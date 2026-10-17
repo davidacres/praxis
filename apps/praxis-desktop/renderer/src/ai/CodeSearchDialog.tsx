@@ -8,6 +8,16 @@ type ObjectValue = Record<string, unknown>;
 function record(value: unknown): ObjectValue {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as ObjectValue) : {};
 }
+/**
+ * The last `segments` parts of a qualified name, without its parameter list: C# names
+ * carry dotted parameter types (`Repo.Map(Maze.Models.User)`), so splitting on '.' alone
+ * would show `User)`. Relation rows use two parts (`AuthController.Login`).
+ */
+function shortSymbolName(qualifiedName: string, segments = 1): string {
+  const parts = qualifiedName.replace(/\(.*\)$/, '').split('.').filter(Boolean);
+  return parts.slice(-segments).join('.') || qualifiedName;
+}
+
 function items(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
@@ -67,8 +77,8 @@ export function CodeSearchDialog({
 
   // Per-symbol detail caches
   const [sourceCache, setSourceCache] = useState<Record<string, { text: string; path?: string; lineStart?: number }>>({});
-  const [callersCache, setCallersCache] = useState<Record<string, Array<{ edgeId: string; symbolId: string; path?: string; line?: number }>>>({});
-  const [calleesCache, setCalleesCache] = useState<Record<string, Array<{ edgeId: string; symbolId: string; path?: string; line?: number }>>>({});
+  const [callersCache, setCallersCache] = useState<Record<string, Array<{ edgeId: string; symbolId: string; qualifiedName?: string; path?: string; line?: number }>>>({});
+  const [calleesCache, setCalleesCache] = useState<Record<string, Array<{ edgeId: string; symbolId: string; qualifiedName?: string; path?: string; line?: number }>>>({});
   const [explainCache, setExplainCache] = useState<Record<string, { desc: string; facts: string[] }>>({});
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -313,9 +323,12 @@ export function CodeSearchDialog({
             const srcId = String(r.sourceSymbolId ?? '');
             const evIds = items(r.evidenceIds).map(String);
             const ev = evIds[0] ? evMap.get(evIds[0]) : undefined;
+            // The service names the far end of each call; older services sent only its ID.
+            const farEnd = record(r.symbol).qualifiedName;
             return {
               edgeId: String(r.edgeId ?? ''),
               symbolId: srcId,
+              qualifiedName: typeof farEnd === 'string' && farEnd ? farEnd : undefined,
               path: ev?.path,
               line: ev?.line
             };
@@ -349,9 +362,12 @@ export function CodeSearchDialog({
             const tgtId = String(r.targetSymbolId ?? '');
             const evIds = items(r.evidenceIds).map(String);
             const ev = evIds[0] ? evMap.get(evIds[0]) : undefined;
+            // The service names the far end of each call; older services sent only its ID.
+            const farEnd = record(r.symbol).qualifiedName;
             return {
               edgeId: String(r.edgeId ?? ''),
               symbolId: tgtId,
+              qualifiedName: typeof farEnd === 'string' && farEnd ? farEnd : undefined,
               path: ev?.path,
               line: ev?.line
             };
@@ -576,7 +592,7 @@ export function CodeSearchDialog({
                     >
                       <div className="code-search-item-top">
                         <span className="code-search-item-name" title={m.symbol.qualifiedName}>
-                          {m.symbol.qualifiedName.split('.').pop() || m.symbol.qualifiedName}
+                          {shortSymbolName(m.symbol.qualifiedName)}
                         </span>
                         <span className="code-search-kind-badge">{m.symbol.kind}</span>
                       </div>
@@ -681,8 +697,8 @@ export function CodeSearchDialog({
                           {currentCallers.map((caller, i) => (
                             <li key={caller.edgeId || i} className="code-search-relation-item">
                               <div className="code-search-relation-header">
-                                <span className="code-search-relation-symbol">
-                                  {caller.symbolId.split(':').pop() || caller.symbolId}
+                                <span className="code-search-relation-symbol" title={caller.qualifiedName ?? caller.symbolId}>
+                                  {caller.qualifiedName ? shortSymbolName(caller.qualifiedName, 2) : caller.symbolId}
                                 </span>
                               </div>
                               {caller.path && (
@@ -706,8 +722,8 @@ export function CodeSearchDialog({
                           {currentCallees.map((callee, i) => (
                             <li key={callee.edgeId || i} className="code-search-relation-item">
                               <div className="code-search-relation-header">
-                                <span className="code-search-relation-symbol">
-                                  {callee.symbolId.split(':').pop() || callee.symbolId}
+                                <span className="code-search-relation-symbol" title={callee.qualifiedName ?? callee.symbolId}>
+                                  {callee.qualifiedName ? shortSymbolName(callee.qualifiedName, 2) : callee.symbolId}
                                 </span>
                               </div>
                               {callee.path && (

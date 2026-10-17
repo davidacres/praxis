@@ -78,8 +78,10 @@ async function setupMockCodeIntelligence(app: TestApp) {
             data: {
               items: [
                 {
-                  edgeId: 'edge:caller:1',
-                  sourceSymbolId: 'MyApp.Controllers.AuthController.Login',
+                  // Real IDs are opaque hashes; the far end is named by `symbol`.
+                  edgeId: 'pci:edge:5b1f0c2a9d7e4f6a8b3c1d2e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a',
+                  sourceSymbolId: 'pci:sym:3f9c2b7e1a0d4c8b9e6f5a2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b',
+                  symbol: { symbolId: 'pci:sym:3f9c2b7e1a0d4c8b9e6f5a2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b', qualifiedName: 'MyApp.Controllers.AuthController.Login(MyApp.Models.LoginRequest)' },
                   evidenceIds: ['pci:ev:caller-loc']
                 }
               ]
@@ -98,8 +100,9 @@ async function setupMockCodeIntelligence(app: TestApp) {
             data: {
               items: [
                 {
-                  edgeId: 'edge:callee:1',
-                  targetSymbolId: 'MyApp.Auth.TokenValidator.Verify',
+                  edgeId: 'pci:edge:9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d',
+                  targetSymbolId: 'pci:sym:7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b',
+                  symbol: { symbolId: 'pci:sym:7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b', qualifiedName: 'MyApp.Auth.TokenValidator.Verify(string)' },
                   evidenceIds: ['pci:ev:callee-loc']
                 }
               ]
@@ -171,12 +174,18 @@ test('opens code search from command palette, searches symbols, and displays sou
   await expect(callersList).toBeVisible();
   await expect(callersList).toContainText('AuthController.Login');
   await expect(callersList).toContainText('src/Controllers/AuthController.cs:55');
+  // Named from the item's symbol, never from the opaque ID or a parameter type.
+  await expect(callersList).not.toContainText('pci:sym');
+  await expect(callersList).not.toContainText('3f9c2b7e');
+  await expect(callersList).not.toContainText('LoginRequest)');
+  await expect(callersList.locator('.code-search-relation-symbol')).toHaveAttribute('title', 'MyApp.Controllers.AuthController.Login(MyApp.Models.LoginRequest)');
 
   // Switch to Callees tab
   await win.getByTestId('code-search-tab-callees').click();
   const calleesList = win.getByTestId('code-search-callees-list');
   await expect(calleesList).toBeVisible();
   await expect(calleesList).toContainText('TokenValidator.Verify');
+  await expect(calleesList).not.toContainText('7a6b5c4d');
 
   // Switch to Explanation tab
   await win.getByTestId('code-search-tab-explain').click();

@@ -315,6 +315,14 @@ public sealed class TypeScriptTests : IDisposable
             .Select(edge => edge!["targetSymbolId"]!.GetValue<string>()).ToHashSet();
         Assert.Contains(sanitize["symbolId"]!.GetValue<string>(), callees);
         Assert.Contains(save["symbolId"]!.GetValue<string>(), callees);
+        // Call items name their far end, including across projects under a context filter.
+        var scopedCallees = queries.Execute("get_callees", new JsonObject { ["repositoryId"] = repoId, ["symbolId"] = run["symbolId"]!.GetValue<string>(),
+            ["contextId"] = run["contextId"]!.GetValue<string>() }, allowed);
+        Assert.Null(scopedCallees["error"]);
+        Assert.Contains(scopedCallees["data"]!["items"]!.AsArray(), item => item!["symbol"]!["qualifiedName"]!.GetValue<string>() == sanitize["qualifiedName"]!.GetValue<string>()
+            && item["symbol"]!["contextId"]!.GetValue<string>() == sanitize["contextId"]!.GetValue<string>());
+        var callers = queries.Execute("get_callers", new JsonObject { ["repositoryId"] = repoId, ["symbolId"] = sanitize["symbolId"]!.GetValue<string>() }, allowed)["data"]!["items"]!.AsArray();
+        Assert.Equal(run["qualifiedName"]!.GetValue<string>(), Assert.Single(callers)!["symbol"]!["qualifiedName"]!.GetValue<string>());
         using (var connection = database.Open(readOnly: true))
         using (var command = connection.CreateCommand())
         {
@@ -342,7 +350,8 @@ public sealed class TypeScriptTests : IDisposable
         JsonNode Single(string name) => Assert.Single(queries.Execute("find_symbol", new JsonObject { ["repositoryId"] = repoId, ["name"] = name }, allowed)["data"]!["items"]!.AsArray())!;
         var panel = Single("Panel"); var page = Single("Page");
         var callers = queries.Execute("get_callers", new JsonObject { ["repositoryId"] = repoId, ["symbolId"] = panel["symbolId"]!.GetValue<string>() }, allowed)["data"]!["items"]!.AsArray();
-        Assert.Contains(callers, edge => edge!["sourceSymbolId"]!.GetValue<string>() == page["symbolId"]!.GetValue<string>() && edge["kind"]!.GetValue<string>() == "calls");
+        Assert.Contains(callers, edge => edge!["sourceSymbolId"]!.GetValue<string>() == page["symbolId"]!.GetValue<string>() && edge["kind"]!.GetValue<string>() == "calls"
+            && edge["symbol"]!["qualifiedName"]!.GetValue<string>() == page["qualifiedName"]!.GetValue<string>());
         using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand();
         command.CommandText = "SELECT count(*) FROM edges e JOIN symbols t ON t.symbol_id=e.target_symbol_id WHERE e.kind='calls' AND t.name IN ('div','section')";
         Assert.Equal(0L, command.ExecuteScalar());

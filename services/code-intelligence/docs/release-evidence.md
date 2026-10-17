@@ -1080,3 +1080,20 @@ The tools used were `list_repositories`, `find_symbol`, `get_callers`, `get_symb
 - **The index was syntax-only for the first few calls.** Rebuilding the package had replaced `ts-sidecar.mjs` under a still-running owner from the previous build. That owner's re-index got a protocol-1.1 response, fell back to syntax-only (`TYPESCRIPT_SIDECAR_PROTOCOL_MISMATCH`) as designed, and recovered when the new owner re-indexed (generation 3 to 4). This happens only in development, where the script is swapped under a running owner; an app update replaces and restarts both together.
 
 This is the first real-agent invocation in the evidence. It is one task in print mode, not a qualification of the Claude Code adapter.
+
+## Call items name their far end — 17 October
+
+`get_callers` and `get_callees` items are now `CallRelation`s: the relation plus `symbol`, the caller or callee as a full `Symbol` (qualified name, kind, signature, declarations). Before, every item needed a `get_symbol` round trip; that was most of the 32 turns in the Claude Code run above.
+- The far end may sit in another context, so it is resolved without the request's `contextId` filter; the edge itself is still scoped by it.
+- Without that exception, a cross-project callee under a context filter would fail the whole query. The extended `WorkspacePackageImportedThroughBuiltDeclarationsResolvesToItsSource` test fails when it is removed.
+
+**Desktop.** The Code Search dialog labelled every caller and callee with the tail of its opaque ID, a 64-character hash. Its e2e mock used readable fake IDs, so this was never caught.
+- Rows now show `Owner.member` from the item's symbol, with the full qualified name as a tooltip.
+- The match list's short name strips C# parameter lists. `Map(Maze.Models.User)` used to show as `User)`.
+- The mock now uses realistic hash IDs and asserts that no ID or parameter fragment is shown.
+- Screenshots of both tabs were inspected.
+
+**Verification.**
+- 147 C# tests pass, 2 SDK-capture tests skipped.
+- 133 freshly captured responses validate against the regenerated `contracts.json` across all 11 tools.
+- 17 code-intelligence e2e specs pass. `codeIntelligenceNative.spec.ts` fails with the packaged binary because it still looks for a "Repository folder" field, which commit `29a9a23c` removed from the settings page. It is skipped without `PRAXIS_CODE_INTELLIGENCE_EXE`, and it is stale independently of this change.

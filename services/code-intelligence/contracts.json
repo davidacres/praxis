@@ -574,6 +574,73 @@
           ],
           "additionalProperties": false
         },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
         "Boundary": {
           "type": "object",
           "properties": {
@@ -1545,6 +1612,73 @@
           ],
           "additionalProperties": false
         },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
         "Boundary": {
           "type": "object",
           "properties": {
@@ -2399,6 +2533,73 @@
             "resolution",
             "provenance",
             "evidenceIds"
+          ],
+          "additionalProperties": false
+        },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
           ],
           "additionalProperties": false
         },
@@ -3404,6 +3605,73 @@
           ],
           "additionalProperties": false
         },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
         "Boundary": {
           "type": "object",
           "properties": {
@@ -4303,6 +4571,73 @@
             "resolution",
             "provenance",
             "evidenceIds"
+          ],
+          "additionalProperties": false
+        },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
           ],
           "additionalProperties": false
         },
@@ -5207,6 +5542,73 @@
           ],
           "additionalProperties": false
         },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
         "Boundary": {
           "type": "object",
           "properties": {
@@ -5391,7 +5793,7 @@
                 "items": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/Relation"
+                    "$ref": "#/$defs/CallRelation"
                   },
                   "maxItems": 100
                 }
@@ -6072,6 +6474,73 @@
           ],
           "additionalProperties": false
         },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
         "Boundary": {
           "type": "object",
           "properties": {
@@ -6256,7 +6725,7 @@
                 "items": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/Relation"
+                    "$ref": "#/$defs/CallRelation"
                   },
                   "maxItems": 100
                 }
@@ -6955,6 +7424,73 @@
             "resolution",
             "provenance",
             "evidenceIds"
+          ],
+          "additionalProperties": false
+        },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
           ],
           "additionalProperties": false
         },
@@ -7881,6 +8417,73 @@
           ],
           "additionalProperties": false
         },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
         "Boundary": {
           "type": "object",
           "properties": {
@@ -8762,6 +9365,73 @@
             "resolution",
             "provenance",
             "evidenceIds"
+          ],
+          "additionalProperties": false
+        },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
           ],
           "additionalProperties": false
         },
@@ -9656,6 +10326,73 @@
             "resolution",
             "provenance",
             "evidenceIds"
+          ],
+          "additionalProperties": false
+        },
+        "CallRelation": {
+          "type": "object",
+          "properties": {
+            "edgeId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "sourceSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "targetSymbolId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "resolved",
+                "possible",
+                "unresolved",
+                "syntaxOnly"
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "enum": [
+                "compiler",
+                "syntax",
+                "heuristic",
+                "documentation",
+                "generated",
+                "metadata"
+              ]
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "maxItems": 100
+            },
+            "symbol": {
+              "$ref": "#/$defs/Symbol"
+            }
+          },
+          "required": [
+            "edgeId",
+            "sourceSymbolId",
+            "targetSymbolId",
+            "kind",
+            "resolution",
+            "provenance",
+            "evidenceIds",
+            "symbol"
           ],
           "additionalProperties": false
         },

@@ -82,11 +82,13 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" or "find_related" ? 10 : 50);
             var more = false; var contentTruncated = false;
             var unresolvedOwners = new Dictionary<string, string>(StringComparer.Ordinal);
-            JsonObject Symbol(string symbolId)
+            // otherEnd: the far symbol of an edge already scoped by the request's context, which may
+            // legitimately live in another context (a cross-project caller or callee).
+            JsonObject Symbol(string symbolId, bool otherEnd = false)
             {
                 var row = Rows(connection, transaction, "SELECT * FROM symbols WHERE repository_id=$0 AND symbol_id=$1", repositoryId, symbolId).SingleOrDefault()
                     ?? throw new QueryException("SYMBOL_NOT_FOUND", "Symbol is unavailable in this repository.");
-                if (contextId is not null && row["defining_context_id"] is not null && Text(row, "defining_context_id") != contextId)
+                if (!otherEnd && contextId is not null && row["defining_context_id"] is not null && Text(row, "defining_context_id") != contextId)
                     throw new QueryException("SYMBOL_NOT_FOUND", "Symbol is unavailable in this context.");
                 var locations = Rows(connection, transaction, "SELECT l.*,f.relative_path FROM locations l JOIN files f ON f.file_id=l.file_id WHERE symbol_id=$0 ORDER BY f.relative_path,start_offset LIMIT 1000", symbolId);
                 foreach (var location in locations) AddEvidence(location);
@@ -429,7 +431,13 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 {
                     var symbolId = Text(arguments, "symbolId")!; Symbol(symbolId);
                     var edges = Edges(symbolId, tool == "get_callers", offset + limit + 1, "calls"); more = edges.Count > offset + limit;
-                    data = new() { ["items"] = Array(edges.Skip(offset).Take(limit).Select(row => (JsonNode?)Relation(row))) }; break;
+                    var incoming = tool == "get_callers";
+                    data = new() { ["items"] = Array(edges.Skip(offset).Take(limit).Select(row =>
+                    {
+                        var relation = Relation(row);
+                        relation["symbol"] = Symbol(Text(row, incoming ? "source_symbol_id" : "target_symbol_id")!, otherEnd: true);
+                        return (JsonNode?)relation;
+                    })) }; break;
                 }
                 case "find_related":
                 {

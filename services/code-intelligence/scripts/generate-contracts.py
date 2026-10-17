@@ -84,6 +84,10 @@ DEFS['Description']=obj({'text':text(16384),'provenance':PROVENANCE,'inputRevisi
 DEFS['Relation']=obj({'edgeId':ID,'sourceSymbolId':ID,'targetSymbolId':ID,'kind':text(64),
  'resolution':RESOLUTION,'provenance':PROVENANCE,'evidenceIds':arr(ID,100)},
  ['edgeId','sourceSymbolId','targetSymbolId','kind','resolution','provenance','evidenceIds'])
+# get_callers/get_callees: the relation plus the symbol at its other end (the caller, or the
+# callee), so a reader does not need a get_symbol round trip per item.
+DEFS['CallRelation']=obj({**DEFS['Relation']['properties'],'symbol':ref('Symbol')},
+ DEFS['Relation']['required']+['symbol'])
 DEFS['Boundary']=obj({'symbolId':ID,'reason':text(256),'omittedCount':nullable(integer())},['symbolId','reason'])
 DEFS['ContextStatus']=obj({'contextId':ID,'state':text(64),'resolution':enum('complete','partial','syntaxOnly'),
  'desiredRevision':integer(),'publishedRevision':integer(),'capabilities':arr(text(64),30)},
@@ -116,8 +120,8 @@ data={
  'explain_symbol':obj({'facts':arr(ref('Fact'),100),'description':nullable(ref('Description')),
    'provenance':PROVENANCE,'uncertainties':arr(text(),100),'coverage':ref('Coverage')},
    ['facts','description','provenance','uncertainties','coverage']),
- 'get_callers':obj({'items':arr(ref('Relation'),100)},['items']),
- 'get_callees':obj({'items':arr(ref('Relation'),100)},['items']),
+ 'get_callers':obj({'items':arr(ref('CallRelation'),100)},['items']),
+ 'get_callees':obj({'items':arr(ref('CallRelation'),100)},['items']),
  'trace_flow':obj({'nodes':arr(ref('Symbol'),1000),'edges':arr(ref('Relation'),2000),
    'boundaries':arr(ref('Boundary'),1000),'unresolvedOccurrences':arr(ID,1000),
    'limitsApplied':obj({'depth':integer(0,10),'maxNodes':integer(1,1000),
