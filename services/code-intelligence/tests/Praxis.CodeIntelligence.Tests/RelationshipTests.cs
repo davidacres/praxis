@@ -158,6 +158,66 @@ public sealed class RelationshipTests
     }
 
     [Fact]
+    public void UserDefinedOperatorsConversionsAndIndexersHaveCallersAndAccesses()
+    {
+        const string code = """
+            struct Money
+            {
+                public static Money operator +(Money a, Money b) => a;
+                public static Money operator -(Money a) => a;
+                public static Money operator ++(Money a) => a;
+                public static implicit operator long(Money m) => 0;
+                public static explicit operator Money(long value) => default;
+            }
+            class Ledger { int[] values = new int[2]; public int this[int index] { get => values[index]; set => values[index] = value; } }
+            class Example
+            {
+                static Money Make() => default;
+                long total = Make();
+                int Run(Money a, Money b, Ledger ledger)
+                {
+                    var sum = a + b;
+                    sum += b;
+                    var negated = -a;
+                    a++;
+                    var made = (Money)1L;
+                    long widened = sum;
+                    ledger[0] = ledger[1];
+                    ledger[0] += 1;
+                    return ledger[0] + 1 + (int)2L;
+                }
+            }
+            """;
+        var result = Analyze(code); Assert.All(result.Contexts, context => Assert.Equal("complete", context.Resolution));
+        IndexedSymbol Operator(string name) => Assert.Single(result.Symbols, symbol => symbol.Name == name && !symbol.External);
+        var run = Assert.Single(result.Symbols, symbol => symbol.Name == "Run");
+        int Calls(IndexedSymbol owner, IndexedSymbol target) => result.Calls.Count(call => call.OwnerId == owner.Id && call.TargetId == target.Id && call.Kind == "calls");
+        Assert.Equal(2, Calls(run, Operator("op_Addition")));
+        Assert.Equal(1, Calls(run, Operator("op_UnaryNegation")));
+        Assert.Equal(1, Calls(run, Operator("op_Increment")));
+        Assert.Equal(1, Calls(run, Operator("op_Explicit")));
+        Assert.Equal(1, Calls(run, Operator("op_Implicit")));
+        // An implicit conversion in a field initializer belongs to the containing type.
+        var example = Assert.Single(result.Symbols, symbol => symbol.Name == "Example" && symbol.Kind == "type");
+        Assert.Equal(1, Calls(example, Operator("op_Implicit")));
+        // The implicit conversion shares its span with the Make() invocation and must stay a distinct fact.
+        Assert.Equal(result.Calls.Count, result.Calls.Select(call => call.Id).Distinct().Count());
+        // Built-in operators bind to no method and create no edges.
+        Assert.DoesNotContain(result.Calls, call => call.TargetId is { } target && result.Symbols.Single(symbol => symbol.Id == target) is { External: true, Name: var name } && name.StartsWith("op_"));
+        foreach (var call in result.Calls.Where(call => call.TargetId is { } target && result.Symbols.Single(symbol => symbol.Id == target).Name.StartsWith("op_")))
+            Assert.Equal("resolved", call.Resolution);
+
+        var indexer = Assert.Single(result.Symbols, symbol => symbol.Kind == "property" && symbol.Name == "this[]");
+        var accesses = result.Relationships.Where(item => item.OwnerId == run.Id && item.TargetId == indexer.Id).ToArray();
+        Assert.Equal(4, accesses.Count(item => item.Kind == "references"));
+        Assert.Equal(3, accesses.Count(item => item.Kind == "reads"));
+        Assert.Equal(2, accesses.Count(item => item.Kind == "writes"));
+        Assert.All(accesses, item => Assert.StartsWith("ledger[", code[item.Start..item.End]));
+        Assert.Equal(result.Relationships.Count, result.Relationships.Select(item => item.Id).Distinct().Count());
+        Assert.DoesNotContain(Analyze(code, semantic: false).Calls, call => call.TargetId is not null);
+    }
+
+    [Fact]
     public void NameofIsReferenceOnlyAndSyntaxFallbackInventsNoSemanticEdges()
     {
         const string code = "class Example { int field; string Run() => nameof(field); }";

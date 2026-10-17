@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Indexing;
 /// <summary>In-memory compiler analysis from explicit inputs. Never evaluates a project or executes generators.</summary>
 public sealed class RoslynAnalyzer
 {
-    public const string AdapterVersion = "roslyn-5.9/v9";
+    public const string AdapterVersion = "roslyn-5.9/v10";
     private sealed record CompilationInput(PassiveProject Project, IndexedContext Context, CSharpCompilation Compilation, IReadOnlyList<Diagnostic> Diagnostics);
     private static readonly SymbolDisplayFormat SignatureFormat = SymbolDisplayFormat.CSharpErrorMessageFormat
         .WithMemberOptions(SymbolDisplayMemberOptions.IncludeContainingType | SymbolDisplayMemberOptions.IncludeType
@@ -219,22 +219,28 @@ public sealed class RoslynAnalyzer
                 var model = models[tree]; var root = tree.GetRoot(cancellationToken);
                 string? Owner(SyntaxNode node) => node.AncestorsAndSelf().Where(nodeSymbols.ContainsKey)
                     .Select(node => nodeSymbols[node]).FirstOrDefault(id => symbols[id].Kind is "type" or "method" or "function" or "constructor" or "accessor" or "module");
-                void Add(SyntaxNode node, string owner, ISymbol target, string kind)
+                // A target must be an indexed source symbol or become an external one; anything
+                // else would be a dangling endpoint.
+                string? Target(ISymbol target)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (target is ITypeSymbol { TypeKind: TypeKind.Error }) return;
                     var identity = Identify(target, input.Context, null);
                     if (!symbols.ContainsKey(identity.Id))
                     {
-                        if (!identity.External) return;
+                        if (!identity.External) return null;
                         symbols[identity.Id] = new(identity.Id, identity.Json, "", Kind(target), target.Name,
                             target.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat), target.ToDisplayString(SignatureFormat),
                             SourceFiles.Hash(Encoding.UTF8.GetBytes(identity.Json)), "resolved", null, true, "", []);
                     }
-                    var occurrenceId = Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.SpanStart, node.Span.End, owner, kind, identity.Id);
+                    return identity.Id;
+                }
+                void Add(SyntaxNode node, string owner, ISymbol target, string kind)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (target is ITypeSymbol { TypeKind: TypeKind.Error } || Target(target) is not string targetId) return;
+                    var occurrenceId = Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.SpanStart, node.Span.End, owner, kind, targetId);
                     if (!relationshipIds.Add(occurrenceId)) return;
                     relationships.Add(new(occurrenceId,
-                        input.Context.Id, source.Path, source.Hash, owner, identity.Id, node.SpanStart, node.Span.End, Range(tree, node.Span),
+                        input.Context.Id, source.Path, source.Hash, owner, targetId, node.SpanStart, node.Span.End, Range(tree, node.Span),
                         input.Context.Resolution == "complete" ? "resolved" : "possible", kind));
                     if (relationships.Count + calls.Count > 200_000 || symbols.Count > 50_000)
                         throw new IOException("INPUT_TOO_LARGE: semantic fact limit exceeded.");
@@ -266,8 +272,12 @@ public sealed class RoslynAnalyzer
                         : name.Parent is MemberBindingExpressionSyntax binding ? binding : name;
                     var operation = model.GetOperation(expression, cancellationToken);
                     if (operation is not (IFieldReferenceOperation or IPropertyReferenceOperation)) continue;
+                    AddAccess(name, owner, target, operation);
+                }
+                void AddAccess(SyntaxNode node, string owner, ISymbol target, IOperation operation)
+                {
                     // nameof produces a reference, never a runtime access classification.
-                    if (Ancestors(operation).Any(parent => parent is INameOfOperation)) continue;
+                    if (Ancestors(operation).Any(parent => parent is INameOfOperation)) return;
                     var parent = operation.Parent; var read = true; var write = false;
                     if (parent is ISimpleAssignmentOperation assignment && assignment.Target == operation) { read = false; write = true; }
                     else if (parent is ICompoundAssignmentOperation compound && compound.Target == operation
@@ -278,9 +288,45 @@ public sealed class RoslynAnalyzer
                         if (argument.Parameter?.RefKind == RefKind.Out) { read = false; write = true; }
                         else if (argument.Parameter?.RefKind == RefKind.Ref) write = true;
                     }
-                    else if (Ancestors(operation).Any(parent => parent is IDeconstructionAssignmentOperation)) continue;
-                    if (read) Add(name, owner, target, "reads");
-                    if (write) Add(name, owner, target, "writes");
+                    else if (Ancestors(operation).Any(parent => parent is IDeconstructionAssignmentOperation)) return;
+                    if (read) Add(node, owner, target, "reads");
+                    if (write) Add(node, owner, target, "writes");
+                }
+                // User-defined operators, conversions and indexers bind without a name or an
+                // invocation (an implicit conversion has no syntax of its own), so they come
+                // from the operation tree of each executable root.
+                var operatorCalls = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var executable in root.DescendantNodes().Where(IsExecutableRoot))
+                {
+                    var body = model.GetOperation(executable is GlobalStatementSyntax global ? global.Statement : executable, cancellationToken);
+                    if (body is null) continue;
+                    foreach (var operation in body.DescendantsAndSelf())
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (Owner(operation.Syntax) is not string owner) continue;
+                        var method = operation switch
+                        {
+                            IBinaryOperation binary => binary.OperatorMethod,
+                            IUnaryOperation unary => unary.OperatorMethod,
+                            IIncrementOrDecrementOperation step => step.OperatorMethod,
+                            ICompoundAssignmentOperation compound => compound.OperatorMethod,
+                            IConversionOperation conversion => conversion.OperatorMethod,
+                            _ => null
+                        };
+                        if (method is { MethodKind: MethodKind.UserDefinedOperator or MethodKind.Conversion } && Target(method) is string targetId)
+                        {
+                            var node = operation.Syntax;
+                            var occurrenceId = Identity.Id("pci:occ:", input.Context.Id, source.Path, source.Hash, node.Span.Start, node.Span.End, owner, "calls", targetId);
+                            if (operatorCalls.Add(occurrenceId))
+                                calls.Add(new(occurrenceId, input.Context.Id, source.Path, source.Hash, owner, targetId, node.Span.Start, node.Span.End,
+                                    Range(tree, node.Span), input.Context.Resolution == "complete" ? "resolved" : "possible"));
+                        }
+                        if (operation is IPropertyReferenceOperation { Property.IsIndexer: true } indexer)
+                        {
+                            Add(operation.Syntax, owner, indexer.Property, "references");
+                            AddAccess(operation.Syntax, owner, indexer.Property, operation);
+                        }
+                    }
                 }
                 foreach (var node in root.DescendantNodes())
                 {
@@ -534,6 +580,11 @@ public sealed class RoslynAnalyzer
         or DelegateDeclarationSyntax or BaseMethodDeclarationSyntax or PropertyDeclarationSyntax or IndexerDeclarationSyntax
         or EventDeclarationSyntax or AccessorDeclarationSyntax or LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax
         || node is VariableDeclaratorSyntax { Parent.Parent: BaseFieldDeclarationSyntax };
+    // Roots whose operation trees cover every executable expression exactly once;
+    // nested local functions and lambdas are descendants of their enclosing root.
+    private static bool IsExecutableRoot(SyntaxNode node) => node is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax or GlobalStatementSyntax
+        || node is ArrowExpressionClauseSyntax { Parent: PropertyDeclarationSyntax or IndexerDeclarationSyntax }
+        || node is EqualsValueClauseSyntax { Parent: PropertyDeclarationSyntax or VariableDeclaratorSyntax { Parent.Parent: BaseFieldDeclarationSyntax } };
     private static bool IsCallable(SyntaxNode node) => node is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax
         or LocalFunctionStatementSyntax or AnonymousFunctionExpressionSyntax;
     private static string Kind(ISymbol symbol) => symbol switch
