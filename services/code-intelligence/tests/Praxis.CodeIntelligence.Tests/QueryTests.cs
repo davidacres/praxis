@@ -256,6 +256,33 @@ public sealed class QueryTests : IDisposable
     }
 
     [Fact]
+    public void OneMatchLargerThanTheBudgetShortensItsDeclarationsInsteadOfFailingThePage()
+    {
+        // A namespace declared in many files carries one declaration (and one evidence
+        // record) per file, so a single match can exceed the whole response budget.
+        var files = Enumerable.Range(0, 60).Select(i => "Part" + i + ".cs").ToArray();
+        foreach (var file in files) File.WriteAllText(Path.Combine(root, file), "namespace Shared.Space { class " + Path.GetFileNameWithoutExtension(file) + " { } }");
+        var metadata = typeof(object).Assembly.Location;
+        File.WriteAllText(Path.Combine(root, "context.praxis.json"), JsonSerializer.Serialize(new PassiveManifest(1,
+            [new("project", "Project", ["Example.cs", .. files], Metadata: [new(metadata, SourceFiles.Hash(File.ReadAllBytes(metadata)))])])));
+        indexer.Index(repository);
+        var search = Query("search_code", new() { ["query"] = "Shared.Space", ["mode"] = "lexical", ["limit"] = 1, ["responseBudgetTokens"] = 1500 });
+        Assert.Null(search["error"]); Assert.True(search["truncated"]!.GetValue<bool>());
+        Assert.Contains(search["warnings"]!.AsArray(), warning => warning!["code"]!.GetValue<string>() == "RESPONSE_TRUNCATED");
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(search.ToJsonString()) <= 4500);
+        var match = Assert.Single(search["data"]!["matches"]!.AsArray())!;
+        Assert.Equal("namespace", match["symbol"]!["kind"]!.GetValue<string>());
+        var declarations = match["symbol"]!["declarations"]!.AsArray().Select(id => id!.GetValue<string>()).ToArray();
+        Assert.InRange(declarations.Length, 1, files.Length - 1);
+        // Every reference that survives still resolves; nothing dangles and nothing is orphaned.
+        var evidence = search["evidence"]!.AsArray().Select(item => item!["id"]!.GetValue<string>()).ToHashSet();
+        Assert.All(declarations, id => Assert.Contains(id, evidence));
+        Assert.All(match["evidenceIds"]!.AsArray(), id => Assert.Contains(id!.GetValue<string>(), evidence));
+        Assert.Subset(declarations.Concat(match["evidenceIds"]!.AsArray().Select(id => id!.GetValue<string>())).ToHashSet(), evidence.ToHashSet());
+        Assert.Subset(evidence.ToHashSet(), declarations.Concat(match["evidenceIds"]!.AsArray().Select(id => id!.GetValue<string>())).ToHashSet());
+    }
+
+    [Fact]
     public void ExternalSymbolsHaveMetadataEvidenceAndNoInventedSourceDeclaration()
     {
         File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { bool Caller() => object.ReferenceEquals(null, null); }"); indexer.Index(repository);

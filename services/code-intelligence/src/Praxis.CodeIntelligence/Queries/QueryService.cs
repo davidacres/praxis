@@ -562,6 +562,31 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 CollectStrings(data, referenced);
                 envelope["evidence"] = Array(evidence.Where(pair => referenced.Contains(pair.Key)).Select(pair => (JsonNode?)pair.Value.DeepClone()));
             }
+            // A single item can still exceed the budget on its own: a namespace declared across
+            // many files carries a declaration and an evidence record per file. Shorten that item's
+            // declaration list (keeping at least one) rather than failing the page, so a caller can
+            // still read it and page past it. Evidence stays complete for every declaration kept.
+            if (collection is { Count: 1 } && collection[0] is JsonObject only
+                && (only["symbol"] as JsonObject ?? only)["declarations"] is JsonArray itemDeclarations)
+            {
+                var evidenceIds = only["evidenceIds"] as JsonArray;
+                while (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget && itemDeclarations.Count > 1)
+                {
+                    var keep = itemDeclarations.Count / 2;
+                    var removed = new HashSet<string>(itemDeclarations.Skip(keep).Select(id => id!.GetValue<string>()), StringComparer.Ordinal);
+                    while (itemDeclarations.Count > keep) itemDeclarations.RemoveAt(itemDeclarations.Count - 1);
+                    if (evidenceIds is not null)
+                        for (var i = evidenceIds.Count - 1; i >= 0; i--)
+                            if (evidenceIds.Count > 1 && removed.Contains(evidenceIds[i]!.GetValue<string>())) evidenceIds.RemoveAt(i);
+                    if (!budgetTrimmed)
+                        warnings.Add(new JsonObject { ["code"] = "RESPONSE_TRUNCATED", ["message"] = "Declarations shortened to fit the response budget; request a larger budget for the full list.", ["retryable"] = false });
+                    budgetTrimmed = true;
+                    envelope["truncated"] = true;
+                    var referenced = new HashSet<string>(StringComparer.Ordinal);
+                    CollectStrings(data, referenced);
+                    envelope["evidence"] = Array(evidence.Where(pair => referenced.Contains(pair.Key)).Select(pair => (JsonNode?)pair.Value.DeepClone()));
+                }
+            }
             if (tool is "get_index_status" or "summarize_project")
             {
                 var trimmed = false;

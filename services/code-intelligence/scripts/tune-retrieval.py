@@ -33,10 +33,10 @@ try:
   expected=[invoke('find_symbol',dict(**selector,limit=50))['data']['items'][0]['symbolId'] for selector in case['expected']]
   matches=[];cursor=None;seen=set()
   while True:
-   args=dict(query=case['query'],mode='hybrid',limit=50)
+   request=dict(query=case['query'],mode='hybrid',limit=50)
    if cursor:
-    args['cursor']=cursor
-   r=invoke('search_code',args)
+    request['cursor']=cursor
+   r=invoke('search_code',request)
    if (r['indexGeneration'],r['queryEpoch'])!=(snapshot['indexGeneration'],snapshot['queryEpoch']):raise ValueError('Mixed snapshot')
    for m in r['data']['matches']:
     identity=m['symbol']['symbolId']
