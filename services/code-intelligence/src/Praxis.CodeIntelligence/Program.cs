@@ -23,7 +23,7 @@ try
             "list | index <repository> | rebuild <repository> | pause <repository> | resume <repository> | unregister <repository>\n" +
             "relocate <repository> <new-root> [--manifest newly-captured.praxis.json] (revokes grants)\n" +
             "status <repository> | search <repository> <query> | query <tool> <JSON arguments>\n" +
-            "grant <repository> --client <provider> | revoke <repository> --client <provider>\n" +
+            "grant <repository> --client <provider> | revoke <repository> --client <provider> | grants --client <provider>\n" +
             "rpc --client <provider> (one tool/arguments JSON object on stdin)\n" +
             "capture <root> <relative.csproj> [--output context.praxis.json] [--configuration Debug] [--framework net10.0] [--restore]\n" +
             "model-check <bundle> | model-install <bundle> | model-activate <repository> <fingerprint>\n" +
@@ -61,6 +61,7 @@ try
         "model-install" when arguments.Count == 2 => new() { ["action"] = "model-install", ["bundle"] = arguments[1] },
         "model-activate" when arguments.Count == 3 => new() { ["action"] = "model-activate", ["repositoryId"] = arguments[1], ["fingerprint"] = arguments[2] },
         "alias" when arguments.Count == 4 => new() { ["action"] = "alias", ["repositoryId"] = arguments[1], ["symbolId"] = arguments[2], ["phrase"] = arguments[3] },
+        "grants" when arguments.Count == 1 && client is not null => new() { ["action"] = "grants", ["client"] = client },
         "rpc" when arguments.Count == 1 && client is not null => await ReadRpc(client),
         "local-rpc" when arguments.Count == 1 => await ReadRpc(null),
         _ => throw new ArgumentException("Invalid command or arguments; run help.")

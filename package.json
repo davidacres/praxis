@@ -72,7 +72,8 @@
     "release:create": "node scripts/create-release.mjs",
     "build:code-intelligence": "node scripts/build-service.mjs",
     "test:code-intelligence": "node scripts/build-service.mjs --test",
-    "package:code-intelligence": "node scripts/build-service.mjs --package"
+    "package:code-intelligence": "node scripts/build-service.mjs --package",
+    "connect:code-intelligence": "node services/code-intelligence/scripts/connect.mjs"
   },
   "overrides": {
     "diff": "^8.0.4",

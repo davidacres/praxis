@@ -72,11 +72,31 @@ Open Settings → AI → Tools → Code intelligence. Register/index a root, ins
 
 Provider access is separate from local indexing. The consent dialog names the destination; only that provider receives the generated MCP server. Handover does not transfer another provider's grant. Revoke removes both the repository/client grant and its desktop MCP configuration. Existing provider navigation continues to work independently. Real adapter invocation is not yet claimed; the MCP SDK mock initialize/list/call and provider isolation checks pass.
 
+### Command-line agents (Claude Code CLI)
+
+One MCP server can serve every repository you grant to a client. Connect a repository with:
+
+```bash
+npm run connect:code-intelligence -- /path/to/repo            # grants client "claude-cli"
+npm run connect:code-intelligence -- --list                   # what claude-cli can read
+npm run connect:code-intelligence -- --disconnect /path/to/repo
+```
+
+`connect` registers the folder, grants the client and waits for the index. If a model bundle is available it then activates the semantic model. The bundle comes from `--model`, `PRAXIS_MODEL_BUNDLE`, or the desktop's download. The first time, it also adds a user-scope `code-intelligence` MCP server to Claude Code; `--no-mcp` prints the command instead. Later repositories need only `connect`. The running server picks up new grants on its next lookup, without a restart. It needs `npm run package:code-intelligence` and `npm run build:core`. `--client`, `--exe` and `--data` override the defaults.
+
+The bridge runs in this mode when its repository argument is `*`:
+
+`node packages/core/out/codeIntelligence/mcpBridge.js <exe> - <data> '*' <client> <contracts.json>`
+
+It adds a `list_repositories` tool. Every other tool takes an optional `repository`: the root folder's name, given in any case. Two roots with the same name get a short ID suffix. `repository` may be omitted when only one repository is granted. A name outside the client's grants returns `ACCESS_DENIED` and lists the available names. The bridge caches the grant list for 10 seconds. The owner still checks the grant on every query, so a revoke takes effect immediately. `grants --client <name>` lists a client's valid grants: same root and nonce, the same test a query applies. Desktop sessions still use one bridge per repository and provider.
+
+An owner started by an older build keeps serving until it exits, and it does not know the `grants` action. Quit Praxis, or any older owner, before the first `connect`.
+
 All eleven tools are read-only and described by `contracts.json`: `search_code`, `find_symbol`, `get_symbol`, `get_source`, `explain_symbol`, `get_callers`, `get_callees`, `trace_flow`, `find_related`, `summarize_project`, `get_index_status`. Static call edges are not execution guarantees. Compiler-bound type/member relationships, bounded possible dispatch, namespace imports, events, explicit throws and observed cross-project dependencies are supported. Captured project and assembly references also have configuration-backed dependency edges with metadata evidence, including unused references. General delegate points-to flow and NuGet package-name inference remain unsupported; static facts do not establish runtime execution.
 
 ## Ownership, operations and recovery
 
-Desktop and CLI attach to one per-user owner using a private Unix socket or current-user Windows pipe, a kernel-held stable lock and a random rendezvous token. No TCP fallback exists. Storage defaults are LocalAppData/Praxis/code-intelligence on Windows, `~/Library/Application Support/Praxis/code-intelligence` on macOS, and XDG_DATA_HOME/Praxis/code-intelligence (or `~/.local/share/Praxis/code-intelligence`) on Linux. `--data` selects another private directory. Desktop test profiles isolate their data when `PRAXIS_SETTINGS_PATH` is set.
+Desktop and CLI attach to one per-user owner using a private Unix socket or current-user Windows pipe, a kernel-held stable lock and a random rendezvous token. Background index and vector jobs hold the owner's single writer. Queries, `list`, `grants`, `grant` and `revoke` are admitted beside it, so they answer during a long vector build; every other action waits for the writer. No TCP fallback exists. Storage defaults are LocalAppData/Praxis/code-intelligence on Windows, `~/Library/Application Support/Praxis/code-intelligence` on macOS, and XDG_DATA_HOME/Praxis/code-intelligence (or `~/.local/share/Praxis/code-intelligence`) on Linux. `--data` selects another private directory. Desktop test profiles isolate their data when `PRAXIS_SETTINGS_PATH` is set.
 
 ```sh
 dotnet path/to/Praxis.CodeIntelligence.dll pause REPOSITORY_ID

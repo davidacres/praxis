@@ -168,4 +168,41 @@ public sealed class HostTests
         }
         finally { Directory.Delete(root, recursive: true); }
     }
+
+    [Fact]
+    public void OnlyReadsAndGrantFileChangesBypassTheWriter()
+    {
+        // Background index and vector jobs hold the writer for minutes; these must not queue behind them.
+        foreach (var action in new[] { "query", "list", "grants", "grant", "revoke" }) Assert.True(OwnerService.RunsBesideWriter(action), action);
+        foreach (var action in new[] { "register", "index", "rebuild", "relocate", "pause", "resume", "unregister", "alias", "model-install", "model-activate", "backup", "doctor", "enrichment-configure", null })
+            Assert.False(OwnerService.RunsBesideWriter(action), action ?? "(none)");
+    }
+
+    [Fact]
+    public void GrantListingShowsOnlyRepositoriesTheClientCanStillQuery()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-grant-list-tests-" + Guid.NewGuid().ToString("N"));
+        var first = Path.Combine(root, "first"); var second = Path.Combine(root, "second"); var moved = Path.Combine(root, "moved");
+        Directory.CreateDirectory(first); Directory.CreateDirectory(second); Directory.CreateDirectory(moved);
+        try
+        {
+            using var runtime = new ServiceRuntime(Path.Combine(root, "data"));
+            var firstId = runtime.Indexer.Register(first); var secondId = runtime.Indexer.Register(second);
+            string[] Listed(string client) => runtime.Dispatch(new JsonObject { ["action"] = "grants", ["client"] = client }, CancellationToken.None)["data"]!
+                .AsArray().Select(entry => entry!["repositoryId"]!.GetValue<string>()).Order(StringComparer.Ordinal).ToArray();
+            void Grant(string id, string client) => Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "grant", ["repositoryId"] = id, ["client"] = client }, CancellationToken.None)["error"]);
+            Assert.Empty(Listed("claude-cli"));
+            Grant(firstId, "claude-cli"); Grant(secondId, "claude-cli"); Grant(secondId, "codex");
+            Assert.Equal(new[] { firstId, secondId }.Order(StringComparer.Ordinal), Listed("claude-cli"));
+            Assert.Equal(new[] { secondId }, Listed("codex"));
+            var entry = runtime.Dispatch(new JsonObject { ["action"] = "grants", ["client"] = "codex" }, CancellationToken.None)["data"]![0]!;
+            Assert.Equal(SourceFiles.CanonicalDirectory(second), entry["root"]!.GetValue<string>());
+            runtime.Dispatch(new JsonObject { ["action"] = "revoke", ["repositoryId"] = firstId, ["client"] = "claude-cli" }, CancellationToken.None);
+            Assert.Equal(new[] { secondId }, Listed("claude-cli"));
+            // Relocation revokes, so a moved repository drops out until it is granted again.
+            Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "relocate", ["repositoryId"] = secondId, ["root"] = moved }, CancellationToken.None)["error"]);
+            Assert.Empty(Listed("claude-cli")); Assert.Empty(Listed("codex"));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 }

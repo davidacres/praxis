@@ -906,3 +906,34 @@ The integrity checks are unchanged: the session is still created from the bytes 
   - Refresh under load p50/max 3.2/4.1 s; publish p50/max 26.7/37.0 s.
 
 The two post-fix concurrent peaks (1.83 and 1.65 GB) bracket run-to-run variation. Both are below MiniLM's 1.91 GB.
+
+## One MCP server for every granted repository — 17 October
+
+**Bridge mode.** The MCP bridge's repository argument may be `*`. The bridge then serves every repository granted to its client:
+- It adds `list_repositories`, and gives every tool an optional `repository` name. The name is the root folder's name, given in any case, with a short ID suffix when two names collide; the full ID is also accepted.
+- New grants are found without a restart. The grant list is cached for 10 s, and a miss refreshes it.
+- The owner still checks the grant on every query, so a revoke takes effect immediately.
+- Failures name what was requested (or `*`), because the envelope's `repositoryId` must be a non-empty string. A mock test caught the first version sending `null`, which the MCP client rejects against the contract.
+- Desktop sessions still use one bridge per repository and provider.
+
+**Service.** A new `grants --client <name>` action lists a client's valid grants: same root and nonce, the same test a query applies.
+
+**`connect` helper.** `npm run connect:code-intelligence -- <folder>`:
+- registers the folder, grants `claude-cli` and waits for the index;
+- activates the semantic model when a bundle is available;
+- adds one user-scope `code-intelligence` MCP server to Claude Code the first time.
+
+`--list` and `--disconnect` are included.
+
+**Owner admission fix.** Trying `connect` on Maze exposed a pre-existing stall. Background jobs hold the owner's writer for a whole index or vector build, and every non-query action queued behind it. During Maze's vector build, `grants` waited out the 2-minute deadline and the client saw "Unable to read beyond the end of the stream". The desktop's `list` calls had the same wait.
+- `list`, `grants`, `grant` and `revoke` are now admitted beside the writer, like queries. None of them writes the index.
+- A grant written during a relocation fails closed, because queries re-check its root.
+- After the change, `--list` answered in 0.36–0.46 s while the owner built Maze's vectors at about 410% CPU.
+
+**Tests.**
+- Service: 144 passed, 2 SDK-capture tests skipped without their opt-in. New tests cover the grant listing (clients, revoke, relocation) and the admission classification.
+- MCP bridge: 7 of 7 pass. The new tests are a mock for multi-repository naming, ambiguity, refusal, live grant/revoke and the schema-valid failures, and a native owner run against the packaged service.
+- Core: 1,550 passed, 2 skipped. `check-types` is clean.
+- Native packaging smoke passes.
+
+Real Claude Code CLI use through this server has not yet been exercised.

@@ -13,6 +13,14 @@ public static class OwnerService
 {
     private sealed class Admission { public readonly SemaphoreSlim Slots = new(4, 4); public int Waiting; }
 
+    /// <summary>
+    /// Actions admitted beside the writer: queries, and reads or grant-file changes that never
+    /// write the index. Background jobs hold the writer for a whole index or vector build, so
+    /// anything queued behind it could wait minutes and hit the request deadline. A grant
+    /// written during a relocation stays safe: queries re-check its root and fail closed.
+    /// </summary>
+    internal static bool RunsBesideWriter(string? action) => action is "query" or "list" or "grants" or "grant" or "revoke";
+
     public static async Task RunAsync(string directory, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(directory); directory = SourceFiles.CanonicalDirectory(directory);
@@ -89,7 +97,7 @@ public static class OwnerService
                         rejected["handshake"] = "authenticationRejected";
                         await Framing.WriteAsync(pipe, rejected, Framing.MaximumResponseBytes, deadline.Token); return;
                     }
-                    var request = frame["request"]!.AsObject(); var query = request["action"]?.GetValue<string>() == "query";
+                    var request = frame["request"]!.AsObject(); var besideWriter = RunsBesideWriter(request["action"]?.GetValue<string>());
                     var repository = request["arguments"]?["repositoryId"]?.GetValue<string>() ?? request["repositoryId"]?.GetValue<string>() ?? "local";
                     if (request["action"]?.GetValue<string>() is "pause" or "unregister" or "rebuild" or "relocate") runtime.CancelRepositoryWork(repository);
                     var admission = admissions.GetOrAdd(repository, _ => new Admission());
@@ -98,7 +106,7 @@ public static class OwnerService
                         Interlocked.Decrement(ref admission.Waiting);
                         await Framing.WriteAsync(pipe, ServiceRuntime.Error("BUSY", "Repository request queue is full."), Framing.MaximumResponseBytes, deadline.Token); return;
                     }
-                    var semaphore = query ? admission.Slots : writer;
+                    var semaphore = besideWriter ? admission.Slots : writer;
                     try { await semaphore.WaitAsync(deadline.Token); } finally { Interlocked.Decrement(ref admission.Waiting); }
                     try
                     {

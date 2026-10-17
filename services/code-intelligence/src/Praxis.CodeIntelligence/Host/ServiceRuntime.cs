@@ -85,6 +85,13 @@ public sealed class ServiceRuntime : IDisposable
                 case "grant":
                     Indexer.Get(repositoryId!); SaveGrant(repositoryId!, Client(request)); return Result(new { granted = true });
                 case "revoke": File.Delete(GrantPath(repositoryId!, Client(request))); return Result(new { revoked = true });
+                case "grants":
+                {
+                    // Only grants that still pass the query-time check (same root, nonce present) are listed.
+                    var client = Client(request);
+                    return Result(Indexer.List().Where(repository => GrantSnapshot(repository.Id, client) is not null)
+                        .Select(repository => new { repositoryId = repository.Id, root = repository.Root, state = repository.State }).ToArray());
+                }
                 case "query":
                 {
                     var arguments = request["arguments"]!.AsObject(); var id = arguments["repositoryId"]?.GetValue<string>() ?? "unknown";

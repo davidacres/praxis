@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -9,12 +10,17 @@ export interface CodeIntelligenceBridgeOptions {
   executable: string;
   assembly?: string;
   dataDirectory: string;
+  /** One repository ID, or {@link ALL_GRANTED} to serve every repository granted to `client`. */
   repositoryId: string;
   client: string;
   contracts: Record<string, { inputSchema: Record<string, unknown>; outputSchema: Record<string, unknown> }>;
 }
+/** Bridge repository argument meaning "every repository this client holds a grant for". */
+export const ALL_GRANTED = '*';
+export interface GrantedRepository { name: string; repositoryId: string; state: string }
 const MAXIMUM_REQUEST = 1024 * 1024;
 const MAXIMUM_RESPONSE = 128 * 1024;
+const GRANT_CACHE_MS = 10_000;
 
 function failure(repositoryId: string, code: string, message: string): Record<string, unknown> {
   return { schemaVersion: '1.2', repositoryId, indexGeneration: null, queryEpoch: null, error: { code, message, retryable: code === 'CANCELLED' } };
@@ -55,6 +61,42 @@ export function invokeCodeIntelligence(options: CodeIntelligenceBridgeOptions, t
   });
 }
 
+/**
+ * Readable names for granted repositories: the root folder's name, with a short ID suffix
+ * when two roots share a name (ignoring case, so `TradeStar.api` and `tradestar.api` differ).
+ */
+export function repositoryNames(entries: ReadonlyArray<{ repositoryId: string; root: string; state: string }>): GrantedRepository[] {
+  const base = (root: string): string => path.basename(root.replace(/[/\\]+$/, '')) || 'repository';
+  const counts = new Map<string, number>();
+  for (const entry of entries) counts.set(base(entry.root).toLowerCase(), (counts.get(base(entry.root).toLowerCase()) ?? 0) + 1);
+  return entries.map(entry => {
+    const name = base(entry.root);
+    const suffix = entry.repositoryId.replace(/^pci:repo:/, '').slice(0, 6);
+    return { name: (counts.get(name.toLowerCase()) ?? 0) > 1 ? `${name}-${suffix}` : name, repositoryId: entry.repositoryId, state: entry.state };
+  }).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+/** Repositories `options.client` may currently query, read from the owner's grant records. */
+export function listGrantedRepositories(options: CodeIntelligenceBridgeOptions): Promise<GrantedRepository[]> {
+  return new Promise((resolve, reject) => {
+    const args = [...(options.assembly ? [options.assembly] : []), 'grants', '--data', options.dataDirectory, '--client', options.client];
+    const child = spawn(options.executable, args, { shell: false, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    const decoder = new StringDecoder('utf8'); let output = ''; let bytes = 0;
+    const timeout = setTimeout(() => child.kill(), 30_000);
+    child.stdout.on('data', (chunk: Buffer) => { bytes += chunk.length; if (bytes > MAXIMUM_RESPONSE) child.kill(); else output += decoder.write(chunk); });
+    child.on('error', error => { clearTimeout(timeout); reject(error); });
+    child.on('close', () => {
+      clearTimeout(timeout);
+      try {
+        const value = JSON.parse(output + decoder.end()) as { data?: unknown };
+        if (!Array.isArray(value.data)) throw new Error('Grant listing failed.');
+        resolve(repositoryNames(value.data.filter((entry): entry is { repositoryId: string; root: string; state: string } =>
+          typeof entry?.repositoryId === 'string' && typeof entry?.root === 'string' && typeof entry?.state === 'string')));
+      } catch (error) { reject(error instanceof Error ? error : new Error('Grant listing failed.')); }
+    });
+  });
+}
+
 // Agents cannot know the opaque repository ID, and the bridge already fixes it.
 function withoutRepository(schema: Record<string, unknown>): Record<string, unknown> {
   const properties = { ...(schema.properties as Record<string, unknown> | undefined) }; delete properties.repositoryId;
@@ -62,21 +104,78 @@ function withoutRepository(schema: Record<string, unknown>): Record<string, unkn
   return { ...schema, properties, ...(required ? { required } : {}) };
 }
 
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+const REPOSITORY_ARGUMENT = { type: 'string', minLength: 1, maxLength: 512,
+  description: 'Repository name from list_repositories. May be omitted when only one repository is available.' };
+
 export function createCodeIntelligenceMcpServer(options: CodeIntelligenceBridgeOptions): Server {
   const server = new Server({ name: 'praxis-code-intelligence', version: '1.2.0' }, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: Object.entries(options.contracts).map(([name, schemas]) => ({
-    name, description: `Read-only ${name.replaceAll('_', ' ')} for the registered repository. Static facts do not prove runtime behavior.`,
-    inputSchema: { ...withoutRepository(schemas.inputSchema), type: 'object' as const }, outputSchema: { ...schemas.outputSchema, type: 'object' as const },
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
-  })) }));
+  const multiple = options.repositoryId === ALL_GRANTED;
+  let granted: { at: number; repositories: Promise<GrantedRepository[]> } | undefined;
+  const repositories = (refresh: boolean): Promise<GrantedRepository[]> => {
+    if (refresh || !granted || Date.now() - granted.at > GRANT_CACHE_MS) {
+      granted = { at: Date.now(), repositories: listGrantedRepositories(options) };
+      granted.repositories.catch(() => { granted = undefined; });
+    }
+    return granted.repositories;
+  };
+  // A repository named by the agent: its readable name (any case) or its ID. Failures name
+  // what was requested (or '*'): the envelope's repositoryId must be a non-empty string. The cache only
+  // speeds this up; the owner re-checks the grant on every query.
+  const resolve = async (requested: string | undefined): Promise<GrantedRepository | Record<string, unknown>> => {
+    for (const refresh of [false, true]) {
+      const available = await repositories(refresh);
+      if (requested === undefined) {
+        if (available.length === 1) return available[0];
+        if (refresh) return failure(ALL_GRANTED, available.length ? 'INVALID_ARGUMENT' : 'ACCESS_DENIED', available.length
+          ? `Name the repository: ${available.map(entry => entry.name).join(', ')}.` : 'No repository has been granted to this client.');
+        continue;
+      }
+      const found = available.find(entry => entry.name === requested || entry.repositoryId === requested)
+        ?? available.find(entry => entry.name.toLowerCase() === requested.toLowerCase());
+      if (found) return found;
+    }
+    const names = (await repositories(false)).map(entry => entry.name);
+    return failure(requested ?? ALL_GRANTED, 'ACCESS_DENIED', `Repository is not available to this client.${names.length ? ` Available: ${names.join(', ')}.` : ''}`);
+  };
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
+    ...(multiple ? [{
+      name: 'list_repositories', description: 'Lists the repositories these code intelligence tools can read, with their index state. Pass a name as `repository` to the other tools.',
+      inputSchema: { type: 'object' as const, properties: {} }, annotations: READ_ONLY
+    }] : []),
+    ...Object.entries(options.contracts).map(([name, schemas]) => {
+      const input = withoutRepository(schemas.inputSchema);
+      return {
+        name, description: `Read-only ${name.replaceAll('_', ' ')} for ${multiple ? 'a granted repository' : 'the registered repository'}. Static facts do not prove runtime behavior.`,
+        inputSchema: { ...input, ...(multiple ? { properties: { repository: REPOSITORY_ARGUMENT, ...(input.properties as Record<string, unknown> | undefined) } } : {}), type: 'object' as const },
+        outputSchema: { ...schemas.outputSchema, type: 'object' as const }, annotations: READ_ONLY
+      };
+    })
+  ] }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    const result = await invokeCodeIntelligence(options, request.params.name, request.params.arguments ?? {}, extra.signal);
-    return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: Boolean(result.error) };
+    const respond = (result: Record<string, unknown>) => ({ content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result, isError: Boolean(result.error) });
+    const arguments_ = { ...(request.params.arguments ?? {}) };
+    if (!multiple) return respond(await invokeCodeIntelligence(options, request.params.name, arguments_, extra.signal));
+    try {
+      if (request.params.name === 'list_repositories') {
+        const available = await repositories(true);
+        return respond({ repositories: available.map(entry => ({ name: entry.name, state: entry.state })) });
+      }
+      const requested = arguments_.repository ?? arguments_.repositoryId;
+      delete arguments_.repository; delete arguments_.repositoryId;
+      if (requested !== undefined && typeof requested !== 'string') return respond(failure(ALL_GRANTED, 'INVALID_ARGUMENT', 'repository must be a string.'));
+      const target = await resolve(requested);
+      if ('error' in target) return respond(target);
+      return respond(await invokeCodeIntelligence({ ...options, repositoryId: (target as GrantedRepository).repositoryId }, request.params.name, arguments_, extra.signal));
+    } catch {
+      return respond(failure(ALL_GRANTED, 'CAPABILITY_UNAVAILABLE', 'Local code intelligence service could not list granted repositories.'));
+    }
   });
   return server;
 }
 
 if (require.main === module) {
+  // repositoryId may be ALL_GRANTED ('*'): one server for every repository granted to the client.
   const [executable, assembly, dataDirectory, repositoryId, client, contractsPath] = process.argv.slice(2);
   if (!executable || !assembly || !dataDirectory || !repositoryId || !client || !contractsPath) process.exitCode = 2;
   else {
