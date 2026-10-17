@@ -279,6 +279,21 @@ export function SessionCodeIntelControl({
                           Rebuild index
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        data-testid={`${testId}-code-intel-search-btn`}
+                        onClick={() => {
+                          setMenuPosition(undefined);
+                          window.dispatchEvent(
+                            new CustomEvent('praxis:open-code-search', {
+                              detail: { workingDirectory }
+                            })
+                          );
+                        }}
+                      >
+                        Search symbols (⌘⇧F)
+                      </button>
                     </div>
                   </div>
                 )}

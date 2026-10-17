@@ -47,6 +47,7 @@ import { extractSubagents, isConversationSession, isSessionForProject, sessionTi
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
+import { CodeSearchDialog } from '../ai/CodeSearchDialog';
 import { Walkthrough, type WalkthroughStop } from './Walkthrough';
 import { NewProjectWizard } from '../projects/NewProjectWizard';
 import { AddProjectDialog, type AddProjectChoice } from '../projects/AddProjectDialog';
@@ -520,6 +521,8 @@ export function App() {
   const [splashBrief] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; } });
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [codeSearchOpen, setCodeSearchOpen] = useState(false);
+  const [codeSearchInitialDirectory, setCodeSearchInitialDirectory] = useState<string>();
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
@@ -1375,9 +1378,19 @@ export function App() {
   }, [activeProjectId, navigate, setAssistantDelegate]);
 
   useEffect(() => {
+    const onOpenCodeSearch = (e: Event) => {
+      const detail = (e as CustomEvent<{ query?: string; workingDirectory?: string }>).detail;
+      if (detail?.workingDirectory) setCodeSearchInitialDirectory(detail.workingDirectory);
+      setCodeSearchOpen(true);
+    };
+    window.addEventListener('praxis:open-code-search', onOpenCodeSearch);
+    return () => window.removeEventListener('praxis:open-code-search', onOpenCodeSearch);
+  }, []);
+
+  useEffect(() => {
     // Until AI is set up, none of the app's global shortcuts may start a
     // session, open the palette or navigate: the shell they act on isn't there.
-    if (aiSetupNeeded) { setPaletteOpen(false); return; }
+    if (aiSetupNeeded) { setPaletteOpen(false); setCodeSearchOpen(false); return; }
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c') {
         event.preventDefault();
@@ -1387,6 +1400,11 @@ export function App() {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault();
         openQuickSession();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setCodeSearchOpen(open => !open);
         return;
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
@@ -1505,6 +1523,7 @@ export function App() {
     entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
     entries.push({ id: 'action:add-project', label: 'Add project', group: 'Go to', icon: 'plus', keywords: 'new existing folder import', run: () => requestAddProject() });
     entries.push({ id: 'action:open-folder', label: 'Open folder', group: 'Go to', icon: 'folder', keywords: 'open folder directory existing project easy mode', run: () => void openExistingFolder() });
+    entries.push({ id: 'action:search-code', label: 'Search code & symbols', hint: '⌘⇧F', group: 'Actions', icon: 'search', keywords: 'code symbol find usages search callers callees index semantic', run: () => setCodeSearchOpen(true) });
     entries.push({ id: 'action:toggle-easymode', label: 'Toggle EasyMode', hint: '⌘⇧E', group: 'Go to', icon: 'feather', keywords: 'toggle easy mode advance mode simple sidebar shortcut', run: () => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } }) });
     entries.push({ id: 'action:toggle-work-mode', label: 'Toggle work mode', group: 'Go to', icon: 'columns', keywords: 'work mode boards classic', run: () => setMode(m => m === 'classic' ? 'work' : 'classic') });
     if (inSession) {
@@ -3225,6 +3244,15 @@ export function App() {
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
       {paletteOpen && !aiSetupNeeded && (
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />
+      )}
+      {codeSearchOpen && !aiSetupNeeded && (
+        <CodeSearchDialog
+          open={codeSearchOpen}
+          onClose={() => setCodeSearchOpen(false)}
+          initialWorkingDirectory={
+            codeSearchInitialDirectory ?? composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder
+          }
+        />
       )}
       {walkthroughOpen && <Walkthrough stops={walkthroughStops} onDone={finishWalkthrough} />}
       {!aiSetupNeeded && <QuickCapture
