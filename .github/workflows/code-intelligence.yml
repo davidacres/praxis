@@ -61,6 +61,8 @@ jobs:
         run: python services/code-intelligence/scripts/prepare-model.py "$PRAXIS_MODEL_BUNDLE"
       - name: Verify relevance evaluator safeguards
         run: python -m unittest discover -s services/code-intelligence/scripts -p 'test_*.py'
+      - name: Install the pinned TypeScript compiler the adapter and package use
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Restore locked service dependencies
         run: dotnet restore services/code-intelligence/Praxis.CodeIntelligence.slnx --locked-mode --disable-parallel -m:1
       - name: Run compiler, storage, path and native model fixtures
@@ -139,9 +141,12 @@ jobs:
           printf 'PRAXIS_QUALIFICATION=%s/praxis-qualification\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Provision hash-pinned local model assets
         run: python services/code-intelligence/scripts/prepare-model.py "$PRAXIS_MODEL_BUNDLE"
+      - name: Install the pinned TypeScript compiler the adapter and package use
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Restore locked service dependencies
         run: dotnet restore services/code-intelligence/Praxis.CodeIntelligence.slnx --locked-mode --disable-parallel -m:1
       - name: Package host runtime
+        id: package
         run: node scripts/build-service.mjs --package
       - name: Qualify an actual full volume
         run: |
@@ -150,7 +155,7 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then executable="$executable.exe"; fi
           node services/code-intelligence/scripts/qualify-disk-full.mjs --executable "$executable" --output "$PRAXIS_QUALIFICATION/disk-full-${{ runner.os }}.praxis.json"
       - name: Qualify crash recovery under abrupt owner termination
-        if: always()
+        if: always() && steps.package.outcome == 'success'
         run: |
           mkdir -p "$PRAXIS_QUALIFICATION"
           executable="$GITHUB_WORKSPACE/services/code-intelligence/artifacts/package/Praxis.CodeIntelligence"
