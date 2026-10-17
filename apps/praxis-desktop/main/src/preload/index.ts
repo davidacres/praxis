@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CodeIntelligenceRequest,
+  SemanticModelStatus,
+  SemanticModelProgressEvent,
   CheckFindings,
   AgentSessionRecord,
   AgentPermissionMode,
@@ -242,6 +244,14 @@ const praxis: PraxisIpc = {
     probeProviderCapability: (provider: AiProvider) => ipcRenderer.invoke('ai:probeProviderCapability', provider),
     testMcpServer: (config: McpServerConfig) => ipcRenderer.invoke('ai:testMcpServer', config),
     codeIntelligence: (request: CodeIntelligenceRequest) => ipcRenderer.invoke('ai:codeIntelligence', request),
+    getSemanticModelStatus: () => ipcRenderer.invoke('ai:getSemanticModelStatus') as Promise<SemanticModelStatus>,
+    downloadSemanticModel: () => ipcRenderer.invoke('ai:downloadSemanticModel') as Promise<SemanticModelStatus>,
+    deleteSemanticModel: () => ipcRenderer.invoke('ai:deleteSemanticModel') as Promise<void>,
+    onSemanticModelProgress: (listener: (event: SemanticModelProgressEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, ev: SemanticModelProgressEvent) => listener(ev);
+      ipcRenderer.on('ai:semanticModelProgress', handler);
+      return () => { ipcRenderer.off('ai:semanticModelProgress', handler); };
+    },
     installCliProvider: (provider: AiProvider) => ipcRenderer.invoke('ai:installCliProvider', provider),
     getLatestCliProviderVersion: (provider: AiProvider) => ipcRenderer.invoke('ai:getLatestCliProviderVersion', provider) as Promise<{ version: string }>,
     listCliModelOptions: (provider: AiProvider) => ipcRenderer.invoke('ai:listCliModelOptions', provider),

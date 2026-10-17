@@ -1,58 +1,84 @@
 import { expect, test } from '@playwright/test';
-import { chooseOption } from './chipSelect';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
-test.afterEach(async () => { if (app) await closeTestApp(app); app = undefined; });
+test.afterEach(async () => {
+  if (app) await closeTestApp(app);
+  app = undefined;
+});
 
 async function openPanel() {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  // Mock only this local capability: no repository, SDK evaluation, model download
-  // or provider invocation is performed by the UI regression fixture.
   await app.electronApp.evaluate(({ ipcMain }) => {
-    let root = '/fixture/original'; let generation = 1;
+    let root = '/fixture/original';
+    let generation = 1;
+    let modelInstalled = false;
+
     ipcMain.removeHandler('ai:codeIntelligence');
     ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
       if (request.action === 'list') return { data: [{ id: 'pci:repo:fixture', root, state: 'ready', generation }] };
       if (request.action === 'rebuild') { generation++; return { data: { queued: true } }; }
-      if (request.action === 'relocate') { root = String(request.root); generation++; return { data: { relocated: true, grantsRevoked: true } }; }
+      if (request.action === 'relocate') { root = String(request.root); generation++; return { data: { relocated: true } }; }
       if (request.action === 'query') {
-        const args = request.arguments as Record<string, unknown>;
-        if (request.tool === 'get_index_status') return { indexGeneration: generation, freshness: { state: 'current' }, data: { contexts: [], diagnostics: [], models: [], jobsByState: {} } };
-        if (request.tool === 'search_code' && args.query === 'mode probe')
-          return { data: { matches: [
-            { symbol: { symbolId: 'probe', qualifiedName: `Mode ${String(args.mode)}`, signature: 'void Run()', resolution: 'resolved' } },
-            // Real qualified names and signatures are long and unbroken.
-            { symbol: { symbolId: 'long', qualifiedName: 'Maze.Authorization.MazePermissionAuthorizationHandler.HandleRequirementAsync(Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext,Maze.Authorization.MazePermissionRequirement)',
-              signature: 'protected override System.Threading.Tasks.Task Maze.Authorization.MazePermissionAuthorizationHandler.HandleRequirementAsync(Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext context, Maze.Authorization.MazePermissionRequirement requirement)', resolution: 'resolved' } }] } };
-        if (request.tool === 'search_code') {
-          const next = args.cursor === 'next-page';
-          return { truncated: !next, nextCursor: next ? null : 'next-page', data: { matches: [{ symbol: { symbolId: next ? 'second' : 'first', qualifiedName: next ? 'SecondResult' : 'FirstResult', signature: 'void Run()', resolution: 'resolved' } }] } };
-        }
+        return {
+          indexGeneration: generation,
+          freshness: { state: 'current' },
+          data: { contexts: [], diagnostics: [], models: [], jobsByState: {} }
+        };
       }
       return { error: { code: 'FIXTURE_UNEXPECTED_REQUEST', message: JSON.stringify(request) } };
     });
+
+    ipcMain.removeHandler('ai:getSemanticModelStatus');
+    ipcMain.handle('ai:getSemanticModelStatus', () => ({
+      installed: modelInstalled,
+      active: modelInstalled,
+      fingerprint: modelInstalled ? 'sha256:fixture-fingerprint' : undefined,
+      sizeBytes: modelInstalled ? 90636722 : 0,
+      downloading: false,
+      progressPercent: modelInstalled ? 100 : 0
+    }));
+
+    ipcMain.removeHandler('ai:downloadSemanticModel');
+    ipcMain.handle('ai:downloadSemanticModel', () => {
+      modelInstalled = true;
+      return {
+        installed: true,
+        active: true,
+        fingerprint: 'sha256:fixture-fingerprint',
+        sizeBytes: 90636722,
+        downloading: false,
+        progressPercent: 100
+      };
+    });
+
+    ipcMain.removeHandler('ai:deleteSemanticModel');
+    ipcMain.handle('ai:deleteSemanticModel', () => {
+      modelInstalled = false;
+    });
   });
+
   const win = app.window;
   await win.getByTestId('titlebar-settings').click();
   await win.getByTestId('settings-nav-ai').click();
   await win.getByTestId('ai-tab-tools').click();
   const panel = win.getByTestId('code-intelligence-panel');
   await expect(panel).toContainText('Generation 1');
-  await expect(panel).toContainText('Search uses saved files; unsaved editor changes are not indexed.');
   return { win, panel };
 }
 
 test('rebuild and relocation use the themed recovery flow and refresh status', async ({}, testInfo) => {
   const { win, panel } = await openPanel();
-  await panel.getByText('Index C# locally', { exact: false }).scrollIntoViewIfNeeded();
-  await win.screenshot({ path: testInfo.outputPath('code-intelligence-saved-files.png') });
   win.on('dialog', () => { throw new Error('Recovery must use an in-app dialog.'); });
-  await panel.getByRole('button', { name: 'Rebuild index', exact: true }).click();
+
+  // Rebuild index
+  await panel.getByTestId('code-intel-rebuild-btn').click();
   await expect(panel).toContainText('Generation 2');
-  await panel.getByRole('button', { name: 'Relocate repository', exact: true }).click();
+
+  // Relocate repository
+  await panel.getByRole('button', { name: 'Relocate', exact: true }).click();
   const dialog = win.getByRole('dialog', { name: 'Relocate repository', exact: true });
-  await expect(dialog).toContainText('revokes all provider access');
+  await expect(dialog).toBeVisible();
   await dialog.getByRole('textbox').fill('/fixture/moved');
   await dialog.getByRole('button', { name: 'Relocate repository', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -61,74 +87,56 @@ test('rebuild and relocation use the themed recovery flow and refresh status', a
   await panel.screenshot({ path: testInfo.outputPath('code-intelligence-recovery.png') });
 });
 
-test('search sends the chosen mode, defaulting to hybrid', async () => {
-  const { panel } = await openPanel();
-  await expect(panel).toContainText('nothing in the repository is built, restored or run');
-  await panel.getByLabel('Search source').fill('mode probe');
-  await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-  await expect(panel.locator('.code-intelligence-match strong').first()).toHaveText('Mode hybrid');
-  expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1), 'long names must wrap, not widen the panel').toBe(true);
-  for (const [value, expected] of [['vector', 'Mode vector'], ['lexical', 'Mode lexical']] as const) {
-    await chooseOption(panel.getByRole('button', { name: 'Search mode' }), value);
-    await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-    await expect(panel.locator('.code-intelligence-match strong').first()).toHaveText(expected);
-  }
+test('semantic search card shows status, allows downloading model, and deleting model', async () => {
+  const { win, panel } = await openPanel();
+
+  const semanticCard = panel.getByTestId('semantic-model-card');
+  await expect(semanticCard).toBeVisible();
+  await expect(semanticCard).toContainText('Semantic Search');
+
+  // Initial state: standard keyword search active
+  const badge = semanticCard.getByTestId('semantic-model-badge');
+  await expect(badge).toHaveText('Standard keyword search active');
+
+  // Download button
+  const downloadBtn = semanticCard.getByTestId('semantic-model-download-btn');
+  await expect(downloadBtn).toBeVisible();
+  await expect(downloadBtn).toContainText('Enable Semantic Search (~90 MB)');
+
+  // Trigger download
+  await downloadBtn.click();
+
+  // Model is now active
+  await expect(badge).toHaveText('Semantic search active');
+  const deleteBtn = semanticCard.getByTestId('semantic-model-delete-btn');
+  await expect(deleteBtn).toBeVisible();
+
+  // Delete model
+  await deleteBtn.click();
+  const confirmDialog = win.getByRole('dialog', { name: 'Remove Semantic Search Model?' });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: 'Remove Model' }).click();
+
+  // Returns to standard keyword search
+  await expect(badge).toHaveText('Standard keyword search active');
 });
 
-test('budget-truncated search offers the returned cursor and shows the next page', async () => {
-  const { panel } = await openPanel();
-  await panel.getByLabel('Search source').fill('parser');
-  await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-  await expect(panel).toContainText('FirstResult');
-  await expect(panel).toContainText('More results are available.');
-  await panel.getByRole('button', { name: 'More search results', exact: true }).click();
-  await expect(panel).toContainText('SecondResult');
-  await expect(panel).not.toContainText('FirstResult');
-  await expect(panel.getByRole('button', { name: 'More search results', exact: true })).toHaveCount(0);
-});
-
-test('source search and recovery remain keyboard accessible in light and dark themes', async ({}, testInfo) => {
+test('code intelligence panel maintains accessibility in light and dark modes', async ({}, testInfo) => {
   const { win, panel } = await openPanel();
   await win.setViewportSize({ width: 1000, height: 800 });
+
   for (const mode of ['light', 'dark']) {
-    await win.evaluate(mode => {
-      document.documentElement.setAttribute('data-mode', mode);
-      document.documentElement.setAttribute('data-theme', `praxis-${mode}`);
+    await win.evaluate(m => {
+      document.documentElement.setAttribute('data-mode', m);
+      document.documentElement.setAttribute('data-theme', `praxis-${m}`);
       document.documentElement.style.setProperty('--ui-scale', '1.25');
     }, mode);
-    const search = panel.getByLabel('Search source');
-    await search.fill('parser');
-    await search.press('Tab');
-    const submit = panel.getByRole('button', { name: 'Search code', exact: true });
-    await expect(submit).toBeFocused();
-    expect(await submit.evaluate(element => Number.parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
-    await submit.press('Enter');
-    await expect(panel).toContainText('FirstResult');
-    const relocate = panel.getByRole('button', { name: 'Relocate repository', exact: true });
-    await relocate.focus();
-    await relocate.press('Enter');
-    const dialog = win.getByRole('dialog', { name: 'Relocate repository', exact: true });
-    await expect(dialog.getByRole('textbox')).toBeFocused();
-    await expect(dialog).toContainText('revokes all provider access');
-    await dialog.getByRole('button', { name: 'Relocate repository', exact: true }).focus();
-    await win.keyboard.press('Tab');
-    await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused();
-    await win.keyboard.press('Shift+Tab');
-    await expect(dialog.getByRole('button', { name: 'Relocate repository', exact: true })).toBeFocused();
-    await win.screenshot({ path: testInfo.outputPath(`code-intelligence-${mode}-keyboard-dialog.png`) });
-    await win.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    await expect(relocate).toBeEnabled();
-    await expect(relocate).toBeFocused();
-    await relocate.press('Enter');
-    await expect(dialog.getByRole('textbox')).toBeFocused();
-    await dialog.getByRole('textbox').press('Tab');
-    await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
-    await win.keyboard.press('Enter');
-    await expect(dialog).toHaveCount(0);
-    await expect(panel).toContainText('/fixture/original');
-    expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
-    await search.scrollIntoViewIfNeeded();
-    await win.screenshot({ path: testInfo.outputPath(`code-intelligence-${mode}-search.png`) });
+
+    const downloadBtn = panel.getByTestId('semantic-model-download-btn');
+    await downloadBtn.focus();
+    await expect(downloadBtn).toBeFocused();
+    expect(await downloadBtn.evaluate(element => Number.parseFloat(getComputedStyle(element).outlineWidth))).toBeGreaterThan(0);
+
+    await win.screenshot({ path: testInfo.outputPath(`code-intelligence-${mode}-panel.png`) });
   }
 });

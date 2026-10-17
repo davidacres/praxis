@@ -815,8 +815,28 @@ export interface CodeIntelligenceResponse {
   freshness?: { state: string };
 }
 
+export interface SemanticModelStatus {
+  installed: boolean;
+  active: boolean;
+  fingerprint?: string;
+  sizeBytes?: number;
+  downloading?: boolean;
+  progressPercent?: number;
+  error?: string;
+}
+
+export interface SemanticModelProgressEvent {
+  bytesDownloaded: number;
+  totalBytes: number;
+  percent: number;
+}
+
 export interface AiIpc {
   codeIntelligence(request: CodeIntelligenceRequest): Promise<CodeIntelligenceResponse>;
+  getSemanticModelStatus(): Promise<SemanticModelStatus>;
+  downloadSemanticModel(): Promise<SemanticModelStatus>;
+  deleteSemanticModel(): Promise<void>;
+  onSemanticModelProgress(listener: (event: SemanticModelProgressEvent) => void): () => void;
   /** Active provider's configuration snapshot — kept for back-compat callers. */
   getStatus(): Promise<AiProviderStatus>;
   /** Stores the active provider's API key encrypted; empty string clears it. */

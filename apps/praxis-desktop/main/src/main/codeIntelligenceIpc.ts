@@ -3,9 +3,18 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { codeIntelligenceDataDirectory, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig } from '@praxis/core';
+import { codeIntelligenceDataDirectory, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain.js';
 import { getSettingsBackend } from './settingsBackendInstance.js';
+import {
+  getSemanticModelDirectory,
+  isSemanticModelInstalled,
+  getSemanticModelStatus,
+  downloadSemanticModel,
+  deleteSemanticModel,
+  getCachedFingerprint,
+  setCachedFingerprint
+} from './semanticModelManager.js';
 
 const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate']);
 const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status']);
@@ -82,6 +91,44 @@ export function registerCodeIntelligenceIpc(): void {
       }
     } catch (error) { return { error: { code: 'CAPABILITY_UNAVAILABLE', message: error instanceof Error ? error.message : 'Code intelligence is unavailable.' } }; }
   });
+
+  ipcMain.handle('ai:getSemanticModelStatus', async (): Promise<SemanticModelStatus> => {
+    if (isSemanticModelInstalled() && !getCachedFingerprint()) {
+      try {
+        const installRes = await invoke(['model-install', getSemanticModelDirectory()]);
+        const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
+        if (typeof fp === 'string') setCachedFingerprint(fp);
+      } catch {
+        // ignore
+      }
+    }
+    return getSemanticModelStatus();
+  });
+
+  ipcMain.handle('ai:downloadSemanticModel', async (): Promise<SemanticModelStatus> => {
+    await downloadSemanticModel();
+    const installRes = await invoke(['model-install', getSemanticModelDirectory()]);
+    const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
+    if (typeof fp === 'string') {
+      setCachedFingerprint(fp);
+      try {
+        const listRes = await invoke(['list']);
+        const list = Array.isArray(listRes.data) ? (listRes.data as Array<Record<string, unknown>>) : [];
+        for (const r of list) {
+          if (typeof r.id === 'string') {
+            void invoke(['model-activate', r.id, fp]).catch(() => {});
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return getSemanticModelStatus();
+  });
+
+  ipcMain.handle('ai:deleteSemanticModel', async (): Promise<void> => {
+    deleteSemanticModel();
+  });
 }
 
 /**
@@ -121,6 +168,10 @@ export async function getSessionCodeIntelligenceServer(
     }
 
     const repositoryId = String(repo.id);
+    const fp = getCachedFingerprint();
+    if (fp) {
+      void invoke(['model-activate', repositoryId, fp]).catch(() => {});
+    }
     const grant = await invoke(['grant', repositoryId, '--client', provider]).catch(() => undefined);
     if (!grant || grant.error) return undefined;
 
