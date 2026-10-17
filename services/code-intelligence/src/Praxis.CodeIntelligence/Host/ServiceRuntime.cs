@@ -6,6 +6,7 @@ using Praxis.CodeIntelligence.Embeddings;
 using Praxis.CodeIntelligence.Enrichment;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using Microsoft.Data.Sqlite;
 
 namespace Praxis.CodeIntelligence.Host;
 
@@ -57,7 +58,7 @@ public sealed class ServiceRuntime : IDisposable
                     if (Indexer.Get(registered).State != "paused") ScheduleIndex(registered);
                     return Result(new { repositoryId = registered });
                 }
-                case "index": return Result(Indexer.Index(repositoryId!, cancellationToken));
+                case "index": { var indexed = Indexer.Index(repositoryId!, cancellationToken); QueueDeferredModels(repositoryId!); return Result(indexed); }
                 case "rebuild":
                 {
                     var repository = Indexer.Get(repositoryId!);
@@ -197,19 +198,51 @@ public sealed class ServiceRuntime : IDisposable
         var repository = Indexer.Get(repositoryId);
         Scheduler.Schedule(repositoryId, "index", "reconcile", "{}", repository.Generation);
     }
+    /// <summary>
+    /// Records the model as building and, when the index is ready, queues its vectors. An index
+    /// that is not ready yet (first indexing, or a failing one) defers the vectors to the next
+    /// successful index job — see <see cref="QueueDeferredModels"/> — instead of refusing.
+    /// </summary>
     private void QueueModel(string repositoryId, string fingerprint)
     {
         var repository = Indexer.Get(repositoryId);
-        if (repository.State != "ready") throw new InvalidOperationException("Index must be ready before activating a model.");
         using var connection = Database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
         if (connection.Scalar(transaction, "SELECT fingerprint FROM model_profiles WHERE fingerprint=$0", fingerprint) is null) throw new ArgumentException("Model is not installed.");
         connection.Execute(transaction, "UPDATE jobs SET state='obsolete',lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL WHERE repository_id=$0 AND kind='embed' AND state IN('pending','leased')", repositoryId);
         connection.Execute(transaction, "UPDATE repository_models SET state='failed' WHERE repository_id=$0 AND state='building' AND model_fingerprint!=$1", repositoryId, fingerprint);
         connection.Execute(transaction, "INSERT INTO repository_models VALUES($0,$1,'building',NULL) ON CONFLICT(repository_id,model_fingerprint) DO UPDATE SET state=CASE WHEN repository_models.state='active' THEN 'active' ELSE 'building' END", repositoryId, fingerprint);
-        var key = Identity.Id("", fingerprint, repository.Generation);
-        connection.Execute(transaction, "INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,'embed',$2,$3,$4,'pending',$5) ON CONFLICT(repository_id,kind,input_key) DO UPDATE SET state='pending',attempts=0,lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL,available_utc=excluded.available_utc,error_code=NULL,error_message=NULL",
-            Identity.Id("pci:job:", repositoryId, "embed", key), repositoryId, key, JsonSerializer.Serialize(new { fingerprint }), repository.Generation, DateTimeOffset.UtcNow.ToString("O"));
+        if (repository.State == "ready") QueueEmbedding(connection, transaction, repositoryId, fingerprint, repository.Generation);
         connection.Execute(transaction, "UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId); transaction.Commit();
+    }
+
+    private static void QueueEmbedding(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, string fingerprint, long generation)
+    {
+        var key = Identity.Id("", fingerprint, generation);
+        connection.Execute(transaction, "INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,'embed',$2,$3,$4,'pending',$5) ON CONFLICT(repository_id,kind,input_key) DO UPDATE SET state='pending',attempts=0,lease_token=NULL,lease_owner=NULL,lease_until_utc=NULL,available_utc=excluded.available_utc,error_code=NULL,error_message=NULL",
+            Identity.Id("pci:job:", repositoryId, "embed", key), repositoryId, key, JsonSerializer.Serialize(new { fingerprint }), generation, DateTimeOffset.UtcNow.ToString("O"));
+    }
+
+    /// <summary>
+    /// After an index job, queue vectors for a model still building with no live or finished job
+    /// for this generation. Publication already queues them when facts change; an unchanged
+    /// reconciliation does not, and a deferred activation would otherwise wait for ever.
+    /// </summary>
+    private void QueueDeferredModels(string repositoryId)
+    {
+        var repository = Indexer.Get(repositoryId);
+        if (repository.State != "ready") return;
+        using var connection = Database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
+        var building = new List<string>();
+        using (var command = connection.Command(transaction, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state='building'", repositoryId))
+        using (var reader = command.ExecuteReader()) while (reader.Read()) building.Add(reader.GetString(0));
+        foreach (var fingerprint in building)
+        {
+            var state = connection.Scalar(transaction, "SELECT state FROM jobs WHERE repository_id=$0 AND kind='embed' AND input_key=$1",
+                repositoryId, Identity.Id("", fingerprint, repository.Generation)) as string;
+            if (state is "pending" or "leased" or "succeeded") continue;
+            QueueEmbedding(connection, transaction, repositoryId, fingerprint, repository.Generation);
+        }
+        transaction.Commit();
     }
     /// <summary>
     /// Sources may have changed while no owner was watching. Queue reconciliation
@@ -264,7 +297,11 @@ public sealed class ServiceRuntime : IDisposable
         }, heartbeatCancellation.Token);
         try
         {
-            if (job.Kind == "index") await Task.Run(() => Indexer.Index(job.RepositoryId, work.Token, job.Token, JsonNode.Parse(job.Payload)?["force"]?.GetValue<bool>() == true), work.Token);
+            if (job.Kind == "index")
+            {
+                await Task.Run(() => Indexer.Index(job.RepositoryId, work.Token, job.Token, JsonNode.Parse(job.Payload)?["force"]?.GetValue<bool>() == true), work.Token);
+                QueueDeferredModels(job.RepositoryId);
+            }
             else
             {
                 var repository = Indexer.Get(job.RepositoryId);

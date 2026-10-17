@@ -12,6 +12,11 @@ public sealed class LocalModelFactAttribute : FactAttribute
 {
     public LocalModelFactAttribute() { if (Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE") is null) Skip = "Provisioned model bundle is required for native model verification."; }
 }
+
+public sealed class LocalModelTheoryAttribute : TheoryAttribute
+{
+    public LocalModelTheoryAttribute() { if (Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE") is null) Skip = "Provisioned model bundle is required for native model verification."; }
+}
 public sealed class ModelTests
 {
     [LocalModelFact]
@@ -163,6 +168,53 @@ public sealed class ModelTests
             Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None)["error"]);
             Assert.Empty(Search()["data"]!["matches"]!.AsArray());
             await WaitForVectors();
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    // The desktop activates the installed model for a repository it has just registered,
+    // and for one whose index is still failing; both used to be refused ("Index must be
+    // ready"), the refusal was dropped, and vector search stayed MODEL_UNAVAILABLE for ever.
+    [LocalModelTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ActivationBeforeTheIndexIsReadyIsHonouredOnceItIs(bool previouslyPublished)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-deferred-activation-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Example.cs"), "class AuthenticationTokenParser { string ParseToken(string token) => token; }");
+            using var runtime = new ServiceRuntime(Path.Combine(root, "runtime"));
+            var id = runtime.Dispatch(new JsonObject { ["action"] = "register", ["root"] = root }, CancellationToken.None)["data"]!["repositoryId"]!.GetValue<string>();
+            // Install first: installing a model makes the next index republish, which would
+            // queue vectors itself and hide the unchanged-reconciliation case.
+            var fingerprint = runtime.Dispatch(new JsonObject { ["action"] = "model-install", ["bundle"] = Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE") }, CancellationToken.None)["data"]!["fingerprint"]!.GetValue<string>();
+            if (previouslyPublished)
+            {
+                // A published index the owner no longer reports ready: its next
+                // reconciliation finds nothing changed and publishes nothing.
+                Assert.Null(runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None)["error"]);
+                using var connection = runtime.Database.Open();
+                connection.Execute(null, "UPDATE repositories SET state='unknown' WHERE repository_id=$0", id);
+            }
+            var activated = runtime.Dispatch(new JsonObject { ["action"] = "model-activate", ["repositoryId"] = id, ["fingerprint"] = fingerprint }, CancellationToken.None);
+            Assert.Null(activated["error"]);
+            Assert.True(activated["data"]!["queued"]!.GetValue<bool>());
+            if (previouslyPublished)
+            {
+                var reconciled = runtime.Dispatch(new JsonObject { ["action"] = "index", ["repositoryId"] = id }, CancellationToken.None);
+                Assert.Null(reconciled["error"]);
+                Assert.False(reconciled["data"]!["changed"]!.GetValue<bool>()); // nothing republished, so nothing else queues vectors
+            }
+            var elapsed = System.Diagnostics.Stopwatch.StartNew(); JsonObject? result = null;
+            while (elapsed.Elapsed < TimeSpan.FromSeconds(20))
+            {
+                await runtime.MaintainAsync(CancellationToken.None);
+                result = runtime.Dispatch(new JsonObject { ["action"] = "query", ["tool"] = "search_code", ["arguments"] = new JsonObject { ["repositoryId"] = id, ["query"] = "token parser", ["mode"] = "vector", ["responseBudgetTokens"] = 8000 } }, CancellationToken.None);
+                if (result["error"] is null && result["data"]?["matches"] is JsonArray { Count: > 0 }) return;
+                await Task.Delay(25);
+            }
+            Assert.Fail("Deferred activation never produced vectors: " + result?.ToJsonString());
         }
         finally { Directory.Delete(root, recursive: true); }
     }

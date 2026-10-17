@@ -55,6 +55,49 @@ async function invoke(args: string[], input?: Record<string, unknown>): Promise<
     child.stdin?.on('error', () => { }); child.stdin?.end(input ? JSON.stringify(input) : undefined);
   });
 }
+// The installed model's fingerprint, installing the downloaded bundle into the service the
+// first time this session needs it.
+async function installedModelFingerprint(): Promise<string | undefined> {
+  const cached = getCachedFingerprint();
+  if (cached) return cached;
+  if (!isSemanticModelInstalled()) return undefined;
+  const installed = await invoke(['model-install', getSemanticModelDirectory()]);
+  const fingerprint = (installed.data as Record<string, unknown> | undefined)?.fingerprint;
+  if (typeof fingerprint !== 'string') return undefined;
+  setCachedFingerprint(fingerprint);
+  return fingerprint;
+}
+
+async function registeredRepositoryIds(): Promise<string[]> {
+  const listed = await invoke(['list']);
+  return (Array.isArray(listed.data) ? listed.data as Array<Record<string, unknown>> : [])
+    .map(repository => repository.id).filter((id): id is string => typeof id === 'string');
+}
+
+/**
+ * Activates the model for each repository that has it neither active nor building, and
+ * returns the failures. Vector search answers MODEL_UNAVAILABLE until a repository is
+ * activated, so a dropped activation is invisible until someone searches; never discard
+ * one. The service accepts an activation before the index is ready and builds the vectors
+ * once it is.
+ */
+async function activateModel(fingerprint: string, repositoryIds: string[]): Promise<string[]> {
+  const failures: string[] = [];
+  for (const repositoryId of repositoryIds) {
+    const status = await invoke(['local-rpc'], { tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } }).catch(() => undefined);
+    const models = (status?.data as { models?: Array<{ fingerprint?: unknown; state?: unknown }> } | undefined)?.models ?? [];
+    if (models.some(model => model.fingerprint === fingerprint && (model.state === 'active' || model.state === 'building'))) continue;
+    const activated = await invoke(['model-activate', repositoryId, fingerprint])
+      .catch((error: unknown) => ({ error: { code: 'OPERATION_FAILED', message: error instanceof Error ? error.message : String(error) } }));
+    if (activated.error) failures.push(activated.error.message);
+  }
+  return failures;
+}
+
+// Repositories registered before this fix, or whose activation was refused while their
+// index was failing, are caught up once per session.
+let modelActivationCaughtUp = false;
+
 export function registerCodeIntelligenceIpc(): void {
   ipcMain.handle('ai:codeIntelligence', async (_event, request: CodeIntelligenceRequest): Promise<CodeIntelligenceResponse> => {
     try {
@@ -65,7 +108,13 @@ export function registerCodeIntelligenceIpc(): void {
           const args = ['register', text(request.root)];
           if (request.manifest) args.push('--manifest', text(request.manifest));
           if (request.excludes?.length) { if (request.excludes.length > 100) throw new Error('Too many exclusions.'); args.push('--exclude', request.excludes.map(value => text(value)).join(';')); }
-          return invoke(args);
+          const registered = await invoke(args);
+          const repositoryId = (registered.data as Record<string, unknown> | undefined)?.repositoryId;
+          if (registered.error || typeof repositoryId !== 'string') return registered;
+          // A repository added after the model was installed needs it activated too.
+          const fingerprint = await installedModelFingerprint().catch(() => undefined);
+          const failures = fingerprint ? await activateModel(fingerprint, [repositoryId]) : [];
+          return failures.length ? { ...registered, warnings: [...(registered.warnings ?? []), ...failures.map(message => ({ code: 'MODEL_ACTIVATION_FAILED', message }))] } : registered;
         }
         case 'relocate': {
           const args = ['relocate', text(request.repositoryId, 512), text(request.root)];
@@ -98,14 +147,15 @@ export function registerCodeIntelligenceIpc(): void {
   });
 
   ipcMain.handle('ai:getSemanticModelStatus', async (): Promise<SemanticModelStatus> => {
-    if (isSemanticModelInstalled() && !getCachedFingerprint()) {
-      try {
-        const installRes = await invoke(['model-install', getSemanticModelDirectory()]);
-        const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
-        if (typeof fp === 'string') setCachedFingerprint(fp);
-      } catch {
-        // ignore
+    try {
+      const fingerprint = await installedModelFingerprint();
+      if (fingerprint && !modelActivationCaughtUp) {
+        modelActivationCaughtUp = true;
+        const failures = await activateModel(fingerprint, await registeredRepositoryIds());
+        if (failures.length) console.error('Semantic model activation failed:', failures.join('; '));
       }
+    } catch (error) {
+      console.error('Semantic model status check failed:', error);
     }
     return getSemanticModelStatus();
   });
@@ -118,17 +168,8 @@ export function registerCodeIntelligenceIpc(): void {
     const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
     if (typeof fp === 'string') {
       setCachedFingerprint(fp);
-      try {
-        const listRes = await invoke(['list']);
-        const list = Array.isArray(listRes.data) ? (listRes.data as Array<Record<string, unknown>>) : [];
-        for (const r of list) {
-          if (typeof r.id === 'string') {
-            void invoke(['model-activate', r.id, fp]).catch(() => {});
-          }
-        }
-      } catch {
-        // ignore
-      }
+      const failures = await activateModel(fp, await registeredRepositoryIds());
+      if (failures.length) throw new Error(`The model is installed but could not be activated: ${failures.join('; ')}`);
     }
     return getSemanticModelStatus();
   });
@@ -208,9 +249,10 @@ export async function getSessionCodeIntelligenceServer(
     }
 
     const repositoryId = String(repo.id);
-    const fp = getCachedFingerprint();
+    const fp = await installedModelFingerprint().catch(() => undefined);
     if (fp) {
-      void invoke(['model-activate', repositoryId, fp]).catch(() => {});
+      const failures = await activateModel(fp, [repositoryId]);
+      if (failures.length) console.error('Semantic model activation failed:', failures.join('; '));
     }
     const grant = await invoke(['grant', repositoryId, '--client', provider]).catch(() => undefined);
     if (!grant || grant.error) return undefined;
