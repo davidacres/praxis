@@ -20,7 +20,11 @@ test.afterEach(async () => {
   app = undefined;
   if (owner && owner.exitCode === null) owner.kill();
   owner = undefined;
-  if (temporary) fs.rmSync(temporary, { recursive: true, force: true });
+  if (temporary) {
+    // The app's requests auto-start an owner of their own; it outlives the app.
+    try { process.kill(JSON.parse(fs.readFileSync(path.join(temporary, 'data', 'owner.json'), 'utf8')).processId); } catch { /* none running */ }
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
   temporary = undefined;
 });
 
