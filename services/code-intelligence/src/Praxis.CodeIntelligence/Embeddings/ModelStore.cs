@@ -13,6 +13,11 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
 {
     public const int VectorScorerVersion = 4;
     public const int VectorQueryPlanVersion = 6;
+    /// <summary>Symbols embedded per committed batch during activation or refresh.</summary>
+    internal const int VectorCommitBatch = 1000;
+    internal int VectorCommitBatchSize { get; set; } = VectorCommitBatch;
+    /// <summary>Test hook: runs after each committed batch with the symbols committed so far.</summary>
+    internal Action<int>? BatchCommitted { get; set; }
     // Queried on the database volume, where both profiles and the SQLite WAL
     // may coexist during activation. Injectable only for deterministic fault tests.
     internal Func<string, long> AvailableDiskBytes { get; set; } = path => new DriveInfo(path).AvailableFreeSpace;
@@ -81,7 +86,11 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         if (model.Fingerprint != fingerprint) throw new IOException("Installed model fingerprint mismatch.");
         var repository = new RepositoryIndexer(database).Get(repositoryId);
         if (repository.State != "ready") throw new InvalidOperationException("INDEX_STALE: index must be ready before model activation.");
-        var inputs = new List<(string Id, string Revision, SymbolRepresentation Representation)>();
+        // Record the build so committed batches are reported as coverage and reused by a retry,
+        // however activation was started (queued job or direct call). Not result-affecting.
+        using (var connection = database.Open())
+            connection.Execute(null, "INSERT INTO repository_models VALUES($0,$1,'building',NULL) ON CONFLICT(repository_id,model_fingerprint) DO NOTHING", repositoryId, fingerprint);
+        var inputs = new List<(string Id, string Revision, SymbolRepresentation Representation, string? Path)>();
         SourceInput? lastSource = null;
         var observedSources = new Dictionary<string, string>(StringComparer.Ordinal);
         using (var connection = database.Open(readOnly: true))
@@ -101,7 +110,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                 }
                 var representation = RepresentationBuilder.Build(reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5),
                     source, source is null ? 0 : reader.GetInt32(8), source is null ? 0 : reader.GetInt32(9));
-                inputs.Add((reader.GetString(0), reader.GetString(1), representation));
+                inputs.Add((reader.GetString(0), reader.GetString(1), representation, source?.Path));
                 if (inputs.Count > 50_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             }
         }
@@ -115,7 +124,54 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             throw new IOException("INSUFFICIENT_DISK_SPACE: model activation requires disk headroom for the new profile and recovery.");
         Dictionary<(string Symbol, string Profile), ReusableEmbedding> reusable;
         using (var read = database.Open(readOnly: true)) reusable = EmbeddingReuse.Capture(read, null, repositoryId, cancellationToken, fingerprint);
-        var embeddings = new List<(string Id, string Revision, SymbolRepresentation Representation, IReadOnlyList<EmbeddedChunk> Chunks)>();
+        // Vectors are committed in batches so coverage climbs during a long build and a crash
+        // keeps finished work (the retry reuses committed sets). A first build stays 'building'
+        // until the final transaction activates it, so search never sees a half-built profile;
+        // a refresh of an active profile changes results, so each of its batches bumps the epoch.
+        bool alreadyActive;
+        using (var read = database.Open(readOnly: true))
+            alreadyActive = read.Scalar(null, "SELECT 1 FROM repository_models WHERE repository_id=$0 AND model_fingerprint=$1 AND state='active'", repositoryId, fingerprint) is not null;
+        var expectedEpoch = repository.QueryEpoch; var committed = 0;
+        var pending = new List<(string Id, string Revision, SymbolRepresentation Representation, IReadOnlyList<EmbeddedChunk> Chunks, string? Path)>();
+        void Commit(bool final)
+        {
+            foreach (var path in pending.Select(item => item.Path).Concat(final ? observedSources.Keys : []).OfType<string>().Distinct(StringComparer.Ordinal))
+                if (SourceFiles.Read(repository.Root, path, cancellationToken).Hash != observedSources[path])
+                    throw new IOException("INDEX_STALE: source changed during embedding.");
+            using var writer = database.Open(); using var transaction = writer.BeginTransaction(deferred: false);
+            using var batch = new SqlBatch(writer, transaction);
+            if (Convert.ToInt64(writer.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", repositoryId)) != expectedEpoch)
+                throw new InvalidOperationException("INDEX_STALE: embedding inputs changed during inference.");
+            if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
+            if (final)
+            {
+                batch.Execute("UPDATE repository_models SET state='retiring' WHERE repository_id=$0 AND state='active' AND model_fingerprint!=$1", repositoryId, fingerprint);
+                batch.Execute("INSERT INTO repository_models VALUES($0,$1,'active',$2) ON CONFLICT(repository_id,model_fingerprint) DO UPDATE SET state='active',activated_utc=excluded.activated_utc", repositoryId, fingerprint, DateTimeOffset.UtcNow.ToString("O"));
+            }
+            foreach (var item in pending)
+            {
+                batch.Execute("UPDATE embedding_sets SET state='stale' WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
+                batch.Execute("DELETE FROM embedding_sets WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
+                batch.Execute("INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL) ON CONFLICT(symbol_id,model_fingerprint) DO UPDATE SET input_revision=excluded.input_revision,representation_hash=excluded.representation_hash,eligibility='eligible',exclusion_reason=NULL", item.Id, fingerprint, item.Revision, item.Representation.Hash);
+                var set = Identity.Id("pci:vector:", item.Id, fingerprint, item.Representation.Hash);
+                batch.Execute("INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", set, item.Id, fingerprint, item.Revision, item.Representation.Hash, item.Chunks.Count);
+                for (var index = 0; index < item.Chunks.Count; index++)
+                {
+                    var values = new byte[LocalModel.Dimensions * 4]; for (var dimension = 0; dimension < LocalModel.Dimensions; dimension++) BinaryPrimitives.WriteSingleLittleEndian(values.AsSpan(dimension * 4, 4), item.Chunks[index].Vector[dimension]);
+                    var span = item.Chunks[index].Span;
+                    var spans = RepresentationBuilder.ChunkMetadata(item.Representation, span);
+                    batch.Execute("INSERT INTO vectors VALUES($0,$1,384,$2,$3)", set, index, values, spans);
+                }
+                batch.Execute("UPDATE embedding_sets SET state='ready' WHERE set_id=$0", set);
+            }
+            var changesResults = final || alreadyActive;
+            if (changesResults) batch.Execute("UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
+            if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
+            cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
+            if (changesResults) expectedEpoch++;
+            committed += pending.Count; pending.Clear();
+            BatchCommitted?.Invoke(committed);
+        }
         foreach (var input in inputs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -128,37 +184,10 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                 ? cached!.Chunks.Select(chunk => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span)).ToArray()
                 : model.EmbedDetailedRepresentation(input.Representation.Text, cancellationToken);
             foreach (var chunk in chunks) LocalModel.ValidateVector(chunk.Vector);
-            embeddings.Add((input.Id, input.Revision, input.Representation, chunks));
+            pending.Add((input.Id, input.Revision, input.Representation, chunks, input.Path));
+            if (pending.Count >= VectorCommitBatchSize) Commit(final: false);
         }
-        foreach (var source in observedSources)
-            if (SourceFiles.Read(repository.Root, source.Key, cancellationToken).Hash != source.Value)
-                throw new IOException("INDEX_STALE: source changed during embedding.");
-        using var writer = database.Open(); using var transaction = writer.BeginTransaction(deferred: false);
-        using var batch = new SqlBatch(writer, transaction);
-        if (Convert.ToInt64(writer.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", repositoryId)) != repository.QueryEpoch)
-            throw new InvalidOperationException("INDEX_STALE: embedding inputs changed during inference.");
-        if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
-        batch.Execute("UPDATE repository_models SET state='retiring' WHERE repository_id=$0 AND state='active' AND model_fingerprint!=$1", repositoryId, fingerprint);
-        batch.Execute("INSERT INTO repository_models VALUES($0,$1,'active',$2) ON CONFLICT(repository_id,model_fingerprint) DO UPDATE SET state='active',activated_utc=excluded.activated_utc", repositoryId, fingerprint, DateTimeOffset.UtcNow.ToString("O"));
-        foreach (var item in embeddings)
-        {
-            batch.Execute("UPDATE embedding_sets SET state='stale' WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
-            batch.Execute("DELETE FROM embedding_sets WHERE symbol_id=$0 AND model_fingerprint=$1", item.Id, fingerprint);
-            batch.Execute("INSERT INTO representation_targets VALUES($0,$1,$2,$3,'eligible',NULL) ON CONFLICT(symbol_id,model_fingerprint) DO UPDATE SET input_revision=excluded.input_revision,representation_hash=excluded.representation_hash,eligibility='eligible',exclusion_reason=NULL", item.Id, fingerprint, item.Revision, item.Representation.Hash);
-            var set = Identity.Id("pci:vector:", item.Id, fingerprint, item.Representation.Hash);
-            batch.Execute("INSERT INTO embedding_sets VALUES($0,$1,$2,$3,$4,$5,'pending',NULL)", set, item.Id, fingerprint, item.Revision, item.Representation.Hash, item.Chunks.Count);
-            for (var index = 0; index < item.Chunks.Count; index++)
-            {
-                var values = new byte[LocalModel.Dimensions * 4]; for (var dimension = 0; dimension < LocalModel.Dimensions; dimension++) BinaryPrimitives.WriteSingleLittleEndian(values.AsSpan(dimension * 4, 4), item.Chunks[index].Vector[dimension]);
-                var span = item.Chunks[index].Span;
-                var spans = RepresentationBuilder.ChunkMetadata(item.Representation, span);
-                batch.Execute("INSERT INTO vectors VALUES($0,$1,384,$2,$3)", set, index, values, spans);
-            }
-            batch.Execute("UPDATE embedding_sets SET state='ready' WHERE set_id=$0", set);
-        }
-        batch.Execute("UPDATE repositories SET query_epoch=query_epoch+1 WHERE repository_id=$0", repositoryId);
-        if (leaseToken is not null) Host.DurableScheduler.AssertLease(writer, transaction, leaseToken);
-        cancellationToken.ThrowIfCancellationRequested(); transaction.Commit();
+        Commit(final: true);
     }
 
     public ModelQuery? QueryEmbedding(string repositoryId, string query, CancellationToken cancellationToken)

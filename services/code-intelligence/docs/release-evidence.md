@@ -1135,3 +1135,21 @@ Choosing from these numbers would tune on the acceptance set. A non-saturated tu
 - 149 C# tests pass, 2 SDK-capture tests skipped.
 
 The floor adds a bounded reorder of the candidate list; 50k latency was not re-measured.
+
+## Batched vector commits — 17 October
+
+Activation and refresh used to hold every embedding in memory and write them in one transaction at the end. Coverage therefore read 0 for the whole of a 23-minute build of this repository and looked hung, and a crash lost all of the work.
+- Vectors are now committed every 1,000 symbols. Each batch re-checks its sources, the query epoch and the lease.
+- A first build stays `building` until the final transaction activates it, so search never uses a partial profile.
+- A refresh of an active profile bumps the epoch with each batch.
+- Activation records its `building` row itself, so a retry reuses the committed sets however activation was started.
+
+**Praxis build** (39,845 symbols, 30 s samples):
+- Coverage rose by about 1,000 every 30–36 s, from 0 to 39,845.
+- The model was `building` until the end and `active` at completion.
+- Total time was ≤ 1,387 s, against 1,364 s for the previous single-transaction build.
+- Owner RSS during embedding was 410–490 MiB.
+
+**Tests.**
+- `AnInterruptedBuildKeepsCommittedBatchesWithoutActivatingAndTheRetryFinishes` (batch size 2, cancelled after the first commit) checks three things: the first batch is durable, the profile is not active and query embedding returns null, and the retry embeds only the remaining symbols before activating. It fails when intermediate commits are disabled.
+- 150 C# tests pass, 2 SDK-capture tests skipped.

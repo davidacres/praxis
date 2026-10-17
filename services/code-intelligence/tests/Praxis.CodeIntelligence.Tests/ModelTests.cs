@@ -293,6 +293,41 @@ public sealed class ModelTests
     }
 
     [LocalModelFact]
+    public void AnInterruptedBuildKeepsCommittedBatchesWithoutActivatingAndTheRetryFinishes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-vector-batches-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            for (var i = 0; i < 4; i++) File.WriteAllText(Path.Combine(root, $"Part{i}.cs"), $"class Part{i} {{ int Measure() => {i}; }}");
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models")) { VectorCommitBatchSize = 2 };
+            var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!);
+            long Scalar(string sql) { using var c = database.Open(readOnly: true); return Convert.ToInt64(c.Scalar(null, sql, repository) ?? 0L); }
+            var eligible = Scalar("SELECT count(*) FROM symbols WHERE repository_id=$0 AND external=0");
+            Assert.True(eligible > 4);
+            using var cancellation = new CancellationTokenSource();
+            var batches = new List<int>();
+            store.BatchCommitted = committed => { batches.Add(committed); cancellation.Cancel(); };
+            Assert.ThrowsAny<OperationCanceledException>(() => store.Activate(repository, profile, cancellation.Token));
+            // The first batch is durable, but the profile is not active, so search ignores it.
+            Assert.Equal(new[] { 2 }, batches);
+            Assert.Equal(2L, Scalar("SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.repository_id=$0 AND e.state='ready'"));
+            Assert.Equal(0L, Scalar("SELECT count(*) FROM repository_models WHERE repository_id=$0 AND state='active'"));
+            Assert.Null(store.QueryEmbedding(repository, "measure a part", CancellationToken.None));
+            // The retry reuses the committed sets and embeds only the rest.
+            batches.Clear(); store.BatchCommitted = batches.Add;
+            store.Activate(repository, profile, CancellationToken.None);
+            Assert.Equal(eligible - 2, batches[^1]);
+            Assert.Equal(eligible, Scalar("SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.repository_id=$0 AND e.state='ready'"));
+            Assert.Equal(1L, Scalar("SELECT count(*) FROM repository_models WHERE repository_id=$0 AND state='active'"));
+            Assert.NotNull(store.QueryEmbedding(repository, "measure a part", CancellationToken.None));
+            Assert.Empty(database.Check());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [LocalModelFact]
     public void QueriesAndVectorRefreshesShareOneInferenceSession()
     {
         // Each session holds the whole model (about 130 MB native plus its load buffers); loading
