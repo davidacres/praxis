@@ -27,8 +27,8 @@ Each row satisfies rule1 (H1 title),2 (explicit type),3 (checked unique ID),4 (d
 | apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-170/tasks/task-454.md | TASK-454 | Task | In Progress | Publish local descriptions chunks and vector sets | 1–6 |
 | apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-170/tasks/task-455.md | TASK-455 | Task | In Progress | Implement hybrid ranking aliases and model degradation | 1–6 |
 | apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-170/tasks/task-456.md | TASK-456 | Task | In Progress | Integrate MCP schemas cancellation and provider scopes | 1–6 |
-| apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-171/tasks/task-457.md | TASK-457 | Task | In Progress | Integrate desktop setup status search and CLI | 1–6 |
-| apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-171/tasks/task-458.md | TASK-458 | Task | To Do | Execute offline platform performance and quality release matrix | 1–6 |
+| apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-171/tasks/task-457.md | TASK-457 | Task | Done | Integrate desktop setup status search and CLI | 1–6 |
+| apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-171/tasks/task-458.md | TASK-458 | Task | Done | Execute offline platform performance and quality release matrix | 1–6 |
 | apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-172/tasks/task-459.md | TASK-459 | Task | Done | Add TypeScript and JavaScript language adapter | 1–6 |
 | apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-172/tasks/task-460.md | TASK-460 | Task | Done | Add optional local LLM enrichment | 1–6 |
 | apps/praxis-desktop/docs/plans/features/fx-bf-109-code-intelligence/stories/fx-be-172/tasks/task-461.md | TASK-461 | Task | Done | Evaluate ANN scaling federation and interoperability | 1–6 |
