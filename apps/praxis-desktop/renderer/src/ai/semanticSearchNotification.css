@@ -1,0 +1,142 @@
+.semantic-search-notification {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: min(420px, calc(100vw - 48px));
+  background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity, 1) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius-lg, 12px) + var(--surface-radius-boost, 0px));
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), var(--surface-accent-glow);
+  backdrop-filter: var(--surface-backdrop);
+  padding: 16px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: semanticNotificationSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes semanticNotificationSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.semantic-search-notification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.semantic-search-notification-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.semantic-search-notification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--tone-accent, #3b82f6) 15%, transparent);
+  color: var(--tone-accent, #3b82f6);
+  flex-shrink: 0;
+}
+
+.semantic-search-notification-title {
+  margin: 0;
+  font-size: var(--text-md, 14px);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.semantic-search-notification-badge {
+  font-size: var(--text-xs, 11px);
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--tone-accent, #3b82f6) 15%, transparent);
+  color: var(--tone-accent, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--tone-accent, #3b82f6) 30%, transparent);
+  white-space: nowrap;
+}
+
+.semantic-search-notification-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm, 4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.semantic-search-notification-close:hover {
+  color: var(--text);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.semantic-search-notification-body {
+  font-size: var(--text-sm, 13px);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.semantic-search-notification-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.semantic-search-notification-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.08));
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.semantic-search-notification-fill {
+  height: 100%;
+  background: var(--tone-accent, #3b82f6);
+  transition: width 0.2s ease;
+}
+
+.semantic-search-notification-meta {
+  font-size: var(--text-xs, 11px);
+  color: var(--text-muted);
+}
+
+.semantic-search-notification-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-sm, 13px);
+  font-weight: 500;
+  color: var(--tone-success, #22c55e);
+}
+
+.semantic-search-notification-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}

@@ -48,6 +48,7 @@ import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
 import { CodeSearchDialog } from '../ai/CodeSearchDialog';
+import { SemanticSearchNotification } from '../ai/SemanticSearchNotification';
 import { Walkthrough, type WalkthroughStop } from './Walkthrough';
 import { NewProjectWizard } from '../projects/NewProjectWizard';
 import { AddProjectDialog, type AddProjectChoice } from '../projects/AddProjectDialog';
@@ -3241,6 +3242,9 @@ export function App() {
         />
       )}
       {startupResolved && !showSplash && !aiSetupNeeded && <SessionRecoveryDialog />}
+      {startupResolved && !showSplash && !aiSetupNeeded && (
+        <SemanticSearchNotification onOpenSettings={() => setSettingsDialogCategory('code-intelligence')} />
+      )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
       {paletteOpen && !aiSetupNeeded && (
         <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />

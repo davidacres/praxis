@@ -206,6 +206,7 @@ export function CodeIntelligencePanel({
       if (window.praxis?.ai?.resetCodeIntelligence) {
         await window.praxis.ai.resetCodeIntelligence();
       }
+      localStorage.removeItem('praxis:semantic-search-prompt-dismissed');
       setRepositoryId('');
       setStatus(undefined);
       setModelStatus({ installed: false, active: false });

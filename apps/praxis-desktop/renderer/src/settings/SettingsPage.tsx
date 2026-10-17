@@ -359,6 +359,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
       if (window.praxis?.ai?.resetCodeIntelligence) {
         await window.praxis.ai.resetCodeIntelligence();
       }
+      localStorage.removeItem('praxis:semantic-search-prompt-dismissed');
       await window.praxis.window.reload();
     }
   };
