@@ -21,8 +21,9 @@ const executable = path.resolve(options.get('--executable')), output = path.reso
 if (!output.endsWith('.praxis.json')) throw Error('Output must end in .praxis.json');
 try { await access(output); throw Error('Output already exists'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 const work = await mkdtemp(path.join(os.tmpdir(), 'pci-disk-full-'));
-const volume = path.join(work, 'volume');
-const data = path.join(volume, 'data'), source = path.join(work, 'source');
+// Windows replaces the volume path with the attached drive letter.
+let volume = path.join(work, 'volume'), data;
+const source = path.join(work, 'source');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const hash = text => text === undefined ? null : 'sha256:' + crypto.createHash('sha256').update(text).digest('hex');
 async function cli(...args) {
@@ -68,7 +69,9 @@ const volumes = {
     }
   },
   win32: {
-    description: '64 MiB NTFS VHDX mounted on an empty folder',
+    // A drive letter, not a folder mount: a volume mount folder is a reparse point the
+    // owner's data-directory canonicalisation cannot resolve yet (see release evidence).
+    description: '64 MiB NTFS VHDX on its own drive letter',
     async attach() {
       const image = path.join(work, 'index.vhdx'), script = path.join(work, 'diskpart.txt');
       const diskpart = async lines => {
@@ -77,9 +80,13 @@ const volumes = {
         try { return await execute('diskpart', ['/s', script], { timeout: 120_000 }); }
         catch (error) { throw Error(`diskpart failed (${lines[0]}): ${(error.stdout ?? '').trim().slice(-2000)}`); }
       };
-      await mkdir(volume);
       await diskpart([`create vdisk file="${image}" maximum=64 type=expandable`, `select vdisk file="${image}"`, 'attach vdisk',
-        'create partition primary', 'format fs=ntfs quick label=PciDiskFull', `assign mount="${volume}"`]);
+        'create partition primary', 'format fs=ntfs quick label=PciDiskFull', 'assign']);
+      // diskpart picks a free letter; find it by the volume label.
+      const { stdout } = await execute('powershell', ['-NoProfile', '-Command', "(Get-Volume -FileSystemLabel PciDiskFull).DriveLetter"]);
+      const letter = stdout.trim();
+      if (!/^[A-Z]$/.test(letter)) throw Error('Attached VHDX has no drive letter: ' + stdout);
+      volume = letter + ':\\';
       return () => diskpart([`select vdisk file="${image}"`, 'detach vdisk']);
     }
   }
@@ -92,6 +99,7 @@ const step = (name, details) => { report.steps.push({ name, ...details }); conso
 let detach, ownerProcess;
 try {
   detach = await platformVolume.attach();
+  data = path.join(volume, 'data');
   await mkdir(source);
   await writeFile(path.join(source, 'Example.cs'), Array.from({ length: 50 }, (_, i) => `public class Example${i} { public int Run${i}() => ${i}; }`).join('\n'));
   const registered = await cli('register', source); if (registered.exitCode) throw Error('Register failed: ' + JSON.stringify(registered));

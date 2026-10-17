@@ -73,11 +73,13 @@ try {
     const pid = await ownerPid(); let killed = false;
     if (pid) try { process.kill(pid, 'SIGKILL'); killed = true; } catch { }
     await wait(300);
+    const restartStarted = performance.now();
     const doctor = (await cli('doctor')).data; // restarts the owner on demand
+    const restartMs = performance.now() - restartStarted;
     const recoveryMs = await settle(180000, true);
     const source = await cli('query', 'get_source', JSON.stringify({ repositoryId: repository, symbolId: target, responseBudgetTokens: 8000 }));
     const finalDoctor = (await cli('doctor')).data;
-    const sample = { iteration, delayMs, killed, integrityAfterRestart: doctor?.checks ?? null, recoveredMs: recoveryMs,
+    const sample = { iteration, delayMs, killed, restartMs, integrityAfterRestart: doctor?.checks ?? null, recoveredMs: recoveryMs,
       currentHash: source.data?.fragments?.[0]?.currentHash ?? null, contentCurrent: source.data?.fragments?.[0]?.currentHash === expectedHash,
       integrityAfterRecovery: finalDoctor?.checks ?? null };
     report.samples.push(sample); console.error(JSON.stringify(sample));
