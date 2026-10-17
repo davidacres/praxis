@@ -33,6 +33,7 @@ import { SessionUsageSummary } from './SessionUsageSummary';
 import { workflowPreview } from './workflowPreview';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
+import { SessionCodeIntelControl } from './SessionCodeIntelControl';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
@@ -1184,6 +1185,12 @@ export function NewSession({
             workingDirectory={workingDirectory}
             runInWorktree={runInWorktree}
             onToggleWorktree={setRunInWorktree}
+            testId="new-session"
+            disabled={submitting}
+          />
+          <SessionCodeIntelControl
+            workingDirectory={workingDirectory}
+            provider={selectedProvider}
             testId="new-session"
             disabled={submitting}
           />

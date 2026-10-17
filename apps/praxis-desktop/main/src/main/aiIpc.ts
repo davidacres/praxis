@@ -51,8 +51,10 @@ import {
   type WireImageAttachment,
   isProviderLimitError,
   extractProviderLimitMessage,
-  resolveTicketContext
+  resolveTicketContext,
+  mcpServerSlug
 } from '@praxis/core';
+import { getSessionCodeIntelligenceServer } from './codeIntelligenceIpc';
 import { buildReadOnlyModeTask } from './sessionModeTask';
 import {
   abortActiveTask,
@@ -337,12 +339,14 @@ function mcpServersOption(
   trackerMcp: Awaited<ReturnType<typeof trackerMcpServerForSession>>,
   toolMode: string | undefined,
   coordinationMcp?: Awaited<ReturnType<typeof coordinationMcpServerForSession>>,
-  provider?: string
+  provider?: string,
+  codeIntelMcp?: AcpMcpServer
 ): { mcpServers?: AcpMcpServer[] } {
   const servers: AcpMcpServer[] = [
     ...(browserMcp ? [browserMcp] : []),
     ...(trackerMcp ? [trackerMcp] : []),
     ...(coordinationMcp ? [coordinationMcp] : []),
+    ...(codeIntelMcp ? [codeIntelMcp] : []),
     ...userMcpAcpServers(toolMode, provider)
   ];
   return servers.length > 0 ? { mcpServers: servers } : {};
@@ -526,6 +530,15 @@ export function registerAiIpc(): void {
     const coordinationMcp = prepared.plan.state === 'acp'
       ? await coordinationMcpServerForSession(issueKey, workingDirectory, toolMode)
       : undefined;
+    const codeIntelServer = await getSessionCodeIntelligenceServer(workingDirectory, prepared.provider);
+    const codeIntelMcp: AcpMcpServer | undefined = codeIntelServer
+      ? {
+          name: mcpServerSlug(codeIntelServer.name),
+          command: codeIntelServer.command ?? '',
+          args: codeIntelServer.args,
+          env: codeIntelServer.env
+        }
+      : undefined;
     await continueAgentTask(prepared, {
       issueKey,
       message: followUp,
@@ -536,9 +549,9 @@ export function registerAiIpc(): void {
       internalConversationTurn: options?.internalConversationTurn,
       conversationContext: options?.conversationContext,
       gadgetAnswer: options?.gadgetAnswer,
-      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp, prepared.provider) : {}),
+      ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp, prepared.provider, codeIntelMcp) : {}),
       ...(prepared.plan.state === 'gateway'
-        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode, prepared.provider)) }
+        ? { toolExtension: mergeToolExtensions(trackerToolExtension(trackerService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode, prepared.provider, codeIntelServer ? [codeIntelServer] : undefined)) }
         : {})
     });
   }
@@ -1109,6 +1122,15 @@ export function registerAiIpc(): void {
       const coordinationMcp = prepared.plan.state === 'acp'
         ? await coordinationMcpServerForSession(issue.key, effectiveWorkingDirectory, toolMode)
         : undefined;
+      const codeIntelServer = await getSessionCodeIntelligenceServer(effectiveWorkingDirectory, prepared.provider);
+      const codeIntelMcp: AcpMcpServer | undefined = codeIntelServer
+        ? {
+            name: mcpServerSlug(codeIntelServer.name),
+            command: codeIntelServer.command ?? '',
+            args: codeIntelServer.args,
+            env: codeIntelServer.env
+          }
+        : undefined;
       await launchAgentTask(prepared, {
         issue,
         taskDefinition,
@@ -1119,9 +1141,9 @@ export function registerAiIpc(): void {
         reasoningEffort,
         permissionMode: input.permissionMode ?? 'manual',
         ...((input.permissionMode === 'bypass' || input.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {}),
-        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp, prepared.provider) : {}),
+        ...(prepared.plan.state === 'acp' ? mcpServersOption(browserMcp, trackerMcp, toolMode, coordinationMcp, prepared.provider, codeIntelMcp) : {}),
         ...(prepared.plan.state === 'gateway'
-          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode, prepared.provider)) }
+          ? { toolExtension: mergeToolExtensions(trackerToolExtension(issueService, toolMode), browserToolExtension(toolMode), await userMcpToolExtension(toolMode, prepared.provider, codeIntelServer ? [codeIntelServer] : undefined)) }
           : {})
       });
       const record = sessionManager.getAgentSession(issue.key);

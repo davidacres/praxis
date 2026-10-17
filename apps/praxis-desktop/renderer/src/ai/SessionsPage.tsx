@@ -32,6 +32,7 @@ import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionTeamControl } from './SessionTeamControl';
 import { askSessionTeamMember, mentionedSessionTeamMember } from './sessionTeamStore';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
+import { SessionCodeIntelControl } from './SessionCodeIntelControl';
 import { basename, contextPressure, extractSubagents, formatCost, formatContextLength, formatErrorMessage, getKnownContextLength, isLimitNoticeReply, isProviderLimitMessage, isWorkflowStageSession, liveActivity, sessionTurnStartedAt, sessionLabel, sessionLimitNotice, sessionTitle, spendPressure } from './sessionNav';
 import { SessionConversationActions, SessionConversationDialog, SessionLimitSwitch, canChangeSessionRuntime, SessionTransitionDialogs, type ComposerPopoverPosition } from './SessionHandover';
 import { SessionFocusTabs } from './SessionFocusTabs';
@@ -2191,6 +2192,12 @@ export function SessionsPage({
                   />
                   <SessionGitBranchControl
                     session={selected}
+                    disabled={conversationRunning || !canChangeSessionRuntime(selected)}
+                  />
+                  <SessionCodeIntelControl
+                    workingDirectory={selected.worktreePath || selected.workingDirectory}
+                    provider={selected.provider}
+                    testId="session"
                     disabled={conversationRunning || !canChangeSessionRuntime(selected)}
                   />
                 </div>

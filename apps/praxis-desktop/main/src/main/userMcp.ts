@@ -43,10 +43,16 @@ export function userMcpAcpServers(toolMode: string | undefined, provider?: strin
 }
 
 /** The tool extension for an API-provider session, or `undefined` when no server contributes a tool. */
-export async function userMcpToolExtension(toolMode: string | undefined, provider?: string): Promise<McpToolExtension | undefined> {
-  const servers = activeServers(toolMode, provider);
+export async function userMcpToolExtension(
+  toolMode: string | undefined,
+  provider?: string,
+  extraServers?: McpServerConfig[]
+): Promise<McpToolExtension | undefined> {
+  const baseServers = activeServers(toolMode, provider);
+  const extra = (extraServers ?? []).filter(extraServer => !baseServers.some(base => base.id === extraServer.id));
+  const servers = [...baseServers, ...extra];
   // A server the user removed or switched off should not keep a process alive.
-  const keep = new Set(enabledMcpServers(getSettingsBackend().read().ai.mcpServers).map(server => server.id));
+  const keep = new Set([...enabledMcpServers(getSettingsBackend().read().ai.mcpServers), ...extra].map(server => server.id));
   for (const server of getSettingsBackend().read().ai.mcpServers ?? []) {
     if (!keep.has(server.id)) void pool.close(server.id);
   }

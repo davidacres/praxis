@@ -212,6 +212,17 @@ export interface AiSettings {
   nativeSources: NativeSourceSettings;
   /** Working habits Praxis asks every AI to follow, so sessions feel the same on any runtime. */
   workingStyle: WorkingStyleSettings;
+  /**
+   * Local code intelligence settings (indexing, semantic & keyword source search, MCP tools).
+   */
+  codeIntelligence?: CodeIntelligenceSettings;
+}
+
+export interface CodeIntelligenceSettings {
+  /** Master switch: whether code intelligence is enabled globally across composers and sessions. */
+  enabled: boolean;
+  /** Folders or repository roots where code intelligence has been explicitly toggled: path -> boolean. */
+  projectOverrides?: Record<string, boolean>;
 }
 
 export interface WorkingStyleSettings {
@@ -587,7 +598,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     providers: {},
     browserTools: { enabled: false, allowedHosts: [] },
     nativeSources: { ecosystems: {}, approvedProjects: [], injectInstructions: true, instructionSource: 'all', extraSkillPaths: [], extraAgentPaths: [] },
-    workingStyle: { enabled: true, text: '' }
+    workingStyle: { enabled: true, text: '' },
+    codeIntelligence: { enabled: true, projectOverrides: {} }
   },
   jira: {
     siteUrl: '',
@@ -689,10 +701,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * per-key so a patch touching one priority doesn't reset the others.
  */
 export interface AppSettingsPatch {
-  ai?: Partial<Omit<AiSettings, 'browserTools' | 'nativeSources' | 'workingStyle'>> & {
+  ai?: Partial<Omit<AiSettings, 'browserTools' | 'nativeSources' | 'workingStyle' | 'codeIntelligence'>> & {
     browserTools?: Partial<AiSettings['browserTools']>;
     nativeSources?: Partial<NativeSourceSettings>;
     workingStyle?: Partial<WorkingStyleSettings>;
+    codeIntelligence?: Partial<CodeIntelligenceSettings>;
   };
   jira?: Partial<JiraSettings>;
   performance?: Partial<PerformanceSettings>;
@@ -1135,6 +1148,21 @@ function readWorkingStyle(value: unknown): WorkingStyleSettings {
   return { enabled: readBoolean(value.enabled, fallback.enabled), text: readString(value.text, fallback.text) };
 }
 
+function readCodeIntelligence(value: unknown): CodeIntelligenceSettings {
+  const fallback = DEFAULT_APP_SETTINGS.ai.codeIntelligence ?? { enabled: true, projectOverrides: {} };
+  if (!isRecord(value)) return { enabled: fallback.enabled, projectOverrides: { ...(fallback.projectOverrides ?? {}) } };
+  const enabled = readBoolean(value.enabled, fallback.enabled);
+  const projectOverrides: Record<string, boolean> = {};
+  if (isRecord(value.projectOverrides)) {
+    for (const [key, val] of Object.entries(value.projectOverrides)) {
+      if (typeof val === 'boolean') {
+        projectOverrides[key] = val;
+      }
+    }
+  }
+  return { enabled, projectOverrides };
+}
+
 function readPriorityColors(value: unknown): Record<string, string> {
   if (!isRecord(value)) {
     return { ...DEFAULT_APP_SETTINGS.appearance.priorityColors };
@@ -1180,14 +1208,16 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ...(mcpServers.length > 0 ? { mcpServers } : {}),
         browserTools: readBrowserTools(raw.ai.browserTools),
         nativeSources: readNativeSources(raw.ai.nativeSources),
-        workingStyle: readWorkingStyle(raw.ai.workingStyle)
+        workingStyle: readWorkingStyle(raw.ai.workingStyle),
+        codeIntelligence: readCodeIntelligence(raw.ai.codeIntelligence)
       }
     : {
         ...DEFAULT_APP_SETTINGS.ai,
         providers: { ...DEFAULT_APP_SETTINGS.ai.providers },
         browserTools: { ...DEFAULT_APP_SETTINGS.ai.browserTools, allowedHosts: [] },
         nativeSources: readNativeSources(undefined),
-        workingStyle: readWorkingStyle(undefined)
+        workingStyle: readWorkingStyle(undefined),
+        codeIntelligence: readCodeIntelligence(undefined)
       };
 
   const jira: JiraSettings = isRecord(raw) && isRecord(raw.jira)
@@ -1484,7 +1514,20 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
           ecosystems: { ...base.ai.nativeSources.ecosystems, ...(patch.ai!.nativeSources!.ecosystems ?? {}) }
         }
       : base.ai.nativeSources,
-    workingStyle: isRecord(patch.ai?.workingStyle) ? { ...base.ai.workingStyle, ...patch.ai!.workingStyle } : base.ai.workingStyle
+    workingStyle: isRecord(patch.ai?.workingStyle) ? { ...base.ai.workingStyle, ...patch.ai!.workingStyle } : base.ai.workingStyle,
+    codeIntelligence: isRecord(patch.ai?.codeIntelligence)
+      ? {
+          enabled: typeof patch.ai!.codeIntelligence.enabled === 'boolean'
+            ? patch.ai!.codeIntelligence.enabled
+            : (base.ai.codeIntelligence?.enabled ?? true),
+          projectOverrides: {
+            ...(base.ai.codeIntelligence?.projectOverrides ?? {}),
+            ...(isRecord(patch.ai!.codeIntelligence.projectOverrides)
+              ? patch.ai!.codeIntelligence.projectOverrides as Record<string, boolean>
+              : {})
+          }
+        }
+      : (base.ai.codeIntelligence ? { ...base.ai.codeIntelligence, projectOverrides: { ...(base.ai.codeIntelligence.projectOverrides ?? {}) } } : { enabled: true, projectOverrides: {} })
   };
   if (customProviders.length > 0) ai.customProviders = customProviders;
   else delete ai.customProviders;

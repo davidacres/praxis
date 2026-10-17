@@ -550,3 +550,46 @@ test('removed built-in providers stay removed across settings reads and unrelate
   assert.equal(added.ai.providers.openai?.added, true);
   assert.equal(added.ai.providers.openai?.enabled, true);
 });
+
+test('code intelligence settings default to enabled with empty project overrides and merge cleanly', () => {
+  assert.equal(DEFAULT_APP_SETTINGS.ai.codeIntelligence?.enabled, true);
+  assert.deepEqual(DEFAULT_APP_SETTINGS.ai.codeIntelligence?.projectOverrides, {});
+
+  const sanitizedEmpty = sanitizeAppSettings({});
+  assert.equal(sanitizedEmpty.ai.codeIntelligence?.enabled, true);
+  assert.deepEqual(sanitizedEmpty.ai.codeIntelligence?.projectOverrides, {});
+
+  const sanitizedExplicit = sanitizeAppSettings({
+    ai: {
+      codeIntelligence: {
+        enabled: false,
+        projectOverrides: {
+          '/repo/a': true,
+          '/repo/b': false
+        }
+      }
+    }
+  });
+  assert.equal(sanitizedExplicit.ai.codeIntelligence?.enabled, false);
+  assert.deepEqual(sanitizedExplicit.ai.codeIntelligence?.projectOverrides, {
+    '/repo/a': true,
+    '/repo/b': false
+  });
+
+  const merged = mergeAppSettings(sanitizedExplicit, {
+    ai: {
+      codeIntelligence: {
+        projectOverrides: {
+          '/repo/c': true
+        }
+      }
+    }
+  });
+  assert.equal(merged.ai.codeIntelligence?.enabled, false);
+  assert.deepEqual(merged.ai.codeIntelligence?.projectOverrides, {
+    '/repo/a': true,
+    '/repo/b': false,
+    '/repo/c': true
+  });
+});
+

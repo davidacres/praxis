@@ -4,7 +4,8 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { codeIntelligenceDataDirectory, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig } from '@praxis/core';
-import { trustedIpcMain as ipcMain } from './trustedIpcMain';
+import { trustedIpcMain as ipcMain } from './trustedIpcMain.js';
+import { getSettingsBackend } from './settingsBackendInstance.js';
 
 const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate']);
 const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status']);
@@ -82,3 +83,69 @@ export function registerCodeIntelligenceIpc(): void {
     } catch (error) { return { error: { code: 'CAPABILITY_UNAVAILABLE', message: error instanceof Error ? error.message : 'Code intelligence is unavailable.' } }; }
   });
 }
+
+/**
+ * Returns the code intelligence McpServerConfig for an agent session if enabled.
+ * Auto-registers the repository folder and grants provider client access.
+ */
+export async function getSessionCodeIntelligenceServer(
+  workingDirectory: string | undefined,
+  provider: string | undefined
+): Promise<McpServerConfig | undefined> {
+  if (!workingDirectory || !provider) return undefined;
+  try {
+    const settings = getSettingsBackend().read();
+    const config = settings.ai.codeIntelligence;
+    const globalEnabled = config?.enabled ?? true;
+    const normalizedDir = path.resolve(workingDirectory);
+    const override = config?.projectOverrides?.[normalizedDir] ?? config?.projectOverrides?.[workingDirectory];
+    const isEnabled = override !== undefined ? override : globalEnabled;
+    if (!isEnabled) return undefined;
+
+    const runtime = service();
+    if (!existsSync(runtime.contracts)) return undefined;
+
+    const listResponse = await invoke(['list']).catch(() => undefined);
+    if (!listResponse || listResponse.error) return undefined;
+
+    const list = Array.isArray(listResponse.data) ? (listResponse.data as Array<Record<string, unknown>>) : [];
+    let repo = list.find(r => typeof r.root === 'string' && (path.resolve(r.root) === normalizedDir || r.root === workingDirectory));
+
+    if (!repo) {
+      const regResponse = await invoke(['register', workingDirectory]).catch(() => undefined);
+      if (!regResponse || regResponse.error) return undefined;
+      const repoId = (regResponse.data as Record<string, unknown>)?.repositoryId;
+      if (typeof repoId !== 'string') return undefined;
+      void invoke(['index', repoId]).catch(() => {});
+      repo = { id: repoId, root: workingDirectory };
+    }
+
+    const repositoryId = String(repo.id);
+    const grant = await invoke(['grant', repositoryId, '--client', provider]).catch(() => undefined);
+    if (!grant || grant.error) return undefined;
+
+    const id = createHash('sha256').update(JSON.stringify([repositoryId, provider])).digest('hex').slice(0, 24);
+    const mcpServer: McpServerConfig = {
+      id: `praxis-code-intelligence-${id}`,
+      name: `code_intelligence`,
+      enabled: true,
+      transport: 'stdio',
+      requireApproval: false,
+      command: process.execPath,
+      args: [
+        path.join(path.dirname(require.resolve('@praxis/core')), 'codeIntelligence', 'mcpBridge.js'),
+        runtime.executable,
+        runtime.assembly || '-',
+        dataDirectory(),
+        repositoryId,
+        provider,
+        runtime.contracts
+      ],
+      env: { ELECTRON_RUN_AS_NODE: '1', PRAXIS_CODE_INTELLIGENCE_PROVIDER: provider }
+    };
+    return mcpServer;
+  } catch {
+    return undefined;
+  }
+}
+
