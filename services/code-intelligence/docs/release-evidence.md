@@ -1,6 +1,6 @@
 # Release evidence and remaining gates
 
-Updated 16 October 2026. M3 implementation is in progress; this document is not a release approval. Current local performance state: the plan-5 query matrix passes 40/40 and the 25-edit concurrent run passes within 2 GiB with pressure admission, both on a 12-core Mac only.
+Updated 17 October 2026. M3 implementation is in progress; this document is not a release approval. Current local performance state with the bge-small model (search plan 7): the 50k full run, the 25-edit concurrent run and the 40-process query matrix all pass, on a 12-core Mac only. The concurrent run's peak RSS is within about 26 MiB of the 2 GiB limit.
 
 | Check | Current evidence | Remaining qualification |
 |---|---|---|
@@ -15,6 +15,7 @@ Updated 16 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Plan-6/schema-5 full process: lexical p95 6.467 ms, hybrid p95 211.053 ms, retrieval-only p95 191.841 ms, independent peak RSS 2020671488 bytes; all measured gates pass (previous plan-5 run: hybrid 434.591, retrieval 414.348 failing) | 50k body edit 17034 ms vs 14263 ms before (no 50k gate). Repeat/concurrent-edit/reference-machine protocol open |
+| 50k with bge-small (search plan 7) | Full process: lexical p95 7.651 ms, hybrid 134.027 ms, retrieval-only 121.149 ms, peak RSS 1,266,171,904 bytes. 25-edit concurrent run: zero errors, hybrid p95 310.9 ms, peak RSS **2,120,105,984 bytes (about 26 MiB under 2 GiB)**. Query matrix 40/40 pass; four-reader retrieval-only p95 max 186.3 ms | Initial 50k vector build 1,014 s (MiniLM 520 s). Concurrent memory headroom fell from about 227 MiB to about 26 MiB; investigate before release. 12-core Mac only |
 | 50k concurrent edits | With §31.3 pressure admission: 25 edits, 14,121 lexical + 14,121 hybrid queries, zero errors, lexical p95 10.98 ms, hybrid p95 286.9 ms, independent peak RSS 1,908,703,232 bytes (about 227 MiB under 2 GiB; pressure engaged in 11 of 1,362 one-second samples) | One run on a 12-core Mac; reference machine and repeated runs open |
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
@@ -832,3 +833,36 @@ The M6 evaluation, architecture, and interop integration were completed on `feat
 Collecting candidates exposed a response-budget defect: a namespace declared in many files produced a single `search_code` match (~20 KB of declaration evidence) larger than the whole 8,000-token budget, and the page failed with `INPUT_TOO_LARGE`, so callers could not page past it. Such an item now has its declaration list halved until it fits (at least one kept), with evidence kept complete for every declaration still referenced, `truncated: true` and a `RESPONSE_TRUNCATED` warning. `QueryTests.OneMatchLargerThanTheBudgetShortensItsDeclarationsInsteadOfFailingThePage` fails without the change. `tune-retrieval.py` also had its command-line arguments shadowed by the paging loop and could not write its output; fixed.
 
 **Acceptance.** The plan-7 binary reran the fixed corpus on a fresh fixture (`maze-release-bge-small-lexical16-results.praxis.json`). Every declared gate passes. Held-out hybrid Recall@10 0.894 (unchanged) and MRR@10 **0.672 → 0.687**: 8 queries rank their answer higher, none lower; behaviour MRR 0.700 → 0.734, cross-project 0.378 → 0.410, no category regresses against lexical. This is the first configuration in which hybrid beats lexical-only on this corpus; the gain is modest. Terminology hybrid recall stays at lexical's 0.615 although vector-only reaches 0.846, so further gains need a richer fusion than a single weight. Query texts, labels and split are unchanged; this is repeated evaluation of the published acceptance set, not a new blind study. Hybrid p95 102 ms in the sequential CLI evaluation. All 140 service tests pass with the bge bundle (2 SDK-capture tests skipped without their opt-in).
+
+## 50k performance and memory with bge-small (search plan 7) — 17 October
+
+This reruns the 50k gates after the model change and fusion retune above. The binary was built at `b8289a3d` (`Praxis.CodeIntelligence.dll` `sha256:9721e46d…`) and used the pinned bge-small bundle. The three runs ran one after another on the same 12-core Mac, with nothing else running.
+
+**Full process** (`benchmarks/macos-arm64-50000-plan7-bge-full.praxis.json`, `-process`, `-time.txt`):
+- All measured gates pass: lexical p95 7.651 ms, hybrid 134.027 ms, retrieval-only 121.149 ms.
+- Independent peak RSS 1,266,171,904 bytes.
+- Initial index 25.1 s. Initial vectors **1,014 s against 520 s with MiniLM**. bge-small has twice MiniLM's layers at the same width, so a first full build of a large repository takes about twice as long. Later edits re-embed only the affected symbols.
+- Body edit 19.3 s; vector refresh 2.0 s (plan 6 with MiniLM: 17.0 s and 1.8 s).
+
+**25-edit concurrent run** (`benchmarks/macos-arm64-50000-plan7-bge-concurrent-edits/`):
+- Zero errors across 16,554 lexical and 16,554 hybrid queries.
+- Lexical p95 12.65 ms. Hybrid p95 310.9 ms (p99 643.9, max 5,074).
+- Minimum coverage was 49,997 of 49,999.
+- Edits under load: publish p50/max 26.9/36.4 s; refresh p50/max 4.0/15.3 s (MiniLM 3.6/11.1 s).
+- Idle hybrid p95 was 135.7 ms, identical to the MiniLM run.
+- **Peak RSS 2,120,105,984 bytes. This passes, but with only about 26 MiB of headroom (MiniLM: about 227 MiB).** The one-second sampler saw resident memory at or above the 1.6 GiB soft limit in 3 of 1,942 samples, so the peak is a short spike rather than a sustained level. The likely cause is the larger ONNX session's working set during vector refresh while Roslyn analysis is also running. That is not yet attributed. Treat it as open before release.
+
+**Query matrix** (`benchmarks/macos-arm64-50000-plan7-bge-query-matrix*`, retained fixture from the full run): complete, zero errors, **all 40 processes pass every gate**. Ranges over five runs (ms):
+
+| Category | Readers | Lexical p95 | Hybrid p95 | Retrieval-only p95 |
+|---|---|---|---|---|
+| exact | 1 | 1.7–1.9 | 82.7–84.2 | 77.1–78.5 |
+| exact | 4 | 8.2–8.6 | 132.9–136.7 | 119.4–125.7 |
+| terminology | 1 | 46.5–48.3 | 123.5–126.2 | 118.3–120.9 |
+| terminology | 4 | 76.6–81.6 | 179.2–185.4 | 166.5–171.3 |
+| behaviour | 1 | 47.7–54.8 | 125.2–133.9 | 119.5–128.1 |
+| behaviour | 4 | 78.6–82.9 | 180.9–201.0 | 168.1–186.3 |
+| negative | 1 | 1.7–1.8 | 84.6–87.1 | 78.8–80.9 |
+| negative | 4 | 8.0–8.5 | 133.4–140.5 | 120.6–123.1 |
+
+Query latency is effectively unchanged from the schema-6 MiniLM matrix. Both models produce 384-dimensional vectors, so the exact scan costs the same; the extra encoder depth adds only about 8–16 ms to query embedding. The lower hybrid p95 compared with the plan-6/schema-5 full-process row (211 ms) comes from the vector-plan-5/6 score pass, not from the model. Only one run was made, on a 12-core Mac; the reference machine remains unmeasured.

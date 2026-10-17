@@ -1,0 +1,17 @@
+{
+  "implementationCommit": "b8289a3d",
+  "assemblyHashes": {
+    "Praxis.CodeIntelligence.dll": "sha256:9721e46dbe346ad3a8f4b3f8378a3d489a6ba2d2a8500f9296527b8923a46688",
+    "Praxis.CodeIntelligence.Benchmarks.dll": "sha256:f22800a1d1771fa01fa29a88beacad63a8a957604823ee35c10f54726466c908"
+  },
+  "model": "BAAI/bge-small-en-v1.5@5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+  "measurement": "Full process /usr/bin/time -l; cold process indexing, local inference, queries, edit publication and refresh",
+  "maximumResidentSetBytes": 1266171904,
+  "concurrentEditsMaximumResidentSetBytes": 2120105984,
+  "limitBytes": 2147483648,
+  "peakRssAtMost2GiB": true,
+  "concurrentEditsPeakRssAtMost2GiB": true,
+  "mainLatencyAndRssLimitsPass": true,
+  "rawReport": "macos-arm64-50000-plan7-bge-full.praxis.json",
+  "fullReleaseQualified": false
+}
