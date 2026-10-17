@@ -1,0 +1,638 @@
+{
+  "experiment": 3,
+  "corpus": "docs/evaluations/praxis-typescript-tuning-corpus.praxis.json",
+  "grid": {
+    "lexicalWeights": [
+      2,
+      4,
+      8
+    ],
+    "coverageExponents": [
+      0,
+      1,
+      2
+    ],
+    "vectorFloors": [
+      1,
+      2
+    ]
+  },
+  "current": "lexical4-coverage0-floor1",
+  "selectedOnTuning": "lexical2-coverage0-floor1",
+  "currentTuning": {
+    "all": {
+      "recallAt10": 0.9038461538461539,
+      "mrrAt10": 0.7230769230769231,
+      "cases": 26
+    },
+    "behaviour": {
+      "recallAt10": 1.0,
+      "mrrAt10": 0.9375,
+      "cases": 8
+    },
+    "crossProject": {
+      "recallAt10": 0.75,
+      "mrrAt10": 1.0,
+      "cases": 2
+    },
+    "exact": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 4
+    },
+    "terminology": {
+      "recallAt10": 0.8333333333333334,
+      "mrrAt10": 0.44166666666666665,
+      "cases": 12
+    }
+  },
+  "selectedTuning": {
+    "all": {
+      "recallAt10": 0.9230769230769231,
+      "mrrAt10": 0.7564102564102565,
+      "cases": 26
+    },
+    "behaviour": {
+      "recallAt10": 1.0,
+      "mrrAt10": 0.9375,
+      "cases": 8
+    },
+    "crossProject": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 2
+    },
+    "exact": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 4
+    },
+    "terminology": {
+      "recallAt10": 0.8333333333333334,
+      "mrrAt10": 0.513888888888889,
+      "cases": 12
+    }
+  },
+  "currentHeldOut": null,
+  "selectedHeldOut": null,
+  "trials": [
+    {
+      "config": "lexical2-coverage0-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9230769230769231,
+          "mrrAt10": 0.7564102564102565,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9375,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.513888888888889,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical2-coverage0-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9230769230769231,
+          "mrrAt10": 0.7564102564102565,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9375,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.513888888888889,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical2-coverage1-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7852564102564104,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9166666666666666,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.5902777777777778,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical2-coverage1-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7852564102564104,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9166666666666666,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.5902777777777778,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical2-coverage2-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.8076923076923077,
+          "mrrAt10": 0.75,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9375,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.5,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.5,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical2-coverage2-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.8076923076923077,
+          "mrrAt10": 0.75,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9375,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.5,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.5,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical4-coverage0-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7230769230769231,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9375,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.44166666666666665,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical4-coverage0-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7230769230769231,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9375,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.44166666666666665,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical4-coverage1-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.75,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9166666666666666,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.513888888888889,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical4-coverage1-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.75,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9166666666666666,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.513888888888889,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical4-coverage2-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7596153846153846,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.90625,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.5416666666666666,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical4-coverage2-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7596153846153846,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.90625,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.5416666666666666,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical8-coverage0-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7009615384615385,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9166666666666666,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.4076388888888889,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical8-coverage0-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7009615384615385,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.9166666666666666,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.4076388888888889,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical8-coverage1-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7275641025641026,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.90625,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.47222222222222227,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical8-coverage1-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7275641025641026,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.90625,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.47222222222222227,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical8-coverage2-floor1",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7224358974358975,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.90625,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.4611111111111111,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    },
+    {
+      "config": "lexical8-coverage2-floor2",
+      "tuning": {
+        "all": {
+          "recallAt10": 0.9038461538461539,
+          "mrrAt10": 0.7224358974358975,
+          "cases": 26
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 0.90625,
+          "cases": 8
+        },
+        "crossProject": {
+          "recallAt10": 0.75,
+          "mrrAt10": 1.0,
+          "cases": 2
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 4
+        },
+        "terminology": {
+          "recallAt10": 0.8333333333333334,
+          "mrrAt10": 0.4611111111111111,
+          "cases": 12
+        }
+      },
+      "heldOut": null
+    }
+  ]
+}
