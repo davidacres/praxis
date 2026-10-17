@@ -1053,3 +1053,30 @@ All three together now peak at about 2.0 GB. The compiler process is now the lar
 **Tests.**
 - 147 C# tests pass, 2 SDK-capture tests skipped without their opt-in.
 - `TruncatedSidecarStreamFallsBackInsteadOfPublishingAPartialAnalysis` fails when the completeness check is removed.
+
+## Real Claude Code CLI through the all-repositories bridge — 17 October
+
+**Setup.**
+- Claude Code 2.1.302 in print mode (`claude -p`), run from a scratch folder.
+- A temporary `--mcp-config` with `--strict-mcp-config`, so the user's Claude configuration was not changed.
+- The bridge in `*` mode for client `claude-cli`, over a scratch index of this repository with bge-small active.
+- Built-in file, search, shell and web tools were disallowed, so every answer had to come from code intelligence.
+
+**Task.**
+1. List the available repositories.
+2. Find the desktop-main callers of core's `sanitizeAppSettings`.
+3. Find where `CodeIntelligencePanel` is rendered.
+
+**Result: all three answers were correct.**
+1. `praxis`.
+2. `SharedSettingsBackend.constructor`, `.write` and `.handleExternalChange`, with call sites. These match `grep`, and Claude paged through the results to separate them from the core tests.
+3. `SettingsPage.CodeIntelligenceSection` at `SettingsPage.tsx:3211`, which is the JSX edge added above.
+
+The tools used were `list_repositories`, `find_symbol`, `get_callers`, `get_symbol`, `get_source`, `search_code`, `find_related`, `trace_flow` and `get_index_status`. The run took 79 s, 32 turns and $1.22.
+
+**Findings.**
+- **`get_callers` and `get_callees` items carry only edge, symbol and evidence IDs.** The agent spent most of its turns on `get_symbol` follow-ups and paging. Including each source or target symbol's qualified name and location in the items would cut turns and cost substantially.
+- **Line numbers are 0-based.** Claude noticed and converted them; a `line` hint in descriptions or 1-based display fields would avoid the mistake.
+- **The index was syntax-only for the first few calls.** Rebuilding the package had replaced `ts-sidecar.mjs` under a still-running owner from the previous build. That owner's re-index got a protocol-1.1 response, fell back to syntax-only (`TYPESCRIPT_SIDECAR_PROTOCOL_MISMATCH`) as designed, and recovered when the new owner re-indexed (generation 3 to 4). This happens only in development, where the script is swapped under a running owner; an app update replaces and restarts both together.
+
+This is the first real-agent invocation in the evidence. It is one task in print mode, not a qualification of the Claude Code adapter.
