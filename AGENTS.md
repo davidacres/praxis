@@ -232,6 +232,20 @@ any one backend, and `FolderService` no longer declares one.
   `projectSnapshot.test.ts` (in the main workspace's `test:git` run) now holds
   the line with a case built from this repo's actual file shape.
 
+## Licences and the pinned model
+
+[`LICENSING.md`](LICENSING.md) records Praxis's licence, the semantic search
+model's licence and policy, and every third-party package that ships. Its
+package tables are generated: after adding or upgrading a shipped dependency
+run `npm run licenses` and commit the result. Anything not on the permissive
+list surfaces under **Needs review** — resolve that before it ships.
+
+The code-intelligence embedding model is **pinned, not a user setting**
+(`BAAI/bge-small-en-v1.5`). Changing it is a release decision: rerun the Maze
+evaluation (`services/code-intelligence/docs/evaluations/README.md`), regenerate
+the golden fixture, and update the manifest, `LocalModel.cs`,
+`semanticModelManager.ts` and `LICENSING.md` together.
+
 ## Repo skills are edited in `.agents/skills` only
 
 `.github/skills` (Copilot) and `.claude/skills` (Claude Code) are generated copies.

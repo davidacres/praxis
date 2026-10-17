@@ -19,6 +19,8 @@
     "test:skills": "node scripts/sync-agent-skills.mjs --check",
     "test:antigravity-consent": "node scripts/check-antigravity-consent.mjs",
     "skills:sync": "node scripts/sync-agent-skills.mjs",
+    "licenses": "node scripts/generate-licensing.mjs",
+    "licenses:check": "node scripts/generate-licensing.mjs --check",
     "build:mobile-protocol": "npm run compile --workspace=@praxis/mobile-protocol",
     "test:mobile-protocol": "npm test --workspace=@praxis/mobile-protocol",
     "build:mobile-relay": "npm run compile --workspace=@praxis/mobile-relay",

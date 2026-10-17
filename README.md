@@ -260,3 +260,8 @@ preferences and manual checks are available under **Settings → Workspace → U
 - Task Designer website-preview nodes only show sites that permit iframe embedding.
 - Some automation flows depend on correct Jira/GitLab credentials, workflow
   settings, tracked boards, and repository setup.
+
+## License
+
+Praxis is MIT-licensed — see [`LICENSE`](LICENSE). [`LICENSING.md`](LICENSING.md) lists
+the semantic search model's licence and every third-party package that ships.
