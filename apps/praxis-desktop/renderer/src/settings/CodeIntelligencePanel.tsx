@@ -193,14 +193,7 @@ export function CodeIntelligencePanel({
   const contexts = items(record(status?.data).contexts);
 
   return (
-    <section className="code-intelligence-panel" data-testid="code-intelligence-panel" aria-busy={busy}>
-      <div>
-        <h4 className="settings-subsection-title">Code intelligence</h4>
-        <p className="settings-hint">
-          High-performance local code indexing, symbol search, and call trees. Operates 100% locally on your machine with zero external network transmission of your code.
-        </p>
-      </div>
-
+    <div className="code-intelligence-panel" data-testid="code-intelligence-panel" aria-busy={busy}>
       {/* Semantic Search Card */}
       <div className="code-intelligence-card" data-testid="semantic-model-card">
         <div className="code-intelligence-card-header">
@@ -499,6 +492,6 @@ export function CodeIntelligencePanel({
           </p>
         )}
       </div>
-    </section>
+    </div>
   );
 }

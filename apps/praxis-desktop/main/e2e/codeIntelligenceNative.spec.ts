@@ -34,8 +34,7 @@ test('packaged service supports desktop source navigation and repository recover
     });
     const win = app.window;
     await win.getByTestId('titlebar-settings').click();
-    await win.getByTestId('settings-nav-ai').click();
-    await win.getByTestId('ai-tab-tools').click();
+    await win.getByTestId('settings-nav-code-intelligence').click();
     const panel = win.getByTestId('code-intelligence-panel');
     await panel.getByLabel('Repository folder', { exact: true }).fill(source);
     await panel.getByRole('button', { name: 'Register repository', exact: true }).click();

@@ -72,6 +72,7 @@ export type SettingsCategory =
   | 'gadgets'
   | 'agent-runtime'
   | 'workflow-templates'
+  | 'code-intelligence'
   | 'performance'
   | 'delivery'
   | 'mcp'
@@ -121,7 +122,7 @@ const AI_GROUP: NavGroupDef = {
   id: 'ai-group',
   label: 'AI & agents',
   icon: 'robot',
-  children: ['ai', 'ai-usage', 'gadgets', 'agent-runtime', 'workflow-templates', 'mcp', 'delivery']
+  children: ['ai', 'ai-usage', 'gadgets', 'agent-runtime', 'workflow-templates', 'code-intelligence', 'mcp', 'delivery']
 };
 
 const INTEGRATIONS_GROUP: NavGroupDef = {
@@ -231,6 +232,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Workflow Templates',
     icon: 'git-branch',
     description: 'Starting points for the workflow designer — install more from the marketplace.'
+  },
+  {
+    id: 'code-intelligence',
+    label: 'Code Intelligence',
+    icon: 'sparkles',
+    description: 'Local code indexing, offline semantic search model, and indexed repositories.'
   },
   {
     id: 'performance',
@@ -414,6 +421,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
           />
         )}
         {active === 'workflow-templates' && <WorkflowTemplatesSection />}
+        {active === 'code-intelligence' && <CodeIntelligenceSection settings={settings} update={update} />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
         {active === 'mcp' && <McpSection settings={settings} update={update} />}
@@ -3149,11 +3157,6 @@ function AiSection({
                 </div>
               </FieldRow>
             )}
-            <CodeIntelligencePanel
-              providers={statuses.filter(status => status.configured && settings.ai.providers[status.provider]?.enabled !== false).map(status => ({ value: status.provider, label: status.provider }))}
-              servers={settings.ai.mcpServers ?? []}
-              onServersChange={next => update({ ai: { mcpServers: next } })}
-            />
             <McpServersPanel
               servers={settings.ai.mcpServers ?? []}
               onChange={next => update({ ai: { mcpServers: next } })}
@@ -3162,6 +3165,25 @@ function AiSection({
         )}
       </div>
     </>
+  );
+}
+
+function CodeIntelligenceSection({
+  settings,
+  update
+}: {
+  settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
+}) {
+  const category = CATEGORIES.find(c => c.id === 'code-intelligence')!;
+  return (
+    <section data-testid="settings-code-intelligence">
+      <CategoryHeader category={category} />
+      <CodeIntelligencePanel
+        servers={settings.ai.mcpServers ?? []}
+        onServersChange={next => update({ ai: { mcpServers: next } })}
+      />
+    </section>
   );
 }
 
