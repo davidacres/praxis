@@ -1102,3 +1102,24 @@ This is the first real-agent invocation in the evidence. It is one task in print
 - **17 turns instead of 32**; $1.07 instead of $1.22; 80 s.
 - The remaining turns went on paging through all 64 callers of `sanitizeAppSettings` (six pages, mostly core tests), plus one restart after a cursor expired during a re-index.
 - Claude again flagged that line numbers are 0-based.
+
+## Fusion experiment 1 (pre-registered) — 17 October
+
+**Setup.**
+- The grid and selection rule were committed in `scripts/fusion-experiment.py` (`200e4335`) before any candidates were collected.
+- Grid: lexical weight {4, 8, 16, 32} × vector floor {0–3} × lexical rank cap {none, 20, 10}. The floor keeps the top-v vector candidates inside the top 10; the cap drops lexical contributions beyond a rank.
+- Selection reads only the 40 Maze tuning cases: Recall@10, then MRR@10, then closeness to production.
+
+**Fixture.** A fresh Maze fixture on the current build reproduces the published baseline exactly: hybrid held-out 0.894 / 0.687, all gates pass (`maze-release-plan7-epochfix-baseline-results.praxis.json`). Replaying the production configuration from the collected channel ranks gives the same 0.894 / 0.687, so the offline replay is faithful.
+
+**Result** (`maze-fusion-experiment-1.praxis.json`):
+- The rule selects the **production configuration**, so nothing changes.
+- All 48 configurations score tuning Recall@10 1.0, and tuning MRR spans only 0.828–0.839. The tuning split is saturated and cannot rank fusion variants.
+
+**Diagnostic only, not a basis for adoption.** The held-out split shows headroom. Lexical 4 with floor 2 and no cap scores 0.955 / 0.738:
+- Terminology 0.615 → 0.846.
+- Behaviour 0.933 → 1.000.
+- Cross-project MRR 0.410 → 0.515.
+- Exact unchanged at 1.0.
+
+Choosing from these numbers would tune on the acceptance set. A non-saturated tuning set is needed before any fusion change.
