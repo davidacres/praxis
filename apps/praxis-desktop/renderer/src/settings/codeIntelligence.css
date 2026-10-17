@@ -121,8 +121,19 @@
   margin-top: 6px;
 }
 
-.code-intelligence-model-meta code {
-  font-family: monospace;
-  font-size: 11px;
+
+.code-intelligence-model-meta-item {
+  display: grid;
+  grid-template-columns: 9em minmax(0, 1fr);
+  gap: 12px;
 }
 
+.code-intelligence-model-meta-item .label {
+  color: var(--text-muted);
+}
+
+.code-intelligence-model-meta-item .value {
+  color: var(--text);
+  font-family: var(--font-mono, monospace);
+  overflow-wrap: anywhere;
+}

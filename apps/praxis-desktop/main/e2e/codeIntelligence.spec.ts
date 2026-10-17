@@ -134,38 +134,21 @@ test('semantic search card shows status, allows downloading model, and deleting 
   await expect(badge).toHaveText('Standard keyword search active');
 });
 
-test('advanced model configuration allows inspecting and changing model settings', async () => {
-  const { win, panel } = await openPanel();
-  const advancedDetails = panel.getByTestId('semantic-model-advanced-details');
-  await expect(advancedDetails).toBeVisible();
+test('model details show the pinned model read-only once installed', async () => {
+  const { panel } = await openPanel();
+  const details = panel.getByTestId('semantic-model-advanced-details');
+  await expect(details).toHaveCount(0);
 
-  // Open details
-  await advancedDetails.locator('summary').click();
+  await panel.getByTestId('semantic-model-download-btn').click();
+  await expect(details).toBeVisible();
+  await details.locator('summary').click();
 
-  const modelIdInput = panel.getByTestId('semantic-model-id-input');
-  await expect(modelIdInput).toBeVisible();
-  await expect(modelIdInput).toHaveValue('sentence-transformers/all-MiniLM-L6-v2');
+  // The model is pinned; nothing here lets the user change it.
+  await expect(panel.getByTestId('semantic-model-id-input')).toHaveCount(0);
+  await expect(panel.getByTestId('semantic-custom-path-input')).toHaveCount(0);
+  await expect(details.locator('input')).toHaveCount(0);
 
-  const customPathInput = panel.getByTestId('semantic-custom-path-input');
-  await expect(customPathInput).toBeVisible();
-  await expect(customPathInput).toHaveValue('');
-
-  // Edit model ID
-  await modelIdInput.fill('custom/embedding-model');
-  await modelIdInput.blur();
-
-  const resetDefaultBtn = panel.getByTestId('semantic-model-reset-default-btn');
-  await expect(resetDefaultBtn).toBeEnabled();
-  await resetDefaultBtn.click();
-  await expect(modelIdInput).toHaveValue('sentence-transformers/all-MiniLM-L6-v2');
-
-  // Trigger download to activate model
-  const downloadBtn = panel.getByTestId('semantic-model-download-btn');
-  await downloadBtn.click();
-
-  // Metadata should now be visible
   const metadata = panel.getByTestId('semantic-model-metadata');
-  await expect(metadata).toBeVisible();
   await expect(metadata).toContainText('sentence-transformers/all-MiniLM-L6-v2');
   await expect(metadata).toContainText('BERT / MiniLM (ONNX)');
   await expect(metadata).toContainText('86.4 MB');

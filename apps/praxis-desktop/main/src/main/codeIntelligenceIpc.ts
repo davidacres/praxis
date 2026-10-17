@@ -93,31 +93,21 @@ export function registerCodeIntelligenceIpc(): void {
   });
 
   ipcMain.handle('ai:getSemanticModelStatus', async (): Promise<SemanticModelStatus> => {
-    const config = getSettingsBackend().read().ai.codeIntelligence;
-    const customPath = config?.customModelPath;
-    const configuredModelId = config?.modelId || 'sentence-transformers/all-MiniLM-L6-v2';
-    const modelDir = getSemanticModelDirectory(customPath);
-
-    if (isSemanticModelInstalled(customPath) && !getCachedFingerprint()) {
+    if (isSemanticModelInstalled() && !getCachedFingerprint()) {
       try {
-        const installRes = await invoke(['model-install', modelDir]);
+        const installRes = await invoke(['model-install', getSemanticModelDirectory()]);
         const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
         if (typeof fp === 'string') setCachedFingerprint(fp);
       } catch {
         // ignore
       }
     }
-    return getSemanticModelStatus(customPath, configuredModelId);
+    return getSemanticModelStatus();
   });
 
   ipcMain.handle('ai:downloadSemanticModel', async (): Promise<SemanticModelStatus> => {
-    const config = getSettingsBackend().read().ai.codeIntelligence;
-    const customPath = config?.customModelPath;
-    const configuredModelId = config?.modelId || 'sentence-transformers/all-MiniLM-L6-v2';
-    const modelDir = getSemanticModelDirectory(customPath);
-
-    await downloadSemanticModel(configuredModelId, customPath);
-    const installRes = await invoke(['model-install', modelDir]);
+    await downloadSemanticModel();
+    const installRes = await invoke(['model-install', getSemanticModelDirectory()]);
     const fp = (installRes.data as Record<string, unknown>)?.fingerprint;
     if (typeof fp === 'string') {
       setCachedFingerprint(fp);
@@ -133,7 +123,7 @@ export function registerCodeIntelligenceIpc(): void {
         // ignore
       }
     }
-    return getSemanticModelStatus(customPath, configuredModelId);
+    return getSemanticModelStatus();
   });
 
   ipcMain.handle('ai:deleteSemanticModel', async (): Promise<void> => {
