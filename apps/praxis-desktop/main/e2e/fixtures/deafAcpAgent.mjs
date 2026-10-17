@@ -6,6 +6,13 @@
 // nothing errors, the turn simply never settles. It is what
 // `AcpAgentHost.stopTask()`'s waits used to block on forever.
 
+// The provider preflight runs `--version`. Answer it like a real CLI: started as an
+// agent, the probe outlived each test's app and leaked one process per run.
+if (process.argv.includes('--version')) {
+  console.log('deaf-acp-agent 1.0.0');
+  process.exit(0);
+}
+
 import { Readable, Writable } from 'node:stream';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
