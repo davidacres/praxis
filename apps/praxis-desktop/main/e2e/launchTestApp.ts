@@ -72,12 +72,15 @@ export interface LaunchOptions {
   discoverInstalledCli?: boolean;
   /** Opt in to exercise the first-run workflow designer tutorial. Defaults to false. */
   workflowTutorial?: boolean;
+  /** Opt in to exercise the semantic search recommendation prompt on startup. Defaults to false. */
+  semanticSearchPrompt?: boolean;
 }
 
 const AI_ONBOARDED_KEY = 'praxis-ai-onboarded';
 const WORKFLOW_TUTORIAL_KEY = 'praxis-workflow-tutorial-seen';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
+const SEMANTIC_SEARCH_DISMISS_KEY = 'praxis:semantic-search-prompt-dismissed';
 
 // The app stores a durable route per workspace under
 // `praxis-last-workspace-route:<workspaceId>`. The bare key is the legacy
@@ -150,19 +153,21 @@ export async function launchTestApp(
 
   const skipAiOnboarding = options?.aiOnboarding !== true;
   const skipWorkflowTutorial = options?.workflowTutorial !== true;
+  const skipSemanticSearchPrompt = options?.semanticSearchPrompt !== true;
   if (options?.workspace !== false) {
-    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding, skipWorkflowTutorial);
+    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding, skipWorkflowTutorial, skipSemanticSearchPrompt);
     await window.waitForLoadState('domcontentloaded');
     if (!options?.keepSplash) {
       await dismissSplash(window);
     }
-  } else if (skipAiOnboarding) {
+  } else if (skipAiOnboarding || skipSemanticSearchPrompt) {
     await window.evaluate(
-      ({ aiKey, wfKey, skipWorkflowTutorial }) => {
+      ({ aiKey, wfKey, skipWorkflowTutorial, searchKey, skipSemanticSearchPrompt }) => {
         localStorage.setItem(aiKey, '1');
         if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
+        if (skipSemanticSearchPrompt) localStorage.setItem(searchKey, 'true');
       },
-      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial }
+      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, skipSemanticSearchPrompt }
     );
     await window.reload();
     await window.waitForLoadState('domcontentloaded');
@@ -180,11 +185,18 @@ export async function launchTestApp(
  * `openNewSession`, also seeds the durable route so it restores into the New
  * Session composer, matching the pre-onboarding default most specs assume.
  */
-async function seedWorkspace(window: Page, openNewSession: boolean, skipAiOnboarding: boolean, skipWorkflowTutorial: boolean): Promise<void> {
+async function seedWorkspace(
+  window: Page,
+  openNewSession: boolean,
+  skipAiOnboarding: boolean,
+  skipWorkflowTutorial: boolean,
+  skipSemanticSearchPrompt: boolean
+): Promise<void> {
   await window.evaluate(
-    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial }) => {
+    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial, searchKey, skipSemanticSearchPrompt }) => {
       if (skipAiOnboarding) localStorage.setItem(aiKey, '1');
       if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
+      if (skipSemanticSearchPrompt) localStorage.setItem(searchKey, 'true');
       const existing = await window.praxis.workspaces.list();
       const workspace = existing[0] ?? (await window.praxis.workspaces.create({ name: 'Test Workspace', projectIds: [] }));
       localStorage.setItem(activeKey, workspace.id);
@@ -197,7 +209,17 @@ async function seedWorkspace(window: Page, openNewSession: boolean, skipAiOnboar
         localStorage.removeItem(`${routeKey}:${workspace.id}`);
       }
     },
-    { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession, aiKey: AI_ONBOARDED_KEY, skipAiOnboarding, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial }
+    {
+      activeKey: ACTIVE_WORKSPACE_KEY,
+      routeKey: LAST_WORKSPACE_ROUTE_KEY,
+      openNewSession,
+      aiKey: AI_ONBOARDED_KEY,
+      skipAiOnboarding,
+      wfKey: WORKFLOW_TUTORIAL_KEY,
+      skipWorkflowTutorial,
+      searchKey: SEMANTIC_SEARCH_DISMISS_KEY,
+      skipSemanticSearchPrompt
+    }
   );
   await window.reload();
 }

@@ -1,8 +1,8 @@
 .semantic-search-notification {
   position: fixed;
-  bottom: 24px;
+  top: 56px;
   right: 24px;
-  width: min(420px, calc(100vw - 48px));
+  width: min(400px, calc(100vw - 48px));
   background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity, 1) * 100%), transparent);
   background-image: var(--surface-panel-tint-layer);
   border: 1px solid var(--border-strong);
@@ -10,7 +10,7 @@
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4), var(--surface-accent-glow);
   backdrop-filter: var(--surface-backdrop);
   padding: 16px;
-  z-index: 500;
+  z-index: 250;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -20,7 +20,7 @@
 @keyframes semanticNotificationSlideIn {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.98);
+    transform: translateY(-16px) scale(0.98);
   }
   to {
     opacity: 1;

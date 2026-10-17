@@ -223,6 +223,10 @@ export interface CodeIntelligenceSettings {
   enabled: boolean;
   /** Folders or repository roots where code intelligence has been explicitly toggled: path -> boolean. */
   projectOverrides?: Record<string, boolean>;
+  /** Model identifier used for semantic code embeddings, default: sentence-transformers/all-MiniLM-L6-v2 */
+  modelId?: string;
+  /** Optional local path to a custom model bundle containing model.onnx and vocab.txt. */
+  customModelPath?: string;
 }
 
 export interface WorkingStyleSettings {
@@ -599,7 +603,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     browserTools: { enabled: false, allowedHosts: [] },
     nativeSources: { ecosystems: {}, approvedProjects: [], injectInstructions: true, instructionSource: 'all', extraSkillPaths: [], extraAgentPaths: [] },
     workingStyle: { enabled: true, text: '' },
-    codeIntelligence: { enabled: true, projectOverrides: {} }
+    codeIntelligence: { enabled: true, projectOverrides: {}, modelId: 'sentence-transformers/all-MiniLM-L6-v2', customModelPath: '' }
   },
   jira: {
     siteUrl: '',
@@ -1149,9 +1153,21 @@ function readWorkingStyle(value: unknown): WorkingStyleSettings {
 }
 
 function readCodeIntelligence(value: unknown): CodeIntelligenceSettings {
-  const fallback = DEFAULT_APP_SETTINGS.ai.codeIntelligence ?? { enabled: true, projectOverrides: {} };
-  if (!isRecord(value)) return { enabled: fallback.enabled, projectOverrides: { ...(fallback.projectOverrides ?? {}) } };
+  const fallback = DEFAULT_APP_SETTINGS.ai.codeIntelligence ?? {
+    enabled: true,
+    projectOverrides: {},
+    modelId: 'sentence-transformers/all-MiniLM-L6-v2',
+    customModelPath: ''
+  };
+  if (!isRecord(value)) return {
+    enabled: fallback.enabled,
+    projectOverrides: { ...(fallback.projectOverrides ?? {}) },
+    modelId: fallback.modelId,
+    customModelPath: fallback.customModelPath
+  };
   const enabled = readBoolean(value.enabled, fallback.enabled);
+  const modelId = typeof value.modelId === 'string' && value.modelId.trim() ? value.modelId.trim() : fallback.modelId;
+  const customModelPath = typeof value.customModelPath === 'string' ? value.customModelPath.trim() : fallback.customModelPath;
   const projectOverrides: Record<string, boolean> = {};
   if (isRecord(value.projectOverrides)) {
     for (const [key, val] of Object.entries(value.projectOverrides)) {
@@ -1160,7 +1176,7 @@ function readCodeIntelligence(value: unknown): CodeIntelligenceSettings {
       }
     }
   }
-  return { enabled, projectOverrides };
+  return { enabled, projectOverrides, modelId, customModelPath };
 }
 
 function readPriorityColors(value: unknown): Record<string, string> {
@@ -1520,6 +1536,12 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
           enabled: typeof patch.ai!.codeIntelligence.enabled === 'boolean'
             ? patch.ai!.codeIntelligence.enabled
             : (base.ai.codeIntelligence?.enabled ?? true),
+          modelId: typeof patch.ai!.codeIntelligence.modelId === 'string'
+            ? patch.ai!.codeIntelligence.modelId
+            : base.ai.codeIntelligence?.modelId,
+          customModelPath: typeof patch.ai!.codeIntelligence.customModelPath === 'string'
+            ? patch.ai!.codeIntelligence.customModelPath
+            : base.ai.codeIntelligence?.customModelPath,
           projectOverrides: {
             ...(base.ai.codeIntelligence?.projectOverrides ?? {}),
             ...(isRecord(patch.ai!.codeIntelligence.projectOverrides)
@@ -1527,7 +1549,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
               : {})
           }
         }
-      : (base.ai.codeIntelligence ? { ...base.ai.codeIntelligence, projectOverrides: { ...(base.ai.codeIntelligence.projectOverrides ?? {}) } } : { enabled: true, projectOverrides: {} })
+      : (base.ai.codeIntelligence ? { ...base.ai.codeIntelligence, projectOverrides: { ...(base.ai.codeIntelligence.projectOverrides ?? {}) } } : { enabled: true, projectOverrides: {}, modelId: 'sentence-transformers/all-MiniLM-L6-v2', customModelPath: '' })
   };
   if (customProviders.length > 0) ai.customProviders = customProviders;
   else delete ai.customProviders;

@@ -3242,7 +3242,7 @@ export function App() {
         />
       )}
       {startupResolved && !showSplash && !aiSetupNeeded && <SessionRecoveryDialog />}
-      {startupResolved && !showSplash && !aiSetupNeeded && (
+      {startupResolved && !showSplash && !aiSetupNeeded && !projectWizardMode && (
         <SemanticSearchNotification onOpenSettings={() => setSettingsDialogCategory('code-intelligence')} />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}

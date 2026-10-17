@@ -823,6 +823,8 @@ export interface SemanticModelStatus {
   downloading?: boolean;
   progressPercent?: number;
   error?: string;
+  modelId?: string;
+  architecture?: string;
 }
 
 export interface SemanticModelProgressEvent {

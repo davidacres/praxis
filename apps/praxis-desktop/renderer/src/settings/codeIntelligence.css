@@ -101,3 +101,28 @@
   font-size: var(--text-xs, 12px);
   color: var(--text-muted);
 }
+
+.code-intelligence-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.code-intelligence-model-meta {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  font-size: var(--text-xs, 12px);
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.code-intelligence-model-meta code {
+  font-family: monospace;
+  font-size: 11px;
+}
+

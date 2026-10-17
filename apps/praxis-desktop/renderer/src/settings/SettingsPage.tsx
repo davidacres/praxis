@@ -3211,6 +3211,8 @@ function CodeIntelligenceSection({
       <CodeIntelligencePanel
         servers={settings.ai.mcpServers ?? []}
         onServersChange={next => update({ ai: { mcpServers: next } })}
+        settings={settings}
+        update={update}
       />
     </section>
   );

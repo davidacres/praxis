@@ -8,7 +8,7 @@ test.afterEach(async () => {
 });
 
 test('shows semantic search recommendation notification on startup if model not installed', async ({}, testInfo) => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     let modelInstalled = false;
 
@@ -54,7 +54,7 @@ test('shows semantic search recommendation notification on startup if model not 
 });
 
 test('enables semantic search from startup notification and shows success feedback', async () => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     let modelInstalled = false;
 
@@ -96,7 +96,7 @@ test('enables semantic search from startup notification and shows success feedba
 });
 
 test('configure button in notification opens Code Intelligence settings page', async () => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('ai:getSemanticModelStatus');
     ipcMain.handle('ai:getSemanticModelStatus', () => ({

@@ -4,7 +4,9 @@ import type {
   CodeIntelligenceResponse,
   McpServerConfig,
   SemanticModelStatus,
-  SemanticModelProgressEvent
+  SemanticModelProgressEvent,
+  AppSettings,
+  AppSettingsPatch
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
@@ -29,11 +31,15 @@ function items(value: unknown): unknown[] {
 
 export function CodeIntelligencePanel({
   servers,
-  onServersChange
+  onServersChange,
+  settings,
+  update
 }: {
   providers?: Array<{ value: string; label: string }>;
   servers?: McpServerConfig[];
   onServersChange?: (servers: McpServerConfig[]) => Promise<void>;
+  settings?: AppSettings;
+  update?: (patch: AppSettingsPatch) => Promise<void>;
 }) {
   const { confirm, prompt } = useDialogs();
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -49,6 +55,42 @@ export function CodeIntelligencePanel({
   });
   const [downloadProgress, setDownloadProgress] = useState<SemanticModelProgressEvent>();
   const [downloading, setDownloading] = useState(false);
+
+  const currentModelId = settings?.ai?.codeIntelligence?.modelId || 'sentence-transformers/all-MiniLM-L6-v2';
+  const currentCustomPath = settings?.ai?.codeIntelligence?.customModelPath || '';
+
+  const [modelIdInput, setModelIdInput] = useState(currentModelId);
+  const [customPathInput, setCustomPathInput] = useState(currentCustomPath);
+
+  useEffect(() => {
+    setModelIdInput(settings?.ai?.codeIntelligence?.modelId || 'sentence-transformers/all-MiniLM-L6-v2');
+  }, [settings?.ai?.codeIntelligence?.modelId]);
+
+  useEffect(() => {
+    setCustomPathInput(settings?.ai?.codeIntelligence?.customModelPath || '');
+  }, [settings?.ai?.codeIntelligence?.customModelPath]);
+
+  const handleSaveModelConfig = async (newModelId?: string, newPath?: string) => {
+    if (!update) return;
+    const modelToSave = (newModelId !== undefined ? newModelId : modelIdInput).trim() || 'sentence-transformers/all-MiniLM-L6-v2';
+    const pathToSave = (newPath !== undefined ? newPath : customPathInput).trim();
+    await update({
+      ai: {
+        codeIntelligence: {
+          modelId: modelToSave,
+          customModelPath: pathToSave
+        }
+      }
+    });
+    await refreshModelStatus();
+  };
+
+  const handleResetModelConfig = async () => {
+    const defaultModel = 'sentence-transformers/all-MiniLM-L6-v2';
+    setModelIdInput(defaultModel);
+    setCustomPathInput('');
+    await handleSaveModelConfig(defaultModel, '');
+  };
 
   const selected = repositories.find(repository => repository.id === repositoryId);
 
@@ -218,6 +260,19 @@ export function CodeIntelligencePanel({
           )
         );
       }
+      if (update) {
+        await update({
+          ai: {
+            codeIntelligence: {
+              enabled: false,
+              modelId: 'sentence-transformers/all-MiniLM-L6-v2',
+              customModelPath: ''
+            }
+          }
+        });
+      }
+      setModelIdInput('sentence-transformers/all-MiniLM-L6-v2');
+      setCustomPathInput('');
       await refresh();
       await refreshModelStatus();
     } catch (err) {
@@ -294,6 +349,93 @@ export function CodeIntelligencePanel({
             </button>
           )}
         </div>
+
+        <details className="code-intelligence-details" data-testid="semantic-model-advanced-details">
+          <summary>Advanced model configuration</summary>
+          <div className="code-intelligence-advanced-body">
+            <p className="settings-hint" style={{ margin: 0 }}>
+              Configure the Hugging Face embedding model ID or specify a custom local model bundle directory containing <code>model.onnx</code>, <code>vocab.txt</code>, and <code>manifest.json</code>.
+            </p>
+
+            <div className="settings-field">
+              <label htmlFor="semantic-model-id" className="settings-field-label">
+                Model identifier
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  id="semantic-model-id"
+                  data-testid="semantic-model-id-input"
+                  className="input-text"
+                  type="text"
+                  value={modelIdInput}
+                  onChange={e => setModelIdInput(e.target.value)}
+                  onBlur={() => void handleSaveModelConfig()}
+                  placeholder="sentence-transformers/all-MiniLM-L6-v2"
+                  disabled={busy || downloading}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-secondary"
+                  data-testid="semantic-model-reset-default-btn"
+                  disabled={busy || downloading || (modelIdInput === 'sentence-transformers/all-MiniLM-L6-v2' && !customPathInput)}
+                  onClick={() => void handleResetModelConfig()}
+                  title="Reset to default model"
+                >
+                  Reset default
+                </button>
+              </div>
+              <p className="settings-hint">
+                Default: <code>sentence-transformers/all-MiniLM-L6-v2</code> (384-dimensional dense embeddings).
+              </p>
+            </div>
+
+            <div className="settings-field">
+              <label htmlFor="semantic-custom-path" className="settings-field-label">
+                Custom local model directory (optional)
+              </label>
+              <input
+                id="semantic-custom-path"
+                data-testid="semantic-custom-path-input"
+                className="input-text"
+                type="text"
+                value={customPathInput}
+                onChange={e => setCustomPathInput(e.target.value)}
+                onBlur={() => void handleSaveModelConfig()}
+                placeholder="/path/to/custom/model/bundle"
+                disabled={busy || downloading}
+              />
+              <p className="settings-hint">
+                Overrides the downloaded cache with a local folder containing <code>model.onnx</code> and <code>vocab.txt</code>.
+              </p>
+            </div>
+
+            {modelStatus.installed && (
+              <div className="code-intelligence-model-meta" data-testid="semantic-model-metadata">
+                <div className="code-intelligence-model-meta-item">
+                  <span className="label">Active Model ID</span>
+                  <span className="value">{modelStatus.modelId || currentModelId}</span>
+                </div>
+                <div className="code-intelligence-model-meta-item">
+                  <span className="label">Architecture</span>
+                  <span className="value">{modelStatus.architecture || 'BERT / MiniLM (ONNX)'}</span>
+                </div>
+                {modelStatus.fingerprint && (
+                  <div className="code-intelligence-model-meta-item">
+                    <span className="label">Model Fingerprint</span>
+                    <span className="value">{modelStatus.fingerprint.slice(0, 16)}…</span>
+                  </div>
+                )}
+                {modelStatus.sizeBytes !== undefined && (
+                  <div className="code-intelligence-model-meta-item">
+                    <span className="label">Disk Size</span>
+                    <span className="value">{(modelStatus.sizeBytes / 1024 / 1024).toFixed(1)} MB</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </details>
       </div>
 
       {/* Indexed Repositories Card */}

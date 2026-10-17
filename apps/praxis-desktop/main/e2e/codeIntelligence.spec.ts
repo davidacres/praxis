@@ -38,6 +38,8 @@ async function openPanel() {
       active: modelInstalled,
       fingerprint: modelInstalled ? 'sha256:fixture-fingerprint' : undefined,
       sizeBytes: modelInstalled ? 90636722 : 0,
+      architecture: modelInstalled ? 'BERT / MiniLM (ONNX)' : undefined,
+      modelId: 'sentence-transformers/all-MiniLM-L6-v2',
       downloading: false,
       progressPercent: modelInstalled ? 100 : 0
     }));
@@ -50,6 +52,8 @@ async function openPanel() {
         active: true,
         fingerprint: 'sha256:fixture-fingerprint',
         sizeBytes: 90636722,
+        architecture: 'BERT / MiniLM (ONNX)',
+        modelId: 'sentence-transformers/all-MiniLM-L6-v2',
         downloading: false,
         progressPercent: 100
       };
@@ -128,6 +132,43 @@ test('semantic search card shows status, allows downloading model, and deleting 
 
   // Returns to standard keyword search
   await expect(badge).toHaveText('Standard keyword search active');
+});
+
+test('advanced model configuration allows inspecting and changing model settings', async () => {
+  const { win, panel } = await openPanel();
+  const advancedDetails = panel.getByTestId('semantic-model-advanced-details');
+  await expect(advancedDetails).toBeVisible();
+
+  // Open details
+  await advancedDetails.locator('summary').click();
+
+  const modelIdInput = panel.getByTestId('semantic-model-id-input');
+  await expect(modelIdInput).toBeVisible();
+  await expect(modelIdInput).toHaveValue('sentence-transformers/all-MiniLM-L6-v2');
+
+  const customPathInput = panel.getByTestId('semantic-custom-path-input');
+  await expect(customPathInput).toBeVisible();
+  await expect(customPathInput).toHaveValue('');
+
+  // Edit model ID
+  await modelIdInput.fill('custom/embedding-model');
+  await modelIdInput.blur();
+
+  const resetDefaultBtn = panel.getByTestId('semantic-model-reset-default-btn');
+  await expect(resetDefaultBtn).toBeEnabled();
+  await resetDefaultBtn.click();
+  await expect(modelIdInput).toHaveValue('sentence-transformers/all-MiniLM-L6-v2');
+
+  // Trigger download to activate model
+  const downloadBtn = panel.getByTestId('semantic-model-download-btn');
+  await downloadBtn.click();
+
+  // Metadata should now be visible
+  const metadata = panel.getByTestId('semantic-model-metadata');
+  await expect(metadata).toBeVisible();
+  await expect(metadata).toContainText('sentence-transformers/all-MiniLM-L6-v2');
+  await expect(metadata).toContainText('BERT / MiniLM (ONNX)');
+  await expect(metadata).toContainText('86.4 MB');
 });
 
 test('code intelligence panel maintains accessibility in light and dark modes', async ({}, testInfo) => {

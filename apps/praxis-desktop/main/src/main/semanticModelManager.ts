@@ -42,7 +42,10 @@ const MANIFEST_CONTENT = {
   license: 'Apache-2.0'
 };
 
-export function getSemanticModelDirectory(): string {
+export function getSemanticModelDirectory(customPath?: string): string {
+  if (customPath && fs.existsSync(customPath)) {
+    return customPath;
+  }
   if (process.env.PRAXIS_MODEL_BUNDLE && fs.existsSync(process.env.PRAXIS_MODEL_BUNDLE)) {
     return process.env.PRAXIS_MODEL_BUNDLE;
   }
@@ -53,8 +56,8 @@ let isDownloading = false;
 let currentProgress = 0;
 let cachedFingerprint: string | undefined;
 
-export function isSemanticModelInstalled(): boolean {
-  const dir = getSemanticModelDirectory();
+export function isSemanticModelInstalled(customPath?: string): boolean {
+  const dir = getSemanticModelDirectory(customPath);
   const manifestPath = path.join(dir, 'manifest.json');
   const modelPath = path.join(dir, 'model.onnx');
   const vocabPath = path.join(dir, 'vocab.txt');
@@ -69,12 +72,19 @@ export function setCachedFingerprint(fingerprint: string | undefined): void {
   cachedFingerprint = fingerprint;
 }
 
-export function getSemanticModelStatus(): SemanticModelStatus {
-  const installed = isSemanticModelInstalled();
-  const dir = getSemanticModelDirectory();
+export function getSemanticModelStatus(customPath?: string, configuredModelId?: string): SemanticModelStatus {
+  const installed = isSemanticModelInstalled(customPath);
+  const dir = getSemanticModelDirectory(customPath);
   let sizeBytes = 0;
+  let modelId = configuredModelId || 'sentence-transformers/all-MiniLM-L6-v2';
+
   if (installed) {
     try {
+      const manifestPath = path.join(dir, 'manifest.json');
+      if (fs.existsSync(manifestPath)) {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+        if (manifest.modelId) modelId = manifest.modelId;
+      }
       const modelStat = fs.statSync(path.join(dir, 'model.onnx'));
       const vocabStat = fs.statSync(path.join(dir, 'vocab.txt'));
       sizeBytes = modelStat.size + vocabStat.size;
@@ -89,7 +99,9 @@ export function getSemanticModelStatus(): SemanticModelStatus {
     fingerprint: cachedFingerprint,
     sizeBytes,
     downloading: isDownloading,
-    progressPercent: currentProgress
+    progressPercent: currentProgress,
+    modelId,
+    architecture: installed ? 'BERT / MiniLM (ONNX)' : undefined
   };
 }
 
@@ -167,13 +179,15 @@ function streamDownload(
 }
 
 export async function downloadSemanticModel(
+  modelId = 'sentence-transformers/all-MiniLM-L6-v2',
+  customPath?: string,
   onProgress?: (event: SemanticModelProgressEvent) => void
 ): Promise<void> {
   if (isDownloading) {
     throw new Error('Model download is already in progress.');
   }
 
-  const dir = getSemanticModelDirectory();
+  const dir = getSemanticModelDirectory(customPath);
   fs.mkdirSync(dir, { recursive: true });
 
   isDownloading = true;
@@ -208,7 +222,7 @@ export async function downloadSemanticModel(
 
     // Write manifest.json
     const manifestDest = path.join(dir, 'manifest.json');
-    fs.writeFileSync(manifestDest, JSON.stringify(MANIFEST_CONTENT, null, 2), 'utf8');
+    fs.writeFileSync(manifestDest, JSON.stringify({ ...MANIFEST_CONTENT, modelId }, null, 2), 'utf8');
 
     currentProgress = 100;
     broadcastToAllWindows('ai:semanticModelProgress', {
