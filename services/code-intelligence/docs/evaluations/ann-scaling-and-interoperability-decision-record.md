@@ -21,17 +21,19 @@ This evaluation completes Milestone 6 (`TASK-461` / `CI-021`), addressing:
 
 ### 1.1 Current Architecture: Exact SIMD Dense Scan
 Praxis Code Intelligence currently uses brute-force exact vector scoring with SIMD hardware acceleration:
-- **Vector representation:** 384-dimensional unit-normalized `float32` embeddings (`all-MiniLM-L6-v2`), stored as 1,536-byte raw blobs in SQLite tables `vectors` and dense trigger-maintained `vector_scan`.
+- **Vector representation:** 384-dimensional unit-normalized `float32` embeddings (`BAAI/bge-small-en-v1.5` since 17 October 2026; `all-MiniLM-L6-v2` when this record was written — both 384-dimensional, so the storage and scan described here are unchanged), stored as 1,536-byte raw blobs in SQLite tables `vectors` and dense trigger-maintained `vector_scan`.
 - **Hardware acceleration:** `VectorScoring` utilizes .NET SIMD intrinsics (`Vector<float>`, `Vector<double>`) on little-endian platforms to perform dot products in a single pass without intermediate memory allocation.
 - **Top-K selection:** `VectorTopCandidates` maintains a bounded min-heap of the top 100 candidates with deterministic ordinal tie-breaking.
 - **Candidate pruning:** Queries join candidate filters (`kind`, `project_id`, `language`) during scanning to eliminate disqualified symbols prior to scoring.
 
 ### 1.2 Performance Characteristics Across Scale Tiers
 
+Only the 50k row is measured; the 5k and 200k rows and every HNSW column are projections, not observations. The 50k figures are the full-process bge-small run under search plan 7 in [`release-evidence.md`](../release-evidence.md) (one 12-core Mac; the reference machine is unmeasured).
+
 | Scale Tier | Symbols | Chunks | Memory Footprint | Exact SIMD Scan Latency | Projected HNSW Latency | Incremental Mutation Overhead (Edit) | Recall |
 |---|---|---|---|---|---|---|---|
 | **Small (5k)** | 5,000 | ~7,500 | ~150 MiB RSS | ~12–25 ms | ~2–4 ms | < 1 ms (Single SQLite row replace) | 100% |
-| **Medium (50k)** | 50,000 | ~75,000 | ~850–1,350 MiB RSS | ~95–180 ms | ~8–15 ms | ~2–5 ms (Single SQLite row replace) | 100% |
+| **Medium (50k)** | 50,000 | ~75,000 | 1.27 GB peak RSS (1.65 GB with 25 concurrent edits) | retrieval-only p95 121 ms; hybrid p95 134 ms | ~8–15 ms (projected) | ~2–5 ms (Single SQLite row replace) | 100% |
 | **Large (200k)** | 200,000 | ~300,000 | ~2.5–3.2 GiB RSS | ~450–700 ms | ~25–40 ms | ~15–50 ms (Graph node update) | 100% (Exact) / 97% (HNSW) |
 
 ### 1.3 Key Architectural Findings & Trade-offs
