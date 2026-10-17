@@ -15,7 +15,7 @@ public sealed record TypeScriptDiscovery(IReadOnlyList<TypeScriptConfigInput> Co
 public sealed class TypeScriptAnalyzer
 {
     public const string AdapterVersion = "typescript-7.0/v2";
-    public const string ProtocolVersion = "1.0";
+    public const string ProtocolVersion = "1.1";
 
     private static readonly HashSet<string> ExcludedDirectories = new(StringComparer.OrdinalIgnoreCase)
     { ".git", "bin", "obj", "node_modules", "vendor", "dist", "coverage", ".idea", ".vs" };
@@ -197,7 +197,19 @@ public sealed class TypeScriptAnalyzer
         };
         startInfo.ArgumentList.Add(sidecarScript);
 
-        JsonDocument response;
+        // Protocol 1.1 streams one JSON record per line: a header with the contexts and record
+        // counts, then each record, then an end marker. A single-document response peaked at
+        // 2.4 GB in the sidecar for Praxis (~175 MB of JSON); records parsed line by line keep
+        // both processes near the size of the analysis itself.
+        var contexts = new List<IndexedContext>();
+        var symbols = new List<IndexedSymbol>();
+        var calls = new List<IndexedCall>();
+        var relationships = new List<IndexedCall>();
+        var configuredDependencies = new List<IndexedDependency>();
+        var diagnostics = new List<IndexedDiagnostic>();
+        // Context IDs, paths, hashes and owner/target IDs repeat across records; share one copy.
+        var shared = new Dictionary<string, string>(StringComparer.Ordinal);
+        string Shared(string value) { if (shared.TryGetValue(value, out var existing)) return existing; shared[value] = value; return value; }
         try
         {
             using var process = Process.Start(startInfo)
@@ -212,209 +224,73 @@ public sealed class TypeScriptAnalyzer
             process.StandardInput.WriteLine(requestJson);
             process.StandardInput.Close();
 
-            // Parse straight from the pipe. The response is one JSON line that reaches about
-            // 175 MB for a 1,000-file monorepo; reading it as a string first held a UTF-16 copy
-            // (plus growth slack) beside the parsed UTF-8 document, about 1 GB of peak memory.
-            JsonDocument? parsed = null;
-            try { parsed = JsonDocument.Parse(process.StandardOutput.BaseStream); }
-            catch (JsonException) when (!cancellationToken.IsCancellationRequested) { }
+            var headerLine = process.StandardOutput.ReadLine();
+            if (string.IsNullOrWhiteSpace(headerLine))
+            {
+                process.WaitForExit();
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new IOException($"TypeScript sidecar exited with code {process.ExitCode} without returning a response.");
+            }
+            JsonElement counts;
+            string adapterVersion;
+            using (var header = JsonDocument.Parse(headerLine))
+            {
+                var rootEl = header.RootElement;
+                if (!rootEl.TryGetProperty("protocolVersion", out var protoProp) || protoProp.GetString() != ProtocolVersion)
+                {
+                    process.Kill(entireProcessTree: true);
+                    return AnalyzeSyntaxOnlyFallback(repositoryId, searchable, "TYPESCRIPT_SIDECAR_PROTOCOL_MISMATCH", "TypeScript compiler sidecar returned an incompatible protocol version; indexed source using syntax-only analysis.", cancellationToken);
+                }
+                if (rootEl.TryGetProperty("error", out var errorProp) && errorProp.ValueKind == JsonValueKind.Object)
+                {
+                    var code = errorProp.TryGetProperty("code", out var c) ? c.GetString() ?? "SIDECAR_FAILED" : "SIDECAR_FAILED";
+                    var msg = errorProp.TryGetProperty("message", out var m) ? m.GetString() ?? "TypeScript sidecar error." : "TypeScript sidecar error.";
+                    if (code == "IDENTITY_COLLISION") throw new InvalidOperationException("IDENTITY_COLLISION");
+                    return AnalyzeSyntaxOnlyFallback(repositoryId, searchable, code, $"TypeScript compiler sidecar failed ({msg}); indexed source using syntax-only analysis.", cancellationToken);
+                }
+                adapterVersion = rootEl.TryGetProperty("adapterVersion", out var avProp) && avProp.GetString() is { Length: > 0 } av ? av : AdapterVersion;
+                if (rootEl.TryGetProperty("contexts", out var ctxArray) && ctxArray.ValueKind == JsonValueKind.Array)
+                    foreach (var item in ctxArray.EnumerateArray()) contexts.Add(ParseContext(item, byPath, adapterVersion));
+                counts = rootEl.GetProperty("counts").Clone();
+            }
+
+            var ended = false;
+            while (process.StandardOutput.ReadLine() is { } line)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (line.Length == 0) continue;
+                using var record = JsonDocument.Parse(line);
+                var rootEl = record.RootElement;
+                if (rootEl.TryGetProperty("symbol", out var symbol))
+                {
+                    symbols.Add(ParseSymbol(symbol, Shared));
+                    if (symbols.Count > 50_000) throw new IOException("INPUT_TOO_LARGE: symbol limit exceeded.");
+                }
+                else if (rootEl.TryGetProperty("call", out var call)) calls.Add(ParseCall(call, Shared));
+                else if (rootEl.TryGetProperty("relationship", out var relationship)) relationships.Add(ParseCall(relationship, Shared));
+                else if (rootEl.TryGetProperty("dependency", out var dependency)) configuredDependencies.Add(ParseDependency(dependency, Shared));
+                else if (rootEl.TryGetProperty("diagnostic", out var diagnostic)) diagnostics.Add(ParseDiagnostic(diagnostic, Shared));
+                else if (rootEl.TryGetProperty("end", out _)) { ended = true; break; }
+                else throw new IOException("TypeScript sidecar returned an unknown record.");
+            }
             process.WaitForExit();
             _ = stderrTask.GetAwaiter().GetResult();
             cancellationToken.ThrowIfCancellationRequested();
-
-            response = parsed ?? throw new IOException($"TypeScript sidecar exited with code {process.ExitCode} without returning a response.");
+            // A stream that stops early (crash, kill, truncated pipe) must not publish a partial analysis.
+            if (!ended || counts.GetProperty("symbols").GetInt32() != symbols.Count || counts.GetProperty("calls").GetInt32() != calls.Count
+                || counts.GetProperty("relationships").GetInt32() != relationships.Count
+                || counts.GetProperty("configuredDependencies").GetInt32() != configuredDependencies.Count
+                || counts.GetProperty("diagnostics").GetInt32() != diagnostics.Count)
+                throw new IOException("TypeScript sidecar response was incomplete.");
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException or JsonException or KeyNotFoundException
+            && ex.Message != "IDENTITY_COLLISION" && !ex.Message.StartsWith("INPUT_TOO_LARGE", StringComparison.Ordinal))
         {
             return AnalyzeSyntaxOnlyFallback(repositoryId, searchable, "TYPESCRIPT_SIDECAR_FAILED", $"TypeScript compiler sidecar could not be executed ({ex.Message}); indexed source using syntax-only analysis.", cancellationToken);
-        }
-
-        using var doc = response;
-        var rootEl = doc.RootElement;
-        if (!rootEl.TryGetProperty("protocolVersion", out var protoProp) || protoProp.GetString() != ProtocolVersion)
-        {
-            return AnalyzeSyntaxOnlyFallback(repositoryId, searchable, "TYPESCRIPT_SIDECAR_PROTOCOL_MISMATCH", "TypeScript compiler sidecar returned an incompatible protocol version; indexed source using syntax-only analysis.", cancellationToken);
-        }
-
-        if (rootEl.TryGetProperty("error", out var errorProp) && errorProp.ValueKind == JsonValueKind.Object)
-        {
-            var code = errorProp.TryGetProperty("code", out var c) ? c.GetString() ?? "SIDECAR_FAILED" : "SIDECAR_FAILED";
-            var msg = errorProp.TryGetProperty("message", out var m) ? m.GetString() ?? "TypeScript sidecar error." : "TypeScript sidecar error.";
-            if (code == "IDENTITY_COLLISION") throw new InvalidOperationException("IDENTITY_COLLISION");
-            return AnalyzeSyntaxOnlyFallback(repositoryId, searchable, code, $"TypeScript compiler sidecar failed ({msg}); indexed source using syntax-only analysis.", cancellationToken);
-        }
-
-        var adapterVersion = rootEl.TryGetProperty("adapterVersion", out var avProp) && avProp.GetString() is { Length: > 0 } av
-            ? av
-            : AdapterVersion;
-
-        var contexts = new List<IndexedContext>();
-        if (rootEl.TryGetProperty("contexts", out var ctxArray) && ctxArray.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in ctxArray.EnumerateArray())
-            {
-                var key = item.GetProperty("key").GetString()!;
-                var projectPath = item.GetProperty("projectPath").GetString()!;
-                var id = item.GetProperty("id").GetString()!;
-                var hash = item.GetProperty("hash").GetString()!;
-                var resolution = item.GetProperty("resolution").GetString()!;
-                var language = item.TryGetProperty("language", out var langProp) && langProp.GetString() is { Length: > 0 } l ? l : "typescript";
-                var ctxAdapter = item.TryGetProperty("adapterVersion", out var caProp) && caProp.GetString() is { Length: > 0 } ca ? ca : adapterVersion;
-                var ctxSources = new List<SourceInput>();
-                if ((item.TryGetProperty("sourcePaths", out var srcArr) || item.TryGetProperty("sources", out srcArr))
-                    && srcArr.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var sEl in srcArr.EnumerateArray())
-                    {
-                        var path = sEl.GetString()!;
-                        if (byPath.TryGetValue(path, out var sourceInput))
-                            ctxSources.Add(sourceInput);
-                    }
-                }
-                contexts.Add(new IndexedContext(key, projectPath, id, hash, resolution, ctxSources, language, ctxAdapter));
-            }
-        }
-
-        var symbols = new List<IndexedSymbol>();
-        if (rootEl.TryGetProperty("symbols", out var symArray) && symArray.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in symArray.EnumerateArray())
-            {
-                var locations = new List<IndexedLocation>();
-                if (item.TryGetProperty("locations", out var locArr) && locArr.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var loc in locArr.EnumerateArray())
-                    {
-                        var rangeEl = loc.GetProperty("range");
-                        var startEl = rangeEl.GetProperty("start");
-                        var endEl = rangeEl.GetProperty("end");
-                        locations.Add(new IndexedLocation(
-                            loc.GetProperty("id").GetString()!,
-                            loc.GetProperty("contextId").GetString()!,
-                            loc.GetProperty("filePath").GetString()!,
-                            loc.GetProperty("hash").GetString()!,
-                            loc.GetProperty("start").GetInt32(),
-                            loc.GetProperty("end").GetInt32(),
-                            new SourceRange(
-                                new Position(startEl.GetProperty("line").GetInt32(), startEl.GetProperty("character").GetInt32()),
-                                new Position(endEl.GetProperty("line").GetInt32(), endEl.GetProperty("character").GetInt32()))));
-                    }
-                }
-
-                var containerId = item.TryGetProperty("containerId", out var contProp) && contProp.ValueKind == JsonValueKind.String
-                    ? contProp.GetString()
-                    : null;
-
-                symbols.Add(new IndexedSymbol(
-                    item.GetProperty("id").GetString()!,
-                    item.GetProperty("identity").GetString()!,
-                    item.GetProperty("contextId").GetString() ?? "",
-                    item.GetProperty("kind").GetString()!,
-                    item.GetProperty("name").GetString()!,
-                    item.GetProperty("qualifiedName").GetString()!,
-                    item.GetProperty("signature").GetString()!,
-                    item.GetProperty("revision").GetString()!,
-                    item.GetProperty("resolution").GetString()!,
-                    containerId,
-                    item.GetProperty("external").GetBoolean(),
-                    item.GetProperty("documentation").GetString() ?? "",
-                    locations));
-
-                if (symbols.Count > 50_000)
-                    throw new IOException("INPUT_TOO_LARGE: symbol limit exceeded.");
-            }
-        }
-
-        static List<IndexedCall> ParseCalls(JsonElement parent, string propertyName)
-        {
-            var result = new List<IndexedCall>();
-            if (!parent.TryGetProperty(propertyName, out var arr) || arr.ValueKind != JsonValueKind.Array)
-                return result;
-            foreach (var item in arr.EnumerateArray())
-            {
-                var rangeEl = item.GetProperty("range");
-                var startEl = rangeEl.GetProperty("start");
-                var endEl = rangeEl.GetProperty("end");
-                var targetId = item.TryGetProperty("targetId", out var tProp) && tProp.ValueKind == JsonValueKind.String
-                    ? tProp.GetString()
-                    : null;
-                var kind = item.TryGetProperty("kind", out var kProp) && kProp.ValueKind == JsonValueKind.String
-                    ? kProp.GetString()!
-                    : "calls";
-                result.Add(new IndexedCall(
-                    item.GetProperty("id").GetString()!,
-                    item.GetProperty("contextId").GetString()!,
-                    item.GetProperty("filePath").GetString()!,
-                    item.GetProperty("hash").GetString()!,
-                    item.GetProperty("ownerId").GetString()!,
-                    targetId,
-                    item.GetProperty("start").GetInt32(),
-                    item.GetProperty("end").GetInt32(),
-                    new SourceRange(
-                        new Position(startEl.GetProperty("line").GetInt32(), startEl.GetProperty("character").GetInt32()),
-                        new Position(endEl.GetProperty("line").GetInt32(), endEl.GetProperty("character").GetInt32())),
-                    item.GetProperty("resolution").GetString()!,
-                    kind));
-            }
-            return result;
-        }
-
-        var calls = ParseCalls(rootEl, "calls");
-        var relationships = ParseCalls(rootEl, "relationships");
-
-        var configuredDependencies = new List<IndexedDependency>();
-        if (rootEl.TryGetProperty("configuredDependencies", out var depArr) && depArr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in depArr.EnumerateArray())
-            {
-                var targetCtx = item.TryGetProperty("targetContextId", out var tcProp) && tcProp.ValueKind == JsonValueKind.String
-                    ? tcProp.GetString()
-                    : null;
-                var reqHash = item.TryGetProperty("requiredContextHash", out var rhProp) && rhProp.ValueKind == JsonValueKind.String
-                    ? rhProp.GetString()
-                    : null;
-                configuredDependencies.Add(new IndexedDependency(
-                    item.GetProperty("id").GetString()!,
-                    item.GetProperty("contextId").GetString()!,
-                    item.GetProperty("ownerId").GetString()!,
-                    item.GetProperty("targetId").GetString()!,
-                    item.GetProperty("inputRevision").GetString()!,
-                    item.GetProperty("resolution").GetString()!,
-                    item.GetProperty("referenceIdentity").GetString()!,
-                    targetCtx,
-                    reqHash));
-            }
-        }
-
-        var diagnostics = new List<IndexedDiagnostic>();
-        if (rootEl.TryGetProperty("diagnostics", out var diagArr) && diagArr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in diagArr.EnumerateArray())
-            {
-                var filePath = item.TryGetProperty("filePath", out var fpProp) && fpProp.ValueKind == JsonValueKind.String
-                    ? fpProp.GetString()
-                    : null;
-                SourceRange? range = null;
-                if (item.TryGetProperty("range", out var rProp) && rProp.ValueKind == JsonValueKind.Object)
-                {
-                    var s = rProp.GetProperty("start");
-                    var e = rProp.GetProperty("end");
-                    range = new SourceRange(
-                        new Position(s.GetProperty("line").GetInt32(), s.GetProperty("character").GetInt32()),
-                        new Position(e.GetProperty("line").GetInt32(), e.GetProperty("character").GetInt32()));
-                }
-                diagnostics.Add(new IndexedDiagnostic(
-                    item.GetProperty("contextId").GetString() ?? "",
-                    filePath,
-                    item.GetProperty("code").GetString()!,
-                    item.GetProperty("severity").GetString()!,
-                    item.GetProperty("message").GetString()!,
-                    range));
-            }
         }
 
         return new RepositoryAnalysis(contexts, symbols, calls, diagnostics)
@@ -422,6 +298,68 @@ public sealed class TypeScriptAnalyzer
             Relationships = relationships,
             ConfiguredDependencies = configuredDependencies
         };
+    }
+
+    private static IndexedContext ParseContext(JsonElement item, IReadOnlyDictionary<string, SourceInput> byPath, string adapterVersion)
+    {
+        var language = item.TryGetProperty("language", out var langProp) && langProp.GetString() is { Length: > 0 } l ? l : "typescript";
+        var ctxAdapter = item.TryGetProperty("adapterVersion", out var caProp) && caProp.GetString() is { Length: > 0 } ca ? ca : adapterVersion;
+        var ctxSources = new List<SourceInput>();
+        if ((item.TryGetProperty("sourcePaths", out var srcArr) || item.TryGetProperty("sources", out srcArr)) && srcArr.ValueKind == JsonValueKind.Array)
+            foreach (var sEl in srcArr.EnumerateArray())
+                if (byPath.TryGetValue(sEl.GetString()!, out var sourceInput)) ctxSources.Add(sourceInput);
+        return new IndexedContext(item.GetProperty("key").GetString()!, item.GetProperty("projectPath").GetString()!, item.GetProperty("id").GetString()!,
+            item.GetProperty("hash").GetString()!, item.GetProperty("resolution").GetString()!, ctxSources, language, ctxAdapter);
+    }
+
+    private static SourceRange ParseRange(JsonElement range)
+    {
+        var start = range.GetProperty("start"); var end = range.GetProperty("end");
+        return new SourceRange(new Position(start.GetProperty("line").GetInt32(), start.GetProperty("character").GetInt32()),
+            new Position(end.GetProperty("line").GetInt32(), end.GetProperty("character").GetInt32()));
+    }
+
+    private static IndexedSymbol ParseSymbol(JsonElement item, Func<string, string> shared)
+    {
+        var locations = new List<IndexedLocation>();
+        if (item.TryGetProperty("locations", out var locArr) && locArr.ValueKind == JsonValueKind.Array)
+            foreach (var loc in locArr.EnumerateArray())
+                locations.Add(new IndexedLocation(loc.GetProperty("id").GetString()!, shared(loc.GetProperty("contextId").GetString()!),
+                    shared(loc.GetProperty("filePath").GetString()!), shared(loc.GetProperty("hash").GetString()!),
+                    loc.GetProperty("start").GetInt32(), loc.GetProperty("end").GetInt32(), ParseRange(loc.GetProperty("range"))));
+        var containerId = item.TryGetProperty("containerId", out var contProp) && contProp.ValueKind == JsonValueKind.String ? shared(contProp.GetString()!) : null;
+        return new IndexedSymbol(shared(item.GetProperty("id").GetString()!), item.GetProperty("identity").GetString()!,
+            shared(item.GetProperty("contextId").GetString() ?? ""), shared(item.GetProperty("kind").GetString()!), item.GetProperty("name").GetString()!,
+            item.GetProperty("qualifiedName").GetString()!, item.GetProperty("signature").GetString()!, item.GetProperty("revision").GetString()!,
+            shared(item.GetProperty("resolution").GetString()!), containerId, item.GetProperty("external").GetBoolean(),
+            item.GetProperty("documentation").GetString() ?? "", locations);
+    }
+
+    private static IndexedCall ParseCall(JsonElement item, Func<string, string> shared)
+    {
+        var targetId = item.TryGetProperty("targetId", out var tProp) && tProp.ValueKind == JsonValueKind.String ? shared(tProp.GetString()!) : null;
+        var kind = item.TryGetProperty("kind", out var kProp) && kProp.ValueKind == JsonValueKind.String ? shared(kProp.GetString()!) : "calls";
+        return new IndexedCall(item.GetProperty("id").GetString()!, shared(item.GetProperty("contextId").GetString()!),
+            shared(item.GetProperty("filePath").GetString()!), shared(item.GetProperty("hash").GetString()!), shared(item.GetProperty("ownerId").GetString()!),
+            targetId, item.GetProperty("start").GetInt32(), item.GetProperty("end").GetInt32(), ParseRange(item.GetProperty("range")),
+            shared(item.GetProperty("resolution").GetString()!), kind);
+    }
+
+    private static IndexedDependency ParseDependency(JsonElement item, Func<string, string> shared)
+    {
+        var targetCtx = item.TryGetProperty("targetContextId", out var tcProp) && tcProp.ValueKind == JsonValueKind.String ? tcProp.GetString() : null;
+        var reqHash = item.TryGetProperty("requiredContextHash", out var rhProp) && rhProp.ValueKind == JsonValueKind.String ? rhProp.GetString() : null;
+        return new IndexedDependency(item.GetProperty("id").GetString()!, shared(item.GetProperty("contextId").GetString()!), shared(item.GetProperty("ownerId").GetString()!),
+            shared(item.GetProperty("targetId").GetString()!), item.GetProperty("inputRevision").GetString()!, item.GetProperty("resolution").GetString()!,
+            item.GetProperty("referenceIdentity").GetString()!, targetCtx, reqHash);
+    }
+
+    private static IndexedDiagnostic ParseDiagnostic(JsonElement item, Func<string, string> shared)
+    {
+        var filePath = item.TryGetProperty("filePath", out var fpProp) && fpProp.ValueKind == JsonValueKind.String ? shared(fpProp.GetString()!) : null;
+        SourceRange? range = item.TryGetProperty("range", out var rProp) && rProp.ValueKind == JsonValueKind.Object ? ParseRange(rProp) : null;
+        return new IndexedDiagnostic(shared(item.GetProperty("contextId").GetString() ?? ""), filePath, item.GetProperty("code").GetString()!,
+            item.GetProperty("severity").GetString()!, item.GetProperty("message").GetString()!, range);
     }
 
     private static RepositoryAnalysis AnalyzeSyntaxOnlyFallback(

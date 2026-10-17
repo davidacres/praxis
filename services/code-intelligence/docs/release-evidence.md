@@ -1016,3 +1016,40 @@ Hybrid p95 was 164 ms in the sequential CLI run.
 - Terminology is the weak category, as it is on Maze. Hybrid lifts recall from 0.333 to 0.500, but four of twelve queries still miss in every mode. For example, "save leftover edits as a commit before a checkout is deleted" does not reach `preserveUncommittedWork`.
 - Cross-project misses happen where one of the two labels is a constant or a small helper, for example `DEFAULT_APP_SETTINGS` and `isTicketReviewKey`.
 - The same fusion work that would help Maze's terminology queries applies here.
+
+## Streamed TypeScript sidecar protocol (1.1) — 17 October
+
+**Cause.** The sidecar's memory was mostly serialisation, not analysis. A scratch copy measured on the captured Praxis request (12.4 MB):
+
+| Phase | Sidecar RSS |
+|---|---|
+| Request parsed | 117 MB |
+| Declarations pass | 461 MB |
+| Calls and relationships pass | 777 MB |
+| `JSON.stringify` of the whole result | 1,978 MB |
+| Written to stdout | 2,314 MB |
+
+The peak was 2.43 GB, of which about 1.5 GB was turning the result into one 175 MB string and writing it out.
+
+**Change.**
+- The sidecar writes a header line (contexts and record counts), one line per record, then `{"end":true}`.
+- Records are batched into chunks of about 1 MB that wait for the pipe to drain.
+- The owner reads and parses line by line. Repeated context IDs, paths, hashes and owner/target IDs share one string instance.
+- A stream without the end marker, or with counts that do not match the header, falls back to syntax-only with `TYPESCRIPT_SIDECAR_FAILED` and never publishes a partial analysis.
+- The protocol version is now 1.1 on both sides.
+
+**Equivalence.** On the identical captured request, the 1.0 single document and the 1.1 stream carry byte-identical record sets: 40,626 symbols, 98,580 calls and 92,949 relationships, compared after key-sorting, with identical contexts.
+
+**Memory indexing Praxis through the owner** (0.1 s sampling):
+
+| Process | Before | After |
+|---|---|---|
+| Owner | 1.2–1.8 GB | **419 MiB** |
+| Sidecar (Node) | 2.29 GB | **793 MiB** |
+| TypeScript 7 compiler | 1.38 GB | 1.28 GB, unchanged |
+
+All three together now peak at about 2.0 GB. The compiler process is now the largest; it holds every configured project open during analysis. Indexing took 48 s.
+
+**Tests.**
+- 147 C# tests pass, 2 SDK-capture tests skipped without their opt-in.
+- `TruncatedSidecarStreamFallsBackInsteadOfPublishingAPartialAnalysis` fails when the completeness check is removed.

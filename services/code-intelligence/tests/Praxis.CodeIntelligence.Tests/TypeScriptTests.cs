@@ -460,6 +460,38 @@ public sealed class TypeScriptTests : IDisposable
         }
     }
 
+    [Fact]
+    public void TruncatedSidecarStreamFallsBackInsteadOfPublishingAPartialAnalysis()
+    {
+        Write("src/partial.ts", "export class PartialService {}\n");
+        // A sidecar that announces two symbols, sends one and stops before the end marker.
+        Write("fake-sidecar.mjs", """
+            process.stdin.resume();
+            process.stdin.on('end', () => {
+              const header = { protocolVersion: '1.1', adapterVersion: 'typescript-7.0/v2', contexts: [],
+                counts: { symbols: 2, calls: 0, relationships: 0, configuredDependencies: 0, diagnostics: 0 } };
+              process.stdout.write(JSON.stringify(header) + '\n');
+              process.stdout.write(JSON.stringify({ symbol: { id: 'pci:sym:x', identity: 'x', contextId: '', kind: 'type', name: 'Ghost',
+                qualifiedName: 'Ghost', signature: 'Ghost', revision: 'r', resolution: 'resolved', containerId: null, external: false,
+                documentation: '', locations: [] } }) + '\n');
+            });
+            """);
+        var previous = Environment.GetEnvironmentVariable("PRAXIS_TS_SIDECAR_PATH");
+        try
+        {
+            Environment.SetEnvironmentVariable("PRAXIS_TS_SIDECAR_PATH", Path.Combine(root, "fake-sidecar.mjs"));
+            var indexer = new RepositoryIndexer(database); var repoId = indexer.Register(root); indexer.Index(repoId);
+            var queries = new QueryService(database); var allowed = new HashSet<string> { repoId };
+            Assert.Empty(queries.Execute("find_symbol", new JsonObject { ["repositoryId"] = repoId, ["name"] = "Ghost" }, allowed)["data"]!["items"]!.AsArray());
+            var found = Assert.Single(queries.Execute("find_symbol", new JsonObject { ["repositoryId"] = repoId, ["name"] = "PartialService" }, allowed)["data"]!["items"]!.AsArray())!;
+            Assert.Equal("syntaxOnly", found["resolution"]!.GetValue<string>());
+            var diagnostics = queries.Execute("get_index_status", new JsonObject { ["repositoryId"] = repoId }, allowed)["data"]!["diagnostics"]!.AsArray();
+            Assert.Contains(diagnostics, d => d!["code"]!.GetValue<string>() == "TYPESCRIPT_SIDECAR_FAILED");
+            Assert.Empty(database.Check());
+        }
+        finally { Environment.SetEnvironmentVariable("PRAXIS_TS_SIDECAR_PATH", previous); }
+    }
+
     [LocalModelFact]
     public void PolyglotVectorAndHybridSearchPreserveLanguageFilters()
     {

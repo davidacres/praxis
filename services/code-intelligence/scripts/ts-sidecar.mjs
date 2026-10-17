@@ -11,7 +11,7 @@ console.info = (...args) => console.error(...args);
 console.debug = (...args) => console.error(...args);
 console.warn = (...args) => console.error(...args);
 
-const PROTOCOL_VERSION = '1.0';
+const PROTOCOL_VERSION = '1.1';
 const ADAPTER_VERSION = 'typescript-7.0/v2';
 
 function sha256(input) {
@@ -1432,6 +1432,47 @@ function analyzeRepository(ts, request) {
   }
 }
 
+// Protocol 1.1: a header line (contexts and record counts), one line per record, then an
+// end marker. Serialising the whole result as one document cost about 1.5 GB on top of the
+// analysis for a 1,000-file repository; records are written in ~1 MB chunks that wait for
+// the pipe to drain, so memory stays near the size of the analysis.
+async function writeResult(result) {
+  let pending = [];
+  let size = 0;
+  const flush = () => new Promise((resolve, reject) => {
+    if (pending.length === 0) { resolve(); return; }
+    const chunk = pending.join('');
+    pending = [];
+    size = 0;
+    writeStdout(chunk, error => (error ? reject(error) : resolve()));
+  });
+  const line = async value => {
+    const text = JSON.stringify(value) + '\n';
+    pending.push(text);
+    size += text.length;
+    if (size >= 1 << 20) await flush();
+  };
+  await line({
+    protocolVersion: result.protocolVersion,
+    adapterVersion: result.adapterVersion,
+    contexts: result.contexts,
+    counts: {
+      symbols: result.symbols.length,
+      calls: result.calls.length,
+      relationships: result.relationships.length,
+      configuredDependencies: result.configuredDependencies.length,
+      diagnostics: result.diagnostics.length
+    }
+  });
+  for (const symbol of result.symbols) await line({ symbol });
+  for (const call of result.calls) await line({ call });
+  for (const relationship of result.relationships) await line({ relationship });
+  for (const dependency of result.configuredDependencies) await line({ dependency });
+  for (const diagnostic of result.diagnostics) await line({ diagnostic });
+  await line({ end: true });
+  await flush();
+}
+
 async function main() {
   const ts = await loadTypeScript();
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -1443,7 +1484,7 @@ async function main() {
         throw new Error(`Unsupported sidecar protocol version: ${request.protocolVersion}`);
       }
       const result = analyzeRepository(ts, request);
-      writeStdout(JSON.stringify(result) + '\n');
+      await writeResult(result);
     } catch (error) {
       writeStdout(
         JSON.stringify({
