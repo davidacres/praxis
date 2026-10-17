@@ -12,7 +12,7 @@ console.debug = (...args) => console.error(...args);
 console.warn = (...args) => console.error(...args);
 
 const PROTOCOL_VERSION = '1.0';
-const ADAPTER_VERSION = 'typescript-7.0/v1';
+const ADAPTER_VERSION = 'typescript-7.0/v2';
 
 function sha256(input) {
   return 'sha256:' + crypto.createHash('sha256').update(input).digest('hex');
@@ -238,6 +238,9 @@ function analyzeRepository(ts, request) {
       const projectRoots = new Map();
       const nodeToSymbolId = new Map();
       const declKeyToSymbolId = new Map();
+      // Non-local source declarations by qualified name, for resolving a workspace package's
+      // emitted declarations (`out/x.d.ts`) back to the source they were built from.
+      const qualifiedToSymbolIds = new Map();
       const calls = [];
       const relationships = [];
       const configuredDependencies = new Map();
@@ -681,6 +684,11 @@ function analyzeRepository(ts, request) {
                 locations: [location]
               };
               symbols.set(symId, symObj);
+              if (kind !== 'function' || !enclosingCallable) {
+                const same = qualifiedToSymbolIds.get(qualifiedName) || [];
+                same.push(symId);
+                qualifiedToSymbolIds.set(qualifiedName, same);
+              }
             } else {
               if (symObj.identity !== identity) {
                 throw new Error('IDENTITY_COLLISION');
@@ -740,6 +748,68 @@ function analyzeRepository(ts, request) {
 
       const repoRootLower = normalizePath(realRoot).toLowerCase();
 
+      // Where each configured project emits declarations, and the source root they come from.
+      // Monorepo packages are imported through their built `types` entry (e.g. `out/index.d.ts`),
+      // so without this every cross-package call would resolve to an external placeholder.
+      const declarationOutputs = [];
+      for (const { cfg, proj } of resolvedConfigs) {
+        const options = proj.compilerOptions || {};
+        const cfgDirAbs = path.resolve(realRoot, path.posix.dirname(cfg.path));
+        const output = options.declarationDir || options.outDir;
+        if (!output) continue;
+        const outputAbs = normalizePath(path.resolve(cfgDirAbs, output)).toLowerCase();
+        const rootAbs = normalizePath(path.resolve(cfgDirAbs, options.rootDir || '.'));
+        if (outputAbs === rootAbs.toLowerCase()) continue;
+        declarationOutputs.push({ outputAbs, rootAbs });
+      }
+
+      function sourceForDeclarationOutput(declarationPath) {
+        let real = declarationPath;
+        try { real = fs.realpathSync(declarationPath); } catch { /* keep the reported path */ }
+        const normalized = normalizePath(real);
+        const lower = normalized.toLowerCase();
+        const match = lower.match(/\.d\.(m|c)?ts$/);
+        if (!match) return null;
+        for (const { outputAbs, rootAbs } of declarationOutputs) {
+          if (!lower.startsWith(outputAbs + '/')) continue;
+          const relative = normalized.slice(outputAbs.length + 1, normalized.length - match[0].length);
+          const extensions = match[1] === 'm' ? ['.mts'] : match[1] === 'c' ? ['.cts'] : ['.ts', '.tsx', '.js', '.jsx'];
+          for (const extension of extensions) {
+            const source = byAbsoluteLower.get(`${rootAbs}/${relative}${extension}`.toLowerCase());
+            if (source && source.role === 'searchableSource') return source;
+          }
+        }
+        return null;
+      }
+
+      // The declaration's name path inside its file: `Class.method`, `namespace.fn`, `config.key`.
+      function declarationNamePath(node) {
+        const names = [];
+        for (let current = node; current && current.kind !== SyntaxKind.SourceFile; current = current.parent) {
+          if (current.kind === SyntaxKind.Constructor) names.push('constructor');
+          else if (current.name && current.name.kind === SyntaxKind.Identifier) names.push(current.name.text ?? current.name.escapedText);
+        }
+        return names.reverse().join('.');
+      }
+
+      function resolveFromDeclarationOutput(ctx, handles) {
+        for (const handle of handles) {
+          if (!handle || !handle.path) continue;
+          const source = sourceForDeclarationOutput(handle.path);
+          if (!source) continue;
+          const node = typeof handle.resolve === 'function' ? handle.resolve(ctx.project) : null;
+          if (!node) continue;
+          const namePath = declarationNamePath(node);
+          if (!namePath) continue;
+          const moduleQualifier = source.path.replace(/\.(d\.ts|tsx|ts|mts|cts|jsx|js|mjs|cjs)$/i, '');
+          const ids = qualifiedToSymbolIds.get(`${moduleQualifier}.${namePath}`);
+          if (!ids || ids.length === 0) continue;
+          const targetCtx = fileToContext.get(source.path);
+          return { id: ids[0], contextId: targetCtx ? targetCtx.id : ctx.id, external: false };
+        }
+        return null;
+      }
+
       function resolveTargetSymbol(ctx, tsSym, declNode, preferredKind = 'method') {
         if (!tsSym && !declNode) return null;
         const checker = ctx.project?.checker;
@@ -782,6 +852,9 @@ function analyzeRepository(ts, request) {
             }
           }
         }
+
+        const fromOutput = resolveFromDeclarationOutput(ctx, candidateHandles);
+        if (fromOutput) return fromOutput;
 
         // External declaration (e.g., node_modules / lib.d.ts / semanticSupport)
         if (resolvedSym && resolvedSym.name && resolvedSym.name !== 'unknown') {
@@ -996,6 +1069,37 @@ function analyzeRepository(ts, request) {
                   }
                 }
               }
+            }
+
+            // 1b. JSX elements: rendering <Component /> calls the component, so `get_callers`
+            // answers "where is this rendered". Intrinsic elements (<div>) are not symbols.
+            if (
+              (node.kind === SyntaxKind.JsxOpeningElement || node.kind === SyntaxKind.JsxSelfClosingElement) &&
+              node.tagName &&
+              !(node.tagName.kind === SyntaxKind.Identifier && /^[a-z]/.test(node.tagName.getText(sf)))
+            ) {
+              let target = null;
+              if (checker) {
+                try { target = resolveTargetSymbol(ctx, checker.getSymbolAtLocation(node.tagName), null, 'method'); }
+                catch { /* recorded as unresolved */ }
+              }
+              const tagStart = node.tagName.getStart(sf);
+              const tagEnd = node.tagName.getEnd();
+              const tagRange = rangeOf(sf, tagStart, tagEnd);
+              calls.push({
+                id: makeId('pci:call:', ctx.id, source.path, source.hash, tagStart, tagEnd, target?.id || 'unresolved'),
+                contextId: ctx.id,
+                filePath: source.path,
+                hash: source.hash,
+                ownerId,
+                targetId: target ? target.id : null,
+                start: tagStart,
+                end: tagEnd,
+                range: tagRange,
+                resolution: syntaxOnly ? 'syntaxOnly' : target ? 'resolved' : 'unresolved',
+                kind: 'calls'
+              });
+              if (target) recordCrossProjectDependency(target, tagStart, tagEnd, tagRange);
             }
 
             // 2. Heritage clauses (extends / implements)

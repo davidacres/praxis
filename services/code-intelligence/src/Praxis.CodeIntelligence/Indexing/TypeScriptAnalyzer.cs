@@ -14,7 +14,7 @@ public sealed record TypeScriptDiscovery(IReadOnlyList<TypeScriptConfigInput> Co
 /// </summary>
 public sealed class TypeScriptAnalyzer
 {
-    public const string AdapterVersion = "typescript-7.0/v1";
+    public const string AdapterVersion = "typescript-7.0/v2";
     public const string ProtocolVersion = "1.0";
 
     private static readonly HashSet<string> ExcludedDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -197,7 +197,7 @@ public sealed class TypeScriptAnalyzer
         };
         startInfo.ArgumentList.Add(sidecarScript);
 
-        string stdoutLine;
+        JsonDocument response;
         try
         {
             using var process = Process.Start(startInfo)
@@ -212,14 +212,17 @@ public sealed class TypeScriptAnalyzer
             process.StandardInput.WriteLine(requestJson);
             process.StandardInput.Close();
 
-            var line = process.StandardOutput.ReadLine();
+            // Parse straight from the pipe. The response is one JSON line that reaches about
+            // 175 MB for a 1,000-file monorepo; reading it as a string first held a UTF-16 copy
+            // (plus growth slack) beside the parsed UTF-8 document, about 1 GB of peak memory.
+            JsonDocument? parsed = null;
+            try { parsed = JsonDocument.Parse(process.StandardOutput.BaseStream); }
+            catch (JsonException) when (!cancellationToken.IsCancellationRequested) { }
             process.WaitForExit();
             _ = stderrTask.GetAwaiter().GetResult();
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (string.IsNullOrWhiteSpace(line))
-                throw new IOException($"TypeScript sidecar exited with code {process.ExitCode} without returning a response.");
-            stdoutLine = line;
+            response = parsed ?? throw new IOException($"TypeScript sidecar exited with code {process.ExitCode} without returning a response.");
         }
         catch (OperationCanceledException)
         {
@@ -230,7 +233,7 @@ public sealed class TypeScriptAnalyzer
             return AnalyzeSyntaxOnlyFallback(repositoryId, searchable, "TYPESCRIPT_SIDECAR_FAILED", $"TypeScript compiler sidecar could not be executed ({ex.Message}); indexed source using syntax-only analysis.", cancellationToken);
         }
 
-        using var doc = JsonDocument.Parse(stdoutLine);
+        using var doc = response;
         var rootEl = doc.RootElement;
         if (!rootEl.TryGetProperty("protocolVersion", out var protoProp) || protoProp.GetString() != ProtocolVersion)
         {

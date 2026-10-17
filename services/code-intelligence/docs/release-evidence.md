@@ -937,3 +937,43 @@ The two post-fix concurrent peaks (1.83 and 1.65 GB) bracket run-to-run variatio
 - Native packaging smoke passes.
 
 Real Claude Code CLI use through this server has not yet been exercised.
+
+## TypeScript qualification on the Praxis repository — 17 October
+
+This was the first run of the M4 adapter on a real repository: Praxis itself, at this branch, on a 12-core Mac.
+
+**Scope.** Git-ignored build output (`out/`, the copied renderer bundle, `artifacts/`) is already excluded by `GitFilePolicy`, so no extra excludes were needed. The index covered:
+- 959 TypeScript, 40 JavaScript and 67 C# files.
+- Six contexts: five `tsconfig` projects (core, desktop main, renderer, mobile-relay, mobile-protocol) and the three C# service projects.
+- About 39,800 source symbols and about 199,000 edges.
+- Indexing took 37–43 s.
+
+166 files have no `tsconfig` and are analysed syntax-only: declarations but no call graph. Most of them (158) are Playwright e2e specs.
+
+**Defect 1: calls between workspace packages never reached source.**
+- `main` and `renderer` import `@praxis/core` through its `types` entry, `packages/core/out/index.d.ts`, which is emitted declarations with no declaration maps.
+- Every resolved core symbol became an external placeholder labelled `ts:defaultLib`. About 12,600 edges pointed at about 1,540 placeholders that share a name with a core source symbol.
+- So `get_callers(sanitizeAppSettings)` missed the desktop's `SharedSettingsBackend`.
+- Fix (adapter `typescript-7.0/v2`): a declaration under a configured project's `declarationDir`/`outDir` maps back through `rootDir` to its source file, and from there by name path to the indexed symbol.
+- After the fix: `main` has 15,813 edges into core source and `renderer` has 26,040. No placeholder shares a core name. The callers of `sanitizeAppSettings` match `grep`.
+
+**Defect 2: React component usage was invisible.** `<CodeIntelligencePanel …/>` produced only an import edge. JSX opening and self-closing elements with a non-intrinsic tag are now recorded as `calls` on the tag name. `get_callers(CodeIntelligencePanel)` now returns `SettingsPage.CodeIntelligenceSection`.
+
+**Memory.** Each process's own peak while indexing Praxis:
+- Sidecar Node process: **2.29 GB**. It holds the whole analysis and a 174.5 MB single-line JSON result, about 870 bytes per fact.
+- TypeScript 7 compiler: 1.38 GB.
+- Owner: 1.21 GB at 0.1 s sampling. One-second samples were 1.39–1.82 GB before this change, which now parses the response from the pipe instead of a UTF-16 string.
+
+`/usr/bin/time` on the owner reports 2.41–2.44 GB, because its maximum includes reaped child processes, i.e. the sidecar. **Open:** the result format repeats IDs, paths and hashes in every record. Shrinking or streaming it is needed before larger TypeScript repositories fit the reference profile.
+
+**Capacity.** The repository symbol limit is 50,000, and Praxis uses 39,800 of it (80%).
+
+**Tests.**
+- `WorkspacePackageImportedThroughBuiltDeclarationsResolvesToItsSource` and `JsxElementsRecordComponentUsageAsCallsButIntrinsicElementsDoNot` both fail against the previous sidecar and pass now.
+- 146 C# tests pass, 2 SDK-capture tests skipped without their opt-in.
+
+**Still open:**
+- A TypeScript retrieval-quality corpus. Search quality on TypeScript is unmeasured.
+- Real Claude Code use against this index.
+- Call graphs for files outside any `tsconfig` (the e2e specs).
+- The sidecar memory above.

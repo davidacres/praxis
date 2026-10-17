@@ -280,6 +280,75 @@ public sealed class TypeScriptTests : IDisposable
     }
 
     [Fact]
+    public void WorkspacePackageImportedThroughBuiltDeclarationsResolvesToItsSource()
+    {
+        // A monorepo package is consumed through its emitted `types` entry (out/*.d.ts). Those
+        // declarations must lead back to the source, not to an external placeholder.
+        Write("packages/core/tsconfig.json", """
+            { "compilerOptions": { "target": "ES2022", "module": "commonjs", "strict": true, "declaration": true, "outDir": "out", "rootDir": "src" }, "include": ["src/**/*"] }
+            """);
+        Write("packages/core/src/settings.ts", """
+            export function sanitize(raw: unknown): string { return String(raw); }
+            export class Store { save(value: string): void { void value; } }
+            """);
+        Write("packages/core/src/index.ts", "export * from \"./settings\";\n");
+        Write("packages/core/out/settings.d.ts", """
+            export declare function sanitize(raw: unknown): string;
+            export declare class Store { save(value: string): void; }
+            """);
+        Write("packages/core/out/index.d.ts", "export * from \"./settings\";\n");
+        Write("packages/app/tsconfig.json", """
+            { "compilerOptions": { "target": "ES2022", "module": "commonjs", "strict": true, "paths": { "@acme/core": ["../core/out/index.d.ts"] } }, "include": ["src/**/*"] }
+            """);
+        Write("packages/app/src/main.ts", """
+            import { sanitize, Store } from "@acme/core";
+            export function run(): string { new Store().save("x"); return sanitize(1); }
+            """);
+
+        var indexer = new RepositoryIndexer(database); var repoId = indexer.Register(root); indexer.Index(repoId);
+        var queries = new QueryService(database); var allowed = new HashSet<string> { repoId };
+        JsonNode Single(string name) => Assert.Single(queries.Execute("find_symbol", new JsonObject { ["repositoryId"] = repoId, ["name"] = name }, allowed)["data"]!["items"]!.AsArray())!;
+        var run = Single("run"); var sanitize = Single("sanitize"); var save = Single("save");
+        Assert.False(sanitize["external"]!.GetValue<bool>());
+        Assert.StartsWith("packages/core/src/settings.", sanitize["qualifiedName"]!.GetValue<string>());
+        var callees = queries.Execute("get_callees", new JsonObject { ["repositoryId"] = repoId, ["symbolId"] = run["symbolId"]!.GetValue<string>() }, allowed)["data"]!["items"]!.AsArray()
+            .Select(edge => edge!["targetSymbolId"]!.GetValue<string>()).ToHashSet();
+        Assert.Contains(sanitize["symbolId"]!.GetValue<string>(), callees);
+        Assert.Contains(save["symbolId"]!.GetValue<string>(), callees);
+        using (var connection = database.Open(readOnly: true))
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT count(*) FROM symbols WHERE external=1 AND name IN ('sanitize','Store','save')";
+            Assert.Equal(0L, command.ExecuteScalar());
+        }
+        Assert.Empty(database.Check());
+    }
+
+    [Fact]
+    public void JsxElementsRecordComponentUsageAsCallsButIntrinsicElementsDoNot()
+    {
+        Write("app/tsconfig.json", """
+            { "compilerOptions": { "target": "ES2022", "module": "commonjs", "strict": true, "jsx": "preserve" }, "include": ["src/**/*"] }
+            """);
+        Write("app/src/jsx.d.ts", "declare namespace JSX { interface IntrinsicElements { [name: string]: unknown } }\n");
+        Write("app/src/Panel.tsx", "export function Panel(props: { title: string }) { return <section>{props.title}</section>; }\n");
+        Write("app/src/Page.tsx", """
+            import { Panel } from "./Panel";
+            export function Page() { return <div><Panel title="settings" /></div>; }
+            """);
+
+        var indexer = new RepositoryIndexer(database); var repoId = indexer.Register(root); indexer.Index(repoId);
+        var queries = new QueryService(database); var allowed = new HashSet<string> { repoId };
+        JsonNode Single(string name) => Assert.Single(queries.Execute("find_symbol", new JsonObject { ["repositoryId"] = repoId, ["name"] = name }, allowed)["data"]!["items"]!.AsArray())!;
+        var panel = Single("Panel"); var page = Single("Page");
+        var callers = queries.Execute("get_callers", new JsonObject { ["repositoryId"] = repoId, ["symbolId"] = panel["symbolId"]!.GetValue<string>() }, allowed)["data"]!["items"]!.AsArray();
+        Assert.Contains(callers, edge => edge!["sourceSymbolId"]!.GetValue<string>() == page["symbolId"]!.GetValue<string>() && edge["kind"]!.GetValue<string>() == "calls");
+        using var connection = database.Open(readOnly: true); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM edges e JOIN symbols t ON t.symbol_id=e.target_symbol_id WHERE e.kind='calls' AND t.name IN ('div','section')";
+        Assert.Equal(0L, command.ExecuteScalar());
+    }
+
+    [Fact]
     public void PolyglotRepositorySupportsLanguageFiltersAcrossCSharpTypeScriptAndJavaScript()
     {
         Write("Backend.cs", "namespace Backend; public class SharedWorker { public void ExecuteWork() {} }");
