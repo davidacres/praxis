@@ -23,7 +23,17 @@ public sealed class LocalModel : IDisposable
     public const string VocabSha256 = "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3";
     /// <summary>bge-small's retrieval instruction, prepended to queries only (documents take none).</summary>
     public const string QueryPrefix = "Represent this sentence for searching relevant passages: ";
-    public LocalModel(string directory)
+    public LocalModel(string directory) : this(Verify(directory)) { }
+    private LocalModel(VerifiedProfile profile)
+    {
+        ManifestJson = profile.ManifestJson; Fingerprint = profile.Fingerprint; tokenizer = profile.Tokenizer;
+        using var options = new SessionOptions { InterOpNumThreads = 1, IntraOpNumThreads = Math.Clamp(Environment.ProcessorCount, 1, 4) };
+        session = new InferenceSession(profile.Model, options);
+    }
+    private sealed record VerifiedProfile(string ManifestJson, string Fingerprint, WordPieceTokenizer Tokenizer, byte[] Model);
+    /// <summary>Checks the manifest and asset hashes and returns the profile fingerprint without creating an inference session.</summary>
+    public static string VerifyFingerprint(string directory) => Verify(directory).Fingerprint;
+    private static VerifiedProfile Verify(string directory)
     {
         var manifest = ReadBounded(Path.Combine(directory, "manifest.json"), 64 * 1024);
         var node = JsonNode.Parse(manifest)!.AsObject();
@@ -41,11 +51,9 @@ public sealed class LocalModel : IDisposable
         if (modelHash != ModelSha256 || vocabHash != VocabSha256
             || node["modelSha256"]?.GetValue<string>() != modelHash || node["vocabSha256"]?.GetValue<string>() != vocabHash)
             throw new IOException("Model or tokenizer checksum mismatch.");
-        ManifestJson = new JsonObject(node.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => KeyValuePair.Create(p.Key, p.Value?.DeepClone()))).ToJsonString();
-        Fingerprint = SourceFiles.Hash(System.Text.Encoding.UTF8.GetBytes(ManifestJson));
-        tokenizer = new(System.Text.Encoding.UTF8.GetString(vocabulary).Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s.TrimEnd('\r')));
-        using var options = new SessionOptions { InterOpNumThreads = 1, IntraOpNumThreads = Math.Clamp(Environment.ProcessorCount, 1, 4) };
-        session = new InferenceSession(model, options);
+        var manifestJson = new JsonObject(node.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => KeyValuePair.Create(p.Key, p.Value?.DeepClone()))).ToJsonString();
+        return new(manifestJson, SourceFiles.Hash(System.Text.Encoding.UTF8.GetBytes(manifestJson)),
+            new(System.Text.Encoding.UTF8.GetString(vocabulary).Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s.TrimEnd('\r'))), model);
     }
     public float[] EmbedQuery(string text, CancellationToken cancellationToken) => Embed(tokenizer.EncodeChunks(QueryPrefix + text, maximumChunks: 1)[0], cancellationToken);
     public IReadOnlyList<float[]> EmbedRepresentation(string text, CancellationToken cancellationToken) => EmbedDetailedRepresentation(text, cancellationToken).Select(chunk => chunk.Vector).ToArray();
@@ -80,10 +88,11 @@ public sealed class LocalModel : IDisposable
     }
     private static byte[] ReadBounded(string path, int maximum)
     {
+        // Exactly sized: a growing MemoryStream doubles past the model size and then copies it again.
         using var file = File.OpenRead(path); if (file.Length > maximum) throw new IOException("Model asset exceeds its size limit.");
-        using var buffer = new MemoryStream(); var chunk = new byte[64 * 1024]; int read;
-        while ((read = file.Read(chunk)) > 0) { if (buffer.Length + read > maximum) throw new IOException("Model asset exceeds its size limit."); buffer.Write(chunk, 0, read); }
-        return buffer.ToArray();
+        var bytes = new byte[file.Length]; file.ReadExactly(bytes);
+        if (file.ReadByte() != -1) throw new IOException("Model asset changed while it was read.");
+        return bytes;
     }
     public void Dispose() => session.Dispose();
 }

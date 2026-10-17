@@ -245,6 +245,49 @@ public sealed class ModelTests
     }
 
     [LocalModelFact]
+    public void QueriesAndVectorRefreshesShareOneInferenceSession()
+    {
+        // Each session holds the whole model (about 130 MB native plus its load buffers); loading
+        // one per refresh is what pushed the 50k concurrent-edit run to within 26 MiB of 2 GiB.
+        var root = Path.Combine(Path.GetTempPath(), "praxis-shared-session-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            File.WriteAllText(Path.Combine(root, "Parser.cs"), "class TokenParser { string Parse(string token) => token; }");
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models"));
+            var profile = store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!);
+            Assert.Equal(0, store.SessionsCreated);
+            store.Activate(repository, profile, CancellationToken.None);
+            var queries = new QueryService(database, store);
+            JsonObject Search() => queries.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = "parse a token", ["mode"] = "vector" }, new HashSet<string> { repository });
+            Assert.Null(Search()["error"]);
+            File.WriteAllText(Path.Combine(root, "Parser.cs"), "class TokenParser { string Parse(string token) => token.Trim(); }");
+            Assert.True(indexer.Index(repository).Changed);
+            store.Activate(repository, profile, CancellationToken.None);
+            var refreshed = Search(); Assert.Null(refreshed["error"]);
+            Assert.Equal(refreshed["data"]!["eligibleSymbolCount"]!.GetValue<long>(), refreshed["data"]!["vectorCoveredSymbolCount"]!.GetValue<long>());
+            Assert.Equal(1, store.SessionsCreated);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [LocalModelFact]
+    public void ProfileVerificationChecksAssetHashesWithoutASession()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "praxis-verify-profile-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            var bundle = Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!;
+            foreach (var name in new[] { "manifest.json", "model.onnx", "vocab.txt" }) File.Copy(Path.Combine(bundle, name), Path.Combine(root, name));
+            using (var model = new LocalModel(bundle)) Assert.Equal(model.Fingerprint, LocalModel.VerifyFingerprint(root));
+            using (var stream = File.OpenWrite(Path.Combine(root, "model.onnx"))) { stream.Seek(-1, SeekOrigin.End); stream.WriteByte(0x5A); }
+            Assert.Contains("checksum", Assert.Throws<IOException>(() => LocalModel.VerifyFingerprint(root)).Message);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [LocalModelFact]
     public void BodyEditsRetainUnchangedVectorBlobsAndRevokeChangedRepresentations()
     {
         var root = Path.Combine(Path.GetTempPath(), "praxis-retained-vectors-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);

@@ -18,6 +18,21 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
     internal Func<string, long> AvailableDiskBytes { get; set; } = path => new DriveInfo(path).AvailableFreeSpace;
     private const long MinimumDiskReserve = 1024L * 1024 * 1024;
     private readonly object queryLock = new(); private LocalModel? cached; private string? cachedFingerprint;
+    // One inference session per profile, shared by query embedding and activation; a replaced
+    // session is disposed once no activation still holds it.
+    private int activeUsers; private readonly List<LocalModel> retired = [];
+    /// <summary>Inference sessions this store has created; observable so tests can hold the one-session rule.</summary>
+    internal int SessionsCreated { get; private set; }
+    private LocalModel Shared(string fingerprint)
+    {
+        if (cachedFingerprint != fingerprint)
+        {
+            if (cached is not null) { if (activeUsers == 0) cached.Dispose(); else retired.Add(cached); }
+            cached = null; cachedFingerprint = null;
+            cached = new LocalModel(ProfileDirectory(fingerprint)); cachedFingerprint = fingerprint; SessionsCreated++;
+        }
+        return cached!;
+    }
     private string ProfileDirectory(string fingerprint)
     {
         if (fingerprint.Length != 71 || !fingerprint.StartsWith("sha256:", StringComparison.Ordinal) || fingerprint[7..].Any(c => !char.IsAsciiHexDigit(c)))
@@ -36,13 +51,12 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             try
             {
                 foreach (var name in new[] { "manifest.json", "model.onnx", "vocab.txt" }) File.Copy(Path.Combine(bundle, name), Path.Combine(stage, name));
-                using var verified = new LocalModel(stage);
-                if (verified.Fingerprint != candidate.Fingerprint) throw new IOException("Model changed during installation.");
+                if (LocalModel.VerifyFingerprint(stage) != candidate.Fingerprint) throw new IOException("Model changed during installation.");
                 Directory.Move(stage, destination);
             }
             finally { if (Directory.Exists(stage)) Directory.Delete(stage, recursive: true); }
         }
-        else { using var verified = new LocalModel(destination); if (verified.Fingerprint != candidate.Fingerprint) throw new IOException("Installed model differs from requested profile."); }
+        else { if (LocalModel.VerifyFingerprint(destination) != candidate.Fingerprint) throw new IOException("Installed model differs from requested profile."); }
         using var connection = database.Open();
         connection.Execute(null, "INSERT INTO model_profiles VALUES($0,$1,384,'cosine',$2) ON CONFLICT(fingerprint) DO NOTHING", candidate.Fingerprint, candidate.ManifestJson, LocalModel.RepresentationVersion);
         return candidate.Fingerprint;
@@ -56,7 +70,14 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
 
     private void ActivateCore(string repositoryId, string fingerprint, CancellationToken cancellationToken, string? leaseToken)
     {
-        using var model = new LocalModel(ProfileDirectory(fingerprint));
+        LocalModel model;
+        lock (queryLock) { model = Shared(fingerprint); activeUsers++; }
+        try { ActivateWith(model, repositoryId, fingerprint, cancellationToken, leaseToken); }
+        finally { lock (queryLock) { if (--activeUsers == 0) { foreach (var old in retired) old.Dispose(); retired.Clear(); } } }
+    }
+
+    private void ActivateWith(LocalModel model, string repositoryId, string fingerprint, CancellationToken cancellationToken, string? leaseToken)
+    {
         if (model.Fingerprint != fingerprint) throw new IOException("Installed model fingerprint mismatch.");
         var repository = new RepositoryIndexer(database).Get(repositoryId);
         if (repository.State != "ready") throw new InvalidOperationException("INDEX_STALE: index must be ready before model activation.");
@@ -147,8 +168,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         if (profile is null) return null;
         lock (queryLock)
         {
-            if (cachedFingerprint != profile) { cached?.Dispose(); cached = new LocalModel(ProfileDirectory(profile)); cachedFingerprint = profile; }
-            return new(profile, cached!.EmbedQuery(query, cancellationToken));
+            return new(profile, Shared(profile).EmbedQuery(query, cancellationToken));
         }
     }
 
@@ -306,5 +326,5 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         cancellationToken.ThrowIfCancellationRequested();
         return scores.Results();
     }
-    public void Dispose() { lock (queryLock) { cached?.Dispose(); cached = null; } }
+    public void Dispose() { lock (queryLock) { cached?.Dispose(); cached = null; cachedFingerprint = null; foreach (var old in retired) old.Dispose(); retired.Clear(); } }
 }

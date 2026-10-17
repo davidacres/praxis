@@ -1,6 +1,6 @@
 # Release evidence and remaining gates
 
-Updated 17 October 2026. M3 implementation is in progress; this document is not a release approval. Current local performance state with the bge-small model (search plan 7): the 50k full run, the 25-edit concurrent run and the 40-process query matrix all pass, on a 12-core Mac only. The concurrent run's peak RSS is within about 26 MiB of the 2 GiB limit.
+Updated 17 October 2026. M3 implementation is in progress; this document is not a release approval. Current local performance state with the bge-small model (search plan 7): the 50k full run, the 25-edit concurrent run and the 40-process query matrix all pass, on a 12-core Mac only. With one shared inference session, the concurrent run peaks at 1.83 GB, about 299 MiB under the 2 GiB limit.
 
 | Check | Current evidence | Remaining qualification |
 |---|---|---|
@@ -15,7 +15,7 @@ Updated 17 October 2026. M3 implementation is in progress; this document is not 
 | Desktop recovery/search | Four focused tests pass, including real native service, light/dark keyboard focus containment and Escape handling; captures inspected | Full functional run: 543 passed, 15 failed, 3 skipped; all four code-intelligence checks pass. 14 failures reproduce with previous dialog; one passes on rerun |
 | Fixed-corpus quality | Search-plan-5 fixed 120-query corpus passed applicable gates, Recall@10 0.893939 equals lexical | Adapter-v8/exact-streaming recheck passed; no semantic recall gain or new blind study claimed |
 | 50k exact-query latency and memory | Plan-6/schema-5 full process: lexical p95 6.467 ms, hybrid p95 211.053 ms, retrieval-only p95 191.841 ms, independent peak RSS 2020671488 bytes; all measured gates pass (previous plan-5 run: hybrid 434.591, retrieval 414.348 failing) | 50k body edit 17034 ms vs 14263 ms before (no 50k gate). Repeat/concurrent-edit/reference-machine protocol open |
-| 50k with bge-small (search plan 7) | Full process: lexical p95 7.651 ms, hybrid 134.027 ms, retrieval-only 121.149 ms, peak RSS 1,266,171,904 bytes. 25-edit concurrent run: zero errors, hybrid p95 310.9 ms, peak RSS **2,120,105,984 bytes (about 26 MiB under 2 GiB)**. Query matrix 40/40 pass; four-reader retrieval-only p95 max 186.3 ms | Initial 50k vector build 1,014 s (MiniLM 520 s). Concurrent memory headroom fell from about 227 MiB to about 26 MiB; investigate before release. 12-core Mac only |
+| 50k with bge-small (search plan 7) | Full process: lexical p95 7.651 ms, hybrid 134.027 ms, retrieval-only 121.149 ms, peak RSS 1,266,171,904 bytes. 25-edit concurrent run: zero errors, hybrid p95 310.9 ms, peak RSS 2,120,105,984 bytes before the shared-session fix, **1,832,779,776 bytes (about 299 MiB under 2 GiB) after it**. Query matrix 40/40 pass; four-reader retrieval-only p95 max 186.3 ms | Initial 50k vector build 1,009–1,014 s (MiniLM 520 s). The post-fix figure is one prototype run; a run of the committed build is pending. 12-core Mac only |
 | 50k concurrent edits | With §31.3 pressure admission: 25 edits, 14,121 lexical + 14,121 hybrid queries, zero errors, lexical p95 10.98 ms, hybrid p95 286.9 ms, independent peak RSS 1,908,703,232 bytes (about 227 MiB under 2 GiB; pressure engaged in 11 of 1,362 one-second samples) | One run on a 12-core Mac; reference machine and repeated runs open |
 | Query matrix (plan 6) | Five runs × exact/terminology/behaviour/negative × one/four readers × 200 queries: 39/40 processes pass every gate; hybrid p95 max 322.743 ms; lexical p95 max 82.942 ms; zero errors | **Fails:** behaviour four-reader run 1 retrieval-only p95 301.9 ms; other four-reader terminology/behaviour runs 236–247 ms (thin margin). Concurrent edits, cross-project, owner/wire, full-process RSS, reference machine unmeasured |
 | Query matrix (mapping v7) | Same protocol after the memory fix: complete, zero errors, all lexical/hybrid p95 pass; 36/40 processes pass every gate | **Fails:** four-reader retrieval-only behaviour runs 1–3 (261.2/261.2/270.4 ms) and terminology run 4 (250.2 ms); the memory fix costs about 5–25 ms on broad four-reader retrieval |
@@ -850,7 +850,7 @@ This reruns the 50k gates after the model change and fusion retune above. The bi
 - Minimum coverage was 49,997 of 49,999.
 - Edits under load: publish p50/max 26.9/36.4 s; refresh p50/max 4.0/15.3 s (MiniLM 3.6/11.1 s).
 - Idle hybrid p95 was 135.7 ms, identical to the MiniLM run.
-- **Peak RSS 2,120,105,984 bytes. This passes, but with only about 26 MiB of headroom (MiniLM: about 227 MiB).** The one-second sampler saw resident memory at or above the 1.6 GiB soft limit in 3 of 1,942 samples, so the peak is a short spike rather than a sustained level. The likely cause is the larger ONNX session's working set during vector refresh while Roslyn analysis is also running. That is not yet attributed. Treat it as open before release.
+- **Peak RSS 2,120,105,984 bytes. This passes, but with only about 26 MiB of headroom (MiniLM: about 227 MiB).** The one-second sampler saw resident memory at or above the 1.6 GiB soft limit in 3 of 1,942 samples, so the peak is a short spike rather than a sustained level. The likely cause is the larger ONNX session's working set during vector refresh while Roslyn analysis is also running. That is not yet attributed. Treat it as open before release. (Resolved by the shared inference session below.)
 
 **Query matrix** (`benchmarks/macos-arm64-50000-plan7-bge-query-matrix*`, retained fixture from the full run): complete, zero errors, **all 40 processes pass every gate**. Ranges over five runs (ms):
 
@@ -866,3 +866,31 @@ This reruns the 50k gates after the model change and fusion retune above. The bi
 | negative | 4 | 8.0–8.5 | 133.4–140.5 | 120.6–123.1 |
 
 Query latency is effectively unchanged from the schema-6 MiniLM matrix. Both models produce 384-dimensional vectors, so the exact scan costs the same; the extra encoder depth adds only about 8–16 ms to query embedding. The lower hybrid p95 compared with the plan-6/schema-5 full-process row (211 ms) comes from the vector-plan-5/6 score pass, not from the model. Only one run was made, on a 12-core Mac; the reference machine remains unmeasured.
+
+## Shared inference session — 17 October
+
+**Cause of the concurrent peak.** The peak in the bge-small run above came at model install, about 17 s in, not during the edits (1 s samples: 721 MiB to 2,021 MiB for one sample, then 836 MiB). Install and the first activation built three inference sessions from managed copies of the model: the candidate, a verification of the staged copy, and the activation's own. `ReadBounded` grew a `MemoryStream` by doubling, so the 133 MB file briefly held a 256 MiB buffer plus a 133 MB copy, and the arrays stayed until a gen-2 collection. Every later `Activate` (one per edit refresh) built another session next to the cached query session. A standalone probe of the same load sequence (ONNX Runtime 1.31.0, three sessions) peaked at 914 MiB for MiniLM and 1,160 MiB for bge-small. bge-small's larger file crosses the 128 MiB doubling step, which made the difference worse than the size ratio.
+
+**Change.**
+- `ReadBounded` reads into an exactly sized array and fails if the file grows during the read.
+- `LocalModel.VerifyFingerprint` checks the manifest and asset hashes without creating a session. Install uses it for the staged and the already-installed copy.
+- `ModelStore` keeps one session per profile, shared by query embedding and activation. A replaced session is disposed once no activation holds it.
+
+The integrity checks are unchanged: the session is still created from the bytes that were hashed.
+
+**Tests.**
+- `QueriesAndVectorRefreshesShareOneInferenceSession`: install, activate, query, edit, refresh and query again create exactly one session. With caching disabled it fails with 4.
+- `ProfileVerificationChecksAssetHashesWithoutASession`: a one-byte change to `model.onnx` is rejected.
+- 142 C# tests pass, 2 SDK-capture tests skipped without their opt-in.
+
+**Measurement.**
+- 3,000-symbol, 5-edit runs (two each): peak RSS 1.00/1.10 GB before, 0.83/0.83 GB after; refresh 0.43–0.45 s before, 0.22 s after.
+- 50k 25-edit concurrent run (`benchmarks/macos-arm64-50000-plan7-bge-shared-session-concurrent-edits/`), prototype build `Praxis.CodeIntelligence.dll` `sha256:06618a20…`, which differs from the committed code only by the test-visible session counter:
+  - **Peak RSS 1,832,779,776 bytes**, about 299 MiB under 2 GiB. Before the fix it was 2,120,105,984; MiniLM's run was 1,908,703,232.
+  - Zero errors across 15,751 + 15,751 queries.
+  - Concurrent lexical p95 12.69 ms; hybrid p95 305.3 ms (p99 614.3, max 2,689; before the fix max 5,074).
+  - Idle hybrid / retrieval-only p95 135.8 / 122.6 ms.
+  - Refresh under load p50/max 3.1/8.6 s (before 4.0/15.3 s); publish p50/max 25.9/39.3 s.
+  - The RSS sampler was attached to the `time` wrapper until the edit phase, so `rss-samples-kib-from-edits.txt` covers the edits only (peak sampled 1.45 GiB); `/usr/bin/time` covers the whole process.
+
+A full run and a concurrent run of the committed build are in progress and will be added when complete.
