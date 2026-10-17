@@ -1,0 +1,758 @@
+{
+  "version": 1,
+  "sourceRevision": "a80b85cc2205b903a2b10757fcce97519883567a",
+  "reviewed": true,
+  "reviewedBy": "Claude AI source inspection, 17 October 2026; no human sign-off claimed",
+  "nearDuplicateSplitReviewed": true,
+  "negativeAbstentionReviewed": false,
+  "reviewedExplanationCount": 0,
+  "releaseMilestone": "M3",
+  "generatedExplanationsInScope": false,
+  "notes": "TypeScript pilot corpus over the Praxis repository (48 queries, all held-out: no weights are tuned on it). Queries and labels were written from declarations and documentation before any search was run against them. No stale category: that needs the controlled-transition harness. It is below the release protocol size (120 queries, 20 per category, 40/80 split), so protocol-size gates are expected to fail.",
+  "reviewMethod": "Labels chosen from declaration names, qualified names and doc comments read from the index; each label resolves to exactly one current symbol. Negative topics checked with git grep over apps, packages and services source.",
+  "queryAndLabelHash": "sha256:b3d988a3283f365fbaed225759e3971a9ff5373ea5449fe62abd2cd800a1c01d",
+  "queries": [
+    {
+      "id": "praxis-ts-exact-01",
+      "category": "exact",
+      "query": "findDependencyCycle",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "findDependencyCycle",
+          "qualifiedName": "packages/core/src/projects/runProfile.findDependencyCycle"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/projects/runProfile.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-02",
+      "category": "exact",
+      "query": "composeWorkflowPolicies",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "composeWorkflowPolicies",
+          "qualifiedName": "packages/core/src/workflows/workflowStore.composeWorkflowPolicies"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowStore.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-03",
+      "category": "exact",
+      "query": "terminalOutputToPlainText",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "terminalOutputToPlainText",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/terminalManager.terminalOutputToPlainText"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/terminalManager.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-04",
+      "category": "exact",
+      "query": "extractDependencyKeys",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "extractDependencyKeys",
+          "qualifiedName": "packages/core/src/ai/contextSnapshot.extractDependencyKeys"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/ai/contextSnapshot.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-05",
+      "category": "exact",
+      "query": "deriveRunStatus",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "deriveRunStatus",
+          "qualifiedName": "packages/core/src/workflows/workflowScheduler.deriveRunStatus"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowScheduler.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-06",
+      "category": "exact",
+      "query": "discoverPlanFolders",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "discoverPlanFolders",
+          "qualifiedName": "packages/core/src/folder/markdownPlanParser.discoverPlanFolders"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/folder/markdownPlanParser.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-07",
+      "category": "exact",
+      "query": "applyEnabledModelCuration",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "applyEnabledModelCuration",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/modelProviders.applyEnabledModelCuration"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/modelProviders.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-08",
+      "category": "exact",
+      "query": "preserveUncommittedWork",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "preserveUncommittedWork",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/runWork.preserveUncommittedWork"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/runWork.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-09",
+      "category": "exact",
+      "query": "parseMiniMaxRemains",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "parseMiniMaxRemains",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/minimaxUsage.parseMiniMaxRemains"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/minimaxUsage.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-exact-10",
+      "category": "exact",
+      "query": "assertTarballIntegrity",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "assertTarballIntegrity",
+          "qualifiedName": "packages/core/src/marketplace/integrity.assertTarballIntegrity"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/marketplace/integrity.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-01",
+      "category": "terminology",
+      "query": "remove ANSI colour escape sequences from shell output before sharing it",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "terminalOutputToPlainText",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/terminalManager.terminalOutputToPlainText"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/terminalManager.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-02",
+      "category": "terminology",
+      "query": "detect a circular prerequisite between run steps",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "findDependencyCycle",
+          "qualifiedName": "packages/core/src/projects/runProfile.findDependencyCycle"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/projects/runProfile.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-03",
+      "category": "terminology",
+      "query": "combine organisation and project governance so the strictest rule wins",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "composeWorkflowPolicies",
+          "qualifiedName": "packages/core/src/workflows/workflowStore.composeWorkflowPolicies"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowStore.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-04",
+      "category": "terminology",
+      "query": "ticket numbers listed under a blocked-by heading",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "extractDependencyKeys",
+          "qualifiedName": "packages/core/src/ai/contextSnapshot.extractDependencyKeys"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/ai/contextSnapshot.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-05",
+      "category": "terminology",
+      "query": "save leftover edits as a commit before a checkout is deleted",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "preserveUncommittedWork",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/runWork.preserveUncommittedWork"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/runWork.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-06",
+      "category": "terminology",
+      "query": "find every folder of planning markdown beneath a chosen directory",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "discoverPlanFolders",
+          "qualifiedName": "packages/core/src/folder/markdownPlanParser.discoverPlanFolders"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/folder/markdownPlanParser.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-07",
+      "category": "terminology",
+      "query": "pick the mainland China region for the Alibaba coding plan",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "regionForEndpoint",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/alibabaCodingPlanUsage.regionForEndpoint"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/alibabaCodingPlanUsage.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-08",
+      "category": "terminology",
+      "query": "which nodes can execute before a given step, walking the graph backwards",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ancestorsOf",
+          "qualifiedName": "packages/core/src/workflows/workflowValidation.ancestorsOf"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowValidation.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-09",
+      "category": "terminology",
+      "query": "only allow secure console login pages except the local test mock",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "allowedConsoleUrl",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/alibabaConsoleSession.allowedConsoleUrl"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/alibabaConsoleSession.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-10",
+      "category": "terminology",
+      "query": "limit a fetched model catalogue to the models the user switched on",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "applyEnabledModelCuration",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/modelProviders.applyEnabledModelCuration"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/modelProviders.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-11",
+      "category": "terminology",
+      "query": "check a downloaded package archive against the advertised checksum before unpacking",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "assertTarballIntegrity",
+          "qualifiedName": "packages/core/src/marketplace/integrity.assertTarballIntegrity"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/marketplace/integrity.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-terminology-12",
+      "category": "terminology",
+      "query": "turn free-form plan status prose into a board column",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "resolveStatus",
+          "qualifiedName": "packages/core/src/projects/projectWorkflow.resolveStatus"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/projects/projectWorkflow.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-01",
+      "category": "behaviour",
+      "query": "refuse a handover whose snapshot came from another session or a moved commit",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "validateHandover",
+          "qualifiedName": "packages/core/src/ai/contextSnapshot.validateHandover"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/ai/contextSnapshot.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-02",
+      "category": "behaviour",
+      "query": "count stage attempts but not ones cut short by the provider limit",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "attemptsSpent",
+          "qualifiedName": "packages/core/src/workflows/workflowRun.attemptsSpent"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowRun.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-03",
+      "category": "behaviour",
+      "query": "close every floating chat window when the main window closes",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "closeAllDetachedChats",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/detachedChatWindow.closeAllDetachedChats"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/detachedChatWindow.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-04",
+      "category": "behaviour",
+      "query": "stop all tracked background services when the app quits",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "stopAllServices",
+          "qualifiedName": "packages/core/src/ai/tools/localTools.stopAllServices"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/ai/tools/localTools.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-05",
+      "category": "behaviour",
+      "query": "deploy an artifact into a directory, keeping excluded paths and backing up what was there",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "applyDirectoryDeployment",
+          "qualifiedName": "packages/core/src/deployments/directoryTarget.applyDirectoryDeployment"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/deployments/directoryTarget.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-06",
+      "category": "behaviour",
+      "query": "check whether a phone can launch a session with its chosen provider and model on this desktop",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "resolveMobileSessionLaunch",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/mobileHostServices.resolveMobileSessionLaunch"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/mobileHostServices.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-07",
+      "category": "behaviour",
+      "query": "build the chat request body for the Vercel AI Gateway",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "buildChatRequest",
+          "qualifiedName": "packages/core/src/ai/gateway/wire.buildChatRequest"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/ai/gateway/wire.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-08",
+      "category": "behaviour",
+      "query": "decide whether a workflow edge is taken given the state of its source node",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "edgeStateFor",
+          "qualifiedName": "packages/core/src/workflows/workflowEdges.edgeStateFor"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowEdges.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-09",
+      "category": "behaviour",
+      "query": "run the IK handshake between two in-process channels until both are open",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "completeHandshake",
+          "qualifiedName": "packages/mobile-protocol/src/secureChannel.completeHandshake"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/mobile-protocol/src/secureChannel.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-10",
+      "category": "behaviour",
+      "query": "convert the Alibaba console quota payload into a provider-neutral usage snapshot",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "parseCodingPlanQuota",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/alibabaCodingPlanUsage.parseCodingPlanQuota"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/alibabaCodingPlanUsage.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-11",
+      "category": "behaviour",
+      "query": "read Claude token usage from its local cache without logging in",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "readClaudeLocalTokens",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/claudeUsage.readClaudeLocalTokens"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/claudeUsage.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-behaviour-12",
+      "category": "behaviour",
+      "query": "derive what status a workflow run should show from what can still move",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "deriveRunStatus",
+          "qualifiedName": "packages/core/src/workflows/workflowScheduler.deriveRunStatus"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowScheduler.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-crossProject-01",
+      "category": "crossProject",
+      "query": "give an agent session the code intelligence MCP server",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "getSessionCodeIntelligenceServer",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/codeIntelligenceIpc.getSessionCodeIntelligenceServer"
+        },
+        {
+          "name": "createCodeIntelligenceMcpServer",
+          "qualifiedName": "packages/core/src/codeIntelligence/mcpBridge.createCodeIntelligenceMcpServer"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/codeIntelligenceIpc.ts",
+        "packages/core/src/codeIntelligence/mcpBridge.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-crossProject-02",
+      "category": "crossProject",
+      "query": "read and validate the shared settings document in the desktop",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "SharedSettingsBackend",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/adapters/sharedSettingsBackend.SharedSettingsBackend"
+        },
+        {
+          "name": "sanitizeAppSettings",
+          "qualifiedName": "packages/core/src/config/appSettings.sanitizeAppSettings"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/adapters/sharedSettingsBackend.ts",
+        "packages/core/src/config/appSettings.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-crossProject-03",
+      "category": "crossProject",
+      "query": "default application settings and the renderer copy of them",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "DEFAULT_APP_SETTINGS",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/settings/settingsDefaults.DEFAULT_APP_SETTINGS"
+        },
+        {
+          "name": "DEFAULT_APP_SETTINGS",
+          "qualifiedName": "packages/core/src/config/appSettings.DEFAULT_APP_SETTINGS"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/settings/settingsDefaults.ts",
+        "packages/core/src/config/appSettings.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-crossProject-04",
+      "category": "crossProject",
+      "query": "session key used for a ticket review and how the renderer recognises it",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "ticketReviewSessionKey",
+          "qualifiedName": "packages/core/src/ai/ticketReview.ticketReviewSessionKey"
+        },
+        {
+          "name": "isTicketReviewKey",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/sessionNav.isTicketReviewKey"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/sessionNav.ts",
+        "packages/core/src/ai/ticketReview.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-crossProject-05",
+      "category": "crossProject",
+      "query": "whether an agent event is the latest edit to a file",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "isLatestEditToPath",
+          "qualifiedName": "packages/core/src/ai/agentEventUtils.isLatestEditToPath"
+        },
+        {
+          "name": "isLatestEditToPath",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/sessionNav.isLatestEditToPath"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/sessionNav.ts",
+        "packages/core/src/ai/agentEventUtils.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-crossProject-06",
+      "category": "crossProject",
+      "query": "code intelligence MCP tools wired into a desktop agent session",
+      "split": "heldOut",
+      "expected": [
+        {
+          "name": "getSessionCodeIntelligenceServer",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/codeIntelligenceIpc.getSessionCodeIntelligenceServer"
+        },
+        {
+          "name": "invokeCodeIntelligence",
+          "qualifiedName": "packages/core/src/codeIntelligence/mcpBridge.invokeCodeIntelligence"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/codeIntelligenceIpc.ts",
+        "packages/core/src/codeIntelligence/mcpBridge.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-01",
+      "category": "negative",
+      "query": "kubernetes pod autoscaling policy",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-02",
+      "category": "negative",
+      "query": "retry failed SMTP email delivery",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-03",
+      "category": "negative",
+      "query": "stitch GraphQL schemas from several services",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-04",
+      "category": "negative",
+      "query": "calculate payroll tax deductions",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-05",
+      "category": "negative",
+      "query": "shopping cart checkout and discount codes",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-06",
+      "category": "negative",
+      "query": "pair a bluetooth device",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-07",
+      "category": "negative",
+      "query": "evaluate spreadsheet cell formulas",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-negative-08",
+      "category": "negative",
+      "query": "tokenise credit card numbers for payment",
+      "split": "heldOut",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    }
+  ]
+}
