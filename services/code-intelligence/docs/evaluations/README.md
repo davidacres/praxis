@@ -51,3 +51,26 @@ Models: `sentence-transformers/all-MiniLM-L6-v2` at the pinned revision; `BAAI/b
 Findings: hybrid is unchanged because the 64:1 lexical weight makes the model irrelevant to ranking — a model change alone does not move the shipped default. Vector-only, bge-small with the instruction beat MiniLM on 25 held-out queries and lost 2; terminology rose 0.615 → 0.846, above lexical's 0.615. Any hybrid gain needs fusion retuned with that model on the tuning split only, then the held-out gate. This MiniLM run is the reference baseline for that work: it reproduces `maze-release-configured-dependencies-results` exactly.
 
 Reproducing: build `Maze.SearchCore` and `Maze.UserService` at the corpus revision with `-p:EmitCompilerGeneratedFiles=true -p:CompilerGeneratedFilesOutputPath=obj/scip-generated`; `capture` each (its `--output` must be repository-relative) and merge the two manifests' projects; add each project's `obj/scip-generated/.../RegexGenerator.g.cs` to `supportSources` (six support files in total) or SearchCore and Common resolve `partial` and lexical drops to 0.879. Run `evaluate-maze-release.py` with a short `--fixture` path: the owner's Unix socket lives in the data directory and a long path fails with "Owner directory is too long for a Unix socket."
+
+## bge-small adopted and fusion retuned — search plan 7 (2026-10-17)
+
+bge-small with its query instruction is now the pinned model, and fusion was retuned for it using only the 40 tuning cases:
+
+- `maze-release-bge-small-lexical64-results.praxis.json` — the production bge-small build at the old weight (plan 6). It matches the experimental run above and is the fixture the tuning read.
+- `maze-bge-small-fusion-tuning.praxis.json` — the tuning record. The grid (0.25–128) was fixed before collection; the rule is unchanged: tuning Recall@10, then MRR, then lower lexical weight. Weight 16 wins on MRR (every weight ≥ 1 has tuning recall 1.0).
+- `maze-release-bge-small-lexical16-results.praxis.json` — acceptance for plan 7 (`rrf-k60-lexical16-vector1-alias0.5-v4`). All gates pass.
+
+Held-out 80, Recall@10 / MRR@10:
+
+| Mode / category | MiniLM, lexical 64 | bge-small, lexical 64 | **bge-small, lexical 16 (shipped)** |
+| --- | --- | --- | --- |
+| hybrid / all | 0.894 / 0.672 | 0.894 / 0.672 | **0.894 / 0.687** |
+| hybrid / behaviour | 0.933 / 0.700 | 0.933 / 0.700 | 0.933 / 0.734 |
+| hybrid / crossProject | 0.923 / 0.378 | 0.923 / 0.378 | 0.923 / 0.410 |
+| hybrid / terminology | 0.615 / 0.304 | 0.615 / 0.306 | 0.615 / 0.308 |
+| vector / all | 0.515 / 0.326 | 0.758 / 0.537 | 0.758 / 0.537 |
+| lexical / all | 0.894 / 0.672 | 0.894 / 0.672 | 0.894 / 0.672 |
+
+Eight held-out queries rank their answer higher and none lower; no category regresses. Terminology remains the open opportunity: vector-only finds 0.846 of those answers, hybrid still 0.615.
+
+For the next run, compare against the `lexical16` report: it is the current baseline. Collecting tuning candidates walks deep result pages; a namespace declared in many files used to make a single match exceed the response budget and fail the page (fixed in plan 7 by shortening that item's declarations). The reproduction notes above still apply.

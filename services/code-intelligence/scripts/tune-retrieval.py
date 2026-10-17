@@ -47,7 +47,7 @@ try:
   collected.append(dict(id=case['id'],category=case['category'],expected=expected,candidates=matches))
   print('Collected tuning',case['id'],len(matches),flush=True)
  trials=[]
- for lexical in [1,1.25,1.5,2,3,4,6,8,12,16,24,32,48,64,96,128]:
+ for lexical in [0.25,0.5,0.75,1,1.25,1.5,2,3,4,6,8,12,16,24,32,48,64,96,128]:
   values=[];rr=[];per={}
   for case in collected:
    if not case['expected']:continue

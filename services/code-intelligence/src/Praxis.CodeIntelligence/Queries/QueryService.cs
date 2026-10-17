@@ -19,9 +19,9 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
         return service;
     }
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 6;
-    public const string RankingProfile = "rrf-k60-lexical64-vector1-alias0.5-v3";
-    public const double LexicalWeight = 64.0;
+    public const int SearchPlanVersion = 7;
+    public const string RankingProfile = "rrf-k60-lexical16-vector1-alias0.5-v4";
+    public const double LexicalWeight = 16.0;
     public const double AliasWeight = 0.5;
     internal Action<QueryMeasurement>? MeasurementObserver { get; init; }
     internal int VectorChunkLimit { get; init; } = 200_000;
