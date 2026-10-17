@@ -9,7 +9,7 @@ namespace Praxis.CodeIntelligence.Storage;
 /// <summary>Owns schema compatibility and connection policy; source files are never modified.</summary>
 public sealed class IndexDatabase
 {
-    public const int SchemaVersion = 6;
+    public const int SchemaVersion = 7;
     // Version 7/3: with the dense vector_scan table, a 128 MiB map and 16 MiB
     // cache per reader match the 512/64 MiB latency while keeping concurrent
     // edits within the 2 GiB budget (see release evidence, 16 October).

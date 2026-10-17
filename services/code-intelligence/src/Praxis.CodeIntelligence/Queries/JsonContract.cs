@@ -26,6 +26,7 @@ public static class JsonContract
             NormalizeArray(filters, "kinds", lower: true);
             NormalizeArray(filters, "languages", lower: true);
             NormalizeArray(filters, "projectIds", lower: false);
+            NormalizeArray(filters, "docTypes", lower: true);
         }
         if (tool == "get_source")
         {
@@ -33,6 +34,16 @@ public static class JsonContract
             if (symbol == file || (file && (!arguments.ContainsKey("range") || arguments.ContainsKey("locationId")))
                 || (symbol && (arguments.ContainsKey("range") || (arguments.ContainsKey("expectedContentHash") && !arguments.ContainsKey("locationId")))))
                 throw new QueryException("INVALID_ARGUMENT", "Choose a symbol selector or a file/range selector; expected symbol hashes require locationId.");
+        }
+        if (tool == "get_knowledge_section")
+        {
+            if (!arguments.ContainsKey("sectionId") && !arguments.ContainsKey("path"))
+                throw new QueryException("INVALID_ARGUMENT", "Provide either sectionId or path.");
+        }
+        if (tool == "find_related_knowledge")
+        {
+            if (!arguments.ContainsKey("symbolId") && !arguments.ContainsKey("path") && !arguments.ContainsKey("ticketId"))
+                throw new QueryException("INVALID_ARGUMENT", "Provide at least one of symbolId, path, or ticketId.");
         }
     }
     private static void NormalizeArray(JsonObject parent, string key, bool lower)

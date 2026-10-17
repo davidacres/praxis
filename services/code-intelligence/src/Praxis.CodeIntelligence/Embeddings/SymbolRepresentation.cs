@@ -49,4 +49,10 @@ public static class RepresentationBuilder
         var value = text.ToString();
         return new(value, SourceFiles.Hash(Encoding.UTF8.GetBytes(value)), truncated, spans);
     }
+
+    public static string BuildKnowledgeRepresentation(string title, string relativePath, string headingPath, string frontmatter, string body)
+    {
+        var fm = string.IsNullOrWhiteSpace(frontmatter) ? "{}" : frontmatter.Trim();
+        return $"[Document]: {title} ({relativePath})\n[Section]: {headingPath}\n{fm}\n{body}";
+    }
 }

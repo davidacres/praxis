@@ -52,12 +52,13 @@ public sealed class RepositoryMonitor : IDisposable
         var relative = Path.GetRelativePath(repository.Root, fullPath).Replace('\\', '/');
         if (SourceScanner.IsExcluded(relative, repository.Config.Excludes ?? [])) return;
         if (relative.Split('/').Any(part => part is ".git" or "bin" or "obj" or "node_modules" or "vendor" or "dist")) return;
-        var extension = Path.GetExtension(fullPath);
+        var extension = Path.GetExtension(fullPath).ToLowerInvariant();
         var fileName = Path.GetFileName(fullPath);
         if (extension.Length == 0
             || extension is ".cs" or ".csproj" or ".props" or ".targets"
                 or ".ts" or ".tsx" or ".mts" or ".cts"
                 or ".js" or ".jsx" or ".mjs" or ".cjs"
+                or ".md" or ".docx" or ".pptx" or ".csv" or ".txt"
             || relative.EndsWith(".praxis.json", StringComparison.OrdinalIgnoreCase)
             || fileName is ".gitignore" or ".editorconfig" or "tsconfig.json" or "jsconfig.json" or "package.json")
             Mark(repository.Id);

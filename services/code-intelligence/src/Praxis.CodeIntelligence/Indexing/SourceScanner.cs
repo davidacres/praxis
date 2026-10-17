@@ -59,6 +59,64 @@ public static class SourceScanner
             || path.EndsWith(".cjs", StringComparison.OrdinalIgnoreCase);
     }
 
+    public const long MaximumDocumentBytes = 25L * 1024 * 1024;
+    public const long MaximumBinaryDocumentBytes = 25L * 1024 * 1024;
+
+    public static bool IsSearchableDocumentFile(string path)
+    {
+        var fileName = System.IO.Path.GetFileName(path);
+        if (fileName.Equals("package-lock.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("packages.lock.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".lock.json", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var ext = System.IO.Path.GetExtension(path);
+        var matches = ext.Equals(".md", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".docx", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".pptx", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".csv", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".txt", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".json", StringComparison.OrdinalIgnoreCase);
+
+        if (!matches) return false;
+
+        if (System.IO.Path.IsPathRooted(path) && File.Exists(path))
+        {
+            var length = new FileInfo(path).Length;
+            if (length > MaximumBinaryDocumentBytes) return false;
+        }
+
+        return true;
+    }
+
+    public static IReadOnlyList<string> ScanDocumentPaths(string root, IReadOnlyList<string> excludedPrefixes, CancellationToken cancellationToken)
+    {
+        root = SourceFiles.CanonicalDirectory(root);
+        var candidates = new List<string>(); var directories = new Stack<string>(); directories.Push(root);
+        var entries = 0;
+        while (directories.TryPop(out var directory))
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory).Order(StringComparer.Ordinal))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (++entries > 200_000) throw new IOException("INPUT_TOO_LARGE: repository entry limit exceeded.");
+                var relative = System.IO.Path.GetRelativePath(root, entry).Replace('\\', '/');
+                if (IsExcluded(relative, excludedPrefixes)) continue;
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    if (!ExcludedDirectories.Contains(System.IO.Path.GetFileName(entry))) directories.Push(entry);
+                    continue;
+                }
+                if (!IsSearchableDocumentFile(entry)) continue;
+                candidates.Add(relative);
+                if (candidates.Count > 25_000) throw new IOException("INPUT_TOO_LARGE: repository document limit exceeded.");
+            }
+        }
+        return GitFilePolicy.Filter(root, candidates, cancellationToken).OrderBy(p => p, StringComparer.Ordinal).ToArray();
+    }
+
     public static bool IsExcluded(string relativePath, IReadOnlyList<string> prefixes) => prefixes.Any(prefix =>
         relativePath.Equals(prefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)
         || relativePath.StartsWith(prefix.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase));

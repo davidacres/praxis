@@ -56,6 +56,7 @@ public sealed class LocalModel : IDisposable
             new(System.Text.Encoding.UTF8.GetString(vocabulary).Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(s => s.TrimEnd('\r'))), model);
     }
     public float[] EmbedQuery(string text, CancellationToken cancellationToken) => Embed(tokenizer.EncodeChunks(QueryPrefix + text, maximumChunks: 1)[0], cancellationToken);
+    public float[] EmbedSection(string text, CancellationToken cancellationToken) => Embed(tokenizer.EncodeChunks(text, maximumChunks: 1)[0], cancellationToken);
     public IReadOnlyList<float[]> EmbedRepresentation(string text, CancellationToken cancellationToken) => EmbedDetailedRepresentation(text, cancellationToken).Select(chunk => chunk.Vector).ToArray();
     public IReadOnlyList<EmbeddedChunk> EmbedDetailedRepresentation(string text, CancellationToken cancellationToken) =>
         tokenizer.EncodeDetailed(text).Select(chunk => new EmbeddedChunk(Embed(chunk.Tokens, cancellationToken), chunk)).ToArray();

@@ -69,11 +69,11 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             if (!allowedRepositories.Contains(repositoryId)) throw new QueryException("ACCESS_DENIED", "Repository access has not been granted.");
             cancellationToken.ThrowIfCancellationRequested();
             // Validate before inference: never silently omit query terms.
-            if (tool == "search_code" && Text(arguments, "query")!.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length > 64)
+            if ((tool is "search_code" or "search_knowledge") && Text(arguments, "query")!.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length > 64)
                 throw new QueryException("INVALID_ARGUMENT", "Search queries support at most 64 literal terms.");
             inferenceStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
             ModelQuery? embedded = null;
-            if (tool == "search_code" && Text(arguments, "mode") != "lexical" && models is not null)
+            if ((tool is "search_code" or "search_knowledge") && Text(arguments, "mode") != "lexical" && models is not null)
                 try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
                 { cancellationToken.ThrowIfCancellationRequested(); /* Hybrid degrades to lexical; vector returns MODEL_UNAVAILABLE below. */ }
@@ -88,7 +88,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             var evidence = new Dictionary<string, JsonObject>(StringComparer.Ordinal); var warnings = new JsonArray();
             var contextId = Text(arguments, "contextId");
             var offset = Text(arguments, "cursor") is string cursor ? cursors.Read(cursor, tool, arguments, epoch.Value) : 0;
-            var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" or "find_related" ? 10 : 50);
+            var limit = Number(arguments, "limit", tool is "search_code" or "find_symbol" or "find_related" or "search_knowledge" or "find_related_knowledge" ? 10 : 50);
             var more = false; var contentTruncated = false;
             var unresolvedOwners = new Dictionary<string, string>(StringComparer.Ordinal);
             // otherEnd: the far symbol of an edge already scoped by the request's context, which may
@@ -561,6 +561,372 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                             ["severity"] = row["severity"]!.DeepClone(), ["message"] = row["message"]!.DeepClone() }; if (row["context_id"] is not null) d["contextId"] = row["context_id"]!.DeepClone();
                             if (row["file_id"] is not null) d["fileId"] = row["file_id"]!.DeepClone(); return (JsonNode?)d; })), ["ownerState"] = "directLocalSession" }; break;
                 }
+                case "search_knowledge":
+                {
+                    var mode = Text(arguments, "mode") ?? "hybrid";
+                    if (mode == "vector" && embedded is null) throw new QueryException("MODEL_UNAVAILABLE", "Install and activate a local embedding model before vector search.");
+                    if (mode == "hybrid" && embedded is null) warnings.Add(new JsonObject { ["code"] = "MODEL_UNAVAILABLE", ["message"] = "Local embedding search is unavailable; lexical results returned." });
+                    if (embedded is not null && connection.Scalar(transaction, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state='active'", repositoryId) as string != embedded.Fingerprint)
+                        throw new QueryException("INDEX_STALE", "Active model changed during query inference; restart the query.");
+                    var query = Text(arguments, "query")!;
+                    if (string.IsNullOrWhiteSpace(query)) throw new QueryException("INVALID_ARGUMENT", "Search query cannot be blank.");
+
+                    var filters = arguments["filters"] as JsonObject;
+                    var docTypes = filters?["docTypes"] is JsonArray dtArr && dtArr.Count > 0 ? dtArr.Select(x => x!.GetValue<string>()).ToArray() : null;
+                    var pathPrefix = filters?["pathPrefix"]?.GetValue<string>();
+
+                    var candidates = new Dictionary<string, (double Score, string Title, string Path, string Heading, string HeadingPath, int StartLine, int EndLine, string Body)>(StringComparer.Ordinal);
+
+                    // Lexical search channel
+                    if (mode != "vector")
+                    {
+                        var tokens = query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Select(t => "\"" + t.Replace("\"", "\"\"") + "\"");
+                        var fts = string.Join(" OR ", tokens);
+
+                        var ftsSql = new StringBuilder("""
+                            SELECT s.section_id, d.title, d.relative_path, s.heading, s.heading_path, s.start_line, s.end_line, s.body,
+                                   bm25(knowledge_fts, 5.0, 3.0, 1.0, 1.0) AS score
+                            FROM knowledge_fts
+                            JOIN knowledge_sections s ON s.rowid = knowledge_fts.rowid
+                            JOIN documents d ON d.document_id = s.document_id
+                            WHERE knowledge_fts MATCH $0 AND d.repository_id = $1
+                            """);
+                        var ftsParams = new List<object?> { fts, repositoryId };
+                        if (docTypes is { Length: > 0 })
+                        {
+                            ftsSql.Append(" AND d.doc_type IN (");
+                            for (var i = 0; i < docTypes.Length; i++)
+                            {
+                                if (i > 0) ftsSql.Append(',');
+                                ftsSql.Append('$' + ftsParams.Count.ToString());
+                                ftsParams.Add(docTypes[i]);
+                            }
+                            ftsSql.Append(')');
+                        }
+                        if (!string.IsNullOrEmpty(pathPrefix))
+                        {
+                            var prefix = pathPrefix.TrimEnd('/');
+                            ftsSql.Append(" AND (d.relative_path = $" + ftsParams.Count + " OR d.relative_path LIKE $" + (ftsParams.Count + 1) + ")");
+                            ftsParams.Add(prefix);
+                            ftsParams.Add(prefix + "/%");
+                        }
+                        ftsSql.Append(" ORDER BY score, s.section_id LIMIT 100");
+
+                        var lexicalRows = Rows(connection, transaction, ftsSql.ToString(), ftsParams.ToArray());
+                        for (var i = 0; i < lexicalRows.Count; i++)
+                        {
+                            var row = lexicalRows[i];
+                            var sId = Text(row, "section_id")!;
+                            var rrf = 4.0 / (60 + (i + 1));
+                            if (candidates.TryGetValue(sId, out var existing))
+                            {
+                                candidates[sId] = existing with { Score = existing.Score + rrf };
+                            }
+                            else
+                            {
+                                candidates[sId] = (rrf, Text(row, "title")!, Text(row, "relative_path")!, Text(row, "heading")!, Text(row, "heading_path")!,
+                                    row["start_line"]!.GetValue<int>(), row["end_line"]!.GetValue<int>(), Text(row, "body")!);
+                            }
+                        }
+                    }
+
+                    // Vector search channel
+                    if (embedded is not null)
+                    {
+                        var vectorCandidates = ModelStore.KnowledgeCandidates(
+                            connection, transaction, repositoryId, embedded, docTypes, pathPrefix, cancellationToken, limit: 100);
+
+                        if (vectorCandidates.Count > 0)
+                        {
+                            var missingIds = vectorCandidates
+                                .Where(c => !candidates.ContainsKey(c.SymbolId))
+                                .Select(c => c.SymbolId)
+                                .ToList();
+
+                            if (missingIds.Count > 0)
+                            {
+                                var detailSql = new StringBuilder("""
+                                    SELECT s.section_id, d.title, d.relative_path, s.heading, s.heading_path, s.start_line, s.end_line, s.body
+                                    FROM knowledge_sections s
+                                    JOIN documents d ON d.document_id = s.document_id
+                                    WHERE s.section_id IN (
+                                    """);
+                                var detailParams = new List<object?>();
+                                for (var i = 0; i < missingIds.Count; i++)
+                                {
+                                    if (i > 0) detailSql.Append(',');
+                                    detailSql.Append('$' + i.ToString());
+                                    detailParams.Add(missingIds[i]);
+                                }
+                                detailSql.Append(')');
+                                var detailRows = Rows(connection, transaction, detailSql.ToString(), detailParams.ToArray());
+                                foreach (var row in detailRows)
+                                {
+                                    var sId = Text(row, "section_id")!;
+                                    candidates[sId] = (0, Text(row, "title")!, Text(row, "relative_path")!, Text(row, "heading")!, Text(row, "heading_path")!,
+                                        row["start_line"]!.GetValue<int>(), row["end_line"]!.GetValue<int>(), Text(row, "body")!);
+                                }
+                            }
+
+                            for (var i = 0; i < vectorCandidates.Count; i++)
+                            {
+                                var vc = vectorCandidates[i];
+                                if (candidates.TryGetValue(vc.SymbolId, out var existing))
+                                {
+                                    candidates[vc.SymbolId] = existing with { Score = existing.Score + 1.0 / (60 + (i + 1)) };
+                                }
+                            }
+                        }
+                    }
+
+                    var sorted = candidates
+                        .OrderByDescending(c => c.Value.Score)
+                        .ThenBy(c => c.Key, StringComparer.Ordinal)
+                        .ToList();
+
+                    more = sorted.Count > offset + limit;
+                    var page = sorted.Skip(offset).Take(limit).ToList();
+                    var matches = new JsonArray();
+                    foreach (var (secId, c) in page)
+                    {
+                        matches.Add(new JsonObject
+                        {
+                            ["sectionId"] = secId,
+                            ["title"] = c.Title,
+                            ["path"] = c.Path,
+                            ["heading"] = c.Heading,
+                            ["headingPath"] = c.HeadingPath,
+                            ["startLine"] = c.StartLine,
+                            ["endLine"] = c.EndLine,
+                            ["body"] = c.Body,
+                            ["score"] = c.Score
+                        });
+                    }
+                    data = new JsonObject
+                    {
+                        ["matches"] = matches,
+                        ["query"] = query,
+                        ["mode"] = mode
+                    };
+                    break;
+                }
+                case "get_knowledge_section":
+                {
+                    var sectionId = Text(arguments, "sectionId");
+                    var path = Text(arguments, "path");
+                    var heading = Text(arguments, "heading");
+                    JsonObject? row = null;
+                    if (sectionId is not null)
+                    {
+                        row = Rows(connection, transaction,
+                            """
+                            SELECT s.section_id, s.document_id, d.title, d.relative_path, d.doc_type, s.heading, s.heading_path,
+                                   s.start_line, s.end_line, s.start_offset, s.end_offset, s.section_hash, s.body, d.frontmatter_json
+                            FROM knowledge_sections s
+                            JOIN documents d ON d.document_id = s.document_id
+                            WHERE d.repository_id = $0 AND s.section_id = $1
+                            """, repositoryId, sectionId).SingleOrDefault();
+                    }
+                    else if (path is not null)
+                    {
+                        var pathKey = DocumentStore.ComputePathKey(path);
+                        if (heading is not null)
+                        {
+                            row = Rows(connection, transaction,
+                                """
+                                SELECT s.section_id, s.document_id, d.title, d.relative_path, d.doc_type, s.heading, s.heading_path,
+                                       s.start_line, s.end_line, s.start_offset, s.end_offset, s.section_hash, s.body, d.frontmatter_json
+                                FROM knowledge_sections s
+                                JOIN documents d ON d.document_id = s.document_id
+                                WHERE d.repository_id = $0 AND d.path_key = $1
+                                  AND (s.heading = $2 OR s.heading_path = $2 OR s.heading_path LIKE '%' || $2)
+                                ORDER BY s.section_index LIMIT 1
+                                """, repositoryId, pathKey, heading).SingleOrDefault();
+                        }
+                        else
+                        {
+                            row = Rows(connection, transaction,
+                                """
+                                SELECT s.section_id, s.document_id, d.title, d.relative_path, d.doc_type, s.heading, s.heading_path,
+                                       s.start_line, s.end_line, s.start_offset, s.end_offset, s.section_hash, s.body, d.frontmatter_json
+                                FROM knowledge_sections s
+                                JOIN documents d ON d.document_id = s.document_id
+                                WHERE d.repository_id = $0 AND d.path_key = $1
+                                ORDER BY s.section_index LIMIT 1
+                                """, repositoryId, pathKey).SingleOrDefault();
+                        }
+                    }
+                    if (row is null) throw new QueryException("SECTION_NOT_FOUND", "Section is unavailable in this repository.");
+
+                    JsonNode? frontmatter = null;
+                    if (Text(row, "frontmatter_json") is string fmJson && !string.IsNullOrWhiteSpace(fmJson))
+                    {
+                        try { frontmatter = JsonNode.Parse(fmJson); } catch { }
+                    }
+
+                    data = new JsonObject
+                    {
+                        ["sectionId"] = row["section_id"]!.DeepClone(),
+                        ["documentId"] = row["document_id"]!.DeepClone(),
+                        ["title"] = row["title"]!.DeepClone(),
+                        ["path"] = row["relative_path"]!.DeepClone(),
+                        ["docType"] = row["doc_type"]!.DeepClone(),
+                        ["heading"] = row["heading"]!.DeepClone(),
+                        ["headingPath"] = row["heading_path"]!.DeepClone(),
+                        ["startLine"] = row["start_line"]!.DeepClone(),
+                        ["endLine"] = row["end_line"]!.DeepClone(),
+                        ["startOffset"] = row["start_offset"]!.DeepClone(),
+                        ["endOffset"] = row["end_offset"]!.DeepClone(),
+                        ["sectionHash"] = row["section_hash"]!.DeepClone(),
+                        ["body"] = row["body"]!.DeepClone(),
+                        ["frontmatter"] = frontmatter,
+                        ["metadata"] = null
+                    };
+                    break;
+                }
+                case "find_related_knowledge":
+                {
+                    var symbolId = Text(arguments, "symbolId");
+                    var path = Text(arguments, "path");
+                    var ticketId = Text(arguments, "ticketId");
+                    var linkRows = new List<JsonObject>();
+
+                    if (symbolId is not null)
+                    {
+                        linkRows.AddRange(Rows(connection, transaction,
+                            """
+                            SELECT s.section_id, d.title, d.relative_path, s.heading, s.heading_path, s.start_line, s.end_line, s.body,
+                                   l.provenance, l.target_kind, l.target_key, 1.0 AS score
+                            FROM knowledge_links l
+                            JOIN knowledge_sections s ON s.section_id = l.section_id
+                            JOIN documents d ON d.document_id = s.document_id
+                            WHERE d.repository_id = $0 AND l.target_kind = 'symbol' AND (l.target_symbol_id = $1 OR l.target_key = $1)
+                            ORDER BY s.section_id
+                            """, repositoryId, symbolId));
+                    }
+                    if (path is not null)
+                    {
+                        var pathKey = DocumentStore.ComputePathKey(path);
+                        linkRows.AddRange(Rows(connection, transaction,
+                            """
+                            SELECT s.section_id, d.title, d.relative_path, s.heading, s.heading_path, s.start_line, s.end_line, s.body,
+                                   l.provenance, l.target_kind, l.target_key, 1.0 AS score
+                            FROM knowledge_links l
+                            JOIN knowledge_sections s ON s.section_id = l.section_id
+                            JOIN documents d ON d.document_id = s.document_id
+                            WHERE d.repository_id = $0 AND l.target_kind = 'file' AND (l.target_key = $1 OR l.target_key = $2)
+                            ORDER BY s.section_id
+                            """, repositoryId, path, pathKey));
+                    }
+                    if (ticketId is not null)
+                    {
+                        linkRows.AddRange(Rows(connection, transaction,
+                            """
+                            SELECT s.section_id, d.title, d.relative_path, s.heading, s.heading_path, s.start_line, s.end_line, s.body,
+                                   l.provenance, l.target_kind, l.target_key, 1.0 AS score
+                            FROM knowledge_links l
+                            JOIN knowledge_sections s ON s.section_id = l.section_id
+                            JOIN documents d ON d.document_id = s.document_id
+                            WHERE d.repository_id = $0 AND l.target_kind = 'ticket' AND l.target_key = $1
+                            ORDER BY s.section_id
+                            """, repositoryId, ticketId));
+                    }
+
+                    var allItems = new List<JsonObject>();
+                    var seenSectionIds = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var row in linkRows)
+                    {
+                        var sId = Text(row, "section_id")!;
+                        if (seenSectionIds.Add(sId))
+                        {
+                            allItems.Add(new JsonObject
+                            {
+                                ["sectionId"] = sId,
+                                ["title"] = row["title"]!.DeepClone(),
+                                ["path"] = row["relative_path"]!.DeepClone(),
+                                ["heading"] = row["heading"]!.DeepClone(),
+                                ["headingPath"] = row["heading_path"]!.DeepClone(),
+                                ["startLine"] = row["start_line"]!.DeepClone(),
+                                ["endLine"] = row["end_line"]!.DeepClone(),
+                                ["body"] = row["body"]!.DeepClone(),
+                                ["score"] = 1.0,
+                                ["provenance"] = row["provenance"]!.DeepClone(),
+                                ["targetKind"] = row["target_kind"]!.DeepClone(),
+                                ["targetKey"] = row["target_key"]!.DeepClone()
+                            });
+                        }
+                    }
+
+                    if (allItems.Count < limit)
+                    {
+                        string? fallbackQuery = null;
+                        if (symbolId is not null)
+                        {
+                            var sym = Rows(connection, transaction, "SELECT name, qualified_name FROM symbols WHERE repository_id=$0 AND symbol_id=$1", repositoryId, symbolId).SingleOrDefault();
+                            fallbackQuery = sym is not null ? Text(sym, "name") : null;
+                        }
+                        if (fallbackQuery is null && path is not null)
+                        {
+                            fallbackQuery = Path.GetFileNameWithoutExtension(path);
+                        }
+                        if (fallbackQuery is null && ticketId is not null)
+                        {
+                            fallbackQuery = ticketId;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(fallbackQuery))
+                        {
+                            var tokens = fallbackQuery.Split([' ', '\t', '\r', '\n', '.', '-', '_'], StringSplitOptions.RemoveEmptyEntries)
+                                .Select(t => "\"" + t.Replace("\"", "\"\"") + "\"");
+                            var fts = string.Join(" OR ", tokens);
+                            if (!string.IsNullOrEmpty(fts))
+                            {
+                                var fallbackRows = Rows(connection, transaction,
+                                    """
+                                    SELECT s.section_id, d.title, d.relative_path, s.heading, s.heading_path, s.start_line, s.end_line, s.body,
+                                           bm25(knowledge_fts, 5.0, 3.0, 1.0, 1.0) AS score
+                                    FROM knowledge_fts
+                                    JOIN knowledge_sections s ON s.rowid = knowledge_fts.rowid
+                                    JOIN documents d ON d.document_id = s.document_id
+                                    WHERE knowledge_fts MATCH $0 AND d.repository_id = $1
+                                    ORDER BY score, s.section_id LIMIT 50
+                                    """, fts, repositoryId);
+
+                                for (var i = 0; i < fallbackRows.Count; i++)
+                                {
+                                    var row = fallbackRows[i];
+                                    var sId = Text(row, "section_id")!;
+                                    if (seenSectionIds.Add(sId))
+                                    {
+                                        allItems.Add(new JsonObject
+                                        {
+                                            ["sectionId"] = sId,
+                                            ["title"] = row["title"]!.DeepClone(),
+                                            ["path"] = row["relative_path"]!.DeepClone(),
+                                            ["heading"] = row["heading"]!.DeepClone(),
+                                            ["headingPath"] = row["heading_path"]!.DeepClone(),
+                                            ["startLine"] = row["start_line"]!.DeepClone(),
+                                            ["endLine"] = row["end_line"]!.DeepClone(),
+                                            ["body"] = row["body"]!.DeepClone(),
+                                            ["score"] = 1.0 / (60 + (i + 1)),
+                                            ["provenance"] = "symbol_match",
+                                            ["targetKind"] = null,
+                                            ["targetKey"] = null
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    more = allItems.Count > offset + limit;
+                    var pagedItems = allItems.Skip(offset).Take(limit).ToList();
+                    data = new JsonObject
+                    {
+                        ["items"] = new JsonArray(pagedItems.Select(x => (JsonNode?)x).ToArray())
+                    };
+                    break;
+                }
                 default: throw new QueryException("INVALID_ARGUMENT", "Unknown tool.");
             }
             responseStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
@@ -573,8 +939,8 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 ["nextCursor"] = more ? cursors.Create(tool, arguments, epoch.Value, offset + limit) : null
             };
             var budget = Math.Min(60_000, Number(arguments, "responseBudgetTokens", 4000) * 3);
-            var collection = tool == "search_code" ? data["matches"] as JsonArray
-                : tool is "find_symbol" or "get_callers" or "get_callees" or "find_related" ? data["items"] as JsonArray : null;
+            var collection = tool is "search_code" or "search_knowledge" ? data["matches"] as JsonArray
+                : tool is "find_symbol" or "get_callers" or "get_callees" or "find_related" or "find_related_knowledge" ? data["items"] as JsonArray : null;
             var budgetTrimmed = false;
             while (Encoding.UTF8.GetByteCount(envelope.ToJsonString()) > budget && collection is { Count: > 1 })
             {

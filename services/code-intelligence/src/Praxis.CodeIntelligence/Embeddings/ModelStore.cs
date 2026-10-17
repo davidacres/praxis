@@ -188,6 +188,142 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             if (pending.Count >= VectorCommitBatchSize) Commit(final: false);
         }
         Commit(final: true);
+        ProcessKnowledgeTargetsWith(model, repositoryId, fingerprint, cancellationToken, leaseToken);
+    }
+
+    public void ProcessKnowledgeTargets(string repositoryId, string fingerprint, CancellationToken cancellationToken, string? leaseToken = null)
+    {
+        LocalModel model;
+        lock (queryLock) { model = Shared(fingerprint); activeUsers++; }
+        try { ProcessKnowledgeTargetsWith(model, repositoryId, fingerprint, cancellationToken, leaseToken); }
+        finally { lock (queryLock) { if (--activeUsers == 0) { foreach (var old in retired) old.Dispose(); retired.Clear(); } } }
+    }
+
+    internal void ProcessKnowledgeTargetsWith(LocalModel model, string repositoryId, string fingerprint, CancellationToken cancellationToken, string? leaseToken)
+    {
+        var pending = new List<(string SectionId, string Text)>();
+        using (var connection = database.Open(readOnly: true))
+        using (var command = connection.Command(null, """
+            SELECT t.section_id, d.title, d.relative_path, s.heading_path, d.frontmatter_json, s.body
+            FROM knowledge_representation_targets t
+            JOIN knowledge_sections s ON s.section_id = t.section_id
+            JOIN documents d ON d.document_id = s.document_id
+            WHERE d.repository_id = $0
+              AND t.model_fingerprint = $1
+              AND t.eligibility = 'eligible'
+              AND NOT EXISTS (
+                SELECT 1 FROM knowledge_vectors v
+                WHERE v.section_id = t.section_id AND v.model_fingerprint = t.model_fingerprint
+              )
+            ORDER BY d.relative_path, s.section_index
+            """, repositoryId, fingerprint))
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                var secId = reader.GetString(0);
+                var title = reader.GetString(1);
+                var relPath = reader.GetString(2);
+                var headingPath = reader.GetString(3);
+                var frontmatter = reader.GetString(4);
+                var body = reader.GetString(5);
+                var text = RepresentationBuilder.BuildKnowledgeRepresentation(title, relPath, headingPath, frontmatter, body);
+                pending.Add((secId, text));
+            }
+        }
+
+        if (pending.Count == 0) return;
+
+        var vectors = new List<(string SectionId, byte[] ValuesBlob)>();
+        foreach (var item in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var vec = model.EmbedSection(item.Text, cancellationToken);
+            LocalModel.ValidateVector(vec);
+            var blob = new byte[LocalModel.Dimensions * sizeof(float)];
+            for (var i = 0; i < LocalModel.Dimensions; i++)
+                BinaryPrimitives.WriteSingleLittleEndian(blob.AsSpan(i * sizeof(float), sizeof(float)), vec[i]);
+            vectors.Add((item.SectionId, blob));
+        }
+
+        using var writeConn = database.Open();
+        using var transaction = writeConn.BeginTransaction(deferred: false);
+        if (leaseToken is not null) Host.DurableScheduler.AssertLease(writeConn, transaction, leaseToken);
+        using var batch = new SqlBatch(writeConn, transaction);
+        foreach (var v in vectors)
+        {
+            batch.Execute("""
+                INSERT INTO knowledge_vectors(section_id, model_fingerprint, dimensions, values_blob)
+                VALUES($0, $1, 384, $2)
+                ON CONFLICT(section_id, model_fingerprint) DO UPDATE SET values_blob = excluded.values_blob
+                """, v.SectionId, fingerprint, v.ValuesBlob);
+        }
+        batch.Execute("UPDATE repositories SET query_epoch = query_epoch + 1 WHERE repository_id = $0", repositoryId);
+        transaction.Commit();
+    }
+
+    public static IReadOnlyList<VectorCandidate> KnowledgeCandidates(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string repositoryId,
+        ModelQuery query,
+        IReadOnlyList<string>? docTypes = null,
+        string? pathPrefix = null,
+        CancellationToken cancellationToken = default,
+        int limit = 100)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LocalModel.ValidateVector(query.Vector);
+
+        var sql = new StringBuilder("""
+            SELECT v.section_id, v.values_blob
+            FROM knowledge_vectors v
+            JOIN knowledge_sections s ON s.section_id = v.section_id
+            JOIN documents d ON d.document_id = s.document_id
+            WHERE d.repository_id = $0 AND v.model_fingerprint = $1
+            """);
+
+        var parameters = new List<object?> { repositoryId, query.Fingerprint };
+
+        if (docTypes is { Count: > 0 })
+        {
+            sql.Append(" AND d.doc_type IN (");
+            for (var i = 0; i < docTypes.Count; i++)
+            {
+                if (i > 0) sql.Append(',');
+                sql.Append('$' + parameters.Count.ToString());
+                parameters.Add(docTypes[i]);
+            }
+            sql.Append(')');
+        }
+
+        if (!string.IsNullOrEmpty(pathPrefix))
+        {
+            var prefix = pathPrefix.TrimEnd('/');
+            sql.Append(" AND (d.relative_path = $" + parameters.Count + " OR d.relative_path LIKE $" + (parameters.Count + 1) + ")");
+            parameters.Add(prefix);
+            parameters.Add(prefix + "/%");
+        }
+
+        using var command = connection.Command(transaction, sql.ToString(), parameters.ToArray());
+        using var reader = command.ExecuteReader();
+        var results = new List<VectorCandidate>();
+        while (reader.Read())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var sectionId = reader.GetString(0);
+            var blob = (byte[])reader.GetValue(1);
+            if (VectorScoring.TryScore(blob, query.Vector, out var score))
+            {
+                results.Add(new VectorCandidate(sectionId, score));
+            }
+        }
+
+        return results
+            .OrderByDescending(c => c.Score)
+            .ThenBy(c => c.SymbolId, StringComparer.Ordinal)
+            .Take(limit)
+            .ToList();
     }
 
     public ModelQuery? QueryEmbedding(string repositoryId, string query, CancellationToken cancellationToken)

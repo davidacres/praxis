@@ -3,6 +3,7 @@ using Praxis.CodeIntelligence.Embeddings;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Praxis.CodeIntelligence.Storage;
+using Praxis.CodeIntelligence.Indexing.Documents;
 
 namespace Praxis.CodeIntelligence.Indexing;
 
@@ -12,6 +13,25 @@ public sealed record IndexResult(string RepositoryId, long Generation, int Files
 
 public sealed class RepositoryIndexer(IndexDatabase database)
 {
+    private static readonly IDocumentParser[] DocumentParsers =
+    [
+        new MarkdownDocumentChunker(),
+        new WordDocumentParser(),
+        new PresentationDocumentParser(),
+        new CsvDocumentParser()
+    ];
+
+    public static string NormalizeDocType(string rawType) => rawType.ToLowerInvariant() switch
+    {
+        "markdown" or "md" => "markdown",
+        "word" or "docx" => "word",
+        "presentation" or "pptx" => "presentation",
+        "sheet" or "csv" or "xlsx" or "xls" => "sheet",
+        "plan" => "plan",
+        "spec" => "spec",
+        _ => "general"
+    };
+
     private sealed record SavedAlias(string Id, string? ProjectId, string SymbolId, string Phrase, string Key, string Origin, long Enabled, string Created);
 
     public void AddAlias(string repositoryId, string symbolId, string phrase)
@@ -104,9 +124,27 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         var repository = Get(id);
         if (repository.State == "paused") throw new InvalidOperationException("INDEX_BUSY: repository is paused.");
         IReadOnlyList<SourceInput> sources; RepositoryAnalysis analysis; string snapshotHash;
+        var parsedDocuments = new List<ParsedDocument>();
         try
         {
             sources = SourceScanner.Scan(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
+            var docPaths = SourceScanner.ScanDocumentPaths(repository.Root, repository.Config.Excludes ?? [], cancellationToken);
+            foreach (var docPath in docPaths)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var parser = DocumentParsers.FirstOrDefault(p => p.CanParse(docPath));
+                if (parser is null) continue;
+                try
+                {
+                    var bytes = File.ReadAllBytes(Path.Combine(repository.Root, docPath));
+                    if (bytes.Length > SourceScanner.MaximumDocumentBytes) continue;
+                    var parsed = parser.Parse(docPath, bytes, repository.Root);
+                    parsedDocuments.Add(parsed);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidDataException or ArgumentException or System.Xml.XmlException)
+                {
+                }
+            }
             PassiveManifest? manifest = null; IndexedDiagnostic? manifestDiagnostic = null; string? manifestHash = null;
             if (repository.Config.Manifest is not null)
             {
@@ -197,7 +235,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                     ManifestHash = manifestHash, Manifest = manifest, TypeScriptConfigs = tsDiscovery!.Configs, repository.Config,
                     Sources = sources.Select(source => new { source.Path, source.Hash, source.Role }).OrderBy(source => source.Path, StringComparer.Ordinal)
                 })));
-            if (!force && TryUnchanged(repository, sources.Count, snapshotHash, cancellationToken, leaseToken) is IndexResult unchanged) return unchanged;
+            if (!force && TryUnchanged(repository, sources.Count, snapshotHash, parsedDocuments, cancellationToken, leaseToken) is IndexResult unchanged) return unchanged;
             if (!hasTsJs)
             {
                 try { analysis = new RoslynAnalyzer().Analyze(id, sources, manifest, cancellationToken); }
@@ -278,7 +316,18 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             throw new InvalidOperationException("INDEX_STALE: repository state changed during analysis.");
         var oldHash = string.Join("|", ReadContextHashes(connection, transaction, id));
         var newHash = string.Join("|", analysis.Contexts.OrderBy(c => c.Id, StringComparer.Ordinal).Select(c => c.Hash));
-        if (!force && oldHash == newHash && repository.Generation > 0)
+        var docsUnchanged = false;
+        var existingDocCount = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM documents WHERE repository_id=$0", id));
+        if (existingDocCount == parsedDocuments.Count)
+        {
+            docsUnchanged = true;
+            foreach (var doc in parsedDocuments)
+            {
+                var curHash = connection.Scalar(transaction, "SELECT content_hash FROM documents WHERE repository_id=$0 AND path_key=$1", id, doc.PathKey) as string;
+                if (curHash != doc.ContentHash) { docsUnchanged = false; break; }
+            }
+        }
+        if (!force && oldHash == newHash && docsUnchanged && repository.Generation > 0)
         {
             connection.Execute(transaction, "UPDATE contexts SET options_json=$0 WHERE project_id IN(SELECT project_id FROM projects WHERE repository_id=$1)", JsonSerializer.Serialize(new { snapshotHash }), id);
             connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), id);
@@ -303,6 +352,54 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             ClearContributions(connection, transaction, id);
         }
         else Clear(connection, transaction, id);
+        var docStore = new DocumentStore(database);
+        if (retain)
+        {
+            var currentDocPathKeys = parsedDocuments.Select(d => d.PathKey).ToHashSet(StringComparer.Ordinal);
+            var existingDocPaths = new List<(string DocId, string PathKey)>();
+            using (var cmd = connection.Command(transaction, "SELECT document_id, path_key FROM documents WHERE repository_id=$0", id))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read()) existingDocPaths.Add((reader.GetString(0), reader.GetString(1)));
+            }
+            foreach (var (docId, pathKey) in existingDocPaths)
+            {
+                if (!currentDocPathKeys.Contains(pathKey))
+                {
+                    docStore.DeleteDocument(connection, transaction, docId);
+                }
+            }
+        }
+        var allSections = new List<(ParsedDocument Doc, DocumentRecord Record, IReadOnlyList<KnowledgeSectionRecord> Sections)>();
+        foreach (var doc in parsedDocuments)
+        {
+            var normalizedType = NormalizeDocType(doc.DocType);
+            var docRecord = new DocumentRecord(
+                "",
+                id,
+                doc.RelativePath,
+                doc.PathKey,
+                doc.ContentHash,
+                normalizedType,
+                doc.Title,
+                doc.FrontmatterJson,
+                doc.SizeBytes
+            );
+            var sectionInputs = doc.Sections.Select((s, i) => new DocumentSectionInput(
+                s.Heading,
+                s.HeadingPath,
+                s.StartLine,
+                s.EndLine,
+                s.StartOffset,
+                s.EndOffset,
+                s.SectionHash,
+                s.Body,
+                i
+            )).ToList();
+            var upsertResult = docStore.UpsertDocument(connection, transaction, docRecord, sectionInputs);
+            var currentSections = docStore.GetSections(upsertResult.Document.DocumentId);
+            allSections.Add((doc, upsertResult.Document, currentSections));
+        }
         var generation = repository.Generation + 1;
         var fileIds = retainedFiles ?? sources.ToDictionary(s => s.Path, _ => "pci:file:" + Guid.NewGuid().ToString("N"), StringComparer.Ordinal);
         foreach (var source in sources)
@@ -375,10 +472,43 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         using (var reader = command.ExecuteReader()) while (reader.Read()) profiles.Add(reader.GetString(0));
         foreach (var profile in profiles)
         {
+            foreach (var (doc, docRec, sections) in allSections)
+            {
+                foreach (var sec in sections)
+                {
+                    var repText = RepresentationBuilder.BuildKnowledgeRepresentation(
+                        docRec.Title, docRec.RelativePath, sec.HeadingPath, docRec.FrontmatterJson, sec.Body);
+                    var repHash = SourceFiles.Hash(Encoding.UTF8.GetBytes(repText));
+                    batch.Execute(
+                        """
+                        INSERT INTO knowledge_representation_targets(section_id, model_fingerprint, input_revision, representation_hash, eligibility)
+                        VALUES($0, $1, $2, $3, 'eligible')
+                        ON CONFLICT(section_id, model_fingerprint) DO UPDATE SET
+                            input_revision = excluded.input_revision,
+                            representation_hash = excluded.representation_hash,
+                            eligibility = excluded.eligibility
+                        """,
+                        sec.SectionId, profile, sec.SectionHash, repHash);
+                }
+            }
             var active = connection.Scalar(transaction, "SELECT state FROM repository_models WHERE repository_id=$0 AND model_fingerprint=$1", id, profile) as string == "active";
             var eligible = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0 AND external=0", id));
             var covered = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM embedding_sets e JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND e.state='ready' AND e.input_revision=s.revision", id, profile));
-            if (active && eligible == covered) continue;
+            var eligibleKnowledge = Convert.ToInt64(connection.Scalar(transaction,
+                """
+                SELECT count(*) FROM knowledge_representation_targets t
+                JOIN knowledge_sections s ON s.section_id = t.section_id
+                JOIN documents d ON d.document_id = s.document_id
+                WHERE d.repository_id = $0 AND t.model_fingerprint = $1 AND t.eligibility = 'eligible'
+                """, id, profile));
+            var coveredKnowledge = Convert.ToInt64(connection.Scalar(transaction,
+                """
+                SELECT count(*) FROM knowledge_vectors v
+                JOIN knowledge_sections s ON s.section_id = v.section_id
+                JOIN documents d ON d.document_id = s.document_id
+                WHERE d.repository_id = $0 AND v.model_fingerprint = $1
+                """, id, profile));
+            if (active && eligible == covered && eligibleKnowledge == coveredKnowledge) continue;
             var key = Identity.Id("", profile, generation);
             batch.Execute("INSERT INTO jobs(job_id,repository_id,kind,input_key,payload_json,desired_revision,state,available_utc) VALUES($0,$1,'embed',$2,$3,$4,'pending',$5) ON CONFLICT(repository_id,kind,input_key) DO NOTHING",
                 Identity.Id("pci:job:", id, "embed", key), id, key, JsonSerializer.Serialize(new { fingerprint = profile }), generation, DateTimeOffset.UtcNow.ToString("O"));
@@ -388,13 +518,20 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         return new(id, generation, sources.Count, analysis.Symbols.Count, true);
     }
 
-    private IndexResult? TryUnchanged(RepositoryRecord repository, int files, string snapshotHash, CancellationToken cancellationToken, string? leaseToken)
+    private IndexResult? TryUnchanged(RepositoryRecord repository, int files, string snapshotHash, IReadOnlyList<ParsedDocument> parsedDocuments, CancellationToken cancellationToken, string? leaseToken)
     {
         if (repository.Generation == 0) return null;
         using var connection = database.Open(); using var transaction = connection.BeginTransaction(deferred: false);
         if (leaseToken is not null) Host.DurableScheduler.AssertLease(connection, transaction, leaseToken);
         if (Convert.ToInt64(connection.Scalar(transaction, "SELECT query_epoch FROM repositories WHERE repository_id=$0", repository.Id)) != repository.QueryEpoch)
             throw new InvalidOperationException("INDEX_STALE: repository changed during input validation.");
+        var docCount = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM documents WHERE repository_id=$0", repository.Id));
+        if (docCount != parsedDocuments.Count) return null;
+        foreach (var doc in parsedDocuments)
+        {
+            var currentHash = connection.Scalar(transaction, "SELECT content_hash FROM documents WHERE repository_id=$0 AND path_key=$1", repository.Id, doc.PathKey) as string;
+            if (currentHash != doc.ContentHash) return null;
+        }
         var total = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0", repository.Id));
         var matching = Convert.ToInt64(connection.Scalar(transaction,
             "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND c.adapter_version IN($1,$2) AND json_extract(c.options_json,'$.snapshotHash')=$3",
@@ -508,6 +645,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         connection.Execute(transaction, "DELETE FROM symbols WHERE repository_id=$0", id);
         connection.Execute(transaction, "DELETE FROM projects WHERE repository_id=$0", id);
         connection.Execute(transaction, "DELETE FROM files WHERE repository_id=$0", id);
+        connection.Execute(transaction, "DELETE FROM documents WHERE repository_id=$0", id);
         connection.Execute(transaction, "DELETE FROM diagnostics WHERE repository_id=$0", id);
     }
     // Keep original identifiers for exact token queries, and append readable

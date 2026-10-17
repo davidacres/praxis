@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **624 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **637 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -259,15 +259,23 @@ This catalogue describes **624 Playwright tests** under `apps/praxis-desktop/mai
 | PT-7134E97BD0 | chat Gadgets | a conflict gadget refuses to resolve until every side is chosen | `apps/praxis-desktop/main/e2e/chatGadgets.spec.ts:738` |
 | PT-3EDDE51138 | chat Project Assignment.visual | assign chat picker and project session placement | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:16` |
 | PT-CDB77B83E7 | chat Project Assignment.visual | assign chat ticket field lists tickets for a folder-backed project | `apps/praxis-desktop/main/e2e/chatProjectAssignment.visual.spec.ts:111` |
-| PT-DCF22F6C16 | code Intelligence | rebuild and relocation use the themed recovery flow and refresh status | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:46` |
-| PT-8C7247F23D | code Intelligence | search sends the chosen mode, defaulting to hybrid | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:64` |
-| PT-892AB10FFA | code Intelligence | budget-truncated search offers the returned cursor and shows the next page | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:78` |
-| PT-9231FEA5A4 | code Intelligence | source search and recovery remain keyboard accessible in light and dark themes | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:90` |
+| PT-DCF22F6C16 | code Intelligence | rebuild and relocation use the themed recovery flow and refresh status | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:84` |
+| PT-E62E1E2707 | code Intelligence | semantic search card shows status, allows downloading model, and deleting model | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:104` |
+| PT-5BF47317FF | code Intelligence | model details show the pinned model read-only once installed | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:138` |
+| PT-78118CB321 | code Intelligence | an earlier model on disk is offered as an update, and updating activates semantic search | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:158` |
+| PT-7FCFECEB42 | code Intelligence | code intelligence panel maintains accessibility in light and dark modes | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:171` |
+| PT-3B358AC6C4 | code Intelligence | factory reset clears repositories and resets code intelligence | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:191` |
+| PT-5B3236513C | code Intelligence | overview section provides reset code intelligence to factory defaults | `apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts:209` |
 | PT-C0D616E5B7 | code Intelligence Native | packaged service supports desktop source navigation and repository recovery | `apps/praxis-desktop/main/e2e/codeIntelligenceNative.spec.ts:9` |
+| PT-3026C05A2E | code Search Dialog | opens code search from command palette, searches symbols, and displays source and usages | `apps/praxis-desktop/main/e2e/codeSearchDialog.spec.ts:133` |
+| PT-DB30AC0DD5 | code Search Dialog | opens code search via shortcut ControlOrMeta+Shift+F and from session code intel chip | `apps/praxis-desktop/main/e2e/codeSearchDialog.spec.ts:205` |
 | PT-59DA0C8AD7 | command Palette | opens with the shortcut, filters, and navigates on Enter | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:21` |
 | PT-FA69F53102 | command Palette | closes on Escape without navigating | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:39` |
 | PT-41E36CF713 | command Palette | finds a demo issue by summary text and navigates to it on Enter | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:50` |
 | PT-502E0DC766 | command Palette | surfaces a settings page and opens the settings dialog | `apps/praxis-desktop/main/e2e/commandPalette.spec.ts:69` |
+| PT-13EFC73594 | composer Code Intelligence | composer code intelligence control shows in new session, toggles preferences, and inspects status | `apps/praxis-desktop/main/e2e/composerCodeIntelligence.spec.ts:11` |
+| PT-6669BC1F99 | composer Code Intelligence | virtual team assistant composer displays code intelligence chip and control | `apps/praxis-desktop/main/e2e/composerCodeIntelligence.spec.ts:58` |
+| PT-82655C5AB5 | composer Code Intelligence | existing session follow-up composer shows code intelligence chip and status | `apps/praxis-desktop/main/e2e/composerCodeIntelligence.spec.ts:75` |
 | PT-4BA2448F9C | composer Model Configuration | composer model settings curate provider chips and preserve the conversation draft | `apps/praxis-desktop/main/e2e/composerModelConfiguration.spec.ts:18` |
 | PT-2E55D7925C | composer Model Configuration | an existing session configures its selected provider rather than the app default | `apps/praxis-desktop/main/e2e/composerModelConfiguration.spec.ts:90` |
 | PT-B902DE0E5F | composer Model Configuration | model search stays fixed when scrolling models in the model menu and manager | `apps/praxis-desktop/main/e2e/composerModelConfiguration.spec.ts:127` |
@@ -435,6 +443,11 @@ This catalogue describes **624 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0933C80ACE | security Review Run | Security Review: findings, readable report, and an approved plan created on the board with its id | `apps/praxis-desktop/main/e2e/securityReviewRun.spec.ts:179` |
 | PT-2119B9F4E9 | security Review Run | Security Review: skipping the plan ends the run as succeeded with no plan created | `apps/praxis-desktop/main/e2e/securityReviewRun.spec.ts:265` |
 | PT-30FBAD1922 | security Review Self.live | Security Review on this repository with a real AI | `apps/praxis-desktop/main/e2e/securityReviewSelf.live.spec.ts:30` |
+| PT-06D12D29D3 | semantic Search Notification | shows semantic search recommendation notification on startup if model not installed | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:13` |
+| PT-D83E9876EA | semantic Search Notification | enables semantic search from startup notification and shows success feedback | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:59` |
+| PT-EB2FB567E1 | semantic Search Notification | configure button in notification opens Code Intelligence settings page | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:101` |
+| PT-A0C7008A04 | semantic Search Notification | offers an update instead of enable when an earlier model is installed | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:135` |
+| PT-4874B92CC2 | semantic Search Notification | the real main process reports a previously downloaded MiniLM bundle as an update | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:170` |
 | PT-E9A2A4583D | session Ai Icons | session list displays single and multiple pixel-perfect AI brand icons beside each session | `apps/praxis-desktop/main/e2e/sessionAiIcons.spec.ts:15` |
 | PT-71A99A13A6 | session Groups | chat and project session groups reorder, rename inline, and persist | `apps/praxis-desktop/main/e2e/sessionGroups.spec.ts:19` |
 | PT-228E76C299 | session Provider Limit | a session whose AI ran out can switch to another AI and carry on | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:47` |

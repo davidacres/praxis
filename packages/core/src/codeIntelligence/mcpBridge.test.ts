@@ -95,7 +95,7 @@ test('MCP SDK initialize/list/call uses scoped RPC and normative error envelopes
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   try {
     await server.connect(serverTransport); await client.connect(clientTransport);
-    const listed = await client.listTools(); assert.equal(listed.tools.length, 11);
+    const listed = await client.listTools(); assert.equal(listed.tools.length, Object.keys(contracts).length);
     assert.ok(listed.tools.every(tool => tool.annotations?.readOnlyHint && tool.outputSchema));
     const called = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'repo' } });
     assert.equal(called.isError, false); assert.equal((called.structuredContent as Record<string, unknown> | undefined)?.schemaVersion, '1.2');
@@ -154,7 +154,7 @@ test('stdio MCP cancellation stops an in-flight RPC child and preserves the sess
     const response = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'repo' } });
     assert.equal(response.isError, true);
     assert.equal(((response.structuredContent as Record<string, unknown>).error as { code: string }).code, 'INVALID_ARGUMENT');
-    assert.equal((await client.listTools()).tools.length, 11);
+    assert.equal((await client.listTools()).tools.length, 14);
   } finally {
     await client.close();
     if (running()) process.kill(pid!, 'SIGKILL');
@@ -192,7 +192,7 @@ test('an all-granted bridge serves every granted repository by name and refuses 
     await grant(['pci:repo:maze1', '/work/maze']);
     await server.connect(serverTransport); await client.connect(clientTransport);
     const tools = (await client.listTools()).tools;
-    assert.equal(tools.length, 12);
+    assert.equal(tools.length, Object.keys(contracts).length + 1);
     assert.ok(tools.every(tool => tool.annotations?.readOnlyHint));
     const search = tools.find(tool => tool.name === 'search_code')!;
     assert.ok((search.inputSchema.properties as Record<string, unknown>).repository);

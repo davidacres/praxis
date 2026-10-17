@@ -17,7 +17,7 @@ import {
 } from './semanticModelManager.js';
 
 const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate']);
-const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status']);
+const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status', 'search_knowledge', 'get_knowledge_section', 'find_related_knowledge']);
 
 function dataDirectory(): string {
   if (!process.env.PRAXIS_CODE_INTELLIGENCE_DATA_DIRECTORY && process.env.PRAXIS_SETTINGS_PATH)

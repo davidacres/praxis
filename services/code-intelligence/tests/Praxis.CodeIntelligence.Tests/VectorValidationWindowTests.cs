@@ -36,9 +36,11 @@ public sealed class VectorValidationWindowTests
             Compare("fresh");
             Assert.Empty(database.Check());
 
-            // A schema-4 database gains vector_scan through the migration backfill.
+            // A schema-4 database gains vector_scan through the migration backfill. A real
+            // schema-4 file has none of migration 7's knowledge tables either.
             using (var writer = database.Open())
-                writer.Execute(null, "DROP TRIGGER vector_scan_insert; DROP TRIGGER vector_scan_update; DROP TRIGGER vector_scan_delete; DROP TRIGGER vector_scan_set_update; DROP TRIGGER vector_scan_symbol_update; DROP TABLE vector_scan; DELETE FROM schema_migrations WHERE version>=5; PRAGMA user_version=4;");
+                writer.Execute(null, "DROP TABLE knowledge_links; DROP TABLE knowledge_vectors; DROP TABLE knowledge_representation_targets; DROP TABLE knowledge_fts; DROP TABLE knowledge_sections; DROP TABLE documents; "
+                    + "DROP TRIGGER vector_scan_insert; DROP TRIGGER vector_scan_update; DROP TRIGGER vector_scan_delete; DROP TRIGGER vector_scan_set_update; DROP TRIGGER vector_scan_symbol_update; DROP TABLE vector_scan; DELETE FROM schema_migrations WHERE version>=5; PRAGMA user_version=4;");
             database.Initialize();
             Assert.Empty(database.Check());
             Compare("upgraded");

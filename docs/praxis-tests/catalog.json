@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 624,
+  "testCount": 637,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -4091,7 +4091,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 46,
+        "line": 84,
         "project": "functional"
       },
       "area": "code Intelligence",
@@ -4102,50 +4102,98 @@
       }
     },
     {
-      "id": "PT-8C7247F23D",
-      "title": "search sends the chosen mode, defaulting to hybrid",
+      "id": "PT-E62E1E2707",
+      "title": "semantic search card shows status, allows downloading model, and deleting model",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 64,
+        "line": 104,
         "project": "functional"
       },
       "area": "code Intelligence",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "search sends the chosen mode, defaulting to hybrid",
+        "when": "semantic search card shows status, allows downloading model, and deleting model",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
     {
-      "id": "PT-892AB10FFA",
-      "title": "budget-truncated search offers the returned cursor and shows the next page",
+      "id": "PT-5BF47317FF",
+      "title": "model details show the pinned model read-only once installed",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 78,
+        "line": 138,
         "project": "functional"
       },
       "area": "code Intelligence",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "budget-truncated search offers the returned cursor and shows the next page",
+        "when": "model details show the pinned model read-only once installed",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
     {
-      "id": "PT-9231FEA5A4",
-      "title": "source search and recovery remain keyboard accessible in light and dark themes",
+      "id": "PT-78118CB321",
+      "title": "an earlier model on disk is offered as an update, and updating activates semantic search",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
-        "line": 90,
+        "line": 158,
         "project": "functional"
       },
       "area": "code Intelligence",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "source search and recovery remain keyboard accessible in light and dark themes",
+        "when": "an earlier model on disk is offered as an update, and updating activates semantic search",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-7FCFECEB42",
+      "title": "code intelligence panel maintains accessibility in light and dark modes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 171,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "code intelligence panel maintains accessibility in light and dark modes",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-3B358AC6C4",
+      "title": "factory reset clears repositories and resets code intelligence",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 191,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "factory reset clears repositories and resets code intelligence",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-5B3236513C",
+      "title": "overview section provides reset code intelligence to factory defaults",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeIntelligence.spec.ts",
+        "line": 209,
+        "project": "functional"
+      },
+      "area": "code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "overview section provides reset code intelligence to factory defaults",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -4162,6 +4210,38 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "packaged service supports desktop source navigation and repository recovery",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-3026C05A2E",
+      "title": "opens code search from command palette, searches symbols, and displays source and usages",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeSearchDialog.spec.ts",
+        "line": 133,
+        "project": "functional"
+      },
+      "area": "code Search Dialog",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "opens code search from command palette, searches symbols, and displays source and usages",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-DB30AC0DD5",
+      "title": "opens code search via shortcut ControlOrMeta+Shift+F and from session code intel chip",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/codeSearchDialog.spec.ts",
+        "line": 205,
+        "project": "functional"
+      },
+      "area": "code Search Dialog",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "opens code search via shortcut ControlOrMeta+Shift+F and from session code intel chip",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -4226,6 +4306,54 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "surfaces a settings page and opens the settings dialog",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-13EFC73594",
+      "title": "composer code intelligence control shows in new session, toggles preferences, and inspects status",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/composerCodeIntelligence.spec.ts",
+        "line": 11,
+        "project": "functional"
+      },
+      "area": "composer Code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "composer code intelligence control shows in new session, toggles preferences, and inspects status",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-6669BC1F99",
+      "title": "virtual team assistant composer displays code intelligence chip and control",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/composerCodeIntelligence.spec.ts",
+        "line": 58,
+        "project": "functional"
+      },
+      "area": "composer Code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "virtual team assistant composer displays code intelligence chip and control",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-82655C5AB5",
+      "title": "existing session follow-up composer shows code intelligence chip and status",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/composerCodeIntelligence.spec.ts",
+        "line": 75,
+        "project": "functional"
+      },
+      "area": "composer Code Intelligence",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "existing session follow-up composer shows code intelligence chip and status",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -6898,6 +7026,86 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "Security Review on this repository with a real AI",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-06D12D29D3",
+      "title": "shows semantic search recommendation notification on startup if model not installed",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts",
+        "line": 13,
+        "project": "functional"
+      },
+      "area": "semantic Search Notification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "shows semantic search recommendation notification on startup if model not installed",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D83E9876EA",
+      "title": "enables semantic search from startup notification and shows success feedback",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts",
+        "line": 59,
+        "project": "functional"
+      },
+      "area": "semantic Search Notification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "enables semantic search from startup notification and shows success feedback",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-EB2FB567E1",
+      "title": "configure button in notification opens Code Intelligence settings page",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts",
+        "line": 101,
+        "project": "functional"
+      },
+      "area": "semantic Search Notification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "configure button in notification opens Code Intelligence settings page",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-A0C7008A04",
+      "title": "offers an update instead of enable when an earlier model is installed",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts",
+        "line": 135,
+        "project": "functional"
+      },
+      "area": "semantic Search Notification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "offers an update instead of enable when an earlier model is installed",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-4874B92CC2",
+      "title": "the real main process reports a previously downloaded MiniLM bundle as an update",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts",
+        "line": 170,
+        "project": "functional"
+      },
+      "area": "semantic Search Notification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the real main process reports a previously downloaded MiniLM bundle as an update",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

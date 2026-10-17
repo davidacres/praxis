@@ -28,6 +28,7 @@ CHANNEL=enum('exact','lexical','vector','alias','graph')
 COMMON={'repositoryId':ID,'contextId':ID,'freshness':FRESH,
         'responseBudgetTokens':integer(512,8000)}
 FILTERS=obj({'projectIds':arr(ID,50),'languages':arr(text(32),10),'kinds':arr(text(64),50)})
+KNOWLEDGE_FILTERS=obj({'docTypes':arr(text(64),20),'pathPrefix':text(512)})
 SYMBOL={'symbolId':ID}
 PAGE={'limit':integer(1,100),'cursor':text(4096)}
 
@@ -53,7 +54,13 @@ inputs={
  'find_related':obj({**COMMON,**SYMBOL,'kinds':arr(text(64),30),'limit':integer(1,50),
      'cursor':text(4096)},['repositoryId','symbolId']),
  'summarize_project':obj({**COMMON,'projectId':ID,'includeGenerated':BOOL},['repositoryId','projectId']),
- 'get_index_status':obj({'repositoryId':ID,'responseBudgetTokens':integer(512,8000)},['repositoryId'])
+ 'get_index_status':obj({'repositoryId':ID,'responseBudgetTokens':integer(512,8000)},['repositoryId']),
+ 'search_knowledge':obj({**COMMON,'query':{'type':'string','minLength':1,'maxLength':2000},
+     'limit':integer(1,50),'filters':KNOWLEDGE_FILTERS,
+     'mode':enum('hybrid','lexical','vector'),'cursor':text(4096)},['repositoryId','query']),
+ 'get_knowledge_section':obj({**COMMON,'sectionId':ID,'path':text(1024),'heading':text(512)},['repositoryId']),
+ 'find_related_knowledge':obj({**COMMON,'symbolId':ID,'path':text(1024),'ticketId':ID,'limit':integer(1,50),
+     'cursor':text(4096)},['repositoryId'])
 }
 
 DEFS={}
@@ -107,6 +114,31 @@ related=obj({'symbol':ref('Symbol'),'reasons':arr(text(128),30),'evidenceIds':ar
  ['symbol','reasons','evidenceIds'])
 component=obj({'symbol':ref('Symbol'),'description':nullable(ref('Description')),
  'evidenceIds':arr(ID,100)},['symbol','description','evidenceIds'])
+knowledge_match=obj({
+    'sectionId':ID,
+    'title':text(1024),
+    'path':text(4096),
+    'heading':text(1024),
+    'headingPath':text(4096),
+    'startLine':integer(),
+    'endLine':integer(),
+    'body':text(131072),
+    'score':NUMBER
+}, ['sectionId','title','path','heading','headingPath','startLine','endLine','body','score'])
+related_knowledge=obj({
+    'sectionId':ID,
+    'title':text(1024),
+    'path':text(4096),
+    'heading':text(1024),
+    'headingPath':text(4096),
+    'startLine':integer(),
+    'endLine':integer(),
+    'body':text(131072),
+    'score':NUMBER,
+    'provenance':nullable(text(64)),
+    'targetKind':nullable(text(64)),
+    'targetKey':nullable(text(1024))
+}, ['sectionId','title','path','heading','headingPath','startLine','endLine','body','score'])
 
 data={
  'search_code':obj({'matches':arr(match,50),'channelsUsed':arr(CHANNEL,5),
@@ -136,7 +168,26 @@ data={
                     ['pending','leased','succeeded','failed','obsolete']),
    'models':arr(ref('ModelStatus'),10),'lastReconciledUtc':nullable(text(40)),
    'diagnostics':arr(ref('Diagnostic'),1000),'ownerState':text(64)},
-   ['desiredRevision','contexts','jobsByState','models','lastReconciledUtc','diagnostics','ownerState'])
+   ['desiredRevision','contexts','jobsByState','models','lastReconciledUtc','diagnostics','ownerState']),
+ 'search_knowledge':obj({'matches':arr(knowledge_match,100),'query':nullable(text(2000)),'mode':nullable(text(32))},['matches']),
+ 'get_knowledge_section':obj({
+    'sectionId':ID,
+    'documentId':ID,
+    'title':text(1024),
+    'path':text(4096),
+    'docType':text(64),
+    'heading':text(1024),
+    'headingPath':text(4096),
+    'startLine':integer(),
+    'endLine':integer(),
+    'startOffset':integer(),
+    'endOffset':integer(),
+    'sectionHash':HASH,
+    'body':text(131072),
+    'frontmatter':{'type':['object','null']},
+    'metadata':{'type':['object','null']}
+ }, ['sectionId','documentId','title','path','docType','heading','headingPath','startLine','endLine','body']),
+ 'find_related_knowledge':obj({'items':arr(related_knowledge,100)},['items'])
 }
 
 def output_schema(tool):
