@@ -1097,3 +1097,8 @@ This is the first real-agent invocation in the evidence. It is one task in print
 - 147 C# tests pass, 2 SDK-capture tests skipped.
 - 133 freshly captured responses validate against the regenerated `contracts.json` across all 11 tools.
 - 17 code-intelligence e2e specs pass. `codeIntelligenceNative.spec.ts` fails with the packaged binary because it still looks for a "Repository folder" field, which commit `29a9a23c` removed from the settings page. It is skipped without `PRAXIS_CODE_INTELLIGENCE_EXE`, and it is stale independently of this change.
+
+**Repeat of the Claude Code task** (same prompt, tools and restrictions, on a fresh index without the model): all three answers were correct again.
+- **17 turns instead of 32**; $1.07 instead of $1.22; 80 s.
+- The remaining turns went on paging through all 64 callers of `sanitizeAppSettings` (six pages, mostly core tests), plus one restart after a cursor expired during a re-index.
+- Claude again flagged that line numbers are 0-based.
