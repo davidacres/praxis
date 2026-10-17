@@ -99,3 +99,24 @@ For the next run, compare against the `lexical16` report: it is the current base
 | TypeScript terminology | 0.500 / 0.308 | 0.667 / 0.398 |
 
 No category's recall or MRR fell on either set. The current Maze baseline is `maze-release-plan8-results`.
+
+## Lexical term coverage — experiment 3 (2026-10-18): rejected, production kept
+
+**Pre-registered** in `12ec02e2` (`scripts/fusion-experiment-3.py`): lexical weight {2, 4, 8} × coverage exponent {0, 1, 2} × vector floor {1, 2}, where coverage is the share of a query's distinct terms a lexical candidate's search document matches. Selection on the Praxis tuning set only, same rule as experiment 2. The hypothesis was formed after reading plan-8 Maze held-out terminology misses, so Maze held-out is not a blind check of it.
+
+**Tuning** (`praxis-fusion-experiment-3-tuning.praxis.json`): production replays exactly (0.904 / 0.723). Coverage raises MRR at weights 4 and 8 (up to 0.760) but never recall, so the rule selected lexical 2, coverage off, floor 1 (0.923 / 0.756) — a one-query recall gain out of 26.
+
+**Acceptance through the real service**, Maze held-out 80, both builds from the same commit on freshly rebuilt fixtures:
+
+| | Production, plan 8 (`maze-release-plan8-rerun-results`) | Candidate, lexical 2 (`maze-release-experiment3-lexical2-results`) |
+|---|---|---|
+| hybrid / all | 0.924 / 0.734 | 0.909 / 0.695 |
+| crossProject | 0.923 / 0.515 | **0.846** / 0.417 |
+| behaviour | 1.000 / 0.760 | 1.000 / 0.650 |
+| terminology | 0.692 / 0.413 | 0.692 / 0.438 |
+
+The candidate fails `noCategoryRegressionOver005` (cross-project recall), so it is rejected and plan 8 stays. The production rerun reproduces `maze-release-plan8-results` exactly, which confirms the rebuilt fixture. The TypeScript pilot was not run: one failed acceptance set is sufficient to reject.
+
+Findings: lowering lexical weight trades cross-project recall for nothing on terminology; term coverage improves ordering but not recall at the weights that keep cross-project intact. Terminology remains at 0.692 hybrid against 0.846 vector-only. A further attempt needs a new tuning set with enough cross-project and terminology cases to see this trade before acceptance, since the 30-query Praxis set has few cross-project cases.
+
+Reproducing the Maze fixture (18 October): the corpus revision builds with SDK 10.0.100 (the repository's `global.json`); `capture` SearchCore and UserService, merge by project key (Maze.Common appears in both, identically), add the two `RegexGenerator.g.cs` files to SearchCore's and Maze.Common's `supportSources` (six support files in total), and keep `--fixture` and every `--data` path short.
