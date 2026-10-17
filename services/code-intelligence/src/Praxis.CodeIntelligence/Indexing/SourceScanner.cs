@@ -26,6 +26,9 @@ public static class SourceScanner
                     continue;
                 }
                 if (!IsSearchableSourceFile(entry)) continue;
+                // Files over the source limit are a default exclusion (spec §78), such as a
+                // built bundle; one must not fail the whole repository.
+                if (new FileInfo(entry).Length > SourceFiles.MaximumBytes) continue;
                 candidates.Add(relative);
                 if (candidates.Count > 25_000) throw new IOException("INPUT_TOO_LARGE: repository source limit exceeded.");
             }

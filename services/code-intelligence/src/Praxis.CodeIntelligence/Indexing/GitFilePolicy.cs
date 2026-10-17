@@ -7,7 +7,7 @@ internal static class GitFilePolicy
 {
     public static IReadOnlyList<string> Filter(string root, IReadOnlyList<string> paths, CancellationToken cancellationToken)
     {
-        if (!Directory.Exists(Path.Combine(root, ".git")) && !File.Exists(Path.Combine(root, ".git"))) return paths;
+        if (!InsideGitWorkTree(root)) return paths;
         var ignored = new HashSet<string>(StringComparer.Ordinal);
         foreach (var batch in paths.Chunk(2000))
         {
@@ -37,6 +37,17 @@ internal static class GitFilePolicy
             catch { try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } throw; }
         }
         return paths.Where(path => !ignored.Contains(path)).ToArray();
+    }
+    // A registered root is often a folder inside a repository (apps/web), so look for
+    // .git in the root and every ancestor; check-ignore resolves paths against its cwd.
+    private static bool InsideGitWorkTree(string root)
+    {
+        for (var directory = new DirectoryInfo(root); directory is not null; directory = directory.Parent)
+        {
+            var marker = Path.Combine(directory.FullName, ".git");
+            if (Directory.Exists(marker) || File.Exists(marker)) return true;
+        }
+        return false;
     }
     private static async Task<string> ReadBounded(StreamReader reader, int maximum, CancellationToken cancellationToken)
     {
