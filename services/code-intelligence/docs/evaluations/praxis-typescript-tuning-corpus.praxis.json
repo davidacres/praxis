@@ -1,0 +1,478 @@
+{
+  "version": 1,
+  "sourceRevision": "bc1aeadb902934dcf3e651f4b57a66ee651544fd",
+  "reviewed": true,
+  "reviewedBy": "Claude AI source inspection, 17 October 2026; no human sign-off claimed",
+  "nearDuplicateSplitReviewed": true,
+  "negativeAbstentionReviewed": false,
+  "reviewedExplanationCount": 0,
+  "releaseMilestone": "M3",
+  "generatedExplanationsInScope": false,
+  "notes": "Fusion tuning set over Praxis (30 queries, all tuning). Written blind from doc comments to be harder than the saturated Maze tuning split: mostly terminology and behaviour, using none of the TypeScript pilot's labels. Used only to select fusion parameters; the Maze held-out split and the TypeScript pilot are the acceptance checks.",
+  "reviewMethod": "Labels from declaration names, qualified names and doc comments read from source; negative topics checked absent with grep.",
+  "queries": [
+    {
+      "id": "praxis-ts-tune-exact-01",
+      "category": "exact",
+      "query": "sessionTurnStartedAt",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "sessionTurnStartedAt",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/sessionNav.sessionTurnStartedAt"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/sessionNav.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-exact-02",
+      "category": "exact",
+      "query": "visibleText",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "visibleText",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ui/iconButtonTooltips.visibleText"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ui/iconButtonTooltips.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-exact-03",
+      "category": "exact",
+      "query": "isPausedNode",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "isPausedNode",
+          "qualifiedName": "packages/core/src/workflows/workflowRun.isPausedNode"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowRun.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-exact-04",
+      "category": "exact",
+      "query": "readRunState",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "readRunState",
+          "qualifiedName": "packages/core/src/projects/runReconciliation.readRunState"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/projects/runReconciliation.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-01",
+      "category": "terminology",
+      "query": "inline the scanner output a stage cannot open from its sandbox",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "formatUpstreamLogs",
+          "qualifiedName": "packages/core/src/workflows/workflowStageTask.formatUpstreamLogs"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowStageTask.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-02",
+      "category": "terminology",
+      "query": "connection status sent to a phone that the access rules rejected",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "refusalFor",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/mobileLanServer.refusalFor"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/mobileLanServer.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-03",
+      "category": "terminology",
+      "query": "attach to an already running lock broker without taking it over",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "connectToCoordination",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/coordinationHost.connectToCoordination"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/coordinationHost.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-04",
+      "category": "terminology",
+      "query": "hide a reply where the agent only talks about what it will do next",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "isNarration",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/chatTurns.isNarration"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/chatTurns.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-05",
+      "category": "terminology",
+      "query": "workflow templates the user saved app-wide",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "globalTemplateDefinitions",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/workflowIpc.globalTemplateDefinitions"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/workflowIpc.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-06",
+      "category": "terminology",
+      "query": "failed step waiting on the user because the provider ran out of quota",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "isPausedNode",
+          "qualifiedName": "packages/core/src/workflows/workflowRun.isPausedNode"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowRun.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-07",
+      "category": "terminology",
+      "query": "drop the internet relay unless remote access mode is selected",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "applyRelay",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/mobileListenerInstance.applyRelay"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/mobileListenerInstance.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-08",
+      "category": "terminology",
+      "query": "keep the retired Blueprint and Binary looks as patterns",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "legacySurfaceMotif",
+          "qualifiedName": "packages/core/src/config/appSettings.legacySurfaceMotif"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/config/appSettings.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-09",
+      "category": "terminology",
+      "query": "column header text colour that stays readable on the board background",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "statusLabelInlineStyle",
+          "qualifiedName": "packages/core/src/board/statusColors.statusLabelInlineStyle"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/board/statusColors.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-10",
+      "category": "terminology",
+      "query": "findings are not final until the reviewer that challenges them has answered",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "awaitingSkeptic",
+          "qualifiedName": "packages/core/src/workflows/workflowEdges.awaitingSkeptic"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowEdges.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-11",
+      "category": "terminology",
+      "query": "skip repeating the tool arguments when they just restate the tool name",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "redundantArgs",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/gadgets/ToolCompletionGadget.redundantArgs"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/gadgets/ToolCompletionGadget.tsx"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-terminology-12",
+      "category": "terminology",
+      "query": "what was running for a project before the app restarted, if anything",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "readRunState",
+          "qualifiedName": "packages/core/src/projects/runReconciliation.readRunState"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/projects/runReconciliation.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-01",
+      "category": "behaviour",
+      "query": "tear down the browser automation endpoint when a session is deleted",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "disposeBrowserMcpForSession",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/browserMcp.disposeBrowserMcpForSession"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/browserMcp.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-02",
+      "category": "behaviour",
+      "query": "drop the cached usage log after its file is cleared",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "resetAiUsageLog",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/aiUsageLogInstance.resetAiUsageLog"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/aiUsageLogInstance.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-03",
+      "category": "behaviour",
+      "query": "tell desktop windows and listeners that a workflow run changed",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "notifyWorkflowRunChanged",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/workflowOrchestratorInstance.notifyWorkflowRunChanged"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/workflowOrchestratorInstance.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-04",
+      "category": "behaviour",
+      "query": "resolve a stage inputs from what upstream stages actually produced",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "buildStageContext",
+          "qualifiedName": "packages/core/src/workflows/workflowStageSession.buildStageContext"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/workflows/workflowStageSession.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-05",
+      "category": "behaviour",
+      "query": "convert a legacy agent json record into the runtime host contract",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "toAgentHostManifest",
+          "qualifiedName": "packages/core/src/ai/agentContracts.toAgentHostManifest"
+        }
+      ],
+      "expectedEvidence": [
+        "packages/core/src/ai/agentContracts.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-06",
+      "category": "behaviour",
+      "query": "usage percentage for a provider window, computing used over limit when needed",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "windowPercent",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/ProviderUsageWindows.windowPercent"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/ai/ProviderUsageWindows.tsx"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-07",
+      "category": "behaviour",
+      "query": "ignore app-owned metadata files when deciding whether a run checkout is dirty",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "isWorkflowMetadataPath",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/workflowWorkspace.isWorkflowMetadataPath"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/workflowWorkspace.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-behaviour-08",
+      "category": "behaviour",
+      "query": "continue an agent session through the same adapter as its first turn",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "continueAgentTask",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/agentSessionLauncher.continueAgentTask"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/agentSessionLauncher.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-crossProject-01",
+      "category": "crossProject",
+      "query": "agents a skill could be activated against",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "eligibleAgentsForSkill",
+          "qualifiedName": "packages/core/src/ai/agentRuntime/agentCatalog.eligibleAgentsForSkill"
+        },
+        {
+          "name": "eligibleAgentsForSkill",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/agents/agentCatalog.eligibleAgentsForSkill"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/renderer/src/agents/agentCatalog.ts",
+        "packages/core/src/ai/agentRuntime/agentCatalog.ts"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-crossProject-02",
+      "category": "crossProject",
+      "query": "whether a provider usage snapshot has anything worth showing",
+      "split": "tuning",
+      "expected": [
+        {
+          "name": "snapshotHasUsage",
+          "qualifiedName": "apps/praxis-desktop/main/src/main/providerUsageBatch.snapshotHasUsage"
+        },
+        {
+          "name": "cardHasData",
+          "qualifiedName": "apps/praxis-desktop/renderer/src/ai/ProviderBudgetsPanel.cardHasData"
+        }
+      ],
+      "expectedEvidence": [
+        "apps/praxis-desktop/main/src/main/providerUsageBatch.ts",
+        "apps/praxis-desktop/renderer/src/ai/ProviderBudgetsPanel.tsx"
+      ],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-negative-01",
+      "category": "negative",
+      "query": "rotate TLS certificates for a load balancer",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-negative-02",
+      "category": "negative",
+      "query": "render 3D terrain meshes",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-negative-03",
+      "category": "negative",
+      "query": "schedule employee shifts and holidays",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    },
+    {
+      "id": "praxis-ts-tune-negative-04",
+      "category": "negative",
+      "query": "compress video files for streaming",
+      "split": "tuning",
+      "expected": [],
+      "expectedEvidence": [],
+      "reviewed": true
+    }
+  ],
+  "queryAndLabelHash": "sha256:9ca1405d34a1ca69ea832fff9f78e574ce58a1110dac6d2c32e3ffae6a581122"
+}
