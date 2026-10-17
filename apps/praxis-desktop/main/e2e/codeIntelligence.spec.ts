@@ -16,7 +16,10 @@ async function openPanel() {
 
     ipcMain.removeHandler('ai:codeIntelligence');
     ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
-      if (request.action === 'list') return { data: [{ id: 'pci:repo:fixture', root, state: 'ready', generation }] };
+      if (request.action === 'list') {
+        if (generation === 0) return { data: [] };
+        return { data: [{ id: 'pci:repo:fixture', root, state: 'ready', generation }] };
+      }
       if (request.action === 'rebuild') { generation++; return { data: { queued: true } }; }
       if (request.action === 'relocate') { root = String(request.root); generation++; return { data: { relocated: true } }; }
       if (request.action === 'query') {
@@ -55,6 +58,13 @@ async function openPanel() {
     ipcMain.removeHandler('ai:deleteSemanticModel');
     ipcMain.handle('ai:deleteSemanticModel', () => {
       modelInstalled = false;
+    });
+
+    ipcMain.removeHandler('ai:resetCodeIntelligence');
+    ipcMain.handle('ai:resetCodeIntelligence', () => {
+      modelInstalled = false;
+      generation = 0;
+      root = '';
     });
   });
 
@@ -138,4 +148,37 @@ test('code intelligence panel maintains accessibility in light and dark modes', 
 
     await win.screenshot({ path: testInfo.outputPath(`code-intelligence-${mode}-panel.png`) });
   }
+});
+
+test('factory reset clears repositories and resets code intelligence', async () => {
+  const { win, panel } = await openPanel();
+
+  const resetCard = panel.getByTestId('code-intel-reset-card');
+  await expect(resetCard).toBeVisible();
+
+  const resetBtn = panel.getByTestId('code-intel-reset-factory-btn');
+  await expect(resetBtn).toBeVisible();
+
+  await resetBtn.click();
+  const confirmDialog = win.getByRole('dialog', { name: 'Reset Code Intelligence to Factory Defaults?' });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole('button', { name: 'Reset to Factory Defaults' }).click();
+
+  await expect(confirmDialog).toHaveCount(0);
+  await expect(panel).toContainText('No repositories indexed yet');
+});
+
+test('overview section provides reset code intelligence to factory defaults', async () => {
+  const { win } = await openPanel();
+  await win.getByTestId('settings-nav-overview').click();
+
+  const resetBtn = win.getByTestId('reset-code-intelligence-factory');
+  await expect(resetBtn).toBeVisible();
+  await resetBtn.click();
+
+  const overlay = win.getByTestId('reset-confirmation-overlay');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText('Reset code intelligence to factory defaults?');
+  await overlay.getByRole('button', { name: 'Reset code intelligence' }).click();
+  await expect(overlay).toHaveCount(0);
 });

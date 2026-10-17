@@ -290,7 +290,7 @@ interface SettingsPageProps {
 export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview', onNewAgentItem, onOpenAgent, onOpenAgentProfile, onOpenSkill }: SettingsPageProps) {
   const [active, setActive] = useState<SettingsCategory>(initialCategory);
   const [resettingData, setResettingData] = useState(false);
-  const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data' | 'appearance'>();
+  const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data' | 'appearance' | 'code-intelligence'>();
   const { settings, update, error } = useSettings();
 
   const nav = useResizable({
@@ -355,6 +355,11 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
       await clearProjectWorkspaceBoardData();
     } else if (action === 'appearance') {
       await resetAppearanceToFactory();
+    } else if (action === 'code-intelligence') {
+      if (window.praxis?.ai?.resetCodeIntelligence) {
+        await window.praxis.ai.resetCodeIntelligence();
+      }
+      await window.praxis.window.reload();
     }
   };
 
@@ -397,6 +402,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
             onResetAppearance={() => setResetConfirmation('appearance')}
             onClearProjectWorkspaceBoardData={() => setResetConfirmation('project-data')}
             clearingProjectWorkspaceBoardData={resettingData}
+            onResetCodeIntelligence={() => setResetConfirmation('code-intelligence')}
           />
         )}
         {active === 'startup' && <StartupSection settings={settings} update={update} />}
@@ -448,7 +454,7 @@ function ResetConfirmationDialog({
   onCancel,
   onConfirm
 }: {
-  action: 'defaults' | 'sessions' | 'project-data' | 'appearance';
+  action: 'defaults' | 'sessions' | 'project-data' | 'appearance' | 'code-intelligence';
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -470,11 +476,17 @@ function ResetConfirmationDialog({
             message: 'This removes app-owned projects, workspaces, tracked boards, board layouts, and task canvases. Portable workspace files and connections will be kept.',
             confirm: 'Clear project data'
           }
-        : {
-          title: 'Reset appearance to factory defaults?',
-          message: 'This restores the factory theme, Looks, surface, motifs, priority colours, and appearance libraries. Other settings and connections will be kept.',
-          confirm: 'Reset appearance'
-          };
+        : action === 'code-intelligence'
+          ? {
+              title: 'Reset code intelligence to factory defaults?',
+              message: 'This removes all indexed repository databases, unregisters all repositories, deletes the offline semantic search model, and restores default code intelligence settings. Your source files will not be touched.',
+              confirm: 'Reset code intelligence'
+            }
+          : {
+            title: 'Reset appearance to factory defaults?',
+            message: 'This restores the factory theme, Looks, surface, motifs, priority colours, and appearance libraries. Other settings and connections will be kept.',
+            confirm: 'Reset appearance'
+            };
 
   return (
     <div className="modal-overlay" data-testid="reset-confirmation-overlay">
@@ -1763,13 +1775,15 @@ function OverviewSection({
   onReset,
   onResetAppearance,
   onClearProjectWorkspaceBoardData,
-  clearingProjectWorkspaceBoardData
+  clearingProjectWorkspaceBoardData,
+  onResetCodeIntelligence
 }: {
   settings: AppSettings;
   onReset: () => void;
   onResetAppearance: () => void;
   onClearProjectWorkspaceBoardData: () => void;
   clearingProjectWorkspaceBoardData: boolean;
+  onResetCodeIntelligence: () => void;
 }) {
   const category = CATEGORIES.find(c => c.id === 'overview')!;
   return (
@@ -1841,6 +1855,20 @@ function OverviewSection({
           data-testid="reset-appearance-factory"
         >
           Reset appearance to factory defaults
+        </button>
+      </div>
+      <div className="section-divider">
+        <strong>Reset code intelligence</strong>
+        <div className="settings-field-help">
+          Restores code intelligence to factory defaults. Wipes all local index databases, unregisters repositories, deletes the offline semantic model, and restores default settings.
+        </div>
+        <button
+          className="btn danger"
+          style={{ marginTop: 8 }}
+          onClick={onResetCodeIntelligence}
+          data-testid="reset-code-intelligence-factory"
+        >
+          Reset code intelligence to factory defaults
         </button>
       </div>
     </>

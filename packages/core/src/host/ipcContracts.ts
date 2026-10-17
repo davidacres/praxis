@@ -836,6 +836,7 @@ export interface AiIpc {
   getSemanticModelStatus(): Promise<SemanticModelStatus>;
   downloadSemanticModel(): Promise<SemanticModelStatus>;
   deleteSemanticModel(): Promise<void>;
+  resetCodeIntelligence(): Promise<void>;
   onSemanticModelProgress(listener: (event: SemanticModelProgressEvent) => void): () => void;
   /** Active provider's configuration snapshot — kept for back-compat callers. */
   getStatus(): Promise<AiProviderStatus>;

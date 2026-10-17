@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { codeIntelligenceDataDirectory, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
@@ -128,6 +128,39 @@ export function registerCodeIntelligenceIpc(): void {
 
   ipcMain.handle('ai:deleteSemanticModel', async (): Promise<void> => {
     deleteSemanticModel();
+  });
+
+  ipcMain.handle('ai:resetCodeIntelligence', async (): Promise<void> => {
+    deleteSemanticModel();
+
+    const dataDir = dataDirectory();
+    try {
+      if (existsSync(dataDir)) {
+        fs.rmSync(dataDir, { recursive: true, force: true });
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+    } catch (err) {
+      console.error('Failed to clear code intelligence data directory:', err);
+    }
+
+    try {
+      const backend = getSettingsBackend();
+      const current = backend.read();
+      const cleanedServers = (current.ai.mcpServers ?? []).filter(
+        (server: McpServerConfig) => !server.id.startsWith('praxis-code-intelligence-') && !server.env?.PRAXIS_CODE_INTELLIGENCE_PROVIDER
+      );
+      await backend.write({
+        ai: {
+          codeIntelligence: {
+            enabled: true,
+            projectOverrides: {}
+          },
+          mcpServers: cleanedServers
+        }
+      });
+    } catch (err) {
+      console.error('Failed to reset code intelligence settings:', err);
+    }
   });
 }
 

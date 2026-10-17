@@ -190,6 +190,42 @@ export function CodeIntelligencePanel({
     }
   };
 
+  const handleResetFactory = async () => {
+    const ok = await confirm({
+      title: 'Reset Code Intelligence to Factory Defaults?',
+      message:
+        'This will clear all local index databases, unregister all repositories, delete the offline semantic search model, and restore default settings. Your source code files will not be touched.',
+      confirmLabel: 'Reset to Factory Defaults',
+      danger: true
+    });
+    if (!ok) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      if (window.praxis?.ai?.resetCodeIntelligence) {
+        await window.praxis.ai.resetCodeIntelligence();
+      }
+      setRepositoryId('');
+      setStatus(undefined);
+      setModelStatus({ installed: false, active: false });
+      setRepositories([]);
+      if (servers && onServersChange) {
+        await onServersChange(
+          servers.filter(
+            server => !server.id.startsWith('praxis-code-intelligence-') && !server.env?.PRAXIS_CODE_INTELLIGENCE_PROVIDER
+          )
+        );
+      }
+      await refresh();
+      await refreshModelStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset code intelligence.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const contexts = items(record(status?.data).contexts);
 
   return (
@@ -482,6 +518,32 @@ export function CodeIntelligencePanel({
             No repositories indexed yet. Repositories are automatically indexed when opened in projects or sessions.
           </p>
         )}
+      </div>
+
+      {/* Factory Reset Card */}
+      <div className="code-intelligence-card" data-testid="code-intel-reset-card">
+        <div className="code-intelligence-card-header">
+          <h5>
+            <Icon name="trash" size={15} />
+            <span>Factory Reset</span>
+          </h5>
+        </div>
+
+        <p className="settings-hint" style={{ margin: 0 }}>
+          Reset code intelligence back to its initial factory state. This clears all local index databases, unregisters all repositories, deletes the downloaded offline semantic search model, and restores default code intelligence settings. Source code files on disk are never modified.
+        </p>
+
+        <div className="code-intelligence-actions" style={{ marginTop: 4 }}>
+          <button
+            type="button"
+            className="btn btn-sm btn-danger"
+            data-testid="code-intel-reset-factory-btn"
+            disabled={busy || downloading}
+            onClick={handleResetFactory}
+          >
+            Reset to factory defaults
+          </button>
+        </div>
       </div>
 
       <div aria-live="polite">

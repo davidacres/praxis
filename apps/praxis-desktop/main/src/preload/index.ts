@@ -247,6 +247,7 @@ const praxis: PraxisIpc = {
     getSemanticModelStatus: () => ipcRenderer.invoke('ai:getSemanticModelStatus') as Promise<SemanticModelStatus>,
     downloadSemanticModel: () => ipcRenderer.invoke('ai:downloadSemanticModel') as Promise<SemanticModelStatus>,
     deleteSemanticModel: () => ipcRenderer.invoke('ai:deleteSemanticModel') as Promise<void>,
+    resetCodeIntelligence: () => ipcRenderer.invoke('ai:resetCodeIntelligence') as Promise<void>,
     onSemanticModelProgress: (listener: (event: SemanticModelProgressEvent) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, ev: SemanticModelProgressEvent) => listener(ev);
       ipcRenderer.on('ai:semanticModelProgress', handler);
