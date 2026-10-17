@@ -74,3 +74,28 @@ Held-out 80, Recall@10 / MRR@10:
 Eight held-out queries rank their answer higher and none lower; no category regresses. Terminology remains the open opportunity: vector-only finds 0.846 of those answers, hybrid still 0.615.
 
 For the next run, compare against the `lexical16` report: it is the current baseline. Collecting tuning candidates walks deep result pages; a namespace declared in many files used to make a single match exceed the response budget and fail the page (fixed in plan 7 by shortening that item's declarations). The reproduction notes above still apply.
+
+## Vector floor — search plan 8 (2026-10-17)
+
+**Experiment 1** (`scripts/fusion-experiment.py`, pre-registered in `200e4335`):
+- Grid: lexical weight {4, 8, 16, 32} × vector floor {0–3} × lexical rank cap {none, 20, 10}.
+- Selection: tuning split only.
+- Result: on Maze, every variant reaches tuning Recall@10 1.0, so the rule kept production (`maze-fusion-experiment-1.praxis.json`). The Maze tuning split cannot rank fusion variants.
+
+**Experiment 2:**
+- Same grid and rule, with selection on a new blind 30-query Praxis tuning set (`praxis-typescript-tuning-corpus.praxis.json`, committed before collection).
+- The tuning set discriminates: production scores 0.827 / 0.683, and the selected lexical 4 + floor 1 scores 0.904 / 0.723 (`praxis-fusion-experiment-2-tuning.praxis.json`).
+- The floor keeps the best vector candidate within the first 10 places, at the last non-exact place, so exact matches keep the top and paging stays complete.
+
+**Acceptance through the real service** (neither set was used for selection):
+
+| | Plan 7 | Plan 8 |
+|---|---|---|
+| Maze held-out hybrid (`maze-release-plan8-results`) | 0.894 / 0.687 | **0.924 / 0.734**, all gates pass |
+| Maze terminology | 0.615 / 0.308 | 0.692 / 0.413 |
+| Maze behaviour | 0.933 / 0.734 | 1.000 / 0.760 |
+| Maze cross-project | 0.923 / 0.410 | 0.923 / 0.515 |
+| TypeScript pilot (`praxis-typescript-pilot-plan8-results`) | 0.787 / 0.718 | **0.838 / 0.782** |
+| TypeScript terminology | 0.500 / 0.308 | 0.667 / 0.398 |
+
+No category's recall or MRR fell on either set. The current Maze baseline is `maze-release-plan8-results`.

@@ -244,6 +244,54 @@ public sealed class ModelTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    private sealed class FixedVectorBackend(Func<IReadOnlyList<VectorCandidate>> ranked) : IVectorBackend
+    {
+        public string BackendName => "fixed-test";
+        public IReadOnlyList<VectorCandidate> FindCandidates(Microsoft.Data.Sqlite.SqliteConnection connection, Microsoft.Data.Sqlite.SqliteTransaction transaction,
+            string repositoryId, ModelQuery query, VectorSearchFilter filter, CancellationToken cancellationToken = default) => ranked();
+    }
+
+    [LocalModelFact]
+    public void TheBestVectorCandidateIsKeptOnTheFirstPageAndPagingStaysComplete()
+    {
+        // Twelve keyword matches would otherwise fill the first page; the model's best
+        // candidate (a paraphrase match with no keyword hit) must still reach place 10.
+        var root = Path.Combine(Path.GetTempPath(), "praxis-vector-floor-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+        try
+        {
+            for (var i = 0; i < 12; i++) File.WriteAllText(Path.Combine(root, $"Widget{i}.cs"), $"class Widget{i} {{ void Render() {{}} }}");
+            File.WriteAllText(Path.Combine(root, "Painter.cs"), "class Painter { void Draw() {} }");
+            var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
+            var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
+            using var store = new ModelStore(database, Path.Combine(root, "models"));
+            store.Activate(repository, store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!), CancellationToken.None);
+            string Id(string name) { using var c = database.Open(readOnly: true); return (string)c.Scalar(null, "SELECT symbol_id FROM symbols WHERE name=$0", name)!; }
+            var draw = Id("Draw");
+            store.VectorBackend = new FixedVectorBackend(() => [new VectorCandidate(draw, 0.9)]);
+            var queries = new QueryService(database, store);
+            JsonObject Page(string? cursor)
+            {
+                var arguments = new JsonObject { ["repositoryId"] = repository, ["query"] = "render", ["mode"] = "hybrid", ["limit"] = 10, ["responseBudgetTokens"] = 8000 };
+                if (cursor is not null) arguments["cursor"] = cursor;
+                return queries.Execute("search_code", arguments, new HashSet<string> { repository });
+            }
+            var first = Page(null); Assert.Null(first["error"]);
+            var firstIds = first["data"]!["matches"]!.AsArray().Select(m => m!["symbol"]!["symbolId"]!.GetValue<string>()).ToList();
+            Assert.Equal(10, firstIds.Count);
+            Assert.Equal(draw, firstIds[9]);
+            var all = new List<string>(firstIds);
+            for (var cursor = first["nextCursor"]?.GetValue<string>(); cursor is not null;)
+            {
+                var next = Page(cursor); Assert.Null(next["error"]);
+                all.AddRange(next["data"]!["matches"]!.AsArray().Select(m => m!["symbol"]!["symbolId"]!.GetValue<string>()));
+                cursor = next["nextCursor"]?.GetValue<string>();
+            }
+            Assert.Equal(all.Count, all.Distinct().Count());
+            Assert.Contains(draw, all);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [LocalModelFact]
     public void QueriesAndVectorRefreshesShareOneInferenceSession()
     {

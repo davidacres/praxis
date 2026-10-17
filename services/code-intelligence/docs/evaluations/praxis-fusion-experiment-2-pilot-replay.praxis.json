@@ -1,0 +1,1568 @@
+{
+  "corpus": "docs/evaluations/praxis-typescript-corpus.praxis.json",
+  "grid": {
+    "lexicalWeights": [
+      4,
+      8,
+      16,
+      32
+    ],
+    "vectorFloors": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "lexicalCaps": [
+      null,
+      20,
+      10
+    ]
+  },
+  "current": "lexical16-floor0-capnone",
+  "selectedOnTuning": null,
+  "currentHeldOut": {
+    "all": {
+      "recallAt10": 0.7875,
+      "mrrAt10": 0.7175,
+      "cases": 40
+    },
+    "behaviour": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 12
+    },
+    "crossProject": {
+      "recallAt10": 0.5833333333333334,
+      "mrrAt10": 0.5,
+      "cases": 6
+    },
+    "exact": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 10
+    },
+    "terminology": {
+      "recallAt10": 0.5,
+      "mrrAt10": 0.30833333333333335,
+      "cases": 12
+    }
+  },
+  "selectedHeldOut": {
+    "all": {
+      "recallAt10": 0.7875,
+      "mrrAt10": 0.7175,
+      "cases": 40
+    },
+    "behaviour": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 12
+    },
+    "crossProject": {
+      "recallAt10": 0.5833333333333334,
+      "mrrAt10": 0.5,
+      "cases": 6
+    },
+    "exact": {
+      "recallAt10": 1.0,
+      "mrrAt10": 1.0,
+      "cases": 10
+    },
+    "terminology": {
+      "recallAt10": 0.5,
+      "mrrAt10": 0.30833333333333335,
+      "cases": 12
+    }
+  },
+  "trials": [
+    {
+      "config": "lexical4-floor0-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8375,
+          "mrrAt10": 0.7819444444444444,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.39814814814814814,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor0-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8125,
+          "mrrAt10": 0.7791666666666667,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.3888888888888889,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor0-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.75,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor1-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8375,
+          "mrrAt10": 0.7819444444444444,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.39814814814814814,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor1-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8125,
+          "mrrAt10": 0.7791666666666667,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.3888888888888889,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor1-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.75,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor2-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8375,
+          "mrrAt10": 0.7819444444444444,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.39814814814814814,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor2-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8375,
+          "mrrAt10": 0.7819444444444444,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.39814814814814814,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor2-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7527777777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor3-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8375,
+          "mrrAt10": 0.7819444444444444,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.39814814814814814,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor3-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.8375,
+          "mrrAt10": 0.7819444444444444,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.39814814814814814,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical4-floor3-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7559027777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.75,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3113425925925926,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor0-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor0-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor0-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7208333333333333,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor1-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor1-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor1-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7208333333333333,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor2-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor2-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor2-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7236111111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor3-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor3-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7298611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.32175925925925924,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical8-floor3-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.726736111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5555555555555556,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3113425925925926,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor0-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7175,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.30833333333333335,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor0-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7175,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.30833333333333335,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor0-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7125,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor1-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7125,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor1-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7125,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor1-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7125,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor2-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7152777777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor2-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7152777777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor2-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7152777777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor3-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7177777777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor3-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7177777777777778,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical16-floor3-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7184027777777777,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.5,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3113425925925926,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor0-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7095833333333333,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.3,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor0-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7095833333333333,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.3,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor0-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7070833333333334,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor1-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7070833333333334,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor1-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7070833333333334,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor1-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7375,
+          "mrrAt10": 0.7070833333333334,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.3333333333333333,
+          "mrrAt10": 0.2916666666666667,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor2-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7098611111111112,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor2-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7098611111111112,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor2-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7625,
+          "mrrAt10": 0.7098611111111112,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.4166666666666667,
+          "mrrAt10": 0.30092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor3-capnone",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7123611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor3-cap20",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7123611111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3092592592592593,
+          "cases": 12
+        }
+      }
+    },
+    {
+      "config": "lexical32-floor3-cap10",
+      "tuning": null,
+      "heldOut": {
+        "all": {
+          "recallAt10": 0.7875,
+          "mrrAt10": 0.7129861111111111,
+          "cases": 40
+        },
+        "behaviour": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 12
+        },
+        "crossProject": {
+          "recallAt10": 0.5833333333333334,
+          "mrrAt10": 0.46388888888888885,
+          "cases": 6
+        },
+        "exact": {
+          "recallAt10": 1.0,
+          "mrrAt10": 1.0,
+          "cases": 10
+        },
+        "terminology": {
+          "recallAt10": 0.5,
+          "mrrAt10": 0.3113425925925926,
+          "cases": 12
+        }
+      }
+    }
+  ]
+}

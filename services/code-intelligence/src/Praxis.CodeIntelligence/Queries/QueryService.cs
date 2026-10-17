@@ -19,9 +19,18 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
         return service;
     }
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 7;
-    public const string RankingProfile = "rrf-k60-lexical16-vector1-alias0.5-v4";
-    public const double LexicalWeight = 16.0;
+    public const int SearchPlanVersion = 8;
+    public const string RankingProfile = "rrf-k60-lexical4-vector1-alias0.5-floor1-v5";
+    public const double LexicalWeight = 4.0;
+    /// <summary>
+    /// The best vector candidate is kept within the first <see cref="VectorFloorDepth"/> places.
+    /// Lexical RRF otherwise fills the first page whenever ten keyword matches exist, so a
+    /// paraphrased query whose answer only the model finds never reaches it. Selected on the
+    /// Praxis fusion tuning set (fusion experiment 2) and accepted on the Maze held-out split
+    /// and the TypeScript pilot.
+    /// </summary>
+    public const int VectorFloor = 1;
+    public const int VectorFloorDepth = 10;
     public const double AliasWeight = 0.5;
     internal Action<QueryMeasurement>? MeasurementObserver { get; init; }
     internal int VectorChunkLimit { get; init; } = 200_000;
@@ -306,8 +315,19 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         if (graphSupport.Count > 0) channels.Add("graph");
                     }
                     // Graph-only expansion never outranks a direct retrieval match.
-                    var ordered = candidates.Values.OrderByDescending(c => c.Ranks.ContainsKey("exact")).ThenByDescending(c => c.Ranks.Count > 0).ThenByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToArray();
-                    more = ordered.Length > offset + limit; var matches = new JsonArray();
+                    var ordered = candidates.Values.OrderByDescending(c => c.Ranks.ContainsKey("exact")).ThenByDescending(c => c.Ranks.Count > 0).ThenByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToList();
+                    // Vector floor: move each of the best vector candidates that fell below the
+                    // floor depth into the last non-exact place within it. Exact matches keep the
+                    // top; the displaced candidate moves down one place, so paging stays complete.
+                    foreach (var pick in ordered.Where(c => c.Ranks.ContainsKey("vector")).OrderBy(c => c.Ranks["vector"]!.GetValue<int>()).Take(VectorFloor).ToArray())
+                    {
+                        var current = ordered.IndexOf(pick);
+                        if (current < VectorFloorDepth) continue;
+                        var target = Enumerable.Range(0, Math.Min(VectorFloorDepth, ordered.Count)).LastOrDefault(i => !ordered[i].Ranks.ContainsKey("exact"), -1);
+                        if (target < 0) continue;
+                        ordered.RemoveAt(current); ordered.Insert(target, pick);
+                    }
+                    more = ordered.Count > offset + limit; var matches = new JsonArray();
                     foreach (var candidate in ordered.Skip(offset).Take(limit))
                     {
                         cancellationToken.ThrowIfCancellationRequested(); var symbol = Symbol(Text(candidate.Row, "symbol_id")!);

@@ -1123,3 +1123,15 @@ This is the first real-agent invocation in the evidence. It is one task in print
 - Exact unchanged at 1.0.
 
 Choosing from these numbers would tune on the acceptance set. A non-saturated tuning set is needed before any fusion change.
+
+## Search plan 8: vector floor — 17 October
+
+`rrf-k60-lexical4-vector1-alias0.5-floor1-v5`: lexical weight 4, with the best vector candidate kept within the first 10 places. It was selected on the blind Praxis fusion tuning set (fusion experiment 2) and accepted through the service on two sets not used for selection:
+- **Maze release evaluation:** every declared gate passes. Hybrid held-out 0.894 / 0.687 → **0.924 / 0.734**; terminology 0.615 → 0.692 recall; behaviour 0.933 → 1.000. No category regresses. p95 77 ms in the sequential CLI run.
+- **TypeScript pilot:** 0.787 / 0.718 → **0.838 / 0.782**, which now clears held-out recall ≥ 0.80. Only the pilot-size gates fail, by design. The exact-category p95 of 1.6 s includes the owner's cold start and model load on the first queries.
+
+**Tests.**
+- `TheBestVectorCandidateIsKeptOnTheFirstPageAndPagingStaysComplete` uses a fixed vector backend and fails with `VectorFloor = 0`.
+- 149 C# tests pass, 2 SDK-capture tests skipped.
+
+The floor adds a bounded reorder of the candidate list; 50k latency was not re-measured.
