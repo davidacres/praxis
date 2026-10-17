@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-10-16T22:50:12.527Z
 **Type:** Story
 **Priority:** Medium
 id: FX-BE-169
 type: Story
-status: In Progress
+status: Done
 priority: High
 created: 2026-10-15
 ---
