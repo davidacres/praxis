@@ -96,6 +96,8 @@ export function CodeSearchDialog({
   // A first model build: nothing semantic can be searched until every symbol has a vector,
   // so say how far it has got and search again once it is active.
   const [modelBuilding, setModelBuilding] = useState(false);
+  // The service returns a page that fits its response budget; the rest follows this cursor.
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const searchedQuery = useRef('');
 
   // Per-symbol detail caches
@@ -234,30 +236,36 @@ export function CodeSearchDialog({
   }, [open, modelBuilding, mode, repositoryId]);
 
   // Perform search
-  const runSearch = async (targetQuery?: string) => {
-    const q = (targetQuery ?? query).trim();
+  const runSearch = async (targetQuery?: string, cursor?: string) => {
+    const q = cursor ? searchedQuery.current : (targetQuery ?? query).trim();
     if (!q || !repositoryId) return;
 
     setBusy(true);
-    setError('');
-    setNotices([]);
-    setModelBuilding(false);
+    if (!cursor) {
+      setError('');
+      setNotices([]);
+      setModelBuilding(false);
+      setNextCursor(null);
+    }
     searchedQuery.current = q;
     try {
       const res = await call({
         action: 'query',
         tool: 'search_code',
-        arguments: { repositoryId, query: q, mode, limit: 30, responseBudgetTokens: RESPONSE_BUDGET }
+        // A cursor is only valid with the arguments of the page it came from.
+        arguments: { repositoryId, query: q, mode, limit: 30, responseBudgetTokens: RESPONSE_BUDGET, ...(cursor ? { cursor } : {}) }
       });
+      setNextCursor(typeof res.nextCursor === 'string' ? res.nextCursor : null);
       const data = record(res.data);
       const eligible = Number(data.eligibleSymbolCount ?? 0);
       const covered = Number(data.vectorCoveredSymbolCount ?? 0);
-      const warnings = items(res.warnings).map(record);
+      // A trimmed page is answered by "Show more", not by a note about cursors.
+      const warnings = items(res.warnings).map(record).filter(warning => warning.code !== 'RESPONSE_TRUNCATED');
       // Without a model nothing is building; the fallback warning already says so.
       const modelUnavailable = warnings.some(warning => warning.code === 'MODEL_UNAVAILABLE');
-      const progress = modelUnavailable ? await buildingModel() : undefined;
-      setModelBuilding(Boolean(progress));
-      setNotices([
+      const progress = modelUnavailable && !cursor ? await buildingModel() : undefined;
+      if (!cursor) setModelBuilding(Boolean(progress));
+      if (!cursor) setNotices([
         ...warnings.map(warning => progress && warning.code === 'MODEL_UNAVAILABLE' ? buildingNotice(progress, true) : String(warning.message ?? '')).filter(Boolean),
         ...(mode !== 'lexical' && !modelUnavailable && eligible > 0 && covered < eligible
           ? [`Semantic index is still building: ${covered} of ${eligible} symbols can be found by meaning so far.`]
@@ -284,7 +292,7 @@ export function CodeSearchDialog({
           });
         }
       }
-      setEvidenceMap(evMap);
+      setEvidenceMap(previous => cursor ? new Map([...previous, ...evMap]) : evMap);
 
       const rawMatches = items(record(res.data).matches);
       const parsed: CodeSearchMatch[] = rawMatches.map(m => {
@@ -307,6 +315,10 @@ export function CodeSearchDialog({
         };
       });
 
+      if (cursor) {
+        setMatches(previous => [...previous, ...parsed.filter(match => !previous.some(seen => seen.symbol.symbolId === match.symbol.symbolId))]);
+        return;
+      }
       setMatches(parsed);
       if (parsed.length > 0) {
         setSelectedSymbolId(parsed[0].symbol.symbolId);
@@ -315,7 +327,8 @@ export function CodeSearchDialog({
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Search failed.';
-      const progress = message.startsWith('MODEL_UNAVAILABLE') ? await buildingModel() : undefined;
+      setNextCursor(null);
+      const progress = !cursor && message.startsWith('MODEL_UNAVAILABLE') ? await buildingModel() : undefined;
       if (progress) {
         setMatches([]);
         setSelectedSymbolId('');
@@ -657,7 +670,7 @@ export function CodeSearchDialog({
           {/* Left Pane: Results list */}
           <div className="code-search-results-pane">
             <div className="code-search-results-header">
-              <span>{busy ? 'Searching…' : `${matches.length} matches`}</span>
+              <span>{busy && !nextCursor ? 'Searching…' : `${matches.length}${nextCursor ? '+' : ''} matches`}</span>
               {matches.length > 0 && <span>↑↓ to navigate</span>}
             </div>
 
@@ -698,6 +711,15 @@ export function CodeSearchDialog({
                   </li>
                 );
               })}
+
+              {nextCursor && matches.length > 0 && (
+                <li className="code-search-more">
+                  <button type="button" className="btn btn-sm" data-testid="code-search-more-btn" disabled={busy}
+                    onClick={() => void runSearch(undefined, nextCursor)}>
+                    {busy ? 'Loading…' : 'Show more'}
+                  </button>
+                </li>
+              )}
 
               {!busy && matches.length === 0 && !(modelBuilding && mode === 'vector') && (
                 <div className="code-search-empty-state">

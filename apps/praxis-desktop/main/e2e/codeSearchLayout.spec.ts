@@ -171,3 +171,50 @@ test('while the model is still building, semantic and hybrid show progress and s
   await expect(dialog.getByTestId('code-search-item-pci:sym:tok')).toContainText('Semantic', { timeout: 10_000 });
   await expect(notice).toHaveCount(0);
 });
+
+// A large repository fills the response budget before the page limit, so the service trims
+// the page and returns a cursor. That is answered with "Show more", never with the agent-facing
+// "continue with nextCursor" note.
+test('a page trimmed to the response budget offers Show more instead of a cursor note', async () => {
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
+  await app.electronApp.evaluate(({ ipcMain }) => {
+    const pages: Array<Record<string, unknown>> = [];
+    (globalThis as Record<string, unknown>).searchPages = pages;
+    const match = (n: number) => ({ symbol: { symbolId: `pci:sym:${n}`, qualifiedName: `App.Symbol${n}`, signature: `void Symbol${n}()`, kind: 'method', declarations: [] }, reasons: ['lexical'] });
+    ipcMain.removeHandler('ai:codeIntelligence');
+    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+      if (request.action === 'list') return { data: [{ id: 'pci:repo:big', root: '/test/big', state: 'ready', generation: 1 }] };
+      if (request.action !== 'query' || request.tool !== 'search_code') return { data: { fragments: [], items: [] }, evidence: [] };
+      const args = request.arguments as Record<string, unknown>;
+      pages.push(args);
+      if (!args.cursor)
+        return { data: { matches: [1, 2, 3].map(match) }, evidence: [], truncated: true, nextCursor: 'page-2',
+          warnings: [{ code: 'RESPONSE_TRUNCATED', message: 'Page reduced to fit the response budget; continue with nextCursor.' }] };
+      return { data: { matches: [3, 4, 5].map(match) }, evidence: [], nextCursor: null, warnings: [] };
+    });
+  });
+  const win = app.window;
+  await win.keyboard.press('ControlOrMeta+Shift+F');
+  const dialog = win.getByTestId('code-search-dialog');
+  await dialog.getByTestId('code-search-input').fill('symbol');
+  await dialog.getByTestId('code-search-submit-btn').click();
+
+  const rows = dialog.locator('[data-testid^="code-search-item-"]');
+  await expect(rows).toHaveCount(3);
+  await expect(dialog).toContainText('3+ matches');
+  await expect(dialog).not.toContainText('nextCursor');
+  await expect(dialog.getByTestId('code-search-notice')).toHaveCount(0);
+  await expect(dialog.getByTestId('code-search-item-pci:sym:1')).toHaveClass(/\bactive\b/);
+
+  await dialog.getByTestId('code-search-more-btn').click();
+  await expect(rows).toHaveCount(5); // the repeated symbol 3 is not listed twice
+  await expect(dialog).toContainText('5 matches');
+  await expect(dialog.getByTestId('code-search-more-btn')).toHaveCount(0);
+  await expect(dialog.getByTestId('code-search-item-pci:sym:1')).toHaveClass(/\bactive\b/);
+  // The cursor is only valid with the first page's arguments, so they are sent unchanged.
+  const pages = await app.electronApp.evaluate(() => (globalThis as Record<string, unknown>).searchPages as Array<Record<string, unknown>>);
+  expect(pages).toHaveLength(2);
+  const { cursor, ...rest } = pages[1];
+  expect(cursor).toBe('page-2');
+  expect(rest).toEqual(pages[0]);
+});

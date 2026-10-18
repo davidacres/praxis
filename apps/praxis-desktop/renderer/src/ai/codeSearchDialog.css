@@ -149,6 +149,12 @@
   min-width: 0;
 }
 
+.code-search-results-list > li.code-search-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+}
+
 /* A <button> sizes to its own content unless told otherwise; every row must be the
    list's full width, and its three single-line rows give every result one height. */
 .code-search-item {
