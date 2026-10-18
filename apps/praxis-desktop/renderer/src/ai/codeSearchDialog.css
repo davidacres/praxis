@@ -481,3 +481,15 @@
   color: var(--tone-accent, #3b82f6);
   font-weight: 500;
 }
+
+/* Why only Keyword is offered: the semantic index is still building, or there is no model. */
+.code-search-semantic-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}

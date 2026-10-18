@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { SemanticModelProgressEvent } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { INDEX_PROMPT_EVENT, isIndexPromptOpen } from '../app/CodeIntelTitlebarChip';
 import './semanticSearchNotification.css';
 
 export const SEMANTIC_SEARCH_DISMISS_KEY = 'praxis:semantic-search-prompt-dismissed';
@@ -18,6 +19,13 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
   const [progress, setProgress] = useState<SemanticModelProgressEvent>();
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  // The code index prompt shares this corner and comes first: an index before its model.
+  const [indexPromptOpen, setIndexPromptOpen] = useState(isIndexPromptOpen);
+  useEffect(() => {
+    const onPrompt = (event: Event) => setIndexPromptOpen(Boolean((event as CustomEvent<{ open: boolean }>).detail?.open));
+    window.addEventListener(INDEX_PROMPT_EVENT, onPrompt);
+    return () => window.removeEventListener(INDEX_PROMPT_EVENT, onPrompt);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +64,7 @@ export function SemanticSearchNotification({ onOpenSettings }: SemanticSearchNot
     };
   }, []);
 
-  if (!visible) return null;
+  if (!visible || indexPromptOpen) return null;
 
   const handleDismiss = () => {
     localStorage.setItem(update ? SEMANTIC_SEARCH_UPDATE_DISMISS_KEY : SEMANTIC_SEARCH_DISMISS_KEY, 'true');

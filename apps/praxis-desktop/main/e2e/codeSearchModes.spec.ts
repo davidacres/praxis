@@ -123,16 +123,23 @@ test('keyword, semantic and hybrid each find what they should with the real mode
   expect(names.some(name => name.includes('synthetic'))).toBe(false);
 });
 
-test('without a model, semantic search says so and hybrid says it used keywords', async () => {
+test('without a model, only keyword search is offered and the dialog says why', async () => {
   test.skip(!executable, 'Set PRAXIS_CODE_INTELLIGENCE_EXE to a host package.');
   test.setTimeout(120_000);
   const { win } = await launch(false);
   const dialog = win.getByTestId('code-search-dialog');
+  const modeChip = dialog.getByRole('button', { name: 'Search mode' }).and(win.locator('button.chip-select'));
 
-  await search(dialog, 'vector', 'decode the access credential');
-  await expect(dialog.locator('.error-banner')).toContainText('MODEL_UNAVAILABLE');
+  await expect(modeChip).toHaveAttribute('data-value', 'lexical');
+  await expect(dialog.getByTestId('code-search-semantic-status')).toContainText('need the semantic model');
+  await modeChip.click();
+  const menu = win.locator(`[id="${await modeChip.getAttribute('aria-controls')}"]`);
+  await expect(menu.locator('[role="option"][data-value="vector"]')).toBeDisabled();
+  await expect(menu.locator('[role="option"][data-value="hybrid"]')).toBeDisabled();
+  await modeChip.click(); // Escape would close the whole dialog
+  await expect(menu).toHaveCount(0);
 
-  const names = await search(dialog, 'hybrid', 'ParseBearerToken');
+  const names = await search(dialog, 'lexical', 'ParseBearerToken');
   expect(rankOf(names, 'ParseBearerToken')).toBe(0);
-  await expect(dialog.getByTestId('code-search-notice')).toContainText('lexical results returned');
+  await expect(dialog.locator('.error-banner')).toHaveCount(0);
 });

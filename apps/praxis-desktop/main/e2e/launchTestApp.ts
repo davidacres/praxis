@@ -74,6 +74,8 @@ export interface LaunchOptions {
   workflowTutorial?: boolean;
   /** Opt in to exercise the semantic search recommendation prompt on startup. Defaults to false. */
   semanticSearchPrompt?: boolean;
+  /** Opt in to the "build a code index?" prompt for an unindexed project folder. Defaults to false. */
+  codeIndexPrompt?: boolean;
 }
 
 const AI_ONBOARDED_KEY = 'praxis-ai-onboarded';
@@ -82,6 +84,8 @@ const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 const SEMANTIC_SEARCH_DISMISS_KEY = 'praxis:semantic-search-prompt-dismissed';
 const SEMANTIC_SEARCH_UPDATE_DISMISS_KEY = 'praxis:semantic-search-update-dismissed';
+/** "Not now" for every folder (CodeIntelTitlebarChip's INDEX_PROMPT_DISMISS_PREFIX + '*'). */
+const CODE_INDEX_PROMPT_OFF_KEY = 'praxis:code-index-prompt-dismissed:*';
 
 // The app stores a durable route per workspace under
 // `praxis-last-workspace-route:<workspaceId>`. The bare key is the legacy
@@ -155,20 +159,22 @@ export async function launchTestApp(
   const skipAiOnboarding = options?.aiOnboarding !== true;
   const skipWorkflowTutorial = options?.workflowTutorial !== true;
   const skipSemanticSearchPrompt = options?.semanticSearchPrompt !== true;
+  const indexPromptOffKey = options?.codeIndexPrompt === true ? '' : CODE_INDEX_PROMPT_OFF_KEY;
   if (options?.workspace !== false) {
-    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding, skipWorkflowTutorial, skipSemanticSearchPrompt);
+    await seedWorkspace(window, options?.openNewSession !== false, skipAiOnboarding, skipWorkflowTutorial, skipSemanticSearchPrompt, indexPromptOffKey);
     await window.waitForLoadState('domcontentloaded');
     if (!options?.keepSplash) {
       await dismissSplash(window);
     }
-  } else if (skipAiOnboarding || skipSemanticSearchPrompt) {
+  } else if (skipAiOnboarding || skipSemanticSearchPrompt || indexPromptOffKey) {
     await window.evaluate(
-      ({ aiKey, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt }) => {
+      ({ aiKey, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt, indexPromptOffKey }) => {
+        if (indexPromptOffKey) localStorage.setItem(indexPromptOffKey, 'true');
         localStorage.setItem(aiKey, '1');
         if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
         if (skipSemanticSearchPrompt) { localStorage.setItem(searchKey, 'true'); localStorage.setItem(searchUpdateKey, 'true'); }
       },
-      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY, skipSemanticSearchPrompt }
+      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY, skipSemanticSearchPrompt, indexPromptOffKey }
     );
     await window.reload();
     await window.waitForLoadState('domcontentloaded');
@@ -191,10 +197,12 @@ async function seedWorkspace(
   openNewSession: boolean,
   skipAiOnboarding: boolean,
   skipWorkflowTutorial: boolean,
-  skipSemanticSearchPrompt: boolean
+  skipSemanticSearchPrompt: boolean,
+  indexPromptOffKey: string
 ): Promise<void> {
   await window.evaluate(
-    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt }) => {
+    async ({ activeKey, routeKey, openNewSession, aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt, indexPromptOffKey }) => {
+      if (indexPromptOffKey) localStorage.setItem(indexPromptOffKey, 'true');
       if (skipAiOnboarding) localStorage.setItem(aiKey, '1');
       if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
       if (skipSemanticSearchPrompt) { localStorage.setItem(searchKey, 'true'); localStorage.setItem(searchUpdateKey, 'true'); }
@@ -220,7 +228,8 @@ async function seedWorkspace(
       skipWorkflowTutorial,
       searchKey: SEMANTIC_SEARCH_DISMISS_KEY,
       searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY,
-      skipSemanticSearchPrompt
+      skipSemanticSearchPrompt,
+      indexPromptOffKey
     }
   );
   await window.reload();

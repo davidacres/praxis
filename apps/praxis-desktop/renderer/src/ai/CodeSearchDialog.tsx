@@ -23,6 +23,34 @@ function shortSymbolName(qualifiedName: string, segments = 1): string {
   return parts.slice(-segments).join('.') || qualifiedName;
 }
 
+type SemanticAvailability = { state: 'unknown' | 'active' | 'building' | 'none'; current?: number; eligible?: number };
+
+/** Whether the repository's semantic vectors can be searched, from its index status. */
+function semanticAvailability(status: CodeIntelligenceResponse): SemanticAvailability {
+  const models = items(record(status.data).models).map(record);
+  if (models.some(model => model.state === 'active')) return { state: 'active' };
+  const building = models.find(model => model.state === 'building');
+  if (!building) return { state: 'none' };
+  const coverage = record(building.coverage);
+  return { state: 'building', current: Number(coverage.current ?? 0), eligible: Number(coverage.eligible ?? 0) };
+}
+
+/** Why Semantic and Hybrid are not offered yet, or undefined when they are. */
+function semanticUnavailableReason(semantic: SemanticAvailability): string | undefined {
+  if (semantic.state === 'none') return 'Needs the semantic model (Settings → Code Intelligence)';
+  if (semantic.state !== 'building') return undefined;
+  if (!semantic.eligible) return 'Available once indexing finishes';
+  return `Semantic index building: ${Math.min(99, Math.floor((semantic.current ?? 0) / semantic.eligible * 100))}% (${(semantic.current ?? 0).toLocaleString()} of ${semantic.eligible.toLocaleString()})`;
+}
+
+/** The line under the search box while only Keyword is offered. */
+function semanticStatusText(semantic: SemanticAvailability): string {
+  if (semantic.state === 'none') return 'Keyword search only: Semantic and Hybrid need the semantic model (Settings → Code Intelligence).';
+  if (!semantic.eligible) return 'Keyword search only until indexing finishes; Semantic and Hybrid follow.';
+  const current = semantic.current ?? 0;
+  return `Keyword search only until the semantic index finishes: ${Math.min(99, Math.floor(current / semantic.eligible * 100))}% (${current.toLocaleString()} of ${semantic.eligible.toLocaleString()} symbols).`;
+}
+
 function items(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
@@ -196,6 +224,37 @@ export function CodeSearchDialog({
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
+
+  // Semantic and Hybrid need a vector for every symbol; until the repository's model is active
+  // only Keyword is offered (Hybrid would silently be Keyword). Keyword is chosen meanwhile and
+  // Hybrid restored when the model becomes active, unless the person picked a mode themselves.
+  const [semantic, setSemantic] = useState<SemanticAvailability>({ state: 'unknown' });
+  const forcedKeyword = useRef(false);
+  useEffect(() => {
+    if (!open || !repositoryId) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const check = async () => {
+      let next: SemanticAvailability = { state: 'unknown' };
+      try {
+        const status = await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: RESPONSE_BUDGET } });
+        next = semanticAvailability(status);
+      } catch { /* unknown: offer every mode and let the search say what it can */ }
+      if (cancelled) return;
+      setSemantic(next);
+      if (next.state === 'building') timer = window.setTimeout(() => void check(), 5000);
+    };
+    void check();
+    return () => { cancelled = true; window.clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, repositoryId]);
+  useEffect(() => {
+    if (semantic.state === 'unknown') return;
+    if (semantic.state !== 'active' && mode !== 'lexical') { forcedKeyword.current = true; setMode('lexical'); }
+    else if (semantic.state === 'active' && forcedKeyword.current) { forcedKeyword.current = false; setMode('hybrid'); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semantic.state]);
+  const semanticUnavailable = semanticUnavailableReason(semantic);
 
   // A mode change answers the same question again in the new mode; otherwise the old
   // results stay on screen under the new mode's name.
@@ -634,11 +693,11 @@ export function CodeSearchDialog({
             <ChipSelect
               ariaLabel="Search mode"
               value={mode}
-              onChange={val => setMode(val as 'hybrid' | 'lexical' | 'vector')}
+              onChange={val => { forcedKeyword.current = false; setMode(val as 'hybrid' | 'lexical' | 'vector'); }}
               options={[
-                { value: 'hybrid', label: 'Hybrid', meta: 'Keywords + semantic vectors' },
+                { value: 'hybrid', label: 'Hybrid', meta: 'Keywords + semantic vectors', disabled: Boolean(semanticUnavailable), description: semanticUnavailable },
                 { value: 'lexical', label: 'Keyword', meta: 'Names and text only' },
-                { value: 'vector', label: 'Semantic', meta: 'Meaning only (local model)' }
+                { value: 'vector', label: 'Semantic', meta: 'Meaning only (local model)', disabled: Boolean(semanticUnavailable), description: semanticUnavailable }
               ]}
             />
 
@@ -675,6 +734,12 @@ export function CodeSearchDialog({
             </div>
 
             {error && <div className="error-banner" style={{ margin: 8 }}>{error}</div>}
+            {semanticUnavailable && (
+              <div className="code-search-semantic-status" role="status" data-testid="code-search-semantic-status">
+                <Icon name={semantic.state === 'building' ? 'refresh' : 'info'} size={12} />
+                <span>{semanticStatusText(semantic)}</span>
+              </div>
+            )}
             {notices.length > 0 && (
               <div className="code-search-notice" role="status" data-testid="code-search-notice">
                 {notices.map(notice => <div key={notice}>{notice}</div>)}

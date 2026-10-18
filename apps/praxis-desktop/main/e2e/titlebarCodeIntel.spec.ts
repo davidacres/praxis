@@ -1,14 +1,20 @@
-import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { expect, test, type Page } from '@playwright/test';
+import { closeTestApp, dismissSplash, launchTestApp, type TestApp } from './launchTestApp';
 
 // The title bar chip reports the project's code search: Indexing… while the index builds,
 // "Semantic N%" with a keyword icon while vectors build, Hybrid with a sparkles icon once the
 // model is active. It must never wake a service that has idled out. Stubbed service so each
 // state can be stepped through deterministically.
 let app: TestApp | undefined;
+let folder: string | undefined;
 test.afterEach(async () => {
   if (app) await closeTestApp(app);
   app = undefined;
+  if (folder) fs.rmSync(folder, { recursive: true, force: true });
+  folder = undefined;
 });
 
 type Stub = { running: boolean; hasIndex?: boolean; repoState: string; model?: { state: string; current: number }; calls: string[] };
@@ -90,27 +96,97 @@ test('the chip shows keyword search without a model and never wakes an idle serv
   await expect(chip).toHaveText('Keyword');
 });
 
-test('a profile with nothing indexed shows no chip and starts no service', async () => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    const stub: Stub = { running: false, hasIndex: false, repoState: 'ready', calls: [] };
+/** A project whose folder is `folder`, opened so the title bar reports on it. */
+async function openProjectFolder(win: Page): Promise<string> {
+  folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-chip-')));
+  fs.writeFileSync(path.join(folder, 'Example.cs'), 'public class Example { }\n');
+  await win.evaluate(async folderPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    await window.praxis.projects.create({
+      name: 'Chip project', key: 'CHIP', type: 'product', purpose: '', brief: {},
+      startingPoint: 'existing-folder', folderPath, planningMode: 'files',
+      workflowStages: [{ id: 'todo', name: 'To do', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }],
+      starterTickets: [], defaultAiToolMode: 'project-only'
+    }, workspace.id);
+  }, folder);
+  await win.reload();
+  await dismissSplash(win);
+  return folder;
+}
+
+/** A service that has never indexed anything and is not running, until a folder is registered. */
+async function stubUnindexedService() {
+  await app!.electronApp.evaluate(({ ipcMain }) => {
+    const stub = { running: false, hasIndex: false, registered: '' as string, repoState: 'pending', calls: [] as string[] };
     (globalThis as Record<string, unknown>).ciStub = stub;
     ipcMain.removeHandler('ai:codeIntelligence');
     ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
       stub.calls.push(String(request.tool ?? request.action));
       if (request.action === 'owner-status') return { data: { running: stub.running, hasIndex: stub.hasIndex } };
-      // A repository at the filesystem root matches whatever folder the chip reports on (and
-      // no session's own folder), so a chip that woke the service would ask for its status
-      // and show it. The session composer's own chip lists repositories too; that is not this.
-      if (request.action === 'list') return { data: [{ id: 'pci:repo:root', root: '/', state: 'ready', generation: 1 }] };
-      if (request.tool === 'get_index_status') return { data: { models: [{ fingerprint: 'sha256:m', state: 'active', coverage: { eligible: 1, current: 1 } }] } };
+      if (request.action === 'register') { stub.registered = String(request.root); stub.running = true; stub.hasIndex = true; return { data: { repositoryId: 'pci:repo:new' } }; }
+      if (request.action === 'list') return { data: stub.registered ? [{ id: 'pci:repo:new', root: stub.registered, state: stub.repoState, generation: 1 }] : [] };
+      if (request.tool === 'get_index_status') return { data: { models: stub.repoState === 'ready' ? [{ fingerprint: 'sha256:m', state: 'building', coverage: { eligible: 100, current: 25 } }] : [] } };
       return { data: {} };
     });
   });
+}
+const stubCalls = () => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as { calls: string[] }).calls);
+const registeredRoot = () => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as { registered: string }).registered);
+
+test('an unindexed folder shows Build index without starting the service, and clicking it builds', async () => {
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
+  await stubUnindexedService();
+  const root = await openProjectFolder(app.window);
   const win = app.window;
+  const chip = win.getByTestId('titlebar-code-intel');
+
+  await expect(chip).toHaveAttribute('data-state', 'unindexed');
+  await expect(chip).toHaveText('Build index');
+  await expect(chip.locator('.titlebar-code-intel-icon')).toHaveClass(/is-zap/);
+  // Nothing was started just to draw the chip: no status query, nothing registered.
+  expect(await stubCalls()).not.toContain('get_index_status');
+  expect(await registeredRoot()).toBe('');
+  // The test profile turns the launch prompt off.
+  await expect(win.getByTestId('code-index-prompt')).toHaveCount(0);
+
+  await chip.click();
+  await expect.poll(registeredRoot).toBe(root);
+  await expect(chip).toHaveText('Indexing…');
+  await app.electronApp.evaluate(() => { ((globalThis as Record<string, unknown>).ciStub as { repoState: string }).repoState = 'ready'; });
+  await expect(chip).toHaveText('Semantic 25%', { timeout: 10_000 });
+});
+
+test('on launch an unindexed folder asks once to build its index, before the model notice', async ({}, testInfo) => {
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { codeIndexPrompt: true, semanticSearchPrompt: true });
+  await stubUnindexedService();
+  const root = await openProjectFolder(app.window);
+  const win = app.window;
+  const prompt = win.getByTestId('code-index-prompt');
+
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText(`Index ${path.basename(root)}?`);
+  // One prompt at a time: the semantic model notice waits for this one.
+  await expect(win.getByTestId('semantic-search-notification')).toHaveCount(0);
+  await win.screenshot({ path: testInfo.outputPath('index-prompt.png') });
+
+  await prompt.getByTestId('code-index-prompt-build').click();
+  await expect(prompt).toHaveCount(0);
+  await expect.poll(registeredRoot).toBe(root);
+  await expect(win.getByTestId('titlebar-code-intel')).toHaveText('Indexing…');
+  await expect(win.getByTestId('semantic-search-notification')).toBeVisible();
+});
+
+test('"Not now" is remembered for the folder; the chip still builds on click', async () => {
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { codeIndexPrompt: true });
+  await stubUnindexedService();
+  await openProjectFolder(app.window);
+  const win = app.window;
+  await win.getByTestId('code-index-prompt').getByTestId('code-index-prompt-dismiss').click();
+  await expect(win.getByTestId('code-index-prompt')).toHaveCount(0);
+  expect(await registeredRoot()).toBe('');
+
   await win.reload();
-  await expect.poll(() => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as Stub).calls)).toContain('owner-status');
-  await win.waitForTimeout(1500);
-  expect(await app.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as Stub).calls)).not.toContain('get_index_status');
-  await expect(win.getByTestId('titlebar-code-intel')).toHaveCount(0);
+  await expect(win.getByTestId('titlebar-code-intel')).toHaveText('Build index');
+  await win.waitForTimeout(1000);
+  await expect(win.getByTestId('code-index-prompt')).toHaveCount(0);
 });

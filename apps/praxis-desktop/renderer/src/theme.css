@@ -695,6 +695,7 @@ textarea {
 .titlebar-code-intel-chip.is-hybrid { color: var(--text); }
 .titlebar-code-intel-chip.is-hybrid .ui-icon, .titlebar-code-intel-chip.is-building, .titlebar-code-intel-chip.is-indexing { color: var(--accent); }
 .titlebar-code-intel-chip.is-building, .titlebar-code-intel-chip.is-indexing { border-color: var(--accent); }
+.titlebar-code-intel-chip.is-unindexed { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .titlebar-code-intel-chip.is-failed { color: var(--danger); border-color: var(--danger); }
 .acp-update-notice { position: fixed; z-index: 1400; top: calc(var(--titlebar-height) + var(--space-2)); right: var(--space-3); width: min(420px, calc(100vw - 2 * var(--space-3))); padding: var(--space-3); border: 1px solid var(--accent-border, var(--border)); border-radius: calc(var(--radius-lg) + var(--surface-radius-boost)); background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent); background-image: var(--surface-panel-tint-layer); color: var(--text); box-shadow: var(--surface-accent-glow), 0 8px 28px rgba(0, 0, 0, .24); backdrop-filter: var(--surface-backdrop); }
 .acp-update-notice-head { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
