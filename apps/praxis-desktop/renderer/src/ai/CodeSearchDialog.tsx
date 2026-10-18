@@ -88,6 +88,9 @@ export function CodeSearchDialog({
   // What the service says about this answer: a fallback to keywords, or semantic coverage
   // still building. Without it, Hybrid with no model looks exactly like a working Hybrid.
   const [notices, setNotices] = useState<string[]>([]);
+  // A first model build: nothing semantic can be searched until every symbol has a vector,
+  // so say how far it has got and search again once it is active.
+  const [modelBuilding, setModelBuilding] = useState(false);
   const searchedQuery = useRef('');
 
   // Per-symbol detail caches
@@ -197,6 +200,34 @@ export function CodeSearchDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
+  /** Progress of a model still on its first build, or undefined when none is building. */
+  async function buildingModel(): Promise<{ current: number; eligible: number } | undefined> {
+    try {
+      const status = await call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: RESPONSE_BUDGET } });
+      const models = items(record(status.data).models).map(record);
+      if (models.some(model => model.state === 'active')) return undefined;
+      const building = models.find(model => model.state === 'building');
+      if (!building) return undefined;
+      const coverage = record(building.coverage);
+      return { current: Number(coverage.current ?? 0), eligible: Number(coverage.eligible ?? 0) };
+    } catch { return undefined; }
+  }
+  const buildingNotice = (progress: { current: number; eligible: number }, fallback: boolean) =>
+    `Semantic index is building: ${progress.current.toLocaleString()} of ${progress.eligible.toLocaleString()} symbols embedded. ` +
+    (fallback ? 'Keyword results are shown until it finishes.' : 'Semantic search starts when it finishes.');
+
+  useEffect(() => {
+    if (!open || !modelBuilding) return;
+    const timer = window.setInterval(() => {
+      void buildingModel().then(progress => {
+        if (progress) setNotices(current => current.map(notice => notice.startsWith('Semantic index is building') ? buildingNotice(progress, mode === 'hybrid') : notice));
+        else if (searchedQuery.current) void runSearch(searchedQuery.current);
+      });
+    }, 5000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, modelBuilding, mode, repositoryId]);
+
   // Perform search
   const runSearch = async (targetQuery?: string) => {
     const q = (targetQuery ?? query).trim();
@@ -205,6 +236,7 @@ export function CodeSearchDialog({
     setBusy(true);
     setError('');
     setNotices([]);
+    setModelBuilding(false);
     searchedQuery.current = q;
     try {
       const res = await call({
@@ -218,8 +250,10 @@ export function CodeSearchDialog({
       const warnings = items(res.warnings).map(record);
       // Without a model nothing is building; the fallback warning already says so.
       const modelUnavailable = warnings.some(warning => warning.code === 'MODEL_UNAVAILABLE');
+      const progress = modelUnavailable ? await buildingModel() : undefined;
+      setModelBuilding(Boolean(progress));
       setNotices([
-        ...warnings.map(warning => String(warning.message ?? '')).filter(Boolean),
+        ...warnings.map(warning => progress && warning.code === 'MODEL_UNAVAILABLE' ? buildingNotice(progress, true) : String(warning.message ?? '')).filter(Boolean),
         ...(mode !== 'lexical' && !modelUnavailable && eligible > 0 && covered < eligible
           ? [`Semantic index is still building: ${covered} of ${eligible} symbols can be found by meaning so far.`]
           : [])
@@ -275,7 +309,14 @@ export function CodeSearchDialog({
         setSelectedSymbolId('');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed.');
+      const message = err instanceof Error ? err.message : 'Search failed.';
+      const progress = message.startsWith('MODEL_UNAVAILABLE') ? await buildingModel() : undefined;
+      if (progress) {
+        setMatches([]);
+        setSelectedSymbolId('');
+        setModelBuilding(true);
+        setNotices([buildingNotice(progress, false)]);
+      } else setError(message);
     } finally {
       setBusy(false);
     }
@@ -653,7 +694,7 @@ export function CodeSearchDialog({
                 );
               })}
 
-              {!busy && matches.length === 0 && (
+              {!busy && matches.length === 0 && !(modelBuilding && mode === 'vector') && (
                 <div className="code-search-empty-state">
                   <Icon name="search" size={24} />
                   <span>{query.trim() ? 'No symbols or code matches found.' : 'Enter a search term to find code and symbols.'}</span>
