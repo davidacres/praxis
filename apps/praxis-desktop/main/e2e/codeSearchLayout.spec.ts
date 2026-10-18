@@ -45,11 +45,13 @@ async function openWithStub(): Promise<Page> {
       { symbol: symbol('pci:sym:long', 'App.Billing.Invoices.Calculation.InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding', 'public decimal InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding.CalculateGrandTotalIncludingAllApplicableRegionalTaxes(Invoice invoice, Region region, RoundingMode rounding)', 'method', ['pci:ev:long']), reasons: ['lexical', 'vector'] },
       { symbol: symbol('pci:sym:noloc', 'App.Generated.Unlocated', 'void Unlocated()', 'method'), reasons: ['vector'] },
       { symbol: symbol('pci:sym:ext', 'System.String.Concat', 'string string.Concat(string, string)', 'method', [], true), reasons: ['lexical'] },
-      { symbol: symbol('pci:sym:short', 'App.Run', '', 'function', ['pci:ev:short']), reasons: ['vector'] }
+      { symbol: symbol('pci:sym:short', 'App.Run', '', 'function', ['pci:ev:short']), reasons: ['vector'] },
+      { symbol: symbol('pci:sym:top', 'main/src/main/semanticModelDownload.ts [synthetic top-level entry]', '[synthetic top-level entry]', 'method', ['pci:ev:top']), reasons: ['vector'] }
     ],
     evidence: [
       { id: 'pci:ev:a', path: 'src/A.cs', range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } } },
       { id: 'pci:ev:long', path: 'src/Billing/Invoices/Calculation/InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding.cs', range: { start: { line: 120, character: 4 }, end: { line: 180, character: 5 } } },
+      { id: 'pci:ev:top', path: 'main/src/main/semanticModelDownload.ts', range: { start: { line: 0, character: 0 }, end: { line: 40, character: 0 } } },
       { id: 'pci:ev:short', path: 'Run.ts', range: { start: { line: 9, character: 0 }, end: { line: 9, character: 20 } } }
     ]
   });
@@ -67,7 +69,7 @@ test('every result row is the full list width and the same height', async ({}, t
   await dialog.getByTestId('code-search-input').fill('invoice');
   await dialog.getByTestId('code-search-submit-btn').click();
   const rows = dialog.locator('[data-testid^="code-search-item-"]');
-  await expect(rows).toHaveCount(5);
+  await expect(rows).toHaveCount(6);
   const list = await dialog.getByTestId('code-search-results-list').evaluate(element => {
     const box = element.getBoundingClientRect(); return { left: box.left, width: element.clientWidth };
   });
@@ -84,6 +86,10 @@ test('every result row is the full list width and the same height', async ({}, t
   // Each row says why it matched.
   await expect(dialog.getByTestId('code-search-item-pci:sym:a')).toContainText('Exact');
   await expect(dialog.getByTestId('code-search-item-pci:sym:long')).toContainText('Keyword · Semantic');
+  // A file's top-level code reads as that file, not as an internal record.
+  await expect(dialog.getByTestId('code-search-item-pci:sym:top').locator('.code-search-item-name')).toHaveText('semanticModelDownload.ts (top level)');
+  await expect(dialog.getByTestId('code-search-item-pci:sym:top')).toContainText('Top-level code');
+  await expect(dialog.getByTestId('code-search-results-list')).not.toContainText('synthetic');
   await dialog.screenshot({ path: testInfo.outputPath('code-search-rows.png') });
 });
 
@@ -92,7 +98,7 @@ test('changing the mode searches again and the dialog reports fallback and cover
   const dialog = win.getByTestId('code-search-dialog');
   await dialog.getByTestId('code-search-input').fill('invoice');
   await dialog.getByTestId('code-search-submit-btn').click();
-  await expect(dialog.locator('[data-testid^="code-search-item-"]')).toHaveCount(5);
+  await expect(dialog.locator('[data-testid^="code-search-item-"]')).toHaveCount(6);
   // Hybrid without a model falls back to keywords: say so instead of looking like hybrid.
   await expect(dialog.getByTestId('code-search-notice')).toContainText('lexical results returned');
   // With no model nothing is building, so no coverage line contradicts the fallback.

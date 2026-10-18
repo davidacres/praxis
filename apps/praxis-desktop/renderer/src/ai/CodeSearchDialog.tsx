@@ -13,7 +13,12 @@ function record(value: unknown): ObjectValue {
  * carry dotted parameter types (`Repo.Map(Maze.Models.User)`), so splitting on '.' alone
  * would show `User)`. Relation rows use two parts (`AuthController.Login`).
  */
+// A file's top-level statements are indexed as one symbol named after the file.
+const TOP_LEVEL_ENTRY = ' [synthetic top-level entry]';
+
 function shortSymbolName(qualifiedName: string, segments = 1): string {
+  if (qualifiedName.endsWith(TOP_LEVEL_ENTRY))
+    return `${qualifiedName.slice(0, -TOP_LEVEL_ENTRY.length).split('/').pop()} (top level)`;
   const parts = qualifiedName.replace(/\(.*\)$/, '').split('.').filter(Boolean);
   return parts.slice(-segments).join('.') || qualifiedName;
 }
@@ -289,7 +294,7 @@ export function CodeSearchDialog({
           symbol: {
             symbolId: String(sym.symbolId ?? ''),
             qualifiedName: String(sym.qualifiedName ?? ''),
-            signature: String(sym.signature ?? ''),
+            signature: sym.signature === TOP_LEVEL_ENTRY.trim() ? 'Top-level code' : String(sym.signature ?? ''),
             kind: String(sym.kind ?? 'symbol'),
             resolution: typeof sym.resolution === 'string' ? sym.resolution : undefined,
             declarations: items(sym.declarations).map(String),
