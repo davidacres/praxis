@@ -86,6 +86,7 @@ export interface CodeSearchDialogProps {
   open: boolean;
   onClose: () => void;
   initialQuery?: string;
+  initialMode?: 'hybrid' | 'lexical' | 'vector';
   initialWorkingDirectory?: string;
 }
 
@@ -104,12 +105,13 @@ export function CodeSearchDialog({
   open,
   onClose,
   initialQuery = '',
+  initialMode,
   initialWorkingDirectory
 }: CodeSearchDialogProps) {
   const [repositories, setRepositories] = useState<Array<{ id: string; root: string; state: string }>>([]);
   const [repositoryId, setRepositoryId] = useState('');
   const [query, setQuery] = useState(initialQuery);
-  const [mode, setMode] = useState<'hybrid' | 'lexical' | 'vector'>('hybrid');
+  const [mode, setMode] = useState<'hybrid' | 'lexical' | 'vector'>(initialMode ?? 'hybrid');
   const [busy, setBusy] = useState(false);
   const [detailBusy, setDetailBusy] = useState(false);
   const [error, setError] = useState('');
@@ -205,12 +207,14 @@ export function CodeSearchDialog({
     };
   }, [open, initialWorkingDirectory]);
 
-  // Focus search input when open
+  // Focus search input and apply initial state when open
   useEffect(() => {
     if (open) {
+      if (initialQuery !== undefined) setQuery(initialQuery);
+      if (initialMode) setMode(initialMode);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [open]);
+  }, [open, initialQuery, initialMode]);
 
   // Close on Escape
   useEffect(() => {
@@ -404,7 +408,7 @@ export function CodeSearchDialog({
     if (repositoryId && initialQuery) {
       void runSearch(initialQuery);
     }
-  }, [repositoryId]);
+  }, [repositoryId, initialQuery]);
 
   const selectedMatch = useMemo(
     () => matches.find(m => m.symbol.symbolId === selectedSymbolId) ?? matches[0],

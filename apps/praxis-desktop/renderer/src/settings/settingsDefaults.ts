@@ -105,7 +105,7 @@ export const DEFAULT_APP_SETTINGS = {
       extraAgentPaths: [] as string[]
     },
     workingStyle: { enabled: true, text: '' },
-    codeIntelligence: { enabled: true, projectOverrides: {} as Record<string, boolean> }
+    codeIntelligence: { enabled: true, projectOverrides: {} as Record<string, boolean>, projectSearchModes: {} as Record<string, 'hybrid' | 'lexical' | 'vector'> }
   },
   jira: {
     siteUrl: '',

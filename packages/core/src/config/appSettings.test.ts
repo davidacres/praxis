@@ -581,11 +581,19 @@ test('code intelligence settings default to enabled with empty project overrides
       codeIntelligence: {
         projectOverrides: {
           '/repo/c': true
+        },
+        searchMode: 'lexical',
+        projectSearchModes: {
+          '/repo/a': 'vector'
         }
       }
     }
   });
   assert.equal(merged.ai.codeIntelligence?.enabled, false);
+  assert.equal(merged.ai.codeIntelligence?.searchMode, 'lexical');
+  assert.deepEqual(merged.ai.codeIntelligence?.projectSearchModes, {
+    '/repo/a': 'vector'
+  });
   assert.deepEqual(merged.ai.codeIntelligence?.projectOverrides, {
     '/repo/a': true,
     '/repo/b': false,

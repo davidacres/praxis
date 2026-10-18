@@ -524,6 +524,8 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [codeSearchOpen, setCodeSearchOpen] = useState(false);
   const [codeSearchInitialDirectory, setCodeSearchInitialDirectory] = useState<string>();
+  const [codeSearchInitialQuery, setCodeSearchInitialQuery] = useState<string>();
+  const [codeSearchInitialMode, setCodeSearchInitialMode] = useState<'hybrid' | 'lexical' | 'vector'>();
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
@@ -1379,9 +1381,21 @@ export function App() {
   }, [activeProjectId, navigate, setAssistantDelegate]);
 
   useEffect(() => {
+    // The composer code-intel panel links out to the full settings category.
+    const onOpenSettings = (e: Event) => {
+      const category = (e as CustomEvent<{ category?: SettingsCategory }>).detail?.category;
+      if (category) setSettingsDialogCategory(category);
+    };
+    window.addEventListener('praxis:open-settings', onOpenSettings);
+    return () => window.removeEventListener('praxis:open-settings', onOpenSettings);
+  }, []);
+
+  useEffect(() => {
     const onOpenCodeSearch = (e: Event) => {
-      const detail = (e as CustomEvent<{ query?: string; workingDirectory?: string }>).detail;
+      const detail = (e as CustomEvent<{ query?: string; workingDirectory?: string; mode?: 'hybrid' | 'lexical' | 'vector' }>).detail;
       if (detail?.workingDirectory) setCodeSearchInitialDirectory(detail.workingDirectory);
+      setCodeSearchInitialQuery(detail?.query);
+      setCodeSearchInitialMode(detail?.mode);
       setCodeSearchOpen(true);
     };
     window.addEventListener('praxis:open-code-search', onOpenCodeSearch);
@@ -3254,6 +3268,8 @@ export function App() {
         <CodeSearchDialog
           open={codeSearchOpen}
           onClose={() => setCodeSearchOpen(false)}
+          initialQuery={codeSearchInitialQuery}
+          initialMode={codeSearchInitialMode}
           initialWorkingDirectory={
             codeSearchInitialDirectory ?? composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder
           }

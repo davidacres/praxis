@@ -230,6 +230,10 @@ export interface CodeIntelligenceSettings {
   enabled: boolean;
   /** Folders or repository roots where code intelligence has been explicitly toggled: path -> boolean. */
   projectOverrides?: Record<string, boolean>;
+  /** Default search mode for code search: 'hybrid' | 'lexical' | 'vector'. */
+  searchMode?: 'hybrid' | 'lexical' | 'vector';
+  /** Folders or repository roots where a search mode has been chosen: path -> 'hybrid' | 'lexical' | 'vector'. */
+  projectSearchModes?: Record<string, 'hybrid' | 'lexical' | 'vector'>;
 }
 
 export interface WorkingStyleSettings {
@@ -1170,7 +1174,23 @@ function readCodeIntelligence(value: unknown): CodeIntelligenceSettings {
       }
     }
   }
-  return { enabled, projectOverrides };
+  const searchMode = value.searchMode === 'hybrid' || value.searchMode === 'lexical' || value.searchMode === 'vector'
+    ? value.searchMode
+    : undefined;
+  const projectSearchModes: Record<string, 'hybrid' | 'lexical' | 'vector'> = {};
+  if (isRecord(value.projectSearchModes)) {
+    for (const [key, val] of Object.entries(value.projectSearchModes)) {
+      if (val === 'hybrid' || val === 'lexical' || val === 'vector') {
+        projectSearchModes[key] = val;
+      }
+    }
+  }
+  return {
+    enabled,
+    projectOverrides,
+    ...(searchMode ? { searchMode } : {}),
+    ...(Object.keys(projectSearchModes).length > 0 ? { projectSearchModes } : {})
+  };
 }
 
 function readPriorityColors(value: unknown): Record<string, string> {
@@ -1535,9 +1555,16 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
             ...(isRecord(patch.ai!.codeIntelligence.projectOverrides)
               ? patch.ai!.codeIntelligence.projectOverrides as Record<string, boolean>
               : {})
+          },
+          searchMode: patch.ai!.codeIntelligence.searchMode ?? base.ai.codeIntelligence?.searchMode,
+          projectSearchModes: {
+            ...(base.ai.codeIntelligence?.projectSearchModes ?? {}),
+            ...(isRecord(patch.ai!.codeIntelligence.projectSearchModes)
+              ? patch.ai!.codeIntelligence.projectSearchModes as Record<string, 'hybrid' | 'lexical' | 'vector'>
+              : {})
           }
         }
-      : (base.ai.codeIntelligence ? { ...base.ai.codeIntelligence, projectOverrides: { ...(base.ai.codeIntelligence.projectOverrides ?? {}) } } : { enabled: true, projectOverrides: {} })
+      : (base.ai.codeIntelligence ? { ...base.ai.codeIntelligence, projectOverrides: { ...(base.ai.codeIntelligence.projectOverrides ?? {}) }, projectSearchModes: { ...(base.ai.codeIntelligence.projectSearchModes ?? {}) } } : { enabled: true, projectOverrides: {} })
   };
   if (customProviders.length > 0) ai.customProviders = customProviders;
   else delete ai.customProviders;
