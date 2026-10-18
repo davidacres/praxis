@@ -41,7 +41,9 @@ async function fillVolume() {
       try { await handle.write(block, 0, size); written += size; }
       catch (error) { if (error.code !== 'ENOSPC') throw error; size >>= 1; }
     }
-    await handle.sync();
+    // Flushing a volume that is now genuinely full can itself report ENOSPC (seen on
+    // APFS in CI); the volume is full either way, which is the point.
+    await handle.sync().catch(error => { if (error.code !== 'ENOSPC') throw error; });
   } finally { await handle.close(); }
   return { filler, written };
 }

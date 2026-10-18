@@ -72,7 +72,11 @@ public sealed class KnowledgeSearchTests : IDisposable
         input ??= new();
         input["repositoryId"] = repository;
         if (!input.ContainsKey("responseBudgetTokens")) input["responseBudgetTokens"] = 8000;
-        return queries.Execute(tool, input, new HashSet<string> { repository });
+        var response = queries.Execute(tool, input, new HashSet<string> { repository });
+        // CI validates every captured response against the tool's normative schema.
+        var directory = Environment.GetEnvironmentVariable("PRAXIS_CONTRACT_SAMPLES");
+        if (directory is not null) { Directory.CreateDirectory(directory); File.WriteAllText(Path.Combine(directory, tool + "-" + Guid.NewGuid() + ".json"), response.ToJsonString()); }
+        return response;
     }
 
     [Fact]

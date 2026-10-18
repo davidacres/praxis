@@ -342,7 +342,7 @@ public sealed class Migration007Tests : IDisposable
         }
 
         var store = new DocumentStore(Database);
-        var doc = new DocumentRecord("doc-1", "repo-1", "docs/guide.md", "docs/guide.md", "chash1", "markdown", "User Guide", "{\"version\":1}", 2048);
+        var doc = new DocumentRecord("doc-1", "repo-1", "docs/guide.md", DocumentStore.ComputePathKey("docs/guide.md"), "chash1", "markdown", "User Guide", "{\"version\":1}", 2048);
         var sections = new List<DocumentSectionInput>
         {
             new("Introduction", "User Guide > Introduction", 1, 15, 0, 300, "hash_intro", "Welcome to Praxis."),
@@ -396,7 +396,7 @@ public sealed class Migration007Tests : IDisposable
         }
 
         var store = new DocumentStore(Database);
-        var doc = new DocumentRecord("doc-cas", "repo-1", "docs/cas.md", "docs/cas.md", "chash1", "markdown", "CAS Document", "{}", 1000);
+        var doc = new DocumentRecord("doc-cas", "repo-1", "docs/cas.md", DocumentStore.ComputePathKey("docs/cas.md"), "chash1", "markdown", "CAS Document", "{}", 1000);
 
         var initialSections = new List<DocumentSectionInput>
         {
@@ -450,7 +450,7 @@ public sealed class Migration007Tests : IDisposable
         // - Section B is unchanged (same hash "hash_B", shifted lines)
         // - Section C is removed
         // - Section D is new
-        var updatedDoc = new DocumentRecord("doc-cas", "repo-1", "docs/cas.md", "docs/cas.md", "chash2", "markdown", "CAS Document Edited", "{}", 1200);
+        var updatedDoc = new DocumentRecord("doc-cas", "repo-1", "docs/cas.md", DocumentStore.ComputePathKey("docs/cas.md"), "chash2", "markdown", "CAS Document Edited", "{}", 1200);
         var editedSections = new List<DocumentSectionInput>
         {
             new("Section A Modified", "CAS > Section A Modified", 1, 15, 0, 150, "hash_A_new", "Modified Body A"),
@@ -500,7 +500,7 @@ public sealed class Migration007Tests : IDisposable
         }
 
         var store = new DocumentStore(Database);
-        var doc = new DocumentRecord("doc-del", "repo-1", "docs/delete_me.md", "docs/delete_me.md", "h1", "general", "To Delete", "{}", 100);
+        var doc = new DocumentRecord("doc-del", "repo-1", "docs/delete_me.md", DocumentStore.ComputePathKey("docs/delete_me.md"), "h1", "general", "To Delete", "{}", 100);
         var sections = new List<DocumentSectionInput>
         {
             new("Heading", "To Delete > Heading", 1, 5, 0, 50, "hash1", "Content to be wiped.")

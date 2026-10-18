@@ -61,7 +61,7 @@ public sealed class DocumentParserTests
         Assert.Equal("Introduction", introSec.HeadingPath);
         Assert.Equal("This is introductory text.", introSec.Body);
         Assert.Equal(
-            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(introSec.HeadingPath + "\n" + introSec.Body))),
+            "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(introSec.HeadingPath + "\n" + introSec.Body))),
             introSec.SectionHash);
 
         var compSec = doc.Sections[1];
@@ -166,7 +166,7 @@ public sealed class DocumentParserTests
             Assert.Equal("Long Document", sec.HeadingPath);
             Assert.False(string.IsNullOrWhiteSpace(sec.Body));
             Assert.Equal(
-                Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sec.HeadingPath + "\n" + sec.Body))),
+                "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sec.HeadingPath + "\n" + sec.Body))),
                 sec.SectionHash);
         }
     }
@@ -237,7 +237,7 @@ public sealed class DocumentParserTests
         Assert.Contains("| Feature | Priority |", sec2.Body);
         Assert.Contains("| Knowledge Base | P1 |", sec2.Body);
         Assert.Equal(
-            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sec2.HeadingPath + "\n" + sec2.Body))),
+            "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sec2.HeadingPath + "\n" + sec2.Body))),
             sec2.SectionHash);
     }
 
@@ -349,7 +349,7 @@ public sealed class DocumentParserTests
         Assert.Contains("| 1 | Alice | Engineer | London |", sec.Body);
         Assert.Contains("| 3 | Charlie | Product Manager | Berlin |", sec.Body);
         Assert.Equal(
-            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sec.HeadingPath + "\n" + sec.Body))),
+            "sha256:" + Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sec.HeadingPath + "\n" + sec.Body))),
             sec.SectionHash);
     }
 

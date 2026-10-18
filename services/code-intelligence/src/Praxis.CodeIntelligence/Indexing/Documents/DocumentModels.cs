@@ -35,8 +35,9 @@ public static class DocumentModelHelpers
     public static string ToPathKey(string relativePath) =>
         OperatingSystem.IsWindows() ? relativePath.ToUpperInvariant() : relativePath;
 
+    // The service's one hash format ("sha256:" + hex), which the published contract requires.
     public static string ComputeSectionHash(string headingPath, string body) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(headingPath + "\n" + body)));
+        SourceFiles.Hash(Encoding.UTF8.GetBytes(headingPath + "\n" + body));
 
     public static int EstimateTokenCount(string text)
     {
