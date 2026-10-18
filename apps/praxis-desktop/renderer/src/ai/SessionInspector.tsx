@@ -9,7 +9,7 @@ import { SessionTasks } from './SessionTasks';
 import { SessionCoordination } from './SessionCoordination';
 import { SessionActivity } from './SessionActivity';
 import { SessionSubagentsSummaryBlock, SessionSubagentsTab } from './SessionSubagents';
-import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, reasoningSnippet, sessionMode, sessionTitle } from './sessionNav';
+import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, sessionMode, sessionTitle } from './sessionNav';
 import { agentStateLaneClass, agentStateLabel } from './aiSessionState';
 
 /**
@@ -67,7 +67,6 @@ export function SessionInspector({
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<InspectorTab>('summary');
   const [workflowRun, setWorkflowRun] = useState<WorkflowRunSummary>();
-  const [copiedReasoning, setCopiedReasoning] = useState(false);
 
   // Switching session resets to Summary. Keeping the previous tab would land
   // you on another session's Activity with no idea why you are looking at it.
@@ -136,19 +135,11 @@ export function SessionInspector({
   const tokens = formatTokens(session.tokenUsage);
   const cost = formatCost(session.cost);
   const activity = liveActivity(session);
-  const reasoning = reasoningSnippet(session);
   const failedTools = failedToolCount(session.events);
   const subagents = extractSubagents(session, sessions);
   const parentSession = session.parentSessionKey
     ? sessions.find(s => s.issueKey === session.parentSessionKey)
     : undefined;
-
-  const copyReasoning = () => {
-    if (!reasoning) return;
-    void navigator.clipboard.writeText(reasoning);
-    setCopiedReasoning(true);
-    setTimeout(() => setCopiedReasoning(false), 2000);
-  };
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -252,34 +243,6 @@ export function SessionInspector({
               </div>
             )}
 
-            {/* Open while the agent is working, as its current focus; folded away once
-                it has finished, because the same thought is already in the chat. */}
-            {reasoning && (
-              <details
-                key={finished ? 'finished' : 'live'}
-                className="agent-runtime-block session-reasoning"
-                data-testid="session-reasoning"
-                open={!finished}
-              >
-                <summary className="session-reasoning-header">
-                  <span className="rail-sub">Reasoning</span>
-                  <button
-                    type="button"
-                    className="btn btn-sm session-reasoning-copy"
-                    data-testid="session-reasoning-copy"
-                    onClick={copyReasoning}
-                    title="Copy thought process"
-                  >
-                    <Icon name={copiedReasoning ? 'check' : 'copy'} size={12} />
-                    <span>{copiedReasoning ? 'Copied' : 'Copy'}</span>
-                  </button>
-                </summary>
-                <div className="session-reasoning-scroll">
-                  <pre className="session-summary-text session-reasoning-text session-reasoning-body">{reasoning}</pre>
-                </div>
-              </details>
-            )}
-
             {/* What the agent says it's doing, live */}
             <SessionTasks session={session} />
 
@@ -330,7 +293,7 @@ export function SessionInspector({
             {/* Everything on this tab is live state, so a finished session with
                 no recorded plan has genuinely nothing to show. Saying so beats
                 a blank pane, which reads as a failure to load. */}
-            {!activity && !reasoning && !session.taskList?.length && !session.purpose && !session.handoverBrief && subagents.length === 0 && (
+            {!activity && !session.taskList?.length && !session.purpose && !session.handoverBrief && subagents.length === 0 && (
               <div className="empty-state" data-testid="session-summary-idle">
                 <Icon name="check" size={24} />
                 <span>

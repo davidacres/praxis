@@ -635,25 +635,6 @@ export function failedToolCount(events: readonly AgentEventSummary[]): number {
   ).length;
 }
 
-/**
- * The agent's reasoning stream for providers that output thinking chunks.
- * In an active turn, this reads the live stream. In a completed session,
- * it retains the latest turn's thought process for inspection.
- */
-export function reasoningSnippet(session: AgentSessionRecord): string | undefined {
-  const activeText = session.reasoningText?.trim();
-  if (activeText) return activeText;
-  if (session.events?.length) {
-    for (let i = session.events.length - 1; i >= 0; i--) {
-      const ev = session.events[i];
-      if (ev.type === 'message' && ev.reasoning?.trim()) {
-        return ev.reasoning.trim();
-      }
-    }
-  }
-  return undefined;
-}
-
 export interface SpendSummary {
   /** Totals keyed by currency, because summing across currencies is nonsense. */
   byCurrency: Array<{ currency: string; amount: number }>;

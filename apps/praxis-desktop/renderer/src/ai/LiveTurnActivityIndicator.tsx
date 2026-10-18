@@ -87,7 +87,7 @@ export function LiveTurnActivityIndicator({
       ) : (
         <StatusGlyph status="running" size="sm" ariaLabel="Active turn running" />
       )}
-      <span className="session-activity-label">{statusText}</span>
+      <span className="session-activity-label" title={variant === 'composer' ? statusText : undefined}>{statusText}</span>
       <span className="session-activity-timer" data-testid={variant === 'composer' ? 'session-composer-activity-timer' : 'session-activity-timer'} aria-label={`Elapsed time: ${formattedTime}`}>
         {formattedTime}
       </span>
