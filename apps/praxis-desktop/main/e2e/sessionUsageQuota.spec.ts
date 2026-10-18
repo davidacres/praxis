@@ -89,6 +89,33 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
   await draft.locator('.session-usage-wrapper').screenshot({ path: shot });
 });
 
+// The collapsed strip must still say something when a provider reports no account limits.
+test('collapsed usage names providers that report no limits instead of going blank', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    AI_GATEWAY_API_KEY: 'usage-unreported-e2e-key', AI_GATEWAY_URL: mock.baseUrl
+  });
+  const page = app.window;
+  await app.electronApp.evaluate(({ ipcMain }) => {
+    ipcMain.removeHandler('aiUsage:providerSnapshots');
+    ipcMain.handle('aiUsage:providerSnapshots', (_event, providers: string[]) => ({ snapshots: providers.map(provider => ({
+      provider,
+      checkedAt: new Date().toISOString(),
+      windows: [],
+      unavailableReason: 'Provider did not return usage.'
+    })), checkedAt: new Date().toISOString() }));
+  });
+  await openDraftComposer(page);
+
+  const summary = page.getByTestId('new-session-view').getByTestId('session-usage-summary');
+  const unreported = summary.locator('.composer-usage-unreported').first();
+  await expect(unreported).toHaveText('Limits not reported');
+  await expect(unreported).toHaveAttribute('title', /Provider did not return usage\./);
+  const shot = path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'composer-usage-unreported.png');
+  fs.mkdirSync(path.dirname(shot), { recursive: true });
+  await summary.screenshot({ path: shot });
+});
+
 // Proven with the IPC model filter removed: 333 provider tokens fail the expected 111.
 test('draft usage follows the selected model and keeps unfiltered dashboard totals', async () => {
   mock = await startMockGatewayServer({ mode: 'complete', models: [{ id: 'mock/first' }, { id: 'mock/second' }] });

@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **658 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **659 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -483,9 +483,10 @@ This catalogue describes **658 Playwright tests** under `apps/praxis-desktop/mai
 | PT-75B0F93373 | session Recovery | teardown drains an ACP task even when the session list already reports completion | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:110` |
 | PT-AEE8B7A3ED | session Team | a session can add several team members; a lone reviewer offers a review | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:19` |
 | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:42` |
-| PT-288744FF07 | session Usage Quota | draft usage follows the selected model and keeps unfiltered dashboard totals | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:93` |
-| PT-665B3B7D14 | session Usage Quota | session usage follows the active conversation speaker and its runtime tokens | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:127` |
-| PT-EB19D7A97A | session Usage Quota | usage attribution preserves missing tokens, currencies and legacy session totals | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:231` |
+| PT-6218719DD9 | session Usage Quota | collapsed usage names providers that report no limits instead of going blank | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:93` |
+| PT-288744FF07 | session Usage Quota | draft usage follows the selected model and keeps unfiltered dashboard totals | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:120` |
+| PT-665B3B7D14 | session Usage Quota | session usage follows the active conversation speaker and its runtime tokens | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:154` |
+| PT-EB19D7A97A | session Usage Quota | usage attribution preserves missing tokens, currencies and legacy session totals | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:258` |
 | PT-67020F5525 | settings Reset | reset to defaults asks separately before clearing saved AI session data | `apps/praxis-desktop/main/e2e/settingsReset.spec.ts:22` |
 | PT-3BA46A8FF8 | settings Reset | clears app-owned project, workspace, and board data without deleting shared connections | `apps/praxis-desktop/main/e2e/settingsReset.spec.ts:38` |
 | PT-9201555682 | shell Polish | output tab backfills the main-process log buffer | `apps/praxis-desktop/main/e2e/shellPolish.spec.ts:50` |

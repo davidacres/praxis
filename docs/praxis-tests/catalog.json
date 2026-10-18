@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 658,
+  "testCount": 659,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -7670,12 +7670,28 @@
       }
     },
     {
+      "id": "PT-6218719DD9",
+      "title": "collapsed usage names providers that report no limits instead of going blank",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
+        "line": 93,
+        "project": "functional"
+      },
+      "area": "session Usage Quota",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "collapsed usage names providers that report no limits instead of going blank",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-288744FF07",
       "title": "draft usage follows the selected model and keeps unfiltered dashboard totals",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 93,
+        "line": 120,
         "project": "functional"
       },
       "area": "session Usage Quota",
@@ -7691,7 +7707,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 127,
+        "line": 154,
         "project": "functional"
       },
       "area": "session Usage Quota",
@@ -7707,7 +7723,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 231,
+        "line": 258,
         "project": "functional"
       },
       "area": "session Usage Quota",

@@ -72,7 +72,8 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
   const data = sessionUsageData(records, selectedProvider, selectedModel, ledger?.key === recordsKey ? ledger.events : []);
   const providerKey = JSON.stringify(data.providers.map(item => item.provider));
   const [accounts, setAccounts] = useState<{ key: string; snapshots: ProviderUsageSnapshot[] }>();
-  const snapshots = accounts?.key === providerKey ? accounts.snapshots : [];
+  const accountsLoaded = accounts?.key === providerKey;
+  const snapshots = accountsLoaded ? accounts.snapshots : [];
   const [now, setNow] = useState(Date.now);
   const [open, setOpen] = useState(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -146,7 +147,7 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
           {data.providers.map(item => <span key={item.provider} title={`${providerLabel(item.provider)} · ${tokenTitle(item)}`} aria-label={`${providerLabel(item.provider)} ${tokenTitle(item)}`} data-testid={`session-usage-tokens-${item.provider}`}>{tokens(item)}</span>)}
         </span>
         {allWindows.map(({ provider, window }, index) => <Limit key={`${provider}-${index}`} window={window} provider={provider} now={now} />)}
-        {data.providers.filter(item => !account(item.provider)?.windows.length).map(item => <span className="composer-usage-unreported" key={item.provider} title={`${providerLabel(item.provider)}: ${account(item.provider)?.unavailableReason ?? 'Account limits not reported'}`}>Limits —</span>)}
+        {data.providers.filter(item => !account(item.provider)?.windows.length).map(item => <span className="composer-usage-unreported" key={item.provider} title={`${providerLabel(item.provider)}: ${account(item.provider)?.unavailableReason ?? (accountsLoaded ? 'Provider returned no account limits' : 'Account limits are loading')}`}>{accountsLoaded ? 'Limits not reported' : 'Limits loading…'}</span>)}
       </span>}
       <Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} />
       {onHide && <button type="button" className="icon-btn icon-btn-sm session-usage-hide-btn" aria-label="Hide usage bar" title="Hide usage bar" data-testid="session-usage-hide-btn"
