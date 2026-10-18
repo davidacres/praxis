@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AiProvider, ProjectRecord, WorkspaceRecord, UpdateStatus } from '@praxis/core';
 import type { SidebarMode } from './Sidebar';
+import { CodeIntelTitlebarChip } from './CodeIntelTitlebarChip';
 import { Icon, type IconName } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
 import { useUpdateStatus } from './useUpdateStatus';
@@ -69,6 +70,8 @@ export interface TitleBarProps {
   settingsOpen: boolean;
   onOpenSettings: () => void;
   onOpenAiSettings: () => void;
+  /** The current project's folder, whose code intelligence the title bar chip reports. */
+  codeIntelFolder?: string;
   /** First-run AI setup is pending: every control but the window's own caption buttons is inert. */
   locked?: boolean;
 }
@@ -127,6 +130,7 @@ export function TitleBar({
   settingsOpen,
   onOpenSettings,
   onOpenAiSettings,
+  codeIntelFolder,
   locked = false
 }: TitleBarProps) {
   const headerRef = useRef<HTMLElement>(null);
@@ -588,6 +592,7 @@ export function TitleBar({
 
       <div className="titlebar-spacer" />
 
+      <CodeIntelTitlebarChip folder={codeIntelFolder} />
       <UpdateIndicator settingsOpen={settingsOpen} onOpenAiSettings={onOpenAiSettings} />
 
       <div className="titlebar-group titlebar-layout-toggles">

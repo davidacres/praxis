@@ -689,6 +689,13 @@ textarea {
 .titlebar-update { margin-right: 6px; }
 .titlebar-update-btn { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border: 1px solid var(--accent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); font-size: var(--text-xs); white-space: nowrap; cursor: pointer; }
 .titlebar-update-btn:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.titlebar-code-intel { margin-right: 6px; }
+.titlebar-code-intel-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; -webkit-app-region: no-drag; }
+.titlebar-code-intel-chip:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.titlebar-code-intel-chip.is-hybrid { color: var(--text); }
+.titlebar-code-intel-chip.is-hybrid .ui-icon, .titlebar-code-intel-chip.is-building, .titlebar-code-intel-chip.is-indexing { color: var(--accent); }
+.titlebar-code-intel-chip.is-building, .titlebar-code-intel-chip.is-indexing { border-color: var(--accent); }
+.titlebar-code-intel-chip.is-failed { color: var(--danger); border-color: var(--danger); }
 .acp-update-notice { position: fixed; z-index: 1400; top: calc(var(--titlebar-height) + var(--space-2)); right: var(--space-3); width: min(420px, calc(100vw - 2 * var(--space-3))); padding: var(--space-3); border: 1px solid var(--accent-border, var(--border)); border-radius: calc(var(--radius-lg) + var(--surface-radius-boost)); background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent); background-image: var(--surface-panel-tint-layer); color: var(--text); box-shadow: var(--surface-accent-glow), 0 8px 28px rgba(0, 0, 0, .24); backdrop-filter: var(--surface-backdrop); }
 .acp-update-notice-head { display: flex; align-items: center; gap: var(--space-2); color: var(--accent); }
 .acp-update-notice-head strong { flex: 1 1 auto; color: var(--text); font-size: var(--text-sm); }
@@ -708,6 +715,9 @@ textarea {
 @media (max-width: 1100px) {
   .titlebar-logo,
   .titlebar-version { display: none; }
+  /* The code search chip keeps its icon; its tooltip still says the rest. */
+  .titlebar-code-intel-chip > span { display: none; }
+  .titlebar-code-intel-chip { padding: 0 6px; }
 }
 /* Windows and Linux draw minimise / maximise / close at the right edge (macOS keeps its traffic
    lights on the left), so there the absolutely-centred group runs into the layout buttons below

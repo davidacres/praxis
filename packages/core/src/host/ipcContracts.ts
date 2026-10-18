@@ -812,6 +812,8 @@ export interface CodeIntelligenceOwnerStatus {
   startedUtc?: string;
   currentBuild?: string;
   outdated?: boolean;
+  /** Whether the data directory holds an index, i.e. something was ever registered. */
+  hasIndex?: boolean;
 }
 export interface CodeIntelligenceResponse {
   indexGeneration?: number | null;

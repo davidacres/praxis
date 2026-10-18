@@ -104,7 +104,9 @@ async function ownerStatus(): Promise<CodeIntelligenceResponse> {
   if (status.error) return status;
   const data = (status.data ?? {}) as CodeIntelligenceOwnerStatus;
   const currentBuild = (version.data as { build?: string } | undefined)?.build;
-  return { data: { ...data, currentBuild, outdated: data.running === true && !!currentBuild && data.build !== currentBuild } };
+  return { data: { ...data, currentBuild, outdated: data.running === true && !!currentBuild && data.build !== currentBuild,
+    // Whether anything was ever indexed here, so a caller can decide whether starting the service is worth it.
+    hasIndex: existsSync(path.join(dataDirectory(), 'index.db')) } };
 }
 async function ownerStart(): Promise<CodeIntelligenceResponse> {
   const started = await invoke(['list']);

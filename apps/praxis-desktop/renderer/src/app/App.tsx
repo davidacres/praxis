@@ -2454,6 +2454,7 @@ export function App() {
       <WindowCloseGuard />
       <TitleBar
         appVersion={appVersion}
+        codeIntelFolder={composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder}
         contextLabel={contextLabel}
         contextIcon={contextIcon}
         workspaces={workspaces}
