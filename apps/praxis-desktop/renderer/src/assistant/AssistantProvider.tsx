@@ -47,6 +47,7 @@ export interface AssistantController {
   activeTurnStartedAt?: number;
   activeToolSession?: AgentSessionRecord;
   lastToolSession?: AgentSessionRecord;
+  toolUsageSessions: AgentSessionRecord[];
   error?: string;
   draft: string;
   setDraft: (draft: string) => void;
@@ -92,10 +93,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<number>();
   const [activeToolSession, setActiveToolSession] = useState<AgentSessionRecord>();
   const [lastToolSession, setLastToolSession] = useState<AgentSessionRecord>();
+  const [toolUsageSessions, setToolUsageSessions] = useState<AgentSessionRecord[]>([]);
   const activeToolPrefix = useRef<string>();
   useEffect(() => window.praxis.ai.onSessionChanged(record => {
     if (activeToolPrefix.current && record.issueKey.startsWith(`${activeToolPrefix.current}-`)) {
       setActiveToolSession(record);
+      setToolUsageSessions(current => current.some(item => item.sessionId === record.sessionId)
+        ? current.map(item => item.sessionId === record.sessionId ? record : item) : [...current, record]);
       if (['completed', 'failed', 'aborted'].includes(record.state)) setLastToolSession(record);
     }
   }), []);
@@ -186,6 +190,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setChatId(undefined);
     setError(undefined);
     setLastToolSession(undefined);
+    setToolUsageSessions([]);
     setAppliedActions({});
   }, []);
 
@@ -265,6 +270,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const loadChat = useCallback(async (id: string) => {
     const chat = await window.praxis.assistant.getChat(id);
     if (!chat) return;
+    if (chatIdRef.current !== id) {
+      setLastToolSession(undefined);
+      setToolUsageSessions([]);
+    }
     messagesRef.current = chat.messages;
     chatIdRef.current = chat.id;
     setMessages(chat.messages);
@@ -308,11 +317,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }), [reset]);
 
   const value = useMemo<AssistantController>(() => ({
-    open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, error, draft, setDraft, teamMembers, toggleTeamMember,
+    open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, setDraft, teamMembers, toggleTeamMember,
     pageContext, availableContext, contextDetached, setContextDetached,
     projectId, setProjectId, chatId, send, newChat: reset, loadChat, chatDeleted,
     applyAction, appliedActions, register, unregister, setSessionDelegate
-  }), [open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, error, draft, pageContext, availableContext, contextDetached,
+  }), [open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, pageContext, availableContext, contextDetached,
     setContextDetached, projectId, setProjectId, chatId, send, reset, loadChat, chatDeleted, applyAction,
     teamMembers, toggleTeamMember,
     appliedActions, register, unregister, setSessionDelegate]);

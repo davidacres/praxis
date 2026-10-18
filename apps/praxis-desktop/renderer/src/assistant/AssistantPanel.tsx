@@ -205,7 +205,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
 
       <div className="assistant-composer-area">
       <div className="session-usage-wrapper">
-        <SessionUsageSummary session={a.activeToolSession ?? a.lastToolSession} sessions={[]} spendLimit={settings?.ai.spendLimit ?? 0} draftProvider={provider} draftModel={model} activityLabel="Team chat usage unavailable" />
+        <SessionUsageSummary session={a.activeToolSession ?? a.lastToolSession} usageSessions={a.toolUsageSessions} sessions={a.toolUsageSessions} spendLimit={settings?.ai.spendLimit ?? 0} draftProvider={provider} draftModel={model} activityLabel={a.toolUsageSessions.length ? 'Tool runtime totals only; team chat usage is not reported' : 'Team chat usage unavailable'} />
       </div>
       <AssistantComposer
         value={a.draft}

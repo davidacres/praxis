@@ -1125,9 +1125,9 @@ export interface AiUsageIpc {
   /**
    * Bucketed totals for the `periodsBack` most recent periods at this granularity, oldest first, zero-filled.
    * Pass `provider` to scope the buckets to one provider (the session usage bar shows the selected
-   * provider's totals next to its account quota); omit it for account-wide totals.
+   * provider's totals next to its account quota); pass `model` for one model's totals.
    */
-  series(granularity: UsageGranularity, periodsBack: number, provider?: AiProvider): Promise<UsageBucket[]>;
+  series(granularity: UsageGranularity, periodsBack: number, provider?: AiProvider, model?: string): Promise<UsageBucket[]>;
   /** The latest period vs. the one before it — "more or less AI than last week", generalised to day/week/month. */
   compareLatestPeriod(granularity: UsageGranularity): Promise<UsageComparison>;
   /** Today / week / month / all-time totals, per-model breakdowns and peaks in one read — the Overview panel and Settings model breakdown. */
@@ -1137,12 +1137,13 @@ export interface AiUsageIpc {
   /** Provider account usage/limits, when the provider exposes a supported API. */
   providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot>;
   /**
-   * Every enabled provider's account usage in one read (FX-BF-050). The
+   * Account usage in one read, optionally scoped to providers used in a session.
+   * Without a provider list, reads every enabled provider (FX-BF-050). The
    * Overview dashboard needs all of them at once and the Codex adapter spawns
    * a CLI process, so a per-provider loop from the renderer would be N process
    * spawns per page load. One provider failing never fails the batch.
    */
-  providerSnapshots(): Promise<ProviderUsageSnapshotsResult>;
+  providerSnapshots(providers?: AiProvider[]): Promise<ProviderUsageSnapshotsResult>;
   /** On-demand historical account usage; never writes to the local ledger. */
   providerHistory(provider: AiProvider): Promise<ProviderUsageHistory>;
   /** Stores a provider's optional admin/usage credential in the OS keychain. */

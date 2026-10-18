@@ -152,7 +152,7 @@ test('assistant composer selects provider, model, reasoning, and permission mode
   expect(assistantStyle.background).toBe(sessionStyle.background);
   expect(assistantStyle.radius).toBe(sessionStyle.radius);
   await expect(win.getByTestId('assistant-context-indicator')).toHaveAttribute('aria-label', 'Context usage unavailable');
-  await expect(win.getByTestId('assistant-panel').getByTestId('session-usage-summary')).toContainText('Team chat usage unavailable');
+  await expect(win.getByTestId('assistant-panel').getByTestId('session-usage-summary')).toContainText('Not reported');
   await expect(win.getByTestId('assistant-provider')).toContainText('Mock');
   await expect(win.getByTestId('assistant-model')).toContainText('mock-model');
   await expect(win.getByTestId('assistant-reasoning')).toHaveAttribute('data-value', 'medium');

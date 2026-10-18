@@ -176,11 +176,11 @@ test('draft and existing sessions share the composer frame and input layout', as
   await page.getByTestId('project-session-new').first().click();
   const draft = page.getByTestId('new-session-view');
   const card = draft.locator('.session-follow-up-composer');
-  await expect(draft.getByTestId('session-usage-summary')).toContainText('Not started');
-  await draft.getByTestId('session-usage-summary').locator('summary').click();
-  await expect(draft.locator('.session-usage-details-content')).toContainText('No usage recorded for this session yet');
-  await draft.getByTestId('session-usage-summary').locator('summary').click();
-  await expect(draft.locator('.session-usage-details-content')).toBeHidden();
+  await expect(draft.getByTestId('session-usage-summary')).toContainText('Not reported');
+  await draft.getByTestId('session-usage-summary').locator(':scope > summary').click();
+  await expect(draft.locator('.composer-usage-expanded')).toContainText('No usage recorded for this session yet');
+  await draft.getByTestId('session-usage-summary').locator(':scope > summary').click();
+  await expect(draft.locator('.composer-usage-expanded')).toBeHidden();
   await expect(draft.getByTestId('new-session-context-indicator')).toBeVisible();
   await expect(card.locator('.session-mode-panel')).toBeVisible();
   await expect(card.locator('.composer-controls .session-mode-toggle')).toHaveCount(0);

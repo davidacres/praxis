@@ -1092,8 +1092,8 @@ test('session failure displays unified error banner above the chat panel and not
   // Usage displays model name before tokens
   const usageSummary = win.locator('[data-testid="session-usage-summary"]');
   await expect(usageSummary).toBeVisible();
-  const usageMeta = usageSummary.locator('.session-usage-summary-meta');
-  await expect(usageMeta).toContainText('anthropic/claude-sonnet-4.6 · ');
+  const usageMeta = usageSummary.getByTestId('session-usage-current');
+  await expect(usageMeta).toContainText('anthropic/claude-sonnet-4.6');
 
   // Dismissing the error banner resets it
   const dismissBtn = win.locator('[data-testid="session-error-banner-dismiss"]');

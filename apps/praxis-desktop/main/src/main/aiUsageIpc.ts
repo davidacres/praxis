@@ -213,10 +213,10 @@ export function registerAiUsageIpc(): void {
   registerProviderUsageAdapter('codex-cli', codexCliSnapshot);
   registerProviderUsageAdapter('claude-code-cli', claudeCodeSnapshot);
   registerProviderUsageAdapter('antigravity-cli', antigravitySnapshot);
-  // Optional provider scoping: the session usage bar shows the selected provider next to its
-  // account quota; omitting the filter keeps account-wide totals for the dashboards.
-  ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number, provider?: AiProvider) =>
-    usageSeries(getAiUsageLog().list(), granularity, periodsBack, new Date(), provider)
+  // Composers scope local totals to the current provider/model. Account quota remains
+  // provider-wide; dashboards omit both filters to retain their account-wide totals.
+  ipcMain.handle('aiUsage:series', async (_event, granularity: UsageGranularity, periodsBack: number, provider?: AiProvider, model?: string) =>
+    usageSeries(getAiUsageLog().list().filter(event => !model || event.model === model), granularity, periodsBack, new Date(), provider)
   );
   ipcMain.handle('aiUsage:compareLatestPeriod', async (_event, granularity: UsageGranularity) =>
     compareLatestPeriod(getAiUsageLog().list(), granularity)
@@ -225,7 +225,8 @@ export function registerAiUsageIpc(): void {
   ipcMain.handle('aiUsage:listEvents', async () => getAiUsageLog().list());
   ipcMain.handle('aiUsage:providerHistory', async (_event, provider: AiProvider) => providerHistory(provider));
   ipcMain.handle('aiUsage:providerSnapshot', async (_event, provider: AiProvider) => providerSnapshot(provider));
-  ipcMain.handle('aiUsage:providerSnapshots', async () => {
+  ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers?: AiProvider[]) => {
+    if (providers) return readProviderSnapshots([...new Set(providers)], providerSnapshot);
     const settings = getSettingsBackend().read().ai;
     let configured: AiProvider[] = [];
     try {
