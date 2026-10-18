@@ -193,16 +193,30 @@ public static class OwnerService
     /// <summary>The running owner's status, or <c>running: false</c>. Never starts an owner.</summary>
     public static async Task<JsonObject> ProbeAsync(string directory, CancellationToken cancellationToken)
     {
-        var response = await TrySendToRunningAsync(directory, new JsonObject { ["action"] = "owner-status" }, cancellationToken);
-        return response?["data"]?.AsObject().DeepClone().AsObject() ?? new JsonObject { ["running"] = false };
+        var (response, processId) = await TrySendToRunningAsync(directory, new JsonObject { ["action"] = "owner-status" }, cancellationToken);
+        if (response is null) return new JsonObject { ["running"] = false };
+        // An owner from before lifecycle requests answers with an error: it is running, but its
+        // build is unknown, so a client must treat it as another build.
+        return response["data"] as JsonObject is { } data ? data.DeepClone().AsObject()
+            : new JsonObject { ["running"] = true, ["processId"] = processId, ["build"] = null, ["startedUtc"] = null };
     }
 
     /// <summary>Asks a running owner to shut down and waits for it to exit. Never starts an owner.</summary>
     public static async Task<JsonObject> StopAsync(string directory, CancellationToken cancellationToken)
     {
-        var response = await TrySendToRunningAsync(directory, new JsonObject { ["action"] = "shutdown" }, cancellationToken);
-        if (response?["data"] is not JsonObject data) return new JsonObject { ["stopped"] = false, ["running"] = false };
+        var (response, processId) = await TrySendToRunningAsync(directory, new JsonObject { ["action"] = "shutdown" }, cancellationToken);
+        if (response is null || processId is null) return new JsonObject { ["stopped"] = false, ["running"] = false };
         var rendezvous = Path.Combine(SourceFiles.CanonicalDirectory(directory), "owner.json");
+        if (response["data"] is not JsonObject data)
+        {
+            // An owner from before lifecycle requests cannot shut down on request. It just proved
+            // it is this directory's authenticated owner, so end it as a crash would; the next
+            // owner reclaims its leases (see the crash-recovery qualification).
+            try { using var legacy = Process.GetProcessById(processId.Value); legacy.Kill(); await legacy.WaitForExitAsync(cancellationToken); }
+            catch (ArgumentException) { } // already gone
+            if (OwnerProcess(rendezvous) == processId) File.Delete(rendezvous);
+            return new JsonObject { ["stopped"] = true, ["running"] = false, ["processId"] = processId };
+        }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(20));
         // The owner removes its rendezvous as its last act; a replacement writes a new one
         // with another process ID, which also means this one has gone.
@@ -217,31 +231,36 @@ public static class OwnerService
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException) { return null; }
     }
 
-    private static async Task<JsonObject?> TrySendToRunningAsync(string directory, JsonObject request, CancellationToken cancellationToken)
+    /// <summary>
+    /// Sends to an owner already running, with its process ID. A null response means none is
+    /// reachable. An error response still proves a live, authenticated owner.
+    /// </summary>
+    private static async Task<(JsonObject? Response, int? ProcessId)> TrySendToRunningAsync(string directory, JsonObject request, CancellationToken cancellationToken)
     {
         directory = Path.GetFullPath(directory);
-        if (!Directory.Exists(directory)) return null;
+        if (!Directory.Exists(directory)) return (null, null);
         directory = SourceFiles.CanonicalDirectory(directory);
         var rendezvous = Path.Combine(directory, "owner.json");
-        if (!File.Exists(rendezvous)) return null;
+        if (!File.Exists(rendezvous)) return (null, null);
         try
         {
-            var bytes = File.ReadAllBytes(rendezvous); if (bytes.Length > 4096) return null;
+            var bytes = File.ReadAllBytes(rendezvous); if (bytes.Length > 4096) return (null, null);
             var owner = JsonNode.Parse(bytes)!; var endpoint = owner["endpoint"]!.GetValue<string>();
-            if (endpoint != Endpoint(directory) || owner["version"]!.GetValue<int>() != 1) return null;
+            if (endpoint != Endpoint(directory) || owner["version"]!.GetValue<int>() != 1) return (null, null);
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(10));
             using var pipe = new NamedPipeClientStream(".", endpoint, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             await pipe.ConnectAsync(1000, deadline.Token);
             await Framing.WriteAsync(pipe, new JsonObject { ["token"] = owner["token"]!.DeepClone(), ["request"] = request.DeepClone() }, Framing.MaximumRequestBytes, deadline.Token);
             var response = await Framing.ReadAsync(pipe, Framing.MaximumResponseBytes, deadline.Token);
-            return response["error"] is null ? response : null;
+            // A rejected token is not proof of anything; only a dispatched answer is.
+            return response["handshake"]?.GetValue<string>() == "authenticationRejected" ? (null, null) : (response, owner["processId"]?.GetValue<int>());
         }
         // A stale rendezvous from a crashed owner, or one exiting right now: nothing is running.
-        catch (Exception ex) when (ex is IOException or TimeoutException or System.Text.Json.JsonException or InvalidOperationException or OperationCanceledException && !cancellationToken.IsCancellationRequested) { return null; }
+        catch (Exception ex) when (ex is IOException or TimeoutException or System.Text.Json.JsonException or InvalidOperationException or OperationCanceledException && !cancellationToken.IsCancellationRequested) { return (null, null); }
     }
 
     private static NamedPipeServerStream Server(string endpoint) => new(endpoint, PipeDirection.InOut, 16, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-    private static string Endpoint(string directory)
+    internal static string Endpoint(string directory)
     {
         if (OperatingSystem.IsWindows()) return "praxis-code-intelligence-" + Identity.Id("", directory)[..24];
         var path = Path.Combine(directory, "owner.sock"); if (Encoding.UTF8.GetByteCount(path) > 100) throw new IOException("Owner directory is too long for a Unix socket."); return path;

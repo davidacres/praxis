@@ -40,6 +40,51 @@ public sealed class HostTests
         finally { cancellation.Cancel(); Directory.Delete(directory, recursive: true); }
     }
 
+    // Owners already running when this shipped answer the lifecycle requests with an error.
+    // Such an owner is live and authenticated: report it running with an unknown build (so
+    // the desktop replaces it), and stop it by ending its process as a crash would.
+    [Fact]
+    public async Task AnOwnerFromBeforeLifecycleRequestsIsReportedAndCanStillBeStopped()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pci-" + Guid.NewGuid().ToString("N")[..8]); Directory.CreateDirectory(directory);
+        directory = SourceFiles.CanonicalDirectory(directory);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        // Stands in for the old owner's process: something whose only job is to be ended.
+        using var legacy = System.Diagnostics.Process.Start(OperatingSystem.IsWindows()
+            ? new System.Diagnostics.ProcessStartInfo("ping", "-n 60 127.0.0.1") { CreateNoWindow = true, RedirectStandardOutput = true }
+            : new System.Diagnostics.ProcessStartInfo("sleep", "60"))!;
+        var endpoint = OwnerService.Endpoint(directory); var token = Guid.NewGuid().ToString("N");
+        File.WriteAllText(Path.Combine(directory, "owner.json"), new JsonObject { ["version"] = 1, ["endpoint"] = endpoint, ["token"] = token, ["processId"] = legacy.Id }.ToJsonString());
+        var server = Task.Run(async () =>
+        {
+            while (!cancellation.IsCancellationRequested)
+            {
+                await using var pipe = new System.IO.Pipes.NamedPipeServerStream(endpoint, System.IO.Pipes.PipeDirection.InOut, 1, System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous | System.IO.Pipes.PipeOptions.CurrentUserOnly);
+                await pipe.WaitForConnectionAsync(cancellation.Token);
+                await Framing.ReadAsync(pipe, Framing.MaximumRequestBytes, cancellation.Token);
+                // What the old runtime answered for an action it did not know.
+                await Framing.WriteAsync(pipe, ServiceRuntime.Error("INVALID_ARGUMENT", "Unknown action."), Framing.MaximumResponseBytes, cancellation.Token);
+            }
+        });
+        try
+        {
+            var status = await OwnerService.ProbeAsync(directory, cancellation.Token);
+            Assert.True(status["running"]!.GetValue<bool>());
+            Assert.Equal(legacy.Id, status["processId"]!.GetValue<int>());
+            Assert.Null(status["build"]);
+            var stopped = await OwnerService.StopAsync(directory, cancellation.Token);
+            Assert.True(stopped["stopped"]!.GetValue<bool>());
+            Assert.True(legacy.HasExited);
+            Assert.False(File.Exists(Path.Combine(directory, "owner.json")));
+        }
+        finally
+        {
+            cancellation.Cancel(); try { await server; } catch (OperationCanceledException) { }
+            if (!legacy.HasExited) legacy.Kill();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ClientRefreshesRejectedHandshakeBeforeDispatchingARequest()
     {
