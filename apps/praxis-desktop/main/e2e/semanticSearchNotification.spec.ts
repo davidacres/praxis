@@ -4,6 +4,10 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, dismissSplash, launchTestApp, type TestApp } from './launchTestApp';
 
+// A PRAXIS_MODEL_BUNDLE inherited from the shell (codeIntelligenceModelActivation.spec.ts
+// needs one) would make the model look installed and hide the notification.
+const noInheritedModel = { PRAXIS_MODEL_BUNDLE: '' };
+
 let app: TestApp | undefined;
 test.afterEach(async () => {
   if (app) await closeTestApp(app);
@@ -11,7 +15,7 @@ test.afterEach(async () => {
 });
 
 test('shows semantic search recommendation notification on startup if model not installed', async ({}, testInfo) => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     let modelInstalled = false;
 
@@ -57,7 +61,7 @@ test('shows semantic search recommendation notification on startup if model not 
 });
 
 test('enables semantic search from startup notification and shows success feedback', async () => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     let modelInstalled = false;
 
@@ -99,7 +103,7 @@ test('enables semantic search from startup notification and shows success feedba
 });
 
 test('configure button in notification opens Code Intelligence settings page', async () => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('ai:getSemanticModelStatus');
     ipcMain.handle('ai:getSemanticModelStatus', () => ({
@@ -135,7 +139,7 @@ test('configure button in notification opens Code Intelligence settings page', a
 test('a finished download that the service then refuses is reported, never shown as enabled', async () => {
   // Proven against the old progress listener, which declared success at 100% downloaded:
   // the success line and the error rendered together.
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain, BrowserWindow }) => {
     ipcMain.removeHandler('ai:downloadSemanticModel');
     ipcMain.handle('ai:downloadSemanticModel', async () => {
@@ -156,7 +160,7 @@ test('a finished download that the service then refuses is reported, never shown
 });
 
 test('offers an update instead of enable when an earlier model is installed', async () => {
-  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' }, { semanticSearchPrompt: true });
+  app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
   await app.electronApp.evaluate(({ ipcMain }) => {
     ipcMain.removeHandler('ai:getSemanticModelStatus');
     ipcMain.handle('ai:getSemanticModelStatus', () => ({

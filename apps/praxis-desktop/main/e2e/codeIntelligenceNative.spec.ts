@@ -4,9 +4,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { chooseOption } from './chipSelect';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
-test('packaged service supports desktop source navigation and repository recovery', async ({}, testInfo) => {
+test('packaged service supports desktop search, source navigation and repository recovery', async ({}, testInfo) => {
   test.setTimeout(90_000);
   const executable = process.env.PRAXIS_CODE_INTELLIGENCE_EXE;
   test.skip(!executable, 'Set PRAXIS_CODE_INTELLIGENCE_EXE to a self-contained host package.');
@@ -33,43 +34,72 @@ test('packaged service supports desktop source navigation and repository recover
       PRAXIS_CODE_INTELLIGENCE_DATA_DIRECTORY: data
     });
     const win = app.window;
-    await win.getByTestId('titlebar-settings').click();
-    await win.getByTestId('settings-nav-code-intelligence').click();
-    const panel = win.getByTestId('code-intelligence-panel');
-    await panel.getByLabel('Repository folder', { exact: true }).fill(source);
-    await panel.getByRole('button', { name: 'Register repository', exact: true }).click();
-    await expect(panel.getByRole('button', { name: 'Index now', exact: true })).toBeEnabled();
-    await panel.getByRole('button', { name: 'Index now', exact: true }).click();
+    // Settings manages repositories; searching and reading source live in the Cmd+Shift+F
+    // dialog. Registration is the request a project or session sends for its folder.
+    const registered = await win.evaluate(root => window.praxis.ai.codeIntelligence({ action: 'register', root }), source);
+    expect(registered.error).toBeUndefined();
+    const openPanel = async () => {
+      await win.getByTestId('titlebar-settings').click();
+      await win.getByTestId('settings-nav-code-intelligence').click();
+      const panel = win.getByTestId('code-intelligence-panel');
+      await expect(panel.getByTestId('code-intel-index-btn')).toBeEnabled();
+      return panel;
+    };
+    const closePanel = async () => {
+      await win.keyboard.press('Escape');
+      await expect(win.getByTestId('code-intelligence-panel')).toHaveCount(0);
+    };
+    const search = async (query: string) => {
+      await win.keyboard.press('ControlOrMeta+Shift+F');
+      const dialog = win.getByTestId('code-search-dialog');
+      await expect(dialog).toBeVisible();
+      await chooseOption(dialog.getByRole('button', { name: 'Search mode' }), 'lexical');
+      await dialog.getByTestId('code-search-input').fill(query);
+      await dialog.getByTestId('code-search-submit-btn').click();
+      return dialog;
+    };
+
+    let panel = await openPanel();
+    await panel.getByTestId('code-intel-index-btn').click();
     await expect(panel).toContainText('Generation 1');
-    await panel.getByLabel('Search source').fill('NativeSmoke');
-    await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-    const typeMatch = panel.locator('.code-intelligence-match').filter({ has: win.getByText('NativeSmoke', { exact: true }) });
+    await closePanel();
+
+    let dialog = await search('NativeSmoke');
+    const typeMatch = dialog.locator('[data-testid^="code-search-item-"]').filter({ hasText: /^NativeSmoke/ });
     await expect(typeMatch).toHaveCount(1);
-    await typeMatch.getByRole('button', { name: 'Source', exact: true }).click();
-    await expect(panel).toContainText('Hash verified:');
-    await expect(panel.locator('article pre')).toContainText('public class NativeSmoke');
-    await panel.getByText('Hash verified:', { exact: false }).scrollIntoViewIfNeeded();
+    await typeMatch.click();
+    await expect(dialog.getByTestId('code-search-source-view')).toContainText('public class NativeSmoke');
     await win.screenshot({ path: testInfo.outputPath('native-source.png') });
-    await panel.getByRole('button', { name: 'Rebuild index', exact: true }).click();
+    await win.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    panel = await openPanel();
+    await panel.getByTestId('code-intel-rebuild-btn').click();
     await expect(panel).toContainText('Generation 2', { timeout: 15_000 });
     await panel.getByRole('button', { name: 'Pause indexing', exact: true }).click();
     await expect(panel.getByRole('button', { name: 'Resume indexing', exact: true })).toBeEnabled();
     await panel.getByRole('button', { name: 'Resume indexing', exact: true }).click();
     await expect(panel.getByRole('button', { name: 'Pause indexing', exact: true })).toBeEnabled();
-    await panel.getByRole('button', { name: 'Relocate repository', exact: true }).click();
-    const dialog = win.getByRole('dialog', { name: 'Relocate repository', exact: true });
-    await dialog.getByRole('textbox').fill(relocated);
+    await panel.getByRole('button', { name: 'Relocate', exact: true }).click();
+    const relocate = win.getByRole('dialog', { name: 'Relocate repository', exact: true });
+    await relocate.getByRole('textbox').fill(relocated);
     await win.screenshot({ path: testInfo.outputPath('native-relocate-dialog.png') });
-    await dialog.getByRole('button', { name: 'Relocate repository', exact: true }).click();
+    await relocate.getByRole('button', { name: 'Relocate repository', exact: true }).click();
+    await expect(relocate).toHaveCount(0);
+    await panel.getByTestId('code-intel-index-btn').click();
+    await expect(panel).toContainText(relocated);
+    await closePanel();
+
+    dialog = await search('NativeMoved');
+    await expect(dialog.locator('[data-testid^="code-search-item-"]').filter({ hasText: /^NativeMoved/ })).toHaveCount(1);
+    await expect(dialog.getByTestId('code-search-results-list')).not.toContainText('NativeSmoke');
+    await win.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
-    await panel.getByRole('button', { name: 'Index now', exact: true }).click();
-    await panel.getByLabel('Search source').fill('NativeMoved');
-    await panel.getByRole('button', { name: 'Search code', exact: true }).click();
-    await expect(panel.locator('.code-intelligence-match strong').filter({ hasText: /^NativeMoved$/ })).toHaveText('NativeMoved');
-    await expect(panel).not.toContainText('NativeSmoke');
-    await panel.getByRole('button', { name: 'Unregister', exact: true }).click();
+
+    panel = await openPanel();
+    await panel.getByTestId('code-intel-unregister-btn').click();
     await win.getByRole('dialog', { name: 'Unregister repository?', exact: true }).getByRole('button', { name: 'Unregister', exact: true }).click();
-    await expect(panel.getByLabel('Search source')).toHaveCount(0);
+    await expect(panel).toContainText('No repositories indexed yet');
     await expect(panel.getByRole('alert')).toHaveCount(0);
   } finally {
     try { if (app) await closeTestApp(app); }

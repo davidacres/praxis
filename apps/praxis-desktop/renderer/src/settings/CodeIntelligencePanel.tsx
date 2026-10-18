@@ -138,6 +138,23 @@ export function CodeIntelligencePanel({
     }
   }, [repositoryId]);
 
+  // Index, rebuild, relocation and vector work run in the background; poll so the
+  // generation, coverage and queued-work line follow them instead of freezing.
+  useEffect(() => {
+    if (!repositoryId) return;
+    let disposed = false;
+    let inFlight = false;
+    const timer = window.setInterval(() => {
+      if (busy || inFlight) return;
+      inFlight = true;
+      void call({ action: 'query', tool: 'get_index_status', arguments: { repositoryId, responseBudgetTokens: 8000 } })
+        .then(next => { if (!disposed) setStatus(next); })
+        .catch(() => { /* Explicit actions report errors; background polling keeps the last result. */ })
+        .finally(() => { inFlight = false; });
+    }, 3000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [repositoryId, busy]);
+
   const handleDownloadModel = async () => {
     if (!window.praxis?.ai?.downloadSemanticModel) return;
     setDownloading(true);
