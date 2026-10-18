@@ -14258,6 +14258,74 @@ button.session-chat-attachment {
 .chip-select-option small { margin-top: 2px; white-space: nowrap; }
 .chip-select-option .chip-select-check { color: var(--accent); margin-left: 4px; }
 
+/* ── Session team roster — bare persona icon, compact two-line rows ──────────
+   The roster is a plain list of people, so the persona colour rides on a bare
+   glyph rather than the ringed `.persona-badge` pill used in message cards:
+   five outlined pills stacked up fight the row text instead of reading as one
+   left edge. Scoped here rather than changing `.persona-badge` itself, which
+   AssistantMessageCard, AssistantPanel, AssistantComposer and
+   SessionTeamMessages all still use as a pill. */
+.persona-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.persona-icon svg { color: var(--badge-tone); }
+.persona-icon--lead { --badge-tone: var(--persona-lead); }
+.persona-icon--dev { --badge-tone: var(--persona-dev); }
+.persona-icon--qa { --badge-tone: var(--persona-qa); }
+.persona-icon--security { --badge-tone: var(--persona-security); }
+.persona-icon--product { --badge-tone: var(--persona-product); }
+
+.session-team-menu { width: min(300px, calc(100vw - 24px)); }
+.session-team-menu .session-team-member {
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: calc(5px * var(--ui-scale)) var(--space-2);
+  min-height: calc(32px * var(--ui-scale));
+}
+.session-team-menu .chip-select-option-text { gap: 0; }
+.session-team-menu .chip-select-option-label { font-weight: 500; }
+/* The handle sits inline after the name; the role hint gets its own line. */
+.session-team-menu .session-team-handle {
+  flex: none;
+  margin-left: 6px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.session-team-menu .chip-select-option-desc {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  margin-top: 1px;
+}
+.session-team-menu .chip-select-check { margin-top: 3px; }
+
+/* ── Split chip — roster on the left half, pre-composed ask on the right ─────
+   Two targets inside one chip height: the left half manages who is on the team,
+   the right half starts an ask as editable text in the composer, so nothing
+   runs until the user reads it and sends it. */
+.session-team-split {
+  display: inline-flex;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+.session-team-split .composer-chip {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.session-team-split > :first-child { padding-right: calc(2px * var(--ui-scale)); }
+.session-team-split > :last-child { padding-left: calc(6px * var(--ui-scale)); border-left: 1px solid var(--border); }
+.session-team-split > :last-child:not(:disabled):hover:not(.active) { background: var(--bg-hover); }
+.session-team-split > :last-child.active { background: var(--bg-sunken); }
+.session-team-split > :last-child:disabled { opacity: .45; cursor: default; }
+.session-team-ask { color: var(--accent); }
+.session-team-ask svg { color: var(--accent); }
+.session-team-split > :last-child:disabled .session-team-ask,
+.session-team-split > :last-child:disabled .session-team-ask svg { color: var(--text-tertiary); }
 /* Toggle chips — a few on/off choices (approval gates) in one row. */
 .wf-toggle-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .wf-toggle-chip { height: var(--field-chip-height); border: 1px solid var(--border); font-size: var(--text-md); }

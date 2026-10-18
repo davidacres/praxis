@@ -1355,6 +1355,12 @@ export function SessionsPage({
     document.querySelector<HTMLTextAreaElement>('[data-testid="session-follow-up-input"]')?.focus();
   };
 
+  /** Puts a drafted team ask into the composer and focuses it, the same way `/name` commands do: the ask stays editable and nothing runs until the user sends it. */
+  const draftTeamAsk = (mention: string) => {
+    setFollowUp(current => (current.trim() ? `${current.trimEnd()} ${mention}` : mention));
+    document.querySelector<HTMLTextAreaElement>('[data-testid="session-follow-up-input"]')?.focus();
+  };
+
   useEffect(() => {
     if (!acpModeMenuPos) return;
     const onDocumentPointerDown = (event: PointerEvent) => {
@@ -2113,7 +2119,7 @@ export function SessionsPage({
                       onRemoveWorkflowRun={onRemoveWorkflowRun}
                       onError={setFollowUpError}
                     />}
-                    <SessionTeamControl session={selected} onError={setFollowUpError} />
+                    <SessionTeamControl session={selected} onDraftAsk={draftTeamAsk} />
                     {context && (
                       <button
                         ref={contextChipRef}

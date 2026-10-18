@@ -4,22 +4,25 @@ import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { PERSONAS } from '../assistant/personaMeta';
-import { askSessionTeamMember, toggleSessionTeamMember, useSessionTeam } from './sessionTeamStore';
+import { toggleSessionTeamMember, useSessionTeam } from './sessionTeamStore';
 
 interface SessionTeamControlProps {
   session: AgentSessionRecord;
   disabled?: boolean;
-  onError?: (message: string) => void;
+  /** Called when the user asks for an ask to be drafted; the owner puts the text in the composer. */
+  onDraftAsk?: (mention: string) => void;
 }
 
 const MENU_GAP = 4;
 
 /**
- * A chip beside the send button that lists the Virtual Team and lets the user
- * add several members to this session. Adding a member starts nothing: the
- * session behaves as normal until the user asks a member (e.g. `@qa …`) to act.
+ * A split chip beside the send button: the left half lists the Virtual Team so
+ * the user can add several members to this session, the right half starts an ask
+ * as ordinary editable text in the composer. Adding a member starts nothing, and
+ * neither does drafting an ask — the session behaves as normal until the user
+ * sends an @mention.
  */
-export function SessionTeamControl({ session, disabled = false, onError }: SessionTeamControlProps) {
+export function SessionTeamControl({ session, disabled = false, onDraftAsk }: SessionTeamControlProps) {
   const { confirm } = useDialogs();
   const { members, busy } = useSessionTeam(session.issueKey);
   const chipRef = useRef<HTMLButtonElement | null>(null);
@@ -32,8 +35,8 @@ export function SessionTeamControl({ session, disabled = false, onError }: Sessi
     const place = () => {
       if (!chipRef.current) return;
       const rect = chipRef.current.getBoundingClientRect();
-      const height = menuRef.current?.offsetHeight ?? 220;
-      const width = menuRef.current?.offsetWidth ?? 240;
+      const height = menuRef.current?.offsetHeight ?? 240;
+      const width = menuRef.current?.offsetWidth ?? 280;
       const top = rect.top - MENU_GAP - height >= MENU_GAP ? rect.top - MENU_GAP - height : rect.bottom + MENU_GAP;
       const left = Math.max(MENU_GAP, Math.min(rect.right - width, window.innerWidth - width - MENU_GAP));
       setPos({ top, left });
@@ -76,16 +79,23 @@ export function SessionTeamControl({ session, disabled = false, onError }: Sessi
     setOpen(false);
     const name = PERSONAS.find(persona => persona.id === role)?.name ?? role;
     void confirm({
-      title: `Request a review from ${name}?`,
-      message: `${name} will review this session's work so far. The session itself is not changed. Choose Not now to just keep ${name} on the team and ask later with @${role}.`,
-      confirmLabel: 'Request review',
+      title: `Add ${name} to the team?`,
+      message: `Nothing runs yet. Type what you want and send when you are ready — the ask stays editable. You can also just keep ${name} on the team and mention @${role} later.`,
+      confirmLabel: 'Draft the ask',
       cancelLabel: 'Not now',
       danger: false
     }).then(ok => {
       if (!ok) return;
-      askSessionTeamMember(session, role, 'Review the work in this session so far. Report findings, risks and concrete recommendations. Do not make changes.')
-        .catch(error => onError?.(error instanceof Error ? error.message : String(error)));
+      // Draft rather than run: the ask goes into the composer for review and send.
+      onDraftAsk?.(`@${role} review the work in this session so far.`);
     });
+  };
+
+  const draftAsk = () => {
+    const first = members[0];
+    if (!first) return;
+    onDraftAsk?.(`@${first} `);
+    setOpen(false);
   };
 
   const count = members.length;
@@ -93,21 +103,35 @@ export function SessionTeamControl({ session, disabled = false, onError }: Sessi
 
   return (
     <>
-      <button
-        ref={chipRef}
-        type="button"
-        className={`composer-chip session-team-chip${open ? ' active' : ''}${count > 0 ? ' has-members' : ''}`}
-        aria-label={count === 0 ? 'Session team' : `Session team, ${count} selected`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={title}
-        data-testid="session-team-chip"
-        disabled={disabled || busy}
-        onClick={() => setOpen(value => !value)}
-      >
-        <Icon name="users" size={14} />
-        {count > 0 && <span className="composer-chip-meta" data-testid="session-team-count">{count}</span>}
-      </button>
+      <div className="composer-chip session-team-chip session-team-split">
+        <button
+          ref={chipRef}
+          type="button"
+          className={`composer-chip${open ? ' active' : ''}${count > 0 ? ' has-members' : ''}`}
+          aria-label={count === 0 ? 'Session team' : `Session team, ${count} selected`}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          title={title}
+          data-testid="session-team-chip"
+          disabled={disabled || busy}
+          onClick={() => setOpen(value => !value)}
+        >
+          <Icon name="users" size={14} />
+          {count > 0 && <span className="composer-chip-meta" data-testid="session-team-count">{count}</span>}
+        </button>
+        <button
+          type="button"
+          className={`composer-chip session-team-ask${open ? ' active' : ''}`}
+          aria-label={count === 0 ? 'Ask the team' : `Ask the team, starts with ${PERSONAS.find(p => p.id === members[0])?.name ?? 'a member'}`}
+          title={count === 0 ? 'Add a team member first' : 'Draft an ask in the composer'}
+          data-testid="session-team-ask"
+          disabled={disabled || busy || count === 0}
+          onClick={draftAsk}
+        >
+          <Icon name="feather" size={14} />
+          <span>Ask…</span>
+        </button>
+      </div>
       {open && createPortal(
         <div
           ref={menuRef}
@@ -128,14 +152,17 @@ export function SessionTeamControl({ session, disabled = false, onError }: Sessi
                 type="button"
                 role="option"
                 aria-selected={selected}
-                className={`composer-provider-option chip-select-option${selected ? ' active' : ''}`}
+                className={`composer-provider-option chip-select-option session-team-member${selected ? ' active' : ''}`}
                 data-testid={`session-team-member-${persona.id}`}
                 onClick={() => toggle(persona.id)}
               >
-                <span className={`persona-badge persona-badge--${persona.id}`}><Icon name={persona.icon} size={12} /></span>
+                <span className={`persona-icon persona-icon--${persona.id}`}><Icon name={persona.icon} size={15} /></span>
                 <span className="chip-select-option-text">
-                  <span className="chip-select-option-label">{persona.name}</span>
-                  <span className="chip-select-option-desc">@{persona.id}</span>
+                  <span className="chip-select-option-label">
+                    {persona.name}
+                    <span className="session-team-handle">@{persona.id}</span>
+                  </span>
+                  <span className="chip-select-option-desc">{persona.role}</span>
                 </span>
                 {selected && <Icon name="check" size={12} className="chip-select-check" />}
               </button>

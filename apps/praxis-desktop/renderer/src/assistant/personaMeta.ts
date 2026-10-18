@@ -11,14 +11,16 @@ export interface PersonaMeta {
   name: string;
   badge: string;
   icon: IconName;
+  /** One line on what this persona is for, shown wherever a roster lists them. */
+  role: string;
 }
 
 export const PERSONAS: readonly PersonaMeta[] = [
-  { id: 'lead', name: 'Tech Lead', badge: 'Lead', icon: 'target' },
-  { id: 'dev', name: 'Senior Dev', badge: 'Dev', icon: 'terminal' },
-  { id: 'qa', name: 'QA Specialist', badge: 'QA', icon: 'check-square' },
-  { id: 'security', name: 'Security Engineer', badge: 'Security', icon: 'shield' },
-  { id: 'product', name: 'Product Researcher', badge: 'Product', icon: 'lightbulb' }
+  { id: 'lead', name: 'Tech Lead', badge: 'Lead', icon: 'target', role: 'Frames the approach, cuts scope' },
+  { id: 'dev', name: 'Senior Dev', badge: 'Dev', icon: 'terminal', role: 'Writes and refactors the change' },
+  { id: 'qa', name: 'QA Specialist', badge: 'QA', icon: 'check-square', role: 'Reviews the work so far' },
+  { id: 'security', name: 'Security Engineer', badge: 'Security', icon: 'shield', role: 'Threat models the change' },
+  { id: 'product', name: 'Product Researcher', badge: 'Product', icon: 'lightbulb', role: 'Checks the problem is real' }
 ];
 
 export function personaMeta(id: AssistantRole): PersonaMeta {
