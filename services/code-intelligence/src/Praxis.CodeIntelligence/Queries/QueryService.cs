@@ -19,7 +19,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
         return service;
     }
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 8;
+    public const int SearchPlanVersion = 9;
     public const string RankingProfile = "rrf-k60-lexical4-vector1-alias0.5-floor1-v5";
     public const double LexicalWeight = 4.0;
     /// <summary>
@@ -229,8 +229,13 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                         var extLang = connection.Scalar(transaction, "SELECT json_extract(descriptor_json,'$[3]') FROM symbols WHERE symbol_id=$0 AND external=1", symId) as string;
                         return extLang is not null && languages.Any(x => x!.GetValue<string>() == extLang);
                     }
+                    // A context's containment root is bookkeeping with no source, never a result.
+                    // Filtered before ranks are assigned, so every channel's ranks stay contiguous.
+                    static bool ContainmentRoot(JsonObject row) =>
+                        Text(row, "kind") == "module" && Text(row, "name") is { } name && name.StartsWith("[synthetic", StringComparison.Ordinal);
                     bool Eligible(JsonObject row)
                     {
+                        if (ContainmentRoot(row)) return false;
                         var filters = arguments["filters"] as JsonObject;
                         if (filters?["languages"] is JsonArray { Count: > 0 } languages && !SymbolMatchesLanguage(row, languages)) return false;
                         if (filters?["kinds"] is JsonArray { Count: > 0 } kinds && !kinds.Any(x => x!.GetValue<string>() == Text(row, "kind"))) return false;
@@ -287,7 +292,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                                 repositoryId, JsonSerializer.Serialize(vectors.Select(vector => vector.SymbolId)))
                                 .ToDictionary(row => Text(row, "symbol_id")!, StringComparer.Ordinal);
                         var position = 0;
-                        foreach (var vector in vectors) Add(vectorRows[vector.SymbolId], "vector", ++position);
+                        foreach (var vector in vectors) if (!ContainmentRoot(vectorRows[vector.SymbolId])) Add(vectorRows[vector.SymbolId], "vector", ++position);
                         if (embedded is not null) channels.Add("vector");
                     }
                     if (mode != "vector")

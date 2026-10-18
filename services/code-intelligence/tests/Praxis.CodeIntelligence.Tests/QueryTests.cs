@@ -33,6 +33,19 @@ public sealed class QueryTests : IDisposable
     }
     private JsonObject Symbol(string name) => Query("find_symbol", new() { ["name"] = name })["data"]!["items"]![0]!.AsObject();
 
+    // A context's containment root is bookkeeping with no source: search offered it as a
+    // result ("Syntax [synthetic projectRoot]") to keyword and semantic queries alike.
+    [Fact]
+    public void SearchNeverOffersSyntheticContainmentRoots()
+    {
+        foreach (var query in new[] { "synthetic", "projectRoot", "Project" })
+        foreach (var mode in new[] { "lexical", "hybrid" })
+        {
+            var matches = Query("search_code", new() { ["query"] = query, ["mode"] = mode })["data"]!["matches"]!.AsArray();
+            Assert.DoesNotContain(matches, match => match!["symbol"]!["qualifiedName"]!.GetValue<string>().Contains("[synthetic", StringComparison.Ordinal));
+        }
+    }
+
     [Fact]
     public void BenchmarkMeasurementsKeepWireResultsUnchangedAndIncludeFailures()
     {

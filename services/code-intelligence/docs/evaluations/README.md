@@ -120,3 +120,7 @@ The candidate fails `noCategoryRegressionOver005` (cross-project recall), so it 
 Findings: lowering lexical weight trades cross-project recall for nothing on terminology; term coverage improves ordering but not recall at the weights that keep cross-project intact. Terminology remains at 0.692 hybrid against 0.846 vector-only. A further attempt needs a new tuning set with enough cross-project and terminology cases to see this trade before acceptance, since the 30-query Praxis set has few cross-project cases.
 
 Reproducing the Maze fixture (18 October): the corpus revision builds with SDK 10.0.100 (the repository's `global.json`); `capture` SearchCore and UserService, merge by project key (Maze.Common appears in both, identically), add the two `RegexGenerator.g.cs` files to SearchCore's and Maze.Common's `supportSources` (six support files in total), and keep `--fixture` and every `--data` path short.
+
+## Search plan 9 (2026-10-18): containment roots are never results
+
+`search_code` no longer offers a context's synthetic containment root (`[synthetic projectRoot]`), which keyword, semantic and hybrid search all returned for queries such as "Syntax" or "synthetic". It has no source and is never a relevance label, so removing it can only move labelled answers up or leave them in place: Recall@10 and MRR@10 cannot fall. The Maze acceptance was **not** re-run for this change; plan 8's figures remain the last measured baseline. Fusion weights and the vector floor are unchanged.

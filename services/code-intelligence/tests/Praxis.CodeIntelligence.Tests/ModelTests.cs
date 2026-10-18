@@ -269,8 +269,14 @@ public sealed class ModelTests
                 new HashSet<string> { repository });
             Assert.Null(response["error"]);
             var matches = response["data"]!["matches"]!.AsArray();
-            Assert.Equal(ranked.Select(candidate => candidate.SymbolId), matches.Select(match => match!["symbol"]!["symbolId"]!.GetValue<string>()));
-            Assert.Equal(Enumerable.Range(1, ranked.Count), matches.Select(match => match!["ranks"]!["vector"]!.GetValue<int>()));
+            // Search offers the candidates in scan order, less context containment roots.
+            HashSet<string> roots;
+            using (var read = database.Open(readOnly: true))
+            using (var command = read.Command(null, "SELECT symbol_id FROM symbols WHERE repository_id=$0 AND kind='module' AND name LIKE '[synthetic%'", repository))
+            using (var reader = command.ExecuteReader()) { roots = []; while (reader.Read()) roots.Add(reader.GetString(0)); }
+            var offered = ranked.Select(candidate => candidate.SymbolId).Where(id => !roots.Contains(id)).ToList();
+            Assert.Equal(offered, matches.Select(match => match!["symbol"]!["symbolId"]!.GetValue<string>()));
+            Assert.Equal(Enumerable.Range(1, offered.Count), matches.Select(match => match!["ranks"]!["vector"]!.GetValue<int>()));
             using (var write = database.Open())
             using (var command = write.CreateCommand())
             {

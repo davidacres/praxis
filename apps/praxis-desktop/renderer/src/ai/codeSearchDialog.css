@@ -144,15 +144,30 @@
   padding: 0;
 }
 
+.code-search-results-list > li {
+  display: block;
+  min-width: 0;
+}
+
+/* A <button> sizes to its own content unless told otherwise; every row must be the
+   list's full width, and its three single-line rows give every result one height. */
 .code-search-item {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
   padding: 8px 12px;
+  border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-left: 3px solid transparent;
+  border-radius: 0;
   cursor: pointer;
   background: transparent;
-  border-left: 3px solid transparent;
+  font: inherit;
+  line-height: 1.35;
   text-align: left;
   color: inherit;
   transition: background 0.15s ease;
@@ -175,6 +190,7 @@
 }
 
 .code-search-item-name {
+  min-width: 0;
   font-weight: 600;
   font-size: var(--text-sm, 13px);
   color: var(--text);
@@ -203,12 +219,41 @@
   white-space: nowrap;
 }
 
+.code-search-item-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .code-search-item-path {
+  flex: 1;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-tertiary, var(--text-muted));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.code-search-item-reasons {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.code-search-notice {
+  margin: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--text);
+  font-size: var(--text-xs, 11px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .code-search-empty-state {

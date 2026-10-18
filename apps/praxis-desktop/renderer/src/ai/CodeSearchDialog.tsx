@@ -56,6 +56,17 @@ export interface CodeSearchDialogProps {
   initialWorkingDirectory?: string;
 }
 
+// The service's default budget (4,000 tokens) cannot hold 30 results with their evidence and
+// silently shortens the page; ask for what the rest of the app uses.
+const RESPONSE_BUDGET = 8000;
+
+const REASON_LABELS: Record<string, string> = { exact: 'Exact', lexical: 'Keyword', vector: 'Semantic', alias: 'Alias', graph: 'Related' };
+
+/** Why a result matched, in the service's order: "Keyword · Semantic". */
+function matchReasons(reasons: string[] | undefined): string {
+  return [...new Set((reasons ?? []).map(reason => REASON_LABELS[reason] ?? reason))].join(' · ');
+}
+
 export function CodeSearchDialog({
   open,
   onClose,
@@ -74,6 +85,10 @@ export function CodeSearchDialog({
   const [selectedSymbolId, setSelectedSymbolId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'source' | 'callers' | 'callees' | 'explain'>('source');
   const [toast, setToast] = useState('');
+  // What the service says about this answer: a fallback to keywords, or semantic coverage
+  // still building. Without it, Hybrid with no model looks exactly like a working Hybrid.
+  const [notices, setNotices] = useState<string[]>([]);
+  const searchedQuery = useRef('');
 
   // Per-symbol detail caches
   const [sourceCache, setSourceCache] = useState<Record<string, { text: string; path?: string; lineStart?: number }>>({});
@@ -172,6 +187,16 @@ export function CodeSearchDialog({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open, onClose]);
 
+  // A mode change answers the same question again in the new mode; otherwise the old
+  // results stay on screen under the new mode's name.
+  const modeShown = useRef(mode);
+  useEffect(() => {
+    if (modeShown.current === mode) return;
+    modeShown.current = mode;
+    if (searchedQuery.current) void runSearch(searchedQuery.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   // Perform search
   const runSearch = async (targetQuery?: string) => {
     const q = (targetQuery ?? query).trim();
@@ -179,12 +204,26 @@ export function CodeSearchDialog({
 
     setBusy(true);
     setError('');
+    setNotices([]);
+    searchedQuery.current = q;
     try {
       const res = await call({
         action: 'query',
         tool: 'search_code',
-        arguments: { repositoryId, query: q, mode, limit: 30 }
+        arguments: { repositoryId, query: q, mode, limit: 30, responseBudgetTokens: RESPONSE_BUDGET }
       });
+      const data = record(res.data);
+      const eligible = Number(data.eligibleSymbolCount ?? 0);
+      const covered = Number(data.vectorCoveredSymbolCount ?? 0);
+      const warnings = items(res.warnings).map(record);
+      // Without a model nothing is building; the fallback warning already says so.
+      const modelUnavailable = warnings.some(warning => warning.code === 'MODEL_UNAVAILABLE');
+      setNotices([
+        ...warnings.map(warning => String(warning.message ?? '')).filter(Boolean),
+        ...(mode !== 'lexical' && !modelUnavailable && eligible > 0 && covered < eligible
+          ? [`Semantic index is still building: ${covered} of ${eligible} symbols can be found by meaning so far.`]
+          : [])
+      ]);
 
       // Parse evidence map
       const evMap = new Map<string, CodeSearchEvidence>();
@@ -275,7 +314,7 @@ export function CodeSearchDialog({
             const res = await call({
               action: 'query',
               tool: 'get_source',
-              arguments: { repositoryId, symbolId: symId, maxLines: 120 }
+              arguments: { repositoryId, symbolId: symId, maxLines: 120, responseBudgetTokens: RESPONSE_BUDGET }
             });
             const frags = items(record(res.data).fragments);
             const firstFrag = record(frags[0]);
@@ -305,7 +344,7 @@ export function CodeSearchDialog({
           const res = await call({
             action: 'query',
             tool: 'get_callers',
-            arguments: { repositoryId, symbolId: symId, limit: 30 }
+            arguments: { repositoryId, symbolId: symId, limit: 30, responseBudgetTokens: RESPONSE_BUDGET }
           });
           const rawItems = items(record(res.data).items);
           const evItems = items(res.evidence);
@@ -344,7 +383,7 @@ export function CodeSearchDialog({
           const res = await call({
             action: 'query',
             tool: 'get_callees',
-            arguments: { repositoryId, symbolId: symId, limit: 30 }
+            arguments: { repositoryId, symbolId: symId, limit: 30, responseBudgetTokens: RESPONSE_BUDGET }
           });
           const rawItems = items(record(res.data).items);
           const evItems = items(res.evidence);
@@ -383,7 +422,7 @@ export function CodeSearchDialog({
           const res = await call({
             action: 'query',
             tool: 'explain_symbol',
-            arguments: { repositoryId, symbolId: symId }
+            arguments: { repositoryId, symbolId: symId, responseBudgetTokens: RESPONSE_BUDGET }
           });
           const data = record(res.data);
           const desc = String(record(data.description).text ?? '');
@@ -577,6 +616,11 @@ export function CodeSearchDialog({
             </div>
 
             {error && <div className="error-banner" style={{ margin: 8 }}>{error}</div>}
+            {notices.length > 0 && (
+              <div className="code-search-notice" role="status" data-testid="code-search-notice">
+                {notices.map(notice => <div key={notice}>{notice}</div>)}
+              </div>
+            )}
 
             <ul className="code-search-results-list" data-testid="code-search-results-list">
               {matches.map(m => {
@@ -596,10 +640,14 @@ export function CodeSearchDialog({
                         </span>
                         <span className="code-search-kind-badge">{m.symbol.kind}</span>
                       </div>
+                      {/* Every row has all three lines, empty or not, so rows share one height. */}
                       <div className="code-search-item-signature" title={m.symbol.signature}>
-                        {m.symbol.signature}
+                        {m.symbol.signature || '\u00a0'}
                       </div>
-                      {loc && <div className="code-search-item-path">{loc}</div>}
+                      <div className="code-search-item-meta">
+                        <span className="code-search-item-path" title={loc}>{loc ?? '\u00a0'}</span>
+                        {matchReasons(m.reasons) && <span className="code-search-item-reasons">{matchReasons(m.reasons)}</span>}
+                      </div>
                     </button>
                   </li>
                 );
