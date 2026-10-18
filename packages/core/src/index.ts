@@ -15,6 +15,7 @@ export * from './ai/providers/providerAdapter';
 export * from './ai/providers/registry';
 export * from './ai/providers/customProviders';
 export * from './ai/providers/providerPresets';
+export * from './ai/providers/localRuntimeDetection';
 export * from './ai/providers/providerProbe';
 export * from './ai/providers/modelCatalog';
 export * from './ai/providers/cliModelMetadata';

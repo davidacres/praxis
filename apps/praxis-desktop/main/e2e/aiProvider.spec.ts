@@ -511,7 +511,7 @@ test('the model manager panel curates which models the composer offers', async (
   await win.locator('[data-testid="model-manager-select-none"]').click();
   await win.locator('[data-testid="model-manager-checkbox-anthropic/claude-opus-5"]').click();
   await win.locator('[data-testid="model-manager-checkbox-anthropic/claude-sonnet-5"]').click();
-  await expect(win.locator('[data-testid="model-manager-count"]')).toHaveText('2 of 3 selected');
+  await expect(win.locator('[data-testid="model-manager-count"]')).toHaveText(/2 of 3 (selected|offered)/);
   await expect(win.locator('[data-testid="model-manager-checkbox-anthropic/claude-opus-5"]')).toBeChecked();
   await expect(win.locator('[data-testid="model-manager-checkbox-anthropic/claude-sonnet-5"]')).toBeChecked();
   await expect(win.locator('[data-testid="model-manager-checkbox-openai/gpt-5.6"]')).not.toBeChecked();

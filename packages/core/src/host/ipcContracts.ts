@@ -38,6 +38,7 @@ import type { ModelOptions } from '../ai/providers/modelCatalog';
 import type { CustomProviderConfig, ProviderCapabilities } from '../ai/providers/customProviders';
 import type { McpServerConfig, McpTestResult } from '../ai/mcp/mcpServerConfig';
 import type { ProviderPreset } from '../ai/providers/providerPresets';
+import type { LocalRuntimeDetection } from '../ai/providers/localRuntimeDetection';
 import type { ReasoningEffort } from '../ai/providers/reasoningSupport';
 import type { ProviderProbeResult } from '../ai/providers/providerProbe';
 import type { WireImageAttachment } from '../ai/gateway/wire';
@@ -893,6 +894,8 @@ export interface AiIpc {
   resetProviderApiKeys(): Promise<void>;
   /** The OpenAI-compatible presets offered by Settings → AI Provider → Add provider. */
   listProviderPresets(): Promise<ProviderPreset[]>;
+  /** Local OpenAI-compatible runtimes (Ollama, LM Studio, …) answering on this machine right now. */
+  detectLocalRuntimes(): Promise<LocalRuntimeDetection[]>;
   /**
    * Probes an endpoint — saved, or an unsaved draft from the settings form.
    * `apiKey` is the key typed into the form; it is used for this probe only.

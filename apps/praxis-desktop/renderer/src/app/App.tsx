@@ -1596,7 +1596,7 @@ export function App() {
     const settingsPages: Array<[SettingsCategory, string]> = [
       ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Appearance'],
       ['appearance-themes', 'Themes'], ['appearance-surfaces', 'Surfaces'], ['appearance-looks', 'Looks'],
-      ['ai', 'AI Provider'], ['ai-usage', 'AI Usage & Spend'], ['agent-runtime', 'Agent Runtime'], ['mcp', 'MCP Server'], ['delivery', 'Delivery'],
+      ['ai', 'AI Providers'], ['ai-usage', 'AI Usage & Spend'], ['agent-runtime', 'Agent Runtime'], ['mcp', 'MCP Server'], ['delivery', 'Delivery'],
       ['connections', 'Connections'], ['jira', 'Jira'], ['terminal', 'Terminal'], ['performance', 'Performance'], ['preview', 'Preview']
     ];
     settingsPages.forEach(([id, label]) => {

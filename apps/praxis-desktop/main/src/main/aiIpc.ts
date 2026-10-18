@@ -13,6 +13,7 @@ import {
   discoverWorkspaceAgentWorkflows,
   GitWorktreeManager,
   PROVIDER_PRESETS,
+  detectLocalRuntimes,
   findProviderDescriptor,
   getProviderDescriptor,
   providerNeedsApiKey,
@@ -688,6 +689,18 @@ export function registerAiIpc(): void {
   });
 
   ipcMain.handle('ai:listProviderPresets', async () => [...PROVIDER_PRESETS]);
+
+  // Add provider's "Found on this Mac": which local runtimes answer right now. Loopback only, short
+  // timeouts; e2e points a preset at a mock through PRAXIS_LOCAL_RUNTIME_ORIGINS (JSON: presetId → origin).
+  ipcMain.handle('ai:detectLocalRuntimes', async () => {
+    let origins: Record<string, string> | undefined;
+    try {
+      origins = process.env.PRAXIS_LOCAL_RUNTIME_ORIGINS ? JSON.parse(process.env.PRAXIS_LOCAL_RUNTIME_ORIGINS) : undefined;
+    } catch {
+      origins = undefined;
+    }
+    return detectLocalRuntimes(PROVIDER_PRESETS, (url, init) => fetch(url, init), { origins });
+  });
 
   ipcMain.handle(
     'ai:testCustomProvider',

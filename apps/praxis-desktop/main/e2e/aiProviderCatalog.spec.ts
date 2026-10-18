@@ -120,7 +120,9 @@ test('the list shows only providers in use; Add provider lists the rest and adds
   const dialog = win.getByTestId('add-provider-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByTestId('add-provider-tile-vercel-gateway')).toBeDisabled();
-  await expect(dialog.getByTestId('add-provider-tile-openai')).toContainText('API key required');
+  await expect(dialog.getByTestId('add-provider-tile-openai')).toBeVisible();
+  await expect(dialog.getByTestId('add-provider-tile-openai')).toContainText('OpenAI');
+  await dialog.getByTestId('add-provider-category-all').click();
   for (const preset of ['openrouter', 'groq', 'ollama', 'lm-studio', 'custom']) {
     await expect(dialog.getByTestId(`add-provider-tile-preset-${preset}`)).toBeVisible();
   }
@@ -155,6 +157,7 @@ test('the list shows only providers in use; Add provider lists the rest and adds
   // A CLI with an explicit path override offers manual setup, not an install
   // action that would install a different executable and leave that override intact.
   await win.getByTestId('ai-add-provider').click();
+  await dialog.getByTestId('add-provider-category-all').click();
   await dialog.getByTestId('add-provider-tile-claude-code-cli').click();
   await expect(win.getByTestId('ai-provider-body-claude-code-cli')).toContainText('Install the CLI, or set its path');
   await expect(win.getByTestId('ai-provider-install-claude-code-cli')).toHaveCount(0);
@@ -239,7 +242,7 @@ test('a custom endpoint is tested, saved, listed with its capabilities and runs 
   await win.screenshot({ path: path.join(shots, 'ai-provider-list-with-custom.png') });
 
   // It is a choice for new sessions, and a session on it runs against the endpoint.
-  await row.locator('.ai-provider-head').getByRole('button', { name: /Make default|Use Team vLLM/ }).click();
+  await win.getByTestId('ai-provider-set-active-custom:team-vllm').click();
   await expect(win.getByTestId('ai-provider-default-custom:team-vllm')).toBeVisible();
   await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
 
@@ -283,11 +286,11 @@ test('an endpoint without tool calling is listed as chat only, kept out of sessi
   await form.getByTestId('custom-endpoint-save').click();
 
   const id = 'custom:lab-ollama';
-  await expect(win.getByTestId(`ai-provider-row-${id}`)).toContainText('chat only');
+  await expect(win.getByTestId(`ai-provider-row-${id}`)).toContainText(/chat only/i);
   await expect(win.getByTestId(`ai-provider-caps-${id}`).locator('[data-capability="tools"]')).toHaveAttribute('data-ok', 'false');
 
   // Still a recommendations provider — that is a one-shot prompt, no tools.
-  await win.getByTestId('ai-tab-defaults').click();
+  await win.getByTestId('ai-tab-routing').click();
   expect(await chipOptionValues(win.getByTestId('ai-recommendation-provider-select'))).toContain(id);
   await win.getByTestId('ai-tab-providers').click();
 
@@ -314,7 +317,7 @@ test('an endpoint without tool calling is listed as chat only, kept out of sessi
   // Removing it asks first, then deletes it and its settings.
   await openAiSettings(win);
   await win.getByTestId(`ai-provider-row-${id}`).locator('.ai-provider-head').click();
-  await win.getByTestId('custom-endpoint-remove').click();
+  await win.getByTestId(`ai-provider-remove-${id}`).click();
   await win.getByTestId('ai-provider-removal-confirm').click();
   await expect(win.getByTestId(`ai-provider-row-${id}`)).toHaveCount(0);
   const after = await win.evaluate(async () => {
@@ -344,6 +347,7 @@ test('configured providers can be removed, re-added, and replace the default whi
     await window.praxis.ai.setProviderApiKey('openai', 'removal-test-key');
   });
   await openAiSettings(win);
+  await win.getByTestId('ai-provider-row-openai').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-remove-openai').focus();
   await win.keyboard.press('Enter');
   await win.getByRole('dialog', { name: 'Remove OpenAI?' }).getByRole('button', { name: 'Cancel' }).click();
@@ -364,9 +368,10 @@ test('configured providers can be removed, re-added, and replace the default whi
   await win.getByTestId('ai-add-provider').click();
   await win.getByTestId('add-provider-tile-openai').click();
   await expect(win.getByTestId('ai-provider-row-openai')).toBeVisible();
+  await win.getByTestId('ai-provider-row-vercel-gateway').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-remove-vercel-gateway').click();
-  await expect(win.getByTestId('ai-provider-removal-confirm')).toBeDisabled();
-  await chooseOption(win.getByTestId('ai-provider-removal-replacement'), 'openai');
+  await expect(win.getByTestId('ai-provider-removal-confirm')).toBeEnabled();
+  await win.getByTestId('ai-provider-removal-replacement-openai').click();
   const artifacts = path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts');
   fs.mkdirSync(artifacts, { recursive: true });
   await win.screenshot({ path: path.join(artifacts, 'provider-removal-confirmation.png') });
@@ -395,8 +400,9 @@ test('a custom endpoint can be the only provider and its default removal uses th
   await expect(win.getByTestId('ai-providers-footnote')).toContainText('Keep at least one');
   await win.getByTestId('ai-add-provider').click();
   await win.getByTestId('add-provider-tile-vercel-gateway').click();
+  await win.getByTestId('ai-provider-row-custom:only').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-remove-custom:only').click();
-  await chooseOption(win.getByTestId('ai-provider-removal-replacement'), 'vercel-gateway');
+  await win.getByTestId('ai-provider-removal-replacement-vercel-gateway').click();
   await win.getByTestId('ai-provider-removal-confirm').click();
   await expect(win.getByTestId('ai-provider-row-custom:only')).toHaveCount(0);
   await expect(win.getByTestId('ai-provider-default-vercel-gateway')).toBeVisible();

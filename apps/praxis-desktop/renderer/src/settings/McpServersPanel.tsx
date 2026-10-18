@@ -242,16 +242,37 @@ export function McpServersPanel({
   };
 
   return (
-    <div className="mcp-servers" data-testid="mcp-servers">
-      <div className="settings-section-subhead"><span>MCP servers</span></div>
-      <p className="settings-hint">
-        Servers you add here are given to full-tools sessions. CLI agents (Claude Code, Codex…) connect to them
-        directly; API providers get their tools through Praxis, named <code>mcp__server__tool</code>. Read-only
-        sessions never get them. Headers and environment values are stored in your settings file.
+    <section className="mcp-servers aip-card" aria-label="MCP servers the AI can use" data-testid="mcp-servers">
+      <h4 className="aip-card-title">
+        <span>MCP servers the AI can use</span>
+        {!draft && (
+          <span className="aip-card-aside">
+            <button
+              type="button"
+              className="btn btn-compact"
+              data-testid="mcp-add-server"
+              onClick={() => {
+                setEditingExisting(false);
+                setTests(current => {
+                  const { draft: _discard, ...rest } = current;
+                  return rest;
+                });
+                setDraft(newDraft());
+              }}
+            >
+              <Icon name="plus" size={12} />
+              Add MCP server
+            </button>
+          </span>
+        )}
+      </h4>
+      <p className="aip-hint">
+        Full-tools sessions only. Local agents connect to them directly; API providers reach them through Praxis as{' '}
+        <code>mcp__server__tool</code>. Read-only sessions never get them. Praxis’s own server for other tools is under MCP Server.
       </p>
 
       {servers.length > 0 && (
-        <div data-testid="mcp-servers-list">
+        <div className="aip-mcp-list" data-testid="mcp-servers-list">
           {servers.map(server => (
             <div key={server.id} data-testid={`mcp-server-row-${server.id}`}>
               <div className="list-row is-static">
@@ -365,24 +386,11 @@ export function McpServersPanel({
             </button>
           </div>
         </div>
-      ) : (
-        <button
-          type="button"
-          className="btn btn-compact"
-          data-testid="mcp-add-server"
-          onClick={() => {
-            setEditingExisting(false);
-            setTests(current => {
-              const { draft: _discard, ...rest } = current;
-              return rest;
-            });
-            setDraft(newDraft());
-          }}
-        >
-          <Icon name="plus" size={12} />
-          Add MCP server
-        </button>
-      )}
-    </div>
+      ) : null}
+      <div className="aip-notice is-warn">
+        <Icon name="warning" size={13} />
+        <span>Headers and environment values are saved in your settings file, not the keychain — avoid long-lived secrets here.</span>
+      </div>
+    </section>
   );
 }

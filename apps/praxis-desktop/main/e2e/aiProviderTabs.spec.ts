@@ -62,16 +62,17 @@ test('the page is split into tabs and each tab shows only its own settings', asy
   await openAiSettings(win);
 
   const tabs = win.getByRole('tablist', { name: 'AI provider settings' });
-  await expect(tabs.getByRole('tab')).toHaveText(['Providers', 'Defaults', 'Tools']);
-  await expect(tabs.getByRole('tab', { name: 'Providers' })).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.getByRole('tab')).toHaveText([/Providers/, /Routing/, /Behaviour/, /Tools/]);
+  await expect(tabs.getByRole('tab', { name: /Providers/ })).toHaveAttribute('aria-selected', 'true');
 
   // Providers: the rows, and none of the other tabs' content.
   await expect(win.getByTestId('ai-provider-list')).toBeVisible();
   await expect(win.getByTestId('ai-browser-tools-toggle')).toHaveCount(0);
   await expect(win.getByTestId('ai-recommendation-provider-select')).toHaveCount(0);
 
-  await tabs.getByRole('tab', { name: 'Defaults' }).click();
+  await tabs.getByRole('tab', { name: 'Routing' }).click();
   await expect(win.getByTestId('ai-recommendation-provider-select')).toBeVisible();
+  await tabs.getByRole('tab', { name: 'Behaviour' }).click();
   await expect(win.getByLabel('AI agent display name')).toBeVisible();
   await expect(win.getByTestId('ai-provider-list')).toHaveCount(0);
 
@@ -80,7 +81,7 @@ test('the page is split into tabs and each tab shows only its own settings', asy
   await tabs.getByRole('tab', { name: 'Tools' }).click();
   await expect(win.getByTestId('ai-browser-tools-toggle')).toBeVisible();
 
-  await tabs.getByRole('tab', { name: 'Providers' }).click();
+  await tabs.getByRole('tab', { name: /Providers/ }).click();
   await expect(win.getByTestId('ai-provider-list')).toBeVisible();
 });
 
@@ -99,6 +100,7 @@ test('each provider is one row with a switch; the default and unconfigured ones 
   await expect(win.getByTestId('ai-provider-default-vercel-gateway')).toBeVisible();
 
   // Anthropic is configured, so it can be switched.
+  await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
   const anthropicSwitch = win.getByTestId('ai-provider-enabled-anthropic');
   await expect(anthropicSwitch).toHaveAttribute('aria-checked', 'true');
   await expect(anthropicSwitch).toBeEnabled();
@@ -108,7 +110,6 @@ test('each provider is one row with a switch; the default and unconfigured ones 
   await expect(win.getByTestId('ai-provider-row-openai')).toHaveCount(0);
   await win.getByTestId('ai-add-provider').click();
   await win.getByTestId('add-provider-tile-openai').click();
-  await win.getByTestId('ai-provider-row-vercel-gateway').locator('.ai-provider-head').click();
   const openai = win.getByTestId('ai-provider-enabled-openai');
   await expect(openai).toHaveAttribute('aria-checked', 'false');
   await expect(openai).toBeEnabled();
@@ -119,11 +120,11 @@ test('each provider is one row with a switch; the default and unconfigured ones 
   await win.screenshot({ path: path.join(artifacts, 'ai-provider-tabs-providers.png') });
 
   // Only the selected row shows its connection details.
-  await expect(win.getByTestId('ai-provider-body-vercel-gateway')).toBeVisible();
+  await expect(win.getByTestId('ai-provider-body-openai')).toBeVisible();
   await expect(win.getByTestId('ai-provider-body-anthropic')).toHaveCount(0);
   await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
   await expect(win.getByTestId('ai-provider-body-anthropic')).toBeVisible();
-  await expect(win.getByTestId('ai-provider-body-vercel-gateway')).toHaveCount(0);
+  await expect(win.getByTestId('ai-provider-body-openai')).toHaveCount(0);
   await expect(win.getByLabel('Anthropic base URL')).toHaveValue(anthropic!.baseUrl);
 });
 
@@ -134,6 +135,7 @@ test('turning a provider off removes it from the composer and refuses new sessio
   expect(await providerOptionCount(win)).toBe(1);
 
   await openAiSettings(win);
+  await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
   await expect(win.getByTestId('ai-provider-enabled-anthropic')).toHaveAttribute('aria-checked', 'false');
   await expect(win.getByTestId('ai-provider-row-anthropic')).toContainText('Turned off');
@@ -163,6 +165,7 @@ test('turning a provider off removes it from the composer and refuses new sessio
 
   // Back on: offered again.
   await openAiSettings(win);
+  await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
   await expect(win.getByTestId('ai-provider-enabled-anthropic')).toHaveAttribute('aria-checked', 'true');
   await closeSettings(win);
@@ -175,9 +178,11 @@ test('making another provider the default frees the previous default to be switc
   const win = await launchWithTwoProviders();
   await openAiSettings(win);
 
+  await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-set-active-anthropic').click();
   await expect(win.getByTestId('ai-provider-default-anthropic')).toBeVisible();
   await expect(win.getByTestId('ai-provider-enabled-anthropic')).toBeDisabled();
+  await win.getByTestId('ai-provider-row-vercel-gateway').locator('.ai-provider-head').click();
   await expect(win.getByTestId('ai-provider-enabled-vercel-gateway')).toBeEnabled();
 });
 
@@ -190,10 +195,9 @@ test('pressing the switch on a provider that is not set up opens its setup, and 
   });
   await openAiSettings(win);
 
+  await win.getByTestId('ai-provider-row-openai').locator('.ai-provider-head').click();
   const openai = win.getByTestId('ai-provider-enabled-openai');
   await expect(openai).toHaveAttribute('aria-checked', 'false');
-  await expect(win.getByTestId('ai-provider-body-openai')).toHaveCount(0);
-
   await openai.click();
 
   // Its setup opens, says what to do, and the key field is focused ready to paste into.
@@ -219,24 +223,25 @@ test('the Recommendations provider list leaves out providers that are turned off
   const select = () => win.getByTestId('ai-recommendation-provider-select');
   const optionValues = async () => chipOptionValues(select());
 
-  await win.getByTestId('ai-tab-defaults').click();
+  await win.getByTestId('ai-tab-routing').click();
   expect(await optionValues()).toContain('anthropic');
 
   // Off: no longer offered.
   await win.getByTestId('ai-tab-providers').click();
+  await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
   await expect(win.getByTestId('ai-provider-enabled-anthropic')).toHaveAttribute('aria-checked', 'false');
-  await win.getByTestId('ai-tab-defaults').click();
+  await win.getByTestId('ai-tab-routing').click();
   expect(await optionValues()).not.toContain('anthropic');
 
   // Chosen first, then turned off: still listed, marked, so the select does not blank a stored value.
   await win.getByTestId('ai-tab-providers').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
-  await win.getByTestId('ai-tab-defaults').click();
+  await win.getByTestId('ai-tab-routing').click();
   await chooseOption(select(), 'anthropic');
   await win.getByTestId('ai-tab-providers').click();
   await win.getByTestId('ai-provider-enabled-anthropic').click();
-  await win.getByTestId('ai-tab-defaults').click();
+  await win.getByTestId('ai-tab-routing').click();
   await expect(select()).toHaveAttribute('data-value', 'anthropic');
   await select().click();
   await expect(win.locator('[role="option"][data-value="anthropic"]')).toHaveText(/Anthropic.*turned off/);

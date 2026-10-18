@@ -168,13 +168,13 @@ export async function launchTestApp(
     }
   } else if (skipAiOnboarding || skipSemanticSearchPrompt || indexPromptOffKey) {
     await window.evaluate(
-      ({ aiKey, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt, indexPromptOffKey }) => {
+      ({ aiKey, skipAiOnboarding, wfKey, skipWorkflowTutorial, searchKey, searchUpdateKey, skipSemanticSearchPrompt, indexPromptOffKey }) => {
         if (indexPromptOffKey) localStorage.setItem(indexPromptOffKey, 'true');
-        localStorage.setItem(aiKey, '1');
+        if (skipAiOnboarding) localStorage.setItem(aiKey, '1');
         if (skipWorkflowTutorial) localStorage.setItem(wfKey, '1');
         if (skipSemanticSearchPrompt) { localStorage.setItem(searchKey, 'true'); localStorage.setItem(searchUpdateKey, 'true'); }
       },
-      { aiKey: AI_ONBOARDED_KEY, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY, skipSemanticSearchPrompt, indexPromptOffKey }
+      { aiKey: AI_ONBOARDED_KEY, skipAiOnboarding, wfKey: WORKFLOW_TUTORIAL_KEY, skipWorkflowTutorial, searchKey: SEMANTIC_SEARCH_DISMISS_KEY, searchUpdateKey: SEMANTIC_SEARCH_UPDATE_DISMISS_KEY, skipSemanticSearchPrompt, indexPromptOffKey }
     );
     await window.reload();
     await window.waitForLoadState('domcontentloaded');

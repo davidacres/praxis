@@ -1128,7 +1128,7 @@ function ProviderLimitNotice({
             </button>
           </>
         ) : (
-          <span className="rail-sub">No other AI is set up — add one in Settings › AI Provider to carry on with it.</span>
+          <span className="rail-sub">No other AI is set up — add one in Settings › AI Providers to carry on with it.</span>
         )}
         <button type="button" className="btn btn-compact" data-testid="wf-run-resume" onClick={onRetry}>
           Retry on {who}

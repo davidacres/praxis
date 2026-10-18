@@ -100,6 +100,13 @@ export interface AiProviderConfig {
    */
   enabledModelIds?: string[];
   /**
+   * Every model id the catalog listed when the user last curated
+   * `enabledModelIds`. A model the catalog lists now but this does not is
+   * *new since curation* — Manage models tags it "New" (it arrives unchecked,
+   * because curation is an allow-list). Unset until the first curation.
+   */
+  knownModelIds?: string[];
+  /**
    * Whether this provider is offered for new sessions (Settings → AI Provider →
    * Providers). `undefined` means enabled: a provider is only *usable* when it is
    * also configured (key present / CLI found), so leaving this unset changes
@@ -1080,6 +1087,9 @@ function readAiProviderConfigs(value: unknown, known: readonly string[]): Partia
     // `[]`, not collapse to "unset".
     if (Array.isArray(raw.enabledModelIds) && raw.enabledModelIds.every(v => typeof v === 'string')) {
       config.enabledModelIds = raw.enabledModelIds as string[];
+    }
+    if (Array.isArray(raw.knownModelIds) && raw.knownModelIds.every(v => typeof v === 'string')) {
+      config.knownModelIds = raw.knownModelIds as string[];
     }
     if (typeof raw.enabled === 'boolean') {
       config.enabled = raw.enabled;

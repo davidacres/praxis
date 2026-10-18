@@ -32,7 +32,7 @@ function HistoryRow({ provider }: { provider: AiProvider }) {
         <h4>{providerLabel(provider)}</h4>
         <button className="btn btn-quiet" type="button" disabled={busy} onClick={() => void load()}>{busy ? 'Fetching history…' : history ? 'Refresh history' : 'Fetch history'}</button>
       </div>
-      <p className="settings-section-description">{api ? `Organization API history. Configure its Admin API key in Settings → AI Provider → ${providerLabel(provider)}. Subscription usage is separate.` : provider === 'claude-code-cli' ? 'Local Claude Code statistics on this device.' : 'Cumulative summary, when supported by the installed Codex CLI.'}</p>
+      <p className="settings-section-description">{api ? `Organization API history. Configure its Admin API key in Settings → AI Providers → ${providerLabel(provider)}. Subscription usage is separate.` : provider === 'claude-code-cli' ? 'Local Claude Code statistics on this device.' : 'Cumulative summary, when supported by the installed Codex CLI.'}</p>
       <div aria-live="polite">
         {error && <p className="error-banner">{error}</p>}
         {history && <>

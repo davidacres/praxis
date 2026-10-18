@@ -1348,7 +1348,7 @@ function AgentStageFields({
         <Field
           label="AI"
           labelTitle="Which AI runs this stage. Different stages can use different AIs — plan with one, implement with another."
-          warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${providerLabel(stageAi as AiProvider) ?? stageAi} is not set up or is turned off — set it up in Settings › AI Provider, or the run will not start.` : undefined}
+          warning={stageAi && usableAis.length > 0 && !usableAis.includes(stageAi) ? `${providerLabel(stageAi as AiProvider) ?? stageAi} is not set up or is turned off — set it up in Settings › AI Providers, or the run will not start.` : undefined}
         >
           <ChipSelect
             ariaLabel="AI"
@@ -1375,7 +1375,7 @@ function AgentStageFields({
         )}
         <Field
           label="Model tier"
-          labelTitle="Which model this stage’s session uses. Map each tier to a model per provider in Settings → AI Provider → Providers (open a provider’s row); an unmapped tier uses the run’s model."
+          labelTitle="Which model this stage’s session uses. Map each tier to a model per provider in Settings → AI Providers → Routing; an unmapped tier uses the run’s model."
         >
           <ChipSelect
             ariaLabel="Model tier"

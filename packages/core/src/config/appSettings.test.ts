@@ -593,3 +593,10 @@ test('code intelligence settings default to enabled with empty project overrides
   });
 });
 
+
+test('a provider keeps the model ids it was curated against, and drops a malformed list', () => {
+  const kept = sanitizeAppSettings({ ai: { providers: { openai: { enabledModelIds: ['a'], knownModelIds: ['a', 'b'] } } } });
+  assert.deepEqual(kept.ai.providers.openai?.knownModelIds, ['a', 'b']);
+  const dropped = sanitizeAppSettings({ ai: { providers: { openai: { enabledModelIds: ['a'], knownModelIds: ['a', 3] } } } });
+  assert.equal(dropped.ai.providers.openai?.knownModelIds, undefined);
+});

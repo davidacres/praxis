@@ -288,9 +288,14 @@ control — the dashed style and the off-palette hue are both asserted.
 
 ## AI provider settings (`SettingsPage.tsx` → `AiSection`)
 
-Settings → AI Provider is four tabs — **Providers · Defaults · Spend · Tools** — and each
-provider is **one row**: name, status, "Make default", and an on/off switch, with its
-connection details (key, URL, model, CLI path, models) opening under the selected row.
+Settings → AI Provider is four tabs — **Providers · Routing · Behaviour · Tools**.
+The **Providers** tab uses a master-detail rail + detail view: a grouped rail on the left
+(Cloud APIs, Local agents, Endpoints) showing status dots and default indicators, and a detail
+card view on the right (Connection, Models, and Usage cards with guided onboarding for missing
+keys and uninstalled CLI agents). The default provider is selected via the route strip at the top
+or "Make default" on the active card. **Routing** controls default and recommendation dispatch
+plus provider model tiers. **Behaviour** holds agent name, working folder, and analysis prompts.
+**Tools** manages in-app browser host permissions (with inline addition and removal) and MCP servers.
 Add a setting to the tab it belongs to rather than the top of the page.
 
 **The Providers tab lists the providers in use, not every provider (FX-BF-044).** A row shows

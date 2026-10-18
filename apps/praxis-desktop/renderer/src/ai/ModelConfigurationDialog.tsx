@@ -36,13 +36,10 @@ export function ModelConfigurationDialog({ providerId, onClose }: { providerId: 
       >
         {settings && <ModelManagerPanel
           key={providerId}
-          chipLayout
           providerId={providerId}
           providerLabel={providerLabel(providerId)}
           enabledModelIds={settings.ai.providers[providerId]?.enabledModelIds}
           providerConfig={settings.ai.providers[providerId] ?? {}}
-          tiers={settings.ai.modelTiers?.[providerId] ?? {}}
-          onTiersChange={tiers => void update({ ai: { modelTiers: { ...settings.ai.modelTiers, [providerId]: tiers } } })}
           onBack={onClose}
           update={update}
         />}

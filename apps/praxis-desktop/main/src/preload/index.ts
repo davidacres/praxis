@@ -264,6 +264,7 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:testProviderApiKey', provider),
     resetProviderApiKeys: () => ipcRenderer.invoke('ai:resetProviderApiKeys'),
     listProviderPresets: () => ipcRenderer.invoke('ai:listProviderPresets'),
+    detectLocalRuntimes: () => ipcRenderer.invoke('ai:detectLocalRuntimes'),
     testCustomProvider: (draft: CustomProviderConfig, options?: { apiKey?: string; model?: string }) =>
       ipcRenderer.invoke('ai:testCustomProvider', draft, options),
     saveCustomProvider: (input: SaveCustomProviderInput) => ipcRenderer.invoke('ai:saveCustomProvider', input),
