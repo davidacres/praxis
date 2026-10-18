@@ -116,3 +116,20 @@ run-ledger evidence.
 ## Comments
 
 
+
+
+**PRX-F47** — 2026-10-18T20:50:47.528Z
+**Workflow run cancelled: Governed delivery — Governed delivery 1**
+
+Status: Cancelled · Duration: 116h 44m
+
+- ✅ Plan: succeeded
+- ❌ Implement: failed
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+cancelled from the run view
