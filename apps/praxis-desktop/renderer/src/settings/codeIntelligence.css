@@ -48,6 +48,12 @@
   border-color: color-mix(in srgb, var(--tone-accent, #3b82f6) 30%, transparent);
 }
 
+.code-intelligence-status-badge.warning {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+
 .code-intelligence-progress-wrap {
   display: flex;
   flex-direction: column;

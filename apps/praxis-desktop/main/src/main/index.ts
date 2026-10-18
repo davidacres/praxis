@@ -1,5 +1,5 @@
 import { registerProjectActivityIpc } from './projectActivityInstance';
-import { registerCodeIntelligenceIpc } from './codeIntelligenceIpc';
+import { registerCodeIntelligenceIpc, replaceOutdatedOwner } from './codeIntelligenceIpc';
 import { registerCoordinationIpc } from './coordinationIpc';
 import { disposeCoordination } from './coordinationInstance';
 import * as fs from 'node:fs';
@@ -364,6 +364,9 @@ void app.whenReady().then(async () => {
   registerBoardPrefsIpc();
   registerAiIpc();
   registerCodeIntelligenceIpc();
+  // A code intelligence owner outlives the app; one left by an earlier build is replaced so
+  // this session (and agents' MCP bridges) never talks to old code. Never blocks startup.
+  void replaceOutdatedOwner().catch(error => console.error('Could not replace an outdated code intelligence service:', error));
   registerCoordinationIpc();
   registerTicketReviewIpc();
   registerAiUsageIpc();

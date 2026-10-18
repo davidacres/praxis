@@ -21,6 +21,13 @@ public static class OwnerService
     /// </summary>
     internal static bool RunsBesideWriter(string? action) => action is "query" or "list" or "grants" or "grant" or "revoke";
 
+    /// <summary>
+    /// This build's identity: the module version ID, which deterministic compilation derives
+    /// from the code. A client compares it with a running owner's to tell whether that owner
+    /// still runs old code — an owner outlives the app that started it.
+    /// </summary>
+    public static string Build { get; } = Assembly.GetExecutingAssembly().ManifestModule.ModuleVersionId.ToString("N");
+
     public static async Task RunAsync(string directory, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(directory); directory = SourceFiles.CanonicalDirectory(directory);
@@ -28,6 +35,7 @@ public static class OwnerService
         using var ownerLock = new FileStream(Path.Combine(directory, "owner.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         var endpoint = Endpoint(directory); if (!OperatingSystem.IsWindows()) File.Delete(endpoint);
         var token = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)); using var runtime = new ServiceRuntime(directory);
+        var startedUtc = DateTimeOffset.UtcNow.ToString("O");
         runtime.Scheduler.ReclaimAbandonedLeases(); // safe: this process holds the exclusive owner lock
         runtime.ScheduleStartupReconciliation();
         using var writer = new SemaphoreSlim(1, 1); using var clients = new SemaphoreSlim(16, 16);
@@ -39,7 +47,7 @@ public static class OwnerService
         try
         {
             File.WriteAllText(staging, new JsonObject { ["version"] = 1, ["endpoint"] = endpoint, ["token"] = token,
-                ["processId"] = Environment.ProcessId }.ToJsonString());
+                ["processId"] = Environment.ProcessId, ["build"] = Build, ["startedUtc"] = startedUtc }.ToJsonString());
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staging, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             File.Move(staging, rendezvous, overwrite: true);
             var maintenance = Task.Run(async () =>
@@ -97,7 +105,19 @@ public static class OwnerService
                         rejected["handshake"] = "authenticationRejected";
                         await Framing.WriteAsync(pipe, rejected, Framing.MaximumResponseBytes, deadline.Token); return;
                     }
-                    var request = frame["request"]!.AsObject(); var besideWriter = RunsBesideWriter(request["action"]?.GetValue<string>());
+                    var request = frame["request"]!.AsObject();
+                    // Owner lifecycle requests answer at once, never queued behind a long writer job.
+                    if (request["action"]?.GetValue<string>() is "owner-status" or "shutdown")
+                    {
+                        var shutdown = request["action"]!.GetValue<string>() == "shutdown";
+                        await Framing.WriteAsync(pipe, new JsonObject { ["data"] = new JsonObject { ["running"] = !shutdown, ["stopping"] = shutdown,
+                            ["processId"] = Environment.ProcessId, ["build"] = Build, ["startedUtc"] = startedUtc } }, Framing.MaximumResponseBytes, deadline.Token);
+                        // Graceful: the loops end, in-flight requests get five seconds, an interrupted
+                        // background job is reclaimed by the next owner like any lost lease.
+                        if (shutdown) lifetime.Cancel();
+                        return;
+                    }
+                    var besideWriter = RunsBesideWriter(request["action"]?.GetValue<string>());
                     var repository = request["arguments"]?["repositoryId"]?.GetValue<string>() ?? request["repositoryId"]?.GetValue<string>() ?? "local";
                     if (request["action"]?.GetValue<string>() is "pause" or "unregister" or "rebuild" or "relocate") runtime.CancelRepositoryWork(repository);
                     var admission = admissions.GetOrAdd(repository, _ => new Admission());
@@ -170,6 +190,56 @@ public static class OwnerService
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { throw new IOException("Owner startup timed out."); }
         finally { startup?.Dispose(); }
     }
+    /// <summary>The running owner's status, or <c>running: false</c>. Never starts an owner.</summary>
+    public static async Task<JsonObject> ProbeAsync(string directory, CancellationToken cancellationToken)
+    {
+        var response = await TrySendToRunningAsync(directory, new JsonObject { ["action"] = "owner-status" }, cancellationToken);
+        return response?["data"]?.AsObject().DeepClone().AsObject() ?? new JsonObject { ["running"] = false };
+    }
+
+    /// <summary>Asks a running owner to shut down and waits for it to exit. Never starts an owner.</summary>
+    public static async Task<JsonObject> StopAsync(string directory, CancellationToken cancellationToken)
+    {
+        var response = await TrySendToRunningAsync(directory, new JsonObject { ["action"] = "shutdown" }, cancellationToken);
+        if (response?["data"] is not JsonObject data) return new JsonObject { ["stopped"] = false, ["running"] = false };
+        var rendezvous = Path.Combine(SourceFiles.CanonicalDirectory(directory), "owner.json");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        // The owner removes its rendezvous as its last act; a replacement writes a new one
+        // with another process ID, which also means this one has gone.
+        while (File.Exists(rendezvous) && OwnerProcess(rendezvous) == data["processId"]!.GetValue<int>())
+            await Task.Delay(50, deadline.Token);
+        return new JsonObject { ["stopped"] = true, ["running"] = false, ["processId"] = data["processId"]!.DeepClone() };
+    }
+
+    private static int? OwnerProcess(string rendezvous)
+    {
+        try { return JsonNode.Parse(File.ReadAllBytes(rendezvous))?["processId"]?.GetValue<int>(); }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException) { return null; }
+    }
+
+    private static async Task<JsonObject?> TrySendToRunningAsync(string directory, JsonObject request, CancellationToken cancellationToken)
+    {
+        directory = Path.GetFullPath(directory);
+        if (!Directory.Exists(directory)) return null;
+        directory = SourceFiles.CanonicalDirectory(directory);
+        var rendezvous = Path.Combine(directory, "owner.json");
+        if (!File.Exists(rendezvous)) return null;
+        try
+        {
+            var bytes = File.ReadAllBytes(rendezvous); if (bytes.Length > 4096) return null;
+            var owner = JsonNode.Parse(bytes)!; var endpoint = owner["endpoint"]!.GetValue<string>();
+            if (endpoint != Endpoint(directory) || owner["version"]!.GetValue<int>() != 1) return null;
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); deadline.CancelAfter(TimeSpan.FromSeconds(10));
+            using var pipe = new NamedPipeClientStream(".", endpoint, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await pipe.ConnectAsync(1000, deadline.Token);
+            await Framing.WriteAsync(pipe, new JsonObject { ["token"] = owner["token"]!.DeepClone(), ["request"] = request.DeepClone() }, Framing.MaximumRequestBytes, deadline.Token);
+            var response = await Framing.ReadAsync(pipe, Framing.MaximumResponseBytes, deadline.Token);
+            return response["error"] is null ? response : null;
+        }
+        // A stale rendezvous from a crashed owner, or one exiting right now: nothing is running.
+        catch (Exception ex) when (ex is IOException or TimeoutException or System.Text.Json.JsonException or InvalidOperationException or OperationCanceledException && !cancellationToken.IsCancellationRequested) { return null; }
+    }
+
     private static NamedPipeServerStream Server(string endpoint) => new(endpoint, PipeDirection.InOut, 16, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
     private static string Endpoint(string directory)
     {

@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { codeIntelligenceDataDirectory, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
+import { codeIntelligenceDataDirectory, type CodeIntelligenceOwnerStatus, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain.js';
 import { getSettingsBackend } from './settingsBackendInstance.js';
 import {
@@ -16,7 +16,7 @@ import {
   setCachedFingerprint
 } from './semanticModelManager.js';
 
-const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate']);
+const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate', 'owner-status', 'owner-start', 'owner-stop', 'owner-restart']);
 const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status', 'search_knowledge', 'get_knowledge_section', 'find_related_knowledge']);
 
 function dataDirectory(): string {
@@ -94,6 +94,40 @@ async function activateModel(fingerprint: string, repositoryIds: string[]): Prom
   return failures;
 }
 
+/**
+ * The background owner outlives the app, so a running one may hold an older build. Status
+ * never starts it; start is any request (the CLI starts an owner on demand); stop waits for
+ * it to exit. Restarting brings every client, agents' MCP bridges included, onto this build.
+ */
+async function ownerStatus(): Promise<CodeIntelligenceResponse> {
+  const [status, version] = await Promise.all([invoke(['owner-status']), invoke(['version'])]);
+  if (status.error) return status;
+  const data = (status.data ?? {}) as CodeIntelligenceOwnerStatus;
+  const currentBuild = (version.data as { build?: string } | undefined)?.build;
+  return { data: { ...data, currentBuild, outdated: data.running === true && !!currentBuild && data.build !== currentBuild } };
+}
+async function ownerStart(): Promise<CodeIntelligenceResponse> {
+  const started = await invoke(['list']);
+  return started.error ? started : ownerStatus();
+}
+async function ownerStop(): Promise<CodeIntelligenceResponse> {
+  const stopped = await invoke(['stop']);
+  return stopped.error ? stopped : ownerStatus();
+}
+async function ownerRestart(): Promise<CodeIntelligenceResponse> {
+  const stopped = await invoke(['stop']);
+  return stopped.error ? stopped : ownerStart();
+}
+
+/** On launch, replace an owner left running by an earlier build so the app never talks to old code. */
+export async function replaceOutdatedOwner(): Promise<boolean> {
+  const status = await ownerStatus();
+  if (!(status.data as CodeIntelligenceOwnerStatus | undefined)?.outdated) return false;
+  const restarted = await ownerRestart();
+  if (restarted.error) throw new Error(restarted.error.message);
+  return true;
+}
+
 // Repositories registered before this fix, or whose activation was refused while their
 // index was failing, are caught up once per session.
 let modelActivationCaughtUp = false;
@@ -141,6 +175,10 @@ export function registerCodeIntelligenceIpc(): void {
         case 'revoke': return invoke(['revoke', text(request.repositoryId, 512), '--client', text(request.provider, 128)]);
         case 'model-install': return invoke(['model-install', text(request.bundle)]);
         case 'model-activate': return invoke(['model-activate', text(request.repositoryId, 512), text(request.fingerprint, 71)]);
+        case 'owner-status': return ownerStatus();
+        case 'owner-start': return ownerStart();
+        case 'owner-stop': return ownerStop();
+        case 'owner-restart': return ownerRestart();
         default: return invoke([request.action, text(request.repositoryId, 512)]);
       }
     } catch (error) { return { error: { code: 'CAPABILITY_UNAVAILABLE', message: error instanceof Error ? error.message : 'Code intelligence is unavailable.' } }; }

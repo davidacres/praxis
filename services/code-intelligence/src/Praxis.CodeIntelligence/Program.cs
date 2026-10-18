@@ -28,7 +28,7 @@ try
             "capture <root> <relative.csproj> [--output context.praxis.json] [--configuration Debug] [--framework net10.0] [--restore]\n" +
             "model-check <bundle> | model-install <bundle> | model-activate <repository> <fingerprint>\n" +
             "alias <repository> <symbolId> <phrase>\n" +
-            "doctor | backup <destination> | serve\nAll commands accept --data <private directory>. Normal indexing never builds or restores projects."); return 0;
+            "doctor | backup <destination> | serve | version | owner-status | stop\nAll commands accept --data <private directory>. Normal indexing never builds or restores projects."); return 0;
     }
     if (arguments[0] == "init" && arguments.Count == 2) { new IndexDatabase(arguments[1]).Initialize(); Console.WriteLine("Index initialized."); return 0; }
     using var cancellation = new CancellationTokenSource(); Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
@@ -47,6 +47,17 @@ try
             ["skippedExternalCompileItems"] = new JsonArray(skipped.Select(path => (JsonNode?)JsonValue.Create(path)).ToArray()) }.ToJsonString()); return 0;
     }
     if (arguments[0] == "serve") { await OwnerService.RunAsync(directory, cancellation.Token); return 0; }
+    // Lifecycle commands talk only to an owner that is already running; none starts one.
+    if (arguments.Count == 1 && arguments[0] is "version" or "owner-status" or "stop")
+    {
+        var data = arguments[0] switch
+        {
+            "version" => new JsonObject { ["build"] = OwnerService.Build },
+            "owner-status" => await OwnerService.ProbeAsync(directory, cancellation.Token),
+            _ => await OwnerService.StopAsync(directory, cancellation.Token)
+        };
+        Console.WriteLine(new JsonObject { ["data"] = data }.ToJsonString()); return 0;
+    }
     JsonObject request = arguments[0] switch
     {
         "list" or "doctor" when arguments.Count == 1 => new() { ["action"] = arguments[0] },

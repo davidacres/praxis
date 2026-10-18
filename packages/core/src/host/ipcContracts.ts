@@ -791,7 +791,9 @@ export interface AiSessionModelInput {
  * over the `ai:sessionChanged` push channel.
  */
 export interface CodeIntelligenceRequest {
-  action: 'list' | 'register' | 'index' | 'rebuild' | 'relocate' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate';
+  action: 'list' | 'register' | 'index' | 'rebuild' | 'relocate' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate'
+    // The background owner process: status never starts it; start/stop/restart are explicit.
+    | 'owner-status' | 'owner-start' | 'owner-stop' | 'owner-restart';
   repositoryId?: string;
   root?: string;
   manifest?: string;
@@ -801,6 +803,15 @@ export interface CodeIntelligenceRequest {
   provider?: string;
   bundle?: string;
   fingerprint?: string;
+}
+/** `data` of an `owner-*` response. `outdated` means the running owner is another build than the app's service. */
+export interface CodeIntelligenceOwnerStatus {
+  running: boolean;
+  processId?: number;
+  build?: string;
+  startedUtc?: string;
+  currentBuild?: string;
+  outdated?: boolean;
 }
 export interface CodeIntelligenceResponse {
   indexGeneration?: number | null;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type {
+  CodeIntelligenceOwnerStatus,
   CodeIntelligenceRequest,
   CodeIntelligenceResponse,
   McpServerConfig,
@@ -44,6 +45,7 @@ export function CodeIntelligencePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState<CodeIntelligenceResponse>();
+  const [owner, setOwner] = useState<CodeIntelligenceOwnerStatus>();
 
   // Semantic model state
   const [modelStatus, setModelStatus] = useState<SemanticModelStatus>({
@@ -79,6 +81,11 @@ export function CodeIntelligencePanel({
     setRepositoryId(current => nextId || (list.some(r => r.id === current) ? current : list[0]?.id || ''));
   }
 
+  // Never starts the service: a stopped service must stay visibly stopped.
+  async function refreshOwner(): Promise<void> {
+    setOwner(record((await call({ action: 'owner-status' })).data) as unknown as CodeIntelligenceOwnerStatus);
+  }
+
   async function refreshModelStatus(): Promise<void> {
     if (window.praxis?.ai?.getSemanticModelStatus) {
       try {
@@ -107,6 +114,7 @@ export function CodeIntelligencePanel({
     void work(async () => {
       await refresh();
       await refreshModelStatus();
+      await refreshOwner();
     });
 
     if (window.praxis?.ai?.onSemanticModelProgress) {
@@ -140,8 +148,10 @@ export function CodeIntelligencePanel({
 
   // Index, rebuild, relocation and vector work run in the background; poll so the
   // generation, coverage and queued-work line follow them instead of freezing.
+  const ownerStopped = owner?.running === false;
   useEffect(() => {
-    if (!repositoryId) return;
+    // An index status query starts the service on demand, which would undo Stop.
+    if (!repositoryId || ownerStopped) return;
     let disposed = false;
     let inFlight = false;
     const timer = window.setInterval(() => {
@@ -153,7 +163,7 @@ export function CodeIntelligencePanel({
         .finally(() => { inFlight = false; });
     }, 3000);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, [repositoryId, busy]);
+  }, [repositoryId, busy, ownerStopped]);
 
   const handleDownloadModel = async () => {
     if (!window.praxis?.ai?.downloadSemanticModel) return;
@@ -362,6 +372,74 @@ export function CodeIntelligencePanel({
             </div>
           </details>
         )}
+      </div>
+
+      {/* Service Card */}
+      <div className="code-intelligence-card" data-testid="code-intel-service-card">
+        <div className="code-intelligence-card-header">
+          <h5>
+            <Icon name="server" size={15} />
+            <span>Service</span>
+          </h5>
+          <span
+            className={`code-intelligence-status-badge${owner?.outdated ? ' warning' : owner?.running ? ' active' : ''}`}
+            data-testid="code-intel-service-badge"
+          >
+            {!owner ? 'Checking…' : owner.outdated ? 'Outdated build' : owner.running ? 'Running' : 'Stopped'}
+          </span>
+        </div>
+        <p className="settings-hint" style={{ margin: 0 }} data-testid="code-intel-service-status">
+          {!owner
+            ? 'Checking the background service…'
+            : owner.running
+            ? `Process ${owner.processId ?? '?'} · started ${owner.startedUtc ? new Date(owner.startedUtc).toLocaleString() : 'unknown'} · build ${(owner.build ?? '').slice(0, 8)}${
+                owner.outdated ? ` (this app's build is ${(owner.currentBuild ?? '').slice(0, 8)}; restart to use it)` : ' (current)'
+              }`
+            : 'Stopped. It starts again automatically the next time Praxis or an agent needs code intelligence.'}
+        </p>
+        <div className="code-intelligence-actions">
+          {owner?.running === false ? (
+            <button
+              className="btn btn-sm"
+              type="button"
+              data-testid="code-intel-service-start-btn"
+              disabled={busy}
+              onClick={() => void work(async () => { setOwner(record((await call({ action: 'owner-start' })).data) as unknown as CodeIntelligenceOwnerStatus); await refresh(); })}
+            >
+              Start
+            </button>
+          ) : (
+            <>
+              <button
+                className="btn btn-sm"
+                type="button"
+                data-testid="code-intel-service-restart-btn"
+                disabled={busy || !owner}
+                onClick={() => void work(async () => { setOwner(record((await call({ action: 'owner-restart' })).data) as unknown as CodeIntelligenceOwnerStatus); await refresh(); })}
+              >
+                Restart
+              </button>
+              <button
+                className="btn btn-sm btn-secondary"
+                type="button"
+                data-testid="code-intel-service-stop-btn"
+                disabled={busy || !owner}
+                onClick={() => void work(async () => setOwner(record((await call({ action: 'owner-stop' })).data) as unknown as CodeIntelligenceOwnerStatus))}
+              >
+                Stop
+              </button>
+            </>
+          )}
+          <button
+            className="icon-btn icon-btn-sm"
+            type="button"
+            aria-label="Refresh service status"
+            disabled={busy}
+            onClick={() => void work(() => refreshOwner())}
+          >
+            <Icon name="refresh" size={13} />
+          </button>
+        </div>
       </div>
 
       {/* Indexed Repositories Card */}

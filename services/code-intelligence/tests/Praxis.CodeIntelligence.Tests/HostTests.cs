@@ -9,6 +9,37 @@ namespace Praxis.CodeIntelligence.Tests;
 
 public sealed class HostTests
 {
+    // The desktop shows, stops and restarts the owner, and replaces one running another build.
+    // None of that may start an owner as a side effect: a status check that silently started
+    // one would make "stopped" impossible to observe.
+    [Fact]
+    public async Task StatusAndStopNeverStartAnOwnerAndStopEndsTheRunningOne()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "pci-" + Guid.NewGuid().ToString("N")[..8]);
+        var rendezvous = Path.Combine(directory, "owner.json");
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            Assert.False((await OwnerService.ProbeAsync(directory, cancellation.Token))["running"]!.GetValue<bool>());
+            Assert.False((await OwnerService.StopAsync(directory, cancellation.Token))["stopped"]!.GetValue<bool>());
+            Assert.False(File.Exists(rendezvous));
+
+            var owner = OwnerService.RunAsync(directory, cancellation.Token);
+            var status = await OwnerService.ProbeAsync(directory, cancellation.Token);
+            Assert.True(status["running"]!.GetValue<bool>());
+            Assert.Equal(Environment.ProcessId, status["processId"]!.GetValue<int>());
+            Assert.Equal(OwnerService.Build, status["build"]!.GetValue<string>());
+            Assert.True(DateTimeOffset.TryParse(status["startedUtc"]!.GetValue<string>(), out _));
+
+            var stopped = await OwnerService.StopAsync(directory, cancellation.Token);
+            Assert.True(stopped["stopped"]!.GetValue<bool>());
+            await owner.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(File.Exists(rendezvous));
+            Assert.False((await OwnerService.ProbeAsync(directory, cancellation.Token))["running"]!.GetValue<bool>());
+        }
+        finally { cancellation.Cancel(); Directory.Delete(directory, recursive: true); }
+    }
+
     [Fact]
     public async Task ClientRefreshesRejectedHandshakeBeforeDispatchingARequest()
     {
