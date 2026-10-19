@@ -1,4 +1,5 @@
 import type { AgentSessionRecord, AiProvider, AiUsageEvent } from '@praxis/core';
+import { isLimitNoticeReply } from './sessionNav';
 
 type Cost = NonNullable<AgentSessionRecord['cost']>;
 export interface SessionModelUsage {
@@ -29,6 +30,24 @@ function sumCosts(values: Array<Cost | undefined>): Cost[] {
   return [...totals].map(([currency, amount]) => ({ currency, amount }));
 }
 
+type Epoch = NonNullable<AgentSessionRecord['runtimeEpochs']>[number];
+
+/**
+ * Whether a runtime produced any reply while it was active. A run with no reply (a provider that
+ * hit its limit at once, a handover before the first answer) used no tokens, so its missing figure
+ * is 0 rather than unreported. Without loaded events we cannot tell, so we keep it unreported.
+ */
+function repliedDuring(record: AgentSessionRecord, epochs: readonly Epoch[], index: number): boolean {
+  if (record.eventsLoaded === false || !record.events?.length) return true;
+  const start = Date.parse(epochs[index].startedAt);
+  const end = Date.parse(epochs[index].endedAt ?? epochs[index + 1]?.startedAt ?? '');
+  return record.events.some(event => {
+    if (event.type !== 'message' || isLimitNoticeReply(event.detail || event.summary)) return false;
+    const at = Date.parse(event.timestamp);
+    return !(at < start) && !(at >= end);
+  });
+}
+
 /** Runtime epochs attribute session tokens; the ledger attributes cost deltas. Neither is account quota. */
 export function sessionUsageData(
   records: AgentSessionRecord[],
@@ -56,11 +75,12 @@ export function sessionUsageData(
       contributions.set(key, [...(contributions.get(key) ?? []), record.tokenUsage?.totalTokens]);
       if (record.cost) costContributions.set(key, [...(costContributions.get(key) ?? []), record.cost]);
     } else {
-      for (const epoch of epochs) {
-        if (!epoch.provider) continue;
+      epochs.forEach((epoch, index) => {
+        if (!epoch.provider) return;
         const key = ensure(epoch.provider, epoch.model);
-        contributions.set(key, [...(contributions.get(key) ?? []), epoch.tokenUsage?.totalTokens]);
-      }
+        const tokens = epoch.tokenUsage?.totalTokens ?? (repliedDuring(record, epochs, index) ? undefined : 0);
+        contributions.set(key, [...(contributions.get(key) ?? []), tokens]);
+      });
       for (const event of ledger.filter(event => event.sessionId === record.sessionId)) {
         if (!event.provider) continue;
         const key = ensure(event.provider, event.model);

@@ -1,14 +1,13 @@
-/* A stable provider order ties the icon, token and account-window groups together. */
+/* The collapsed strip is one group per provider (icon, tokens, limits), so it wraps between providers, never inside one. */
 .session-usage-summary.composer-usage-compact { container-type: inline-size; }
 .session-usage-summary.composer-usage-compact > summary { gap: var(--space-2); padding: var(--space-2) var(--space-3); font-size: var(--text-xs); min-height: calc(38px * var(--ui-scale, 1)); list-style: none; }
-.composer-usage-current, .composer-usage-inline, .composer-usage-pair, .composer-usage-limit-value, .composer-usage-provider-name, .composer-usage-model-name { display: flex; align-items: center; gap: var(--space-2); }
+.composer-usage-current, .composer-usage-inline, .composer-usage-provider-group, .composer-usage-limit-value, .composer-usage-provider-name, .composer-usage-model-name { display: flex; align-items: center; gap: var(--space-2); }
 .composer-usage-current { min-width: 0; flex: 1 1 auto; }
 .composer-usage-current strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
 .composer-usage-current > svg, .composer-usage-provider-name > svg, .composer-usage-model-name > svg { flex-shrink: 0; }
-.composer-usage-inline { margin-left: auto; justify-content: flex-end; flex-wrap: wrap; font-variant-numeric: tabular-nums; row-gap: var(--space-1); }
-.composer-usage-pair { gap: var(--space-1); white-space: nowrap; }
-.composer-usage-pair > span { display: inline-flex; align-items: center; }
-.composer-usage-pair > span + span::before { content: '/'; color: var(--text-tertiary); margin-right: var(--space-1); }
+.composer-usage-inline { margin-left: auto; justify-content: flex-end; flex-wrap: wrap; font-variant-numeric: tabular-nums; row-gap: var(--space-1); column-gap: var(--space-4); }
+.composer-usage-provider-group { gap: var(--space-2); white-space: nowrap; flex-wrap: nowrap; }
+.composer-usage-group-logo { display: inline-flex; flex-shrink: 0; }
 .composer-usage-limit { display: inline-flex; flex-direction: column; gap: var(--space-1); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .composer-usage-limit-value { gap: var(--space-1); }
 .composer-usage-limit strong { font-weight: 600; }
@@ -20,6 +19,21 @@
 .composer-usage-limit-track > span { display: block; height: 100%; background: var(--accent); }
 .composer-usage-limit.is-warn .composer-usage-limit-track > span { background: var(--warning); }
 .composer-usage-limit.is-limit .composer-usage-limit-track > span { background: var(--danger); }
+.composer-usage-chart { display: inline-grid; grid-template-columns: auto auto; align-items: center; column-gap: var(--space-1); row-gap: calc(1px * var(--ui-scale, 1)); line-height: 1; font-size: calc(10px * var(--ui-scale, 1)); }
+.composer-usage-chart-row { display: contents; }
+.composer-usage-chart .composer-usage-limit-track { width: calc(36px * var(--ui-scale, 1)); }
+.composer-usage-chart-row > strong { min-width: 3.5ch; text-align: right; }
+/* Not reported: a full grey bar and a dash, so it cannot be mistaken for 0% used. */
+.composer-usage-chart-row.is-unreported { color: var(--text-tertiary); }
+.composer-usage-chart-row.is-unreported .composer-usage-limit-track { background: color-mix(in srgb, var(--text-tertiary) 45%, var(--border)); }
+/* Loading: a short segment sweeps left to right and back; the weekly row trails the 5h row slightly. */
+.composer-usage-chart-row.is-loading .composer-usage-limit-track > span { width: 40%; background: color-mix(in srgb, var(--accent) 55%, var(--border)); animation: composer-usage-sweep 0.9s ease-in-out infinite alternate; }
+.composer-usage-chart-row.is-loading + .composer-usage-chart-row.is-loading .composer-usage-limit-track > span { animation-delay: 0.15s; }
+.composer-usage-chart-placeholder { visibility: hidden; }
+@keyframes composer-usage-sweep { from { transform: translateX(0); } to { transform: translateX(150%); } }
+@media (prefers-reduced-motion: reduce) {
+  .composer-usage-chart-row.is-loading .composer-usage-limit-track > span { width: 100%; animation: none; opacity: 0.5; }
+}
 .composer-usage-expanded { padding: 0 var(--space-3) var(--space-2); font-size: var(--text-xs); }
 .composer-usage-expanded-current { display: flex; flex-direction: column; align-items: flex-end; margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .composer-usage-expanded-current strong { font-weight: 600; }

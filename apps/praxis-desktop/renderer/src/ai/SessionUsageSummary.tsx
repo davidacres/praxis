@@ -24,6 +24,8 @@ function windowLabel(window: ProviderUsageWindow) {
   return 'Hour';
 }
 
+const severity = (percent: number) => percent >= 100 ? ' is-limit' : percent >= 80 ? ' is-warn' : '';
+
 function Limit({ window, provider, now, expanded = false }: {
   window: ProviderUsageWindow; provider: AiProvider; now: number; expanded?: boolean;
 }) {
@@ -34,11 +36,11 @@ function Limit({ window, provider, now, expanded = false }: {
     : undefined;
   const value = percent !== undefined ? `${Math.round(percent)}%`
     : window.usedTokens !== undefined ? `${formatTokenCompact(window.usedTokens)} tok`
-      : consumptionCost ?? 'Not reported';
+      : consumptionCost ?? '–';
   const reset = window.resetsAt && Number.isFinite(Date.parse(window.resetsAt)) ? countdown(window.resetsAt, now) : undefined;
   const label = expanded ? window.label ?? windowLabel(window) : windowLabel(window);
-  const title = `${providerLabel(provider)} · ${window.label ?? label}: ${value}${quota ? ' used' : ' consumption; limit not reported'}${reset ? ` · resets in ${reset}` : ' · reset not reported'}`;
-  return <span className={`composer-usage-limit${percent !== undefined && percent >= 100 ? ' is-limit' : percent !== undefined && percent >= 80 ? ' is-warn' : ''}`}
+  const title = `${providerLabel(provider)} · ${window.label ?? label}: ${value}${quota ? ' used' : value === '–' ? ' (not available)' : ' consumption; no limit shared'}${reset ? ` · resets in ${reset}` : ''}`;
+  return <span className={`composer-usage-limit${percent !== undefined ? severity(percent) : ''}`}
     title={title} aria-label={title} data-provider={provider} data-period={window.period} data-testid={`session-usage-meter-${window.period}`}>
     <span className="composer-usage-limit-value"><span className="composer-usage-muted">{label}</span> <strong>{value}</strong>
       {quota && <span className="composer-usage-limit-track" role="progressbar" aria-label={`${providerLabel(provider)} ${window.label ?? label} used`}
@@ -46,7 +48,95 @@ function Limit({ window, provider, now, expanded = false }: {
         <span style={{ width: `${Math.max(0, Math.min(100, percent!))}%` }} />
       </span>}
     </span>
-    {expanded && <small>{reset ? `↻ ${reset}` : 'Reset not reported'}</small>}
+    {expanded && reset && <small>↻ {reset}</small>}
+  </span>;
+}
+
+// The collapsed strip always shows these two rows per provider, so every provider reads the same way.
+const CHART_SLOTS: Array<{ period: 'hour' | 'week'; name: string; pick: (windows: ProviderUsageWindow[]) => ProviderUsageWindow | undefined }> = [
+  { period: 'hour', name: '5-hour window', pick: windows => windows.find(window => window.period === 'hour' && window.windowDurationMinutes === 300) ?? windows.find(window => window.period === 'hour') },
+  { period: 'week', name: 'Weekly', pick: windows => windows.find(window => window.period === 'week') }
+];
+
+const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * A percentage that eases from its last value to `target`: from 0 when the data first lands,
+ * from the old figure on a later refresh. Bar width and label both read it, so they stay in step.
+ */
+function useAnimatedPercent(target: number, durationMs = 600): number {
+  const [value, setValue] = useState(() => reducedMotion() ? target : 0);
+  const shown = useRef(value);
+  useEffect(() => {
+    if (reducedMotion()) { shown.current = target; setValue(target); return; }
+    const from = shown.current;
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      shown.current = from + (target - from) * (1 - (1 - t) ** 3);
+      setValue(shown.current);
+      if (t < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [target, durationMs]);
+  return value;
+}
+
+/** One reported row: colour, tooltip and accessible value use the real figure; only the drawing animates. */
+function ChartRow({ provider, period, name, line, percent }: { provider: AiProvider; period: string; name: string; line: string; percent: number }) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const shown = useAnimatedPercent(clamped);
+  return <span className={`composer-usage-limit composer-usage-chart-row${severity(percent)}`}
+    aria-label={`${providerLabel(provider)} · ${line}`} data-provider={provider} data-period={period} data-reported="true" data-testid={`session-usage-meter-${period}`}>
+    <span className="composer-usage-limit-track" role="progressbar" aria-label={`${providerLabel(provider)} ${name} used`}
+      aria-valuenow={clamped} aria-valuemin={0} aria-valuemax={100}>
+      <span style={{ width: `${shown}%` }} />
+    </span>
+    <strong>{Math.round(percent > 100 ? shown * percent / 100 : shown)}%</strong>
+  </span>;
+}
+
+/**
+ * One provider's limits as a two-row bar chart: 5-hour on top, weekly below. Replaces a
+ * `5h 32% ▬ Wk 61% ▬` pair per provider; the window names move to the tooltip and accessible
+ * labels, where the reset times already were. A window the provider does not report keeps its
+ * row as an empty grey bar, so a gap is visible rather than silently missing. Other windows
+ * (daily spend, monthly) appear only in the expanded panel.
+ */
+function LimitChart({ windows, provider, now, unavailable, loading = false }: {
+  windows: ProviderUsageWindow[]; provider: AiProvider; now: number; unavailable?: string; loading?: boolean;
+}) {
+  // Loading: both rows sweep back and forth instead of sitting empty, and show no numbers yet.
+  if (loading) return <span className="composer-usage-chart is-loading" role="group" aria-label={`${providerLabel(provider)} account limits loading`}
+    aria-busy="true" title={`${providerLabel(provider)}\nAccount limits are loading`} data-provider={provider} data-testid="session-usage-chart">
+    {CHART_SLOTS.map(slot => <span key={slot.period} className="composer-usage-limit composer-usage-chart-row is-loading"
+      data-provider={provider} data-period={slot.period} data-testid={`session-usage-meter-${slot.period}`}>
+      <span className="composer-usage-limit-track"><span /></span>
+      {/* Invisible, so the chart is already the size it will be once figures land: no jump. */}
+      <strong aria-hidden="true" className="composer-usage-chart-placeholder">0%</strong>
+    </span>)}
+  </span>;
+  const quotas = windows.filter(isQuota);
+  const rows = CHART_SLOTS.map(slot => {
+    const window = slot.pick(quotas);
+    if (!window) return { slot, name: slot.name, line: `${slot.name}: not available` };
+    const percent = windowPercent(window);
+    const name = window.label ?? slot.name;
+    const reset = window.resetsAt && Number.isFinite(Date.parse(window.resetsAt)) ? countdown(window.resetsAt, now) : undefined;
+    return { slot, name, percent, line: `${name}: ${Math.round(percent)}% used${reset ? ` · resets in ${reset}` : ''}` };
+  });
+  const title = [providerLabel(provider), ...rows.map(row => row.line), ...(unavailable ? [unavailable] : [])].join('\n');
+  return <span className="composer-usage-chart" role="group" aria-label={`${providerLabel(provider)} account limits`} title={title}
+    data-provider={provider} data-testid="session-usage-chart">
+    {rows.map(({ slot, name, percent, line }) => percent === undefined
+      ? <span key={slot.period} className="composer-usage-limit composer-usage-chart-row is-unreported" aria-label={`${providerLabel(provider)} · ${line}`}
+        data-provider={provider} data-period={slot.period} data-reported="false" data-testid={`session-usage-meter-${slot.period}`}>
+        <span className="composer-usage-limit-track" />
+        <strong aria-hidden="true">–</strong>
+      </span>
+      : <ChartRow key={slot.period} provider={provider} period={slot.period} name={name} line={line} percent={percent} />)}
   </span>;
 }
 
@@ -118,13 +208,13 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
     return () => { document.removeEventListener('click', pointer); document.removeEventListener('keydown', key); };
   }, [open]);
 
-  const tokens = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? 'Not reported' : `${formatTokenCompact(value.tokens)}${value.partial ? '+' : ''} tok`;
-  const tokenTitle = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? 'Session tokens not reported'
+  // Before the first turn there is no session record: it has used nothing, which is not the same as unreported.
+  const notStarted = records.length === 0;
+  const tokens = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? (notStarted ? '0 tok' : '–') : `${formatTokenCompact(value.tokens)}${value.partial ? '+' : ''} tok`;
+  const tokenTitle = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? (notStarted ? 'No tokens used in this session yet' : 'Token count not available from this provider')
     : `${Math.round(value.tokens).toLocaleString()} session tokens${value.partial ? ' reported; some runtime usage is unavailable' : ''}`;
   const costs = (value: { costs: NonNullable<AgentSessionRecord['cost']>[] }) => value.costs.map(formatCost).join(' + ');
   const account = (provider: AiProvider) => snapshots.find(item => item.provider === provider);
-  const allWindows = data.providers.flatMap(item => (account(item.provider)?.windows ?? []).map(window => ({ provider: item.provider, window })))
-    .sort((a, b) => ['hour', 'day', 'week', 'month'].indexOf(a.window.period) - ['hour', 'day', 'week', 'month'].indexOf(b.window.period));
   const spendRatio = spendLimit > 0 ? sessions.reduce((sum, item) => sum + (item.cost?.amount ?? 0), 0) / spendLimit : 0;
   const limitNotice = session && (session.providerLimitReached || sessionLimitNotice(session));
 
@@ -137,17 +227,20 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
       </span>
       {limitNotice && <span className="composer-usage-limit-alert" role="img" aria-label="Provider limit reached" title={session?.lastError ?? 'Provider limit reached'}><Icon name="warning" size={13} /></span>}
       {open ? <span className="composer-usage-expanded-current" title={data.current && tokenTitle(data.current)}>
-        <strong>{data.current ? tokens(data.current) : 'Not reported'}{data.current && costs(data.current) ? ` · ${costs(data.current)}` : ''}</strong>
+        <strong>{data.current ? tokens(data.current) : notStarted ? '0 tok' : '–'}{data.current && costs(data.current) ? ` · ${costs(data.current)}` : ''}</strong>
         <small>Current model in session</small>
       </span> : <span className="composer-usage-inline" data-testid="session-usage-inline">
-        <span className="composer-usage-pair composer-usage-provider-icons" aria-label="Providers in order">
-          {data.providers.map(item => <span key={item.provider} title={providerLabel(item.provider)} aria-label={providerLabel(item.provider)}><ProviderBrandLogo provider={item.provider} size={16} decorative /></span>)}
-        </span>
-        <span className="composer-usage-pair composer-usage-token-pair">
-          {data.providers.map(item => <span key={item.provider} title={`${providerLabel(item.provider)} · ${tokenTitle(item)}`} aria-label={`${providerLabel(item.provider)} ${tokenTitle(item)}`} data-testid={`session-usage-tokens-${item.provider}`}>{tokens(item)}</span>)}
-        </span>
-        {allWindows.map(({ provider, window }, index) => <Limit key={`${provider}-${index}`} window={window} provider={provider} now={now} />)}
-        {data.providers.filter(item => !account(item.provider)?.windows.length).map(item => <span className="composer-usage-unreported" key={item.provider} title={`${providerLabel(item.provider)}: ${account(item.provider)?.unavailableReason ?? (accountsLoaded ? 'Provider returned no account limits' : 'Account limits are loading')}`}>{accountsLoaded ? 'Limits not reported' : 'Limits loading…'}</span>)}
+        {data.providers.map(item => {
+          const snapshot = account(item.provider);
+          const unavailable = snapshot?.windows.length ? undefined
+            : snapshot?.unavailableReason ?? (accountsLoaded ? 'Provider returned no account limits' : 'Account limits are loading');
+          // One group per provider, so a chart is read beside its own icon and the strip wraps between providers.
+          return <span className="composer-usage-provider-group" key={item.provider} data-provider={item.provider} data-testid={`session-usage-group-${item.provider}`}>
+            <span className="composer-usage-group-logo" title={providerLabel(item.provider)} aria-label={providerLabel(item.provider)}><ProviderBrandLogo provider={item.provider} size={16} decorative /></span>
+            <span title={`${providerLabel(item.provider)} · ${tokenTitle(item)}`} aria-label={`${providerLabel(item.provider)} ${tokenTitle(item)}`} data-testid={`session-usage-tokens-${item.provider}`}>{tokens(item)}</span>
+            <LimitChart windows={snapshot?.windows ?? []} provider={item.provider} now={now} unavailable={unavailable} loading={!accountsLoaded} />
+          </span>;
+        })}
       </span>}
       <Icon name={open ? 'chevron-up' : 'chevron-down'} size={12} />
       {onHide && <button type="button" className="icon-btn icon-btn-sm session-usage-hide-btn" aria-label="Hide usage bar" title="Hide usage bar" data-testid="session-usage-hide-btn"
@@ -163,7 +256,7 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
             <span className="composer-usage-provider-tokens" title={`${tokenTitle(item)}${costs(item) ? ` · ${costs(item)}` : ''}`}>{tokens(item)}</span>
             <span className="composer-usage-provider-limits">
               {snapshot?.windows.map((window, index) => <Limit key={index} window={window} provider={item.provider} now={now} expanded />)}
-              {!snapshot?.windows.length && <span className="composer-usage-unreported" title={snapshot?.unavailableReason}>{snapshot ? 'Limits not reported' : 'Loading limits…'}</span>}
+              {!snapshot?.windows.length && <span className="composer-usage-unreported" title={snapshot ? snapshot.unavailableReason ?? 'No account limits available for this provider' : 'Account limits are loading'}>{snapshot ? '–' : 'Loading limits…'}</span>}
               {snapshot?.credits && <span className="composer-usage-credit">{formatAccountCost(snapshot.credits.remaining, snapshot.credits.currency)}<small>Credit balance</small></span>}
             </span>
           </div>;
