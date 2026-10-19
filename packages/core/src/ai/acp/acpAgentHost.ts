@@ -3,7 +3,7 @@ import type { CoordinationGate } from '../coordination/coordinationGate';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
 import type { TokenUsage, WireImageAttachment } from '../gateway/wire';
-import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
+import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, CODE_INTELLIGENCE_PROMPT, CODE_INTELLIGENCE_SERVER_NAME, buildSystemPrompt } from '../agentPrompt';
 import { reviewedIssueKey } from '../ticketReview';
 import {
   AGENT_DEFAULTS,
@@ -851,13 +851,14 @@ export class AcpAgentHost {
     }
     const sessionId = randomUUID();
     const hasBrowser = options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false;
+    const hasCodeIntelligence = options.mcpServers?.some(server => server.name === CODE_INTELLIGENCE_SERVER_NAME) ?? false;
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
       toolMode === 'read-only'
         ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
         : toolMode === 'project-only'
           ? 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.'
           : 'FULL. Use tools as needed; honor every permission request.'
-    }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
+    }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${hasCodeIntelligence ? `\n\n${CODE_INTELLIGENCE_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
     // its own persona, so the task's own instructions travel as one prompt.
@@ -1108,6 +1109,10 @@ export class AcpAgentHost {
     }${
       (options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
+        : ''
+    }${
+      (options.mcpServers?.some(server => server.name === CODE_INTELLIGENCE_SERVER_NAME) ?? false)
+        ? `\n\n${CODE_INTELLIGENCE_PROMPT}`
         : ''
     }${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
     const prompt = [

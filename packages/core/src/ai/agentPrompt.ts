@@ -93,6 +93,20 @@ This session can drive a real web browser embedded in the app. Yes, you can brow
 - browser_click(ref) / browser_type(ref, text, submit?) — act on an element by ref; also return a short excerpt.
 Use it whenever the user references a URL, asks you to look something up online, or check a web page. Prefer browser_snapshot for navigation/forms and browser_read only for content you need — don't dump whole pages.`;
 
+/** Name the desktop gives the per-session code intelligence MCP server. */
+export const CODE_INTELLIGENCE_SERVER_NAME = 'code_intelligence';
+
+/**
+ * Appended when the session has the code intelligence tools. Without it agents
+ * default to grep and never discover the index; with a hard "never grep" rule
+ * they get stuck on lagging, uncovered or failed lookups. So: route, don't replace.
+ */
+export const CODE_INTELLIGENCE_PROMPT = `## Code intelligence
+This session has read-only \`code_intelligence\` tools over a local index of the working folder (C#, TypeScript, JavaScript and docs).
+- Use them first for structure: find_symbol for definitions, get_callers / get_callees / trace_flow for call paths, search_code when you know the concept but not the identifier, search_knowledge for project docs. Then get_source to read just the part you need.
+- Use grep or text search instead for exact strings (messages, setting keys, CSS classes, test IDs), files the index does not cover, and code you changed in this session, because the index can lag recent edits.
+- An empty, external-only or error result does not mean the code is missing. Check get_index_status if needed, then fall back to text search.`;
+
 /** Extra session policy for a user-selected full-autonomy run. */
 export const AUTOPILOT_SESSION_PROMPT = `## Autopilot
 - Complete the task end to end without asking the user routine follow-up questions or waiting for confirmation.

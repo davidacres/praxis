@@ -97,6 +97,8 @@ test('MCP SDK initialize/list/call uses scoped RPC and normative error envelopes
     await server.connect(serverTransport); await client.connect(clientTransport);
     const listed = await client.listTools(); assert.equal(listed.tools.length, Object.keys(contracts).length);
     assert.ok(listed.tools.every(tool => tool.annotations?.readOnlyHint && tool.outputSchema));
+    // Every contract tool says when to use it, not just its name.
+    assert.ok(listed.tools.every(tool => !tool.description?.includes('registered repository') && tool.description?.includes('may lag edits')), 'every tool has usage guidance');
     const called = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'repo' } });
     assert.equal(called.isError, false); assert.equal((called.structuredContent as Record<string, unknown> | undefined)?.schemaVersion, '1.2');
     const denied = await client.callTool({ name: 'get_index_status', arguments: { repositoryId: 'different' } });

@@ -4,7 +4,7 @@ import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
 import { runAgentLoop, type AgentLoopEvent, type WireImageAttachment, type WireMessage } from './agentRuntime';
-import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
+import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, CODE_INTELLIGENCE_PROMPT, CODE_INTELLIGENCE_SERVER_NAME, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
 import { reviewedIssueKey } from './ticketReview';
 import {
   AGENT_DEFAULTS,
@@ -69,6 +69,11 @@ interface ActiveTask {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+/** Gateway MCP tools are exposed as `mcp__<server>__<tool>`. */
+function hasCodeIntelligenceTools(extension: VercelAgentStartOptions['toolExtension']): boolean {
+  return extension?.definitions.some(tool => tool.name.startsWith(`mcp__${CODE_INTELLIGENCE_SERVER_NAME}__`)) ?? false;
 }
 
 function evt(
@@ -610,13 +615,14 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     const sessionId = randomUUID();
     const hasBrowserTools = options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false;
+    const hasCodeIntelligence = hasCodeIntelligenceTools(options.toolExtension);
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\n${
       toolMode === 'read-only'
         ? 'Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets.'
         : toolMode === 'project-only'
           ? 'Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user.'
           : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
-    }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
+    }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${hasCodeIntelligence ? `\n\n${CODE_INTELLIGENCE_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
     const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
 
     const task: ActiveTask = {
@@ -740,7 +746,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       (options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
         : ''
-    }${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
+    }${hasCodeIntelligenceTools(options.toolExtension) ? `\n\n${CODE_INTELLIGENCE_PROMPT}` : ''}${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
 
     const task: ActiveTask = {
       issueKey,

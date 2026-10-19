@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { IssueDetails } from '../types';
-import { AUTOPILOT_SESSION_PROMPT, buildSystemPrompt } from './agentPrompt';
+import { AUTOPILOT_SESSION_PROMPT, CODE_INTELLIGENCE_PROMPT, buildSystemPrompt } from './agentPrompt';
 import { coerceGadgetBlock } from './gadgets/validation';
 import { parseChatBlocks } from './gadgets/blockParser';
 import {
@@ -139,4 +139,10 @@ test('the working style and project instructions follow the task prompt, style f
   assert.match(prompt, /## Working style\nFollow these habits whichever tools you have:\n- Plan first\./);
   assert.ok(prompt.indexOf('## Working style') < prompt.indexOf('## Project instructions'));
   assert.doesNotMatch(buildSystemPrompt({ goal: 'Do it.', scope: '', definitionOfDone: '' }, ISSUE), /Working style/);
+});
+
+test('code intelligence prompt routes structure to the index and keeps text search as fallback', () => {
+  assert.match(CODE_INTELLIGENCE_PROMPT, /find_symbol/);
+  assert.match(CODE_INTELLIGENCE_PROMPT, /grep or text search instead/);
+  assert.match(CODE_INTELLIGENCE_PROMPT, /does not mean the code is missing/);
 });

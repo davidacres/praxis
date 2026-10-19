@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { codeIntelligenceDataDirectory, type CodeIntelligenceOwnerStatus, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
+import { CODE_INTELLIGENCE_SERVER_NAME, codeIntelligenceDataDirectory, type CodeIntelligenceOwnerStatus, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain.js';
 import { getSettingsBackend } from './settingsBackendInstance.js';
 import {
@@ -300,7 +300,7 @@ export async function getSessionCodeIntelligenceServer(
     const id = createHash('sha256').update(JSON.stringify([repositoryId, provider])).digest('hex').slice(0, 24);
     const mcpServer: McpServerConfig = {
       id: `praxis-code-intelligence-${id}`,
-      name: `code_intelligence`,
+      name: CODE_INTELLIGENCE_SERVER_NAME,
       enabled: true,
       transport: 'stdio',
       requireApproval: false,

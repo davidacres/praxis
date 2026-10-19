@@ -104,6 +104,25 @@ function withoutRepository(schema: Record<string, unknown>): Record<string, unkn
   return { ...schema, properties, ...(required ? { required } : {}) };
 }
 
+// When to reach for each tool. The generic contract name alone gave agents no reason to prefer it over grep.
+const TOOL_GUIDANCE: Record<string, string> = {
+  search_code: 'Find code by concept or name when you do not know the exact identifier ("where is session handover handled"). Hybrid mode ranks by meaning and keywords.',
+  find_symbol: 'Find where a class, function, method or field is declared, by name or qualified name. Returns symbol IDs for the other tools.',
+  get_symbol: 'Get the declaration, kind and signature of a symbol ID.',
+  get_source: 'Read the source of a symbol, file or range found by another tool, without opening the whole file.',
+  explain_symbol: 'Get the structural facts about a symbol, with evidence and any uncertainties, as an orientation before reading its source.',
+  get_callers: 'List what calls a symbol. Use instead of grepping for its name: it skips comments, strings and look-alike names.',
+  get_callees: 'List what a symbol calls.',
+  trace_flow: 'Follow call paths from a symbol, outgoing or incoming, several levels deep in one call.',
+  find_related: 'Find structural and semantic neighbours of a symbol, each with the reason it is related.',
+  summarize_project: 'Summarize one project\'s components, index coverage and unresolved boundaries.',
+  get_index_status: 'Check whether the index is current. Call it when results look empty, partial or stale.',
+  search_knowledge: 'Search the repository\'s docs and plans (Markdown and similar) by concept or keyword.',
+  get_knowledge_section: 'Read one docs section found by search_knowledge.',
+  find_related_knowledge: 'Find docs that mention a symbol, file or ticket.'
+};
+const STATIC_CAVEAT = 'Read-only and static: results do not prove runtime behavior, and may lag edits made moments ago.';
+
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const REPOSITORY_ARGUMENT = { type: 'string', minLength: 1, maxLength: 512,
   description: 'Repository name from list_repositories. May be omitted when only one repository is available.' };
@@ -146,7 +165,7 @@ export function createCodeIntelligenceMcpServer(options: CodeIntelligenceBridgeO
     ...Object.entries(options.contracts).map(([name, schemas]) => {
       const input = withoutRepository(schemas.inputSchema);
       return {
-        name, description: `Read-only ${name.replaceAll('_', ' ')} for ${multiple ? 'a granted repository' : 'the registered repository'}. Static facts do not prove runtime behavior.`,
+        name, description: `${TOOL_GUIDANCE[name] ?? `${name.replaceAll('_', ' ')} for ${multiple ? 'a granted repository' : 'the registered repository'}.`} ${STATIC_CAVEAT}`,
         inputSchema: { ...input, ...(multiple ? { properties: { repository: REPOSITORY_ARGUMENT, ...(input.properties as Record<string, unknown> | undefined) } } : {}), type: 'object' as const },
         outputSchema: { ...schemas.outputSchema, type: 'object' as const }, annotations: READ_ONLY
       };
