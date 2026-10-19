@@ -1014,12 +1014,15 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     if (graphNodes.Count > 1)
                     {
                         var removed = new HashSet<string>(StringComparer.Ordinal);
-                        var count = Math.Max(1, (graphNodes.Count - 1) / 2);
-                        for (var i = 0; i < count; i++)
-                        {
-                            removed.Add(graphNodes[^1]!["symbolId"]!.GetValue<string>());
-                            graphNodes.RemoveAt(graphNodes.Count - 1);
-                        }
+                        // Preserve local paths before external endpoints. External
+                        // nodes are traversal boundaries, so removing one cannot
+                        // orphan a discovered subtree. Trim only as much as needed:
+                        // halving can throw away a helper that would have fitted.
+                        var index = Enumerable.Range(1, graphNodes.Count - 1)
+                            .OrderBy(i => graphNodes[i]!["external"]!.GetValue<bool>() ? 0 : 1)
+                            .ThenByDescending(i => i).First();
+                        removed.Add(graphNodes[index]!["symbolId"]!.GetValue<string>());
+                        graphNodes.RemoveAt(index);
                         for (var i = graphEdges.Count - 1; i >= 0; i--)
                             if (removed.Contains(Text(graphEdges[i]!.AsObject(), "sourceSymbolId")!) || removed.Contains(Text(graphEdges[i]!.AsObject(), "targetSymbolId")!)) graphEdges.RemoveAt(i);
                         for (var i = boundaries.Count - 1; i >= 0; i--)

@@ -572,6 +572,29 @@ public sealed class QueryTests : IDisposable
     }
 
     [Fact]
+    public void GraphBudgetRetainsLocalHelpersBeforeExternalEndpoints()
+    {
+        var external = string.Join(" ", new[] { "Abs", "Sin", "Cos", "Tan", "Sqrt", "Floor", "Ceiling", "Round", "Exp", "Log", "Log10", "Acos", "Asin", "Atan", "Sinh", "Cosh", "Tanh" }.Select(name => $"System.Math.{name}(1.0);"));
+        File.WriteAllText(Path.Combine(root, "Example.cs"), "class Example { void Caller() { " + external + " Step(); } void Step() { Finish(); } void Finish() {} }");
+        indexer.Index(repository);
+        var caller = Symbol("Caller");
+        var response = Query("trace_flow", new() { ["symbolId"] = caller["symbolId"]!.DeepClone(), ["depth"] = 3, ["responseBudgetTokens"] = 2400 });
+        Assert.Null(response["error"]);
+        Assert.True(response["truncated"]!.GetValue<bool>());
+        var nodes = response["data"]!["nodes"]!.AsArray();
+        Assert.Contains(nodes, node => node!["qualifiedName"]!.GetValue<string>() == "Example.Step()");
+        Assert.Contains(nodes, node => node!["qualifiedName"]!.GetValue<string>() == "Example.Finish()");
+        var ids = nodes.Select(node => node!["symbolId"]!.GetValue<string>()).ToHashSet();
+        Assert.All(response["data"]!["edges"]!.AsArray(), edge =>
+        {
+            Assert.Contains(edge!["sourceSymbolId"]!.GetValue<string>(), ids);
+            Assert.Contains(edge["targetSymbolId"]!.GetValue<string>(), ids);
+        });
+        Assert.Contains(response["data"]!["boundaries"]!.AsArray(), boundary => boundary!["reason"]!.GetValue<string>() == "graphBudget");
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(response.ToJsonString()) <= 7200);
+    }
+
+    [Fact]
     public void StaticGraphIncludesEndpointsAndCallsiteEvidence()
     {
         var caller = Symbol("Caller"); var target = Symbol("Target");
