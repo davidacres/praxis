@@ -9504,6 +9504,20 @@ button.session-telemetry-chip:hover {
   border-color: var(--border);
 }
 
+/* The turn used the code intelligence index: the one chip that reports a capability, not a measure. */
+.session-telemetry-chip.is-code-intel {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle, var(--border)));
+}
+.session-telemetry-chip.is-code-intel .ui-icon {
+  color: var(--accent);
+}
+button.session-telemetry-chip.is-code-intel:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+}
+
 .session-activity {
   margin-top: var(--space-4);
   border-top: 1px solid var(--border);

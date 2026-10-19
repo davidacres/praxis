@@ -22,7 +22,7 @@ import { GadgetBlockList } from './gadgets';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
 import { gadgetMessageKey, stripGadgetFences, visibleMessageText } from './gadgets/messageText';
 import { captionText, collectThoughtRuns, mergeReasoningStep, thoughtCaption, thoughtRunStartingAt } from './chatThought';
-import { collectTurnTools } from './chatToolCalls';
+import { codeIntelligenceCalls, codeIntelligenceToolLabel, collectTurnTools } from './chatToolCalls';
 import { collectMessageRuns, messageRunCovering, messageRunStartingAt } from './chatTurns';
 
 /** Image thumbnails for a user turn in the chat transcript; click enlarges. */
@@ -375,12 +375,14 @@ export function SessionChatThread({
         const captionShown = hasThought && Boolean(caption);
         const telemetrySource = messageRun ?? event;
         const toolNames = messageRun ? messageRun.toolNames : event.toolNames;
+        const codeIntelCalls = event.type === 'message' ? codeIntelligenceCalls(turnToolCalls) : [];
         const hasTelemetry = event.type === 'message' && (
           (!captionShown && telemetrySource.durationMs !== undefined) ||
           telemetrySource.tokenUsage !== undefined ||
           telemetrySource.cost !== undefined ||
           telemetrySource.modelId !== undefined ||
-          (!captionShown && toolNames && toolNames.length > 0)
+          (!captionShown && toolNames && toolNames.length > 0) ||
+          codeIntelCalls.length > 0
         );
         const toolCallCount = messageRun?.toolCalls ?? toolNames?.length ?? 0;
         const cardGadgetBlocks = (messageRun ? messageRun.memberIndices : [index])
@@ -597,6 +599,20 @@ export function SessionChatThread({
                   >
                     <Icon name="tools" size={11} />
                     <span>{toolCallCount} tool {toolCallCount === 1 ? 'call' : 'calls'}</span>
+                  </button>
+                )}
+                {codeIntelCalls.length > 0 && (
+                  <button
+                    type="button"
+                    className="session-telemetry-chip is-clickable is-code-intel"
+                    data-testid="session-chat-code-intel-badge"
+                    title={`Used code intelligence: ${[...new Set(codeIntelCalls.map(call => codeIntelligenceToolLabel(call.name)))].join(', ')}. View the calls in the Activity tab.`}
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'activity' } }));
+                    }}
+                  >
+                    <Icon name="search" size={11} />
+                    <span>code intel</span>
                   </button>
                 )}
               </div>

@@ -105,6 +105,8 @@ test('a turn that narrates between tool calls renders as one assistant card', as
   // Exactly one telemetry bar for the turn, not one per round trip.
   await expect(card.locator('.session-chat-telemetry-bar')).toHaveCount(1);
   await expect(card.locator('.session-chat-telemetry-bar')).toContainText('tok');
+  // Only local tools ran, so there is no code intelligence badge.
+  await expect(card.getByTestId('session-chat-code-intel-badge')).toHaveCount(0);
 
   // The details pane names an untitled session once, not twice: the title is
   // just the goal's first line, so printing both repeated the same words.

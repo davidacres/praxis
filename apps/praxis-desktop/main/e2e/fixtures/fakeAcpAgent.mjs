@@ -188,6 +188,23 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     }
   }
 
+  if (promptText.includes('CODE_INTEL_COMPLETED_FIRST')) {
+    // Some ACP adapters announce a completed MCP call without sending a
+    // preceding in-progress `tool_call`. Keep this shape to cover the chat
+    // telemetry path that must still recognize the call.
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'code-intel-search',
+        title: 'Search code',
+        name: 'mcp__code_intelligence__search_code',
+        kind: 'read',
+        status: 'completed'
+      }
+    });
+  }
+
   if (promptText.includes('LIMIT_NOTICE')) {
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
       sessionId: ctx.params.sessionId,

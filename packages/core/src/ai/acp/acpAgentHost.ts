@@ -757,7 +757,9 @@ export class AcpAgentHost {
           this.handleSessionUpdate(issueKey, { ...update, sessionUpdate: 'tool_call_update' }, task);
           break;
         }
-        const toolName = update.title || update.name || update.toolCallId;
+        // ACP `title` is presentation text; use `name` when available so
+        // downstream telemetry can identify namespaced MCP tools reliably.
+        const toolName = update.name || update.title || update.toolCallId;
         this.appendEvent(
           issueKey,
           evt('tool_start', `Running tool: ${toolName}`, undefined, {
@@ -811,11 +813,11 @@ export class AcpAgentHost {
             issueKey,
             evt(
               'tool_complete',
-              `Tool ${ok ? 'completed' : 'failed'}: ${update.title || update.name || update.toolCallId}`,
+              `Tool ${ok ? 'completed' : 'failed'}: ${update.name || update.title || update.toolCallId}`,
               detail?.slice(0, 2000),
               {
                 callId: update.toolCallId,
-                toolName: update.title ?? update.name ?? undefined,
+                toolName: update.name ?? update.title ?? undefined,
                 // `kind` is often only on the initial `tool_call`; diff blocks in
                 // the result imply a write even when this update omits it.
                 kind: fileChanges.length > 0 ? 'write' : mapAcpToolKind(update.kind ?? undefined),
