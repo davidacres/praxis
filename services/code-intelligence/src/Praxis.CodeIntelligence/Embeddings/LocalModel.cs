@@ -27,9 +27,29 @@ public sealed class LocalModel : IDisposable
     private LocalModel(VerifiedProfile profile)
     {
         ManifestJson = profile.ManifestJson; Fingerprint = profile.Fingerprint; tokenizer = profile.Tokenizer;
-        using var options = new SessionOptions { InterOpNumThreads = 1, IntraOpNumThreads = Math.Clamp(Environment.ProcessorCount, 1, 4) };
+        using var options = new SessionOptions { InterOpNumThreads = 1, IntraOpNumThreads = InferenceThreads };
         session = new InferenceSession(profile.Model, options);
     }
+    /// <summary>
+    /// One inference thread per performance core, at most eight. Inference is compute bound:
+    /// on an M3 Pro (6P+6E) six threads embed 54 chunks/s against 39 at four, and eight or
+    /// twelve are slower again because the extra threads land on efficiency cores and the
+    /// rest wait for them. Without a performance-core count, half the logical processors
+    /// stands in for the physical cores of an SMT machine.
+    /// </summary>
+    internal static readonly int InferenceThreads = Math.Clamp(PerformanceCores() ?? Environment.ProcessorCount / 2, 1, 8);
+    private static int? PerformanceCores()
+    {
+        if (!OperatingSystem.IsMacOS()) return null;
+        try
+        {
+            int value = 0; nint size = sizeof(int);
+            return sysctlbyname("hw.perflevel0.physicalcpu", ref value, ref size, 0, 0) == 0 && value > 0 ? value : null;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) { return null; }
+    }
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern int sysctlbyname(string name, ref int value, ref nint size, nint newValue, nint newSize);
     private sealed record VerifiedProfile(string ManifestJson, string Fingerprint, WordPieceTokenizer Tokenizer, byte[] Model);
     /// <summary>Checks the manifest and asset hashes and returns the profile fingerprint without creating an inference session.</summary>
     public static string VerifyFingerprint(string directory) => Verify(directory).Fingerprint;

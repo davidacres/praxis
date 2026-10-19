@@ -73,6 +73,16 @@ public sealed class ModelTests
     }
 
     [Fact]
+    public void InferenceUsesOneThreadPerPerformanceCore()
+    {
+        Assert.InRange(LocalModel.InferenceThreads, 1, 8);
+        if (!OperatingSystem.IsMacOS()) return;
+        using var sysctl = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("sysctl", "-n hw.perflevel0.physicalcpu") { RedirectStandardOutput = true })!;
+        var reported = sysctl.StandardOutput.ReadToEnd().Trim(); sysctl.WaitForExit();
+        if (int.TryParse(reported, out var cores)) Assert.Equal(Math.Clamp(cores, 1, 8), LocalModel.InferenceThreads);
+    }
+
+    [Fact]
     public void RepresentationPrioritizesIdentityAndRecordsBoundedSourceCoordinates()
     {
         const string sourceText = "prefix class Example { string Value => \"😀\"; } suffix";
