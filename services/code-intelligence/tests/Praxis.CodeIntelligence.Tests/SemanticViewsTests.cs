@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Praxis.CodeIntelligence.Embeddings;
 using Praxis.CodeIntelligence.Indexing;
+using Praxis.CodeIntelligence.Queries;
 using Praxis.CodeIntelligence.Storage;
 using Xunit;
 
@@ -65,6 +67,50 @@ public sealed class SemanticViewsTests
         Assert.InRange(views.Count,2,5);
         Assert.Equal(views.Count,views.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.DoesNotContain(views, string.IsNullOrWhiteSpace);
+    }
+
+    [Fact]
+    public void UnsetModeSendsQuestionsToSemanticSearchOnlyWhereHeadersExist()
+    {
+        Assert.Equal("vector", QueryService.ResolveSearchMode(null, "where is the greeting printed", hasSemanticHeaders: true));
+        Assert.Equal("hybrid", QueryService.ResolveSearchMode(null, "where is the greeting printed", hasSemanticHeaders: false));
+        Assert.Equal("hybrid", QueryService.ResolveSearchMode(null, "printGreeting", hasSemanticHeaders: true));
+        Assert.Equal("hybrid", QueryService.ResolveSearchMode(null, "print greeting", hasSemanticHeaders: true));
+        Assert.Equal("lexical", QueryService.ResolveSearchMode("lexical", "where is the greeting printed", hasSemanticHeaders: true));
+        Assert.Equal("hybrid", QueryService.ResolveSearchMode("hybrid", "where is the greeting printed", hasSemanticHeaders: true));
+    }
+
+    [LocalModelFact]
+    public void SearchWithoutModeRoutesByQuestionShapeAndIndexLanguage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pci-auto-mode-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            string[] Channels(string source, string file, string code, params string[] queries)
+            {
+                var sourceRoot = Path.Combine(root, source); Directory.CreateDirectory(sourceRoot);
+                File.WriteAllText(Path.Combine(sourceRoot, file), code);
+                var database = new IndexDatabase(Path.Combine(root, source + "-data", "index.db")); database.Initialize();
+                var indexer = new RepositoryIndexer(database); var repository = indexer.Register(sourceRoot); indexer.Index(repository);
+                using var models = new ModelStore(database, Path.Combine(root, source + "-models"));
+                models.Activate(repository, models.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!), default);
+                var service = new QueryService(database, models);
+                return queries.Select(query =>
+                {
+                    var response = service.Execute("search_code", new JsonObject { ["repositoryId"] = repository, ["query"] = query, ["limit"] = 10, ["responseBudgetTokens"] = 8000 }, new HashSet<string> { repository });
+                    Assert.Null(response["error"]);
+                    return string.Join(",", response["data"]!["channelsUsed"]!.AsArray().Select(channel => channel!.GetValue<string>()).Order());
+                }).ToArray();
+            }
+            var script = Channels("js", "greet.js", "export function printGreeting(name) { console.log('hello ' + name); }",
+                "where is the greeting printed", "printGreeting");
+            Assert.Equal("vector", script[0]);
+            Assert.Contains("lexical", script[1]);
+            var csharp = Channels("cs", "Greeter.cs", "class Greeter { void PrintGreeting() { System.Console.WriteLine(\"hello\"); } }",
+                "where is the greeting printed");
+            Assert.Contains("lexical", csharp[0]);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }
 
     [LocalModelFact]

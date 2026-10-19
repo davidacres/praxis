@@ -106,7 +106,7 @@ function withoutRepository(schema: Record<string, unknown>): Record<string, unkn
 
 // When to reach for each tool. The generic contract name alone gave agents no reason to prefer it over grep.
 const TOOL_GUIDANCE: Record<string, string> = {
-  search_code: 'Find code by concept or name when you do not know the exact identifier ("where is session handover handled"). Hybrid mode ranks by meaning and keywords.',
+  search_code: 'Find code by concept or name when you do not know the exact identifier ("where is session handover handled"). Ask a plain-language question and leave mode unset: it picks the best-measured search for the question and the index.',
   find_symbol: 'Find where a class, function, method or field is declared, by name or qualified name. Returns symbol IDs for the other tools.',
   get_symbol: 'Get the declaration, kind and signature of a symbol ID.',
   get_source: 'Read the source of a symbol, file or range found by another tool, without opening the whole file.',

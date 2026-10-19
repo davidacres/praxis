@@ -19,7 +19,20 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
         return service;
     }
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 11;
+    public const int SearchPlanVersion = 12;
+    /// <summary>Plain-language questions have at least this many terms; names and short phrases have fewer.</summary>
+    public const int SemanticQuestionTerms = 3;
+
+    /// <summary>
+    /// The search_code mode when the caller leaves it unset. A plain-language question goes to
+    /// semantic search when the index has semantic headers (TypeScript/JavaScript): there it found
+    /// more answers than hybrid on every evaluated set, while hybrid's 4:1 lexical weight buries
+    /// paraphrase matches. Names, short phrases and repositories without headers (C#, where
+    /// keyword matching is stronger) keep hybrid. An explicit mode always wins.
+    /// </summary>
+    public static string ResolveSearchMode(string? requested, string query, bool hasSemanticHeaders) =>
+        requested ?? (hasSemanticHeaders && query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries).Length >= SemanticQuestionTerms
+            ? "vector" : "hybrid");
     public const string RankingProfile = "rrf-k60-lexical4-vector1-alias0.5-floor2-v6";
     public const double LexicalWeight = 4.0;
     /// <summary>
@@ -75,7 +88,8 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             inferenceStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
             ModelQuery? embedded = null;
             if ((tool is "search_code" or "search_knowledge") && Text(arguments, "mode") != "lexical" && models is not null)
-                try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken, tool == "search_code" && Text(arguments, "mode") == "vector"); }
+                try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken,
+                    tool == "search_code" && ResolveSearchMode(Text(arguments, "mode"), Text(arguments, "query")!, hasSemanticHeaders: true) == "vector"); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
                 { cancellationToken.ThrowIfCancellationRequested(); /* Hybrid degrades to lexical; vector returns MODEL_UNAVAILABLE below. */ }
             inferenceEnd = measurement?.Elapsed.TotalMilliseconds ?? 0;
@@ -177,7 +191,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                 }
                 case "search_code":
                 {
-                    var mode = Text(arguments, "mode") ?? "hybrid";
+                    var mode = ResolveSearchMode(Text(arguments, "mode"), Text(arguments, "query")!, embedded?.HasSemanticHeaders == true);
                     if (mode == "vector" && embedded is null) throw new QueryException("MODEL_UNAVAILABLE", "Install and activate a local embedding model before vector search.");
                     if (mode == "hybrid" && embedded is null) warnings.Add(new JsonObject { ["code"] = "MODEL_UNAVAILABLE", ["message"] = "Local embedding search is unavailable; lexical results returned." });
                     if (embedded is not null && connection.Scalar(transaction, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state='active'", repositoryId) as string != embedded.Fingerprint)
