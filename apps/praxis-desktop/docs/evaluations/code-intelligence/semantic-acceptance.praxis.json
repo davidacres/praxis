@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "status": "frozen before semantic experiments; not yet searched",
+  "reviewer": "AI source-authoring; not independent human review",
+  "scope": "40 natural-language questions, 20 new target behaviours; some files overlap earlier development components",
+  "relevancePolicy": "Fixed primary implementation anchor, top ten original slots; no label adjustment after results",
+  "families": [
+    {
+      "id": "H01",
+      "path": "main/src/main/runWork.ts",
+      "name": "inspectRunWork",
+      "qualifiedName": "main/src/main/runWork.inspectRunWork",
+      "symbolId": "pci:sym:93ddb6143364124cfb4cd7f8a99d145e996bc41b8fd22c1dc2f5e3d86618d406",
+      "signature": "main/src/main/runWork.inspectRunWork(repoRoot: string, runId: string, worktreePath?: string): Promise<RunWorkInfo>",
+      "sourceSha256": "c3e4e7a907062897912bc0b88a4642b6b99acf97a585b6b14c68977ee9f5f023",
+      "queries": [
+        "find the branch and checkout holding the work produced by an automation run",
+        "How does the app inspect the saved branch, remaining commits and uncommitted changes for a run?"
+      ]
+    },
+    {
+      "id": "H02",
+      "path": "main/src/main/mobileSessionChanges.ts",
+      "name": "readMobileSessionChanges",
+      "qualifiedName": "main/src/main/mobileSessionChanges.readMobileSessionChanges",
+      "symbolId": "pci:sym:9fefa77cf12f4e41aa3dec6a28153322c98fcc814964ba81dca2a9769fc97fbc",
+      "signature": "main/src/main/mobileSessionChanges.readMobileSessionChanges(record: AgentSessionRecord, git: MobileSessionChangesGit): Promise<MobileSessionChanges>",
+      "sourceSha256": "82b97f81a62f96dc931ca59f8313477c221e8c7701de0b71453c3dd542987ba3",
+      "queries": [
+        "show changed files on a phone with the agent edits first",
+        "Where are repository changes annotated as reported by the session and sorted ahead of preexisting edits?"
+      ]
+    },
+    {
+      "id": "H03",
+      "path": "main/src/main/mobileSessionChanges.ts",
+      "name": "readMobileSessionFileDiff",
+      "qualifiedName": "main/src/main/mobileSessionChanges.readMobileSessionFileDiff",
+      "symbolId": "pci:sym:51cabc2e1d84f77fc1192d55b97d5119dbd0820b010ca8c630d2e32859cce7b1",
+      "signature": "main/src/main/mobileSessionChanges.readMobileSessionFileDiff(record: AgentSessionRecord, path: string, git: MobileSessionChangesGit, maxLines: number): Promise<MobileFileDiff>",
+      "sourceSha256": "82b97f81a62f96dc931ca59f8313477c221e8c7701de0b71453c3dd542987ba3",
+      "queries": [
+        "send a bounded diff for a changed session file to the phone",
+        "Where does the phone diff reader require a path from git status and stop after its line budget?"
+      ]
+    },
+    {
+      "id": "H04",
+      "path": "main/src/main/mobileRunProjection.ts",
+      "name": "currentRunStage",
+      "qualifiedName": "main/src/main/mobileRunProjection.currentRunStage",
+      "symbolId": "pci:sym:4994b06dfdaddc41d110a372df093561e259f7eed0f66d7b1521e03a73062593",
+      "signature": "main/src/main/mobileRunProjection.currentRunStage(stages: readonly Pick<MobileRunStage, 'nodeId' | 'type' | 'lane' | 'attempts'>[]): string | undefined",
+      "sourceSha256": "5987abb778432ef020b6af8780587ce169d842d2e8cfb9d2f09238204d1c3188",
+      "queries": [
+        "pick the currently executing stage for the phone progress display",
+        "How is the active mobile run stage selected from stage attempts and lanes?"
+      ]
+    },
+    {
+      "id": "H05",
+      "path": "main/src/main/providerUsageHistory.ts",
+      "name": "fetchApiUsageHistory",
+      "qualifiedName": "main/src/main/providerUsageHistory.fetchApiUsageHistory",
+      "symbolId": "pci:sym:b9fda9d22c28555081142f19377df794b676036728cdefa372d1280688c903c4",
+      "signature": "main/src/main/providerUsageHistory.fetchApiUsageHistory(provider: 'openai' | 'anthropic', key: string, fetcher: typeof fetch): Promise<ProviderUsageHistory>",
+      "sourceSha256": "f31f54026b1c774e717560c217561b40fe9e549a5fc846779fe1193b818ad058",
+      "queries": [
+        "retrieve historical daily API account consumption from the provider",
+        "Where are authenticated API usage history requests paginated and accumulated into daily totals?"
+      ]
+    },
+    {
+      "id": "H06",
+      "path": "main/src/main/workflowApprovalGadgetSync.ts",
+      "name": "syncApprovalGadgets",
+      "qualifiedName": "main/src/main/workflowApprovalGadgetSync.syncApprovalGadgets",
+      "symbolId": "pci:sym:5dd94f3bd8152016627c353d0cab45dc297441b30c503b6ae3c6feaf50466e92",
+      "signature": "main/src/main/workflowApprovalGadgetSync.syncApprovalGadgets(run: WorkflowRun): void",
+      "sourceSha256": "0e9017fb878eec9430cea061e5ca8487a81b8a37a82f36fea46f2e2078ff1d78",
+      "queries": [
+        "keep controller chat approval controls aligned with the run state",
+        "Where are obsolete approval gadgets revoked and newly required approvals published for a controller session?"
+      ]
+    },
+    {
+      "id": "H07",
+      "path": "renderer/src/ai/providerAvailability.ts",
+      "name": "isProviderUsableForSessions",
+      "qualifiedName": "renderer/src/ai/providerAvailability.isProviderUsableForSessions",
+      "symbolId": "pci:sym:b5d4c2fbcfea1c8a2066d5a033a2c39dc25662f21d3a0c5c7fa3eba770a8d74c",
+      "signature": "renderer/src/ai/providerAvailability.isProviderUsableForSessions(status: Pick<AiProviderStatus, 'configured' | 'enabled' | 'capabilities'>): boolean",
+      "sourceSha256": "cbfa24fc4ce333ece15566f9822bc7d9595305b5a60a3f7b32747a74c82121bf",
+      "queries": [
+        "decide whether a configured AI can appear in agent session pickers",
+        "Which predicate combines provider configuration, enabled state and tool calling capability for sessions?"
+      ]
+    },
+    {
+      "id": "H08",
+      "path": "renderer/src/ai/providerAvailability.ts",
+      "name": "canRunAgentSessions",
+      "qualifiedName": "renderer/src/ai/providerAvailability.canRunAgentSessions",
+      "symbolId": "pci:sym:1261229dde15a26432fd7d58918f3803187b281a5c8923ccb14056fad8b61071",
+      "signature": "renderer/src/ai/providerAvailability.canRunAgentSessions(status: Pick<AiProviderStatus, 'capabilities'>): boolean",
+      "sourceSha256": "cbfa24fc4ce333ece15566f9822bc7d9595305b5a60a3f7b32747a74c82121bf",
+      "queries": [
+        "exclude endpoints known to lack tool calls from interactive agent work",
+        "Where are untested providers allowed but endpoints with an explicit no-tools capability refused for agent sessions?"
+      ]
+    },
+    {
+      "id": "H09",
+      "path": "renderer/src/ai/modelProviders.ts",
+      "name": "applyEnabledModelCuration",
+      "qualifiedName": "renderer/src/ai/modelProviders.applyEnabledModelCuration",
+      "symbolId": "pci:sym:12eb561b7902e7118b33012560e3b021808960b73dba18e4f0d0fdce9bc06375",
+      "signature": "renderer/src/ai/modelProviders.applyEnabledModelCuration(options: ModelOptions, enabledModelIds: readonly string[] | undefined): ModelOptions",
+      "sourceSha256": "1026fe26749e3003770931b69f5f7830ce469141d84f078eb57d81684f85dd9f",
+      "queries": [
+        "restrict a fetched model catalogue to the models enabled by the user",
+        "Where is an unset model allowlist treated as no filtering while a configured list filters the catalogue?"
+      ]
+    },
+    {
+      "id": "H10",
+      "path": "renderer/src/ai/modelProviders.ts",
+      "name": "refreshModelOptions",
+      "qualifiedName": "renderer/src/ai/modelProviders.refreshModelOptions",
+      "symbolId": "pci:sym:81331e72f2ab43d6b9b35967869957653989836807edafd0ebe45aca47d27e14",
+      "signature": "renderer/src/ai/modelProviders.refreshModelOptions(provider: AiProvider): Promise<ModelOptions | undefined>",
+      "sourceSha256": "1026fe26749e3003770931b69f5f7830ce469141d84f078eb57d81684f85dd9f",
+      "queries": [
+        "force a fresh model catalogue instead of using the renderer cache",
+        "Which helper invalidates the cached provider catalogue before fetching its models again?"
+      ]
+    },
+    {
+      "id": "H11",
+      "path": "renderer/src/projects/projectBriefFields.ts",
+      "name": "defaultProjectWorkflow",
+      "qualifiedName": "renderer/src/projects/projectBriefFields.defaultProjectWorkflow",
+      "symbolId": "pci:sym:99c038339be770ec5004f937261a90ceead64de40e9a0a7f3c1574fd0abc6624",
+      "signature": "renderer/src/projects/projectBriefFields.defaultProjectWorkflow(type: ProjectType): ProjectWorkflowStage[]",
+      "sourceSha256": "8ee6d36b1aa538200b891838040b985601b35e2ff691344510fc2a66ad9975d5",
+      "queries": [
+        "choose initial board stages for a newly selected project type",
+        "Where does the wizard obtain the default project workflow associated with its project type?"
+      ]
+    },
+    {
+      "id": "H12",
+      "path": "renderer/src/settings/themes.ts",
+      "name": "resolveThemeMode",
+      "qualifiedName": "renderer/src/settings/themes.resolveThemeMode",
+      "symbolId": "pci:sym:5889923e368828813638a8f3dc08e556f0c3adc03fcdc7bea9105c46afd8ec0b",
+      "signature": "renderer/src/settings/themes.resolveThemeMode(preference: ThemeModePreference): ThemeMode",
+      "sourceSha256": "e0fb3d10724c5ed3e21d07ae10641d65c4e528880ece4ab0c46190b04553131d",
+      "queries": [
+        "resolve automatic appearance from the operating system light preference",
+        "Where is an explicit light or dark preference preserved while system mode consults the colour scheme media query?"
+      ]
+    },
+    {
+      "id": "H13",
+      "path": "renderer/src/settings/themes.ts",
+      "name": "applyThemePreference",
+      "qualifiedName": "renderer/src/settings/themes.applyThemePreference",
+      "symbolId": "pci:sym:3464ce94d73647ae466a113caaad2233a76f525745e78efbb45e72ee132fcdab",
+      "signature": "renderer/src/settings/themes.applyThemePreference(themeId: string, preference: ThemeModePreference): ThemeDefinition",
+      "sourceSha256": "e0fb3d10724c5ed3e21d07ae10641d65c4e528880ece4ab0c46190b04553131d",
+      "queries": [
+        "keep the chosen theme following operating system appearance changes",
+        "Where is the old system-theme listener removed before applying a matching theme variant and subscribing again?"
+      ]
+    },
+    {
+      "id": "H14",
+      "path": "renderer/src/ai/sessionNav.ts",
+      "name": "isSessionForProject",
+      "qualifiedName": "renderer/src/ai/sessionNav.isSessionForProject",
+      "symbolId": "pci:sym:a55c0e9efd1c3b98a9f99f70d8557dcf9900379cb0850f31a76d0fb760a3e66e",
+      "signature": "renderer/src/ai/sessionNav.isSessionForProject(session: AgentSessionRecord, project: Pick<ProjectRecord, 'id' | 'key' | 'workspaceFolder'> & { workItems?: Array<{ key: string }> }, allSessions?: AgentSessionRecord[], visited: Set<string>): boolean",
+      "sourceSha256": "94777354b7bc9738954bf8f2d831b5673055c3849060bb819e8e4aafa68bc529",
+      "queries": [
+        "associate an agent conversation with the correct project",
+        "Where are session project identity and repository folder relationships used to determine project membership?"
+      ]
+    },
+    {
+      "id": "H15",
+      "path": "renderer/src/ai/sessionNav.ts",
+      "name": "contextPressure",
+      "qualifiedName": "renderer/src/ai/sessionNav.contextPressure",
+      "symbolId": "pci:sym:b1a3d6332419b433ca513a88028b3f7f0cf051b67d7e13680b3b580a1dcc1107",
+      "signature": "renderer/src/ai/sessionNav.contextPressure(session: AgentSessionRecord): ContextPressure | undefined",
+      "sourceSha256": "94777354b7bc9738954bf8f2d831b5673055c3849060bb819e8e4aafa68bc529",
+      "queries": [
+        "estimate how close a conversation is to its model context limit",
+        "Which helper combines token usage and context capacity to return the pressure shown for a session?"
+      ]
+    },
+    {
+      "id": "H16",
+      "path": "renderer/src/ai/sessionNav.ts",
+      "name": "extractSubagents",
+      "qualifiedName": "renderer/src/ai/sessionNav.extractSubagents",
+      "symbolId": "pci:sym:85691e01743dbbf1748931224429189ec85df3172de637be920d7f733bbe28e8",
+      "signature": "renderer/src/ai/sessionNav.extractSubagents(session: AgentSessionRecord, allSessions?: AgentSessionRecord[]): SubagentItem[]",
+      "sourceSha256": "94777354b7bc9738954bf8f2d831b5673055c3849060bb819e8e4aafa68bc529",
+      "queries": [
+        "collect delegated agents beneath the parent conversation",
+        "Where are child sessions and recorded agent activity turned into the subagent list?"
+      ]
+    },
+    {
+      "id": "H17",
+      "path": "renderer/src/ai/sessionUsageData.ts",
+      "name": "sessionUsageData",
+      "qualifiedName": "renderer/src/ai/sessionUsageData.sessionUsageData",
+      "symbolId": "pci:sym:2025e6eb99f1e06e87b1e2928b310f03673533db735307de5f4c56a646846f90",
+      "signature": "renderer/src/ai/sessionUsageData.sessionUsageData(records: AgentSessionRecord[], selectedProvider: AiProvider | undefined, selectedModel: string | undefined, events: AiUsageEvent[]): { providers: SessionProviderUsage[]; models: SessionModelUsage[]; current: SessionModelUsage | undefined; total: { tokens: number | undefined; partial: boolean; costs: { ...; }[]; }; }",
+      "sourceSha256": "f5ba7dbf90cb9c9e9c025145351ea7369e1889dd15e7583b4a7f5e1c1871b3ac",
+      "queries": [
+        "calculate conversation usage over provider and model changes",
+        "Where are session usage epochs assembled without losing earlier reply token and cost totals?"
+      ]
+    },
+    {
+      "id": "H18",
+      "path": "main/src/main/workflowWorkspace.ts",
+      "name": "workflowBaseBlockingPaths",
+      "qualifiedName": "main/src/main/workflowWorkspace.workflowBaseBlockingPaths",
+      "symbolId": "pci:sym:ec17ea269152525c58a1a144038d5882ac751616f333e3f2e01782c6873d498f",
+      "signature": "main/src/main/workflowWorkspace.workflowBaseBlockingPaths(files: readonly Pick<GitChangedFile, 'path'>[]): string[]",
+      "sourceSha256": "0a65d87d446a0c531f1bfe71f9e7f744fa01285448d0a8c0dfd2960bb68831e5",
+      "queries": [
+        "allow dirty app metadata while protecting the product snapshot before a run",
+        "Which filter removes Praxis metadata paths from the uncommitted files that block a workflow base?"
+      ]
+    },
+    {
+      "id": "H19",
+      "path": "main/src/main/mobileInteractiveSessions.ts",
+      "name": "createMobileInteractiveSession",
+      "qualifiedName": "main/src/main/mobileInteractiveSessions.createMobileInteractiveSession",
+      "symbolId": "pci:sym:6577d13982e0a313d31d729e72e356b83d46095d8b4e81148633e3df208bae5c",
+      "signature": "main/src/main/mobileInteractiveSessions.createMobileInteractiveSession(input: {\n  projectId: string;\n  title: string;\n  message: string;\n  provider?: string;\n  model?: string;\n  mode?: MobileSessionMode;\n}): Promise<AgentSessionRecord>",
+      "sourceSha256": "f0f07891dc90dea996d405dba8a0040a3d5a64b00312a795a5cfba2fb0a0420c",
+      "queries": [
+        "start an interactive AI conversation requested from the phone",
+        "Where is a phone-created session checked against its project context and launched through the desktop host?"
+      ]
+    },
+    {
+      "id": "H20",
+      "path": "main/src/main/mobileAppearance.ts",
+      "name": "setDesktopAppearance",
+      "qualifiedName": "main/src/main/mobileAppearance.setDesktopAppearance",
+      "symbolId": "pci:sym:5ce1655052d88358d27fe164d0f9287ffacbc211c7d6440a53806d1bbcd68125",
+      "signature": "main/src/main/mobileAppearance.setDesktopAppearance(value: unknown): void",
+      "sourceSha256": "b0c58bb9b8e8d2968f1dcbe532b980706297a3e98f60825c54c7b8eacdf5db62",
+      "queries": [
+        "store and broadcast the desktop appearance for connected mobile clients",
+        "Where is an incoming desktop appearance validated before listeners are notified?"
+      ]
+    }
+  ]
+}

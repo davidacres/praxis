@@ -1,0 +1,32 @@
+{
+  "valid": true,
+  "queries": 168,
+  "families": 48,
+  "domains": 12,
+  "sourceFiles": 24,
+  "querySplits": {
+    "tuning": 56,
+    "heldOut": 112
+  },
+  "positiveFamilySplits": {
+    "tuning": 16,
+    "heldOut": 32
+  },
+  "agentTaskSplits": {
+    "tuning": 4,
+    "heldOut": 8
+  },
+  "lifecycleCases": 6,
+  "corpusSha256": "21d0060111e226f93c0c6ff0e4b641c9f4ff5d4c0e88edd3f1b6da5a64349aa4",
+  "existingReleaseProtocolDeclarations": {
+    "sourceRevisionDeclared": true,
+    "nearDuplicateSplitReviewDeclared": false,
+    "atLeast120Queries": true,
+    "heldOutEveryCategory": false,
+    "atLeast20PerCategory": false,
+    "tuning40HeldOut80": false,
+    "reviewDeclared": false
+  },
+  "releaseAcceptanceClaimed": false,
+  "rankingQueriesExecutedByValidator": 0
+}

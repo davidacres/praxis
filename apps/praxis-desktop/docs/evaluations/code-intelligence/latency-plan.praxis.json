@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "seed": 20261020,
+  "repetitions": 3,
+  "selection": "First family by ID in each of the 12 original desktop domains; terminology and behaviour variants. Fixed before latency collection; not selected for speed.",
+  "queries": [
+    {
+      "id": "F37-t",
+      "domain": "appearance",
+      "query": "normalise persisted decorative pattern settings"
+    },
+    {
+      "id": "F37-b",
+      "domain": "appearance",
+      "query": "Where are unknown pattern ids dropped and numeric settings clamped before a surface motif is used?"
+    },
+    {
+      "id": "F21-t",
+      "domain": "chat",
+      "query": "associate tool activity with the assistant reply that used it"
+    },
+    {
+      "id": "F21-b",
+      "domain": "chat",
+      "query": "Where are tool events collected per chat turn, including completed calls that had no start event?"
+    },
+    {
+      "id": "F29-t",
+      "domain": "code-intelligence",
+      "query": "attach local repository understanding tools to an AI conversation"
+    },
+    {
+      "id": "F29-b",
+      "domain": "code-intelligence",
+      "query": "Where do project overrides, repository registration and a provider grant determine whether a session gets the local MCP server?"
+    },
+    {
+      "id": "F09-t",
+      "domain": "connections",
+      "query": "choose the issue tracker implementation for a connection"
+    },
+    {
+      "id": "F09-b",
+      "domain": "connections",
+      "query": "Where does a folder connection get its cached backend and disk reload notifications instead of another tracker implementation?"
+    },
+    {
+      "id": "F33-t",
+      "domain": "embedding-model",
+      "query": "decide whether the required local embedding assets are present"
+    },
+    {
+      "id": "F33-b",
+      "domain": "embedding-model",
+      "query": "Where is local model installation checked using both required files and the pinned manifest identity?"
+    },
+    {
+      "id": "F25-t",
+      "domain": "gadgets",
+      "query": "validate an interactive answer using the host session authority"
+    },
+    {
+      "id": "F25-b",
+      "domain": "gadgets",
+      "query": "Where is a gadget answer checked before lookup and its action scope taken from the stored envelope?"
+    },
+    {
+      "id": "F17-t",
+      "domain": "git",
+      "query": "check whether a folder can be used as a version controlled workspace"
+    },
+    {
+      "id": "F17-b",
+      "domain": "git",
+      "query": "Where does repository preflight distinguish a missing folder or invalid Git repository from a usable checkout?"
+    },
+    {
+      "id": "F45-t",
+      "domain": "mobile",
+      "query": "list unanswered permission prompts for phone review"
+    },
+    {
+      "id": "F45-b",
+      "domain": "mobile",
+      "query": "Where are permission request events collected only for sessions awaiting approval and completed requests removed in order?"
+    },
+    {
+      "id": "F41-t",
+      "domain": "providers",
+      "query": "list configured enabled AI providers in preference order"
+    },
+    {
+      "id": "F41-b",
+      "domain": "providers",
+      "query": "Where are preferred providers, the active provider and remaining providers deduplicated and filtered for usability?"
+    },
+    {
+      "id": "F01-t",
+      "domain": "workflow-editor",
+      "query": "change the configuration of one stage in a process diagram"
+    },
+    {
+      "id": "F01-b",
+      "domain": "workflow-editor",
+      "query": "When a stage is edited, where is the matching node patched while the other nodes and links are retained?"
+    },
+    {
+      "id": "F05-t",
+      "domain": "workflow-storage",
+      "query": "combine saved process definitions with local unfinished copies"
+    },
+    {
+      "id": "F05-b",
+      "domain": "workflow-storage",
+      "query": "When a project has both a workflow file and a draft with the same id, which definition wins?"
+    },
+    {
+      "id": "F13-t",
+      "domain": "workspace",
+      "query": "remember the location of a workspace document outside app storage"
+    },
+    {
+      "id": "F13-b",
+      "domain": "workspace",
+      "query": "Where does registering a workspace replace a pointer with the same id and clear its unreadable marker?"
+    }
+  ]
+}

@@ -1,0 +1,1981 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-19",
+  "method": "find_symbol exact qualified selector plus get_source current-hash verification; no search ranking queries executed",
+  "reviewer": "Codex AI; not independent human review",
+  "labels": [
+    {
+      "id": "F01",
+      "name": "updateNode",
+      "path": "renderer/src/workflows/workflowEdits.ts",
+      "qualifiedName": "renderer/src/workflows/workflowEdits.updateNode",
+      "signature": "renderer/src/workflows/workflowEdits.updateNode(definition: WorkflowDefinition, nodeId: string, patch: Partial<Omit<WorkflowNode, 'id' | 'type'>>): WorkflowDefinition",
+      "symbolId": "pci:sym:48091cfca89a67b69f4f9d1efc33cc765671df07e8de4850e24863819d0edbfd",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+      "range": {
+        "start": {
+          "line": 90,
+          "character": 0
+        },
+        "end": {
+          "line": 97,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 90,
+              "character": 0
+            },
+            "end": {
+              "line": 97,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "indexedHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F02",
+      "name": "connectNodes",
+      "path": "renderer/src/workflows/workflowEdits.ts",
+      "qualifiedName": "renderer/src/workflows/workflowEdits.connectNodes",
+      "signature": "renderer/src/workflows/workflowEdits.connectNodes(definition: WorkflowDefinition, input: { from: string; to: string; on?: WorkflowEdgeOutcome; required?: boolean }): WorkflowDefinition",
+      "symbolId": "pci:sym:78cad3bd9123ac7572f137b961d949806ce886de940c123aad61d0f741444ddf",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+      "range": {
+        "start": {
+          "line": 283,
+          "character": 0
+        },
+        "end": {
+          "line": 314,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 283,
+              "character": 0
+            },
+            "end": {
+              "line": 314,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "indexedHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F03",
+      "name": "wouldCloseCycle",
+      "path": "renderer/src/workflows/workflowEdits.ts",
+      "qualifiedName": "renderer/src/workflows/workflowEdits.wouldCloseCycle",
+      "signature": "renderer/src/workflows/workflowEdits.wouldCloseCycle(definition: WorkflowDefinition, from: string, to: string): boolean",
+      "symbolId": "pci:sym:33e256de1110c46e3444c7c238c69e6d10fccdffc413214c292c08d65b34291b",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+      "range": {
+        "start": {
+          "line": 259,
+          "character": 0
+        },
+        "end": {
+          "line": 276,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 259,
+              "character": 0
+            },
+            "end": {
+              "line": 276,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "indexedHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F04",
+      "name": "autoArrange",
+      "path": "renderer/src/workflows/workflowEdits.ts",
+      "qualifiedName": "renderer/src/workflows/workflowEdits.autoArrange",
+      "signature": "renderer/src/workflows/workflowEdits.autoArrange(definition: WorkflowDefinition, orientation: WorkflowArrangeOrientation): WorkflowDefinition",
+      "symbolId": "pci:sym:3137af0b5888c643fb5cea3e4b57acedf0d3e5f77243a3e1307378c3f0653e22",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+      "range": {
+        "start": {
+          "line": 122,
+          "character": 0
+        },
+        "end": {
+          "line": 216,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 122,
+              "character": 0
+            },
+            "end": {
+              "line": 202,
+              "character": 0
+            }
+          },
+          "currentHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "indexedHash": "sha256:6286dbd4255ae7564f7849b251d9bf1193447a772252a36fc807a433e745a189",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": true
+    },
+    {
+      "id": "F05",
+      "name": "projectDefinitions",
+      "path": "main/src/main/workflowIpc.ts",
+      "qualifiedName": "main/src/main/workflowIpc.projectDefinitions",
+      "signature": "main/src/main/workflowIpc.projectDefinitions(projectId: string): Promise<WorkflowDefinition[]>",
+      "symbolId": "pci:sym:d6a3ba12c47e83eab718dd4fca23e261ea0d5b4c974ad20f543b8048e08a0138",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+      "range": {
+        "start": {
+          "line": 267,
+          "character": 0
+        },
+        "end": {
+          "line": 275,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 267,
+              "character": 0
+            },
+            "end": {
+              "line": 275,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "indexedHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F06",
+      "name": "persistProjectWorkflow",
+      "path": "main/src/main/workflowIpc.ts",
+      "qualifiedName": "main/src/main/workflowIpc.persistProjectWorkflow",
+      "signature": "main/src/main/workflowIpc.persistProjectWorkflow(projectId: string, definition: WorkflowDefinition): Promise<string | undefined>",
+      "symbolId": "pci:sym:9fcf2c8d37dc2b5d44b6d1db240d486662e99f2a38093a3233aa55eb90585a3b",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+      "range": {
+        "start": {
+          "line": 312,
+          "character": 0
+        },
+        "end": {
+          "line": 322,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 312,
+              "character": 0
+            },
+            "end": {
+              "line": 322,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "indexedHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F07",
+      "name": "saveDraft",
+      "path": "main/src/main/workflowIpc.ts",
+      "qualifiedName": "main/src/main/workflowIpc.saveDraft",
+      "signature": "main/src/main/workflowIpc.saveDraft(projectId: string, definition: WorkflowDefinition): Promise<void>",
+      "symbolId": "pci:sym:c566033b7ae8b981081fcd4d65682b9b58acd00da9ed2958795c39d8a25e88f9",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+      "range": {
+        "start": {
+          "line": 297,
+          "character": 0
+        },
+        "end": {
+          "line": 300,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 297,
+              "character": 0
+            },
+            "end": {
+              "line": 300,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "indexedHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F08",
+      "name": "dropDraft",
+      "path": "main/src/main/workflowIpc.ts",
+      "qualifiedName": "main/src/main/workflowIpc.dropDraft",
+      "signature": "main/src/main/workflowIpc.dropDraft(projectId: string, workflowId: string): Promise<void>",
+      "symbolId": "pci:sym:0d302147b64c9b51fba2e2c86eeea2e2d94c9d9233e388eeaeafbd337f9d82b4",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+      "range": {
+        "start": {
+          "line": 302,
+          "character": 0
+        },
+        "end": {
+          "line": 305,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 302,
+              "character": 0
+            },
+            "end": {
+              "line": 305,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "indexedHash": "sha256:06f770ec0f215aa7013a552dbf1dd330e4cf9407a55c043de3b7cc9e1c7fac53",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F09",
+      "name": "resolveServiceForConnection",
+      "path": "main/src/main/serviceRegistry.ts",
+      "qualifiedName": "main/src/main/serviceRegistry.resolveServiceForConnection",
+      "signature": "main/src/main/serviceRegistry.resolveServiceForConnection(connectionId: string | undefined): Promise<IssueTrackerService>",
+      "symbolId": "pci:sym:204b29267a0fff29abb44d19e7f48f24c555b2c999aac03461c52b1496d010ea",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "2826fc4000e6f85ebd81a31097251d2cd190c9c413f4a801af3a30661bf4e7ad",
+      "range": {
+        "start": {
+          "line": 236,
+          "character": 0
+        },
+        "end": {
+          "line": 286,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 236,
+              "character": 0
+            },
+            "end": {
+              "line": 286,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:2826fc4000e6f85ebd81a31097251d2cd190c9c413f4a801af3a30661bf4e7ad",
+          "indexedHash": "sha256:2826fc4000e6f85ebd81a31097251d2cd190c9c413f4a801af3a30661bf4e7ad",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F10",
+      "name": "getStubService",
+      "path": "main/src/main/serviceRegistry.ts",
+      "qualifiedName": "main/src/main/serviceRegistry.getStubService",
+      "signature": "main/src/main/serviceRegistry.getStubService(mode: BackendMode): StubBackendService",
+      "symbolId": "pci:sym:331d2ca2d66692b855098b77aa017ecded93eb67a22e3b8039be24e3c25cbeb4",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "2826fc4000e6f85ebd81a31097251d2cd190c9c413f4a801af3a30661bf4e7ad",
+      "range": {
+        "start": {
+          "line": 51,
+          "character": 0
+        },
+        "end": {
+          "line": 58,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 51,
+              "character": 0
+            },
+            "end": {
+              "line": 58,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:2826fc4000e6f85ebd81a31097251d2cd190c9c413f4a801af3a30661bf4e7ad",
+          "indexedHash": "sha256:2826fc4000e6f85ebd81a31097251d2cd190c9c413f4a801af3a30661bf4e7ad",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F11",
+      "name": "autoSynthesizesBoard",
+      "path": "renderer/src/connections/connectionPolicy.ts",
+      "qualifiedName": "renderer/src/connections/connectionPolicy.autoSynthesizesBoard",
+      "signature": "renderer/src/connections/connectionPolicy.autoSynthesizesBoard(mode: BackendMode): boolean",
+      "symbolId": "pci:sym:ed875cda41e9196d9c6844c7508f9219d64bebb08e9c5f4e4709d83b8624b99b",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "2e65d516edf5caff48187471ca74fdaad9722c56e1cc93b69ce2502600f6a9c2",
+      "range": {
+        "start": {
+          "line": 44,
+          "character": 0
+        },
+        "end": {
+          "line": 46,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 44,
+              "character": 0
+            },
+            "end": {
+              "line": 46,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:2e65d516edf5caff48187471ca74fdaad9722c56e1cc93b69ce2502600f6a9c2",
+          "indexedHash": "sha256:2e65d516edf5caff48187471ca74fdaad9722c56e1cc93b69ce2502600f6a9c2",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F12",
+      "name": "createSynthesizedTrackedBoard",
+      "path": "renderer/src/connections/connectionPolicy.ts",
+      "qualifiedName": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard",
+      "signature": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard(connection: Connection): TrackedBoard | undefined",
+      "symbolId": "pci:sym:afd11861b34a75ffea0162c6689aa90607145b11c153418c84c4f58f48ca9ca0",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "2e65d516edf5caff48187471ca74fdaad9722c56e1cc93b69ce2502600f6a9c2",
+      "range": {
+        "start": {
+          "line": 69,
+          "character": 0
+        },
+        "end": {
+          "line": 99,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 69,
+              "character": 0
+            },
+            "end": {
+              "line": 99,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:2e65d516edf5caff48187471ca74fdaad9722c56e1cc93b69ce2502600f6a9c2",
+          "indexedHash": "sha256:2e65d516edf5caff48187471ca74fdaad9722c56e1cc93b69ce2502600f6a9c2",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F13",
+      "name": "registerWorkspaceLocation",
+      "path": "main/src/main/workspaceLocations.ts",
+      "qualifiedName": "main/src/main/workspaceLocations.registerWorkspaceLocation",
+      "signature": "main/src/main/workspaceLocations.registerWorkspaceLocation(location: WorkspaceLocation): Promise<void>",
+      "symbolId": "pci:sym:743a5ef139bcf4e4cc6e71a7830d50f5ffc0eaffed5ee67f8c40336575c3c6f9",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+      "range": {
+        "start": {
+          "line": 43,
+          "character": 0
+        },
+        "end": {
+          "line": 48,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 43,
+              "character": 0
+            },
+            "end": {
+              "line": 48,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+          "indexedHash": "sha256:c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F14",
+      "name": "deregisterWorkspaceLocation",
+      "path": "main/src/main/workspaceLocations.ts",
+      "qualifiedName": "main/src/main/workspaceLocations.deregisterWorkspaceLocation",
+      "signature": "main/src/main/workspaceLocations.deregisterWorkspaceLocation(workspaceId: string): Promise<void>",
+      "symbolId": "pci:sym:14c0cb83cfd3aab9dfeff63450c2dd410bd83fd2fc465e4b8da7f1b5fc95cd99",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+      "range": {
+        "start": {
+          "line": 55,
+          "character": 0
+        },
+        "end": {
+          "line": 62,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 55,
+              "character": 0
+            },
+            "end": {
+              "line": 62,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+          "indexedHash": "sha256:c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F15",
+      "name": "getWorkspaceScopes",
+      "path": "main/src/main/workspaceLocations.ts",
+      "qualifiedName": "main/src/main/workspaceLocations.getWorkspaceScopes",
+      "signature": "main/src/main/workspaceLocations.getWorkspaceScopes(): UnionScope[]",
+      "symbolId": "pci:sym:0cd7afb38c1e1b655b4718f337259bf5daa2728a741cc49d8da27466fb234855",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+      "range": {
+        "start": {
+          "line": 71,
+          "character": 0
+        },
+        "end": {
+          "line": 91,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 71,
+              "character": 0
+            },
+            "end": {
+              "line": 91,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+          "indexedHash": "sha256:c82647e510cd0df5b7ae001cae75fabc341b8152a8dc9ffd5b2a11504f98733c",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F16",
+      "name": "writeProjectSnapshot",
+      "path": "main/src/main/projectManager.ts",
+      "qualifiedName": "main/src/main/projectManager.writeProjectSnapshot",
+      "signature": "main/src/main/projectManager.writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'>",
+      "symbolId": "pci:sym:54fa84f57d6ec99c05ca6b1d5f77d72c69c7628f759b9c99390f570e2cb3170e",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "23188044225c7b47d6dc230247ddb3b2871be70fede98fd610a01efddd719f4e",
+      "range": {
+        "start": {
+          "line": 325,
+          "character": 0
+        },
+        "end": {
+          "line": 344,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 325,
+              "character": 0
+            },
+            "end": {
+              "line": 344,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:23188044225c7b47d6dc230247ddb3b2871be70fede98fd610a01efddd719f4e",
+          "indexedHash": "sha256:23188044225c7b47d6dc230247ddb3b2871be70fede98fd610a01efddd719f4e",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F17",
+      "name": "preflightGitRepository",
+      "path": "main/src/main/gitService.ts",
+      "qualifiedName": "main/src/main/gitService.preflightGitRepository",
+      "signature": "main/src/main/gitService.preflightGitRepository(input?: string): Promise<GitRepositoryPreflight>",
+      "symbolId": "pci:sym:cf3dc295b9f90a2aecf2facfa8e1410fc6d7f3d2692cdba43c4a6e220ea8c8ab",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+      "range": {
+        "start": {
+          "line": 91,
+          "character": 0
+        },
+        "end": {
+          "line": 112,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 91,
+              "character": 0
+            },
+            "end": {
+              "line": 112,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "indexedHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F18",
+      "name": "commitPathsGit",
+      "path": "main/src/main/gitService.ts",
+      "qualifiedName": "main/src/main/gitService.commitPathsGit",
+      "signature": "main/src/main/gitService.commitPathsGit(input: string, paths: string[], message: string): Promise<void>",
+      "symbolId": "pci:sym:9dc2055370d01d5f57101b939c1803a3cd6137e945c2c812c31bee7b0bfbb7a9",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+      "range": {
+        "start": {
+          "line": 224,
+          "character": 0
+        },
+        "end": {
+          "line": 231,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 224,
+              "character": 0
+            },
+            "end": {
+              "line": 231,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "indexedHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F19",
+      "name": "applyGitHunk",
+      "path": "main/src/main/gitService.ts",
+      "qualifiedName": "main/src/main/gitService.applyGitHunk",
+      "signature": "main/src/main/gitService.applyGitHunk(input: string, request: GitHunkActionRequest): Promise<GitStatusSnapshot>",
+      "symbolId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+      "range": {
+        "start": {
+          "line": 423,
+          "character": 0
+        },
+        "end": {
+          "line": 433,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 423,
+              "character": 0
+            },
+            "end": {
+              "line": 433,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "indexedHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F20",
+      "name": "safeRepositoryFile",
+      "path": "main/src/main/gitService.ts",
+      "qualifiedName": "main/src/main/gitService.safeRepositoryFile",
+      "signature": "main/src/main/gitService.safeRepositoryFile(repositoryPath: string, relativePath: string): Promise<string>",
+      "symbolId": "pci:sym:a67dded404268e6bf8296e4a41f1ca38358c38f5f0cad98355cfe2ed9a03408a",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+      "range": {
+        "start": {
+          "line": 435,
+          "character": 0
+        },
+        "end": {
+          "line": 443,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 435,
+              "character": 0
+            },
+            "end": {
+              "line": 443,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "indexedHash": "sha256:a1c1fe2d9d0018bdaacff3e311a2c7a18cf4cd3f6d5afe9704cc3df8d5f7b762",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F21",
+      "name": "collectTurnTools",
+      "path": "renderer/src/ai/chatToolCalls.ts",
+      "qualifiedName": "renderer/src/ai/chatToolCalls.collectTurnTools",
+      "signature": "renderer/src/ai/chatToolCalls.collectTurnTools(events: readonly AgentEventSummary[]): Map<AgentEventSummary, TurnTools>",
+      "symbolId": "pci:sym:e2c38f36c9aa6381d68626334ea391ce4067848fa198fdf6784fe858aa276edb",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "6c1af39e0b1df99a3f4a8802361047bb893548f5b9d1a322c394700db152606b",
+      "range": {
+        "start": {
+          "line": 30,
+          "character": 0
+        },
+        "end": {
+          "line": 78,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 30,
+              "character": 0
+            },
+            "end": {
+              "line": 78,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:6c1af39e0b1df99a3f4a8802361047bb893548f5b9d1a322c394700db152606b",
+          "indexedHash": "sha256:6c1af39e0b1df99a3f4a8802361047bb893548f5b9d1a322c394700db152606b",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F22",
+      "name": "isCodeIntelligenceTool",
+      "path": "renderer/src/ai/chatToolCalls.ts",
+      "qualifiedName": "renderer/src/ai/chatToolCalls.isCodeIntelligenceTool",
+      "signature": "renderer/src/ai/chatToolCalls.isCodeIntelligenceTool(name: string): boolean",
+      "symbolId": "pci:sym:78aacd80b69a6c025be65ec1b2c813978b334e5bece1690a8defdd2e91164696",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "6c1af39e0b1df99a3f4a8802361047bb893548f5b9d1a322c394700db152606b",
+      "range": {
+        "start": {
+          "line": 97,
+          "character": 0
+        },
+        "end": {
+          "line": 99,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 97,
+              "character": 0
+            },
+            "end": {
+              "line": 99,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:6c1af39e0b1df99a3f4a8802361047bb893548f5b9d1a322c394700db152606b",
+          "indexedHash": "sha256:6c1af39e0b1df99a3f4a8802361047bb893548f5b9d1a322c394700db152606b",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F23",
+      "name": "collectMessageRuns",
+      "path": "renderer/src/ai/chatTurns.ts",
+      "qualifiedName": "renderer/src/ai/chatTurns.collectMessageRuns",
+      "signature": "renderer/src/ai/chatTurns.collectMessageRuns(events: readonly AgentEventSummary[], visibleText: (event: AgentEventSummary) => string, hooks: {\n    /** Tool calls made so far in the event's turn. */\n    toolCallsAt?: (event: AgentEventSummary) => number | undefined;\n    /** Whether the agent called a tool after this message, so it is an aside. */\n    isIntermediate?: (event: AgentEventSummary) => boolean;\n  }): MessageRun[]",
+      "symbolId": "pci:sym:0ba153507ec9832f2d151a8afe015dc6d7d513b891d5b39054e42c3737602ec4",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "412ba3ddc971018d3dfaa73c364b0a8bec2b35334da8d812a1d2d82bc823b2cc",
+      "range": {
+        "start": {
+          "line": 95,
+          "character": 0
+        },
+        "end": {
+          "line": 157,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 95,
+              "character": 0
+            },
+            "end": {
+              "line": 157,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:412ba3ddc971018d3dfaa73c364b0a8bec2b35334da8d812a1d2d82bc823b2cc",
+          "indexedHash": "sha256:412ba3ddc971018d3dfaa73c364b0a8bec2b35334da8d812a1d2d82bc823b2cc",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F24",
+      "name": "mergeReasoningStep",
+      "path": "renderer/src/ai/chatThought.ts",
+      "qualifiedName": "renderer/src/ai/chatThought.mergeReasoningStep",
+      "signature": "renderer/src/ai/chatThought.mergeReasoningStep(steps: string[], incoming: string): string[]",
+      "symbolId": "pci:sym:663bcf2d53d015c1818ffe8d901204cadbeb3d6de8d6310b9cd5c6729df51a2a",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "d440b2430b0021aaab4b912940e49e164bcdd40fc3f80d78ca3567916d7fa7cc",
+      "range": {
+        "start": {
+          "line": 37,
+          "character": 0
+        },
+        "end": {
+          "line": 48,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 37,
+              "character": 0
+            },
+            "end": {
+              "line": 48,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:d440b2430b0021aaab4b912940e49e164bcdd40fc3f80d78ca3567916d7fa7cc",
+          "indexedHash": "sha256:d440b2430b0021aaab4b912940e49e164bcdd40fc3f80d78ca3567916d7fa7cc",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F25",
+      "name": "submitGadgetAction",
+      "path": "main/src/main/gadgetIpc.ts",
+      "qualifiedName": "main/src/main/gadgetIpc.submitGadgetAction",
+      "signature": "main/src/main/gadgetIpc.submitGadgetAction(request: GadgetSubmitRequest, actor: string): Promise<GadgetActionResult>",
+      "symbolId": "pci:sym:d3e19372e3d9497a0f0900cf948b8b3c6320d552816086517ddcac4172cb82a5",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "667635c510e41d607349231c44df254fab6a69b8b3ac36719c94bc148139577a",
+      "range": {
+        "start": {
+          "line": 132,
+          "character": 0
+        },
+        "end": {
+          "line": 195,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 132,
+              "character": 0
+            },
+            "end": {
+              "line": 195,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:667635c510e41d607349231c44df254fab6a69b8b3ac36719c94bc148139577a",
+          "indexedHash": "sha256:667635c510e41d607349231c44df254fab6a69b8b3ac36719c94bc148139577a",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F26",
+      "name": "executeGadgetAction",
+      "path": "main/src/main/gadgetIpc.ts",
+      "qualifiedName": "main/src/main/gadgetIpc.executeGadgetAction",
+      "signature": "main/src/main/gadgetIpc.executeGadgetAction({ envelope, action, record }: GadgetExecutionContext, actor: string): Promise<{ outcome: unknown; message: string; } | { outcome: { acknowledged: boolean; }; message: string; correlationId: string; }>",
+      "symbolId": "pci:sym:a8dbd823a69cea99a8784d2ef81727d4e385bbdcc764d943c7d105e62f11626b",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "667635c510e41d607349231c44df254fab6a69b8b3ac36719c94bc148139577a",
+      "range": {
+        "start": {
+          "line": 87,
+          "character": 0
+        },
+        "end": {
+          "line": 126,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 87,
+              "character": 0
+            },
+            "end": {
+              "line": 126,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:667635c510e41d607349231c44df254fab6a69b8b3ac36719c94bc148139577a",
+          "indexedHash": "sha256:667635c510e41d607349231c44df254fab6a69b8b3ac36719c94bc148139577a",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F27",
+      "name": "isGadgetActionable",
+      "path": "renderer/src/ai/gadgets/gadgetContract.ts",
+      "qualifiedName": "renderer/src/ai/gadgets/gadgetContract.isGadgetActionable",
+      "signature": "renderer/src/ai/gadgets/gadgetContract.isGadgetActionable(state: GadgetLifecycleState | undefined): boolean",
+      "symbolId": "pci:sym:67afb8f1d2adefab5bddae29c4c0ce771b498019e261cbc70cc429b333cc3a6d",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "8cda051fa6297e626249e268b5359beb23d404f0bd99174b13c561c1c322a1f4",
+      "range": {
+        "start": {
+          "line": 26,
+          "character": 0
+        },
+        "end": {
+          "line": 28,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 26,
+              "character": 0
+            },
+            "end": {
+              "line": 28,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:8cda051fa6297e626249e268b5359beb23d404f0bd99174b13c561c1c322a1f4",
+          "indexedHash": "sha256:8cda051fa6297e626249e268b5359beb23d404f0bd99174b13c561c1c322a1f4",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F28",
+      "name": "stripGadgetFences",
+      "path": "renderer/src/ai/gadgets/messageText.ts",
+      "qualifiedName": "renderer/src/ai/gadgets/messageText.stripGadgetFences",
+      "signature": "renderer/src/ai/gadgets/messageText.stripGadgetFences(text: string): string",
+      "symbolId": "pci:sym:7ceb66f235a4073354d8f7e67ecb097c3bc69a1577aa9deb08cffbb338095460",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "4dbefc1d38fb09fa83d63be98ebede0fc34f15af7097c82c1ac0509d0b16b271",
+      "range": {
+        "start": {
+          "line": 41,
+          "character": 0
+        },
+        "end": {
+          "line": 48,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 41,
+              "character": 0
+            },
+            "end": {
+              "line": 48,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:4dbefc1d38fb09fa83d63be98ebede0fc34f15af7097c82c1ac0509d0b16b271",
+          "indexedHash": "sha256:4dbefc1d38fb09fa83d63be98ebede0fc34f15af7097c82c1ac0509d0b16b271",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F29",
+      "name": "getSessionCodeIntelligenceServer",
+      "path": "main/src/main/codeIntelligenceIpc.ts",
+      "qualifiedName": "main/src/main/codeIntelligenceIpc.getSessionCodeIntelligenceServer",
+      "signature": "main/src/main/codeIntelligenceIpc.getSessionCodeIntelligenceServer(workingDirectory: string | undefined, provider: string | undefined): Promise<McpServerConfig | undefined>",
+      "symbolId": "pci:sym:ae1eea66e473e4c615919595082f1c5d5c462c280d8967ba2fcf5cd22381b6db",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+      "range": {
+        "start": {
+          "line": 258,
+          "character": 0
+        },
+        "end": {
+          "line": 322,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 258,
+              "character": 0
+            },
+            "end": {
+              "line": 322,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "indexedHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F30",
+      "name": "activateModel",
+      "path": "main/src/main/codeIntelligenceIpc.ts",
+      "qualifiedName": "main/src/main/codeIntelligenceIpc.activateModel",
+      "signature": "main/src/main/codeIntelligenceIpc.activateModel(fingerprint: string, repositoryIds: string[]): Promise<string[]>",
+      "symbolId": "pci:sym:94d630842a64e9d005065e52af45b447d1bce7f0d58e05bca08e45917eaf3aac",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+      "range": {
+        "start": {
+          "line": 83,
+          "character": 0
+        },
+        "end": {
+          "line": 94,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 83,
+              "character": 0
+            },
+            "end": {
+              "line": 94,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "indexedHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F31",
+      "name": "replaceOutdatedOwner",
+      "path": "main/src/main/codeIntelligenceIpc.ts",
+      "qualifiedName": "main/src/main/codeIntelligenceIpc.replaceOutdatedOwner",
+      "signature": "main/src/main/codeIntelligenceIpc.replaceOutdatedOwner(): Promise<boolean>",
+      "symbolId": "pci:sym:2fb17b3754c164b4ce3aecbd1cffa18c4ba8ccaac91cc7b3c0fcddbde9e53b22",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+      "range": {
+        "start": {
+          "line": 124,
+          "character": 0
+        },
+        "end": {
+          "line": 130,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 124,
+              "character": 0
+            },
+            "end": {
+              "line": 130,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "indexedHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F32",
+      "name": "installedModelFingerprint",
+      "path": "main/src/main/codeIntelligenceIpc.ts",
+      "qualifiedName": "main/src/main/codeIntelligenceIpc.installedModelFingerprint",
+      "signature": "main/src/main/codeIntelligenceIpc.installedModelFingerprint(): Promise<string | undefined>",
+      "symbolId": "pci:sym:6cb1b011f2e29054bf1195d57602d07a6abd453c4056d8293fb4bb11adf36ae4",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+      "range": {
+        "start": {
+          "line": 59,
+          "character": 0
+        },
+        "end": {
+          "line": 68,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 59,
+              "character": 0
+            },
+            "end": {
+              "line": 68,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "indexedHash": "sha256:b3c6c5f98752074956a2984d621753f8f8e69f65de88ac728e0762939f7cef68",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F33",
+      "name": "isSemanticModelInstalled",
+      "path": "main/src/main/semanticModelManager.ts",
+      "qualifiedName": "main/src/main/semanticModelManager.isSemanticModelInstalled",
+      "signature": "main/src/main/semanticModelManager.isSemanticModelInstalled(): boolean",
+      "symbolId": "pci:sym:fb8338923a349bdd497bb6ec7b285510751a6e0935208291cb421bae0341ae12",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+      "range": {
+        "start": {
+          "line": 71,
+          "character": 0
+        },
+        "end": {
+          "line": 76,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 71,
+              "character": 0
+            },
+            "end": {
+              "line": 76,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+          "indexedHash": "sha256:354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F34",
+      "name": "getSemanticModelStatus",
+      "path": "main/src/main/semanticModelManager.ts",
+      "qualifiedName": "main/src/main/semanticModelManager.getSemanticModelStatus",
+      "signature": "main/src/main/semanticModelManager.getSemanticModelStatus(): SemanticModelStatus",
+      "symbolId": "pci:sym:faa243d3965f94a9e7d1ebaaade3d6da0a71003a10d5a015e657111fd70d425f",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+      "range": {
+        "start": {
+          "line": 91,
+          "character": 0
+        },
+        "end": {
+          "line": 116,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 91,
+              "character": 0
+            },
+            "end": {
+              "line": 116,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+          "indexedHash": "sha256:354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F35",
+      "name": "downloadSemanticModel",
+      "path": "main/src/main/semanticModelManager.ts",
+      "qualifiedName": "main/src/main/semanticModelManager.downloadSemanticModel",
+      "signature": "main/src/main/semanticModelManager.downloadSemanticModel(onProgress?: (event: SemanticModelProgressEvent) => void): Promise<void>",
+      "symbolId": "pci:sym:877986c053880510da7aabe5172b9bb97b5106b23d946d387faac486960c4492",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+      "range": {
+        "start": {
+          "line": 118,
+          "character": 0
+        },
+        "end": {
+          "line": 171,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 118,
+              "character": 0
+            },
+            "end": {
+              "line": 171,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+          "indexedHash": "sha256:354e5c47690f6b6094f82aa0c94c1f709145ef53c354f989b293588a41248a7c",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F36",
+      "name": "streamDownload",
+      "path": "main/src/main/semanticModelDownload.ts",
+      "qualifiedName": "main/src/main/semanticModelDownload.streamDownload",
+      "signature": "main/src/main/semanticModelDownload.streamDownload(url: string, destination: string, expectedSize: number, expectedSha256: string, onChunk: (bytesReceived: number) => void, redirectCount: number): Promise<void>",
+      "symbolId": "pci:sym:7a9ad7810ad6a6785961e51da58fca80db8627e840ee35b35d7feb27f85302d8",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "e65f8f77dababa7f51e949e829d84303a98e4aa9cae52dff46f8ed7d5a1642a5",
+      "range": {
+        "start": {
+          "line": 7,
+          "character": 0
+        },
+        "end": {
+          "line": 81,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 7,
+              "character": 0
+            },
+            "end": {
+              "line": 81,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:e65f8f77dababa7f51e949e829d84303a98e4aa9cae52dff46f8ed7d5a1642a5",
+          "indexedHash": "sha256:e65f8f77dababa7f51e949e829d84303a98e4aa9cae52dff46f8ed7d5a1642a5",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F37",
+      "name": "readPatternSpec",
+      "path": "renderer/src/settings/surfacePacks.ts",
+      "qualifiedName": "renderer/src/settings/surfacePacks.readPatternSpec",
+      "signature": "renderer/src/settings/surfacePacks.readPatternSpec(value: unknown): SurfacePatternSpec | undefined",
+      "symbolId": "pci:sym:43fba1ef5590c66888b96f0aa022a31f6aafce21ea377f214d04a201845308d7",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "26f3e6bb9868d82fb460836c673098c070cbc9bb3e4e88175d6e5441eda09d20",
+      "range": {
+        "start": {
+          "line": 159,
+          "character": 0
+        },
+        "end": {
+          "line": 191,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 159,
+              "character": 0
+            },
+            "end": {
+              "line": 191,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:26f3e6bb9868d82fb460836c673098c070cbc9bb3e4e88175d6e5441eda09d20",
+          "indexedHash": "sha256:26f3e6bb9868d82fb460836c673098c070cbc9bb3e4e88175d6e5441eda09d20",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F38",
+      "name": "coercePacks",
+      "path": "renderer/src/settings/surfacePacks.ts",
+      "qualifiedName": "renderer/src/settings/surfacePacks.coercePacks",
+      "signature": "renderer/src/settings/surfacePacks.coercePacks(records: AppearanceSettings['customSurfacePacks'], source: 'custom' | 'marketplace'): SurfacePackDefinition[]",
+      "symbolId": "pci:sym:40602d110eab5ea0266e20aab4abb77bbc1b1d7338aa4d3bd4a6af7fa855cc97",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "26f3e6bb9868d82fb460836c673098c070cbc9bb3e4e88175d6e5441eda09d20",
+      "range": {
+        "start": {
+          "line": 194,
+          "character": 0
+        },
+        "end": {
+          "line": 221,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 194,
+              "character": 0
+            },
+            "end": {
+              "line": 221,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:26f3e6bb9868d82fb460836c673098c070cbc9bb3e4e88175d6e5441eda09d20",
+          "indexedHash": "sha256:26f3e6bb9868d82fb460836c673098c070cbc9bb3e4e88175d6e5441eda09d20",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F39",
+      "name": "splitCssLayers",
+      "path": "renderer/src/settings/cssLayerList.ts",
+      "qualifiedName": "renderer/src/settings/cssLayerList.splitCssLayers",
+      "signature": "renderer/src/settings/cssLayerList.splitCssLayers(value: string): string[]",
+      "symbolId": "pci:sym:c048e58f435bea15aff910d234590aac540928dab5cda2c2bcbff20c6a297faa",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "645f2024049d7df69801191aa8e6ce33583837f099c0fd7f0b92816e32e0d46e",
+      "range": {
+        "start": {
+          "line": 1,
+          "character": 0
+        },
+        "end": {
+          "line": 27,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 1,
+              "character": 0
+            },
+            "end": {
+              "line": 27,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:645f2024049d7df69801191aa8e6ce33583837f099c0fd7f0b92816e32e0d46e",
+          "indexedHash": "sha256:645f2024049d7df69801191aa8e6ce33583837f099c0fd7f0b92816e32e0d46e",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F40",
+      "name": "startPublishingMobileAppearance",
+      "path": "renderer/src/settings/mobileAppearancePublisher.ts",
+      "qualifiedName": "renderer/src/settings/mobileAppearancePublisher.startPublishingMobileAppearance",
+      "signature": "renderer/src/settings/mobileAppearancePublisher.startPublishingMobileAppearance(): void",
+      "symbolId": "pci:sym:46e37f0398f8ef70ec4dc3188322eab6193b9468d309da957093afde988de562",
+      "contextId": "pci:ctx:23a9492c2819f2d3e5d90d9700d58b342cb0de3a53e0c3a09c0dfbd90346e7b1",
+      "sourceSha256": "1c8e1f71f35e9c695a157995e102e7c1310f6a7d53815643c1d1a096551e20b4",
+      "range": {
+        "start": {
+          "line": 137,
+          "character": 0
+        },
+        "end": {
+          "line": 151,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 137,
+              "character": 0
+            },
+            "end": {
+              "line": 151,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:1c8e1f71f35e9c695a157995e102e7c1310f6a7d53815643c1d1a096551e20b4",
+          "indexedHash": "sha256:1c8e1f71f35e9c695a157995e102e7c1310f6a7d53815643c1d1a096551e20b4",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F41",
+      "name": "usableProviders",
+      "path": "main/src/main/providerFallback.ts",
+      "qualifiedName": "main/src/main/providerFallback.usableProviders",
+      "signature": "main/src/main/providerFallback.usableProviders(preferred: readonly string[]): Promise<AiProvider[]>",
+      "symbolId": "pci:sym:be6e4852d3b1c2cdc5a9893213b824d0daa2938f5109f7930f039673e6bb3218",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+      "range": {
+        "start": {
+          "line": 16,
+          "character": 0
+        },
+        "end": {
+          "line": 22,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 16,
+              "character": 0
+            },
+            "end": {
+              "line": 22,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+          "indexedHash": "sha256:f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F42",
+      "name": "nextUsableProvider",
+      "path": "main/src/main/providerFallback.ts",
+      "qualifiedName": "main/src/main/providerFallback.nextUsableProvider",
+      "signature": "main/src/main/providerFallback.nextUsableProvider(exclude: readonly string[], preferred: readonly string[]): Promise<AiProvider | undefined>",
+      "symbolId": "pci:sym:d514b3c2f7f4a26a94395c474e30353fcdf4f4fea9b08bfb4bdfa88cf9c948f1",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+      "range": {
+        "start": {
+          "line": 25,
+          "character": 0
+        },
+        "end": {
+          "line": 27,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 25,
+              "character": 0
+            },
+            "end": {
+              "line": 27,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+          "indexedHash": "sha256:f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F43",
+      "name": "fallbackProviderForStage",
+      "path": "main/src/main/providerFallback.ts",
+      "qualifiedName": "main/src/main/providerFallback.fallbackProviderForStage",
+      "signature": "main/src/main/providerFallback.fallbackProviderForStage(run: WorkflowRun, nodeId: string): Promise<AiProvider | undefined>",
+      "symbolId": "pci:sym:e69893f85d83a34c67ba95eaa4be1531211138964c8b0de591551f23957539dd",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+      "range": {
+        "start": {
+          "line": 30,
+          "character": 0
+        },
+        "end": {
+          "line": 34,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 30,
+              "character": 0
+            },
+            "end": {
+              "line": 34,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+          "indexedHash": "sha256:f9994bf941225a97e981713f50d188ff085ba5bf94453eca82cd5a6fc24eebc2",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F44",
+      "name": "readProviderSnapshots",
+      "path": "main/src/main/providerUsageBatch.ts",
+      "qualifiedName": "main/src/main/providerUsageBatch.readProviderSnapshots",
+      "signature": "main/src/main/providerUsageBatch.readProviderSnapshots(providers: readonly AiProvider[], read: (provider: AiProvider) => Promise<ProviderUsageSnapshot>): Promise<ProviderUsageSnapshotsResult>",
+      "symbolId": "pci:sym:77b74824b4600cc8e2a3e6ce7f3fec13f96004e97f019327f9c47d5b2f1fa3f4",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "22c440a0e870990a895d671c24995353f447ca55094d11d12d30bfefab8c8914",
+      "range": {
+        "start": {
+          "line": 66,
+          "character": 0
+        },
+        "end": {
+          "line": 95,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 66,
+              "character": 0
+            },
+            "end": {
+              "line": 95,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:22c440a0e870990a895d671c24995353f447ca55094d11d12d30bfefab8c8914",
+          "indexedHash": "sha256:22c440a0e870990a895d671c24995353f447ca55094d11d12d30bfefab8c8914",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F45",
+      "name": "pendingMobilePermissions",
+      "path": "main/src/main/mobilePermissions.ts",
+      "qualifiedName": "main/src/main/mobilePermissions.pendingMobilePermissions",
+      "signature": "main/src/main/mobilePermissions.pendingMobilePermissions(records: Iterable<AgentSessionRecord>): MobilePermissionRequest[]",
+      "symbolId": "pci:sym:f140c104e12d6797594b4a545aa4a3fb60c14d3bdd071d2625ba586d0255b977",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "c5c19e5146dd4daa9b0d239da8d002e32d49b1e395e3ad808734f0bc75688104",
+      "range": {
+        "start": {
+          "line": 12,
+          "character": 0
+        },
+        "end": {
+          "line": 35,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 12,
+              "character": 0
+            },
+            "end": {
+              "line": 35,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:c5c19e5146dd4daa9b0d239da8d002e32d49b1e395e3ad808734f0bc75688104",
+          "indexedHash": "sha256:c5c19e5146dd4daa9b0d239da8d002e32d49b1e395e3ad808734f0bc75688104",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F46",
+      "name": "respondToMobilePermission",
+      "path": "main/src/main/mobilePermissions.ts",
+      "qualifiedName": "main/src/main/mobilePermissions.respondToMobilePermission",
+      "signature": "main/src/main/mobilePermissions.respondToMobilePermission(input: {\n  records: Iterable<AgentSessionRecord>;\n  requestId: string;\n  projectId: string;\n  decision: 'allow' | 'allow_always' | 'deny';\n  hasActiveTask(sessionKey: string): boolean;\n  respond(sessionKey: string, decision: PermissionDecision): void;\n}): { requestId: string; decision: 'allow' | 'allow_always' | 'deny'; sessionId: string }",
+      "symbolId": "pci:sym:bacb06710ee416bc4c4464ec22b45a36a2af61c0efebb0a7313438d9a7467d21",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "c5c19e5146dd4daa9b0d239da8d002e32d49b1e395e3ad808734f0bc75688104",
+      "range": {
+        "start": {
+          "line": 37,
+          "character": 0
+        },
+        "end": {
+          "line": 62,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 37,
+              "character": 0
+            },
+            "end": {
+              "line": 62,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:c5c19e5146dd4daa9b0d239da8d002e32d49b1e395e3ad808734f0bc75688104",
+          "indexedHash": "sha256:c5c19e5146dd4daa9b0d239da8d002e32d49b1e395e3ad808734f0bc75688104",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F47",
+      "name": "readMobileImagePreview",
+      "path": "main/src/main/mobileImagePreview.ts",
+      "qualifiedName": "main/src/main/mobileImagePreview.readMobileImagePreview",
+      "signature": "main/src/main/mobileImagePreview.readMobileImagePreview(record: AgentSessionRecord, params: Pick<MobileReadParams, 'path' | 'eventIndex' | 'attachmentIndex' | 'offset'>): Promise<MobileImagePreview | undefined>",
+      "symbolId": "pci:sym:4d97b893a1ce8ecd8e97c5b6a72a17c66c9507ac3b307f3903c613c2ff80a85f",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "acbef72447e391dbd27f6e6f00f90c88b1eed0f0e487e97a87211a7a11dffacd",
+      "range": {
+        "start": {
+          "line": 54,
+          "character": 0
+        },
+        "end": {
+          "line": 129,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 54,
+              "character": 0
+            },
+            "end": {
+              "line": 129,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:acbef72447e391dbd27f6e6f00f90c88b1eed0f0e487e97a87211a7a11dffacd",
+          "indexedHash": "sha256:acbef72447e391dbd27f6e6f00f90c88b1eed0f0e487e97a87211a7a11dffacd",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    },
+    {
+      "id": "F48",
+      "name": "mobileSessionSummary",
+      "path": "main/src/main/mobileSessionProjection.ts",
+      "qualifiedName": "main/src/main/mobileSessionProjection.mobileSessionSummary",
+      "signature": "main/src/main/mobileSessionProjection.mobileSessionSummary(record: AgentSessionRecord): MobileSessionSummary",
+      "symbolId": "pci:sym:2244c3a88468a1847e100bc9fedb16aa0310bfcfbde5d17accb8e69a44534177",
+      "contextId": "pci:ctx:db88da331a4fcfbbf407fc29ac4df82e35c1ca8a25c71e6e4d97554c44bde2c1",
+      "sourceSha256": "635f6003099b84640c0e366730922cdc10d24a70dfa815e7692ff6aced446392",
+      "range": {
+        "start": {
+          "line": 50,
+          "character": 0
+        },
+        "end": {
+          "line": 67,
+          "character": 1
+        }
+      },
+      "resolution": "resolved",
+      "fragments": [
+        {
+          "range": {
+            "start": {
+              "line": 50,
+              "character": 0
+            },
+            "end": {
+              "line": 67,
+              "character": 1
+            }
+          },
+          "currentHash": "sha256:635f6003099b84640c0e366730922cdc10d24a70dfa815e7692ff6aced446392",
+          "indexedHash": "sha256:635f6003099b84640c0e366730922cdc10d24a70dfa815e7692ff6aced446392",
+          "matchesIndexedRevision": true
+        }
+      ],
+      "generation": 79,
+      "epoch": 169,
+      "truncated": false
+    }
+  ],
+  "limitations": [
+    "Overall index freshness is partial; the syntax-only context remains in the search pool.",
+    "F04 source response is truncated at the tool default line cap; its full declaration was additionally read from disk.",
+    "Labels and answer points have AI review only; seed qrels are not exhaustive."
+  ]
+}

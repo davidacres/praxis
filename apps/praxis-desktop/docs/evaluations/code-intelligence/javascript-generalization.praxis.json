@@ -1,0 +1,492 @@
+{
+  "version": 1,
+  "sourceRevision": "Installed markdown-it 14.3.2; frozen file manifest sha256:942e95549cd78c328d131c0ee9ce47e3ed8ab8d58b2d02f207816f540e29036c",
+  "reviewed": false,
+  "reviewedBy": "AI source-grounded authoring; independent human review pending",
+  "nearDuplicateSplitReviewed": false,
+  "negativeAbstentionReviewed": false,
+  "reviewedExplanationCount": 0,
+  "releaseMilestone": "M3",
+  "generatedExplanationsInScope": false,
+  "notes": "20 fresh natural-language behaviours from a separate JavaScript project, frozen after declaration/source inspection and before all search queries. Small diagnostic corpus, no tuning or release acceptance claim.",
+  "frozenUtc": "2026-10-19T20:10:30.275401+00:00",
+  "queries": [
+    {
+      "id": "markdown-js-01",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are different input line endings unified and zero characters replaced with a replacement character?",
+      "expected": [
+        {
+          "name": "normalize",
+          "qualifiedName": "lib/rules_core/normalize.normalize"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_core/normalize.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_core/normalize.mjs",
+        "contentHash": "sha256:7f7fab952ebe0a0c16016835e1af0bf682af6e2eb5a28454eb350c28332cfa93",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-02",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where is the matching closing square bracket found while skipping inline tokens and restoring the original parser position?",
+      "expected": [
+        {
+          "name": "parseLinkLabel",
+          "qualifiedName": "lib/helpers/parse_link_label.parseLinkLabel"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/helpers/parse_link_label.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/helpers/parse_link_label.mjs",
+        "contentHash": "sha256:70129adaa86dfd0f99e05971c51f865a3956775c045ccdc2ec8f2f2e0c0893aa",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-03",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where is an address between angle brackets or balanced parentheses parsed, with excessive nesting and control characters rejected?",
+      "expected": [
+        {
+          "name": "parseLinkDestination",
+          "qualifiedName": "lib/helpers/parse_link_destination.parseLinkDestination"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/helpers/parse_link_destination.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/helpers/parse_link_destination.mjs",
+        "contentHash": "sha256:0426a1489ec76c3e10c8b36bf5a286e97cca90a800e4e24a98b314835b790c1c",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-04",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where is a quoted or parenthesized hyperlink tooltip parsed and allowed to continue on another line?",
+      "expected": [
+        {
+          "name": "parseLinkTitle",
+          "qualifiedName": "lib/helpers/parse_link_title.parseLinkTitle"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/helpers/parse_link_title.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/helpers/parse_link_title.mjs",
+        "contentHash": "sha256:c10fc0bd89f11eb982a865dcf525cf6f3bec328958bb4de752e3993b44eb9c7c",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-05",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where does a line ending become a forced break after two trailing spaces, but a soft break otherwise?",
+      "expected": [
+        {
+          "name": "newline",
+          "qualifiedName": "lib/rules_inline/newline.newline"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_inline/newline.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_inline/newline.mjs",
+        "contentHash": "sha256:4c51181f46d59ce1d40dfdec014d1eb69937de850eacfdd4fcb759f9f141e990",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-06",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are equal-length grave-accent runs paired to form inline code while unmatched runs are cached?",
+      "expected": [
+        {
+          "name": "backtick",
+          "qualifiedName": "lib/rules_inline/backticks.backtick"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_inline/backticks.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_inline/backticks.mjs",
+        "contentHash": "sha256:8baed32815f895f72b0a01255c3180ba2e72fcffb51fbea7677ccf128dafbc40",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-07",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are numeric and named character references decoded, with invalid numeric values replaced?",
+      "expected": [
+        {
+          "name": "entity",
+          "qualifiedName": "lib/rules_inline/entity.entity"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_inline/entity.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_inline/entity.mjs",
+        "contentHash": "sha256:37c2420b56e055ff150c13485a2322914974b0364a8d3823c3ef81318196c101",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-08",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where is a slash before punctuation handled, including forced line breaks and preserving a slash before a space?",
+      "expected": [
+        {
+          "name": "escape",
+          "qualifiedName": "lib/rules_inline/escape.escape"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_inline/escape.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_inline/escape.mjs",
+        "contentHash": "sha256:f498e10cc6318f2a2856e51217e6c0f0a837b18dd920162d2cd6e49789b15adf",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-09",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are angle-bracketed web addresses and email addresses recognized, validated and emitted as clickable tokens?",
+      "expected": [
+        {
+          "name": "autolink",
+          "qualifiedName": "lib/rules_inline/autolink.autolink"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_inline/autolink.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_inline/autolink.mjs",
+        "contentHash": "sha256:78599ff3df236375e29dc63f04ad93ae1bb4744d7c47021b93104462cbfc61c5",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-10",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are markup attribute names and values escaped before being assembled into output text?",
+      "expected": [
+        {
+          "name": "renderAttrs",
+          "qualifiedName": "lib/renderer.renderAttrs#9"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/renderer.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/renderer.mjs",
+        "contentHash": "sha256:47750faf7a1f9dab8d3e984ee4c6a799c195130ff141c9cb1a98e13d7bf70cc2",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-11",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where does generic token output omit hidden paragraphs and optionally add a slash to empty elements?",
+      "expected": [
+        {
+          "name": "renderToken",
+          "qualifiedName": "lib/renderer.renderToken#10"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/renderer.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/renderer.mjs",
+        "contentHash": "sha256:47750faf7a1f9dab8d3e984ee4c6a799c195130ff141c9cb1a98e13d7bf70cc2",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-12",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where is whitespace removed from both ends using ASCII-specific checks instead of the built-in Unicode trimming operation?",
+      "expected": [
+        {
+          "name": "asciiTrim",
+          "qualifiedName": "lib/common/utils.asciiTrim"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/common/utils.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/common/utils.mjs",
+        "contentHash": "sha256:952160caa972e1d2e291dc284d8531f835b9eb7628c1e806c9cf95351c55afbe",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-13",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are multi-character code-block delimiters matched, requiring a closing run at least as long as the opening run?",
+      "expected": [
+        {
+          "name": "fence",
+          "qualifiedName": "lib/rules_block/fence.fence"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_block/fence.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_block/fence.mjs",
+        "contentHash": "sha256:4434e2f70150df1490bd11eeea8bd20fe763f029c22fc21305b6376f068cfd21",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-14",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are table row cells divided at vertical bars while preserving escaped vertical bars inside a cell?",
+      "expected": [
+        {
+          "name": "escapedSplit",
+          "qualifiedName": "lib/rules_block/table.escapedSplit"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_block/table.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_block/table.mjs",
+        "contentHash": "sha256:454553ff462fc68e353dad0f7b04ba1da46ee18acf88047dde8faf1873d64bca",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-15",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are hash-prefixed section titles limited to six levels and their optional trailing hashes removed?",
+      "expected": [
+        {
+          "name": "heading",
+          "qualifiedName": "lib/rules_block/heading.heading"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_block/heading.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_block/heading.mjs",
+        "contentHash": "sha256:75e812fc9938775e55d7c4e840a856e557ef0f4a2ab27aec535d25c78c6e8d7c",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-16",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where is a numbered item prefix recognized while rejecting more than nine digits and missing whitespace after punctuation?",
+      "expected": [
+        {
+          "name": "skipOrderedListMarker",
+          "qualifiedName": "lib/rules_block/list.skipOrderedListMarker"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_block/list.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_block/list.mjs",
+        "contentHash": "sha256:1f569f81b61a73094ea7c70a30b2d6d3577de26de2d55d5f8b9146027f2f8a5f",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-17",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are closing formatting markers matched to earlier opening markers with skip-ahead bookkeeping?",
+      "expected": [
+        {
+          "name": "processDelimiters",
+          "qualifiedName": "lib/rules_inline/balance_pairs.processDelimiters"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/rules_inline/balance_pairs.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/rules_inline/balance_pairs.mjs",
+        "contentHash": "sha256:06769d0aa4e5af875e504dea82db9bc726b463911e7b1c17f732098be95ad403",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-18",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are reference labels made insensitive to repeated whitespace and Unicode letter case variants?",
+      "expected": [
+        {
+          "name": "normalizeReference",
+          "qualifiedName": "lib/common/utils.normalizeReference"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/common/utils.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/common/utils.mjs",
+        "contentHash": "sha256:952160caa972e1d2e291dc284d8531f835b9eb7628c1e806c9cf95351c55afbe",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-19",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are unsafe markup characters encoded while strings without those characters are returned unchanged?",
+      "expected": [
+        {
+          "name": "escapeHtml",
+          "qualifiedName": "lib/common/utils.escapeHtml"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/common/utils.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/common/utils.mjs",
+        "contentHash": "sha256:952160caa972e1d2e291dc284d8531f835b9eb7628c1e806c9cf95351c55afbe",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    },
+    {
+      "id": "markdown-js-20",
+      "category": "behaviour",
+      "split": "heldOut",
+      "query": "Where are surrogate values, noncharacters, control values and values beyond the Unicode maximum rejected?",
+      "expected": [
+        {
+          "name": "isValidEntityCode",
+          "qualifiedName": "lib/common/utils.isValidEntityCode"
+        }
+      ],
+      "expectedEvidence": [
+        "lib/common/utils.mjs"
+      ],
+      "reviewed": false,
+      "sourceReview": {
+        "path": "lib/common/utils.mjs",
+        "contentHash": "sha256:952160caa972e1d2e291dc284d8531f835b9eb7628c1e806c9cf95351c55afbe",
+        "reviewedBy": "AI source inspection; no independent human review"
+      }
+    }
+  ],
+  "sourceManifest": {
+    "LICENSE": "792c48c5a849a15fdf9e37e8bcf9e6d1dd13b32b46c642a748a0a46a9919d473",
+    "package.json": "67038287f4a8fee121160931df00e584a51318b4bb4848450752c712deac97f6",
+    "tsconfig.json": "f14f4373a3fd0fdf50cc8f0824733359c2e3cee975f94f716693cfff414a426d",
+    "lib/parser_block.mjs": "ba9fe86713007b6c04e4381fc15500936ce3852eeaefe819350fa1a42eb10bd4",
+    "lib/parser_inline.mjs": "67ed63ad6efecc6f03bf1dc40f01a0abec7c0e675053b7503847bd4b287f72e4",
+    "lib/ruler.mjs": "86b94f2a50df56a51ef6ee8bdfb23a6733e83a1efa2f58b3b166aebae84a7ce2",
+    "lib/parser_core.mjs": "d6789a1f7ef8ad05a64114b873ca18b4b5c8245fee02d2d7559a20bba93858ec",
+    "lib/renderer.mjs": "47750faf7a1f9dab8d3e984ee4c6a799c195130ff141c9cb1a98e13d7bf70cc2",
+    "lib/token.mjs": "c6ebce7f456a6fef97e3cf2cd411418a80eb15ef469d7a7ea12405191cd5705f",
+    "lib/index.mjs": "840746264c1655558e80752c663d745e4336e806978f74d4c678c5e21bab5158",
+    "lib/rules_block/hr.mjs": "2d786cf899247071a305d4fefcb3d41de707e31982997ebf134672497f20edc9",
+    "lib/rules_block/table.mjs": "454553ff462fc68e353dad0f7b04ba1da46ee18acf88047dde8faf1873d64bca",
+    "lib/rules_block/paragraph.mjs": "be9534ba8fa1312ae6ab6e6ecd6e96173a5a3dd35e924b7751782675bb15dc9a",
+    "lib/rules_block/state_block.mjs": "3f26d52f4fa67c5fa5f85346acf18f4139419b5dc8496056dd6050bd3a266860",
+    "lib/rules_block/code.mjs": "5b5aad3b00bf175f55849ae44974944fc26a45d416440f3710d11c6213f49968",
+    "lib/rules_block/blockquote.mjs": "d88eaf1c88489376a825e9de09031d17b6cf442ae5f420acce3619df94f5c899",
+    "lib/rules_block/fence.mjs": "4434e2f70150df1490bd11eeea8bd20fe763f029c22fc21305b6376f068cfd21",
+    "lib/rules_block/html_block.mjs": "d8e20eca3742fb8e5d3eae238de1afa962104d772df6dbccad604325940ca86b",
+    "lib/rules_block/lheading.mjs": "ae83782c9a5bbcb69f3127a4541c1e27e6a46be86d4955bf840c5cd1a289a482",
+    "lib/rules_block/heading.mjs": "75e812fc9938775e55d7c4e840a856e557ef0f4a2ab27aec535d25c78c6e8d7c",
+    "lib/rules_block/list.mjs": "1f569f81b61a73094ea7c70a30b2d6d3577de26de2d55d5f8b9146027f2f8a5f",
+    "lib/rules_block/reference.mjs": "edccd89f1455f60cb0833d2886a508a88f20e54dfe8ba13e21611dc9119ca3cc",
+    "lib/rules_core/replacements.mjs": "9b3211580c89951bad60aa4550f76ebf2d2b81cc4523849ed34e6b85ed25ba3a",
+    "lib/rules_core/block.mjs": "52ef23be5d9248275a5c0ff8b43602540bd3ed8a69bc63fbdc262b09c5de69b5",
+    "lib/rules_core/inline.mjs": "0da70e72022dda01deaf6630a772a9c4798b6b6dc1d37144520b872d302b12a3",
+    "lib/rules_core/smartquotes.mjs": "2d92309d2a0517b7ac74ba6780333996ff3bf0763e28464916f04befdddb4dee",
+    "lib/rules_core/text_join.mjs": "d61f0f19e2e49b565564a1537c46828c18da453516226d1637816021d4d68fce",
+    "lib/rules_core/normalize.mjs": "7f7fab952ebe0a0c16016835e1af0bf682af6e2eb5a28454eb350c28332cfa93",
+    "lib/rules_core/linkify.mjs": "e68ac3597363b13a7451e65d9a7943ce99f4b57e9509eb62eebb1a3162423499",
+    "lib/rules_core/state_core.mjs": "eb68c945733124231b5dc98d480854393b99fc069fd95703f4c36d310572e4f0",
+    "lib/common/html_blocks.mjs": "5bbdf4ab71bd31461b29d47da1077c600ba941c3e53d74f8d50ce31ac45546a5",
+    "lib/common/utils.mjs": "952160caa972e1d2e291dc284d8531f835b9eb7628c1e806c9cf95351c55afbe",
+    "lib/common/html_re.mjs": "82021df92c9f3f856cd1bb59454c2033c50a0617a748acc150bbdacb8101abcc",
+    "lib/rules_inline/emphasis.mjs": "23e1dbd2fdb408e257f2bbccccae1b1ee8a068db1c43a38b4edd9db76c2f40a1",
+    "lib/rules_inline/fragments_join.mjs": "143e477737ce7565af95a6c5dbb854667a07d45e7f3e1b849fb68ba39937014c",
+    "lib/rules_inline/linkify.mjs": "3a55e9a5fa81bd7b924d4f7469452a7fa6ba999f5204ff076a64f5dc8477348e",
+    "lib/rules_inline/image.mjs": "67e1ad7ba6ce1a2ee0dfaee83653fec3f3e602f8d8841c4b8426c770b03870b4",
+    "lib/rules_inline/text.mjs": "63aca7fc12c4e44bbe8edb6b8cf38c8bf01e3aa1ef5dd0feef82aae930b1d0e8",
+    "lib/rules_inline/escape.mjs": "f498e10cc6318f2a2856e51217e6c0f0a837b18dd920162d2cd6e49789b15adf",
+    "lib/rules_inline/entity.mjs": "37c2420b56e055ff150c13485a2322914974b0364a8d3823c3ef81318196c101",
+    "lib/rules_inline/html_inline.mjs": "f843b79ce79be4d93e7ed0b33f4c20c64c892266ba759107b33a17c5be9add60",
+    "lib/rules_inline/backticks.mjs": "8baed32815f895f72b0a01255c3180ba2e72fcffb51fbea7677ccf128dafbc40",
+    "lib/rules_inline/link.mjs": "a805f4cc75ad14b8b7838d408b703a9e26401badfd00a39a80a21e10a3af5cd0",
+    "lib/rules_inline/autolink.mjs": "78599ff3df236375e29dc63f04ad93ae1bb4744d7c47021b93104462cbfc61c5",
+    "lib/rules_inline/state_inline.mjs": "bdca3dd6a3359f3f8e0f3b760e6dd8e90624dc1356f24062123b7a4332b71619",
+    "lib/rules_inline/strikethrough.mjs": "cf130f8d2405731b5a2ed687ad7b4571baf9dbc3f98a472629c6553c1c6cb089",
+    "lib/rules_inline/balance_pairs.mjs": "06769d0aa4e5af875e504dea82db9bc726b463911e7b1c17f732098be95ad403",
+    "lib/rules_inline/newline.mjs": "4c51181f46d59ce1d40dfdec014d1eb69937de850eacfdd4fcb759f9f141e990",
+    "lib/presets/default.mjs": "f8b577995fcde6bd0fcb96524eb32a872d9e82874921956fda81477913a94cc9",
+    "lib/presets/commonmark.mjs": "0287ae7e457b4a18f049aa81a7ca39bbc543eb2e9b95718476a8fb16dc299eee",
+    "lib/presets/zero.mjs": "d88083cd3b6a87566b63950c99a810fa3228345a41cb1fe441f2d8139bb9e60f",
+    "lib/helpers/parse_link_title.mjs": "c10fc0bd89f11eb982a865dcf525cf6f3bec328958bb4de752e3993b44eb9c7c",
+    "lib/helpers/parse_link_label.mjs": "70129adaa86dfd0f99e05971c51f865a3956775c045ccdc2ec8f2f2e0c0893aa",
+    "lib/helpers/parse_link_destination.mjs": "0426a1489ec76c3e10c8b36bf5a286e97cca90a800e4e24a98b314835b790c1c",
+    "lib/helpers/index.mjs": "c5a73b8f46eaa0f027f06a309a362f885ec4467c99a581d798cbb6a3bac14965"
+  }
+}

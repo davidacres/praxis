@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "status": "authored; not executed",
+  "purpose": "Controlled correctness checks complementary to retrieval and agent quality; not additional scored relevance questions",
+  "fixturePolicy": "Fresh disposable fixture only. Never mutate the working checkout. Capture complete compiler contexts before publication. Use the same pinned model and index manifest before and after each change.",
+  "initialFiles": {
+    "library/tsconfig.json": "{\"compilerOptions\":{\"composite\":true,\"strict\":true,\"target\":\"ES2022\",\"module\":\"commonjs\"},\"include\":[\"src/**/*.ts\"]}",
+    "library/src/policy.ts": "export function canReadDocument(ownerId: string, actorId: string): boolean { return ownerId === actorId; }\n",
+    "client/tsconfig.json": "{\"compilerOptions\":{\"composite\":true,\"strict\":true,\"target\":\"ES2022\",\"module\":\"commonjs\"},\"references\":[{\"path\":\"../library\"}],\"include\":[\"src/**/*.ts\"]}",
+    "client/src/read.ts": "import { canReadDocument } from '../../library/src/policy';\nexport function readDocument(ownerId: string, actorId: string): string { if (!canReadDocument(ownerId, actorId)) throw new Error('Forbidden'); return 'document'; }\n"
+  },
+  "cases": [
+    {
+      "id": "L01",
+      "operation": "cross-project-call",
+      "prompt": "Find the policy that prevents a non-owner reading a document, and trace the client call into it.",
+      "expected": ["The policy declaration is library/src/policy.ts canReadDocument", "client/src/read.ts readDocument has a resolved cross-project call to that declaration", "Source evidence contains the owner equality check and denial branch"],
+      "prerequisite": "Both TypeScript compiler contexts complete; no source-only fallback accepted as graph proof"
+    },
+    {
+      "id": "L02",
+      "operation": "unpublished-body-change",
+      "mutation": "In library/src/policy.ts replace ownerId === actorId with false without publishing a new index snapshot.",
+      "expected": ["get_source refuses changed bytes or explicitly reports the changed snapshot according to its contract", "No stale source is represented as current", "Search freshness and evidence disclose the old published state"],
+      "reset": "Restore the initial fixture before the next case"
+    },
+    {
+      "id": "L03",
+      "operation": "rename-and-publish",
+      "mutation": "Rename canReadDocument to isDocumentOwner and update its client import and call, then publish and wait for vectors.",
+      "queries": ["prevent someone else reading an owned document", "isDocumentOwner"],
+      "expected": ["New declaration and source resolve", "Old symbol identity is retired and cannot return current source", "Client graph points to the new identity", "No old identity remains in current search or vector results"],
+      "reset": "Restore the initial fixture before the next case"
+    },
+    {
+      "id": "L04",
+      "operation": "move-and-publish",
+      "mutation": "Move library/src/policy.ts to library/src/access.ts and update the client import, then publish.",
+      "queries": ["check document ownership before allowing a read"],
+      "expected": ["Source evidence names library/src/access.ts", "Old file locations cannot produce current source", "Cross-project call still resolves", "Vector coverage is current after publication"],
+      "reset": "Restore the initial fixture before the next case"
+    },
+    {
+      "id": "L05",
+      "operation": "delete-and-publish",
+      "mutation": "Delete the policy and client source files, update the captured source manifest and publish.",
+      "queries": ["canReadDocument", "readDocument"],
+      "expected": ["Removed declarations are not current search hits", "Removed identities cannot return source", "No removed vector or call edge survives", "A synthetic project root is not mistaken for the removed implementation"],
+      "reset": "Restore the initial fixture before the next case"
+    },
+    {
+      "id": "L06",
+      "operation": "model-unavailable",
+      "mutation": "Use a separate isolated data directory with no active model; index the initial fixture without changing its source.",
+      "queries": ["prevent another person reading a document"],
+      "expected": ["Vector-only returns the documented model-unavailable error", "Hybrid explicitly reports lexical fallback", "Fallback is not counted as semantic improvement", "Lexical lookup and source access continue to work"]
+    }
+  ]
+}

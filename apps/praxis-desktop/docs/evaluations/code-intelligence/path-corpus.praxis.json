@@ -1,0 +1,558 @@
+{
+  "version": 1,
+  "reviewer": "AI source-grounded, not independently reviewed",
+  "scope": "Desktop static calls; explicit boundaries for core, processes, IPC and injected callbacks",
+  "depth": 4,
+  "maxNodes": 100,
+  "maxEdges": 200,
+  "cases": [
+    {
+      "id": "P01",
+      "query": "Trace saving a workflow into a project folder or a local draft and cleaning up the draft after saving.",
+      "entry": "main/src/main/workflowIpc.persistProjectWorkflow",
+      "entryId": "pci:sym:9fcf2c8d37dc2b5d44b6d1db240d486662e99f2a38093a3233aa55eb90585a3b",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/workflowIpc.draftDefinitions",
+          "symbolId": "pci:sym:30ad8d1990e8c8aba68ebfa321d7ce7b2c0a8e3eec52d4f43eb3b5d2f7cfea0f"
+        },
+        {
+          "qualifiedName": "main/src/main/workflowIpc.dropDraft",
+          "symbolId": "pci:sym:0d302147b64c9b51fba2e2c86eeea2e2d94c9d9233e388eeaeafbd337f9d82b4"
+        },
+        {
+          "qualifiedName": "main/src/main/workflowIpc.persistProjectWorkflow",
+          "symbolId": "pci:sym:9fcf2c8d37dc2b5d44b6d1db240d486662e99f2a38093a3233aa55eb90585a3b"
+        },
+        {
+          "qualifiedName": "main/src/main/workflowIpc.projectFolder",
+          "symbolId": "pci:sym:2d1271f2e11d4203ccd339ed127e4b7b966d18e4f539fe188c6f9402a2d309f9"
+        },
+        {
+          "qualifiedName": "main/src/main/workflowIpc.saveDraft",
+          "symbolId": "pci:sym:c566033b7ae8b981081fcd4d65682b9b58acd00da9ed2958795c39d8a25e88f9"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/workflowIpc.persistProjectWorkflow",
+          "target": "main/src/main/workflowIpc.projectFolder",
+          "sourceSymbolId": "pci:sym:9fcf2c8d37dc2b5d44b6d1db240d486662e99f2a38093a3233aa55eb90585a3b",
+          "targetSymbolId": "pci:sym:2d1271f2e11d4203ccd339ed127e4b7b966d18e4f539fe188c6f9402a2d309f9",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/workflowIpc.persistProjectWorkflow",
+          "target": "main/src/main/workflowIpc.saveDraft",
+          "sourceSymbolId": "pci:sym:9fcf2c8d37dc2b5d44b6d1db240d486662e99f2a38093a3233aa55eb90585a3b",
+          "targetSymbolId": "pci:sym:c566033b7ae8b981081fcd4d65682b9b58acd00da9ed2958795c39d8a25e88f9",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/workflowIpc.persistProjectWorkflow",
+          "target": "main/src/main/workflowIpc.dropDraft",
+          "sourceSymbolId": "pci:sym:9fcf2c8d37dc2b5d44b6d1db240d486662e99f2a38093a3233aa55eb90585a3b",
+          "targetSymbolId": "pci:sym:0d302147b64c9b51fba2e2c86eeea2e2d94c9d9233e388eeaeafbd337f9d82b4",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/workflowIpc.saveDraft",
+          "target": "main/src/main/workflowIpc.draftDefinitions",
+          "sourceSymbolId": "pci:sym:c566033b7ae8b981081fcd4d65682b9b58acd00da9ed2958795c39d8a25e88f9",
+          "targetSymbolId": "pci:sym:30ad8d1990e8c8aba68ebfa321d7ce7b2c0a8e3eec52d4f43eb3b5d2f7cfea0f",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/workflowIpc.dropDraft",
+          "target": "main/src/main/workflowIpc.draftDefinitions",
+          "sourceSymbolId": "pci:sym:0d302147b64c9b51fba2e2c86eeea2e2d94c9d9233e388eeaeafbd337f9d82b4",
+          "targetSymbolId": "pci:sym:30ad8d1990e8c8aba68ebfa321d7ce7b2c0a8e3eec52d4f43eb3b5d2f7cfea0f",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "File writing and backing stores imported from core lie outside this desktop index."
+      ]
+    },
+    {
+      "id": "P02",
+      "query": "Trace choosing a replacement provider for an exhausted workflow stage while retaining independent review.",
+      "entry": "main/src/main/providerFallback.fallbackProviderForStage",
+      "entryId": "pci:sym:e69893f85d83a34c67ba95eaa4be1531211138964c8b0de591551f23957539dd",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/providerFallback.authorProviders",
+          "symbolId": "pci:sym:6e9635332daff9baeb84a7d49f9587dcdb43acc76cc6913e4fc460a534b163b4"
+        },
+        {
+          "qualifiedName": "main/src/main/providerFallback.fallbackProviderForStage",
+          "symbolId": "pci:sym:e69893f85d83a34c67ba95eaa4be1531211138964c8b0de591551f23957539dd"
+        },
+        {
+          "qualifiedName": "main/src/main/providerFallback.nextUsableProvider",
+          "symbolId": "pci:sym:d514b3c2f7f4a26a94395c474e30353fcdf4f4fea9b08bfb4bdfa88cf9c948f1"
+        },
+        {
+          "qualifiedName": "main/src/main/providerFallback.usableProviders",
+          "symbolId": "pci:sym:be6e4852d3b1c2cdc5a9893213b824d0daa2938f5109f7930f039673e6bb3218"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/providerFallback.fallbackProviderForStage",
+          "target": "main/src/main/providerFallback.nextUsableProvider",
+          "sourceSymbolId": "pci:sym:e69893f85d83a34c67ba95eaa4be1531211138964c8b0de591551f23957539dd",
+          "targetSymbolId": "pci:sym:d514b3c2f7f4a26a94395c474e30353fcdf4f4fea9b08bfb4bdfa88cf9c948f1",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/providerFallback.fallbackProviderForStage",
+          "target": "main/src/main/providerFallback.authorProviders",
+          "sourceSymbolId": "pci:sym:e69893f85d83a34c67ba95eaa4be1531211138964c8b0de591551f23957539dd",
+          "targetSymbolId": "pci:sym:6e9635332daff9baeb84a7d49f9587dcdb43acc76cc6913e4fc460a534b163b4",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/providerFallback.nextUsableProvider",
+          "target": "main/src/main/providerFallback.usableProviders",
+          "sourceSymbolId": "pci:sym:d514b3c2f7f4a26a94395c474e30353fcdf4f4fea9b08bfb4bdfa88cf9c948f1",
+          "targetSymbolId": "pci:sym:be6e4852d3b1c2cdc5a9893213b824d0daa2938f5109f7930f039673e6bb3218",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Provider policy decisions in core are outside this index; actual provider execution is not statically proved."
+      ]
+    },
+    {
+      "id": "P03",
+      "query": "Trace how a confirmed chat control routes into workflow approval or applying a ticket review.",
+      "entry": "main/src/main/gadgetIpc.executeGadgetAction",
+      "entryId": "pci:sym:a8dbd823a69cea99a8784d2ef81727d4e385bbdcc764d943c7d105e62f11626b",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/gadgetIpc.approveWorkflowFromGadget",
+          "symbolId": "pci:sym:13dd92b0cfe8eea24af0487142493747611206ad28233ba2bcb6d2b6a80361f9"
+        },
+        {
+          "qualifiedName": "main/src/main/gadgetIpc.executeGadgetAction",
+          "symbolId": "pci:sym:a8dbd823a69cea99a8784d2ef81727d4e385bbdcc764d943c7d105e62f11626b"
+        },
+        {
+          "qualifiedName": "main/src/main/ticketReviewApply.applyTicketReview",
+          "symbolId": "pci:sym:8517b7b0f0ae780c8d8b4e0f324ee385785126821a67c79fe60066c7069abb34"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/gadgetIpc.executeGadgetAction",
+          "target": "main/src/main/gadgetIpc.approveWorkflowFromGadget",
+          "sourceSymbolId": "pci:sym:a8dbd823a69cea99a8784d2ef81727d4e385bbdcc764d943c7d105e62f11626b",
+          "targetSymbolId": "pci:sym:13dd92b0cfe8eea24af0487142493747611206ad28233ba2bcb6d2b6a80361f9",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gadgetIpc.executeGadgetAction",
+          "target": "main/src/main/ticketReviewApply.applyTicketReview",
+          "sourceSymbolId": "pci:sym:a8dbd823a69cea99a8784d2ef81727d4e385bbdcc764d943c7d105e62f11626b",
+          "targetSymbolId": "pci:sym:8517b7b0f0ae780c8d8b4e0f324ee385785126821a67c79fe60066c7069abb34",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Dispatch from gadget service to this executor is an injected callback, not an inferred direct call from submitGadgetAction."
+      ]
+    },
+    {
+      "id": "P04",
+      "query": "Trace responding to a phone permission prompt through pending request validation.",
+      "entry": "main/src/main/mobilePermissions.respondToMobilePermission",
+      "entryId": "pci:sym:bacb06710ee416bc4c4464ec22b45a36a2af61c0efebb0a7313438d9a7467d21",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/mobilePermissions.pendingMobilePermissions",
+          "symbolId": "pci:sym:f140c104e12d6797594b4a545aa4a3fb60c14d3bdd071d2625ba586d0255b977"
+        },
+        {
+          "qualifiedName": "main/src/main/mobilePermissions.respondToMobilePermission",
+          "symbolId": "pci:sym:bacb06710ee416bc4c4464ec22b45a36a2af61c0efebb0a7313438d9a7467d21"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/mobilePermissions.respondToMobilePermission",
+          "target": "main/src/main/mobilePermissions.pendingMobilePermissions",
+          "sourceSymbolId": "pci:sym:bacb06710ee416bc4c4464ec22b45a36a2af61c0efebb0a7313438d9a7467d21",
+          "targetSymbolId": "pci:sym:f140c104e12d6797594b4a545aa4a3fb60c14d3bdd071d2625ba586d0255b977",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "hasActiveTask and respond are injected functions; their declarations do not identify the concrete runtime implementations."
+      ]
+    },
+    {
+      "id": "P05",
+      "query": "Trace a mobile image preview request through session folder selection and image bounds checks.",
+      "entry": "main/src/main/mobileImagePreview.readMobileImagePreview",
+      "entryId": "pci:sym:4d97b893a1ce8ecd8e97c5b6a72a17c66c9507ac3b307f3903c613c2ff80a85f",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/mobileImagePreview.readMobileImagePreview",
+          "symbolId": "pci:sym:4d97b893a1ce8ecd8e97c5b6a72a17c66c9507ac3b307f3903c613c2ff80a85f"
+        },
+        {
+          "qualifiedName": "main/src/main/mobileImagePreview.sessionWorkingDirectory",
+          "symbolId": "pci:sym:f568d23a10cf4be0872ced112dd1153175b7bbbb7abc89139fb0e2182f2a71a7"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/mobileImagePreview.readMobileImagePreview",
+          "target": "main/src/main/mobileImagePreview.sessionWorkingDirectory",
+          "sourceSymbolId": "pci:sym:4d97b893a1ce8ecd8e97c5b6a72a17c66c9507ac3b307f3903c613c2ff80a85f",
+          "targetSymbolId": "pci:sym:f568d23a10cf4be0872ced112dd1153175b7bbbb7abc89139fb0e2182f2a71a7",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Sandbox implementations imported from core cannot be followed within the desktop root."
+      ]
+    },
+    {
+      "id": "P06",
+      "query": "Trace applying one diff hunk through repository resolution, safety checks and the Git process.",
+      "entry": "main/src/main/gitService.applyGitHunk",
+      "entryId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/gitService.applyGitHunk",
+          "symbolId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.assertSafeHunkRequest",
+          "symbolId": "pci:sym:c8b7bbca452ba4b7a38f8b40b89904df06ed0aadf665a63b095b63190ee82b87"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.getGitStatus",
+          "symbolId": "pci:sym:2e8478f2b0ee3d73c08dfb9dce758b7f16d8ae829c99217ad8ed18a921e85bf9"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.gitWithInput",
+          "symbolId": "pci:sym:f4ad6bdaccbed541609e697ebbe3af8f2dd995652582250b913006089f198b03"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.resolveRepository",
+          "symbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/gitService.applyGitHunk",
+          "target": "main/src/main/gitService.resolveRepository",
+          "sourceSymbolId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61",
+          "targetSymbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gitService.applyGitHunk",
+          "target": "main/src/main/gitService.assertSafeHunkRequest",
+          "sourceSymbolId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61",
+          "targetSymbolId": "pci:sym:c8b7bbca452ba4b7a38f8b40b89904df06ed0aadf665a63b095b63190ee82b87",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gitService.applyGitHunk",
+          "target": "main/src/main/gitService.gitWithInput",
+          "sourceSymbolId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61",
+          "targetSymbolId": "pci:sym:f4ad6bdaccbed541609e697ebbe3af8f2dd995652582250b913006089f198b03",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gitService.applyGitHunk",
+          "target": "main/src/main/gitService.getGitStatus",
+          "sourceSymbolId": "pci:sym:6c110581e30b6906a429240c4cb0f94370d3ff1d770e66c21617815941e55d61",
+          "targetSymbolId": "pci:sym:2e8478f2b0ee3d73c08dfb9dce758b7f16d8ae829c99217ad8ed18a921e85bf9",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gitService.getGitStatus",
+          "target": "main/src/main/gitService.resolveRepository",
+          "sourceSymbolId": "pci:sym:2e8478f2b0ee3d73c08dfb9dce758b7f16d8ae829c99217ad8ed18a921e85bf9",
+          "targetSymbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "The external Git process is a boundary; graph edges are not proof a command executed successfully."
+      ]
+    },
+    {
+      "id": "P07",
+      "query": "Trace deriving the board identity for a folder or GitHub connection from its settings.",
+      "entry": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard",
+      "entryId": "pci:sym:afd11861b34a75ffea0162c6689aa90607145b11c153418c84c4f58f48ca9ca0",
+      "requiredNodes": [
+        {
+          "qualifiedName": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard",
+          "symbolId": "pci:sym:afd11861b34a75ffea0162c6689aa90607145b11c153418c84c4f58f48ca9ca0"
+        },
+        {
+          "qualifiedName": "renderer/src/connections/connectionPolicy.stringSetting",
+          "symbolId": "pci:sym:fd2b79d9492522c64c7191fff5465e7af12497d03b9f90c6b06c5faf46b2cd55"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard",
+          "target": "renderer/src/connections/connectionPolicy.stringSetting",
+          "sourceSymbolId": "pci:sym:afd11861b34a75ffea0162c6689aa90607145b11c153418c84c4f58f48ca9ca0",
+          "targetSymbolId": "pci:sym:fd2b79d9492522c64c7191fff5465e7af12497d03b9f90c6b06c5faf46b2cd55",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "This renderer policy does not invoke a tracker backend."
+      ]
+    },
+    {
+      "id": "P08",
+      "query": "Trace refusing a workflow run when uncommitted product changes would be missing from its checkout.",
+      "entry": "main/src/main/workflowWorkspace.assertWorkflowBaseReady",
+      "entryId": "pci:sym:dad1db0a1ed6633c630da4a3f9f815b6cdf1cb3219bd702bebb763a56b4c25fd",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/gitService.getGitStatus",
+          "symbolId": "pci:sym:2e8478f2b0ee3d73c08dfb9dce758b7f16d8ae829c99217ad8ed18a921e85bf9"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.resolveRepository",
+          "symbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e"
+        },
+        {
+          "qualifiedName": "main/src/main/workflowWorkspace.assertWorkflowBaseReady",
+          "symbolId": "pci:sym:dad1db0a1ed6633c630da4a3f9f815b6cdf1cb3219bd702bebb763a56b4c25fd"
+        },
+        {
+          "qualifiedName": "main/src/main/workflowWorkspace.workflowBlockingFiles",
+          "symbolId": "pci:sym:b6eb794fc730d324ff6e5d1f5e21bb1925c3cb47124323bc3b7c7fa61c19e363"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/workflowWorkspace.assertWorkflowBaseReady",
+          "target": "main/src/main/workflowWorkspace.workflowBlockingFiles",
+          "sourceSymbolId": "pci:sym:dad1db0a1ed6633c630da4a3f9f815b6cdf1cb3219bd702bebb763a56b4c25fd",
+          "targetSymbolId": "pci:sym:b6eb794fc730d324ff6e5d1f5e21bb1925c3cb47124323bc3b7c7fa61c19e363",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/workflowWorkspace.workflowBlockingFiles",
+          "target": "main/src/main/gitService.getGitStatus",
+          "sourceSymbolId": "pci:sym:b6eb794fc730d324ff6e5d1f5e21bb1925c3cb47124323bc3b7c7fa61c19e363",
+          "targetSymbolId": "pci:sym:2e8478f2b0ee3d73c08dfb9dce758b7f16d8ae829c99217ad8ed18a921e85bf9",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gitService.getGitStatus",
+          "target": "main/src/main/gitService.resolveRepository",
+          "sourceSymbolId": "pci:sym:2e8478f2b0ee3d73c08dfb9dce758b7f16d8ae829c99217ad8ed18a921e85bf9",
+          "targetSymbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Callbacks used to filter metadata are not assumed to be direct calls; workflow orchestration beyond this preflight is out of scope."
+      ]
+    },
+    {
+      "id": "P09",
+      "query": "Trace reading repository file contents through repository resolution and symlink containment checks.",
+      "entry": "main/src/main/gitService.getGitFileContent",
+      "entryId": "pci:sym:6ac303d1c550bcff4f6a3ae05ea6253ac8772668a2c64142303c48df1a10d69f",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/gitService.getGitFileContent",
+          "symbolId": "pci:sym:6ac303d1c550bcff4f6a3ae05ea6253ac8772668a2c64142303c48df1a10d69f"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.resolveRepository",
+          "symbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e"
+        },
+        {
+          "qualifiedName": "main/src/main/gitService.safeRepositoryFile",
+          "symbolId": "pci:sym:a67dded404268e6bf8296e4a41f1ca38358c38f5f0cad98355cfe2ed9a03408a"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/gitService.getGitFileContent",
+          "target": "main/src/main/gitService.resolveRepository",
+          "sourceSymbolId": "pci:sym:6ac303d1c550bcff4f6a3ae05ea6253ac8772668a2c64142303c48df1a10d69f",
+          "targetSymbolId": "pci:sym:0f581b28a418ceb694fefa69f9123fdd83fa8ec5f6db031576bbdb7b110eb92e",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/gitService.getGitFileContent",
+          "target": "main/src/main/gitService.safeRepositoryFile",
+          "sourceSymbolId": "pci:sym:6ac303d1c550bcff4f6a3ae05ea6253ac8772668a2c64142303c48df1a10d69f",
+          "targetSymbolId": "pci:sym:a67dded404268e6bf8296e4a41f1ca38358c38f5f0cad98355cfe2ed9a03408a",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Filesystem calls are external endpoints; returning an edge does not establish runtime file contents."
+      ]
+    },
+    {
+      "id": "P10",
+      "query": "Trace how semantic model status depends on installed assets and pinned model identity.",
+      "entry": "main/src/main/semanticModelManager.getSemanticModelStatus",
+      "entryId": "pci:sym:faa243d3965f94a9e7d1ebaaade3d6da0a71003a10d5a015e657111fd70d425f",
+      "requiredNodes": [
+        {
+          "qualifiedName": "main/src/main/semanticModelManager.getSemanticModelDirectory",
+          "symbolId": "pci:sym:3f09df4d2d64cb3e29b3d720f66c3ed0427ebb6bef0b6627b8ea844f6d218931"
+        },
+        {
+          "qualifiedName": "main/src/main/semanticModelManager.getSemanticModelStatus",
+          "symbolId": "pci:sym:faa243d3965f94a9e7d1ebaaade3d6da0a71003a10d5a015e657111fd70d425f"
+        },
+        {
+          "qualifiedName": "main/src/main/semanticModelManager.hasModelFiles",
+          "symbolId": "pci:sym:046c0fd78e3de628825b907d09e08b362fd3abb50ee33a42096abbab214d5012"
+        },
+        {
+          "qualifiedName": "main/src/main/semanticModelManager.installedManifest",
+          "symbolId": "pci:sym:3b50dcf74a5c24e940aec7ef90209bca79fbc2cf4bf1f14293bfeb2bf39c4bbc"
+        },
+        {
+          "qualifiedName": "main/src/main/semanticModelManager.isSemanticModelInstalled",
+          "symbolId": "pci:sym:fb8338923a349bdd497bb6ec7b285510751a6e0935208291cb421bae0341ae12"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "main/src/main/semanticModelManager.getSemanticModelStatus",
+          "target": "main/src/main/semanticModelManager.isSemanticModelInstalled",
+          "sourceSymbolId": "pci:sym:faa243d3965f94a9e7d1ebaaade3d6da0a71003a10d5a015e657111fd70d425f",
+          "targetSymbolId": "pci:sym:fb8338923a349bdd497bb6ec7b285510751a6e0935208291cb421bae0341ae12",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/semanticModelManager.getSemanticModelStatus",
+          "target": "main/src/main/semanticModelManager.getSemanticModelDirectory",
+          "sourceSymbolId": "pci:sym:faa243d3965f94a9e7d1ebaaade3d6da0a71003a10d5a015e657111fd70d425f",
+          "targetSymbolId": "pci:sym:3f09df4d2d64cb3e29b3d720f66c3ed0427ebb6bef0b6627b8ea844f6d218931",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/semanticModelManager.isSemanticModelInstalled",
+          "target": "main/src/main/semanticModelManager.hasModelFiles",
+          "sourceSymbolId": "pci:sym:fb8338923a349bdd497bb6ec7b285510751a6e0935208291cb421bae0341ae12",
+          "targetSymbolId": "pci:sym:046c0fd78e3de628825b907d09e08b362fd3abb50ee33a42096abbab214d5012",
+          "kind": "calls"
+        },
+        {
+          "source": "main/src/main/semanticModelManager.isSemanticModelInstalled",
+          "target": "main/src/main/semanticModelManager.installedManifest",
+          "sourceSymbolId": "pci:sym:fb8338923a349bdd497bb6ec7b285510751a6e0935208291cb421bae0341ae12",
+          "targetSymbolId": "pci:sym:3b50dcf74a5c24e940aec7ef90209bca79fbc2cf4bf1f14293bfeb2bf39c4bbc",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "A model status read is not a semantic search or evidence that an agent called the tool."
+      ]
+    },
+    {
+      "id": "P11",
+      "query": "Trace how a session gets its effective model context capacity.",
+      "entry": "renderer/src/ai/sessionNav.sessionContextLimit",
+      "entryId": "pci:sym:4ea4e2f71e6098da1716ac872d75c1241e03aa6282e4781e79994a6ca9561b51",
+      "requiredNodes": [
+        {
+          "qualifiedName": "renderer/src/ai/sessionNav.getKnownContextLength",
+          "symbolId": "pci:sym:5177f208f903139835e60471e1184ff104a17b94a3347751557a4106f4916a0e"
+        },
+        {
+          "qualifiedName": "renderer/src/ai/sessionNav.sessionContextLimit",
+          "symbolId": "pci:sym:4ea4e2f71e6098da1716ac872d75c1241e03aa6282e4781e79994a6ca9561b51"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "renderer/src/ai/sessionNav.sessionContextLimit",
+          "target": "renderer/src/ai/sessionNav.getKnownContextLength",
+          "sourceSymbolId": "pci:sym:4ea4e2f71e6098da1716ac872d75c1241e03aa6282e4781e79994a6ca9561b51",
+          "targetSymbolId": "pci:sym:5177f208f903139835e60471e1184ff104a17b94a3347751557a4106f4916a0e",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Configured and known-model capacities are static inputs, not runtime evidence of provider limits."
+      ]
+    },
+    {
+      "id": "P12",
+      "query": "Trace following the system colour scheme through theme mode resolution and application.",
+      "entry": "renderer/src/settings/themes.applyThemePreference",
+      "entryId": "pci:sym:3464ce94d73647ae466a113caaad2233a76f525745e78efbb45e72ee132fcdab",
+      "requiredNodes": [
+        {
+          "qualifiedName": "renderer/src/settings/themes.applyTheme",
+          "symbolId": "pci:sym:02be7111def865536b923b8c8e160e3e56dcc1148e993481dc20a3904141e79b"
+        },
+        {
+          "qualifiedName": "renderer/src/settings/themes.applyThemePreference",
+          "symbolId": "pci:sym:3464ce94d73647ae466a113caaad2233a76f525745e78efbb45e72ee132fcdab"
+        },
+        {
+          "qualifiedName": "renderer/src/settings/themes.applyThemePreference.<anonymous>#0",
+          "symbolId": "pci:sym:ff965b5a08ae70b13c95b7c720e2287eedbdef5658978dea911245a51d1430fb"
+        },
+        {
+          "qualifiedName": "renderer/src/settings/themes.findTheme",
+          "symbolId": "pci:sym:4b66f82a22305fa886a3ef6fff061ba15831ffc5dcf43fd9eca06dbfe51cb3a5"
+        },
+        {
+          "qualifiedName": "renderer/src/settings/themes.resolveThemeMode",
+          "symbolId": "pci:sym:5889923e368828813638a8f3dc08e556f0c3adc03fcdc7bea9105c46afd8ec0b"
+        }
+      ],
+      "requiredEdges": [
+        {
+          "source": "renderer/src/settings/themes.applyThemePreference",
+          "target": "renderer/src/settings/themes.applyThemePreference.<anonymous>#0",
+          "sourceSymbolId": "pci:sym:3464ce94d73647ae466a113caaad2233a76f525745e78efbb45e72ee132fcdab",
+          "targetSymbolId": "pci:sym:ff965b5a08ae70b13c95b7c720e2287eedbdef5658978dea911245a51d1430fb",
+          "kind": "calls"
+        },
+        {
+          "source": "renderer/src/settings/themes.applyThemePreference.<anonymous>#0",
+          "target": "renderer/src/settings/themes.resolveThemeMode",
+          "sourceSymbolId": "pci:sym:ff965b5a08ae70b13c95b7c720e2287eedbdef5658978dea911245a51d1430fb",
+          "targetSymbolId": "pci:sym:5889923e368828813638a8f3dc08e556f0c3adc03fcdc7bea9105c46afd8ec0b",
+          "kind": "calls"
+        },
+        {
+          "source": "renderer/src/settings/themes.applyThemePreference.<anonymous>#0",
+          "target": "renderer/src/settings/themes.findTheme",
+          "sourceSymbolId": "pci:sym:ff965b5a08ae70b13c95b7c720e2287eedbdef5658978dea911245a51d1430fb",
+          "targetSymbolId": "pci:sym:4b66f82a22305fa886a3ef6fff061ba15831ffc5dcf43fd9eca06dbfe51cb3a5",
+          "kind": "calls"
+        },
+        {
+          "source": "renderer/src/settings/themes.applyThemePreference.<anonymous>#0",
+          "target": "renderer/src/settings/themes.applyTheme",
+          "sourceSymbolId": "pci:sym:ff965b5a08ae70b13c95b7c720e2287eedbdef5658978dea911245a51d1430fb",
+          "targetSymbolId": "pci:sym:02be7111def865536b923b8c8e160e3e56dcc1148e993481dc20a3904141e79b",
+          "kind": "calls"
+        }
+      ],
+      "boundaries": [
+        "Media-query event registration is a callback boundary; a static trace does not prove a change event occurred."
+      ]
+    }
+  ]
+}

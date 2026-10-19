@@ -1,0 +1,1051 @@
+{
+  "version": 1,
+  "sourceRevision": "b758fa2472b4bda042be0bed1142ea081655c26d",
+  "status": "authored; not executed",
+  "tasks": [
+    {
+      "id": "A01",
+      "domain": "workflow-editor",
+      "split": "tuning",
+      "familyIds": [
+        "F02",
+        "F03",
+        "F04"
+      ],
+      "prompt": "Explain what happens when I add a link that closes a workflow cycle, and whether arranging the diagram changes execution. Do not change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F02",
+          "selector": {
+            "name": "connectNodes",
+            "qualifiedName": "renderer/src/workflows/workflowEdits.connectNodes",
+            "signature": "renderer/src/workflows/workflowEdits.connectNodes(definition: WorkflowDefinition, input: { from: string; to: string; on?: WorkflowEdgeOutcome; required?: boolean }): WorkflowDefinition"
+          },
+          "path": "renderer/src/workflows/workflowEdits.ts"
+        },
+        {
+          "familyId": "F03",
+          "selector": {
+            "name": "wouldCloseCycle",
+            "qualifiedName": "renderer/src/workflows/workflowEdits.wouldCloseCycle",
+            "signature": "renderer/src/workflows/workflowEdits.wouldCloseCycle(definition: WorkflowDefinition, from: string, to: string): boolean"
+          },
+          "path": "renderer/src/workflows/workflowEdits.ts"
+        },
+        {
+          "familyId": "F04",
+          "selector": {
+            "name": "autoArrange",
+            "qualifiedName": "renderer/src/workflows/workflowEdits.autoArrange",
+            "signature": "renderer/src/workflows/workflowEdits.autoArrange(definition: WorkflowDefinition, orientation: WorkflowArrangeOrientation): WorkflowDefinition"
+          },
+          "path": "renderer/src/workflows/workflowEdits.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F02",
+          "points": [
+            "Checks endpoints",
+            "Handles duplicate connections",
+            "Returns an updated workflow definition",
+            "Replaces an agent-task outcome connection",
+            "Marks a detected cycle as a bounded loop rather than always rejecting it"
+          ]
+        },
+        {
+          "familyId": "F03",
+          "points": [
+            "Checks reachability",
+            "Tests the proposed edge direction",
+            "Returns whether it would introduce a cycle",
+            "Ignores edges already marked as bounded loops"
+          ]
+        },
+        {
+          "familyId": "F04",
+          "points": [
+            "Uses dependency levels",
+            "Supports both orientations",
+            "Changes presentation coordinates"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim every cycle is rejected; detected cycles may become bounded loops.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A02",
+      "domain": "workflow-storage",
+      "split": "tuning",
+      "familyIds": [
+        "F05",
+        "F06",
+        "F07",
+        "F08"
+      ],
+      "prompt": "Trace how an edited workflow is saved with and without a project folder, and which definition is loaded if a file and local draft have the same id. Do not change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F05",
+          "selector": {
+            "name": "projectDefinitions",
+            "qualifiedName": "main/src/main/workflowIpc.projectDefinitions",
+            "signature": "main/src/main/workflowIpc.projectDefinitions(projectId: string): Promise<WorkflowDefinition[]>"
+          },
+          "path": "main/src/main/workflowIpc.ts"
+        },
+        {
+          "familyId": "F06",
+          "selector": {
+            "name": "persistProjectWorkflow",
+            "qualifiedName": "main/src/main/workflowIpc.persistProjectWorkflow",
+            "signature": "main/src/main/workflowIpc.persistProjectWorkflow(projectId: string, definition: WorkflowDefinition): Promise<string | undefined>"
+          },
+          "path": "main/src/main/workflowIpc.ts"
+        },
+        {
+          "familyId": "F07",
+          "selector": {
+            "name": "saveDraft",
+            "qualifiedName": "main/src/main/workflowIpc.saveDraft",
+            "signature": "main/src/main/workflowIpc.saveDraft(projectId: string, definition: WorkflowDefinition): Promise<void>"
+          },
+          "path": "main/src/main/workflowIpc.ts"
+        },
+        {
+          "familyId": "F08",
+          "selector": {
+            "name": "dropDraft",
+            "qualifiedName": "main/src/main/workflowIpc.dropDraft",
+            "signature": "main/src/main/workflowIpc.dropDraft(projectId: string, workflowId: string): Promise<void>"
+          },
+          "path": "main/src/main/workflowIpc.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F05",
+          "points": [
+            "Loads project folder definitions",
+            "Committed ids suppress drafts",
+            "Returns remaining drafts too"
+          ]
+        },
+        {
+          "familyId": "F06",
+          "points": [
+            "Folderless projects use drafts",
+            "Folder projects write a file",
+            "Drops the corresponding draft after writing"
+          ]
+        },
+        {
+          "familyId": "F07",
+          "points": [
+            "Reads existing drafts",
+            "Filters the matching id",
+            "Stores the replacement with the others"
+          ]
+        },
+        {
+          "familyId": "F08",
+          "points": [
+            "Filters the selected workflow id",
+            "Writes remaining drafts",
+            "Uses the project draft key"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim a draft overrides a committed definition.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A03",
+      "domain": "connections",
+      "split": "heldOut",
+      "familyIds": [
+        "F09",
+        "F10",
+        "F11",
+        "F12"
+      ],
+      "prompt": "Compare a folder connection and a GitHub connection: how is the backend chosen, how is the board identity derived, and what happens for a mode without an implementation? Do not change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F09",
+          "selector": {
+            "name": "resolveServiceForConnection",
+            "qualifiedName": "main/src/main/serviceRegistry.resolveServiceForConnection",
+            "signature": "main/src/main/serviceRegistry.resolveServiceForConnection(connectionId: string | undefined): Promise<IssueTrackerService>"
+          },
+          "path": "main/src/main/serviceRegistry.ts"
+        },
+        {
+          "familyId": "F10",
+          "selector": {
+            "name": "getStubService",
+            "qualifiedName": "main/src/main/serviceRegistry.getStubService",
+            "signature": "main/src/main/serviceRegistry.getStubService(mode: BackendMode): StubBackendService"
+          },
+          "path": "main/src/main/serviceRegistry.ts"
+        },
+        {
+          "familyId": "F11",
+          "selector": {
+            "name": "autoSynthesizesBoard",
+            "qualifiedName": "renderer/src/connections/connectionPolicy.autoSynthesizesBoard",
+            "signature": "renderer/src/connections/connectionPolicy.autoSynthesizesBoard(mode: BackendMode): boolean"
+          },
+          "path": "renderer/src/connections/connectionPolicy.ts"
+        },
+        {
+          "familyId": "F12",
+          "selector": {
+            "name": "createSynthesizedTrackedBoard",
+            "qualifiedName": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard",
+            "signature": "renderer/src/connections/connectionPolicy.createSynthesizedTrackedBoard(connection: Connection): TrackedBoard | undefined"
+          },
+          "path": "renderer/src/connections/connectionPolicy.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F09",
+          "points": [
+            "Branches on connection mode",
+            "Caches folder services",
+            "Subscribes to folder changes"
+          ]
+        },
+        {
+          "familyId": "F10",
+          "points": [
+            "Caches stubs by mode",
+            "Creates StubBackendService",
+            "Does not substitute the demo backend"
+          ]
+        },
+        {
+          "familyId": "F11",
+          "points": [
+            "Folder qualifies",
+            "Demo qualifies",
+            "GitHub qualifies"
+          ]
+        },
+        {
+          "familyId": "F12",
+          "points": [
+            "Checks owner and repo",
+            "Missing values return undefined",
+            "Builds github:owner/repo identity"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not describe a stub as a demo backend. Identify core implementation details as outside this root when they cannot be inspected.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A04",
+      "domain": "workspace",
+      "split": "heldOut",
+      "familyIds": [
+        "F13",
+        "F14",
+        "F15",
+        "F16"
+      ],
+      "prompt": "Explain how external workspace files are registered and reopened, what removing one from Praxis does, and when a project description may be rewritten. Do not change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F13",
+          "selector": {
+            "name": "registerWorkspaceLocation",
+            "qualifiedName": "main/src/main/workspaceLocations.registerWorkspaceLocation",
+            "signature": "main/src/main/workspaceLocations.registerWorkspaceLocation(location: WorkspaceLocation): Promise<void>"
+          },
+          "path": "main/src/main/workspaceLocations.ts"
+        },
+        {
+          "familyId": "F14",
+          "selector": {
+            "name": "deregisterWorkspaceLocation",
+            "qualifiedName": "main/src/main/workspaceLocations.deregisterWorkspaceLocation",
+            "signature": "main/src/main/workspaceLocations.deregisterWorkspaceLocation(workspaceId: string): Promise<void>"
+          },
+          "path": "main/src/main/workspaceLocations.ts"
+        },
+        {
+          "familyId": "F15",
+          "selector": {
+            "name": "getWorkspaceScopes",
+            "qualifiedName": "main/src/main/workspaceLocations.getWorkspaceScopes",
+            "signature": "main/src/main/workspaceLocations.getWorkspaceScopes(): UnionScope[]"
+          },
+          "path": "main/src/main/workspaceLocations.ts"
+        },
+        {
+          "familyId": "F16",
+          "selector": {
+            "name": "writeProjectSnapshot",
+            "qualifiedName": "main/src/main/projectManager.writeProjectSnapshot",
+            "signature": "main/src/main/projectManager.writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'>"
+          },
+          "path": "main/src/main/projectManager.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F13",
+          "points": [
+            "Replaces matching id",
+            "Updates registry",
+            "Clears unreadable path"
+          ]
+        },
+        {
+          "familyId": "F14",
+          "points": [
+            "Removes pointer",
+            "Drops cached store",
+            "Does not delete the document"
+          ]
+        },
+        {
+          "familyId": "F15",
+          "points": [
+            "Caches opened stores",
+            "Catches unreadable files",
+            "Skips known unreadable paths"
+          ]
+        },
+        {
+          "familyId": "F16",
+          "points": [
+            "Uses PROJECT_FILE_NAME",
+            "Retains markerless documents",
+            "Replaces only the marked block"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim removal deletes the workspace document or that markerless project descriptions are overwritten.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A05",
+      "domain": "git",
+      "split": "heldOut",
+      "familyIds": [
+        "F17",
+        "F18",
+        "F19",
+        "F20"
+      ],
+      "prompt": "Trace repository validation, committing only selected files, and applying one diff hunk. Explain how repository file access checks symlink escapes. Do not execute Git mutations or change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F17",
+          "selector": {
+            "name": "preflightGitRepository",
+            "qualifiedName": "main/src/main/gitService.preflightGitRepository",
+            "signature": "main/src/main/gitService.preflightGitRepository(input?: string): Promise<GitRepositoryPreflight>"
+          },
+          "path": "main/src/main/gitService.ts"
+        },
+        {
+          "familyId": "F18",
+          "selector": {
+            "name": "commitPathsGit",
+            "qualifiedName": "main/src/main/gitService.commitPathsGit",
+            "signature": "main/src/main/gitService.commitPathsGit(input: string, paths: string[], message: string): Promise<void>"
+          },
+          "path": "main/src/main/gitService.ts"
+        },
+        {
+          "familyId": "F19",
+          "selector": {
+            "name": "applyGitHunk",
+            "qualifiedName": "main/src/main/gitService.applyGitHunk",
+            "signature": "main/src/main/gitService.applyGitHunk(input: string, request: GitHunkActionRequest): Promise<GitStatusSnapshot>"
+          },
+          "path": "main/src/main/gitService.ts"
+        },
+        {
+          "familyId": "F20",
+          "selector": {
+            "name": "safeRepositoryFile",
+            "qualifiedName": "main/src/main/gitService.safeRepositoryFile",
+            "signature": "main/src/main/gitService.safeRepositoryFile(repositoryPath: string, relativePath: string): Promise<string>"
+          },
+          "path": "main/src/main/gitService.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F17",
+          "points": [
+            "Validates the input folder",
+            "Checks repository availability",
+            "Returns a preflight result"
+          ]
+        },
+        {
+          "familyId": "F18",
+          "points": [
+            "Stages selected paths",
+            "Commits only specified paths",
+            "Uses the provided commit message"
+          ]
+        },
+        {
+          "familyId": "F19",
+          "points": [
+            "Validates the hunk request",
+            "Sets cached and reverse flags by action",
+            "Returns updated Git status"
+          ]
+        },
+        {
+          "familyId": "F20",
+          "points": [
+            "Rejects absolute and traversal paths",
+            "Checks resolved containment",
+            "Checks the real parent directory"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not describe --only as committing all staged files; do not claim hunk validation alone proves every filesystem operation safe.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A06",
+      "domain": "chat",
+      "split": "tuning",
+      "familyIds": [
+        "F21",
+        "F22",
+        "F23",
+        "F24"
+      ],
+      "prompt": "Explain how tool activity gets attached to an assistant reply, how a code intelligence call is recognised, and how cumulative reasoning avoids repeated paragraphs. Cover completion-only tool notifications. Do not change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F21",
+          "selector": {
+            "name": "collectTurnTools",
+            "qualifiedName": "renderer/src/ai/chatToolCalls.collectTurnTools",
+            "signature": "renderer/src/ai/chatToolCalls.collectTurnTools(events: readonly AgentEventSummary[]): Map<AgentEventSummary, TurnTools>"
+          },
+          "path": "renderer/src/ai/chatToolCalls.ts"
+        },
+        {
+          "familyId": "F22",
+          "selector": {
+            "name": "isCodeIntelligenceTool",
+            "qualifiedName": "renderer/src/ai/chatToolCalls.isCodeIntelligenceTool",
+            "signature": "renderer/src/ai/chatToolCalls.isCodeIntelligenceTool(name: string): boolean"
+          },
+          "path": "renderer/src/ai/chatToolCalls.ts"
+        },
+        {
+          "familyId": "F23",
+          "selector": {
+            "name": "collectMessageRuns",
+            "qualifiedName": "renderer/src/ai/chatTurns.collectMessageRuns",
+            "signature": "renderer/src/ai/chatTurns.collectMessageRuns(events: readonly AgentEventSummary[], visibleText: (event: AgentEventSummary) => string, hooks: {\n    /** Tool calls made so far in the event's turn. */\n    toolCallsAt?: (event: AgentEventSummary) => number | undefined;\n    /** Whether the agent called a tool after this message, so it is an aside. */\n    isIntermediate?: (event: AgentEventSummary) => boolean;\n  }): MessageRun[]"
+          },
+          "path": "renderer/src/ai/chatTurns.ts"
+        },
+        {
+          "familyId": "F24",
+          "selector": {
+            "name": "mergeReasoningStep",
+            "qualifiedName": "renderer/src/ai/chatThought.mergeReasoningStep",
+            "signature": "renderer/src/ai/chatThought.mergeReasoningStep(steps: string[], incoming: string): string[]"
+          },
+          "path": "renderer/src/ai/chatThought.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F21",
+          "points": [
+            "Tracks calls for the current turn",
+            "Handles completion-only calls",
+            "Associates calls with assistant messages"
+          ]
+        },
+        {
+          "familyId": "F22",
+          "points": [
+            "Matches supported server and tool naming formats",
+            "Trims the tool name",
+            "Uses the code intelligence matcher"
+          ]
+        },
+        {
+          "familyId": "F23",
+          "points": [
+            "Groups assistant messages",
+            "Separates narration from reply parts",
+            "Latest usage totals win"
+          ]
+        },
+        {
+          "familyId": "F24",
+          "points": [
+            "Ignores repeated prefixes",
+            "Replaces a shorter last step",
+            "Appends new independent text"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not infer actual tool usage from tool availability, or ignore completion-only events.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A07",
+      "domain": "gadgets",
+      "split": "heldOut",
+      "familyIds": [
+        "F25",
+        "F26",
+        "F27",
+        "F28"
+      ],
+      "prompt": "Trace an interactive chat answer from actionable renderer state to host submission and operation routing. Explain whose scope is authoritative and why gadget JSON is hidden from prose. Do not submit actions or change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F25",
+          "selector": {
+            "name": "submitGadgetAction",
+            "qualifiedName": "main/src/main/gadgetIpc.submitGadgetAction",
+            "signature": "main/src/main/gadgetIpc.submitGadgetAction(request: GadgetSubmitRequest, actor: string): Promise<GadgetActionResult>"
+          },
+          "path": "main/src/main/gadgetIpc.ts"
+        },
+        {
+          "familyId": "F26",
+          "selector": {
+            "name": "executeGadgetAction",
+            "qualifiedName": "main/src/main/gadgetIpc.executeGadgetAction",
+            "signature": "main/src/main/gadgetIpc.executeGadgetAction({ envelope, action, record }: GadgetExecutionContext, actor: string): Promise<{ outcome: unknown; message: string; } | { outcome: { acknowledged: boolean; }; message: string; correlationId: string; }>"
+          },
+          "path": "main/src/main/gadgetIpc.ts"
+        },
+        {
+          "familyId": "F27",
+          "selector": {
+            "name": "isGadgetActionable",
+            "qualifiedName": "renderer/src/ai/gadgets/gadgetContract.isGadgetActionable",
+            "signature": "renderer/src/ai/gadgets/gadgetContract.isGadgetActionable(state: GadgetLifecycleState | undefined): boolean"
+          },
+          "path": "renderer/src/ai/gadgets/gadgetContract.ts"
+        },
+        {
+          "familyId": "F28",
+          "selector": {
+            "name": "stripGadgetFences",
+            "qualifiedName": "renderer/src/ai/gadgets/messageText.stripGadgetFences",
+            "signature": "renderer/src/ai/gadgets/messageText.stripGadgetFences(text: string): string"
+          },
+          "path": "renderer/src/ai/gadgets/messageText.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F25",
+          "points": [
+            "Validates incoming value",
+            "Resolves host session scope",
+            "Uses stored envelope scope for submission"
+          ]
+        },
+        {
+          "familyId": "F26",
+          "points": [
+            "Checks approval effect and confirmation",
+            "Checks ticket-review gate",
+            "Returns informational outcomes for other values"
+          ]
+        },
+        {
+          "familyId": "F27",
+          "points": [
+            "Only active returns true",
+            "Undefined is inert",
+            "Other lifecycle states are inert"
+          ]
+        },
+        {
+          "familyId": "F28",
+          "points": [
+            "Removes closed fences",
+            "Drops an unclosed trailing fence",
+            "Tidies whitespace"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim the renderer chooses authority or that every form automatically performs a mutation.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A08",
+      "domain": "code-intelligence",
+      "split": "tuning",
+      "familyIds": [
+        "F29",
+        "F30",
+        "F31",
+        "F32"
+      ],
+      "prompt": "Explain the gates for attaching code intelligence to a session, how the installed embedding model is activated, and when an outdated index owner is restarted. Distinguish attachment from actual tool use. Do not change settings or code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F29",
+          "selector": {
+            "name": "getSessionCodeIntelligenceServer",
+            "qualifiedName": "main/src/main/codeIntelligenceIpc.getSessionCodeIntelligenceServer",
+            "signature": "main/src/main/codeIntelligenceIpc.getSessionCodeIntelligenceServer(workingDirectory: string | undefined, provider: string | undefined): Promise<McpServerConfig | undefined>"
+          },
+          "path": "main/src/main/codeIntelligenceIpc.ts"
+        },
+        {
+          "familyId": "F30",
+          "selector": {
+            "name": "activateModel",
+            "qualifiedName": "main/src/main/codeIntelligenceIpc.activateModel",
+            "signature": "main/src/main/codeIntelligenceIpc.activateModel(fingerprint: string, repositoryIds: string[]): Promise<string[]>"
+          },
+          "path": "main/src/main/codeIntelligenceIpc.ts"
+        },
+        {
+          "familyId": "F31",
+          "selector": {
+            "name": "replaceOutdatedOwner",
+            "qualifiedName": "main/src/main/codeIntelligenceIpc.replaceOutdatedOwner",
+            "signature": "main/src/main/codeIntelligenceIpc.replaceOutdatedOwner(): Promise<boolean>"
+          },
+          "path": "main/src/main/codeIntelligenceIpc.ts"
+        },
+        {
+          "familyId": "F32",
+          "selector": {
+            "name": "installedModelFingerprint",
+            "qualifiedName": "main/src/main/codeIntelligenceIpc.installedModelFingerprint",
+            "signature": "main/src/main/codeIntelligenceIpc.installedModelFingerprint(): Promise<string | undefined>"
+          },
+          "path": "main/src/main/codeIntelligenceIpc.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F29",
+          "points": [
+            "Checks enablement overrides",
+            "Registers a missing repository",
+            "Obtains provider grant and builds stdio server"
+          ]
+        },
+        {
+          "familyId": "F30",
+          "points": [
+            "Loops over repository ids",
+            "Invokes model activation",
+            "Collects failures"
+          ]
+        },
+        {
+          "familyId": "F31",
+          "points": [
+            "Reads owner status",
+            "Checks the outdated flag",
+            "Restarts only when outdated and surfaces restart failure"
+          ]
+        },
+        {
+          "familyId": "F32",
+          "points": [
+            "Checks installation or cache",
+            "Loads the model",
+            "Caches fingerprint"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not equate MCP attachment with a completed semantic search.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A09",
+      "domain": "embedding-model",
+      "split": "heldOut",
+      "familyIds": [
+        "F33",
+        "F34",
+        "F35",
+        "F36"
+      ],
+      "prompt": "Explain the difference between an installed and active semantic model, then trace asset downloading, progress, checksum verification and failure cleanup. Do not download anything or change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F33",
+          "selector": {
+            "name": "isSemanticModelInstalled",
+            "qualifiedName": "main/src/main/semanticModelManager.isSemanticModelInstalled",
+            "signature": "main/src/main/semanticModelManager.isSemanticModelInstalled(): boolean"
+          },
+          "path": "main/src/main/semanticModelManager.ts"
+        },
+        {
+          "familyId": "F34",
+          "selector": {
+            "name": "getSemanticModelStatus",
+            "qualifiedName": "main/src/main/semanticModelManager.getSemanticModelStatus",
+            "signature": "main/src/main/semanticModelManager.getSemanticModelStatus(): SemanticModelStatus"
+          },
+          "path": "main/src/main/semanticModelManager.ts"
+        },
+        {
+          "familyId": "F35",
+          "selector": {
+            "name": "downloadSemanticModel",
+            "qualifiedName": "main/src/main/semanticModelManager.downloadSemanticModel",
+            "signature": "main/src/main/semanticModelManager.downloadSemanticModel(onProgress?: (event: SemanticModelProgressEvent) => void): Promise<void>"
+          },
+          "path": "main/src/main/semanticModelManager.ts"
+        },
+        {
+          "familyId": "F36",
+          "selector": {
+            "name": "streamDownload",
+            "qualifiedName": "main/src/main/semanticModelDownload.streamDownload",
+            "signature": "main/src/main/semanticModelDownload.streamDownload(url: string, destination: string, expectedSize: number, expectedSha256: string, onChunk: (bytesReceived: number) => void, redirectCount: number): Promise<void>"
+          },
+          "path": "main/src/main/semanticModelDownload.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F33",
+          "points": [
+            "Checks required files",
+            "Checks manifest model id",
+            "Checks pinned revision"
+          ]
+        },
+        {
+          "familyId": "F34",
+          "points": [
+            "Installed and active are distinct",
+            "Reports progress and size",
+            "Includes update availability"
+          ]
+        },
+        {
+          "familyId": "F35",
+          "points": [
+            "Refuses concurrent download",
+            "Tracks per-asset progress",
+            "Clears downloading in finally"
+          ]
+        },
+        {
+          "familyId": "F36",
+          "points": [
+            "Bounds redirects",
+            "Checks size and SHA256",
+            "Renames a verified partial file"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim downloadSemanticModel rechecks checksums for already present assets it skips by size; explain that limit if discussing integrity.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A10",
+      "domain": "appearance",
+      "split": "heldOut",
+      "familyIds": [
+        "F37",
+        "F38",
+        "F39",
+        "F40"
+      ],
+      "prompt": "Trace how persisted surface packs are normalised, how CSS image layers are split safely, and how resolved appearance reaches a phone after theme changes. Do not change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F37",
+          "selector": {
+            "name": "readPatternSpec",
+            "qualifiedName": "renderer/src/settings/surfacePacks.readPatternSpec",
+            "signature": "renderer/src/settings/surfacePacks.readPatternSpec(value: unknown): SurfacePatternSpec | undefined"
+          },
+          "path": "renderer/src/settings/surfacePacks.ts"
+        },
+        {
+          "familyId": "F38",
+          "selector": {
+            "name": "coercePacks",
+            "qualifiedName": "renderer/src/settings/surfacePacks.coercePacks",
+            "signature": "renderer/src/settings/surfacePacks.coercePacks(records: AppearanceSettings['customSurfacePacks'], source: 'custom' | 'marketplace'): SurfacePackDefinition[]"
+          },
+          "path": "renderer/src/settings/surfacePacks.ts"
+        },
+        {
+          "familyId": "F39",
+          "selector": {
+            "name": "splitCssLayers",
+            "qualifiedName": "renderer/src/settings/cssLayerList.splitCssLayers",
+            "signature": "renderer/src/settings/cssLayerList.splitCssLayers(value: string): string[]"
+          },
+          "path": "renderer/src/settings/cssLayerList.ts"
+        },
+        {
+          "familyId": "F40",
+          "selector": {
+            "name": "startPublishingMobileAppearance",
+            "qualifiedName": "renderer/src/settings/mobileAppearancePublisher.startPublishingMobileAppearance",
+            "signature": "renderer/src/settings/mobileAppearancePublisher.startPublishingMobileAppearance(): void"
+          },
+          "path": "renderer/src/settings/mobileAppearancePublisher.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F37",
+          "points": [
+            "Checks pattern identity",
+            "Clamps numeric fields",
+            "Whitelists animation name"
+          ]
+        },
+        {
+          "familyId": "F38",
+          "points": [
+            "Filters token keys",
+            "Finds base pack",
+            "Inherits base pattern when needed"
+          ]
+        },
+        {
+          "familyId": "F39",
+          "points": [
+            "Tracks parentheses",
+            "Tracks quotes",
+            "Splits only top-level commas"
+          ]
+        },
+        {
+          "familyId": "F40",
+          "points": [
+            "Listens for theme and surface change events",
+            "Coalesces publication using animation frames",
+            "Publishes resolved appearance through settings IPC"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim the publisher uses a MutationObserver; it listens for theme and surface events.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A11",
+      "domain": "providers",
+      "split": "heldOut",
+      "familyIds": [
+        "F41",
+        "F42",
+        "F43",
+        "F44"
+      ],
+      "prompt": "Explain automatic provider fallback after exhaustion, protection for an independent reviewer, and why one failing account-usage read does not hide healthy provider budgets. Do not call remote services or change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F41",
+          "selector": {
+            "name": "usableProviders",
+            "qualifiedName": "main/src/main/providerFallback.usableProviders",
+            "signature": "main/src/main/providerFallback.usableProviders(preferred: readonly string[]): Promise<AiProvider[]>"
+          },
+          "path": "main/src/main/providerFallback.ts"
+        },
+        {
+          "familyId": "F42",
+          "selector": {
+            "name": "nextUsableProvider",
+            "qualifiedName": "main/src/main/providerFallback.nextUsableProvider",
+            "signature": "main/src/main/providerFallback.nextUsableProvider(exclude: readonly string[], preferred: readonly string[]): Promise<AiProvider | undefined>"
+          },
+          "path": "main/src/main/providerFallback.ts"
+        },
+        {
+          "familyId": "F43",
+          "selector": {
+            "name": "fallbackProviderForStage",
+            "qualifiedName": "main/src/main/providerFallback.fallbackProviderForStage",
+            "signature": "main/src/main/providerFallback.fallbackProviderForStage(run: WorkflowRun, nodeId: string): Promise<AiProvider | undefined>"
+          },
+          "path": "main/src/main/providerFallback.ts"
+        },
+        {
+          "familyId": "F44",
+          "selector": {
+            "name": "readProviderSnapshots",
+            "qualifiedName": "main/src/main/providerUsageBatch.readProviderSnapshots",
+            "signature": "main/src/main/providerUsageBatch.readProviderSnapshots(providers: readonly AiProvider[], read: (provider: AiProvider) => Promise<ProviderUsageSnapshot>): Promise<ProviderUsageSnapshotsResult>"
+          },
+          "path": "main/src/main/providerUsageBatch.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F41",
+          "points": [
+            "Configured and enabled required",
+            "Preferred then active then remaining",
+            "Deduplicates provider ids"
+          ]
+        },
+        {
+          "familyId": "F42",
+          "points": [
+            "Uses ordered usable providers",
+            "Filters excluded ids",
+            "May return undefined"
+          ]
+        },
+        {
+          "familyId": "F43",
+          "points": [
+            "Resolves current stage provider",
+            "Excludes exhausted providers",
+            "Excludes author provider for independent review"
+          ]
+        },
+        {
+          "familyId": "F44",
+          "points": [
+            "Uses allSettled",
+            "Retains successful snapshots",
+            "Represents failed reads and sorts availability"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim every configured provider is eligible regardless of enabled state or review independence.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    },
+    {
+      "id": "A12",
+      "domain": "mobile",
+      "split": "heldOut",
+      "familyIds": [
+        "F45",
+        "F46",
+        "F47",
+        "F48"
+      ],
+      "prompt": "Explain how the phone sees session summaries, answers pending permissions and obtains image previews. Cover request ordering, project checks, image path boundaries and chunk limits. Do not answer permissions or change code.",
+      "requiredEvidence": [
+        {
+          "familyId": "F45",
+          "selector": {
+            "name": "pendingMobilePermissions",
+            "qualifiedName": "main/src/main/mobilePermissions.pendingMobilePermissions",
+            "signature": "main/src/main/mobilePermissions.pendingMobilePermissions(records: Iterable<AgentSessionRecord>): MobilePermissionRequest[]"
+          },
+          "path": "main/src/main/mobilePermissions.ts"
+        },
+        {
+          "familyId": "F46",
+          "selector": {
+            "name": "respondToMobilePermission",
+            "qualifiedName": "main/src/main/mobilePermissions.respondToMobilePermission",
+            "signature": "main/src/main/mobilePermissions.respondToMobilePermission(input: {\n  records: Iterable<AgentSessionRecord>;\n  requestId: string;\n  projectId: string;\n  decision: 'allow' | 'allow_always' | 'deny';\n  hasActiveTask(sessionKey: string): boolean;\n  respond(sessionKey: string, decision: PermissionDecision): void;\n}): { requestId: string; decision: 'allow' | 'allow_always' | 'deny'; sessionId: string }"
+          },
+          "path": "main/src/main/mobilePermissions.ts"
+        },
+        {
+          "familyId": "F47",
+          "selector": {
+            "name": "readMobileImagePreview",
+            "qualifiedName": "main/src/main/mobileImagePreview.readMobileImagePreview",
+            "signature": "main/src/main/mobileImagePreview.readMobileImagePreview(record: AgentSessionRecord, params: Pick<MobileReadParams, 'path' | 'eventIndex' | 'attachmentIndex' | 'offset'>): Promise<MobileImagePreview | undefined>"
+          },
+          "path": "main/src/main/mobileImagePreview.ts"
+        },
+        {
+          "familyId": "F48",
+          "selector": {
+            "name": "mobileSessionSummary",
+            "qualifiedName": "main/src/main/mobileSessionProjection.mobileSessionSummary",
+            "signature": "main/src/main/mobileSessionProjection.mobileSessionSummary(record: AgentSessionRecord): MobileSessionSummary"
+          },
+          "path": "main/src/main/mobileSessionProjection.ts"
+        }
+      ],
+      "answerChecklist": [
+        {
+          "familyId": "F45",
+          "points": [
+            "Requires awaiting_approval state",
+            "Collects request events",
+            "Shifts completed requests"
+          ]
+        },
+        {
+          "familyId": "F46",
+          "points": [
+            "Requires oldest request",
+            "Checks project and active task",
+            "Maps allow to allow_once"
+          ]
+        },
+        {
+          "familyId": "F47",
+          "points": [
+            "Checks offsets and image types",
+            "Bounds image size and sandbox paths",
+            "Chunks base64 output"
+          ]
+        },
+        {
+          "familyId": "F48",
+          "points": [
+            "Maps lifecycle",
+            "Uses title and goal fallback",
+            "Carries optional session context"
+          ]
+        }
+      ],
+      "criticalTrap": "Do not claim a phone may approve a later pending request first or retrieve arbitrary host images.",
+      "reviewStatus": "AI-authored; independent rubric review pending"
+    }
+  ],
+  "arms": [
+    {
+      "id": "files",
+      "tools": "File listing, rg and source reads; no code intelligence"
+    },
+    {
+      "id": "lexical",
+      "tools": "Same file tools plus read-only code intelligence; search_code must use lexical"
+    },
+    {
+      "id": "vector",
+      "tools": "Same file tools plus read-only code intelligence; search_code must use vector"
+    },
+    {
+      "id": "hybrid",
+      "tools": "Same file tools plus read-only code intelligence; search_code must use hybrid"
+    }
+  ],
+  "repeats": 3,
+  "scoring": {
+    "correctness": 4,
+    "evidence": 2,
+    "coverage": 2,
+    "uncertainty": 2,
+    "total": 10
+  },
+  "humanBlindReviewRequired": true
+}
