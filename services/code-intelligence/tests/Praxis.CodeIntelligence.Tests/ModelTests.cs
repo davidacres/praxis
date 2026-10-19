@@ -320,22 +320,24 @@ public sealed class ModelTests
     }
 
     [LocalModelFact]
-    public void TheBestVectorCandidateIsKeptOnTheFirstPageAndPagingStaysComplete()
+    public void TheBestVectorCandidatesAreKeptOnTheFirstPageAndPagingStaysComplete()
     {
-        // Twelve keyword matches would otherwise fill the first page; the model's best
-        // candidate (a paraphrase match with no keyword hit) must still reach place 10.
+        // Twelve keyword matches would otherwise fill the first page; the model's two best
+        // candidates (paraphrase matches with no keyword hit) must still reach places 9 and 10,
+        // in the model's order, without the second pushing the first off the page.
         var root = Path.Combine(Path.GetTempPath(), "praxis-vector-floor-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
         try
         {
             for (var i = 0; i < 12; i++) File.WriteAllText(Path.Combine(root, $"Widget{i}.cs"), $"class Widget{i} {{ void Render() {{}} }}");
             File.WriteAllText(Path.Combine(root, "Painter.cs"), "class Painter { void Draw() {} }");
+            File.WriteAllText(Path.Combine(root, "Brush.cs"), "class Brush { void Stroke() {} }");
             var database = new IndexDatabase(Path.Combine(root, "data", "index.db")); database.Initialize();
             var indexer = new RepositoryIndexer(database); var repository = indexer.Register(root); indexer.Index(repository);
             using var store = new ModelStore(database, Path.Combine(root, "models"));
             store.Activate(repository, store.Install(Environment.GetEnvironmentVariable("PRAXIS_MODEL_BUNDLE")!), CancellationToken.None);
             string Id(string name) { using var c = database.Open(readOnly: true); return (string)c.Scalar(null, "SELECT symbol_id FROM symbols WHERE name=$0", name)!; }
-            var draw = Id("Draw");
-            store.VectorBackend = new FixedVectorBackend(() => [new VectorCandidate(draw, 0.9)]);
+            var draw = Id("Draw"); var stroke = Id("Stroke");
+            store.VectorBackend = new FixedVectorBackend(() => [new VectorCandidate(draw, 0.9), new VectorCandidate(stroke, 0.8)]);
             var queries = new QueryService(database, store);
             JsonObject Page(string? cursor)
             {
@@ -346,7 +348,8 @@ public sealed class ModelTests
             var first = Page(null); Assert.Null(first["error"]);
             var firstIds = first["data"]!["matches"]!.AsArray().Select(m => m!["symbol"]!["symbolId"]!.GetValue<string>()).ToList();
             Assert.Equal(10, firstIds.Count);
-            Assert.Equal(draw, firstIds[9]);
+            Assert.Equal(draw, firstIds[8]);
+            Assert.Equal(stroke, firstIds[9]);
             var all = new List<string>(firstIds);
             for (var cursor = first["nextCursor"]?.GetValue<string>(); cursor is not null;)
             {
@@ -356,6 +359,7 @@ public sealed class ModelTests
             }
             Assert.Equal(all.Count, all.Distinct().Count());
             Assert.Contains(draw, all);
+            Assert.Contains(stroke, all);
         }
         finally { Directory.Delete(root, recursive: true); }
     }

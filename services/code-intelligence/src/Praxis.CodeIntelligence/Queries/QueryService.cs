@@ -19,17 +19,18 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
         return service;
     }
     public const int SearchCountCacheVersion = 1;
-    public const int SearchPlanVersion = 9;
-    public const string RankingProfile = "rrf-k60-lexical4-vector1-alias0.5-floor1-v5";
+    public const int SearchPlanVersion = 11;
+    public const string RankingProfile = "rrf-k60-lexical4-vector1-alias0.5-floor2-v6";
     public const double LexicalWeight = 4.0;
     /// <summary>
-    /// The best vector candidate is kept within the first <see cref="VectorFloorDepth"/> places.
+    /// The best vector candidates are kept within the first <see cref="VectorFloorDepth"/> places.
     /// Lexical RRF otherwise fills the first page whenever ten keyword matches exist, so a
-    /// paraphrased query whose answer only the model finds never reaches it. Selected on the
-    /// Praxis fusion tuning set (fusion experiment 2) and accepted on the Maze held-out split
-    /// and the TypeScript pilot.
+    /// paraphrased query whose answer only the model finds never reaches it. A floor of one
+    /// (fusion experiment 2) proved brittle: a representation change that swapped the model's
+    /// first and second choice dropped the answer from hybrid entirely. Two places keep it
+    /// without losing a hit on the Maze held-out split, the TypeScript pilot or the desktop corpus.
     /// </summary>
-    public const int VectorFloor = 1;
+    public const int VectorFloor = 2;
     public const int VectorFloorDepth = 10;
     public const double AliasWeight = 0.5;
     internal Action<QueryMeasurement>? MeasurementObserver { get; init; }
@@ -322,15 +323,20 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     // Graph-only expansion never outranks a direct retrieval match.
                     var ordered = candidates.Values.OrderByDescending(c => c.Ranks.ContainsKey("exact")).ThenByDescending(c => c.Ranks.Count > 0).ThenByDescending(c => c.Score).ThenBy(c => Text(c.Row, "symbol_id"), StringComparer.Ordinal).ToList();
                     // Vector floor: move each of the best vector candidates that fell below the
-                    // floor depth into the last non-exact place within it. Exact matches keep the
-                    // top; the displaced candidate moves down one place, so paging stays complete.
-                    foreach (var pick in ordered.Where(c => c.Ranks.ContainsKey("vector")).OrderBy(c => c.Ranks["vector"]!.GetValue<int>()).Take(VectorFloor).ToArray())
+                    // floor depth into the last non-exact place within it that no other floored
+                    // candidate holds. Exact matches keep the top; the displaced candidate opens
+                    // the next page, so paging stays complete. Placing the weaker pick first lets
+                    // the stronger one take the higher place when both are lifted.
+                    var floored = ordered.Where(c => c.Ranks.ContainsKey("vector")).OrderBy(c => c.Ranks["vector"]!.GetValue<int>()).Take(VectorFloor).ToArray();
+                    for (var f = floored.Length - 1; f >= 0; f--)
                     {
+                        var pick = floored[f];
                         var current = ordered.IndexOf(pick);
                         if (current < VectorFloorDepth) continue;
-                        var target = Enumerable.Range(0, Math.Min(VectorFloorDepth, ordered.Count)).LastOrDefault(i => !ordered[i].Ranks.ContainsKey("exact"), -1);
+                        var target = Enumerable.Range(0, Math.Min(VectorFloorDepth, ordered.Count)).LastOrDefault(i => !ordered[i].Ranks.ContainsKey("exact") && !floored.Contains(ordered[i]), -1);
                         if (target < 0) continue;
-                        ordered.RemoveAt(current); ordered.Insert(target, pick);
+                        ordered.RemoveAt(current); var displaced = ordered[target]; ordered[target] = pick;
+                        ordered.Insert(Math.Min(VectorFloorDepth, ordered.Count), displaced);
                     }
                     more = ordered.Count > offset + limit; var matches = new JsonArray();
                     foreach (var candidate in ordered.Skip(offset).Take(limit))
