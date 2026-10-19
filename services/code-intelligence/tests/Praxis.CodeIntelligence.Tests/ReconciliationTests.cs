@@ -49,12 +49,12 @@ public sealed class ReconciliationTests : IDisposable
         Assert.Empty(database.Check());
     }
     [Fact]
-    public void LegacyContextsBackfillSnapshotWithoutChangingFactsOrGeneration()
+    public void CurrentRepresentationsBackfillSnapshotWithoutChangingFactsOrGeneration()
     {
         File.WriteAllText(Path.Combine(Root, "Example.cs"), "class Example {}");
         var database = Database(); var indexer = new RepositoryIndexer(database); var id = indexer.Register(Root); var first = indexer.Index(id);
         using (var connection = database.Open())
-        using (var command = connection.CreateCommand()) { command.CommandText = "UPDATE contexts SET options_json='{}'"; command.ExecuteNonQuery(); }
+        using (var command = connection.CreateCommand()) { command.CommandText = "UPDATE contexts SET options_json=json_remove(options_json,'$.snapshotHash')"; command.ExecuteNonQuery(); }
         var reconciled = indexer.Index(id); Assert.False(reconciled.Changed); Assert.Equal(first.Generation, reconciled.Generation);
         Assert.Equal(1, Count(database, "SELECT count(*) FROM contexts WHERE length(json_extract(options_json,'$.snapshotHash'))=71"));
         Assert.False(indexer.Index(id).Changed); Assert.Empty(database.Check());

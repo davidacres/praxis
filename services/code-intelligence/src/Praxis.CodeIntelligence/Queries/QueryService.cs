@@ -74,7 +74,7 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
             inferenceStart = measurement?.Elapsed.TotalMilliseconds ?? 0;
             ModelQuery? embedded = null;
             if ((tool is "search_code" or "search_knowledge") && Text(arguments, "mode") != "lexical" && models is not null)
-                try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken); }
+                try { embedded = models.QueryEmbedding(repositoryId, Text(arguments, "query")!, cancellationToken, tool == "search_code" && Text(arguments, "mode") == "vector"); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or Microsoft.ML.OnnxRuntime.OnnxRuntimeException)
                 { cancellationToken.ThrowIfCancellationRequested(); /* Hybrid degrades to lexical; vector returns MODEL_UNAVAILABLE below. */ }
             inferenceEnd = measurement?.Elapsed.TotalMilliseconds ?? 0;

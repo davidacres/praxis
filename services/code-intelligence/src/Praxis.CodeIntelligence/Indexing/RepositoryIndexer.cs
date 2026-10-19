@@ -327,9 +327,12 @@ public sealed class RepositoryIndexer(IndexDatabase database)
                 if (curHash != doc.ContentHash) { docsUnchanged = false; break; }
             }
         }
-        if (!force && oldHash == newHash && docsUnchanged && repository.Generation > 0)
+        var representationFormatCurrent = Convert.ToInt64(connection.Scalar(transaction,
+            "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND COALESCE(json_extract(c.options_json,'$.representationFormat'),0)!=$1",
+            id, RepresentationBuilder.FormatVersion)) == 0;
+        if (!force && oldHash == newHash && docsUnchanged && repository.Generation > 0 && representationFormatCurrent)
         {
-            connection.Execute(transaction, "UPDATE contexts SET options_json=$0 WHERE project_id IN(SELECT project_id FROM projects WHERE repository_id=$1)", JsonSerializer.Serialize(new { snapshotHash }), id);
+            connection.Execute(transaction, "UPDATE contexts SET options_json=$0 WHERE project_id IN(SELECT project_id FROM projects WHERE repository_id=$1)", JsonSerializer.Serialize(new { snapshotHash, representationFormat = RepresentationBuilder.FormatVersion }), id);
             connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), id);
             cancellationToken.ThrowIfCancellationRequested(); transaction.Commit(); return new(id, repository.Generation, sources.Count, analysis.Symbols.Count, false);
         }
@@ -411,7 +414,7 @@ public sealed class RepositoryIndexer(IndexDatabase database)
             batch.Execute("INSERT INTO projects VALUES($0,$1,$2,$3,$4) ON CONFLICT(project_id) DO UPDATE SET relative_path=excluded.relative_path,language=excluded.language", projectId, id, context.Key, context.ProjectPath, context.Language);
             batch.Execute("INSERT INTO contexts(context_id,project_id,slot_key,context_hash,api_hash,adapter_version,options_json,desired_revision,published_revision,state,resolution,capabilities_json) VALUES($0,$1,$2,$3,$3,$7,$8,$4,$4,'ready',$5,$6) ON CONFLICT(context_id) DO UPDATE SET context_hash=excluded.context_hash,api_hash=excluded.api_hash,adapter_version=excluded.adapter_version,options_json=excluded.options_json,desired_revision=excluded.desired_revision,published_revision=excluded.published_revision,state=excluded.state,resolution=excluded.resolution,capabilities_json=excluded.capabilities_json",
                 context.Id, projectId, context.Key, context.Hash, generation, context.Resolution,
-                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), context.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash }));
+                JsonSerializer.Serialize(context.Resolution == "syntaxOnly" ? new[] { "declarations", "lexical" } : new[] { "declarations", "lexical", "calls", "references", "accesses", "typeDependencies" }), context.AdapterVersion, JsonSerializer.Serialize(new { snapshotHash, representationFormat = RepresentationBuilder.FormatVersion }));
             foreach (var source in context.Sources)
                 batch.Execute("INSERT INTO context_files VALUES($0,$1,$2,$3) ON CONFLICT(context_id,file_id) DO UPDATE SET analysed_hash=excluded.analysed_hash,generation=excluded.generation", context.Id, fileIds[source.Path], source.Hash, generation);
         }
@@ -534,8 +537,8 @@ public sealed class RepositoryIndexer(IndexDatabase database)
         }
         var total = Convert.ToInt64(connection.Scalar(transaction, "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0", repository.Id));
         var matching = Convert.ToInt64(connection.Scalar(transaction,
-            "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND c.adapter_version IN($1,$2) AND json_extract(c.options_json,'$.snapshotHash')=$3",
-            repository.Id, RoslynAnalyzer.AdapterVersion, TypeScriptAnalyzer.AdapterVersion, snapshotHash));
+            "SELECT count(*) FROM contexts c JOIN projects p ON p.project_id=c.project_id WHERE p.repository_id=$0 AND c.adapter_version IN($1,$2) AND json_extract(c.options_json,'$.snapshotHash')=$3 AND json_extract(c.options_json,'$.representationFormat')=$4",
+            repository.Id, RoslynAnalyzer.AdapterVersion, TypeScriptAnalyzer.AdapterVersion, snapshotHash, RepresentationBuilder.FormatVersion));
         if (total == 0 || total != matching) return null;
         var symbols = Convert.ToInt32(connection.Scalar(transaction, "SELECT count(*) FROM symbols WHERE repository_id=$0", repository.Id));
         connection.Execute(transaction, "UPDATE repositories SET state='ready',last_reconciled_utc=$0 WHERE repository_id=$1", DateTimeOffset.UtcNow.ToString("O"), repository.Id);

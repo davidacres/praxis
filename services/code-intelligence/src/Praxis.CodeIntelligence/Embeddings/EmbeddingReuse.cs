@@ -27,6 +27,7 @@ internal static class EmbeddingReuse
             "AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks " +
             "ORDER BY e.symbol_id,e.model_fingerprint,v.chunk_index", repositoryId, profile);
         using var reader = command.ExecuteReader(); var invalid = new HashSet<(string, string)>();
+        var headerSets = new HashSet<(string, string)>();
         while (reader.Read())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -41,8 +42,10 @@ internal static class EmbeddingReuse
                 // Older metadata without separate token/input truncation is re-inferred.
                 var tokenSpan = new TokenizedChunk([], span["Start"]!.GetValue<int>(), span["End"]!.GetValue<int>(),
                     span["FirstToken"]!.GetValue<int>(), span["EndToken"]!.GetValue<int>(), span["TokenTruncated"]!.GetValue<bool>());
+                if (reader.GetInt32(4) == 0 && span["SemanticHeader"]?.GetValue<bool>() == true) headerSets.Add(key);
+                var sourceChunk = reader.GetInt32(4) - (headerSets.Contains(key) && reader.GetInt32(4) > 0 ? 1 : 0);
                 if (span["CoordinateBasis"]?.GetValue<string>() != "utf16"
-                    || tokenSpan.FirstToken != reader.GetInt32(4) * 254
+                    || tokenSpan.FirstToken != sourceChunk * 254
                     || tokenSpan.Start < 0 || tokenSpan.End < tokenSpan.Start || tokenSpan.FirstToken < 0
                     || tokenSpan.EndToken < tokenSpan.FirstToken || tokenSpan.EndToken - tokenSpan.FirstToken > 254
                     || span["RepresentationHash"]!.GetValue<string>() != reader.GetString(3)) throw new ArgumentException("Invalid cached span.");
@@ -70,6 +73,10 @@ internal static class EmbeddingReuse
         CancellationToken cancellationToken, SqlBatch batch, bool retain = false)
     {
         if (captured.Count == 0) return;
+        var languages = analysis.Contexts.ToDictionary(context => context.Id, context => context.Language, StringComparer.Ordinal);
+        var headers = SemanticHeaderBuilder.Build(analysis.Symbols.Where(symbol => !symbol.External).Select(symbol =>
+            new SemanticHeaderSymbol(symbol.Id, symbol.Name, symbol.QualifiedName, symbol.Signature, symbol.Kind, symbol.Documentation, languages.GetValueOrDefault(symbol.ContextId, "unknown"))),
+            analysis.Calls.Concat(analysis.Relationships).Where(call => call.Kind == "calls" && call.Resolution == "resolved" && call.TargetId is not null).Select(call => (call.OwnerId, call.TargetId!)));
         var byPath = sources.ToDictionary(source => source.Path, StringComparer.Ordinal);
         var bySymbol = captured.Values.ToLookup(set => set.SymbolId, StringComparer.Ordinal);
         foreach (var symbol in analysis.Symbols.Where(symbol => !symbol.External))
@@ -79,7 +86,7 @@ internal static class EmbeddingReuse
             var location = symbol.Locations.OrderBy(location => location.FilePath, StringComparer.Ordinal).ThenBy(location => location.Start).FirstOrDefault();
             var source = location is null ? null : byPath[location.FilePath];
             var representation = RepresentationBuilder.Build(symbol.QualifiedName, symbol.Signature, symbol.Documentation,
-                $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}", source, location?.Start ?? 0, location?.End ?? 0);
+                $"{symbol.Kind} {symbol.QualifiedName}. {symbol.Signature}", source, location?.Start ?? 0, location?.End ?? 0, headers.GetValueOrDefault(symbol.Id));
             foreach (var cached in bySymbol[symbol.Id])
             {
                 if (cached.Hash != representation.Hash || cached.Chunks.Any(chunk => chunk.Span.End > representation.Text.Length)) continue;

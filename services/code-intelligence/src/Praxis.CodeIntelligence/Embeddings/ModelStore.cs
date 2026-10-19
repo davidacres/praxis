@@ -6,7 +6,7 @@ using Praxis.CodeIntelligence.Storage;
 
 namespace Praxis.CodeIntelligence.Embeddings;
 
-public sealed record ModelQuery(string Fingerprint, float[] Vector);
+public sealed record ModelQuery(string Fingerprint, float[] Vector, bool HasSemanticHeaders = false, IReadOnlyList<ModelQuery>? AlternateViews = null);
 public sealed record VectorCandidate(string SymbolId, double Score);
 
 public sealed class ModelStore(IndexDatabase database, string directory) : IDisposable
@@ -90,6 +90,18 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         // however activation was started (queued job or direct call). Not result-affecting.
         using (var connection = database.Open())
             connection.Execute(null, "INSERT INTO repository_models VALUES($0,$1,'building',NULL) ON CONFLICT(repository_id,model_fingerprint) DO NOTHING", repositoryId, fingerprint);
+        IReadOnlyDictionary<string, string> headers;
+        using (var read = database.Open(readOnly: true))
+        {
+            var symbols = new List<SemanticHeaderSymbol>();
+            using (var command = read.Command(null, "SELECT s.symbol_id,s.name,s.qualified_name,s.signature,s.kind,d.documentation,p.language FROM symbols s JOIN search_documents d ON d.symbol_id=s.symbol_id JOIN contexts c ON c.context_id=s.defining_context_id JOIN projects p ON p.project_id=c.project_id WHERE s.repository_id=$0 AND s.external=0", repositoryId))
+            using (var reader = command.ExecuteReader())
+                while (reader.Read()) symbols.Add(new(reader.GetString(0),reader.GetString(1),reader.GetString(2),reader.GetString(3),reader.GetString(4),reader.GetString(5),reader.GetString(6)));
+            var calls = new List<(string,string)>();
+            using (var command = read.Command(null, "SELECT DISTINCT e.source_symbol_id,e.target_symbol_id FROM edges e JOIN symbols s ON s.symbol_id=e.source_symbol_id WHERE s.repository_id=$0 AND e.kind='calls' AND e.resolution='resolved' ORDER BY e.source_symbol_id,e.target_symbol_id", repositoryId))
+            using (var reader = command.ExecuteReader()) while (reader.Read()) calls.Add((reader.GetString(0),reader.GetString(1)));
+            headers = SemanticHeaderBuilder.Build(symbols,calls);
+        }
         var inputs = new List<(string Id, string Revision, SymbolRepresentation Representation, string? Path)>();
         SourceInput? lastSource = null;
         var observedSources = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -109,7 +121,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
                     observedSources[path] = source.Hash;
                 }
                 var representation = RepresentationBuilder.Build(reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5),
-                    source, source is null ? 0 : reader.GetInt32(8), source is null ? 0 : reader.GetInt32(9));
+                    source, source is null ? 0 : reader.GetInt32(8), source is null ? 0 : reader.GetInt32(9), headers.GetValueOrDefault(reader.GetString(0)));
                 inputs.Add((reader.GetString(0), reader.GetString(1), representation, source?.Path));
                 if (inputs.Count > 50_000) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             }
@@ -172,6 +184,7 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             committed += pending.Count; pending.Clear();
             BatchCommitted?.Invoke(committed);
         }
+        var headerCache = new Dictionary<string, EmbeddedChunk>(StringComparer.Ordinal);
         foreach (var input in inputs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -180,9 +193,21 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             // Complete validated current sets require neither inference nor derivative rewrites.
             // Compare exact regenerated source metadata so corrupt/stale spans are still repaired.
             if (current && cached!.Chunks.All(chunk => chunk.Metadata == RepresentationBuilder.ChunkMetadata(input.Representation, chunk.Span))) continue;
-            var chunks = current
-                ? cached!.Chunks.Select(chunk => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span)).ToArray()
-                : model.EmbedDetailedRepresentation(input.Representation.Text, cancellationToken);
+            IReadOnlyList<EmbeddedChunk> chunks;
+            if (current) chunks = cached!.Chunks.Select(chunk => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span)).ToArray();
+            else if (cached is not null && cached.Hash == input.Representation.SourceViewHash && cached.Revision == input.Revision
+                && cached.Chunks.All(chunk => chunk.Span.End <= input.Representation.Text.Length - input.Representation.SourceViewStart))
+            {
+                // Reuse an unchanged, validated legacy source view when adding a
+                // semantic header. Never reuse vectors from a different body/hash.
+                var text = input.Representation.Text[..input.Representation.SemanticHeaderLength];
+                if (!headerCache.TryGetValue(text, out var header)) headerCache[text] = header = model.EmbedSemanticHeader(input.Representation, cancellationToken);
+                var offset = input.Representation.SourceViewStart;
+                chunks = new[] { header }.Concat(cached.Chunks.Take(3).Select((chunk,index) => new EmbeddedChunk(EmbeddingReuse.Decode(chunk.Values), chunk.Span with {
+                    Start = chunk.Span.Start + offset, End = chunk.Span.End + offset,
+                    Truncated = chunk.Span.Truncated || index == 2 && cached.Chunks.Count > 3 }))).ToArray();
+            }
+            else chunks = model.EmbedDetailedRepresentation(input.Representation, cancellationToken);
             foreach (var chunk in chunks) LocalModel.ValidateVector(chunk.Vector);
             pending.Add((input.Id, input.Revision, input.Representation, chunks, input.Path));
             if (pending.Count >= VectorCommitBatchSize) Commit(final: false);
@@ -326,14 +351,19 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             .ToList();
     }
 
-    public ModelQuery? QueryEmbedding(string repositoryId, string query, CancellationToken cancellationToken)
+    public ModelQuery? QueryEmbedding(string repositoryId, string query, CancellationToken cancellationToken, bool includeSemanticViews = false)
     {
         using var connection = database.Open(readOnly: true);
         var profile = connection.Scalar(null, "SELECT model_fingerprint FROM repository_models WHERE repository_id=$0 AND state='active'", repositoryId) as string;
         if (profile is null) return null;
         lock (queryLock)
         {
-            return new(profile, Shared(profile).EmbedQuery(query, cancellationToken));
+            var hasHeaders = connection.Scalar(null, "SELECT 1 FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN symbols s ON s.symbol_id=e.symbol_id WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND e.state='ready' AND v.chunk_index=0 AND json_valid(v.spans_json) AND json_extract(v.spans_json,'$.SemanticHeader')=1 LIMIT 1", repositoryId, profile) is not null;
+            var model = Shared(profile);
+            var first = new ModelQuery(profile, model.EmbedQuery(query, cancellationToken), hasHeaders);
+            if (!includeSemanticViews || !hasHeaders) return first;
+            var alternatives = SemanticQueryViews.Create(query).Skip(1).Select(text => new ModelQuery(profile, model.EmbedQuery(text, cancellationToken), hasHeaders)).ToArray();
+            return first with { AlternateViews = alternatives };
         }
     }
 
@@ -359,6 +389,28 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
     {
         cancellationToken.ThrowIfCancellationRequested();
         LocalModel.ValidateVector(query.Vector);
+        if (query.AlternateViews is { Count: > 0 })
+        {
+            var scores = new Dictionary<string,double>(StringComparer.Ordinal);
+            var views = new[] { query with { AlternateViews = null } }.Concat(query.AlternateViews).ToArray();
+            // Header/source searches use the same validated rows for every query
+            // view. Share that scan while retaining each view's exact top-100.
+            var sharedRankings = views.All(view => view.HasSemanticHeaders && view.Fingerprint == query.Fingerprint && view.AlternateViews is null)
+                ? ExhaustiveCandidateViews(connection, transaction, repositoryId, views, contextId, kinds, projectIds, cancellationToken, maximumChunks, languages)
+                : null;
+            for (var view = 0; view < views.Length; view++)
+            {
+                var viewRanking = sharedRankings is not null ? sharedRankings[view]
+                    : CandidatesCore(connection, transaction, repositoryId, views[view], contextId, kinds, projectIds, cancellationToken, maximumChunks, validationWindow, languages);
+                for (var rank = 0; rank < viewRanking.Count; rank++)
+                {
+                    var id = viewRanking[rank].SymbolId;
+                    scores[id] = scores.GetValueOrDefault(id) + (view == 0 ? 2.0 : 1.0) / (5 + rank + 1);
+                }
+            }
+            return scores.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal).Take(100).Select(pair => new VectorCandidate(pair.Key,pair.Value)).ToArray();
+        }
+        if (query.HasSemanticHeaders) return ExhaustiveCandidates(connection, transaction, repositoryId, query, contextId, kinds, projectIds, cancellationToken, maximumChunks, languages);
         var window = new VectorTopCandidates(Math.Clamp(validationWindow, 100, VectorTopCandidates.MaximumCapacity));
         var scanned = 0; var bytes = new byte[LocalModel.Dimensions * 4];
         // The score pass has no repository predicate (that needs the symbols join
@@ -456,10 +508,14 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
             throw new SqliteException(SQLitePCL.raw.sqlite3_errmsg(handle).utf8_to_string(), code);
     }
 
-    internal static IReadOnlyList<VectorCandidate> ExhaustiveCandidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, IReadOnlyList<string>? languages = null)
+    internal static IReadOnlyList<VectorCandidate> ExhaustiveCandidates(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, ModelQuery query, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken = default, int maximumChunks = 200_000, IReadOnlyList<string>? languages = null) =>
+        ExhaustiveCandidateViews(connection, transaction, repositoryId, [query], contextId, kinds, projectIds, cancellationToken, maximumChunks, languages)[0];
+
+    private static IReadOnlyList<VectorCandidate>[] ExhaustiveCandidateViews(SqliteConnection connection, SqliteTransaction transaction, string repositoryId, IReadOnlyList<ModelQuery> queries, string? contextId, IReadOnlyList<string>? kinds, IReadOnlyList<string>? projectIds, CancellationToken cancellationToken, int maximumChunks, IReadOnlyList<string>? languages)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        LocalModel.ValidateVector(query.Vector); var parameters = new List<object?> { repositoryId, query.Fingerprint, contextId };
+        foreach (var query in queries) LocalModel.ValidateVector(query.Vector);
+        var parameters = new List<object?> { repositoryId, queries[0].Fingerprint, contextId };
         var filter = "";
         foreach (var (column, values) in new[] { ("s.kind", kinds), ("c.project_id", projectIds) })
         {
@@ -477,19 +533,39 @@ public sealed class ModelStore(IndexDatabase database, string directory) : IDisp
         // project filtering needs the context row during the exhaustive scan.
         var contextJoin = projectIds is { Count: > 0 } ? " JOIN contexts c ON c.context_id=s.defining_context_id" : "";
         using var command = connection.Command(transaction,
-            "SELECT s.symbol_id,v.values_blob FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id" + contextJoin + " WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND v.dimensions=384 AND length(v.values_blob)=1536 AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
-        using var reader = command.ExecuteReader(); var scores = new VectorTopCandidates(); var scanned = 0;
+            "SELECT s.symbol_id,v.values_blob,CASE WHEN v.chunk_index=0 AND json_valid(v.spans_json) THEN COALESCE(json_extract(v.spans_json,'$.SemanticHeader'),0) ELSE 0 END FROM vectors v JOIN embedding_sets e ON e.set_id=v.set_id JOIN representation_targets r ON r.symbol_id=e.symbol_id AND r.model_fingerprint=e.model_fingerprint JOIN symbols s ON s.symbol_id=e.symbol_id" + contextJoin + " WHERE s.repository_id=$0 AND e.model_fingerprint=$1 AND ($2 IS NULL OR s.defining_context_id=$2) AND e.state='ready' AND e.input_revision=s.revision AND r.input_revision=s.revision AND r.representation_hash=e.representation_hash AND r.eligibility='eligible' AND v.dimensions=384 AND length(v.values_blob)=1536 AND (SELECT count(*) FROM vectors complete WHERE complete.set_id=e.set_id)=e.expected_chunks" + filter, parameters.ToArray());
+        using var reader = command.ExecuteReader(); var scanned = 0;
+        var scores = queries.Select(_ => new VectorTopCandidates()).ToArray();
+        var views = queries.Select(_ => new Dictionary<string,(double Header,double Source)>(StringComparer.Ordinal)).ToArray();
         var bytes = new byte[LocalModel.Dimensions * 4];
         while (reader.Read())
         {
             if (++scanned > maximumChunks) throw new InvalidOperationException("VECTOR_CAPACITY_EXCEEDED");
             if ((scanned & 127) == 0) cancellationToken.ThrowIfCancellationRequested();
             if (reader.GetBytes(1, 0, bytes, 0, bytes.Length) != bytes.Length) continue;
-            if (!VectorScoring.TryScore(bytes, query.Vector, out var score)) continue;
-            if (scores.CanImprove(score)) scores.Add(reader.GetString(0), score);
+            var id = reader.GetString(0);
+            var isHeader = reader.GetInt64(2) == 1;
+            for (var index = 0; index < queries.Count; index++)
+            {
+                if (!VectorScoring.TryScore(bytes, queries[index].Vector, out var score)) continue;
+                if (queries[index].HasSemanticHeaders)
+                {
+                    (double Header,double Source) previous = views[index].GetValueOrDefault(id,(double.NegativeInfinity,double.NegativeInfinity));
+                    views[index][id] = isHeader ? (score,previous.Source) : (previous.Header,Math.Max(previous.Source,score));
+                }
+                else if (scores[index].CanImprove(score)) scores[index].Add(id, score);
+            }
         }
         cancellationToken.ThrowIfCancellationRequested();
-        return scores.Results();
+        for (var index = 0; index < queries.Count; index++)
+        {
+            foreach (var (id,view) in views[index])
+            {
+                var score = double.IsFinite(view.Header) && double.IsFinite(view.Source) ? (view.Header + view.Source) / 2 : view.Source;
+                if (double.IsFinite(score) && scores[index].CanImprove(score)) scores[index].Add(id,score);
+            }
+        }
+        return scores.Select(score => score.Results()).ToArray();
     }
     public void Dispose() { lock (queryLock) { cached?.Dispose(); cached = null; cachedFingerprint = null; foreach (var old in retired) old.Dispose(); retired.Clear(); } }
 }

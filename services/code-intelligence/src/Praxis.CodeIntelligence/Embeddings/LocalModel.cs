@@ -80,6 +80,19 @@ public sealed class LocalModel : IDisposable
     public IReadOnlyList<float[]> EmbedRepresentation(string text, CancellationToken cancellationToken) => EmbedDetailedRepresentation(text, cancellationToken).Select(chunk => chunk.Vector).ToArray();
     public IReadOnlyList<EmbeddedChunk> EmbedDetailedRepresentation(string text, CancellationToken cancellationToken) =>
         tokenizer.EncodeDetailed(text).Select(chunk => new EmbeddedChunk(Embed(chunk.Tokens, cancellationToken), chunk)).ToArray();
+    public EmbeddedChunk EmbedSemanticHeader(SymbolRepresentation representation, CancellationToken cancellationToken)
+    {
+        var span = tokenizer.EncodeDetailed(representation.Text[..representation.SemanticHeaderLength], maximumChunks: 1)[0];
+        return new(Embed(span.Tokens, cancellationToken), span);
+    }
+    public IReadOnlyList<EmbeddedChunk> EmbedDetailedRepresentation(SymbolRepresentation representation, CancellationToken cancellationToken)
+    {
+        if (representation.SemanticHeaderLength == 0) return EmbedDetailedRepresentation(representation.Text, cancellationToken);
+        var chunks = new List<EmbeddedChunk> { EmbedSemanticHeader(representation, cancellationToken) };
+        foreach (var span in tokenizer.EncodeDetailed(representation.Text[representation.SourceViewStart..], maximumChunks: 3))
+            chunks.Add(new(Embed(span.Tokens, cancellationToken), span with { Start = span.Start + representation.SourceViewStart, End = span.End + representation.SourceViewStart }));
+        return chunks;
+    }
     private float[] Embed(long[] tokens, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
