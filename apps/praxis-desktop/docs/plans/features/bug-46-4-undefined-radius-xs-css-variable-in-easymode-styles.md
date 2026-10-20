@@ -1,5 +1,5 @@
 ---
-**Status:** Backlog
+**Status:** Done
 **Created:** 2026-10-08T18:35:00.000Z
 **Type:** Bug
 **Priority:** Low
@@ -7,8 +7,8 @@
 **Reported By:** Dave Acres
 id: FX-BG-049
 title: Undefined --radius-xs CSS variable used in EasyMode styles
-status: Backlog
-updated: 2026-10-08
+status: Done
+updated: 2026-10-20
 ---
 
 # [P3] Undefined --radius-xs CSS variable used in EasyMode styles
@@ -25,9 +25,9 @@ While some usages provide a hardcoded fallback (`var(--radius-xs, 4px)`), others
 
 **Acceptance criteria**
 
-- [ ] `--radius-xs` is declared on `:root` (e.g. `calc(3px * var(--ui-scale))` or aligned with design guidelines) or normalized to an existing radius token.
-- [ ] No usages of `var(--radius-xs)` fail to resolve.
-- [ ] Controls using the token scale properly under `[data-display-size='large']`.
+- [x] `--radius-xs` is declared on `:root` (e.g. `calc(3px * var(--ui-scale))` or aligned with design guidelines) or normalized to an existing radius token.
+- [x] No usages of `var(--radius-xs)` fail to resolve.
+- [x] Controls using the token scale properly under `[data-display-size='large']`.
 
 ## Investigation state
 
@@ -67,5 +67,4 @@ Radius tokens are consistently declared and respond to display scale settings.
 None.
 
 ## Comments
-
-
+**2026-10-20:** Fixed. `--radius-xs: calc(4px * var(--ui-scale))` is declared on `:root` next to `--radius-sm`. Rules with a `3px` literal fallback now use 4px (a 1px change); the rule with no fallback (`.wf-timeline-attempt-badge`) is rounded again, and every use now scales with the display size. `e2e/cssTokens.spec.ts` measures the resolved radius.

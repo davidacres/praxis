@@ -15,11 +15,15 @@
      Code's macOS terminal rather than the app's denser code-label font. */
   --terminal-font: Menlo, Monaco, 'SF Mono', 'Courier New', monospace;
 
+  --radius-xs: calc(4px * var(--ui-scale));
   --radius-sm: calc(4px * var(--ui-scale));
   --radius-md: calc(6px * var(--ui-scale));
   --radius-lg: calc(10px * var(--ui-scale));
   --radius-xl: calc(14px * var(--ui-scale));
   --radius-pill: 999px;
+
+  /* Resolved on the root element, so every [data-theme] / [data-mode] --border override flows through. */
+  --border-subtle: var(--border);
 
   --space-1: calc(4px * var(--ui-scale));
   --space-2: calc(8px * var(--ui-scale));

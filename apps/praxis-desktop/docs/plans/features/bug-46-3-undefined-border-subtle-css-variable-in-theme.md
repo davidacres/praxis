@@ -1,5 +1,5 @@
 ---
-**Status:** Backlog
+**Status:** Done
 **Created:** 2026-10-08T18:35:00.000Z
 **Type:** Bug
 **Priority:** Low
@@ -7,8 +7,8 @@
 **Reported By:** Dave Acres
 id: FX-BG-048
 title: Undefined --border-subtle CSS variable used across desktop stylesheets
-status: Backlog
-updated: 2026-10-08
+status: Done
+updated: 2026-10-20
 ---
 
 # [P3] Undefined --border-subtle CSS variable used across desktop stylesheets
@@ -23,9 +23,9 @@ The CSS variable `--border-subtle` is referenced 22 times across `apps/praxis-de
 
 **Acceptance criteria**
 
-- [ ] `--border-subtle` is formally defined in `:root` and `[data-mode]` blocks in `theme.css`, or replaced with valid design tokens.
-- [ ] No occurrences of `var(--border-subtle)` remain unresolvable.
-- [ ] Borders in EasyMode sidebar (`.easymode-section--runs`), usage overview, and workflow timeline render with consistent themed subtlety.
+- [x] `--border-subtle` is formally defined in `:root` and `[data-mode]` blocks in `theme.css`, or replaced with valid design tokens.
+- [x] No occurrences of `var(--border-subtle)` remain unresolvable.
+- [x] Borders in EasyMode sidebar (`.easymode-section--runs`), usage overview, and workflow timeline render with consistent themed subtlety.
 
 ## Investigation state
 
@@ -62,5 +62,4 @@ All theme border variables resolve to coherent design system colors.
 None.
 
 ## Comments
-
-
+**2026-10-20:** Fixed. `--border-subtle` is declared on `:root` in `theme.css` as an alias of `--border`. Every `[data-theme]` / `[data-mode]` block overrides `--border` on the same root element, so the subtle border follows each palette. Rules that already had a `var(--border)` fallback are unchanged; the ones with no fallback now get a border, and the few that fell back to `rgba(255,255,255,.08)` now use the themed border. Guarded by `e2e/cssTokens.spec.ts` (light, dark and a named palette). The screenshot specs for the shell, projects, workflow themes, marketplace and workflow designer still pass.
