@@ -146,7 +146,7 @@ and Electron integration. Last audited: 2026-09-15.
 | Theme-aware right-pane surfaces | ✓ | All panes inherit active theme; no opacity/fallback |
 | Status/connection indicator | ✓ | `ConnectionStatusDot.tsx` on each non-demo sidebar connection group, fed by `connection.check` |
 | Output / log panel | ✓ | Bottom panel with Output (terminal) tab; Application tab planned |
-| Application logs | ✓ | Output tab tails the shared log bus (`[ai]`, `[jira]`, `[gitlab]`, `[workflow]` tags); 500-line ring buffer, no search/export/persistence across restarts (FX-BE-041) |
+| Application logs | ✓ | Output tab tails the shared log bus (`[ai]`, `[jira]`, `[gitlab]`, `[workflow]` tags). Filter box (terms ANDed, case-insensitive, tags searchable), copy, save as a file, clear view. History survives a restart: main appends to `<userData>/logs/application.log` (one JSON string per line, rotated once past 1 MB) and seeds the 500-line ring from it, with a `previous session above` marker (FX-BE-041) |
 | Native window chrome | ✓ | Electron default frame; settings option to hide |
 | Auto-update | ✓ | Signed, notarized builds (FX-BE-034; blocked on credentials) |
 | Installer packaging | ✓ | DMG (Mac), MSI (Windows), AppImage (Linux) |
@@ -156,8 +156,8 @@ and Electron integration. Last audited: 2026-09-15.
 Largest unfinished items, ordered by adoption impact:
 
 1. **Signed builds & auto-update** (FX-BE-034) — "try Praxis" currently means "maintain a local build." Blocked on code-signing credentials.
-2. **Multi-file / terminal agent proof** (FX-BE-036) — the ticket-to-agent flow is scripted-proven only for single-file, no-shell edits.
-3. **Application logs — search/export/persistence** — Output tab tails the log bus live (FX-BE-041); still a 500-line in-memory ring buffer with no history across restarts.
+2. ~~Multi-file / terminal agent proof~~ (FX-BE-036) — shipped: live coverage for a multi-file change and shell use landed in `8a52f794` (this line was stale).
+3. ~~Application logs — search/export/persistence~~ — shipped 2026-10-20 (see the Application logs row).
 
 **Shipped since the last audit: GitHub real backend** (FX-BE-035) — `GitHubBoardService`
 in core, wired through `serviceRegistry.ts`'s `case 'github'`. One repository is one

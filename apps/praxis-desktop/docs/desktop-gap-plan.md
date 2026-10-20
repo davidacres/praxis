@@ -60,9 +60,9 @@ after, confirming the addition is structurally isolated
 
 #### FX-BE-036 — Prove multi-file and terminal-using agent paths
 
-**Status:** Planned. **Priority:** P2 (proof of capability)
+**Status:** Shipped (`8a52f794`: live multi-file and shell-use tasks). **Priority:** P2 (proof of capability)
 
-The ticket-to-agent flow is proven only for single-file, no-shell edits
+Originally the ticket-to-agent flow was proven only for single-file, no-shell edits
 (scripted e2e without model calls). Needs: a multi-file fixture and a shell-command
 fixture, both in the normal suite. Unblocks confidence that delivery workflows can
 do real work.
@@ -87,7 +87,7 @@ tracker's own workflow). Full detail in `docs/PLAN_MAP.md`.
 
 | Gap | Work | Why |
 |---|---|---|
-| Application logs — search/export/persistence | The Output tab already tails the shared log bus live (ai/jira/gitlab/workflow tags, FX-BE-041); still a 500-line in-memory ring buffer with no search, export, or persistence across restarts. | Debugging an issue from days ago still needs file-system access. |
+| ~~Application logs — search/export/persistence~~ | Shipped 2026-10-20: filter, copy, save and clear in the Output tab; history persisted to `<userData>/logs/application.log` and reloaded on start. | — |
 
 **Corrected in this pass:** connection status indicator (`ConnectionStatusDot.tsx`
 on each sidebar connection group) and issue details peek in sidebar
