@@ -85,6 +85,48 @@ test('output tab streams lines appended while it is open', async () => {
   await expect(win.locator('[data-testid="output-log"]')).toContainText('[ai]');
 });
 
+test('output tab filters, copies and clears the log', async () => {
+  app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
+  const win = app.window;
+
+  await win.locator('[aria-label="Toggle panel"]').click();
+  await win.locator('[data-testid="panel-tab-output"]').click();
+  const output = win.locator('[data-testid="output-log"]');
+  await expect(output).toContainText('[app]');
+
+  // Terms are ANDed and case-insensitive; the [tag] prefix is searchable.
+  await win.locator('[data-testid="output-filter"]').fill('STARTED [app]');
+  await expect(output).toContainText('started');
+  await win.locator('[data-testid="output-filter"]').fill('no-such-line-anywhere');
+  await expect(win.locator('[data-testid="output-no-match"]')).toBeVisible();
+  await expect(win.locator('[data-testid="output-copy"]')).toBeDisabled();
+
+  await win.locator('[data-testid="output-filter"]').fill('');
+  await expect(output).toContainText('[app]');
+  await win.locator('[data-testid="output-clear"]').click();
+  await expect(output).toContainText('No output yet.');
+});
+
+test('output history survives a restart', async () => {
+  app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
+  await app.window.locator('[aria-label="Toggle panel"]').click();
+  await app.window.locator('[data-testid="panel-tab-output"]').click();
+  await expect(app.window.locator('[data-testid="output-log"]')).toContainText('started');
+  // Let the serialised file writer flush before the process goes away.
+  await app.window.waitForTimeout(500);
+
+  const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+  app = await launchTestApp(undefined, reuse, { ...NO_GATEWAY_ENV });
+
+  // The panel's open state is remembered across launches; only open it if it is shut.
+  if (await app.window.locator('[data-testid="panel-tab-output"]').count() === 0) {
+    await app.window.locator('[aria-label="Toggle panel"]').click();
+  }
+  await app.window.locator('[data-testid="panel-tab-output"]').click();
+  await expect(app.window.locator('[data-testid="output-log"]')).toContainText('previous session above');
+});
+
 test('selecting an issue pins a peek card above the sidebar footer', async () => {
   app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
   const win = app.window;

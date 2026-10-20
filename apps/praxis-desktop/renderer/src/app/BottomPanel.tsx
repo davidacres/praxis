@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import type { AgentSessionRecord, TerminalCommandRecord, TerminalProfile, TerminalSessionInfo, TerminalSettings } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { filterLogLines } from './logFilter';
 import { getActiveTerminalId, setActiveTerminalId } from '../ai/terminalSelection';
 import { visibleMessageText } from '../ai/gadgets/messageText';
 import { useSettings } from '../settings/useSettings';
@@ -65,6 +66,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
   const terminalSettings = settings?.terminal;
   const [tab, setTab] = useState<PanelTab>('terminal');
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [logFilter, setLogFilter] = useState('');
   const [sessions, setSessions] = useState<TerminalSessionInfo[]>([]);
   const [profiles, setProfiles] = useState<TerminalProfile[]>([]);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -172,9 +174,24 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     return () => { cancelled = true; unsubscribe(); };
   }, []);
 
+  const visibleLogLines = useMemo(() => filterLogLines(logLines, logFilter), [logLines, logFilter]);
+
   useEffect(() => {
     if (tab === 'output' && outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [logLines, tab]);
+  }, [visibleLogLines, tab]);
+
+  const copyLog = () => {
+    void navigator.clipboard?.writeText(visibleLogLines.join('\n')).catch(() => undefined);
+  };
+
+  const saveLog = () => {
+    const url = URL.createObjectURL(new Blob([`${visibleLogLines.join('\n')}\n`], { type: 'text/plain' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `praxis-output-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     const host = terminalHostRef.current;
@@ -296,6 +313,21 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
             className={`panel-tab${tab === entry.id ? ' active' : ''}`} onClick={() => setTab(entry.id)}>{entry.label}</button>
         ))}
         <span className="spacer" />
+        {tab === 'output' && <>
+          <input
+            className="input output-filter"
+            type="search"
+            spellCheck={false}
+            aria-label="Filter output"
+            placeholder="Filter output"
+            data-testid="output-filter"
+            value={logFilter}
+            onChange={event => setLogFilter(event.target.value)}
+          />
+          <button className="icon-btn icon-btn-sm" aria-label="Copy output" data-testid="output-copy" disabled={visibleLogLines.length === 0} onClick={copyLog}><Icon name="copy" size={14} /></button>
+          <button className="icon-btn icon-btn-sm" aria-label="Save output as a file" data-testid="output-save" disabled={visibleLogLines.length === 0} onClick={saveLog}><Icon name="archive" size={14} /></button>
+          <button className="icon-btn icon-btn-sm" aria-label="Clear output" data-testid="output-clear" disabled={logLines.length === 0} onClick={() => setLogLines([])}><Icon name="trash" size={14} /></button>
+        </>}
         {tab === 'terminal' && !terminalDisabledReason && <>
           <Icon name="terminal" size={14} />
           <ChipSelect
@@ -449,7 +481,8 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
           {terminalError && <div className="terminal-error">{terminalError}</div>}</>
         : <div className="output-log" ref={outputRef} data-testid="output-log">
           {logLines.length === 0 ? <div className="panel-empty">No output yet.</div>
-            : logLines.map((line, index) => <div className="output-line" key={index}>{line}</div>)}
+            : visibleLogLines.length === 0 ? <div className="panel-empty" data-testid="output-no-match">No lines match “{logFilter.trim()}”.</div>
+            : visibleLogLines.map((line, index) => <div className="output-line" key={index}>{line}</div>)}
         </div>}
       </div>
     </section>
