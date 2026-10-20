@@ -1519,6 +1519,11 @@ textarea {
   overflow-y: auto;
 }
 
+.output-filter {
+  width: 180px;
+  height: 24px;
+}
+
 .output-line {
   white-space: pre-wrap;
   word-break: break-word;
