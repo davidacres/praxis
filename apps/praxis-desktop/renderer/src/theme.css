@@ -2234,6 +2234,7 @@ textarea {
    .tree-row's 0 left padding), which is what made them read as flush-left
    top-level items instead of children of the project tree. */
 .project-deployments-row { padding-left: var(--tree-indent-1); }
+.project-schedules-row { padding-left: var(--tree-indent-1); }
 /* The project's Run (services) row is a flat leaf like Deployments, so --tree-indent-1. It used to borrow
    .project-run-row — the class for a workflow run *node* (--tree-indent-3) — and sat 12px too deep. */
 .project-service-run-row { padding-left: var(--tree-indent-1); }

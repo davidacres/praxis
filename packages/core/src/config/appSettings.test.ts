@@ -528,6 +528,16 @@ test('preview enableDeployments defaults to false and can be merged', () => {
   assert.equal(merged.preview.enableDeployments, true);
 });
 
+test('preview enableScheduledRuns defaults to false, sanitizes and merges', () => {
+  assert.equal(DEFAULT_APP_SETTINGS.preview.enableScheduledRuns, false);
+  assert.equal(sanitizeAppSettings({}).preview.enableScheduledRuns, false);
+  assert.equal(sanitizeAppSettings({ preview: { enableScheduledRuns: 'yes' } }).preview.enableScheduledRuns, false);
+  assert.equal(sanitizeAppSettings({ preview: { enableScheduledRuns: true } }).preview.enableScheduledRuns, true);
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { preview: { enableScheduledRuns: true } });
+  assert.equal(merged.preview.enableScheduledRuns, true);
+  assert.equal(merged.preview.enableDeployments, false);
+});
+
 test('appearance zoomFactor defaults to 1 and is sanitized and merged within 0.7 - 1.5 limits', () => {
   assert.equal(DEFAULT_APP_SETTINGS.appearance.zoomFactor, 1);
   assert.equal(sanitizeAppSettings({}).appearance.zoomFactor, 1);

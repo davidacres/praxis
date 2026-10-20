@@ -2423,6 +2423,13 @@ function PreviewSection({
         onChange={next => void update({ preview: { enableDeployments: next } })}
         testId="toggle-enable-deployments"
       />
+      <Toggle
+        label="Scheduled runs (experimental)"
+        description="Queue several board tickets in a fixed order for a one-off run at a set time. The schedule can be built and saved, but nothing starts it yet."
+        checked={settings.preview.enableScheduledRuns ?? false}
+        onChange={next => void update({ preview: { enableScheduledRuns: next } })}
+        testId="toggle-enable-scheduled-runs"
+      />
     </>
   );
 }

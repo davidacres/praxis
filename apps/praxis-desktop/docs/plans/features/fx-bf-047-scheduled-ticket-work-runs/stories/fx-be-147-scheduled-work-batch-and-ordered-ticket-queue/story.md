@@ -1,15 +1,15 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-09-29T11:22:33.341Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-147
 title: Scheduled work batch and ordered ticket queue
-status: Backlog
+status: In Progress
 feature: FX-BF-047
-updated: 2026-09-29
-tasks: [TASK-383, TASK-384]
+updated: 2026-10-20
+tasks: [TASK-383, TASK-384, TASK-462]
 dependencies: [FX-BF-040]
 validation: [npm run test:core, npm run test:desktop]
 ---
@@ -41,11 +41,17 @@ decide the exact sequence in which Praxis should attempt the tickets.
   current timezone.
 - A schedule with deleted, inaccessible, or blocked tickets remains visible and
   explains what must be fixed before launch.
+- A schedule is a one-off: one absolute start time, no repeat rule.
+- A schedule whose start passed while Praxis was closed is reported as missed,
+  and only an explicit user choice starts it or skips it.
+- Only board tickets can be queued; an existing session cannot.
 
 ## Task list
 
 - `TASK-383` — Define scheduled run and ordered queue contracts.
-- `TASK-384` — Build ticket picker, start-time, and order editor.
+- `TASK-384` — Build ticket picker, start-time, and order editor (the hopper and
+  belt composer from the v2 design).
+- `TASK-462` — Add the board entry points and the Scheduled runs lineup page.
 
 ## Validation
 
@@ -67,3 +73,4 @@ order, and readiness state after an app restart.
 
 ## Comments
 
+**2026-10-20:** TASK-383 and TASK-384 are done and TASK-462 is in progress (board selection bar outstanding). The close condition — a saved schedule reopened after an app restart with the same start time, ticket list and running order — is covered by `e2e/scheduledRuns.spec.ts`. Readiness is recomputed on every read, so a deleted or unreadable ticket stays visible with its reason. Nothing starts a schedule yet: that is FX-BE-148, and the whole surface stays behind the Scheduled runs preview until it does.

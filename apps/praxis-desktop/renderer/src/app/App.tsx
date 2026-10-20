@@ -76,6 +76,7 @@ import { WorkflowPolicyPage } from '../workflows/WorkflowPolicyPage';
 import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
 import { RunProfileEditor } from '../projects/RunProfileEditor';
 import { DeploymentsPage } from '../deployments/DeploymentsPage';
+import { ScheduledRunsPage } from '../schedule/ScheduledRunsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
@@ -180,7 +181,8 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   workflows: 'Workflows',
   git: 'Git Graph',
   run: 'Run',
-  deployments: 'Deployments'
+  deployments: 'Deployments',
+  schedules: 'Scheduled runs'
 };
 
 const FEATURE_ICONS: Record<FeatureId, IconName> = {
@@ -192,7 +194,8 @@ const FEATURE_ICONS: Record<FeatureId, IconName> = {
   workflows: 'git-branch',
   git: 'git-branch',
   run: 'play',
-  deployments: 'radio-tower'
+  deployments: 'radio-tower',
+  schedules: 'clock'
 };
 
 /** Legacy single-slot key. Still read once per workspace as a fallback so an
@@ -1525,12 +1528,13 @@ export function App() {
     entries.push({ id: 'assistant:toggle', label: 'Ask the virtual team', hint: '⌘J', group: 'Go to', icon: 'sparkles', keywords: 'assistant ai chat tech lead qa security', run: toggleAssistant });
     (Object.keys(FEATURE_TITLES) as FeatureId[]).forEach(feature => {
       if (feature === 'deployments' && !settings?.preview?.enableDeployments) return;
+      if (feature === 'schedules' && !settings?.preview?.enableScheduledRuns) return;
       entries.push({
         id: `feature:${feature}`,
         label: FEATURE_TITLES[feature],
         group: 'Go to',
-        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : feature === 'conversations' ? 'chats' : 'home',
-        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
+        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'schedules' ? 'clock' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : feature === 'conversations' ? 'chats' : 'home',
+        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments' || feature === 'schedules') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
       });
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
@@ -1552,6 +1556,9 @@ export function App() {
       entries.push({ id: `project-run:${project.id}`, label: `${project.name}: Run`, hint: project.key, group: 'Projects', icon: 'server', keywords: 'run profile services launch', run: () => navigate({ projectId: project.id, feature: 'run' }) });
       if (settings?.preview?.enableDeployments) {
         entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
+      }
+      if (settings?.preview?.enableScheduledRuns) {
+        entries.push({ id: `project-schedules:${project.id}`, label: `${project.name}: Scheduled runs`, hint: project.key, group: 'Projects', icon: 'clock', keywords: 'schedule scheduled run queue tickets overnight batch', run: () => navigate({ projectId: project.id, feature: 'schedules' }) });
       }
       entries.push({ id: `runs:${project.id}`, label: `${project.name} · Workflow runs`, hint: 'Browse runs and history', group: 'Workflows', icon: 'play', keywords: 'runs history list workflow archive', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined }) });
       (runsByProjectId[project.id] ?? []).filter(run => !run.archived).forEach(run => {
@@ -2176,7 +2183,7 @@ export function App() {
         />
       );
     }
-    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && route.feature !== 'sessions' && route.feature !== 'conversations' && route.feature !== 'connections' && route.feature !== 'overview') {
+    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && route.feature !== 'schedules' && route.feature !== 'sessions' && route.feature !== 'conversations' && route.feature !== 'connections' && route.feature !== 'overview') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough}
         reviewPanel={<ProjectReviewPanel key={selectedProject.id} project={selectedProject} sessions={agentSessions} request={reviewRequest}
           onOpenPlanFile={relativePath => {
@@ -2280,6 +2287,26 @@ export function App() {
         );
       }
       return <DeploymentsPage project={selectedProject} />;
+    }
+    if (route.feature === 'schedules') {
+      if (!settings?.preview?.enableScheduledRuns) {
+        return (
+          <div className="empty-state" data-testid="schedules-disabled">
+            <Icon name="clock" size={28} />
+            <span>Scheduled runs preview is disabled.</span>
+            <p>Enable Scheduled runs under Settings &gt; Preview to queue tickets for a run at a set time.</p>
+          </div>
+        );
+      }
+      if (!selectedProject) {
+        return (
+          <div className="empty-state" data-testid="schedules-no-project">
+            <Icon name="clock" size={28} />
+            <span>Pick a project to schedule its tickets.</span>
+          </div>
+        );
+      }
+      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} />;
     }
     if (route.feature) {
       return (
@@ -2402,6 +2429,13 @@ export function App() {
     if (!boardDetails) {
       return <div className="empty-state">Loading board…</div>;
     }
+    // The project that owns this board, for the Scheduled runs shortcut: the one in view, else the one linking it.
+    const boardOwnerId = projectIdForConnection(selectedBoard.connectionId, connections);
+    const scheduleProject = settings?.preview?.enableScheduledRuns
+      ? selectedProject
+        ?? workspaceProjects.find(project => project.id === boardOwnerId)
+        ?? workspaceProjects.find(project => project.linkedBoards.some(link => link.boardId === selectedBoard.id && link.connectionId === selectedBoard.connectionId))
+      : undefined;
     // No scroll wrapper: the board's columns own the pane height themselves.
     // Keyed by board id so the filter bar and paging state reset on a board
     // switch instead of leaking the previous board's query into the new one.
@@ -2420,6 +2454,7 @@ export function App() {
         createIssueHint={createIssueHint}
         onIssueMove={onIssueMove}
         onOpenDesigner={() => navigate({ boardId: selectedBoard.id, view: 'designer' })}
+        onScheduleRun={scheduleProject ? () => navigate({ projectId: scheduleProject.id, feature: 'schedules' }) : undefined}
         openSettings={boardSettingsOpenFor === selectedBoard.id}
         onSettingsOpened={() => setBoardSettingsOpenFor(undefined)}
       />
@@ -2806,6 +2841,8 @@ export function App() {
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
                   enableDeployments={settings?.preview?.enableDeployments ?? false}
                   onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
+                  enableScheduledRuns={settings?.preview?.enableScheduledRuns ?? false}
+                  onSelectSchedules={project => navigate({ projectId: project.id, feature: 'schedules' })}
                   onNewWorkflow={project => setNewWorkflowForProject(project.id)}
                   onDeleteWorkflow={async (project, workflowId) => {
                     if (

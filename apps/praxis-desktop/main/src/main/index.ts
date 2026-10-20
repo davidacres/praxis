@@ -41,6 +41,7 @@ import { registerRunProfileIpc } from './runProfileIpc';
 import { registerRunControlIpc } from './runControlIpc';
 import { registerDeploymentControlIpc } from './deploymentControlIpc';
 import { registerDeploymentProfileIpc } from './deploymentProfileIpc';
+import { reconcileScheduledRunsOnLaunch, registerScheduledRunIpc } from './scheduledRunIpc';
 import { registerDeploymentArtifactIpc } from './deploymentArtifactIpc';
 import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
@@ -382,6 +383,8 @@ void app.whenReady().then(async () => {
   registerDeploymentControlIpc();
   registerDeploymentProfileIpc();
   registerDeploymentArtifactIpc();
+  registerScheduledRunIpc();
+  void reconcileScheduledRunsOnLaunch().catch(error => console.error('Scheduled run reconciliation failed:', error));
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();

@@ -145,7 +145,8 @@ export const DEFAULT_APP_SETTINGS = {
     enableNewProject: true,
     boardsSidebarMode: 'classic' as 'classic' | 'work',
     enableEasyMode: false,
-    enableDeployments: false
+    enableDeployments: false,
+    enableScheduledRuns: false
   },
   appearance: {
     displayMode: 'compact' as 'compact' | 'large',

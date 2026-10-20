@@ -40,6 +40,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
+import type { MissedResolution, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
 import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/core';
@@ -791,6 +792,22 @@ const praxis: PraxisIpc = {
         run: DeploymentRun;
         reason?: string;
       }>
+  },
+  scheduledRuns: {
+    list: () => ipcRenderer.invoke('scheduledRuns:list') as Promise<ScheduledRunView[]>,
+    get: (id: string) => ipcRenderer.invoke('scheduledRuns:get', id) as Promise<ScheduledRunView | undefined>,
+    save: (input: SaveScheduledRunInput) => ipcRenderer.invoke('scheduledRuns:save', input) as Promise<ScheduledRunView>,
+    preview: (input: SaveScheduledRunInput) =>
+      ipcRenderer.invoke('scheduledRuns:preview', input) as Promise<{ readiness?: ScheduledRunReadiness; error?: string }>,
+    remove: (id: string) => ipcRenderer.invoke('scheduledRuns:remove', id) as Promise<void>,
+    setArmed: (id: string, armed: boolean) => ipcRenderer.invoke('scheduledRuns:setArmed', id, armed) as Promise<ScheduledRunView>,
+    resolveMissed: (id: string, resolution: MissedResolution) =>
+      ipcRenderer.invoke('scheduledRuns:resolveMissed', id, resolution) as Promise<ScheduledRunView>,
+    onChanged: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on('scheduledRuns:changed', handler);
+      return () => ipcRenderer.off('scheduledRuns:changed', handler);
+    }
   }
 };
 

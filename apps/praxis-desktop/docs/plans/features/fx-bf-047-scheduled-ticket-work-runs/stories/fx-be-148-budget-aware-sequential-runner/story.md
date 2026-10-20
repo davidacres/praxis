@@ -8,8 +8,8 @@ id: FX-BE-148
 title: Budget-aware sequential runner and audit trail
 status: Backlog
 feature: FX-BF-047
-updated: 2026-09-29
-tasks: [TASK-385, TASK-386]
+updated: 2026-10-20
+tasks: [TASK-385, TASK-386, TASK-463, TASK-464]
 dependencies: [FX-BE-147, FX-BF-041]
 validation: [npm run test:core, npm run test:desktop]
 ---
@@ -43,11 +43,16 @@ with clear pauses for budget limits, approvals, failures, and user decisions.
   sessions or workflow runs.
 - Budget and provider allowance checks run before each ticket, not only at the
   beginning of the schedule.
+- At 95% of the active provider's allowance the runner records status, commits a
+  checkpoint, and hands over to the next usable provider; with none left it pauses.
+- Closing the app with a future schedule warns and recommends minimising.
 
 ## Task list
 
 - `TASK-385` — Implement scheduled sequential execution.
 - `TASK-386` — Add budget gates, pause states, and run ledger.
+- `TASK-463` — Warn on close when a future schedule exists and recommend minimising.
+- `TASK-464` — Hand over to the next provider at 95% of the active provider's allowance.
 
 ## Validation
 

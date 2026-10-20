@@ -63,6 +63,8 @@ import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { ProposedRunService } from '../projects/runProfileDiscovery';
 import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
 import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '../projects/deploymentProfile';
+import type { ComposeScheduledRunInput, MissedResolution, ScheduledRun } from '../scheduledRuns/scheduledRun';
+import type { ScheduledRunReadiness } from '../scheduledRuns/scheduledRunReadiness';
 import type { CredentialBindingStatus } from '../projects/deploymentProfileStore';
 import type { DeploymentRun } from '../projects/deploymentRunState';
 import type { PublishManifest } from '../projects/publishManifest';
@@ -1249,6 +1251,44 @@ export interface PraxisIpc {
   runs: RunsIpc;
   preview: PreviewIpc;
   deployments: DeploymentsIpc;
+  scheduledRuns: ScheduledRunsIpc;
+}
+
+/** A schedule plus what the editor and lineup need to show it, derived fresh on every read. */
+export interface ScheduledRunView {
+  run: ScheduledRun;
+  /** Recomputed from the live board each time; never stored. */
+  readiness: ScheduledRunReadiness;
+  /** The start as wall-clock parts in the run's own timezone, for the editor's date and time fields. */
+  start: { date: string; time: string };
+}
+
+/** What the composer submits. `id` present means editing that schedule. */
+export type SaveScheduledRunInput = Omit<ComposeScheduledRunInput, 'at'> & { id?: string };
+
+/**
+ * Scheduled ticket runs (FX-BF-047 / FX-BE-147). Definitions only until the
+ * runner ships: saving a schedule arms it, but nothing starts it yet, which is
+ * why the whole surface sits behind the `enableScheduledRuns` preview.
+ */
+export interface ScheduledRunsIpc {
+  /** Every schedule, soonest start first. */
+  list(): Promise<ScheduledRunView[]>;
+  get(id: string): Promise<ScheduledRunView | undefined>;
+  /** Creates or updates a schedule from the composer. Rejects with a readable message for an invalid one. */
+  save(input: SaveScheduledRunInput): Promise<ScheduledRunView>;
+  remove(id: string): Promise<void>;
+  /**
+   * Validates what the composer holds without saving it: the readiness it would have,
+   * or the reason it cannot be saved yet (a start that has passed, a time that does not exist).
+   */
+  preview(input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; error?: string }>;
+  /** Arms a draft, or puts an armed schedule back on hold. */
+  setArmed(id: string, armed: boolean): Promise<ScheduledRunView>;
+  /** The user's explicit decision about a schedule whose start passed while Praxis was closed. */
+  resolveMissed(id: string, resolution: MissedResolution): Promise<ScheduledRunView>;
+  /** A schedule changed (here or in another window). Re-query to show it. */
+  onChanged(listener: () => void): () => void;
 }
 
 /**

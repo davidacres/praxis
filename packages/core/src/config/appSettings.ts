@@ -292,6 +292,8 @@ export interface PreviewSettings {
   enableEasyMode: boolean;
   /** Enable deployment profiles, targets, and delivery runs for projects. */
   enableDeployments: boolean;
+  /** Enable scheduled ticket runs: the schedule composer and the Scheduled runs page. Off until the runner ships, so nothing can be scheduled that will not start. */
+  enableScheduledRuns: boolean;
 }
 
 export interface StartupSettings {
@@ -653,7 +655,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     enableNewProject: true,
     boardsSidebarMode: 'classic',
     enableEasyMode: false,
-    enableDeployments: false
+    enableDeployments: false,
+    enableScheduledRuns: false
   },
   appearance: {
     displayMode: 'compact',
@@ -1338,7 +1341,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           DEFAULT_APP_SETTINGS.preview.boardsSidebarMode
         ),
         enableEasyMode: readBoolean(raw.preview.enableEasyMode, DEFAULT_APP_SETTINGS.preview.enableEasyMode),
-        enableDeployments: readBoolean(raw.preview.enableDeployments, DEFAULT_APP_SETTINGS.preview.enableDeployments)
+        enableDeployments: readBoolean(raw.preview.enableDeployments, DEFAULT_APP_SETTINGS.preview.enableDeployments),
+        enableScheduledRuns: readBoolean(raw.preview.enableScheduledRuns, DEFAULT_APP_SETTINGS.preview.enableScheduledRuns)
       }
     : { ...DEFAULT_APP_SETTINGS.preview };
 

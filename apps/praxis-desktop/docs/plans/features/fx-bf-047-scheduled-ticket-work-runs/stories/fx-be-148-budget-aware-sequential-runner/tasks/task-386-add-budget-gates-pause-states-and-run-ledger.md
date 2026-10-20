@@ -22,8 +22,8 @@ ledger of spend, pauses, retries, skips, and outcomes.
 
 ## Done when
 
-- The runner checks remaining run budget and provider allowance before each
-  queue entry starts.
+- The runner checks the enabled providers' remaining allowance before each
+  queue entry starts. There is no per-run dollar cap in the initial release.
 - A schedule can pause for budget, approval, policy, trust, missing provider,
   or user decision.
 - The ledger records queue-entry transitions, spend estimates, actual spend,

@@ -57,6 +57,11 @@ export interface BoardViewProps {
   onIssueMove: (issueKey: string, targetStatus: string, connectionId: string | undefined) => Promise<boolean> | boolean;
   /** Opens this board in the Task Designer canvas. */
   onOpenDesigner: () => void;
+  /**
+   * Opens the project's scheduled runs to queue tickets for a one-off run. Passed only when the
+   * Scheduled runs preview is on and the board belongs to a project; absent hides the button.
+   */
+  onScheduleRun?: () => void;
   openSettings?: boolean;
   onSettingsOpened?: () => void;
 }
@@ -275,6 +280,7 @@ export function BoardView({
   createIssueHint,
   onIssueMove,
   onOpenDesigner,
+  onScheduleRun,
   openSettings = false,
   onSettingsOpened
 }: BoardViewProps) {
@@ -1174,6 +1180,18 @@ export function BoardView({
         </button>
       </div>
       <div className="board-toolbar-group board-toolbar-right">
+        {onScheduleRun && (
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm"
+            data-testid="board-schedule-btn"
+            aria-label="Schedule run"
+            title="Queue tickets from this project for a scheduled run"
+            onClick={onScheduleRun}
+          >
+            <Icon name="clock" size={14} />
+          </button>
+        )}
         <button
           type="button"
           className="icon-btn icon-btn-sm"
