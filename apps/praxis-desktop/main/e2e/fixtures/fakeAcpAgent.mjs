@@ -370,6 +370,16 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     return { stopReason: 'end_turn' };
   }
 
+  if (promptText.includes('EMIT_LINKS')) {
+    // A reply carrying links (markdown, autolink, bare URL, a file name that must
+    // stay plain text) — the text comes from the spec so it can point at its own server.
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: process.env.FAKE_ACP_LINKS_TEXT ?? 'no links configured' } }
+    });
+    return { stopReason: 'end_turn' };
+  }
+
   if (promptText.includes('WITH_DIFF')) {
     // Announce an edit tool call, then complete it with a `diff` content block —
     // the shape `acpAgentHost.readAcpToolContent` turns into a rendered diff.

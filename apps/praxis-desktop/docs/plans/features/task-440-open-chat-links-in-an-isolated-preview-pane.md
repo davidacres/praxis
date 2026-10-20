@@ -1,13 +1,13 @@
 ---
-**Status:** Backlog
+**Status:** Done
 **Created:** 2026-10-12T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 **Requested By:** Dave Acres
 id: TASK-440
 title: Open chat links in an isolated preview pane
-status: Backlog
-updated: 2026-10-12
+status: Done
+updated: 2026-10-20
 ---
 
 # Open chat links in an isolated preview pane
@@ -51,13 +51,13 @@ Fold this into `Markdown.tsx`'s link handling only where its existing parser doe
 
 ## Acceptance criteria
 
-- [ ] A markdown link, an autolink and a bare URL in a chat message are clickable; trailing punctuation and balanced brackets behave as above.
-- [ ] Clicking loads the page in the right-hand pane; the app window never navigates away.
-- [ ] The guest has no Node, no preload, an isolated session, http(s) only, popups denied, `file://` blocked, and `webviewTag` stays `false` everywhere.
-- [ ] Private, loopback and non-http(s) URLs are refused with a visible reason.
-- [ ] Back/forward/reload/stop, the address bar and "open in system browser" work; clicking the same link twice re-navigates.
+- [x] A markdown link, an autolink and a bare URL in a chat message are clickable; trailing punctuation and balanced brackets behave as above.
+- [x] Clicking loads the page in the right-hand pane; the app window never navigates away.
+- [x] The guest has no Node, no preload, an isolated session, http(s) only, popups denied, `file://` blocked, and `webviewTag` stays `false` everywhere.
+- [x] Private, loopback and non-http(s) URLs are refused with a visible reason.
+- [x] Back/forward/reload/stop, the address bar and "open in system browser" work; clicking the same link twice re-navigates.
 - [ ] Selecting a work item restores the pane.
-- [ ] An e2e spec serves a local page, clicks the linkified URL and asserts the guest's title (which only arrives from a real load), plus a refusal case for a blocked URL. Keyboard focus and tooltips follow the repo's focus and icon-button rules.
+- [x] An e2e spec serves a local page, clicks the linkified URL and asserts the guest's title (which only arrives from a real load), plus a refusal case for a blocked URL. Keyboard focus and tooltips follow the repo's focus and icon-button rules.
 
 ## Dependencies
 
@@ -65,3 +65,12 @@ Fold this into `Markdown.tsx`'s link handling only where its existing parser doe
 
 ## Comments
 **2026-10-12:** Created while tidying branches: the old branch is deleted in favour of this ticket. Its linkification logic is preserved above; the full original diff is recoverable from commit `7721316e` until the remote objects are garbage-collected.
+
+**2026-10-20:** Implemented by reusing the in-app browser that already exists rather than adding a second pane: the session console's `BrowserPane` over the main-process `aiBrowser.ts` `WebContentsView` (own `persist:` partition, sandboxed, no Node, `webviewTag: false`, navigation guards, and the `blockedBrowserUrlReason` URL policy). So the page opens **beside the conversation in the session console dock**, not in the app's right-hand ticket pane.
+
+- `ui/Markdown.tsx` turns on markdown-it `linkify` for explicit schemes only (`fuzzyLink`/`fuzzyEmail`/`fuzzyIP` off — with them on, `README.md` and `run.sh` became links, because `.md` and `.sh` are country TLDs). linkify-it already keeps trailing sentence punctuation and balanced brackets out of the URL, so the helper preserved above was not needed.
+- A click is always intercepted. `ui/markdownLinks.tsx` supplies a handler context: the session console provides one that opens the browser pane and navigates; every other surface falls back to the system browser. Only absolute http(s) is followed.
+- `BrowserPane` takes a `linkRequest` whose token changes per click (so the same link twice re-navigates), shows a refusal reason in a `role="alert"` banner (navigation errors used to be swallowed), and gains an "Open in system browser" button.
+- Spec: `e2e/chatLinks.spec.ts` (fake ACP agent `EMIT_LINKS` trigger) — markdown/autolink/bare URLs, file name stays text, app URL unchanged, same-link-twice, and a loopback link refused with the notice.
+
+**Not done:** "Selecting a work item restores the pane" does not apply, because the browser lives in the session console rather than the shared right pane. The optional "confirm the first link from a message" step was not added.

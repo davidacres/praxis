@@ -20,7 +20,8 @@ import { Markdown } from '../ui/Markdown';
 import { isTerminalAgentState } from './aiSessionState';
 import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
-import { BrowserPane } from '../browser/BrowserPane';
+import { BrowserPane, type BrowserLinkRequest } from '../browser/BrowserPane';
+import { MarkdownLinkContext } from '../ui/markdownLinks';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { providerLabel, supportsReasoningEffort } from './modelProviders';
 import { ReasoningEffortSlider } from './ReasoningEffortSlider';
@@ -608,6 +609,7 @@ export function SessionsPage({
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
+  const [browserLink, setBrowserLink] = useState<BrowserLinkRequest>();
   const [isCompact, setIsCompact] = useState<boolean>(() => {
     try {
       return localStorage.getItem('praxis:easymode-chat-width') === 'compact';
@@ -635,6 +637,7 @@ export function SessionsPage({
   useEffect(() => {
     setBrowserOpen(initialBrowserOpen ?? false);
     browserDismissed.current = initialBrowserOpen === false;
+    setBrowserLink(undefined);
   }, [initialBrowserOpen, selectedKey]);
 
   useEffect(() => {
@@ -727,10 +730,23 @@ export function SessionsPage({
     }
   }, [composerOnly, agentUsedBrowser, onBrowserOpenChange]);
 
+  // A link clicked in the chat opens beside the conversation instead of leaving the app.
+  const chatLinkHandler = useMemo(() => ({
+    openLink: (url: string) => {
+      browserDismissed.current = false;
+      setBrowserOpen(true);
+      onBrowserOpenChange?.(true);
+      setBrowserLink(previous => ({ url, token: (previous?.token ?? 0) + 1 }));
+    }
+  }), [onBrowserOpenChange]);
+
   const setBrowserVisibility = (open: boolean) => {
     browserDismissed.current = !open;
     setBrowserOpen(open);
-    if (!open) setBrowserMaximized(false);
+    if (!open) {
+      setBrowserMaximized(false);
+      setBrowserLink(undefined);
+    }
     onBrowserOpenChange?.(open);
   };
   // `tool_start` feeds the live status line, not the transcript — only the
@@ -2287,6 +2303,7 @@ export function SessionsPage({
   if (composerOnly) return <>{activeComposer}{composerDialogs}</>;
 
   return (
+    <MarkdownLinkContext.Provider value={chatLinkHandler}>
     <div
       className={`sessions-layout${plainSurface ? ' plain-surface' : ''}`}
       data-testid="sessions-view"
@@ -2506,6 +2523,7 @@ export function SessionsPage({
               >
                 <BrowserPane
                   initialUrl={initialBrowserUrl}
+                  linkRequest={browserLink}
                   onNavigate={onBrowserUrlChange}
                   suspended={browserSuspended}
                   maximized={browserMaximized}
@@ -2519,5 +2537,6 @@ export function SessionsPage({
       </div>
       {composerDialogs}
     </div>
+    </MarkdownLinkContext.Provider>
   );
 }

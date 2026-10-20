@@ -10,8 +10,21 @@ import { Icon } from '../ui/Icon';
  * pinned over it. Rendered inside the session console when the user opens it or
  * when the agent first drives the browser.
  */
+export interface BrowserLinkRequest {
+  url: string;
+  /** Changes on every click, so following the same link twice navigates again after the user has browsed on. */
+  token: number;
+}
+
+/** `Error invoking remote method 'browser:navigate': Error: <reason>` → `<reason>`. */
+function refusalReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '') || 'The page could not be opened.';
+}
+
 export function BrowserPane({
   initialUrl,
+  linkRequest,
   onNavigate,
   suspended = false,
   maximized = false,
@@ -19,6 +32,8 @@ export function BrowserPane({
   onClose
 }: {
   initialUrl?: string;
+  /** A link the user followed from elsewhere in the app (a chat message). */
+  linkRequest?: BrowserLinkRequest;
   onNavigate?: (url: string) => void;
   suspended?: boolean;
   maximized?: boolean;
@@ -29,6 +44,7 @@ export function BrowserPane({
   const [state, setState] = useState<BrowserNavigationState | undefined>();
   const [urlDraft, setUrlDraft] = useState('');
   const [editing, setEditing] = useState(false);
+  const [notice, setNotice] = useState<string | undefined>();
 
   // Kept in refs so the mount effect never re-subscribes / re-navigates when a
   // parent re-render hands us a new callback identity or the input focus flips.
@@ -36,7 +52,8 @@ export function BrowserPane({
   onNavigateRef.current = onNavigate;
   const editingRef = useRef(editing);
   editingRef.current = editing;
-  const restoredRef = useRef(false);
+  // A link opened this pane, so the persisted URL must not be restored over it.
+  const restoredRef = useRef(Boolean(linkRequest));
 
   const pushBounds = useCallback(() => {
     const el = surfaceRef.current;
@@ -89,11 +106,19 @@ export function BrowserPane({
     void window.praxis.browser.setVisible(!suspended);
   }, [suspended]);
 
+  const navigateTo = useCallback((url: string) => {
+    setNotice(undefined);
+    void window.praxis.browser.navigate(url).catch(error => setNotice(refusalReason(error)));
+  }, []);
+
+  useEffect(() => {
+    if (linkRequest) navigateTo(linkRequest.url);
+  }, [linkRequest?.token, navigateTo]);
+
   const go = (raw: string) => {
     const trimmed = raw.trim();
     if (!trimmed) return;
-    const url = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-    void window.praxis.browser.navigate(url).catch(() => undefined);
+    navigateTo(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
     setEditing(false);
   };
 
@@ -150,12 +175,24 @@ export function BrowserPane({
             <Icon name={maximized ? 'window-restore' : 'window-maximize'} size={13} />
           </button>
         )}
+        <button
+          className="icon-btn icon-btn-sm"
+          aria-label="Open in system browser"
+          data-testid="browser-open-external"
+          disabled={!state?.url}
+          onClick={() => { if (state?.url) void window.praxis.shell.openExternal(state.url); }}
+        >
+          <Icon name="link" size={13} />
+        </button>
         {onClose && (
           <button className="icon-btn icon-btn-sm" aria-label="Close browser" onClick={onClose}>
             <Icon name="close" size={13} />
           </button>
         )}
       </div>
+      {notice && (
+        <div className="error-banner browser-pane-notice" role="alert" data-testid="browser-notice">{notice}</div>
+      )}
       <div className="browser-pane-surface" ref={surfaceRef} data-testid="browser-pane-surface">
         {!state?.url && (
           <div className="browser-pane-empty">

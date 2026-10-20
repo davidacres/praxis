@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import MarkdownIt from 'markdown-it';
 import { normalizeStructuredReviewMarkdown } from './structuredReviewMarkdown';
+import { followableUrl, useMarkdownLinkHandler } from './markdownLinks';
 
 // Keep this list deliberately raster-only. A response can name an arbitrary
 // path, but the host will only turn a bounded image file inside the session's
@@ -61,7 +62,10 @@ function normalizeImageReferences(text: string, detectImageReferences: boolean):
 function createMarkdownRenderer(imageSources: Record<string, string>, loadLocalImages: boolean) {
   // html:false keeps raw HTML inert — the renderer is sandboxed, but the
   // review and analysis text is model output, so never let markup through.
-  const renderer = new MarkdownIt({ html: false, linkify: false, breaks: true });
+  const renderer = new MarkdownIt({ html: false, linkify: true, breaks: true });
+  // Only explicit schemes (https://…). Fuzzy matching would turn file names such
+  // as README.md or run.sh into links, because .md and .sh are country TLDs.
+  renderer.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
   renderer.renderer.rules.image = (tokens, index) => {
     const token = tokens[index];
     const source = String(token.attrGet('src') ?? '');
@@ -106,6 +110,7 @@ export function Markdown({
   const [imageSources, setImageSources] = useState<Record<string, string>>({});
   const [expandedImage, setExpandedImage] = useState<{ src: string; alt: string }>();
   const [imageZoom, setImageZoom] = useState(1);
+  const linkHandler = useMarkdownLinkHandler();
 
   useEffect(() => {
     setImageSources({});
@@ -145,6 +150,18 @@ export function Markdown({
   }, [expandedImage]);
 
   const openImage = (event: MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as Element).closest?.('a[href]');
+    if (anchor) {
+      // Never let the app window follow an href. http(s) goes to the surface's
+      // handler (an in-app browser pane) or the system browser; the rest is inert.
+      event.preventDefault();
+      const url = followableUrl(anchor.getAttribute('href'));
+      if (url) {
+        if (linkHandler) linkHandler.openLink(url);
+        else void window.praxis.shell.openExternal(url);
+      }
+      return;
+    }
     const image = (event.target as Element).closest('img.markdown-image-preview') as HTMLImageElement | null;
     if (!image || !image.naturalWidth) return;
     setImageZoom(1);
