@@ -176,7 +176,9 @@ test('draft and existing sessions share the composer frame and input layout', as
   await page.getByTestId('project-session-new').first().click();
   const draft = page.getByTestId('new-session-view');
   const card = draft.locator('.session-follow-up-composer');
-  await expect(draft.getByTestId('session-usage-summary')).toContainText('Not reported');
+  // A draft has used nothing yet: 0 tok, never "Not reported".
+  await expect(draft.getByTestId('session-usage-summary')).toContainText('0 tok');
+  await expect(draft.getByTestId('session-usage-summary')).not.toContainText(/not reported/i);
   await draft.getByTestId('session-usage-summary').locator(':scope > summary').click();
   await expect(draft.locator('.composer-usage-expanded')).toContainText('No usage recorded for this session yet');
   await draft.getByTestId('session-usage-summary').locator(':scope > summary').click();

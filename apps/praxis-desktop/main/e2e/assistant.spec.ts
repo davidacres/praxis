@@ -152,7 +152,9 @@ test('assistant composer selects provider, model, reasoning, and permission mode
   expect(assistantStyle.background).toBe(sessionStyle.background);
   expect(assistantStyle.radius).toBe(sessionStyle.radius);
   await expect(win.getByTestId('assistant-context-indicator')).toHaveAttribute('aria-label', 'Context usage unavailable');
-  await expect(win.getByTestId('assistant-panel').getByTestId('session-usage-summary')).toContainText('Not reported');
+  // Nothing has run in this conversation yet: 0 tok, never "Not reported".
+  await expect(win.getByTestId('assistant-panel').getByTestId('session-usage-summary')).toContainText('0 tok');
+  await expect(win.getByTestId('assistant-panel').getByTestId('session-usage-summary')).not.toContainText(/not reported/i);
   await expect(win.getByTestId('assistant-provider')).toContainText('Mock');
   await expect(win.getByTestId('assistant-model')).toContainText('mock-model');
   await expect(win.getByTestId('assistant-reasoning')).toHaveAttribute('data-value', 'medium');
