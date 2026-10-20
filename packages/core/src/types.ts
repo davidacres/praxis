@@ -155,6 +155,12 @@ export interface Board {
   /** Availability of a locally-backed board; missing boards remain visible so they can be removed. */
   availability?: 'available' | 'missing';
   availabilityMessage?: string;
+  /**
+   * Set when this board cannot take new issues even though its connection can
+   * (a secondary plans root of a multi-root folder connection). The UI disables
+   * creation up front and shows `reason`, instead of failing after the form is filled.
+   */
+  issueCreation?: { allowed: false; reason: string };
   raw?: unknown;
 }
 

@@ -192,6 +192,9 @@ interface LiveIssue extends IssueSummary {
 
 // ── Multi-root boards ───────────────────────────────────────────────
 
+const SECONDARY_ROOT_CREATION_ERROR =
+  'Creating issues in a specific plans root is not supported yet for multi-root folder connections — create from the primary board instead.';
+
 /**
  * Stable short hash of a plans-root path, used to distinguish board ids when a
  * folder contains several plans roots. djb2 — a stable discriminator, not
@@ -519,13 +522,14 @@ export class FolderService implements IssueTrackerService {
 
   public async getBoards(_filters: BoardFilters): Promise<Board[]> {
     await this.ensureLoaded();
-    return this.boardRoots.map(root => ({
+    return this.boardRoots.map((root, index) => ({
       id: root.id,
       name: root.name,
       type: 'plan',
       projectKey: root.projectKey,
       projectName: root.projectName,
-      locationName: root.rootPath
+      locationName: root.rootPath,
+      ...(index > 0 ? { issueCreation: { allowed: false as const, reason: SECONDARY_ROOT_CREATION_ERROR } } : {})
     }));
   }
 
@@ -601,9 +605,7 @@ export class FolderService implements IssueTrackerService {
     if (input.boardId && this.boardRoots.length > 1) {
       const target = this.boardRoots.find(root => root.id === input.boardId);
       if (target && target.id !== this.boardRoots[0]?.id) {
-        throw new Error(
-          'Creating issues in a specific plans root is not supported yet for multi-root folder connections — create from the primary board instead.'
-        );
+        throw new Error(SECONDARY_ROOT_CREATION_ERROR);
       }
     }
     if (!this.featuresRootPath) {

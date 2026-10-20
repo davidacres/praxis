@@ -6,9 +6,13 @@ import { Icon } from '../ui/Icon';
 import { getCreatableTypes, getDraftParentRule } from './issueDraftFields';
 
 /** Shared with the ordinary board create button; main remains the permission enforcer. */
-export function issueCreationAvailability(connection: Connection | undefined): { allowed: boolean; hint?: string } {
+export function issueCreationAvailability(
+  connection: Connection | undefined,
+  board?: Board
+): { allowed: boolean; hint?: string } {
+  if (board?.issueCreation) return { allowed: false, hint: board.issueCreation.reason };
   if (!connection || connection.mode === 'demo') return { allowed: true };
-  if (['app', 'folder', 'project', 'github'].includes(connection.mode)) {
+  if (['app', 'folder', 'project', 'github', 'gitlab'].includes(connection.mode)) {
     return connection.settings.allowIssueCreation === true
       ? { allowed: true }
       : { allowed: false, hint: 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.' };
@@ -44,7 +48,7 @@ export function QuickCapture({ open, boards, connections, initialBoard, onClose,
   const captureProjectKey = board?.projectKey || projectKey;
   const connection = connections.find(item => item.id === board?.connectionId);
   const mode = resolveBackendMode(board?.connectionId, connections);
-  const availability = issueCreationAvailability(connection);
+  const availability = issueCreationAvailability(connection, board);
   const types = getCreatableTypes(mode);
   const parentRule = getDraftParentRule(issueType, mode);
   const allowed = Boolean(board && board.availability !== 'missing' && availability.allowed);

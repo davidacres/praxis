@@ -65,7 +65,7 @@ test.afterEach(async () => {
  * the host adapter that feeds `GitLabApiConfig.token` reads it from there
  * before falling back to the secret store (see `GitLabConfigStore`).
  */
-function seededSettings(url: string, projectPath: string): Record<string, unknown> {
+function seededSettings(url: string, projectPath: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     connections: [
       {
@@ -75,7 +75,8 @@ function seededSettings(url: string, projectPath: string): Record<string, unknow
         settings: {
           url,
           projectPath,
-          apiKey: 'glpat-test'
+          apiKey: 'glpat-test',
+          ...extra
         }
       }
     ]
@@ -193,4 +194,32 @@ test('tracked board renders issue cards and accepts a new comment via the mock',
   await window.locator('[data-testid="issue-edit-save-btn"]').click();
   await expect.poll(() => mock?.counters.updateIssueHits ?? 0).toBeGreaterThanOrEqual(1);
   await expect(summary).toHaveValue('Updated from the desktop detail pane');
+});
+
+/** Track the mock's one board from the connection form and open it. */
+async function openTrackedBoard(): Promise<void> {
+  await openSeededConnection();
+  await window.locator('[data-testid="conn-pick-boards-btn"]').click();
+  const pickerRow = window.locator('[data-testid="board-picker-row"]', { hasText: 'Demo Board' });
+  await expect(pickerRow).toBeVisible();
+  await pickerRow.locator('input[type="checkbox"]').check();
+  await window.locator('[data-testid="board-picker-save"]').click();
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' }).click();
+}
+
+test('New issue is disabled on a GitLab board until the connection allows creation', async () => {
+  await openTrackedBoard();
+  const newIssue = window.locator('[data-testid="board-new-issue-btn"]');
+  await expect(newIssue).toBeDisabled();
+  await expect(newIssue).toHaveAttribute('title', /Allow issue creation/);
+});
+
+test('New issue is enabled on a GitLab board once the connection allows creation', async () => {
+  // beforeEach launched without the setting; relaunch with it on.
+  await closeTestApp(app!);
+  app = await launchTestApp(seededSettings(baseUrl, 'group/demo', { allowIssueCreation: true }));
+  window = app.window;
+
+  await openTrackedBoard();
+  await expect(window.locator('[data-testid="board-new-issue-btn"]')).toBeEnabled();
 });

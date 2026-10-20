@@ -1653,8 +1653,8 @@ export function App() {
    * Whether the selected board's backend accepts new tickets. Demo always can;
    * folder and project connections carry an `allowIssueCreation` setting (a
    * project's own board always sets it, a folder connection stays read-only
-   * until the user opts in); the not-yet-ported modes (gitlab/github) resolve
-   * to a stub backend that throws, so the form would only error — the button is
+   * until the user opts in), as do GitHub and GitLab connections; any other
+   * mode has no create path, so the form would only error — the button is
    * disabled up front instead, with the hint saying why.
    *
    * The `!connection` arm is a fallback for a board whose connection row has
@@ -1662,7 +1662,7 @@ export function App() {
    * first launch after the startup heal). It permits rather than blocks, which
    * is what that board did before it had a row at all.
    */
-  const { allowed: canCreateIssue, hint: createIssueHint } = issueCreationAvailability(connection);
+  const { allowed: canCreateIssue, hint: createIssueHint } = issueCreationAvailability(connection, selectedBoard);
 
   const onboardingProjectWizard = Boolean(projectWizardMode && projectWizardPresentation === 'onboarding');
   // WebContentsView is a native sibling of the renderer and always paints

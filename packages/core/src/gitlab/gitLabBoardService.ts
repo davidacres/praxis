@@ -47,9 +47,11 @@ interface GitLabSelectedBoardRef {
   boardId: number;
 }
 
-function buildUnsupportedGitLabIssueMessage(): string {
-  return 'GitLab issue access is not implemented yet. GitLab board listing is available.';
-}
+const GITLAB_ATTACHMENTS_UNSUPPORTED_ERROR =
+  'GitLab mode does not support attachments. Add files as links in the issue description or a comment instead.';
+
+const ISSUE_CREATION_DISABLED_ERROR =
+  'Issue creation is disabled for this GitLab connection. Enable it on the connection to create GitLab issues.';
 
 function buildGitLabSelectedBoardRef(projectPath: string, boardId: number): string {
   return `${projectPath.trim()}::${boardId}`;
@@ -576,15 +578,15 @@ export class GitLabBoardService implements IssueTrackerService {
   }
 
   public async createBoard(_input: CreateBoardInput): Promise<Board> {
-    throw new Error('Creating GitLab boards is not implemented yet.');
+    throw new Error('GitLab mode does not support creating boards. Create the board in GitLab, then select it on the connection.');
   }
 
   public async updateBoard(_boardId: string, _input: UpdateBoardInput): Promise<Board> {
-    throw new Error('Updating GitLab boards is not implemented yet.');
+    throw new Error('GitLab mode does not support updating boards. Edit the board in GitLab; Praxis reads it live.');
   }
 
   public async deleteBoard(_boardId: string): Promise<void> {
-    throw new Error('Deleting GitLab boards is not implemented yet.');
+    throw new Error('GitLab mode does not support deleting boards. Delete the board in GitLab, or deselect it on the connection.');
   }
 
   public async getIssue(_issueKey: string): Promise<IssueDetails> {
@@ -610,8 +612,24 @@ export class GitLabBoardService implements IssueTrackerService {
     };
   }
 
-  public async createIssue(_input: CreateIssueInput): Promise<IssueDetails> {
-    throw new Error(buildUnsupportedGitLabIssueMessage());
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    if (!this.configStore.getGitLabAllowIssueCreation()) {
+      throw new Error(ISSUE_CREATION_DISABLED_ERROR);
+    }
+
+    const summary = input.summary.trim();
+    if (!summary) {
+      throw new Error('Summary cannot be empty.');
+    }
+
+    const client = await this.getClient();
+    const projectRef = input.projectKey.trim() || undefined;
+    const project = await client.getProject(projectRef);
+    const created = await client.createIssue(
+      { title: summary, description: input.description?.trim() || undefined },
+      projectRef
+    );
+    return this.getIssue(created.references?.full ?? `${project.pathWithNamespace}#${created.iid}`);
   }
 
   public async updateIssue(_issueKey: string, _input: UpdateIssueInput): Promise<IssueDetails> {
@@ -638,7 +656,7 @@ export class GitLabBoardService implements IssueTrackerService {
   }
 
   public async deleteIssue(_issueKey: string): Promise<void> {
-    throw new Error(buildUnsupportedGitLabIssueMessage());
+    throw new Error('GitLab mode does not support deleting issues. Close the issue instead.');
   }
 
   public async addComment(_issueKey: string, _body: string): Promise<void> {
@@ -653,7 +671,7 @@ export class GitLabBoardService implements IssueTrackerService {
   }
 
   public async attachFile(_issueKey: string, _filePath: string, _fileName?: string): Promise<void> {
-    throw new Error(buildUnsupportedGitLabIssueMessage());
+    throw new Error(GITLAB_ATTACHMENTS_UNSUPPORTED_ERROR);
   }
 
   public async downloadAttachment(
@@ -661,7 +679,7 @@ export class GitLabBoardService implements IssueTrackerService {
     _attachment: IssueAttachment,
     _targetFilePath: string
   ): Promise<void> {
-    throw new Error(buildUnsupportedGitLabIssueMessage());
+    throw new Error(GITLAB_ATTACHMENTS_UNSUPPORTED_ERROR);
   }
 
   public async getTransitions(_issueKey: string): Promise<WorkflowTransition[]> {

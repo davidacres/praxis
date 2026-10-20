@@ -874,10 +874,17 @@ function ModeFields({
             onChange={next => setValue('listAllAccessibleBoards', next)}
             testId="conn-field-listAllAccessibleBoards"
           />
+          <Toggle
+            label="Allow issue creation"
+            description="When off, the board is read-only and the New issue button is disabled."
+            checked={values.allowIssueCreation === true}
+            onChange={next => setValue('allowIssueCreation', next)}
+            testId="conn-field-allowIssueCreation"
+          />
           <p className="placeholder-text" data-testid="conn-mode-note">
             Boards and issues load through the GitLab REST API using the saved token. Issue
-            creation is not supported by the GitLab backend; editing covers summary,
-            description, and assignee.
+            creation is off until enabled above; editing covers summary, description, and
+            assignee.
           </p>
         </>
       );

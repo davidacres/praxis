@@ -48,4 +48,8 @@ export class DesktopGitLabConfigProvider implements GitLabConfigStore {
     const value = this.settings['apiKey'];
     return typeof value === 'string' ? value : '';
   }
+
+  public getGitLabAllowIssueCreation(): boolean {
+    return this.settings['allowIssueCreation'] === true;
+  }
 }

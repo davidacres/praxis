@@ -156,3 +156,16 @@ test('each board shows only its own root’s issues', async () => {
   expect(primaryTexts.some(text => text.includes(extraOwnTitle))).toBe(false);
   expect(primaryTexts.some(text => text.includes(extraOwnFeature))).toBe(false);
 });
+
+test('a secondary plans root disables New issue up front and says why', async () => {
+  await launchWithMultiRootFixture();
+
+  const primary = window.locator('[data-testid="board-nav-item"]').getByText('E2E Multi', { exact: true });
+  await primary.click();
+  await expect(window.locator('[data-testid="board-new-issue-btn"]')).toBeEnabled();
+
+  await window.locator('[data-testid="board-nav-item"]', { hasText: /^proj-(alpha|beta)$/ }).click();
+  const newIssue = window.locator('[data-testid="board-new-issue-btn"]');
+  await expect(newIssue).toBeDisabled();
+  await expect(newIssue).toHaveAttribute('title', /specific plans root is not supported yet.*primary board/);
+});

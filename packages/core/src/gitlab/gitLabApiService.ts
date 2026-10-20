@@ -764,6 +764,25 @@ export class GitLabApiService {
     );
   }
 
+  public async createIssue(
+    input: { title: string; description?: string; labels?: string[]; assigneeIds?: number[] },
+    projectRef?: string | number
+  ): Promise<GitLabIssue> {
+    const issue = await this.requestJson<Record<string, unknown>>(
+      'POST',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/issues`,
+      undefined,
+      {
+        title: input.title,
+        description: input.description,
+        labels: input.labels?.length ? input.labels.join(',') : undefined,
+        assignee_ids: input.assigneeIds?.length ? input.assigneeIds.join(',') : undefined
+      }
+    );
+
+    return normalizeIssue(issue);
+  }
+
   public async updateIssue(
     issueIid: number,
     input: {

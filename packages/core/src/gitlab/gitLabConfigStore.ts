@@ -13,6 +13,8 @@ export interface GitLabConfigStore {
   getGitLabSelectedBoardRefs(): string[];
   /** Inline (non-secret-store) API key; may be empty. */
   getGitLabApiKey(): string;
+  /** Mirrors folder's and GitHub's `allowIssueCreation` gate — off by default. */
+  getGitLabAllowIssueCreation(): boolean;
 }
 
 /** Optional host hooks for `GitLabBoardService`. */
