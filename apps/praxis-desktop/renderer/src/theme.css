@@ -18346,62 +18346,6 @@ button.session-chat-attachment {
   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
 }
 
-/* Micro Filter Rail */
-.filter-rail {
-  padding: 4px 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.07));
-  background: var(--bg-sidebar, var(--bg-elevated));
-  flex-shrink: 0;
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 3px;
-}
-
-.filter-tab {
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 8px;
-  border-radius: var(--radius-xs, 4px);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.filter-tab:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.filter-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.filter-tab.is-active {
-  background: var(--bg-elevated);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-}
-
-.filter-count {
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  opacity: 0.8;
-  background: var(--bg-sunken);
-  padding: 1px 5px;
-  border-radius: 8px;
-}
-
 .easymode-sidebar-feed {
   flex: 1;
   overflow-y: auto;
@@ -19317,12 +19261,6 @@ button.session-chat-attachment {
 
 .easymode-empty-card__link:hover { background: var(--bg-hover); }
 .easymode-empty-card__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-.easymode-filter-empty {
-  margin: 2px 4px 6px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
 
 /* Run launchpad: one-click starters for this project's workflows. */
 .run-launchpad {

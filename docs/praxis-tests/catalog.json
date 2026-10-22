@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 691,
+  "testCount": 692,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -358,12 +358,28 @@
       }
     },
     {
+      "id": "PT-61152B8378",
+      "title": "Codex CLI ACP updates appear as Activity with the latest update in the summary",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
+        "line": 271,
+        "project": "functional"
+      },
+      "area": "ai Cli Agent Host",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Codex CLI ACP updates appear as Activity with the latest update in the summary",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-56863C8E2F",
       "title": "MCP servers the user added reach a CLI agent at session start",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 271,
+        "line": 293,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -379,7 +395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 308,
+        "line": 330,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -395,7 +411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 367,
+        "line": 389,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -411,7 +427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 398,
+        "line": 420,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -427,7 +443,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 417,
+        "line": 439,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -443,7 +459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 464,
+        "line": 486,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -459,7 +475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 485,
+        "line": 507,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -475,7 +491,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 514,
+        "line": 536,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -491,7 +507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 524,
+        "line": 546,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -507,7 +523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 590,
+        "line": 612,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -523,7 +539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 603,
+        "line": 625,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -539,7 +555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 626,
+        "line": 648,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -5238,18 +5254,18 @@
       }
     },
     {
-      "id": "PT-B674916509",
-      "title": "paused and not_started sessions beyond the first five stay visible in All and Live",
+      "id": "PT-BD3466D9E5",
+      "title": "easy mode has no filter tabs and unfinished sessions beyond the first five stay visible",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1621,
+        "line": 1624,
         "project": "functional"
       },
       "area": "easymode",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "paused and not_started sessions beyond the first five stay visible in All and Live",
+        "when": "easy mode has no filter tabs and unfinished sessions beyond the first five stay visible",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -7435,7 +7451,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 330,
+        "line": 336,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7451,7 +7467,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 361,
+        "line": 382,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7467,7 +7483,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 413,
+        "line": 434,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7483,7 +7499,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 435,
+        "line": 456,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7499,7 +7515,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 560,
+        "line": 581,
         "project": "functional"
       },
       "area": "scheduled Runs",

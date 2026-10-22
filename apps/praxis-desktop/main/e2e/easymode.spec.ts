@@ -1589,12 +1589,15 @@ test('a long session list folds behind "Show more" and leaves the Runs section o
     return bounds.bottom <= sidebar.bottom + 1;
   })).toBe(true);
   const feed = win.locator('.easymode-sidebar-feed');
-  expect(await feed.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
-  await feed.evaluate(element => { element.scrollTop = 0; });
-  const feedBox = (await feed.boundingBox())!;
-  await win.mouse.move(feedBox.x + 5, feedBox.y + 5);
-  await win.mouse.wheel(0, 500);
-  await expect.poll(() => feed.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  // Removing the filter rail can leave enough room for the feed to fit.
+  // Exercise scrolling only when needed; keyboard access below must work either way.
+  if (await feed.evaluate(element => element.scrollHeight > element.clientHeight)) {
+    await feed.evaluate(element => { element.scrollTop = 0; });
+    const feedBox = (await feed.boundingBox())!;
+    await win.mouse.move(feedBox.x + 5, feedBox.y + 5);
+    await win.mouse.wheel(0, 500);
+    await expect.poll(() => feed.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  }
   const sessionBody = win.locator('.easymode-section--sessions > .easymode-section__body');
   expect(await sessionBody.evaluate(body => body.scrollHeight > body.clientHeight)).toBe(true);
   await win.getByTestId('section-header-add-sessions').focus();
@@ -1618,7 +1621,7 @@ test('a long session list folds behind "Show more" and leaves the Runs section o
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-sessions-overflow.png') });
 });
 
-test('paused and not_started sessions beyond the first five stay visible in All and Live', async () => {
+test('easy mode has no filter tabs and unfinished sessions beyond the first five stay visible', async () => {
   app = await launchTestApp({ preview: { enableEasyMode: true } }, undefined, undefined, { openNewSession: false });
   const win = app.window;
   await app.electronApp.evaluate(({ BrowserWindow }) => {
@@ -1638,14 +1641,13 @@ test('paused and not_started sessions beyond the first five stay visible in All 
   await expect(cards).toHaveCount(7);
   for (const state of ['paused', 'not_started']) await expect(win.getByTestId(`easymode-session-card-SESSION-${state}`)).toBeVisible();
   await expect(win.getByTestId('easymode-sessions-show-more')).toHaveText('Show 1 more');
-  await sidebar.getByRole('tab', { name: /^Live/ }).click();
-  await expect(sidebar.getByRole('tab', { name: /^Live/ })).toContainText('2');
-  await expect(cards).toHaveCount(2);
-  for (const state of ['paused', 'not_started']) await expect(win.getByTestId(`easymode-session-card-SESSION-${state}`)).toBeVisible();
-  await sidebar.getByRole('tab', { name: /^Gates/ }).click();
-  await expect(cards).toHaveCount(0);
-  await sidebar.getByRole('tab', { name: /^Live/ }).click();
-  const capture = path.resolve(__dirname, '../../../../.praxis/session-artifacts/easymode-unfinished-live.png');
+  await expect(sidebar.getByRole('tablist', { name: 'Filter sidebar items' })).toHaveCount(0);
+  await expect(sidebar.getByRole('tab')).toHaveCount(0);
+  await win.getByTestId('easymode-sessions-show-more').click();
+  await expect(cards).toHaveCount(8);
+  await win.getByTestId('easymode-sessions-show-more').click();
+  await expect(cards).toHaveCount(7);
+  const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-sidebar-without-tabs.png');
   fs.mkdirSync(path.dirname(capture), { recursive: true });
   await sidebar.screenshot({ path: capture });
 });

@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **691 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **692 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -26,18 +26,19 @@ This catalogue describes **691 Playwright tests** under `apps/praxis-desktop/mai
 | PT-1433666F22 | ai Cli Agent Host | ACP read-only permission denial survives neutral titles, missing kinds and allow-only wire options | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:172` |
 | PT-8B3835312A | ai Cli Agent Host | an Agent Hub ACP binding launches its declared host entry point | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:205` |
 | PT-BB6D2FEAF8 | ai Cli Agent Host | a CLI-hosted turn shows the agent's thought in a collapsed Thought block | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:253` |
-| PT-56863C8E2F | ai Cli Agent Host | MCP servers the user added reach a CLI agent at session start | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:271` |
-| PT-59941C287E | ai Cli Agent Host | ACP resume replay does not duplicate the previous answer into a follow-up | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:308` |
-| PT-1999DA8875 | ai Cli Agent Host | a pasted image reaches an ACP agent as an image content block | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:367` |
-| PT-E868E41A8C | ai Cli Agent Host | an ACP diff tool call renders as a red/green diff in the console | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:398` |
-| PT-81CB515D12 | ai Cli Agent Host | ticket-selected Claude Code runs review and analysis without using Vercel | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:417` |
-| PT-1868BD4BF4 | ai Cli Agent Host | an in-flight turn shows one live status line, not streamed tool blocks | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:464` |
-| PT-18A9C6783D | ai Cli Agent Host | abort kills the ACP agent subprocess cleanly | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:485` |
-| PT-B20B70A423 | ai Cli Agent Host | listCliModelOptions reads the real model list from session/new | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:514` |
-| PT-5FE459F9D3 | ai Cli Agent Host | ACP model menus show context sizes and published pricing for model aliases | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:524` |
-| PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:590` |
-| PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:603` |
-| PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:626` |
+| PT-61152B8378 | ai Cli Agent Host | Codex CLI ACP updates appear as Activity with the latest update in the summary | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:271` |
+| PT-56863C8E2F | ai Cli Agent Host | MCP servers the user added reach a CLI agent at session start | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:293` |
+| PT-59941C287E | ai Cli Agent Host | ACP resume replay does not duplicate the previous answer into a follow-up | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:330` |
+| PT-1999DA8875 | ai Cli Agent Host | a pasted image reaches an ACP agent as an image content block | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:389` |
+| PT-E868E41A8C | ai Cli Agent Host | an ACP diff tool call renders as a red/green diff in the console | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:420` |
+| PT-81CB515D12 | ai Cli Agent Host | ticket-selected Claude Code runs review and analysis without using Vercel | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:439` |
+| PT-1868BD4BF4 | ai Cli Agent Host | an in-flight turn shows one live status line, not streamed tool blocks | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:486` |
+| PT-18A9C6783D | ai Cli Agent Host | abort kills the ACP agent subprocess cleanly | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:507` |
+| PT-B20B70A423 | ai Cli Agent Host | listCliModelOptions reads the real model list from session/new | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:536` |
+| PT-5FE459F9D3 | ai Cli Agent Host | ACP model menus show context sizes and published pricing for model aliases | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:546` |
+| PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:612` |
+| PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:625` |
+| PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:648` |
 | PT-F9FE6B89E2 | ai Coding Task | a ticket for a one-line fix is delegated to an agent and lands on disk | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:36` |
 | PT-41267424E7 | ai Coding Task | a read-only session cannot write the file | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:126` |
 | PT-3CFB8F109B | ai Coding Task | each turn records its reply once, and follow-ups carry the earlier answer | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:172` |
@@ -331,7 +332,7 @@ This catalogue describes **691 Playwright tests** under `apps/praxis-desktop/mai
 | PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1084` |
 | PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1256` |
 | PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1478` |
-| PT-B674916509 | easymode | paused and not_started sessions beyond the first five stay visible in All and Live | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1621` |
+| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1624` |
 | PT-60D8BF1214 | edit Issue | editing a live folder issue writes the priority back to markdown | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:108` |
 | PT-B5CC8CC324 | edit Issue | changing a folder ticket parent moves it to the selected feature | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:143` |
 | PT-AB88717169 | folder | folder board lists the fixture feature task | `apps/praxis-desktop/main/e2e/folder.spec.ts:64` |
@@ -468,11 +469,11 @@ This catalogue describes **691 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0498B7BAAE | scheduled Runs | selected board tickets are appended directly to an existing schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:268` |
 | PT-07C623F1C9 | scheduled Runs | without the preview the board toolbar has no schedule shortcut | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:295` |
 | PT-225AEDFF55 | scheduled Runs | tickets can be dragged from the hopper onto the belt and reordered on it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:304` |
-| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:330` |
-| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:361` |
-| PT-78DB6CEAAE | scheduled Runs | the armed processor rings stay concentric while they spin | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:413` |
-| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:435` |
-| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:560` |
+| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:336` |
+| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:382` |
+| PT-78DB6CEAAE | scheduled Runs | the armed processor rings stay concentric while they spin | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:434` |
+| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:456` |
+| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:581` |
 | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
 | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
 | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |

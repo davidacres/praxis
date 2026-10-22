@@ -9,7 +9,6 @@ export interface EasyModeAutomationsListProps {
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   activeWorkflowRunId?: string;
   allSessions?: AgentSessionRecord[];
-  filterTab?: 'all' | 'live' | 'gates';
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
   onSelectSession?: (issueKey: string) => void;
   onNewWorkflowRun?: () => void;
@@ -146,7 +145,6 @@ export function EasyModeAutomationsList({
   runsByProjectId,
   activeWorkflowRunId,
   allSessions,
-  filterTab,
   onSelectWorkflowRun,
   onSelectSession,
   onNewWorkflowRun,
@@ -195,12 +193,6 @@ export function EasyModeAutomationsList({
       const runs = runsByProjectId[project.id] ?? [];
       for (const run of runs) {
         if (!run.archived) {
-          if (filterTab === 'live') {
-            if (run.status !== 'running' && run.status !== 'awaiting-approval') continue;
-          } else if (filterTab === 'gates') {
-            const hasGate = run.status === 'awaiting-approval' || run.stages?.some(s => s.lane === 'awaiting');
-            if (!hasGate) continue;
-          }
           list.push({ project, run });
         }
       }
@@ -211,7 +203,7 @@ export function EasyModeAutomationsList({
       const timeB = new Date(b.run.startedAt).getTime() || 0;
       return timeB - timeA;
     });
-  }, [projects, runsByProjectId, filterTab]);
+  }, [projects, runsByProjectId]);
 
   const workflows = runnableWorkflows ?? [];
   const launchpad = onStartWorkflow && workflows.length > 0
@@ -219,13 +211,6 @@ export function EasyModeAutomationsList({
     : null;
 
   if (allRuns.length === 0) {
-    if (filterTab && filterTab !== 'all') {
-      return (
-        <p className="easymode-filter-empty" data-testid="easymode-automations-filter-empty">
-          {filterTab === 'live' ? 'No runs in progress.' : 'No runs waiting on you.'}
-        </p>
-      );
-    }
     return (
       <div className="easymode-empty-card easymode-empty-card--compact" data-testid="easymode-automations-empty-card">
         <div className="easymode-empty-card__row">
@@ -517,7 +502,7 @@ export function EasyModeAutomationsList({
           </div>
         );
       })}
-      {(!filterTab || filterTab === 'all') && launchpad}
+      {launchpad}
     </div>
   );
 }

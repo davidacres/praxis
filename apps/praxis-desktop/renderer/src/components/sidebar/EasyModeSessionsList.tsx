@@ -8,7 +8,6 @@ export interface EasyModeSessionsListProps {
   allSessions?: AgentSessionRecord[];
   selectedSessionKey?: string;
   activeAgentId?: string;
-  filterTab?: 'all' | 'live' | 'gates';
   onSelectSession: (issueKey: string) => void;
   onSelectAgent?: (sessionKey: string, agentId: string) => void;
   onNewSession?: () => void;
@@ -32,7 +31,6 @@ export function EasyModeSessionsList({
   allSessions,
   selectedSessionKey,
   activeAgentId,
-  filterTab,
   onSelectSession,
   onSelectAgent,
   onNewSession,
@@ -48,14 +46,8 @@ export function EasyModeSessionsList({
   // Only display user root sessions at top level; subagents appear inside their parent session's card,
   // and automation stage sessions appear under their respective automation.
   const rootSessions = useMemo(() => {
-    let list = sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
-    if (filterTab === 'live') {
-      list = list.filter(s => isAttentionState(s.state));
-    } else if (filterTab === 'gates') {
-      list = list.filter(s => s.state === 'awaiting_approval' || s.state === 'awaiting_input');
-    }
-    return list;
-  }, [sessions, filterTab]);
+    return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
+  }, [sessions]);
 
   const filteredSessions = useMemo(() => {
     if (!filterQuery.trim()) return rootSessions;

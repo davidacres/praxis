@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { AgentSessionRecord, GitStatusSnapshot, WorkflowRunSummary, ProjectRecord } from '@praxis/core';
 import { SectionHeader } from './SectionHeader';
-import { EasyModeSessionsList, isAttentionState } from './EasyModeSessionsList';
+import { EasyModeSessionsList } from './EasyModeSessionsList';
 import { EasyModeAutomationsList } from './EasyModeAutomationsList';
 import { AssignSessionDialog } from './AssignSessionDialog';
 import { Icon } from '../../ui/Icon';
@@ -39,7 +39,7 @@ export interface EasyModeSidebarProps {
 
 /**
  * EasyMode Sidebar: The artisan peripheral workspace sidebar.
- * Features the Horizon workspace anchor, micro filter rail, and symmetrical Sessions & Runs pipelines.
+ * Features the Horizon workspace anchor and symmetrical Sessions & Runs pipelines.
  */
 export function EasyModeSidebar({
   sessions,
@@ -69,7 +69,6 @@ export function EasyModeSidebar({
   renderSessionsContent,
   renderAutomationsContent
 }: EasyModeSidebarProps) {
-  const [filterTab, setFilterTab] = useState<'all' | 'live' | 'gates'>('all');
   const [gitStatus, setGitStatus] = useState<GitStatusSnapshot | null>(null);
   const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
 
@@ -103,21 +102,6 @@ export function EasyModeSidebar({
   const rootSessions = useMemo(() => {
     return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
   }, [sessions]);
-
-  // Counts for filter rail tabs
-  const { allCount, liveCount, gateCount } = useMemo(() => {
-    const total = rootSessions.length + allRuns.length;
-    const live = rootSessions.filter(
-      s => isAttentionState(s.state)
-    ).length + allRuns.filter(r => r.run.status === 'running' || r.run.status === 'awaiting-approval').length;
-    const gates = rootSessions.filter(
-      s => s.state === 'awaiting_approval' || s.state === 'awaiting_input'
-    ).length + allRuns.filter(
-      r => r.run.status === 'awaiting-approval' || r.run.stages?.some(st => st.lane === 'awaiting')
-    ).length;
-
-    return { allCount: total, liveCount: live, gateCount: gates };
-  }, [rootSessions, allRuns]);
 
   return (
     <aside className="easymode-sidebar" data-testid="easymode-sidebar" aria-label="EasyMode Workspace Sidebar">
@@ -158,42 +142,6 @@ export function EasyModeSidebar({
         )}
       </div>
 
-      {/* Micro Filter Rail */}
-      <div className="filter-rail" role="tablist" aria-label="Filter sidebar items">
-        <div className="filter-tabs">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filterTab === 'all'}
-            className={`filter-tab ${filterTab === 'all' ? 'is-active' : ''}`}
-            onClick={() => setFilterTab('all')}
-          >
-            <span>All</span>
-            <span className="filter-count">{allCount}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filterTab === 'live'}
-            className={`filter-tab ${filterTab === 'live' ? 'is-active' : ''}`}
-            onClick={() => setFilterTab('live')}
-          >
-            <span>Live</span>
-            <span className="filter-count">{liveCount}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filterTab === 'gates'}
-            className={`filter-tab ${filterTab === 'gates' ? 'is-active' : ''}`}
-            onClick={() => setFilterTab('gates')}
-          >
-            <span>Gates</span>
-            <span className="filter-count">{gateCount}</span>
-          </button>
-        </div>
-      </div>
-
       {/* Sidebar Feed Container */}
       <div className="easymode-sidebar-feed">
         {/* Sessions Section */}
@@ -212,7 +160,6 @@ export function EasyModeSidebar({
                 allSessions={allSessions}
                 selectedSessionKey={activeSessionKey}
                 activeAgentId={activeAgentId}
-                filterTab={filterTab}
                 onSelectSession={onSelectSession}
                 onSelectAgent={onSelectAgent}
                 onNewSession={onNewSession}
@@ -243,7 +190,6 @@ export function EasyModeSidebar({
                 runsByProjectId={runsByProjectId}
                 activeWorkflowRunId={activeWorkflowRunId}
                 allSessions={allSessions}
-                filterTab={filterTab}
                 onSelectSession={onSelectSession}
                 onSelectWorkflowRun={onSelectWorkflowRun}
                 onNewWorkflowRun={onNewWorkflowRun}
