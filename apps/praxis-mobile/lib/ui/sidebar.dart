@@ -11,6 +11,7 @@ import '../core/time.dart';
 import '../core/workflow_runs.dart';
 import 'app_icon.dart';
 import 'kit.dart';
+import 'project_switcher.dart';
 import 'provider_brand_logo.dart';
 
 enum _SettingsPage { desktops, server, permissions, app }
@@ -21,25 +22,49 @@ enum _Filter { all, live, gates }
 /// Finished sessions shown before the rest fold behind "Show more", as on the desktop.
 const _collapsedSessionLimit = 5;
 
-bool _workIsLive(WorkItem item) => item.draft || item.status == 'active' || item.status == 'awaiting-input';
-bool _workIsGate(WorkItem item) => !item.draft && item.status == 'awaiting-input';
-bool _runIsLive(RunSnapshot run) => run.status == 'running' || run.status == 'awaiting-approval';
-bool _runIsGate(RunSnapshot run) => run.status == 'awaiting-approval' || run.stages.any((stage) => stage.lane == 'awaiting');
+bool _workIsLive(WorkItem item) =>
+    item.draft || item.status == 'active' || item.status == 'awaiting-input';
+bool _workIsGate(WorkItem item) =>
+    !item.draft && item.status == 'awaiting-input';
+bool _runIsLive(RunSnapshot run) =>
+    run.status == 'running' || run.status == 'awaiting-approval';
+bool _runIsGate(RunSnapshot run) =>
+    run.status == 'awaiting-approval' ||
+    run.stages.any((stage) => stage.lane == 'awaiting');
 
 const _settings = [
-  (_SettingsPage.desktops, 'server', 'Desktops', 'Switch or manage paired desktops'),
-  (_SettingsPage.server, 'server', 'Desktop connection', 'Connection and host details'),
-  (_SettingsPage.permissions, 'shield', 'Permissions', 'What the desktop allows this phone'),
+  (
+    _SettingsPage.desktops,
+    'server',
+    'Desktops',
+    'Switch or manage paired desktops',
+  ),
+  (
+    _SettingsPage.server,
+    'server',
+    'Desktop connection',
+    'Connection and host details',
+  ),
+  (
+    _SettingsPage.permissions,
+    'shield',
+    'Permissions',
+    'What the desktop allows this phone',
+  ),
   (_SettingsPage.app, 'gear', 'App settings', 'Appearance and notifications'),
 ];
 
-({String label, Tone tone}) _connectionText(ShellConnection connection) => switch (connection) {
-  ShellConnection.ready => (label: 'Connected', tone: Tone.ok),
-  ShellConnection.reconnecting => (label: 'Reconnecting', tone: Tone.warn),
-  ShellConnection.connecting => (label: 'Connecting', tone: Tone.warn),
-  ShellConnection.pairing => (label: 'Awaiting confirmation', tone: Tone.warn),
-  ShellConnection.offline => (label: 'Offline', tone: Tone.danger),
-};
+({String label, Tone tone}) _connectionText(ShellConnection connection) =>
+    switch (connection) {
+      ShellConnection.ready => (label: 'Connected', tone: Tone.ok),
+      ShellConnection.reconnecting => (label: 'Reconnecting', tone: Tone.warn),
+      ShellConnection.connecting => (label: 'Connecting', tone: Tone.warn),
+      ShellConnection.pairing => (
+        label: 'Awaiting confirmation',
+        tone: Tone.warn,
+      ),
+      ShellConnection.offline => (label: 'Offline', tone: Tone.danger),
+    };
 
 const _capabilityRows = [
   ('view', 'View sessions, runs and attention'),
@@ -48,96 +73,83 @@ const _capabilityRows = [
 ];
 
 class AppSidebar extends StatefulWidget {
-  const AppSidebar({super.key, required this.visible, required this.onClose});
-  final bool visible;
-  final VoidCallback onClose;
+  const AppSidebar({super.key, required this.onOpenNavigation});
+
+  final VoidCallback onOpenNavigation;
 
   @override
   State<AppSidebar> createState() => _AppSidebarState();
 }
 
 class _AppSidebarState extends State<AppSidebar> {
-  _SettingsPage? _page;
   _Filter _filter = _Filter.all;
   bool _showAllSessions = false;
 
   @override
-  void didUpdateWidget(AppSidebar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!widget.visible && _page != null) _page = null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = context.p;
-    final media = MediaQuery.of(context);
-    final width = (media.size.width * 0.85).clamp(0.0, 340.0);
-    return IgnorePointer(
-      ignoring: !widget.visible,
-      child: AnimatedOpacity(
-        opacity: widget.visible ? 1 : 0,
-        duration: const Duration(milliseconds: 200),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Pressable(
-                label: 'Close navigation',
-                onTap: widget.onClose,
-                excludeChildSemantics: true,
-                builder: (context, _) => ColoredBox(color: p.scrim),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: width,
-              child: Container(
-                padding: EdgeInsets.only(top: media.padding.top, bottom: media.padding.bottom),
-                decoration: BoxDecoration(
-                  color: p.bgSunken,
-                  border: Border(right: BorderSide(color: p.borderStrong)),
-                ),
-                child: widget.visible
-                    ? (_page != null ? _SettingsDetail(page: _page!, onBack: () => setState(() => _page = null)) : _nav(context))
-                    : const SizedBox.shrink(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      ColoredBox(color: context.p.bgSunken, child: _nav(context));
 
   Widget _nav(BuildContext context) {
     final store = context.watch<AppStore>();
     final t = context.t;
     final p = t.palette;
     final stageKeys = runStageSessionKeys(store.workflowRuns);
-    final visible = store.work.where((item) => item.draft || (!stageKeys.contains(item.workId) && !isStageSessionKey(item.workId, item.runId))).toList();
-    final allRuns = store.runsSupported ? store.workflowRuns : const <RunSnapshot>[];
+    final visible = store.work
+        .where(
+          (item) =>
+              item.draft ||
+              (!stageKeys.contains(item.workId) &&
+                  !isStageSessionKey(item.workId, item.runId)),
+        )
+        .toList();
+    final allRuns = store.runsSupported
+        ? store.workflowRuns
+        : const <RunSnapshot>[];
     final counts = {
       _Filter.all: visible.length + allRuns.length,
-      _Filter.live: visible.where(_workIsLive).length + allRuns.where(_runIsLive).length,
-      _Filter.gates: visible.where(_workIsGate).length + allRuns.where(_runIsGate).length,
+      _Filter.live:
+          visible.where(_workIsLive).length + allRuns.where(_runIsLive).length,
+      _Filter.gates:
+          visible.where(_workIsGate).length + allRuns.where(_runIsGate).length,
     };
-    final sessions = visible.where((item) => switch (_filter) { _Filter.all => true, _Filter.live => _workIsLive(item), _Filter.gates => _workIsGate(item) }).toList();
-    final runs = allRuns.where((run) => switch (_filter) { _Filter.all => true, _Filter.live => _runIsLive(run), _Filter.gates => _runIsGate(run) }).toList();
+    final sessions = visible
+        .where(
+          (item) => switch (_filter) {
+            _Filter.all => true,
+            _Filter.live => _workIsLive(item),
+            _Filter.gates => _workIsGate(item),
+          },
+        )
+        .toList();
+    final runs = allRuns
+        .where(
+          (run) => switch (_filter) {
+            _Filter.all => true,
+            _Filter.live => _runIsLive(run),
+            _Filter.gates => _runIsGate(run),
+          },
+        )
+        .toList();
     // Live, waiting and open sessions always stay; the cap only trims the finished tail.
     final shownSessions = _showAllSessions
         ? sessions
-        : [for (final (index, item) in sessions.indexed) if (index < _collapsedSessionLimit || _workIsLive(item) || store.openWorkId == item.workId) item];
+        : [
+            for (final (index, item) in sessions.indexed)
+              if (index < _collapsedSessionLimit ||
+                  _workIsLive(item) ||
+                  store.openWorkId == item.workId)
+                item,
+          ];
     final hiddenSessions = sessions.length - shownSessions.length;
 
     void navigate(String route) {
       store.setRoute(route);
       if (route != 'work') store.openWork(null);
-      widget.onClose();
     }
 
     final projectName = store.project.name.isNotEmpty
         ? store.project.name
-        : (store.selectedDesktop?.name ?? (store.host.hostName.isNotEmpty ? store.host.hostName : 'Praxis'));
+        : 'Praxis';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -147,29 +159,28 @@ class _AppSidebarState extends State<AppSidebar> {
           padding: EdgeInsets.fromLTRB(t.s(10), t.s(8), t.s(8), t.s(8)),
           decoration: BoxDecoration(
             color: p.bgSunken,
-            border: Border(bottom: BorderSide(color: p.border.withValues(alpha: 0.7))),
+            border: Border(
+              bottom: BorderSide(color: p.border.withValues(alpha: 0.7)),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  // Folder icon + project / workspace name
+                  MenuButton(
+                    onTap: widget.onOpenNavigation,
+                    size: 30,
+                    radius: 6,
+                  ),
+                  SizedBox(width: t.s(6)),
                   Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        AppIcon('folder', size: 14, color: p.accent),
-                        SizedBox(width: t.s(6)),
-                        Flexible(
-                          child: Text(
-                            projectName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ts(context, 12.5, weight: FontWeight.w600, color: p.text),
-                          ),
-                        ),
-                      ],
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ProjectSwitcher(
+                        key: ValueKey(store.contextKey),
+                        compact: true,
+                      ),
                     ),
                   ),
                   SizedBox(width: t.s(6)),
@@ -178,7 +189,6 @@ class _AppSidebarState extends State<AppSidebar> {
                     label: 'New session',
                     onTap: () {
                       store.startNewChat();
-                      widget.onClose();
                     },
                     excludeChildSemantics: true,
                     builder: (context, pressed) => Container(
@@ -187,38 +197,32 @@ class _AppSidebarState extends State<AppSidebar> {
                       decoration: BoxDecoration(
                         color: pressed ? p.surfaceRaised : p.surface,
                         borderRadius: BorderRadius.circular(t.s(4)),
-                        border: Border.all(color: pressed ? p.accent : p.border),
+                        border: Border.all(
+                          color: pressed ? p.accent : p.border,
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           AppIcon('plus', size: 10, color: p.text),
                           SizedBox(width: t.s(3)),
-                          Text('New', style: ts(context, 10.5, weight: FontWeight.w500, color: p.text)),
+                          Text(
+                            'New',
+                            style: ts(
+                              context,
+                              10.5,
+                              weight: FontWeight.w500,
+                              color: p.text,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  SizedBox(width: t.s(4)),
-                  // Close button
-                  Pressable(
-                    label: 'Close navigation',
-                    onTap: widget.onClose,
-                    excludeChildSemantics: true,
-                    builder: (context, pressed) => Container(
-                      width: t.s(24),
-                      height: t.s(24),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: pressed ? p.surfaceRaised : Colors.transparent,
-                        borderRadius: BorderRadius.circular(t.s(4)),
-                      ),
-                      child: AppIcon('close', size: 12, color: p.textDim),
-                    ),
-                  ),
                 ],
               ),
-              if (store.desktopLabel.isNotEmpty && store.desktopLabel != projectName) ...[
+              if (store.desktopLabel.isNotEmpty &&
+                  store.desktopLabel != projectName) ...[
                 SizedBox(height: t.s(4)),
                 Row(
                   children: [
@@ -226,7 +230,9 @@ class _AppSidebarState extends State<AppSidebar> {
                       width: 5,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: store.connection == ShellConnection.ready ? p.ok : p.warn,
+                        color: store.connection == ShellConnection.ready
+                            ? p.ok
+                            : p.warn,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -236,7 +242,12 @@ class _AppSidebarState extends State<AppSidebar> {
                         '${store.desktopLabel} · ${store.connection == ShellConnection.ready ? 'connected' : 'offline'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: ts(context, 10, family: monospace, color: p.textDim),
+                        style: ts(
+                          context,
+                          10,
+                          family: monospace,
+                          color: p.textDim,
+                        ),
                       ),
                     ),
                   ],
@@ -252,7 +263,10 @@ class _AppSidebarState extends State<AppSidebar> {
           child: _EasyNavRow(
             icon: 'radio-tower',
             label: 'Activity',
-            active: store.primaryRoute == 'activity' && store.openWorkId == null && store.openRunId == null,
+            active:
+                store.primaryRoute == 'activity' &&
+                store.openWorkId == null &&
+                store.openRunId == null,
             badge: '${store.activity.length}',
             onTap: () {
               navigate('activity');
@@ -264,14 +278,17 @@ class _AppSidebarState extends State<AppSidebar> {
         Container(
           padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(5)),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: p.border.withValues(alpha: 0.5))),
+            border: Border(
+              bottom: BorderSide(color: p.border.withValues(alpha: 0.5)),
+            ),
           ),
           child: Row(
             children: [
               for (final filter in _Filter.values) ...[
                 if (filter != _Filter.all) SizedBox(width: t.s(3)),
                 _EasyFilterTab(
-                  label: '${filter.name[0].toUpperCase()}${filter.name.substring(1)}',
+                  label:
+                      '${filter.name[0].toUpperCase()}${filter.name.substring(1)}',
                   count: counts[filter] ?? 0,
                   active: _filter == filter,
                   onTap: () => setState(() {
@@ -295,7 +312,6 @@ class _AppSidebarState extends State<AppSidebar> {
                 count: sessions.length,
                 onAdd: () {
                   store.startNewChat();
-                  widget.onClose();
                 },
               ),
               if (sessions.isEmpty)
@@ -320,22 +336,33 @@ class _AppSidebarState extends State<AppSidebar> {
                       onTap: () {
                         store.setRoute('work');
                         store.openWork(item.workId);
-                        widget.onClose();
                       },
                     ),
                   ),
               ],
-              if (hiddenSessions > 0 || (_showAllSessions && sessions.length > _collapsedSessionLimit))
+              if (hiddenSessions > 0 ||
+                  (_showAllSessions &&
+                      sessions.length > _collapsedSessionLimit))
                 Pressable(
-                  label: _showAllSessions ? 'Show fewer sessions' : 'Show $hiddenSessions more sessions',
-                  onTap: () => setState(() => _showAllSessions = !_showAllSessions),
+                  label: _showAllSessions
+                      ? 'Show fewer sessions'
+                      : 'Show $hiddenSessions more sessions',
+                  onTap: () =>
+                      setState(() => _showAllSessions = !_showAllSessions),
                   excludeChildSemantics: true,
                   builder: (context, pressed) => Container(
                     height: t.s(30),
                     alignment: Alignment.center,
                     child: Text(
-                      _showAllSessions ? 'Show fewer' : 'Show $hiddenSessions more',
-                      style: ts(context, 11, weight: FontWeight.w500, color: pressed ? p.text : p.textDim),
+                      _showAllSessions
+                          ? 'Show fewer'
+                          : 'Show $hiddenSessions more',
+                      style: ts(
+                        context,
+                        11,
+                        weight: FontWeight.w500,
+                        color: pressed ? p.text : p.textDim,
+                      ),
                     ),
                   ),
                 ),
@@ -343,26 +370,29 @@ class _AppSidebarState extends State<AppSidebar> {
               // Runs Section
               if (store.runsSupported) ...[
                 SizedBox(height: t.s(8)),
-                _EasySectionHeader(
-                  title: 'RUNS',
-                  count: runs.length,
-                  onAdd: store.workflows.isNotEmpty
-                      ? () {
-                          // Start the first available workflow or open chat
-                          store.startNewChat();
-                          widget.onClose();
-                        }
-                      : null,
-                ),
+                _EasySectionHeader(title: 'RUNS', count: runs.length),
                 if (runs.isEmpty) ...[
                   if (store.workflows.isNotEmpty && _filter == _Filter.all) ...[
                     // Compact Launchpad matching desktop EasyMode
                     Padding(
-                      padding: EdgeInsets.fromLTRB(t.s(6), t.s(2), t.s(6), t.s(8)),
+                      padding: EdgeInsets.fromLTRB(
+                        t.s(6),
+                        t.s(2),
+                        t.s(6),
+                        t.s(8),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Start a run', style: ts(context, 10, weight: FontWeight.w600, color: p.textDim)),
+                          Text(
+                            'Start a run',
+                            style: ts(
+                              context,
+                              10,
+                              weight: FontWeight.w600,
+                              color: p.textDim,
+                            ),
+                          ),
                           SizedBox(height: t.s(4)),
                           Wrap(
                             spacing: t.s(4),
@@ -372,23 +402,44 @@ class _AppSidebarState extends State<AppSidebar> {
                                 Pressable(
                                   label: 'Start ${wf.name}',
                                   onTap: () {
-                                    store.startWorkflow(wf.workflowId, 'Start ${wf.name}');
-                                    widget.onClose();
+                                    store.startWorkflow(
+                                      wf.workflowId,
+                                      'Start ${wf.name}',
+                                    );
                                   },
                                   excludeChildSemantics: true,
                                   builder: (context, pressed) => Container(
-                                    padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(4)),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: t.s(8),
+                                      vertical: t.s(4),
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: pressed ? p.surfaceRaised : p.surface,
-                                      borderRadius: BorderRadius.circular(t.s(4)),
+                                      color: pressed
+                                          ? p.surfaceRaised
+                                          : p.surface,
+                                      borderRadius: BorderRadius.circular(
+                                        t.s(4),
+                                      ),
                                       border: Border.all(color: p.border),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        AppIcon('play', size: 9, color: p.accent),
+                                        AppIcon(
+                                          'play',
+                                          size: 9,
+                                          color: p.accent,
+                                        ),
                                         SizedBox(width: t.s(5)),
-                                        Text(wf.name, style: ts(context, 11, weight: FontWeight.w500, color: p.text)),
+                                        Text(
+                                          wf.name,
+                                          style: ts(
+                                            context,
+                                            11,
+                                            weight: FontWeight.w500,
+                                            color: p.text,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -400,10 +451,22 @@ class _AppSidebarState extends State<AppSidebar> {
                     ),
                   ] else
                     Padding(
-                      padding: EdgeInsets.fromLTRB(t.s(8), t.s(4), t.s(8), t.s(8)),
+                      padding: EdgeInsets.fromLTRB(
+                        t.s(8),
+                        t.s(4),
+                        t.s(8),
+                        t.s(8),
+                      ),
                       child: Text(
-                        _filter != _Filter.all ? 'Nothing matches this filter.' : 'No runs in this project yet.',
-                        style: ts(context, 11, lineHeight: 16, color: p.textDim),
+                        _filter != _Filter.all
+                            ? 'Nothing matches this filter.'
+                            : 'No runs in this project yet.',
+                        style: ts(
+                          context,
+                          11,
+                          lineHeight: 16,
+                          color: p.textDim,
+                        ),
                       ),
                     ),
                 ] else
@@ -415,61 +478,176 @@ class _AppSidebarState extends State<AppSidebar> {
                         active: store.openRunId == run.runId,
                         onTap: () {
                           store.openRun(run.runId);
-                          widget.onClose();
                         },
                         onSelectStageSession: (stageSessionKey) {
                           store.setRoute('work');
                           store.openWork(stageSessionKey);
-                          widget.onClose();
                         },
                       ),
                     ),
               ],
-
-              SizedBox(height: t.s(8)),
-              const _SectionLabel('SETTINGS'),
-              for (final item in _settings)
-                _EasyNavRow(
-                  icon: item.$2,
-                  label: item.$3,
-                  caption: item.$4,
-                  drillsIn: true,
-                  onTap: () {
-                    if (item.$1 == _SettingsPage.desktops) {
-                      store.showDesktops();
-                      widget.onClose();
-                    } else {
-                      setState(() => _page = item.$1);
-                    }
-                  },
-                ),
             ],
           ),
         ),
+      ],
+    );
+  }
+}
 
-        // Sidebar Footer
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: t.s(14), vertical: t.s(10)),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: p.border.withValues(alpha: 0.7))),
+/// Navigation and settings drawer, available from Home and detail headers.
+class AppNavigationDrawer extends StatefulWidget {
+  const AppNavigationDrawer({
+    super.key,
+    required this.onClose,
+    required this.onGoHome,
+  });
+
+  final VoidCallback onClose;
+  final VoidCallback onGoHome;
+
+  @override
+  State<AppNavigationDrawer> createState() => _AppNavigationDrawerState();
+}
+
+class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
+  _SettingsPage? _page;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<AppStore>();
+    final t = context.t;
+    final p = t.palette;
+
+    void navigate(String route) {
+      store.desktopsVisible = false;
+      store.openWork(null);
+      store.openRun(null);
+      store.setRoute(route);
+      widget.onClose();
+    }
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Pressable(
+            label: 'Close navigation',
+            onTap: widget.onClose,
+            excludeChildSemantics: true,
+            builder: (context, _) => ColoredBox(color: p.scrim),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'Local connection · Noise IK encrypted',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ts(context, 10, scaled: false, color: p.textDim),
-                ),
-              ),
-              SizedBox(width: t.s(8)),
-              Text(
-                store.hostInfo != null ? 'rev ${store.hostInfo!.surfaceRevision}' : 'rev 1',
-                style: ts(context, 10, scaled: false, color: p.textDim),
-              ),
-            ],
+        ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: (MediaQuery.sizeOf(context).width * 0.85).clamp(0.0, 340.0),
+          child: ColoredBox(
+            color: p.bgSunken,
+            child: SafeArea(
+              right: false,
+              child: _page != null
+                  ? _SettingsDetail(
+                      page: _page!,
+                      onBack: () => setState(() => _page = null),
+                      onOpenDesktops: widget.onClose,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            t.s(14),
+                            t.s(12),
+                            t.s(10),
+                            t.s(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Praxis',
+                                  style: ts(
+                                    context,
+                                    17,
+                                    weight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Pressable(
+                                label: 'Close navigation',
+                                onTap: widget.onClose,
+                                excludeChildSemantics: true,
+                                builder: (context, _) => SizedBox(
+                                  width: t.s(32),
+                                  height: t.s(32),
+                                  child: Center(
+                                    child: AppIcon(
+                                      'close',
+                                      size: 14,
+                                      color: p.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: ListView(
+                            padding: EdgeInsets.symmetric(horizontal: t.s(8)),
+                            children: [
+                              _EasyNavRow(
+                                icon: 'folder',
+                                label: 'Home',
+                                onTap: widget.onGoHome,
+                              ),
+                              _EasyNavRow(
+                                icon: 'radio-tower',
+                                label: 'Activity',
+                                onTap: () => navigate('activity'),
+                              ),
+                              _EasyNavRow(
+                                icon: 'warning',
+                                label: 'Attention',
+                                onTap: () => navigate('attention'),
+                              ),
+                              _EasyNavRow(
+                                icon: 'chats',
+                                label: 'Sessions',
+                                onTap: () => navigate('work'),
+                              ),
+                              if (store.runsSupported)
+                                _EasyNavRow(
+                                  icon: 'play',
+                                  label: 'Runs',
+                                  onTap: () => navigate('runs'),
+                                ),
+                              _EasyNavRow(
+                                icon: 'server',
+                                label: 'Desktops',
+                                onTap: () {
+                                  store.showDesktops();
+                                  widget.onClose();
+                                },
+                              ),
+                              SizedBox(height: t.s(10)),
+                              const _SectionLabel('SETTINGS'),
+                              for (final item in _settings.where(
+                                (item) => item.$1 != _SettingsPage.desktops,
+                              ))
+                                _EasyNavRow(
+                                  icon: item.$2,
+                                  label: item.$3,
+                                  caption: item.$4,
+                                  drillsIn: true,
+                                  onTap: () => setState(() => _page = item.$1),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
       ],
@@ -526,7 +704,10 @@ class _EasyFilterTab extends StatelessWidget {
             ),
             SizedBox(width: t.s(5)),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: t.s(5), vertical: t.s(1)),
+              padding: EdgeInsets.symmetric(
+                horizontal: t.s(5),
+                vertical: t.s(1),
+              ),
               decoration: BoxDecoration(
                 color: p.bgSunken,
                 borderRadius: BorderRadius.circular(8),
@@ -551,11 +732,7 @@ class _EasyFilterTab extends StatelessWidget {
 
 /// EasyMode Section Header with title, count badge, and compact + button.
 class _EasySectionHeader extends StatelessWidget {
-  const _EasySectionHeader({
-    required this.title,
-    this.count,
-    this.onAdd,
-  });
+  const _EasySectionHeader({required this.title, this.count, this.onAdd});
 
   final String title;
   final int? count;
@@ -586,7 +763,10 @@ class _EasySectionHeader extends StatelessWidget {
               if (count != null) ...[
                 SizedBox(width: t.s(6)),
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(1)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: t.s(6),
+                    vertical: t.s(1),
+                  ),
                   decoration: BoxDecoration(
                     color: p.bgSunken,
                     borderRadius: BorderRadius.circular(10),
@@ -612,11 +792,7 @@ class _EasySectionHeader extends StatelessWidget {
                   color: pressed ? p.surfaceRaised : Colors.transparent,
                   borderRadius: BorderRadius.circular(t.s(4)),
                 ),
-                child: AppIcon(
-                  'plus',
-                  size: 11,
-                  color: p.textDim,
-                ),
+                child: AppIcon('plus', size: 11, color: p.textDim),
               ),
             ),
         ],
@@ -644,8 +820,12 @@ class _EasyModeSessionCardWidget extends StatelessWidget {
     final t = context.t;
     final p = t.palette;
 
-    final isRunning = item.status == 'active' || item.status == 'executing' || item.status == 'planning';
-    final isGate = item.status == 'awaiting-input' || item.status == 'awaiting_approval';
+    final isRunning =
+        item.status == 'active' ||
+        item.status == 'executing' ||
+        item.status == 'planning';
+    final isGate =
+        item.status == 'awaiting-input' || item.status == 'awaiting_approval';
     final isDone = item.status == 'completed' || item.status == 'finished';
     final isFailed = item.status == 'failed' || item.status == 'aborted';
 
@@ -719,10 +899,13 @@ class _EasyModeSessionCardWidget extends StatelessWidget {
 
     final provider = item.provider;
     final model = item.model;
-    final hasAiSubtitle = (provider != null && provider.isNotEmpty) || (model != null && model.isNotEmpty);
+    final hasAiSubtitle =
+        (provider != null && provider.isNotEmpty) ||
+        (model != null && model.isNotEmpty);
 
     return Pressable(
-      label: '${item.title}, ${item.status}${provider != null ? ', $provider' : ''}${model != null ? ', $model' : ''}',
+      label:
+          '${item.title}, ${item.status}${provider != null ? ', $provider' : ''}${model != null ? ', $model' : ''}',
       selected: active,
       onTap: onTap,
       excludeChildSemantics: true,
@@ -805,7 +988,9 @@ class _EasyModeSessionCardWidget extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: p.bgSunken,
                           borderRadius: BorderRadius.circular(t.s(3)),
-                          border: Border.all(color: p.border.withValues(alpha: 0.5)),
+                          border: Border.all(
+                            color: p.border.withValues(alpha: 0.5),
+                          ),
                         ),
                         child: ProviderBrandLogo(provider: provider, size: 10),
                       ),
@@ -915,8 +1100,11 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
     final isGate = run.status == 'awaiting-approval';
     final hasStages = run.stages.isNotEmpty;
 
-    final activeStage = run.stages.where((s) => s.lane == 'running' || s.lane == 'awaiting').firstOrNull;
-    final isExpanded = _manuallyExpanded ?? (isRunning || isGate || widget.active);
+    final activeStage = run.stages
+        .where((s) => s.lane == 'running' || s.lane == 'awaiting')
+        .firstOrNull;
+    final isExpanded =
+        _manuallyExpanded ?? (isRunning || isGate || widget.active);
 
     final provider = run.aiProvider;
     final hasAiSubtitle = provider != null && provider.isNotEmpty;
@@ -924,11 +1112,15 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
     return Container(
       decoration: BoxDecoration(
         color: widget.active
-            ? (p.dark ? Colors.white.withValues(alpha: 0.08) : p.accentSoft.withValues(alpha: 0.5))
+            ? (p.dark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : p.accentSoft.withValues(alpha: 0.5))
             : Colors.transparent,
         borderRadius: BorderRadius.circular(t.s(5)),
         border: Border.all(
-          color: widget.active ? p.accent.withValues(alpha: 0.3) : Colors.transparent,
+          color: widget.active
+              ? p.accent.withValues(alpha: 0.3)
+              : Colors.transparent,
         ),
       ),
       child: Column(
@@ -941,7 +1133,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
             onTap: widget.onTap,
             excludeChildSemantics: true,
             builder: (context, pressed) => Container(
-              padding: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(5)),
+              padding: EdgeInsets.symmetric(
+                horizontal: t.s(6),
+                vertical: t.s(5),
+              ),
               decoration: BoxDecoration(
                 color: pressed ? p.surfaceRaised : Colors.transparent,
                 borderRadius: BorderRadius.circular(t.s(5)),
@@ -958,11 +1153,7 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                         width: 14,
                         height: 14,
                         child: Center(
-                          child: AppIcon(
-                            'play',
-                            size: 11,
-                            color: p.accent,
-                          ),
+                          child: AppIcon('play', size: 11, color: p.accent),
                         ),
                       ),
                       SizedBox(width: t.s(6)),
@@ -975,7 +1166,9 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                           style: ts(
                             context,
                             12.5,
-                            weight: widget.active ? FontWeight.w600 : FontWeight.w500,
+                            weight: widget.active
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                             color: widget.active ? p.text : p.textSecondary,
                           ),
                         ),
@@ -983,7 +1176,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                       if (activeStage != null && !isGate) ...[
                         SizedBox(width: t.s(4)),
                         Container(
-                          padding: EdgeInsets.symmetric(horizontal: t.s(4), vertical: t.s(1)),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: t.s(4),
+                            vertical: t.s(1),
+                          ),
                           decoration: BoxDecoration(
                             color: p.accent.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(t.s(3)),
@@ -992,7 +1188,13 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                             activeStage.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: ts(context, 9, scaled: false, weight: FontWeight.w600, color: p.accent),
+                            style: ts(
+                              context,
+                              9,
+                              scaled: false,
+                              weight: FontWeight.w600,
+                              color: p.accent,
+                            ),
                           ),
                         ),
                       ],
@@ -1000,14 +1202,17 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                         SizedBox(width: t.s(2)),
                         Pressable(
                           label: isExpanded ? 'Hide stages' : 'Show stages',
-                          onTap: () => setState(() => _manuallyExpanded = !isExpanded),
+                          onTap: () =>
+                              setState(() => _manuallyExpanded = !isExpanded),
                           excludeChildSemantics: true,
                           builder: (context, expandPressed) => Container(
                             width: t.s(18),
                             height: t.s(18),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: expandPressed ? p.surfaceRaised : Colors.transparent,
+                              color: expandPressed
+                                  ? p.surfaceRaised
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(t.s(3)),
                             ),
                             child: AppIcon(
@@ -1026,7 +1231,12 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                         height: 14,
                         child: Center(
                           child: isGate
-                              ? AppIcon('warning', size: 11, color: p.warn, strokeWidth: 1.4)
+                              ? AppIcon(
+                                  'warning',
+                                  size: 11,
+                                  color: p.warn,
+                                  strokeWidth: 1.4,
+                                )
                               : isRunning
                               ? Container(
                                   width: 7,
@@ -1044,13 +1254,26 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                                   ),
                                 )
                               : run.status == 'succeeded'
-                              ? AppIcon('check', size: 11, color: p.ok, strokeWidth: 1.6)
+                              ? AppIcon(
+                                  'check',
+                                  size: 11,
+                                  color: p.ok,
+                                  strokeWidth: 1.6,
+                                )
                               : run.status == 'failed'
-                              ? AppIcon('close', size: 11, color: p.danger, strokeWidth: 1.5)
+                              ? AppIcon(
+                                  'close',
+                                  size: 11,
+                                  color: p.danger,
+                                  strokeWidth: 1.5,
+                                )
                               : Container(
                                   width: 6,
                                   height: 6,
-                                  decoration: BoxDecoration(color: p.textDim, shape: BoxShape.circle),
+                                  decoration: BoxDecoration(
+                                    color: p.textDim,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
                         ),
                       ),
@@ -1068,14 +1291,24 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                             decoration: BoxDecoration(
                               color: p.bgSunken,
                               borderRadius: BorderRadius.circular(t.s(3)),
-                              border: Border.all(color: p.border.withValues(alpha: 0.5)),
+                              border: Border.all(
+                                color: p.border.withValues(alpha: 0.5),
+                              ),
                             ),
-                            child: ProviderBrandLogo(provider: provider, size: 10),
+                            child: ProviderBrandLogo(
+                              provider: provider,
+                              size: 10,
+                            ),
                           ),
                           SizedBox(width: t.s(4)),
                           Text(
                             provider,
-                            style: ts(context, 10, scaled: false, color: p.textDim),
+                            style: ts(
+                              context,
+                              10,
+                              scaled: false,
+                              color: p.textDim,
+                            ),
                           ),
                         ],
                       ),
@@ -1089,7 +1322,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
           // Segmented Pipeline Gauge Rail (matching desktop EasyMode gauge)
           if (hasStages) ...[
             Container(
-              margin: EdgeInsets.symmetric(horizontal: t.s(6), vertical: t.s(2)),
+              margin: EdgeInsets.symmetric(
+                horizontal: t.s(6),
+                vertical: t.s(2),
+              ),
               padding: EdgeInsets.all(t.s(5)),
               decoration: BoxDecoration(
                 color: p.bgSunken,
@@ -1113,7 +1349,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                               Container(
                                 height: t.s(3.5),
                                 decoration: BoxDecoration(
-                                  color: _gaugeSegmentColor(run.stages[i].lane, p),
+                                  color: _gaugeSegmentColor(
+                                    run.stages[i].lane,
+                                    p,
+                                  ),
                                   borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
@@ -1128,7 +1367,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                                         8,
                                         scaled: false,
                                         weight: FontWeight.w700,
-                                        color: _stageDotColor(run.stages[i].lane, p),
+                                        color: _stageDotColor(
+                                          run.stages[i].lane,
+                                          p,
+                                        ),
                                       ),
                                     ),
                                     SizedBox(width: t.s(2)),
@@ -1141,10 +1383,16 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                                           context,
                                           9,
                                           scaled: false,
-                                          weight: run.stages[i].lane == 'running' || run.stages[i].lane == 'awaiting'
+                                          weight:
+                                              run.stages[i].lane == 'running' ||
+                                                  run.stages[i].lane ==
+                                                      'awaiting'
                                               ? FontWeight.w600
                                               : FontWeight.w400,
-                                          color: run.stages[i].lane == 'running' || run.stages[i].lane == 'awaiting'
+                                          color:
+                                              run.stages[i].lane == 'running' ||
+                                                  run.stages[i].lane ==
+                                                      'awaiting'
                                               ? p.text
                                               : p.textDim,
                                         ),
@@ -1172,7 +1420,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                               Container(
                                 width: 5,
                                 height: 5,
-                                decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+                                decoration: BoxDecoration(
+                                  color: p.accent,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                               SizedBox(width: t.s(4)),
                               Flexible(
@@ -1180,20 +1431,41 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                                   '${run.stages.indexOf(activeStage) + 1}/${run.stages.length} ${activeStage.name}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: ts(context, 10, scaled: false, weight: FontWeight.w500, color: p.text),
+                                  style: ts(
+                                    context,
+                                    10,
+                                    scaled: false,
+                                    weight: FontWeight.w500,
+                                    color: p.text,
+                                  ),
                                 ),
                               ),
                             ] else if (run.status == 'succeeded') ...[
-                              AppIcon('check', size: 10, color: p.ok, strokeWidth: 1.6),
+                              AppIcon(
+                                'check',
+                                size: 10,
+                                color: p.ok,
+                                strokeWidth: 1.6,
+                              ),
                               SizedBox(width: t.s(4)),
                               Text(
                                 'All ${run.stages.length} stages completed',
-                                style: ts(context, 10, scaled: false, color: p.textDim),
+                                style: ts(
+                                  context,
+                                  10,
+                                  scaled: false,
+                                  color: p.textDim,
+                                ),
                               ),
                             ] else ...[
                               Text(
                                 '${run.stages.length} stages · ${info.label}',
-                                style: ts(context, 10, scaled: false, color: p.textDim),
+                                style: ts(
+                                  context,
+                                  10,
+                                  scaled: false,
+                                  color: p.textDim,
+                                ),
                               ),
                             ],
                           ],
@@ -1201,7 +1473,13 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                       ),
                       Text(
                         '${run.stages.where((s) => s.lane == 'done').length}/${run.stages.length}',
-                        style: ts(context, 9.5, scaled: false, family: monospace, color: p.textDim),
+                        style: ts(
+                          context,
+                          9.5,
+                          scaled: false,
+                          family: monospace,
+                          color: p.textDim,
+                        ),
                       ),
                     ],
                   ),
@@ -1214,7 +1492,10 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
           if (hasStages && isExpanded) ...[
             Container(
               margin: EdgeInsets.fromLTRB(t.s(6), 0, t.s(6), t.s(3)),
-              padding: EdgeInsets.symmetric(horizontal: t.s(4), vertical: t.s(2)),
+              padding: EdgeInsets.symmetric(
+                horizontal: t.s(4),
+                vertical: t.s(2),
+              ),
               decoration: BoxDecoration(
                 color: p.bgSunken.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(t.s(4)),
@@ -1225,9 +1506,11 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                 children: [
                   for (final stage in run.stages) ...[
                     Pressable(
-                      label: 'Stage ${stage.name}, ${_stageLaneLabel(stage.lane)}',
+                      label:
+                          'Stage ${stage.name}, ${_stageLaneLabel(stage.lane)}',
                       onTap: () {
-                        if (stage.sessionKey != null && widget.onSelectStageSession != null) {
+                        if (stage.sessionKey != null &&
+                            widget.onSelectStageSession != null) {
                           widget.onSelectStageSession!(stage.sessionKey!);
                         } else {
                           widget.onTap();
@@ -1235,9 +1518,14 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                       },
                       excludeChildSemantics: true,
                       builder: (context, stagePressed) => Container(
-                        padding: EdgeInsets.symmetric(horizontal: t.s(5), vertical: t.s(2.5)),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: t.s(5),
+                          vertical: t.s(2.5),
+                        ),
                         decoration: BoxDecoration(
-                          color: stagePressed ? p.surfaceRaised : Colors.transparent,
+                          color: stagePressed
+                              ? p.surfaceRaised
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(t.s(3)),
                         ),
                         child: Row(
@@ -1250,9 +1538,13 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                                 shape: BoxShape.circle,
                               ),
                             ),
-                            if (stage.provider != null && stage.provider!.isNotEmpty) ...[
+                            if (stage.provider != null &&
+                                stage.provider!.isNotEmpty) ...[
                               SizedBox(width: t.s(4)),
-                              ProviderBrandLogo(provider: stage.provider!, size: 10),
+                              ProviderBrandLogo(
+                                provider: stage.provider!,
+                                size: 10,
+                              ),
                             ],
                             SizedBox(width: t.s(5)),
                             Expanded(
@@ -1263,10 +1555,16 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                                 style: ts(
                                   context,
                                   10.5,
-                                  weight: stage.lane == 'running' || stage.lane == 'awaiting'
+                                  weight:
+                                      stage.lane == 'running' ||
+                                          stage.lane == 'awaiting'
                                       ? FontWeight.w600
                                       : FontWeight.w400,
-                                  color: stage.lane == 'running' || stage.lane == 'awaiting' ? p.text : p.textSecondary,
+                                  color:
+                                      stage.lane == 'running' ||
+                                          stage.lane == 'awaiting'
+                                      ? p.text
+                                      : p.textSecondary,
                                 ),
                               ),
                             ),
@@ -1276,22 +1574,43 @@ class _EasyModeRunCardWidgetState extends State<_EasyModeRunCardWidget> {
                               height: 12,
                               child: Center(
                                 child: stage.lane == 'done'
-                                    ? AppIcon('check', size: 9.5, color: p.ok, strokeWidth: 1.6)
+                                    ? AppIcon(
+                                        'check',
+                                        size: 9.5,
+                                        color: p.ok,
+                                        strokeWidth: 1.6,
+                                      )
                                     : stage.lane == 'running'
                                     ? Container(
                                         width: 5,
                                         height: 5,
-                                        decoration: BoxDecoration(color: p.accent, shape: BoxShape.circle),
+                                        decoration: BoxDecoration(
+                                          color: p.accent,
+                                          shape: BoxShape.circle,
+                                        ),
                                       )
                                     : stage.lane == 'awaiting'
-                                    ? AppIcon('warning', size: 9.5, color: p.warn, strokeWidth: 1.4)
+                                    ? AppIcon(
+                                        'warning',
+                                        size: 9.5,
+                                        color: p.warn,
+                                        strokeWidth: 1.4,
+                                      )
                                     : stage.lane == 'failed'
-                                    ? AppIcon('close', size: 9.5, color: p.danger, strokeWidth: 1.5)
+                                    ? AppIcon(
+                                        'close',
+                                        size: 9.5,
+                                        color: p.danger,
+                                        strokeWidth: 1.5,
+                                      )
                                     : Container(
                                         width: 5,
                                         height: 5,
                                         decoration: BoxDecoration(
-                                          border: Border.all(color: p.borderStrong, width: 1.1),
+                                          border: Border.all(
+                                            color: p.borderStrong,
+                                            width: 1.1,
+                                          ),
                                           shape: BoxShape.circle,
                                         ),
                                       ),
@@ -1353,7 +1672,9 @@ class _EasyNavRow extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(t.s(6)),
           border: Border.all(
-            color: active ? p.accent.withValues(alpha: 0.35) : Colors.transparent,
+            color: active
+                ? p.accent.withValues(alpha: 0.35)
+                : Colors.transparent,
           ),
         ),
         child: Row(
@@ -1402,16 +1723,28 @@ class _EasyNavRow extends StatelessWidget {
               SizedBox(width: t.s(6)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(color: p.warn, borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(
+                  color: p.warn,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: Text(
                   badge!,
-                  style: ts(context, 10, scaled: false, weight: FontWeight.w700, color: p.bgSunken),
+                  style: ts(
+                    context,
+                    10,
+                    scaled: false,
+                    weight: FontWeight.w700,
+                    color: p.bgSunken,
+                  ),
                 ),
               ),
             ],
             if (drillsIn) ...[
               SizedBox(width: t.s(6)),
-              Text('›', style: ts(context, 16, scaled: false, color: p.textDim)),
+              Text(
+                '›',
+                style: ts(context, 16, scaled: false, color: p.textDim),
+              ),
             ],
           ],
         ),
@@ -1420,22 +1753,37 @@ class _EasyNavRow extends StatelessWidget {
   }
 }
 
-
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(context.t.s(6), context.t.s(10), context.t.s(6), context.t.s(4)),
+    padding: EdgeInsets.fromLTRB(
+      context.t.s(6),
+      context.t.s(10),
+      context.t.s(6),
+      context.t.s(4),
+    ),
     child: Text(
       text,
-      style: ts(context, 10, weight: FontWeight.w700, letterSpacing: 0.6, color: context.p.textDim),
+      style: ts(
+        context,
+        10,
+        weight: FontWeight.w700,
+        letterSpacing: 0.6,
+        color: context.p.textDim,
+      ),
     ),
   );
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow(this.label, this.value, {this.tone, this.selectable = false});
+  const _DetailRow(
+    this.label,
+    this.value, {
+    this.tone,
+    this.selectable = false,
+  });
   final String label;
   final String value;
   final Tone? tone;
@@ -1456,13 +1804,20 @@ class _DetailRow extends StatelessWidget {
         builder: (context, box) => Row(
           children: [
             Expanded(
-              child: Text(label, style: ts(context, 12, color: p.textSecondary)),
+              child: Text(
+                label,
+                style: ts(context, 12, color: p.textSecondary),
+              ),
             ),
             const SizedBox(width: 12),
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: box.maxWidth * 0.6),
               child: selectable
-                  ? SelectableText(value, textAlign: TextAlign.right, style: valueStyle)
+                  ? SelectableText(
+                      value,
+                      textAlign: TextAlign.right,
+                      style: valueStyle,
+                    )
                   : Text(value, textAlign: TextAlign.right, style: valueStyle),
             ),
           ],
@@ -1483,7 +1838,10 @@ class _DetailCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(9),
       border: Border.all(color: context.p.border),
     ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    ),
   );
 }
 
@@ -1493,8 +1851,14 @@ class _Note extends StatelessWidget {
   final Color? color;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.symmetric(vertical: context.t.s(12), horizontal: context.t.s(4)),
-    child: Text(text, style: ts(context, 11, lineHeight: 17, color: color ?? context.p.textDim)),
+    padding: EdgeInsets.symmetric(
+      vertical: context.t.s(12),
+      horizontal: context.t.s(4),
+    ),
+    child: Text(
+      text,
+      style: ts(context, 11, lineHeight: 17, color: color ?? context.p.textDim),
+    ),
   );
 }
 
@@ -1520,7 +1884,13 @@ class _SmallButton extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: ts(context, 12, scaled: false, weight: FontWeight.w700, color: p.textSecondary),
+          style: ts(
+            context,
+            12,
+            scaled: false,
+            weight: FontWeight.w700,
+            color: p.textSecondary,
+          ),
         ),
       ),
     );
@@ -1528,9 +1898,14 @@ class _SmallButton extends StatelessWidget {
 }
 
 class _SettingsDetail extends StatelessWidget {
-  const _SettingsDetail({required this.page, required this.onBack});
+  const _SettingsDetail({
+    required this.page,
+    required this.onBack,
+    required this.onOpenDesktops,
+  });
   final _SettingsPage page;
   final VoidCallback onBack;
+  final VoidCallback onOpenDesktops;
 
   @override
   Widget build(BuildContext context) {
@@ -1551,9 +1926,14 @@ class _SettingsDetail extends StatelessWidget {
           const _SectionLabel('APPEARANCE'),
           _DetailCard([
             _DetailRow('Theme', t.appearance?.themeName ?? 'Praxis Dark'),
-            _DetailRow('Follows', t.appearance != null ? 'The desktop' : 'Default until paired'),
+            _DetailRow(
+              'Follows',
+              t.appearance != null ? 'The desktop' : 'Default until paired',
+            ),
           ]),
-          const _Note('The phone wears the paired desktop’s theme and changes with it. Choose a theme in the desktop’s Settings → Themes.'),
+          const _Note(
+            'The phone wears the paired desktop’s theme and changes with it. Choose a theme in the desktop’s Settings → Themes.',
+          ),
           const _SectionLabel('DISPLAY SIZE'),
           Row(
             children: [
@@ -1561,10 +1941,13 @@ class _SettingsDetail extends StatelessWidget {
                 if (mode == 'large') const SizedBox(width: 8),
                 Expanded(
                   child: Pressable(
-                    label: '${mode == 'large' ? 'Large' : 'Compact'} display size',
+                    label:
+                        '${mode == 'large' ? 'Large' : 'Compact'} display size',
                     selected: t.displayMode == mode,
                     onTap: () {
-                      if (themeController.applyDisplayMode(mode)) saveDisplayMode(mode);
+                      if (themeController.applyDisplayMode(mode)) {
+                        saveDisplayMode(mode);
+                      }
                     },
                     excludeChildSemantics: true,
                     builder: (context, pressed) {
@@ -1579,17 +1962,29 @@ class _SettingsDetail extends StatelessWidget {
                               ? p.accentSoft
                               : p.bgSunken,
                           borderRadius: BorderRadius.circular(t.s(9)),
-                          border: Border.all(color: selected ? p.accent : p.border),
+                          border: Border.all(
+                            color: selected ? p.accent : p.border,
+                          ),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               mode == 'large' ? 'Large' : 'Compact',
-                              style: ts(context, 13, weight: FontWeight.w700, color: selected ? p.accent : p.textSecondary),
+                              style: ts(
+                                context,
+                                13,
+                                weight: FontWeight.w700,
+                                color: selected ? p.accent : p.textSecondary,
+                              ),
                             ),
                             SizedBox(height: t.s(4)),
-                            Text(mode == 'large' ? 'Larger text and controls' : 'Current sizing', style: ts(context, 10, color: p.textDim)),
+                            Text(
+                              mode == 'large'
+                                  ? 'Larger text and controls'
+                                  : 'Current sizing',
+                              style: ts(context, 10, color: p.textDim),
+                            ),
                           ],
                         ),
                       );
@@ -1599,33 +1994,56 @@ class _SettingsDetail extends StatelessWidget {
               ],
             ],
           ),
-          const _Note('Large mode increases reading size, spacing and touch targets across the mobile app. Compact keeps the current density.'),
+          const _Note(
+            'Large mode increases reading size, spacing and touch targets across the mobile app. Compact keeps the current density.',
+          ),
           const _SectionLabel('NOTIFICATIONS'),
-          const _DetailCard([_DetailRow('Push notifications', 'Not available'), _DetailRow('Attention while open', 'Live from the desktop')]),
-          const _Note('Praxis mobile does not send notifications yet. Attention requests and session updates arrive live while the app is open and connected.'),
+          const _DetailCard([
+            _DetailRow('Push notifications', 'Not available'),
+            _DetailRow('Attention while open', 'Live from the desktop'),
+          ]),
+          const _Note(
+            'Praxis mobile does not send notifications yet. Attention requests and session updates arrive live while the app is open and connected.',
+          ),
           const _SectionLabel('SECURITY'),
-          const _DetailCard([_DetailRow('Approvals and allowing agents', 'Face ID or passcode')]),
+          const _DetailCard([
+            _DetailRow('Approvals and allowing agents', 'Face ID or passcode'),
+          ]),
           const _Note(
             'Approving a run, rejecting one, allowing an agent to act, or answering a question that changes something asks you to confirm it is you. One check covers a minute of decisions.',
           ),
           const _SectionLabel('DESKTOPS'),
           _DetailCard([
             _DetailRow('Active desktop', store.desktopLabel),
-            _DetailRow('Saved desktops', '${store.desktops.entries.length} paired'),
+            _DetailRow(
+              'Saved desktops',
+              '${store.desktops.entries.length} paired',
+            ),
           ]),
           const SizedBox(height: 8),
           _SmallButton('Manage desktops', () {
             store.showDesktops();
-            onBack();
+            onOpenDesktops();
           }),
           const _SectionLabel('DIAGNOSTICS'),
           _DetailCard([
-            if (diagnostics.isEmpty) const _DetailRow('Recent problems', 'None', tone: Tone.ok),
+            if (diagnostics.isEmpty)
+              const _DetailRow('Recent problems', 'None', tone: Tone.ok),
             for (final entry in diagnostics.take(12))
-              _DetailRow('${formatDayAndClock(entry.at)} · ${entry.what}', entry.message, tone: Tone.warn, selectable: true),
+              _DetailRow(
+                '${formatDayAndClock(entry.at)} · ${entry.what}',
+                entry.message,
+                tone: Tone.warn,
+                selectable: true,
+              ),
           ]),
-          if (diagnostics.isNotEmpty) ...[const SizedBox(height: 8), _SmallButton('Clear', Diagnostics.instance.clear)],
-          const _Note('Background refreshes and screens that fail are listed here, newest first. Nothing is sent anywhere.'),
+          if (diagnostics.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _SmallButton('Clear', Diagnostics.instance.clear),
+          ],
+          const _Note(
+            'Background refreshes and screens that fail are listed here, newest first. Nothing is sent anywhere.',
+          ),
         ];
       case _SettingsPage.desktops:
         content = [
@@ -1633,7 +2051,7 @@ class _SettingsDetail extends StatelessWidget {
           const SizedBox(height: 12),
           _SmallButton('Open Desktops', () {
             store.showDesktops();
-            onBack();
+            onOpenDesktops();
           }),
         ];
       case _SettingsPage.server:
@@ -1654,10 +2072,19 @@ class _SettingsDetail extends StatelessWidget {
                   width: 40,
                   height: 40,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: p.accentSoft, borderRadius: BorderRadius.circular(9)),
+                  decoration: BoxDecoration(
+                    color: p.accentSoft,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
                   child: Text(
                     'P',
-                    style: ts(context, 19, scaled: false, weight: FontWeight.w800, color: p.accent),
+                    style: ts(
+                      context,
+                      19,
+                      scaled: false,
+                      weight: FontWeight.w800,
+                      color: p.accent,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 11),
@@ -1670,13 +2097,26 @@ class _SettingsDetail extends StatelessWidget {
                           store.desktopLabel,
                           config?.hostName,
                           config?.address,
-                        ].firstWhere((value) => value != null && value.isNotEmpty, orElse: () => 'Desktop')!,
-                        style: ts(context, 14, scaled: false, weight: FontWeight.w700),
+                        ].firstWhere(
+                          (value) => value != null && value.isNotEmpty,
+                          orElse: () => 'Desktop',
+                        )!,
+                        style: ts(
+                          context,
+                          14,
+                          scaled: false,
+                          weight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '●  ${state.label}${store.connection == ShellConnection.ready ? ' over the local network' : ''}',
-                        style: ts(context, 10, scaled: false, color: toneOf(context, state.tone)),
+                        style: ts(
+                          context,
+                          10,
+                          scaled: false,
+                          color: toneOf(context, state.tone),
+                        ),
                       ),
                     ],
                   ),
@@ -1684,15 +2124,29 @@ class _SettingsDetail extends StatelessWidget {
               ],
             ),
           ),
-          if (store.connectionIssue != null && store.connection != ShellConnection.ready) _Note(store.connectionIssue!.message, color: p.warn),
+          if (store.connectionIssue != null &&
+              store.connection != ShellConnection.ready)
+            _Note(store.connectionIssue!.message, color: p.warn),
           const _SectionLabel('CONNECTION'),
           _DetailCard([
             _DetailRow('State', state.label, tone: state.tone),
-            if (config != null) _DetailRow('Address', '${config.address}:${config.port}'),
-            _DetailRow('Host ID', store.host.hostId.isNotEmpty ? store.host.hostId : config?.hostId ?? '—'),
-            if (grant?.hostKeyFingerprint != null) _DetailRow('Host key', grant!.hostKeyFingerprint!),
+            if (config != null)
+              _DetailRow('Address', '${config.address}:${config.port}'),
+            _DetailRow(
+              'Host ID',
+              store.host.hostId.isNotEmpty
+                  ? store.host.hostId
+                  : config?.hostId ?? '—',
+            ),
+            if (grant?.hostKeyFingerprint != null)
+              _DetailRow('Host key', grant!.hostKeyFingerprint!),
             const _DetailRow('Transport', 'Noise IK, encrypted'),
-            _DetailRow('Protocol', info != null ? 'v${info.protocolVersion} · revision ${info.surfaceRevision}' : 'v1 · revision 1 (older desktop)'),
+            _DetailRow(
+              'Protocol',
+              info != null
+                  ? 'v${info.protocolVersion} · revision ${info.surfaceRevision}'
+                  : 'v1 · revision 1 (older desktop)',
+            ),
             if (grant != null)
               _DetailRow(
                 'Desktop access mode',
@@ -1705,50 +2159,71 @@ class _SettingsDetail extends StatelessWidget {
               ),
           ]),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              if (store.connection != ShellConnection.ready) ...[_SmallButton('Reconnect now', store.retryConnection), const SizedBox(width: 8)],
+              if (store.connection != ShellConnection.ready) ...[
+                _SmallButton('Reconnect now', store.retryConnection),
+              ],
               _SmallButton('Switch desktop', () {
                 store.showDesktops();
-                onBack();
+                onOpenDesktops();
               }),
-              const SizedBox(width: 8),
               _SmallButton('Disconnect', () => store.disconnect()),
             ],
           ),
-          const _Note('Execution stays on this desktop. The phone never receives provider credentials, repository paths or the desktop’s private key.'),
+          const _Note(
+            'Execution stays on this desktop. The phone never receives provider credentials, repository paths or the desktop’s private key.',
+          ),
         ];
       case _SettingsPage.permissions:
         content = [
           const _Note(
             'Granted when this phone was confirmed on the desktop and enforced there on every request. Change it in Settings → Mobile access on the desktop.',
           ),
-          if (store.access.status == RemoteStatus.loading || store.access.status == RemoteStatus.idle)
+          if (store.access.status == RemoteStatus.loading ||
+              store.access.status == RemoteStatus.idle)
             const _Note('Loading this phone’s grant from the desktop…'),
-          if (store.access.status == RemoteStatus.unsupported || store.access.status == RemoteStatus.error) _Note(store.access.message ?? '', color: p.warn),
+          if (store.access.status == RemoteStatus.unsupported ||
+              store.access.status == RemoteStatus.error)
+            _Note(store.access.message ?? '', color: p.warn),
           if (grant != null) ...[
             const _SectionLabel('THIS PHONE'),
             _DetailCard([
               _DetailRow('Name on desktop', grant.label ?? grant.deviceId),
-              if (when(grant.pairedAt) != null) _DetailRow('Paired', when(grant.pairedAt)!),
-              if (when(grant.lastSeenAt) != null) _DetailRow('Last connected', when(grant.lastSeenAt)!),
+              if (when(grant.pairedAt) != null)
+                _DetailRow('Paired', when(grant.pairedAt)!),
+              if (when(grant.lastSeenAt) != null)
+                _DetailRow('Last connected', when(grant.lastSeenAt)!),
             ]),
             const _SectionLabel('REMOTE ACTIONS'),
             _DetailCard([
               for (final row in _capabilityRows)
                 _DetailRow(
                   row.$2,
-                  grant.capabilities.contains(row.$1) ? 'Allowed' : 'Not allowed',
-                  tone: grant.capabilities.contains(row.$1) ? Tone.ok : Tone.danger,
+                  grant.capabilities.contains(row.$1)
+                      ? 'Allowed'
+                      : 'Not allowed',
+                  tone: grant.capabilities.contains(row.$1)
+                      ? Tone.ok
+                      : Tone.danger,
                 ),
-              const _DetailRow('Shell or file access', 'Never offered to phones'),
+              const _DetailRow(
+                'Shell or file access',
+                'Never offered to phones',
+              ),
             ]),
             const _SectionLabel('PROJECTS'),
             _DetailCard([
-              if (grant.projects.isEmpty) const _DetailRow('Scope', 'All projects'),
-              for (final project in grant.projects) _DetailRow(project.name, 'Granted', tone: Tone.ok),
+              if (grant.projects.isEmpty)
+                const _DetailRow('Scope', 'All projects'),
+              for (final project in grant.projects)
+                _DetailRow(project.name, 'Granted', tone: Tone.ok),
             ]),
-            const _Note('Each tool permission an agent asks for is answered once, here or on the desktop; the phone cannot grant standing permissions.'),
+            const _Note(
+              'Each tool permission an agent asks for is answered once, here or on the desktop; the phone cannot grant standing permissions.',
+            ),
           ],
         ];
     }
@@ -1772,20 +2247,42 @@ class _SettingsDetail extends StatelessWidget {
                   width: 32,
                   height: 32,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(7)),
+                  decoration: BoxDecoration(
+                    color: p.surface,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
                   child: Transform.translate(
                     offset: const Offset(0, -2),
-                    child: Text('‹', style: ts(context, 27, scaled: false, lineHeight: 28, color: p.textSecondary)),
+                    child: Text(
+                      '‹',
+                      style: ts(
+                        context,
+                        27,
+                        scaled: false,
+                        lineHeight: 28,
+                        color: p.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              Text(title, style: ts(context, 16, weight: FontWeight.w700)),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ts(context, 16, weight: FontWeight.w700),
+                ),
+              ),
             ],
           ),
         ),
         Expanded(
-          child: ListView(padding: const EdgeInsets.fromLTRB(12, 12, 12, 30), children: content),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 30),
+            children: content,
+          ),
         ),
       ],
     );

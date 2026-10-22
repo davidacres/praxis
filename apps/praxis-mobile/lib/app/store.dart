@@ -419,7 +419,7 @@ class AppStore extends ChangeNotifier {
   // ---------------------------------------------------------------- state
 
   ShellConnection _connection = ShellConnection.offline;
-  String primaryRoute = 'work';
+  String primaryRoute = 'home';
   String detail = 'chat';
   bool autoConnectEnabled = true;
   ({String hostId, String hostName, bool online}) host = (hostId: '', hostName: '', online: false);
@@ -1023,7 +1023,7 @@ class AppStore extends ChangeNotifier {
     _projectId = null;
     _cursor.reset(0);
     _commands.clear();
-    primaryRoute = 'work';
+    primaryRoute = 'home';
     detail = 'chat';
     host = (hostId: '', hostName: '', online: false);
     hostInfo = null;

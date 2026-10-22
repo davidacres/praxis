@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { ProjectRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 
@@ -13,7 +14,7 @@ export interface Candidate {
   container: boolean;
 }
 
-/** Keep every ticket in the picker; only unfinished work can enter a run. */
+/** Load the full hierarchy for group expansion; the picker hides completed work. */
 export function useScheduleTickets(project: ProjectRecord) {
   const [candidates, setCandidates] = useState<Candidate[]>();
   const [loadError, setLoadError] = useState('');
@@ -59,16 +60,19 @@ export function expandScheduleTickets(candidates: Candidate[], roots: Candidate[
   return candidates.filter(item => !item.finished && !item.container && wanted.has(`${item.connectionId}\0${item.key}`));
 }
 
-export function ScheduleTickets({ candidates, loadError, used = () => false, onAdd, onDrag, onDragEnd, onDragStart }: {
+export function ScheduleTickets({ candidates, loadError, used = () => false, onAdd, onTicketDrag, onTicketDrop }: {
   candidates?: Candidate[]; loadError: string; used?: (candidate: Candidate) => boolean;
-  onAdd: (candidate: Candidate) => void; onDrag?: (candidate: Candidate) => void; onDragEnd?: () => void;
-  onDragStart?: (candidate: Candidate, dataTransfer: DataTransfer) => void;
+  onAdd: (candidate: Candidate) => void;
+  onTicketDrag?: (point: { x: number; y: number } | null) => void;
+  onTicketDrop?: (candidate: Candidate, point: { x: number; y: number }) => void;
 }) {
   const [query, setQuery] = useState('');
+  const pointerDrag = useRef<{ pointerId: number; x: number; y: number; moved: boolean }>();
+  const [dragPreview, setDragPreview] = useState<{ title: string; x: number; y: number }>();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [collapsedSearch, setCollapsedSearch] = useState<Set<string>>(() => new Set());
   const identity = (item: Candidate) => `${item.connectionId}\0${item.key}`;
-  const all = candidates ?? [];
+  const all = (candidates ?? []).filter(candidate => !candidate.finished);
   const byId = new Map(all.map(item => [identity(item), item]));
   const parentOf = new Map<string, string>();
   for (const item of all) {
@@ -105,8 +109,35 @@ export function ScheduleTickets({ candidates, loadError, used = () => false, onA
     return <li key={id} className="schedule-ticket-family">
       <button type="button" className={`issue-card schedule-ticket-card${children.length ? ' issue-card-parent issue-card-has-stack' : ''}${isChild ? ' issue-card-child' : ''}${isChild && isLast && !children.length ? ' issue-card-child-last' : ''}${unavailable ? ' is-used' : ''}`}
         data-testid="schedule-hopper-card" data-issue={candidate.key} data-child-of={isChild ? candidate.parentKey : undefined}
-        disabled={unavailable} draggable={!!onDrag && !unavailable} aria-label={candidate.finished ? `${candidate.key} is completed` : queued ? `${candidate.key} is on the belt` : `Add ${candidate.key} to the run`}
-        onClick={() => onAdd(candidate)} onDragStart={event => { onDrag?.(candidate); onDragStart?.(candidate, event.dataTransfer); if (!onDragStart) { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('text/plain', candidate.key); } }} onDragEnd={onDragEnd}>
+        disabled={unavailable} data-draggable={!!onTicketDrop && !unavailable} draggable={false} aria-label={candidate.finished ? `${candidate.key} is completed` : queued ? `${candidate.key} is on the belt` : `Drag ${candidate.key} to the run, or press Enter to add`}
+        onKeyDown={event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          if (!event.repeat && !unavailable) onAdd(candidate);
+        }}
+        onPointerDown={event => {
+          if (!onTicketDrop || unavailable || event.button !== 0 || !event.isPrimary) return;
+          pointerDrag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={event => {
+          const drag = pointerDrag.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return;
+          drag.moved = true;
+          setDragPreview({ title: candidate.title, x: event.clientX, y: event.clientY });
+          onTicketDrag?.({ x: event.clientX, y: event.clientY });
+        }}
+        onPointerUp={event => {
+          const drag = pointerDrag.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          pointerDrag.current = undefined;
+          setDragPreview(undefined);
+          onTicketDrag?.(null);
+          if (drag.moved) onTicketDrop?.(candidate, { x: event.clientX, y: event.clientY });
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onLostPointerCapture={() => { pointerDrag.current = undefined; setDragPreview(undefined); onTicketDrag?.(null); }}>
         <span className="schedule-ticket-heading">
           <span className="issue-card-title" title={candidate.title}>{candidate.title}</span>
           <span className="issue-card-context" title={parent ? `${candidate.issueType} in ${parent.title}` : candidate.issueType}>{candidate.issueType}</span>
@@ -124,6 +155,7 @@ export function ScheduleTickets({ candidates, loadError, used = () => false, onA
     </li>;
   };
   return <section className="schedule-hopper" aria-label="Project tickets" data-testid="schedule-hopper">
+    {dragPreview && createPortal(<div className="schedule-ticket-drag-preview" style={{ left: dragPreview.x + 12, top: dragPreview.y + 12 }} aria-hidden="true">{dragPreview.title}</div>, document.body)}
     <label className="easymode-search-bar"><Icon name="search" size={13} /><input className="easymode-search-bar__input" aria-label="Filter tickets" placeholder="Filter tickets" value={query} onChange={event => { setQuery(event.target.value); setCollapsedSearch(new Set()); }} /></label>
     {candidates === undefined && !loadError && <p className="schedule-hint">Loading tickets…</p>}
     {loadError && <p className="schedule-hint schedule-hint--bad" role="alert">{loadError}</p>}

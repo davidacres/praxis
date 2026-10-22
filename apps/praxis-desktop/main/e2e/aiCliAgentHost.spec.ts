@@ -268,6 +268,28 @@ test('a CLI-hosted turn shows the agent\'s thought in a collapsed Thought block'
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(1);
 });
 
+test('Codex CLI ACP updates appear as Activity with the latest update in the summary', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'codex-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-216', 'codex-cli', 'EMIT_CODEX_ACTIVITY then answer.');
+  await expect.poll(async () => (await readSession(win, 'APP-216'))?.state, { timeout: 15000 }).toBe('completed');
+
+  await openSession(win, 'APP-216');
+  const activity = win.locator('[data-testid="session-activity-disclosure"]');
+  await expect(activity).toHaveCount(1);
+  await expect(activity).not.toHaveAttribute('open', '');
+  await expect(activity.getByTestId('session-activity-summary')).toContainText('Activity');
+  await expect(activity.getByTestId('session-activity-summary')).toContainText('Building project switcher');
+  await activity.getByTestId('session-activity-summary').click();
+  await expect(activity.getByTestId('session-activity-update')).toHaveCount(2);
+  await expect(activity.getByTestId('session-activity-history')).toContainText('Inspecting project picker');
+  await activity.screenshot({ path: test.info().outputPath('codex-activity.png') });
+  await expect(win.locator('[data-testid="session-thought-disclosure"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-assistant"]')).toHaveCount(1);
+});
+
 test('MCP servers the user added reach a CLI agent at session start', async () => {
   app = await launchTestApp();
   const win = app.window;

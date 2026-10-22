@@ -11,6 +11,7 @@ import 'screens/activity_screen.dart';
 import 'screens/attention_screen.dart';
 import 'screens/connect_screen.dart';
 import 'screens/desktops_screen.dart';
+import 'screens/runs_screen.dart';
 import 'screens/work_screen.dart';
 import 'ui/error_card.dart';
 import 'ui/kit.dart';
@@ -21,7 +22,10 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    Diagnostics.instance.record('Showing ${details.context?.toDescription() ?? 'a screen'}', details.exception);
+    Diagnostics.instance.record(
+      'Showing ${details.context?.toDescription() ?? 'a screen'}',
+      details.exception,
+    );
   };
   ErrorWidget.builder = (details) => ErrorCard(details: details);
   final theme = ThemeController();
@@ -64,7 +68,9 @@ class _PraxisAppState extends State<PraxisApp> {
           return PraxisTheme(
             data: data,
             child: AnnotatedRegion<SystemUiOverlayStyle>(
-              value: p.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+              value: p.dark
+                  ? SystemUiOverlayStyle.light
+                  : SystemUiOverlayStyle.dark,
               child: MaterialApp(
                 title: 'Praxis',
                 debugShowCheckedModeBanner: false,
@@ -76,8 +82,16 @@ class _PraxisAppState extends State<PraxisApp> {
                   canvasColor: p.bg,
                   splashFactory: NoSplash.splashFactory,
                   highlightColor: Colors.transparent,
-                  textSelectionTheme: TextSelectionThemeData(cursorColor: p.accent, selectionColor: p.accentMuted, selectionHandleColor: p.accent),
-                  colorScheme: ColorScheme.fromSeed(seedColor: p.accent, brightness: p.dark ? Brightness.dark : Brightness.light, surface: p.surface),
+                  textSelectionTheme: TextSelectionThemeData(
+                    cursorColor: p.accent,
+                    selectionColor: p.accentMuted,
+                    selectionHandleColor: p.accent,
+                  ),
+                  colorScheme: ColorScheme.fromSeed(
+                    seedColor: p.accent,
+                    brightness: p.dark ? Brightness.dark : Brightness.light,
+                    surface: p.surface,
+                  ),
                 ),
                 // A neutral base, as React Native has: Material's type scale adds letter spacing and line height to every Text.
                 builder: (context, child) => PraxisTheme(
@@ -104,23 +118,41 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  bool _sidebarOpen = false;
+  bool _navigationOpen = false;
 
-  void _open() => setState(() => _sidebarOpen = true);
-  void _close() => setState(() => _sidebarOpen = false);
+  void _openNavigation() => setState(() => _navigationOpen = true);
+  void _closeNavigation() => setState(() => _navigationOpen = false);
+
+  void _goHome() {
+    _closeNavigation();
+    final store = context.read<AppStore>();
+    store.desktopsVisible = false;
+    store.openWork(null);
+    store.openRun(null);
+    store.setRoute('home');
+  }
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
     final p = context.p;
-    if (!store.showsWork && _sidebarOpen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _close());
+    if (!store.showsWork && !store.desktopsVisible && _navigationOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _closeNavigation();
+      });
     }
     final Widget body;
     if (store.desktopsVisible) {
-      body = const DesktopsScreen();
+      body = Column(
+        children: [
+          AppHeader(title: 'Desktops', onOpenSidebar: _openNavigation),
+          const Expanded(child: DesktopsScreen()),
+        ],
+      );
     } else if (!store.showsWork) {
       body = ConnectScreen(key: ValueKey(store.contextKey));
+    } else if (store.primaryRoute == 'home') {
+      body = AppSidebar(onOpenNavigation: _openNavigation);
     } else {
       body = Column(
         children: [
@@ -128,9 +160,19 @@ class _RootState extends State<_Root> {
           const AttentionBanner(),
           Expanded(
             child: switch (store.primaryRoute) {
-              'attention' => AttentionScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),
-              'activity' => ActivityScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),
-              _ => WorkScreen(key: ValueKey(store.contextKey), onOpenSidebar: _open),
+              'attention' => AttentionScreen(
+                key: ValueKey(store.contextKey),
+                onOpenSidebar: _openNavigation,
+              ),
+              'runs' => RunsScreen(onOpenSidebar: _openNavigation),
+              'activity' => ActivityScreen(
+                key: ValueKey(store.contextKey),
+                onOpenSidebar: _openNavigation,
+              ),
+              _ => WorkScreen(
+                key: ValueKey(store.contextKey),
+                onOpenSidebar: _openNavigation,
+              ),
             },
           ),
         ],
@@ -141,9 +183,12 @@ class _RootState extends State<_Root> {
       body: Stack(
         children: [
           Positioned.fill(child: SafeArea(child: body)),
-          if (store.showsWork && !store.desktopsVisible)
+          if (_navigationOpen && (store.showsWork || store.desktopsVisible))
             Positioned.fill(
-              child: AppSidebar(visible: _sidebarOpen, onClose: _close),
+              child: AppNavigationDrawer(
+                onClose: _closeNavigation,
+                onGoHome: _goHome,
+              ),
             ),
         ],
       ),

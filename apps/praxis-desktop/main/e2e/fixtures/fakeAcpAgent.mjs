@@ -188,6 +188,15 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     }
   }
 
+  if (promptText.includes('EMIT_CODEX_ACTIVITY')) {
+    for (const text of ['**Inspecting project picker**\n\n', '**Building project switcher**']) {
+      await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+        sessionId: ctx.params.sessionId,
+        update: { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text } }
+      });
+    }
+  }
+
   if (promptText.includes('CODE_INTEL_COMPLETED_FIRST')) {
     // Some ACP adapters announce a completed MCP call without sending a
     // preceding in-progress `tool_call`. Keep this shape to cover the chat

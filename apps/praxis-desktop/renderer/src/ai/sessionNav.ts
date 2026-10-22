@@ -1,6 +1,7 @@
 import type { AgentEventSummary, AgentSessionRecord, AiProvider, Connection, ProjectRecord } from '@praxis/core';
 import { isTerminalAgentState } from './aiSessionState';
 import { ACP_PROVIDERS, providerLabel } from './modelProviders';
+import { latestCodexActivity } from './codexActivity';
 
 /**
  * Naming and classification for an agent session, shared by the three surfaces
@@ -617,6 +618,9 @@ export function liveActivity(session: AgentSessionRecord): string | undefined {
     }
   }
   if (session.state === 'planning') return 'Planning…';
+  if (session.provider === 'codex-cli') {
+    return latestCodexActivity(session.reasoningText ?? '') ?? 'Working…';
+  }
   return session.reasoningText?.trim() ? 'Thinking…' : 'Working…';
 }
 
@@ -1283,4 +1287,3 @@ export function extractSessionAiProviders(session: AgentSessionRecord, childSess
 
   return result;
 }
-

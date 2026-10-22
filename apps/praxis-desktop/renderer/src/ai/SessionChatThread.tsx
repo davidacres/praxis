@@ -15,6 +15,7 @@ import { Icon } from '../ui/Icon';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
 import { ThoughtBlock } from '../ui/ThoughtBlock';
+import { CodexActivityBlock } from './CodexActivityBlock';
 import { thoughtEmptyReasonFor } from '../ui/thoughtDisplay';
 import { useDialogs } from '../ui/dialogs';
 import { providerLabel } from './modelProviders';
@@ -73,6 +74,17 @@ function parseTerminalContext(detail: string | undefined) {
     output: decodeContextText(match[3]),
     message: match[4]
   } : undefined;
+}
+
+function providerForEvent(session: AgentSessionRecord, event: AgentEventSummary) {
+  if (event.speaker?.provider) return event.speaker.provider;
+  const timestamp = Date.parse(event.timestamp);
+  const epoch = Number.isNaN(timestamp) ? undefined : session.runtimeEpochs?.find(candidate => {
+    const startedAt = Date.parse(candidate.startedAt);
+    const endedAt = candidate.endedAt ? Date.parse(candidate.endedAt) : Number.POSITIVE_INFINITY;
+    return !Number.isNaN(startedAt) && timestamp >= startedAt && timestamp <= endedAt;
+  });
+  return epoch?.provider ?? session.provider;
 }
 
 function formatMessageTime(isoString?: string): string {
@@ -390,6 +402,7 @@ export function SessionChatThread({
           : event;
         const turnToolCalls = (lastMember && turnTools.get(lastMember)?.calls) ?? [];
         const hasThought = reasoningSteps.length > 0 || narration.length > 0;
+        const isCodexCli = event.type === 'message' && providerForEvent(session, event) === 'codex-cli';
         const captionShown = hasThought && Boolean(caption);
         const telemetrySource = messageRun ?? event;
         const toolNames = messageRun ? messageRun.toolNames : event.toolNames;
@@ -495,13 +508,17 @@ export function SessionChatThread({
             )}
 
             {hasThought && (
-              <ThoughtBlock
-                steps={thoughtSteps}
-                caption={caption}
-                toolCalls={turnToolCalls}
-                testIdPrefix="session"
-                imageSessionId={session?.issueKey}
-              />
+              isCodexCli ? (
+                <CodexActivityBlock steps={thoughtSteps} caption={caption} toolCalls={turnToolCalls} testIdPrefix="session" />
+              ) : (
+                <ThoughtBlock
+                  steps={thoughtSteps}
+                  caption={caption}
+                  toolCalls={turnToolCalls}
+                  testIdPrefix="session"
+                  imageSessionId={session?.issueKey}
+                />
+              )
             )}
 
             {/* Task checklist progress if tasks are found in message */}
@@ -692,12 +709,16 @@ export function SessionChatThread({
               in the composer. Same widget as the settled turn, so reasoning
               doesn't collapse and move a DOM level deeper when the turn ends. */}
           {session.reasoningText ? (
-            <ThoughtBlock
-              steps={[session.reasoningText]}
-              streaming
-              testIdPrefix="session"
-              imageSessionId={session?.issueKey}
-            />
+            session.provider === 'codex-cli' ? (
+              <CodexActivityBlock steps={[session.reasoningText]} streaming testIdPrefix="session" />
+            ) : (
+              <ThoughtBlock
+                steps={[session.reasoningText]}
+                streaming
+                testIdPrefix="session"
+                imageSessionId={session?.issueKey}
+              />
+            )
           ) : liveReasoningEmptyReason ? (
             /* Nothing has streamed, and nothing will: say so rather than leave
                the user guessing whether thoughts are broken for this model.

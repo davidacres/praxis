@@ -11,6 +11,7 @@ import '../core/time.dart';
 import '../ui/kit.dart';
 import '../ui/motif_backdrop.dart';
 import '../ui/permission_card.dart';
+import '../ui/project_switcher.dart';
 import '../ui/transcript.dart';
 import 'changes_view.dart';
 import 'provider_model_sheet.dart';
@@ -27,11 +28,21 @@ class WorkScreen extends StatelessWidget {
     final store = context.watch<AppStore>();
     final runId = store.openRunId;
     if (runId != null && store.workflowRuns.any((run) => run.runId == runId)) {
-      return RunDetail(key: ValueKey('${store.contextKey}:run:$runId'), runId: runId, onOpenSidebar: onOpenSidebar);
+      return RunDetail(
+        key: ValueKey('${store.contextKey}:run:$runId'),
+        runId: runId,
+        onOpenSidebar: onOpenSidebar,
+      );
     }
-    final open = store.work.where((item) => item.workId == store.openWorkId).firstOrNull;
+    final open = store.work
+        .where((item) => item.workId == store.openWorkId)
+        .firstOrNull;
     if (open == null) return _EmptySession(onOpenSidebar: onOpenSidebar);
-    return WorkDetail(key: ValueKey('${store.contextKey}:work:${open.workId}'), workId: open.workId, onOpenSidebar: onOpenSidebar);
+    return WorkDetail(
+      key: ValueKey('${store.contextKey}:work:${open.workId}'),
+      workId: open.workId,
+      onOpenSidebar: onOpenSidebar,
+    );
   }
 }
 
@@ -55,14 +66,22 @@ class _EmptySession extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Choose a session', style: ts(context, 18, weight: FontWeight.w700)),
+                      Text(
+                        'Choose a session',
+                        style: ts(context, 18, weight: FontWeight.w700),
+                      ),
                       SizedBox(height: t.s(7)),
                       ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: t.s(260)),
                         child: Text(
-                          'Open a previous session or start a new chat from the sidebar.',
+                          'Open a previous session or start a new chat from Home.',
                           textAlign: TextAlign.center,
-                          style: ts(context, 12, lineHeight: 18, color: t.palette.textDim),
+                          style: ts(
+                            context,
+                            12,
+                            lineHeight: 18,
+                            color: t.palette.textDim,
+                          ),
                         ),
                       ),
                     ],
@@ -77,10 +96,15 @@ class _EmptySession extends StatelessWidget {
   }
 }
 
-String storeLabel(BuildContext context) => context.watch<AppStore>().desktopLabel;
+String storeLabel(BuildContext context) =>
+    context.watch<AppStore>().desktopLabel;
 
 class SessionHeader extends StatelessWidget {
-  const SessionHeader({super.key, required this.title, required this.onOpenSidebar});
+  const SessionHeader({
+    super.key,
+    required this.title,
+    required this.onOpenSidebar,
+  });
   final String title;
   final VoidCallback onOpenSidebar;
 
@@ -97,7 +121,9 @@ class SessionHeader extends StatelessWidget {
       child: Row(
         children: [
           MenuButton(onTap: onOpenSidebar, size: 30, radius: 6, glyph: 15),
-          SizedBox(width: t.s(9)),
+          SizedBox(width: t.s(6)),
+          const HomeButton(),
+          SizedBox(width: t.s(8)),
           Expanded(
             child: Semantics(
               header: true,
@@ -109,7 +135,11 @@ class SessionHeader extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(width: t.s(9)),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: t.s(105)),
+            child: const ProjectSwitcher(compact: true),
+          ),
+          SizedBox(width: t.s(6)),
           const ConnectionBadge(),
         ],
       ),
@@ -119,7 +149,11 @@ class SessionHeader extends StatelessWidget {
 
 /// A message the phone sent that the desktop has not taken yet — sending, or failed with Retry.
 class _PendingFollowUp extends StatelessWidget {
-  const _PendingFollowUp({required this.followUp, required this.canRetry, required this.onRetry});
+  const _PendingFollowUp({
+    required this.followUp,
+    required this.canRetry,
+    required this.onRetry,
+  });
   final FollowUp followUp;
   final bool canRetry;
   final VoidCallback onRetry;
@@ -134,7 +168,13 @@ class _PendingFollowUp extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         ChatMessage(
-          message: TranscriptMessage(id: followUp.messageId, author: 'user', text: followUp.text, at: formatClock(followUp.createdAt), streaming: false),
+          message: TranscriptMessage(
+            id: followUp.messageId,
+            author: 'user',
+            text: followUp.text,
+            at: formatClock(followUp.createdAt),
+            streaming: false,
+          ),
         ),
         Align(
           alignment: failed ? Alignment.centerLeft : Alignment.center,
@@ -156,12 +196,28 @@ class _PendingFollowUp extends StatelessWidget {
                       children: [
                         Text(
                           'NOT SENT',
-                          style: ts(context, 10, weight: FontWeight.w700, letterSpacing: 0.8, color: p.textDim),
+                          style: ts(
+                            context,
+                            10,
+                            weight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: p.textDim,
+                          ),
                         ),
                         SizedBox(height: t.s(8)),
-                        Text(followUp.result ?? 'The desktop did not accept this message.', style: ts(context, 13, lineHeight: 19)),
+                        Text(
+                          followUp.result ??
+                              'The desktop did not accept this message.',
+                          style: ts(context, 13, lineHeight: 19),
+                        ),
                         SizedBox(height: t.s(8)),
-                        PraxisButton(label: 'Retry', ghost: true, disabled: !canRetry, onPressed: onRetry, expand: false),
+                        PraxisButton(
+                          label: 'Retry',
+                          ghost: true,
+                          disabled: !canRetry,
+                          onPressed: onRetry,
+                          expand: false,
+                        ),
                       ],
                     ),
                   )
@@ -176,18 +232,35 @@ class _PendingFollowUp extends StatelessWidget {
                           children: [
                             Text(
                               'AI AGENT',
-                              style: ts(context, 10, weight: FontWeight.w700, letterSpacing: 0.8, color: p.textDim),
+                              style: ts(
+                                context,
+                                10,
+                                weight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: p.textDim,
+                              ),
                             ),
                             Text(
                               'SENDING',
-                              style: ts(context, 10, color: p.textDim, features: tabular),
+                              style: ts(
+                                context,
+                                10,
+                                color: p.textDim,
+                                features: tabular,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Text(
                         'Sending to the desktop…',
-                        style: ts(context, 13, lineHeight: 19, color: p.textDim, style: FontStyle.italic),
+                        style: ts(
+                          context,
+                          13,
+                          lineHeight: 19,
+                          color: p.textDim,
+                          style: FontStyle.italic,
+                        ),
                       ),
                     ],
                   ),
@@ -214,7 +287,11 @@ class _FollowUpEntry extends _Entry {
 }
 
 class WorkDetail extends StatefulWidget {
-  const WorkDetail({super.key, required this.workId, required this.onOpenSidebar});
+  const WorkDetail({
+    super.key,
+    required this.workId,
+    required this.onOpenSidebar,
+  });
   final String workId;
   final VoidCallback onOpenSidebar;
 
@@ -253,8 +330,14 @@ class _WorkDetailState extends State<WorkDetail> {
     _draftTimer = null;
     final store = _draftStore;
     final entry = _draftEntry;
-    if (store == null || entry == null || store.generation != _draftGeneration) return;
-    final item = store.work.where((item) => item.workId == widget.workId).firstOrNull;
+    if (store == null ||
+        entry == null ||
+        store.generation != _draftGeneration) {
+      return;
+    }
+    final item = store.work
+        .where((item) => item.workId == widget.workId)
+        .firstOrNull;
     store.saveComposerDraft(entry, widget.workId, _draft.text, item: item);
   }
 
@@ -289,26 +372,50 @@ class _WorkDetailState extends State<WorkDetail> {
   /// Effects run on render: load models to name them, refresh usage when a turn ends, re-read run progress.
   void _effects(AppStore store, WorkItem item, SelectionInfo info) {
     final providerId = info.providerId;
-    if (providerId != null && !store.models.containsKey(providerId) && store.connection == ShellConnection.ready && (item.draft || info.canConfigure)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => mounted && store.generation == _draftGeneration ? store.loadModels(providerId) : null);
+    if (providerId != null &&
+        !store.models.containsKey(providerId) &&
+        store.connection == ShellConnection.ready &&
+        (item.draft || info.canConfigure)) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => mounted && store.generation == _draftGeneration
+            ? store.loadModels(providerId)
+            : null,
+      );
     }
     if (!item.draft && _previousStatus == 'active' && item.status != 'active') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && store.generation == _draftGeneration) {
-          store.refreshUsage(item.sessionId).catchError((Object error) => Diagnostics.instance.record('Refreshing usage', error));
+          store
+              .refreshUsage(item.sessionId)
+              .catchError(
+                (Object error) =>
+                    Diagnostics.instance.record('Refreshing usage', error),
+              );
         }
       });
     }
     _previousStatus = item.status;
     final runId = item.runId;
     if (store.detail != 'chat' && runId != null) {
-      final sequence = store.workflowRuns.where((run) => run.runId == runId).firstOrNull?.sequence;
-      if (_loadedRunSequence != sequence || _loadedRunDetail != store.detail || !store.runs.containsKey(runId)) {
+      final sequence = store.workflowRuns
+          .where((run) => run.runId == runId)
+          .firstOrNull
+          ?.sequence;
+      if (_loadedRunSequence != sequence ||
+          _loadedRunDetail != store.detail ||
+          !store.runs.containsKey(runId)) {
         _loadedRunSequence = sequence;
         _loadedRunDetail = store.detail;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && store.generation == _draftGeneration) {
-            store.loadRun(runId).catchError((Object error) => Diagnostics.instance.record('Loading workflow progress', error));
+            store
+                .loadRun(runId)
+                .catchError(
+                  (Object error) => Diagnostics.instance.record(
+                    'Loading workflow progress',
+                    error,
+                  ),
+                );
           }
         });
       }
@@ -318,27 +425,48 @@ class _WorkDetailState extends State<WorkDetail> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
-    final item = store.work.where((entry) => entry.workId == widget.workId).firstOrNull;
+    final item = store.work
+        .where((entry) => entry.workId == widget.workId)
+        .firstOrNull;
     if (item == null) return const SizedBox.shrink();
     final info = SelectionInfo(store, item);
     _effects(store, item, info);
     final t = context.t;
     final p = t.palette;
     final ready = store.connection == ShellConnection.ready;
-    final itemFollowUps = store.followUps.where((message) => message.workId == item.workId).toList();
+    final itemFollowUps = store.followUps
+        .where((message) => message.workId == item.workId)
+        .toList();
     final session = store.sessionFor(item.sessionId);
     final messages = store.transcriptFor(item.sessionId);
-    final model = session?.model ?? (item.draft ? info.selection?.model : item.model);
+    final model =
+        session?.model ?? (item.draft ? info.selection?.model : item.model);
     final verdict = item.draft
-        ? validateSelection(info.catalog, info.selection ?? defaultSessionSelection, info.providerId != null ? info.providerModels?.value : null)
+        ? validateSelection(
+            info.catalog,
+            info.selection ?? defaultSessionSelection,
+            info.providerId != null ? info.providerModels?.value : null,
+          )
         : null;
     final blockedReason = store.connection == ShellConnection.reconnecting
         ? 'Reconnecting to ${store.host.hostName.isNotEmpty ? store.host.hostName : 'the desktop'}… you can send again once it is back.'
         : verdict;
-    final entries = <_Entry>[...messages.map(_MessageEntry.new), ...itemFollowUps.map(_FollowUpEntry.new)];
-    final permissions = store.openAttention.where((entry) => entry.kind == 'permission' && entry.sessionId == item.sessionId).toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final sending = item.status == 'active' || itemFollowUps.any((message) => message.state == FollowUpState.pending);
+    final entries = <_Entry>[
+      ...messages.map(_MessageEntry.new),
+      ...itemFollowUps.map(_FollowUpEntry.new),
+    ];
+    final permissions =
+        store.openAttention
+            .where(
+              (entry) =>
+                  entry.kind == 'permission' &&
+                  entry.sessionId == item.sessionId,
+            )
+            .toList()
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final sending =
+        item.status == 'active' ||
+        itemFollowUps.any((message) => message.state == FollowUpState.pending);
 
     Widget body;
     if (store.detail == 'chat') {
@@ -354,14 +482,22 @@ class _WorkDetailState extends State<WorkDetail> {
                       padding: EdgeInsets.symmetric(vertical: t.s(24)),
                       child: Column(
                         children: [
-                          Text('New chat', style: ts(context, 18, weight: FontWeight.w700)),
+                          Text(
+                            'New chat',
+                            style: ts(context, 18, weight: FontWeight.w700),
+                          ),
                           SizedBox(height: t.s(7)),
                           ConstrainedBox(
                             constraints: BoxConstraints(maxWidth: t.s(260)),
                             child: Text(
                               'Choose the provider, model and mode below, then send your first message. The session runs on ${store.host.hostName.isNotEmpty ? store.host.hostName : 'the desktop'}.',
                               textAlign: TextAlign.center,
-                              style: ts(context, 12, lineHeight: 18, color: p.textDim),
+                              style: ts(
+                                context,
+                                12,
+                                lineHeight: 18,
+                                color: p.textDim,
+                              ),
                             ),
                           ),
                         ],
@@ -372,11 +508,14 @@ class _WorkDetailState extends State<WorkDetail> {
                 _MessageEntry(:final message) => ChatMessage(
                   message: message.withMeta(
                     model: message.author == 'assistant' ? model : null,
-                    tokens: message.author == 'assistant' ? session?.tokenUsage : null,
+                    tokens: message.author == 'assistant'
+                        ? session?.tokenUsage
+                        : null,
                     cost: message.author == 'assistant' ? session?.cost : null,
                   ),
                   connected: ready,
-                  onAnswer: (gadget, action, value) => store.answerGadget(item.sessionId, gadget, action, value),
+                  onAnswer: (gadget, action, value) =>
+                      store.answerGadget(item.sessionId, gadget, action, value),
                 ),
                 _FollowUpEntry(:final followUp) => _PendingFollowUp(
                   followUp: followUp,
@@ -394,7 +533,9 @@ class _WorkDetailState extends State<WorkDetail> {
               child: PermissionCard(
                 key: ValueKey(permissions.first.id),
                 item: permissions.first,
-                subject: permissions.length > 1 ? 'The agent is waiting for you · ${permissions.length - 1} more after this' : null,
+                subject: permissions.length > 1
+                    ? 'The agent is waiting for you · ${permissions.length - 1} more after this'
+                    : null,
               ),
             ),
           SessionComposer(
@@ -402,7 +543,13 @@ class _WorkDetailState extends State<WorkDetail> {
             onSend: () => _send(store, item),
             onStop: item.draft
                 ? null
-                : () => store.cancelSession(item.sessionId).catchError((Object error) => setState(() => _composerError = Diagnostics.messageOf(error))),
+                : () => store
+                      .cancelSession(item.sessionId)
+                      .catchError(
+                        (Object error) => setState(
+                          () => _composerError = Diagnostics.messageOf(error),
+                        ),
+                      ),
             sending: sending,
             blockedReason: blockedReason,
             error: _composerError,
@@ -414,29 +561,60 @@ class _WorkDetailState extends State<WorkDetail> {
             mode: info.mode,
             onOpenProviderPicker: () {
               if (info.catalog == null) store.refreshProviders();
-              ProviderModelSheet.show(context, workId: item.workId, kind: 'provider');
+              ProviderModelSheet.show(
+                context,
+                workId: item.workId,
+                kind: 'provider',
+              );
             },
             onOpenModelPicker: () {
               final providerId = info.providerId;
-              if (providerId != null && !store.models.containsKey(providerId)) store.loadModels(providerId);
-              ProviderModelSheet.show(context, workId: item.workId, kind: 'model');
+              if (providerId != null && !store.models.containsKey(providerId)) {
+                store.loadModels(providerId);
+              }
+              ProviderModelSheet.show(
+                context,
+                workId: item.workId,
+                kind: 'model',
+              );
             },
             modeOptions: composerModeOptions(info.catalog),
             onChangeMode: (next) {
               if (item.draft) {
-                store.updateDraftSelection(item.workId, (current) => current.copyWith(mode: next));
+                store.updateDraftSelection(
+                  item.workId,
+                  (current) => current.copyWith(mode: next),
+                );
               } else {
-                store.configureSession(item, mode: next).catchError((Object error) => setState(() => _composerError = Diagnostics.messageOf(error)));
+                store
+                    .configureSession(item, mode: next)
+                    .catchError(
+                      (Object error) => setState(
+                        () => _composerError = Diagnostics.messageOf(error),
+                      ),
+                    );
               }
             },
             usage: store.usageFor(item),
             onRefreshUsage: item.draft
                 ? null
-                : () => store.refreshUsage(item.sessionId).catchError((Object error) => Diagnostics.instance.record('Refreshing usage', error)),
+                : () => store
+                      .refreshUsage(item.sessionId)
+                      .catchError(
+                        (Object error) => Diagnostics.instance.record(
+                          'Refreshing usage',
+                          error,
+                        ),
+                      ),
             workflows: store.workflows,
             onStartWorkflow: ready
-                ? (workflowId) =>
-                      store.startWorkflow(workflowId, item.title).catchError((Object error) => setState(() => _composerError = Diagnostics.messageOf(error)))
+                ? (workflowId) => store
+                      .startWorkflow(workflowId, item.title)
+                      .catchError(
+                        (Object error) => setState(
+                          () => _composerError = Diagnostics.messageOf(error),
+                        ),
+                      )
                 : null,
           ),
         ],
@@ -478,8 +656,19 @@ class _WorkDetailState extends State<WorkDetail> {
             ),
           if (store.detail == 'changes')
             item.draft
-                ? const PraxisCard(children: [Body('Send the first message to start a session; its changes appear here.', dim: true)])
-                : ChangesView(sessionId: item.sessionId, runId: item.runId, run: run),
+                ? const PraxisCard(
+                    children: [
+                      Body(
+                        'Send the first message to start a session; its changes appear here.',
+                        dim: true,
+                      ),
+                    ],
+                  )
+                : ChangesView(
+                    sessionId: item.sessionId,
+                    runId: item.runId,
+                    run: run,
+                  ),
         ],
       );
     }
@@ -489,7 +678,10 @@ class _WorkDetailState extends State<WorkDetail> {
         const MotifBackdrop(),
         Column(
           children: [
-            SessionHeader(title: item.title, onOpenSidebar: widget.onOpenSidebar),
+            SessionHeader(
+              title: item.title,
+              onOpenSidebar: widget.onOpenSidebar,
+            ),
             Expanded(child: body),
           ],
         ),

@@ -137,7 +137,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
         <div className="feature-section-header feature-section-toggle">
           <button type="button" className="feature-section-title" aria-expanded={!ticketsCollapsed} onClick={toggleTickets}>
             <span className="sidebar-section-label">Project tickets</span>
-            <span className="easymode-section-header__count">{candidates?.length ?? 0}</span>
+            <span className="easymode-section-header__count">{candidates?.filter(candidate => !candidate.finished).length ?? 0}</span>
           </button>
           <div className="feature-section-actions">
             <button type="button" className="feature-section-action" aria-label={ticketsMaximized ? 'Restore sidebar' : 'Use full sidebar'} title={ticketsMaximized ? 'Restore sidebar' : 'Use full sidebar'} onClick={() => {

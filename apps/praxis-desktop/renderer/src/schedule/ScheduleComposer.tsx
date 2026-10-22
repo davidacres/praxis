@@ -160,6 +160,15 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
     if (candidate) addCandidate(candidate, index);
   };
 
+  const pointerDropIndex = (point: { x: number; y: number }): number | undefined => {
+    const target = document.elementFromPoint(point.x, point.y);
+    if (!target?.closest('.schedule-stage')) return undefined;
+    const card = target.closest<HTMLElement>('.schedule-belt-card');
+    if (!card) return belt.length;
+    const index = belt.findIndex(ticket => ticket.issueKey === card.dataset.issue);
+    return index < 0 ? belt.length : index;
+  };
+
   const readiness = preview.readiness;
   const blockers = readiness?.issues.filter(issue => issue.severity === 'blocker') ?? [];
   const canSchedule = !!readiness && readiness.ready && belt.length > 0 && !preview.error;
@@ -220,16 +229,31 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
       {saveError && <div className="schedule-error" role="alert" data-testid="schedule-save-error">{saveError}</div>}
 
       <div className="schedule-compose-grid">
-        {ticketHost && createPortal(<ScheduleTickets candidates={candidates} loadError={loadError} used={onBelt} onAdd={candidate => addCandidate(candidate)} onDrag={candidate => { dragging.current = { from: 'hopper', key: `${candidate.connectionId}\u0000${candidate.key}` }; }} onDragEnd={() => { dragging.current = undefined; setOverIndex(undefined); }} onDragStart={(candidate, dataTransfer) => {
-          const payload = { from: 'hopper' as const, key: `${candidate.connectionId}\u0000${candidate.key}` };
-          dragging.current = payload;
-          dataTransfer.effectAllowed = 'copy';
-          dataTransfer.setData(SCHEDULE_TICKET_DRAG_TYPE, JSON.stringify(payload));
-          dataTransfer.setData('text/plain', candidate.key);
+        {ticketHost && createPortal(<ScheduleTickets candidates={candidates} loadError={loadError} used={onBelt} onAdd={candidate => addCandidate(candidate)} onTicketDrag={point => {
+          setOverIndex(point ? pointerDropIndex(point) : undefined);
+        }} onTicketDrop={(candidate, point) => {
+          const index = pointerDropIndex(point);
+          setOverIndex(undefined);
+          if (index !== undefined) addCandidate(candidate, index);
         }} />, ticketHost)}
 
         <div className="schedule-main-col">
-          <section className="schedule-stage" aria-label="Run order">
+          <section className="schedule-stage" aria-label="Run order"
+            onDragOver={event => {
+              if (!dragging.current && !Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = dragging.current?.from === 'belt' ? 'move' : 'copy';
+              setOverIndex(belt.length);
+            }}
+            onDragLeave={event => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverIndex(undefined);
+            }}
+            onDrop={event => {
+              event.preventDefault();
+              event.stopPropagation();
+              dropAt(belt.length, event.dataTransfer);
+            }}
+            data-drag-over={overIndex !== undefined || undefined}>
             <div className="schedule-stage-head">
               <h3 className="schedule-panel-title">Run order <span className="schedule-panel-note">one at a time, left to right</span></h3>
               <span className="schedule-pill" data-testid="schedule-count">{count} ticket{count === 1 ? '' : 's'}</span>
@@ -246,6 +270,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
                 }}
                 onDrop={event => {
                   event.preventDefault();
+                  event.stopPropagation();
                   dropAt(belt.length, event.dataTransfer);
                 }}
               >

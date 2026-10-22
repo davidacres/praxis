@@ -88,11 +88,11 @@ test('builds a schedule on the belt, saves it, and it survives a restart in the 
   await expect(composer).toBeVisible();
   await expect(page.getByTestId('schedule-hopper-card')).toHaveCount(3);
 
-  // Click adds to the end of the belt; the card in the hopper dims.
+  // Keyboard activation adds to the end of the belt; clicking the card does not.
   const keys = await page.getByTestId('schedule-hopper-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-issue') as string));
-  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Log retention' }).click();
-  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Fix pager bug' }).click();
-  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Add export CSV' }).click();
+  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Log retention' }).press('Enter');
+  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Fix pager bug' }).press('Enter');
+  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Add export CSV' }).press('Enter');
   expect(await beltOrder(page)).toHaveLength(3);
   await expect(page.getByTestId('schedule-count')).toHaveText('3 tickets');
   await expect(page.getByTestId('schedule-hopper-card').filter({ hasText: 'Log retention' })).toBeDisabled();
@@ -139,7 +139,7 @@ test('builds a schedule on the belt, saves it, and it survives a restart in the 
 test('edit, schedule, hold and delete a schedule', async () => {
   const { page } = await launch();
   await page.getByTestId('schedule-new').click();
-  await page.getByTestId('schedule-hopper-card').first().click();
+  await page.getByTestId('schedule-hopper-card').first().press('Enter');
   await page.getByTestId('schedule-date').fill('2030-02-01');
   await page.getByTestId('schedule-time').fill('09:30');
   await page.getByTestId('schedule-name').fill('Morning batch');
@@ -154,7 +154,7 @@ test('edit, schedule, hold and delete a schedule', async () => {
   // Edit adds a second ticket and keeps it scheduled.
   await card.getByTestId('schedule-edit').click();
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
-  await page.getByTestId('schedule-hopper-card').filter({ hasNotText: 'on belt' }).first().click();
+  await page.getByTestId('schedule-hopper-card').filter({ hasNotText: 'on belt' }).first().press('Enter');
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
   await page.getByTestId('schedule-save').click();
   await expect(card.getByTestId('schedule-mini-belt').locator('li')).toHaveCount(2);
@@ -214,7 +214,7 @@ test('a start that passed while Praxis was closed is missed, and only a choice r
 test('a run with no usable provider cannot be scheduled, and says why', async () => {
   const { page } = await launch({ provider: false });
   await page.getByTestId('schedule-new').click();
-  await page.getByTestId('schedule-hopper-card').first().click();
+  await page.getByTestId('schedule-hopper-card').first().press('Enter');
   await expect(page.getByTestId('schedule-readiness')).toContainText('No AI provider is enabled');
   await expect(page.getByTestId('schedule-save')).toBeDisabled();
   // A draft can still be kept while that is fixed.
@@ -305,6 +305,12 @@ test('tickets can be dragged from the hopper onto the belt and reordered on it',
   const { page } = await launch();
   await page.getByTestId('schedule-new').click();
   const hopper = (text: string) => page.getByTestId('schedule-hopper-card').filter({ hasText: text });
+  await hopper('Fix pager bug').click();
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(0);
+  // A drag released outside Run order must not fall through to click-to-add.
+  await hopper('Fix pager bug').dragTo(page.getByTestId('schedule-name'));
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(0);
+
 
   // Dropping on the empty belt appends; dropping on a card inserts before it.
   await hopper('Fix pager bug').dragTo(page.getByTestId('schedule-belt-slot'));
@@ -340,9 +346,24 @@ test('dragging a group ticket from the scheduler sidebar adds its unfinished chi
   await expect(page.getByTestId('schedule-sidebar')).toBeVisible();
   await page.getByTestId('schedule-new').click();
 
+  // Match the running app's 120% zoom; hit testing uses CSS coordinates.
+  await page.evaluate(() => window.praxis.window.setZoomFactor(1.2));
   const groupTicket = page.locator(`[data-testid="schedule-hopper-card"][data-issue="${groupKey}"]`);
   await expect(groupTicket).toBeVisible();
-  await groupTicket.dragTo(page.getByTestId('schedule-belt-slot'));
+  // Drag the visible title onto the Run order header, outside the belt slot.
+  const source = await groupTicket.locator('.issue-card-title').boundingBox();
+  const target = await page.getByRole('region', { name: 'Run order', exact: true }).locator('.schedule-stage-head').boundingBox();
+  expect(source).not.toBeNull();
+  expect(target).not.toBeNull();
+  await page.mouse.move(source!.x + source!.width / 2, source!.y + source!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(source!.x + source!.width / 2 + 10, source!.y + source!.height / 2, { steps: 5 });
+  await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2, { steps: 25 });
+  await page.mouse.move(target!.x + target!.width / 2 + 1, target!.y + target!.height / 2);
+  await expect(page.locator('.schedule-ticket-drag-preview')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Run order', exact: true })).toHaveAttribute('data-drag-over', 'true');
+  await page.mouse.up();
+  await expect(page.locator('.schedule-ticket-drag-preview')).toHaveCount(0);
 
   const belt = page.getByTestId('schedule-belt');
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
@@ -369,7 +390,7 @@ test('capture the composer and lineup for visual review (opt-in)', async () => {
   await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
 
   await page.getByTestId('schedule-new').click();
-  for (const title of titles.slice(0, 4)) await page.getByTestId('schedule-hopper-card').filter({ hasText: title }).click();
+  for (const title of titles.slice(0, 4)) await page.getByTestId('schedule-hopper-card').filter({ hasText: title }).press('Enter');
   await page.getByTestId('schedule-name').fill('Nightly API cleanup');
   await page.getByTestId('schedule-date').fill('2030-10-21');
   await page.getByTestId('schedule-time').fill('22:00');
@@ -413,7 +434,7 @@ test('capture the composer and lineup for visual review (opt-in)', async () => {
 test('the armed processor rings stay concentric while they spin', async () => {
   const { page } = await launch();
   await page.getByTestId('schedule-new').click();
-  await page.getByTestId('schedule-hopper-card').first().click();
+  await page.getByTestId('schedule-hopper-card').first().press('Enter');
   const centres = () => page.getByTestId('schedule-processor').evaluate(root => {
     const centre = (selector: string) => {
       const box = (root.querySelector(selector) as SVGGraphicsElement).getBoundingClientRect();
@@ -466,7 +487,7 @@ test('scheduled runs have a grouped sidebar and project tickets stay outside the
   await page.getByTestId('schedule-nav-run').filter({ hasText: 'First schedule' }).click();
   await expect(page.getByTestId('schedule-card')).toHaveCount(1);
   await expect(page.getByTestId('schedule-card-name')).toHaveText('First schedule');
-  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Fix pager bug' }).click();
+  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Fix pager bug' }).press('Enter');
   await expect(page.getByTestId('schedule-name')).toHaveValue('First schedule');
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
   // The secondary pane must not hide the left run list or reset the draft.
@@ -500,7 +521,7 @@ test('scheduled runs have a grouped sidebar and project tickets stay outside the
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
   await page.getByRole('textbox', { name: 'Filter tickets' }).fill('export');
   await expect(page.getByTestId('schedule-hopper-card')).toHaveCount(1);
-  await page.getByTestId('schedule-hopper-card').click();
+  await page.getByTestId('schedule-hopper-card').press('Enter');
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
   await page.getByTestId('schedule-save-draft').click();
   await expect(page.getByTestId('schedule-card').getByTestId('schedule-mini-belt').locator('li[data-issue]')).toHaveCount(2);
@@ -510,7 +531,7 @@ test('scheduled runs have a grouped sidebar and project tickets stay outside the
   await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
   await page.getByTestId('schedule-new').click();
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(0);
-  await page.getByTestId('schedule-hopper-card').first().click();
+  await page.getByTestId('schedule-hopper-card').first().press('Enter');
   await expect(page.getByTestId('schedule-ready')).toBeVisible();
   await page.waitForTimeout(800); // Let the ticket entry animation settle for visual review.
   await page.screenshot({ path: path.join(shots, 'scheduled-run-sidebar-composer.png') });
@@ -518,14 +539,14 @@ test('scheduled runs have a grouped sidebar and project tickets stay outside the
   await page.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-light', themeMode: 'light' } } as never));
   await page.reload();
   await page.getByTestId('schedule-new').click();
-  await page.getByTestId('schedule-hopper-card').first().click();
+  await page.getByTestId('schedule-hopper-card').first().press('Enter');
   await page.setViewportSize({ width: 1100, height: 650 });
   const tickets = page.getByTestId('schedule-sidebar').getByTestId('schedule-hopper');
   await expect(tickets).toBeVisible();
   const bounds = await tickets.boundingBox();
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(650);
   await page.getByRole('textbox', { name: 'Filter tickets' }).fill('retention');
-  await page.getByTestId('schedule-hopper-card').click();
+  await page.getByTestId('schedule-hopper-card').press('Enter');
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
   await expect(page.locator('html')).toHaveAttribute('data-mode', 'light');
   const belt = await page.getByTestId('schedule-belt').boundingBox();
@@ -564,6 +585,11 @@ test('sidebar uses classic recency groups and expands group tickets', async () =
     const group = await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Feature', summary: 'Release group', description: '' }, connection);
     await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Grouped work', description: '', parentKey: group.key }, connection);
     await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Other grouped work', description: '', parentKey: group.key }, connection);
+    const done = await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Completed standalone work', description: '' }, connection);
+    const doneChild = await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Completed grouped work', description: '', parentKey: group.key }, connection);
+    const doneGroup = await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Feature', summary: 'Completed group', description: '' }, connection);
+    await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Unfinished child of completed group', description: '', parentKey: doneGroup.key }, connection);
+    for (const ticket of [done, doneChild, doneGroup]) await window.praxis.issue.transition(ticket.key, 'done', connection);
     for (const name of ['Today run', 'Recent run', 'Old run']) await window.praxis.scheduledRuns.save({ projectId: id, name, date: '2030-01-15', time: '22:00', timezone: 'UTC', tickets: [], arm: false });
     return group.key;
   }, projectId);
@@ -585,8 +611,12 @@ test('sidebar uses classic recency groups and expands group tickets', async () =
   await expect(reopened.getByTestId('schedule-bucket-last-week')).toContainText('Old run');
   await reopened.getByTestId('schedule-bucket-this-week').getByRole('button', { name: 'This week' }).click();
   await expect(reopened.getByTestId('schedule-bucket-this-week').getByTestId('schedule-nav-run')).toHaveCount(0);
+  // Hide completed parents and children, while retaining their unfinished work.
+  await expect(reopened.getByTestId('schedule-hopper-card').filter({ hasText: /^Completed/ })).toHaveCount(0);
+  await expect(reopened.getByTestId('schedule-hopper-card').filter({ hasText: 'Unfinished child of completed group' })).toBeVisible();
+  await expect(reopened.getByRole('button', { name: 'Project tickets 7', exact: true })).toBeVisible();
   await reopened.getByTestId('schedule-new').click();
-  await reopened.locator(`[data-testid="schedule-hopper-card"][data-issue="${groupKey}"]`).click();
+  await reopened.locator(`[data-testid="schedule-hopper-card"][data-issue="${groupKey}"]`).press('Enter');
   await expect(reopened.getByTestId('schedule-belt-card')).toHaveCount(2);
   await expect(reopened.getByTestId('schedule-belt')).toContainText('Grouped work');
   await expect(reopened.getByTestId('schedule-belt')).toContainText('Other grouped work');

@@ -6,6 +6,7 @@ import '../app/diagnostics.dart';
 import '../app/store.dart';
 import '../app/theme.dart';
 import '../core/workflow_runs.dart';
+import 'project_switcher.dart';
 
 /// Text in the app's scale. [lineHeight] is in points, as React Native writes it.
 TextStyle ts(
@@ -28,7 +29,9 @@ TextStyle ts(
     color: color ?? t.palette.text,
     fontWeight: weight,
     // With no lineHeight, CoreText's line box for SF: ascent + descent, no leading.
-    height: lineHeight == null ? 1.1777 : (scaled ? lineHeight * t.scale : lineHeight) / fontSize,
+    height: lineHeight == null
+        ? 1.1777
+        : (scaled ? lineHeight * t.scale : lineHeight) / fontSize,
     letterSpacing: letterSpacing ?? sfTracking(fontSize, weight),
     fontStyle: style,
     fontFamily: family,
@@ -42,8 +45,44 @@ TextStyle ts(
 /// Flutter does not: measured on the simulator as CoreText width minus Flutter
 /// width per glyph (points), regular and bold. React Native's letterSpacing
 /// replaces it, so an explicit letterSpacing is used as-is.
-const _trackingRegular = [0.203, 0.167, 0.117, 0.064, 0.0, -0.076, -0.150, -0.234, -0.312, -0.432, -0.484, -0.540, -0.708, -0.799, -0.894, -0.950, -1.007];
-const _trackingBold = [0.203, 0.167, 0.117, 0.064, 0.0, -0.076, -0.150, -0.234, -0.312, -0.432, -0.480, -0.532, -0.686, -0.761, -0.839, -0.876, -0.913];
+const _trackingRegular = [
+  0.203,
+  0.167,
+  0.117,
+  0.064,
+  0.0,
+  -0.076,
+  -0.150,
+  -0.234,
+  -0.312,
+  -0.432,
+  -0.484,
+  -0.540,
+  -0.708,
+  -0.799,
+  -0.894,
+  -0.950,
+  -1.007,
+];
+const _trackingBold = [
+  0.203,
+  0.167,
+  0.117,
+  0.064,
+  0.0,
+  -0.076,
+  -0.150,
+  -0.234,
+  -0.312,
+  -0.432,
+  -0.480,
+  -0.532,
+  -0.686,
+  -0.761,
+  -0.839,
+  -0.876,
+  -0.913,
+];
 
 double sfTracking(double size, FontWeight weight) {
   double at(List<double> table) {
@@ -130,7 +169,10 @@ class ScreenScroll extends StatelessWidget {
       child: ListView(
         padding: EdgeInsets.all(t.space),
         children: [
-          for (var i = 0; i < children.length; i += 1) ...[if (i > 0) SizedBox(height: t.space), children[i]],
+          for (var i = 0; i < children.length; i += 1) ...[
+            if (i > 0) SizedBox(height: t.space),
+            children[i],
+          ],
         ],
       ),
     );
@@ -138,7 +180,12 @@ class ScreenScroll extends StatelessWidget {
 }
 
 class PraxisCard extends StatelessWidget {
-  const PraxisCard({super.key, required this.children, this.gap = 8, this.borderColor});
+  const PraxisCard({
+    super.key,
+    required this.children,
+    this.gap = 8,
+    this.borderColor,
+  });
   final List<Widget> children;
   final double gap;
   final Color? borderColor;
@@ -157,7 +204,10 @@ class PraxisCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var i = 0; i < children.length; i += 1) ...[if (i > 0) SizedBox(height: gap), children[i]],
+          for (var i = 0; i < children.length; i += 1) ...[
+            if (i > 0) SizedBox(height: gap),
+            children[i],
+          ],
         ],
       ),
     );
@@ -185,7 +235,12 @@ class Body extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     textAlign: align,
-    style: ts(context, 15, lineHeight: 21, color: dim ? context.p.textDim : context.p.text),
+    style: ts(
+      context,
+      15,
+      lineHeight: 21,
+      color: dim ? context.p.textDim : context.p.text,
+    ),
   );
 }
 
@@ -208,7 +263,10 @@ class Pill extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: context.t.s(10), vertical: context.t.s(3)),
+        padding: EdgeInsets.symmetric(
+          horizontal: context.t.s(10),
+          vertical: context.t.s(3),
+        ),
         decoration: BoxDecoration(
           border: Border.all(color: color),
           borderRadius: BorderRadius.circular(999),
@@ -223,7 +281,14 @@ class Pill extends StatelessWidget {
 }
 
 class PraxisButton extends StatelessWidget {
-  const PraxisButton({super.key, required this.label, required this.onPressed, this.ghost = false, this.disabled = false, this.expand = true});
+  const PraxisButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.ghost = false,
+    this.disabled = false,
+    this.expand = true,
+  });
   final String label;
   final VoidCallback? onPressed;
   final bool ghost;
@@ -257,13 +322,23 @@ class PraxisButton extends StatelessWidget {
           child: expand
               ? Text(
                   label,
-                  style: ts(context, 15, weight: FontWeight.w700, color: ghost ? t.palette.text : t.palette.onAccent),
+                  style: ts(
+                    context,
+                    15,
+                    weight: FontWeight.w700,
+                    color: ghost ? t.palette.text : t.palette.onAccent,
+                  ),
                 )
               : Align(
                   widthFactor: 1,
                   child: Text(
                     label,
-                    style: ts(context, 15, weight: FontWeight.w700, color: ghost ? t.palette.text : t.palette.onAccent),
+                    style: ts(
+                      context,
+                      15,
+                      weight: FontWeight.w700,
+                      color: ghost ? t.palette.text : t.palette.onAccent,
+                    ),
                   ),
                 ),
         ),
@@ -280,7 +355,10 @@ class Spinner extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     width: small ? 20 : 36,
     height: small ? 20 : 36,
-    child: CupertinoActivityIndicator(color: color ?? context.p.textDim, radius: small ? 9 : 16),
+    child: CupertinoActivityIndicator(
+      color: color ?? context.p.textDim,
+      radius: small ? 9 : 16,
+    ),
   );
 }
 
@@ -324,7 +402,14 @@ class ConnectionBadge extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               label,
-              style: ts(context, 9, scaled: false, weight: FontWeight.w700, color: p.textDim, letterSpacing: 0.6),
+              style: ts(
+                context,
+                9,
+                scaled: false,
+                weight: FontWeight.w700,
+                color: p.textDim,
+                letterSpacing: 0.6,
+              ),
             ),
           ],
         ),
@@ -334,7 +419,13 @@ class ConnectionBadge extends StatelessWidget {
 }
 
 class MenuButton extends StatelessWidget {
-  const MenuButton({super.key, required this.onTap, this.size = 32, this.radius = 7, this.glyph = 17});
+  const MenuButton({
+    super.key,
+    required this.onTap,
+    this.size = 32,
+    this.radius = 7,
+    this.glyph = 17,
+  });
   final VoidCallback onTap;
   final double size;
   final double radius;
@@ -360,7 +451,12 @@ class MenuButton extends StatelessWidget {
           ),
           child: Text(
             '☰',
-            style: ts(context, glyph, color: t.palette.textSecondary, lineHeight: glyph + 2),
+            style: ts(
+              context,
+              glyph,
+              color: t.palette.textSecondary,
+              lineHeight: glyph + 2,
+            ),
           ),
         ),
       ),
@@ -368,9 +464,43 @@ class MenuButton extends StatelessWidget {
   }
 }
 
+void goHome(BuildContext context) {
+  final store = context.read<AppStore>();
+  store.desktopsVisible = false;
+  store.openWork(null);
+  store.openRun(null);
+  store.setRoute('home');
+}
+
+class HomeButton extends StatelessWidget {
+  const HomeButton({super.key});
+
+  @override
+  Widget build(BuildContext context) => Pressable(
+    label: 'Home',
+    onTap: () => goHome(context),
+    excludeChildSemantics: true,
+    builder: (context, pressed) => Container(
+      width: context.t.s(30),
+      height: context.t.s(30),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: pressed ? context.p.surfaceRaised : context.p.surface,
+        border: Border.all(color: context.p.border),
+        borderRadius: BorderRadius.circular(context.t.s(6)),
+      ),
+      child: Text('⌂', style: ts(context, 17, color: context.p.textSecondary)),
+    ),
+  );
+}
+
 /// The Attention and Activity header: menu, title, connection state.
 class AppHeader extends StatelessWidget {
-  const AppHeader({super.key, required this.title, required this.onOpenSidebar});
+  const AppHeader({
+    super.key,
+    required this.title,
+    required this.onOpenSidebar,
+  });
   final String title;
   final VoidCallback onOpenSidebar;
 
@@ -387,13 +517,23 @@ class AppHeader extends StatelessWidget {
       child: Row(
         children: [
           MenuButton(onTap: onOpenSidebar),
-          SizedBox(width: t.s(10)),
+          SizedBox(width: t.s(6)),
+          const HomeButton(),
+          SizedBox(width: t.s(8)),
           Expanded(
             child: Semantics(
               header: true,
-              child: Text(title, style: ts(context, 15, weight: FontWeight.w700)),
+              child: Text(
+                title,
+                style: ts(context, 15, weight: FontWeight.w700),
+              ),
             ),
           ),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: t.s(115)),
+            child: const ProjectSwitcher(compact: true),
+          ),
+          SizedBox(width: t.s(6)),
           const ConnectionBadge(),
         ],
       ),
@@ -409,7 +549,9 @@ class StaleBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
     final text = context.watch<Diagnostics>().staleness;
-    if (text == null || store.connection != ShellConnection.ready) return const SizedBox.shrink();
+    if (text == null || store.connection != ShellConnection.ready) {
+      return const SizedBox.shrink();
+    }
     final t = context.t;
     return Pressable(
       label: '$text Tap to reconnect.',
@@ -422,7 +564,10 @@ class StaleBanner extends StatelessWidget {
           color: t.palette.warnSoft,
           border: Border(bottom: BorderSide(color: t.palette.warn)),
         ),
-        child: Text('$text Tap to reconnect.', style: ts(context, 12.5, lineHeight: 18)),
+        child: Text(
+          '$text Tap to reconnect.',
+          style: ts(context, 12.5, lineHeight: 18),
+        ),
       ),
     );
   }
@@ -436,7 +581,10 @@ Color runToneColor(BuildContext context, RunTone tone) => switch (tone) {
   RunTone.neutral => context.p.textDim,
 };
 
-Color runToneBackground(BuildContext context, RunTone tone) => tone == RunTone.neutral ? context.p.surfaceRaised : runToneColor(context, tone);
+Color runToneBackground(BuildContext context, RunTone tone) =>
+    tone == RunTone.neutral
+    ? context.p.surfaceRaised
+    : runToneColor(context, tone);
 
 class StatusPill extends StatelessWidget {
   const StatusPill({super.key, required this.label, required this.tone});
@@ -446,7 +594,10 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = runToneColor(context, tone);
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: context.t.s(8), vertical: context.t.s(2)),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.t.s(8),
+        vertical: context.t.s(2),
+      ),
       decoration: BoxDecoration(
         border: Border.all(color: color),
         borderRadius: BorderRadius.circular(999),
@@ -462,7 +613,11 @@ class StatusPill extends StatelessWidget {
 }
 
 /// A modal sheet with the app's handle, rounded top and scrim.
-Future<T?> showPraxisSheet<T>(BuildContext context, {required WidgetBuilder builder, double maxHeightFactor = 0.82}) {
+Future<T?> showPraxisSheet<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+  double maxHeightFactor = 0.82,
+}) {
   final p = context.p;
   return showModalBottomSheet<T>(
     context: context,
@@ -470,7 +625,9 @@ Future<T?> showPraxisSheet<T>(BuildContext context, {required WidgetBuilder buil
     useSafeArea: true,
     backgroundColor: Colors.transparent,
     barrierColor: p.scrim,
-    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * maxHeightFactor),
+    constraints: BoxConstraints(
+      maxHeight: MediaQuery.of(context).size.height * maxHeightFactor,
+    ),
     builder: builder,
   );
 }
@@ -503,7 +660,10 @@ class SheetFrame extends StatelessWidget {
               width: 42,
               height: 4,
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: p.borderStrong, borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: p.borderStrong,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           Flexible(child: child),
@@ -514,7 +674,14 @@ class SheetFrame extends StatelessWidget {
 }
 
 class SquareIconButton extends StatelessWidget {
-  const SquareIconButton({super.key, required this.label, required this.glyph, required this.onTap, this.size = 34, this.glyphSize = 19});
+  const SquareIconButton({
+    super.key,
+    required this.label,
+    required this.glyph,
+    required this.onTap,
+    this.size = 34,
+    this.glyphSize = 19,
+  });
   final String label;
   final String glyph;
   final VoidCallback onTap;
@@ -532,10 +699,19 @@ class SquareIconButton extends StatelessWidget {
         width: size,
         height: size,
         alignment: Alignment.center,
-        decoration: BoxDecoration(color: pressed ? p.surfaceRaised : p.surface, borderRadius: BorderRadius.circular(7)),
+        decoration: BoxDecoration(
+          color: pressed ? p.surfaceRaised : p.surface,
+          borderRadius: BorderRadius.circular(7),
+        ),
         child: Text(
           glyph,
-          style: ts(context, glyphSize, scaled: false, weight: FontWeight.w300, color: p.textDim),
+          style: ts(
+            context,
+            glyphSize,
+            scaled: false,
+            weight: FontWeight.w300,
+            color: p.textDim,
+          ),
         ),
       ),
     );
