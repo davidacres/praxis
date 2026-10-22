@@ -10,6 +10,7 @@ import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { providerLabel } from './modelProviders';
 import { formatCost, summariseSpend } from './sessionNav';
 import { ProviderCard } from './ProviderUsageWindows';
+import { onSessionChanged } from './sessionChangeStream';
 
 /**
  * Per-provider account budgets on the Overview dashboard (FX-BF-050).
@@ -81,7 +82,7 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
         }
       })
       .catch(() => undefined);
-    const unsub = window.praxis.ai.onSessionChanged(record => {
+    const unsub = onSessionChanged(record => {
       const { events: _ev, ...rest } = record;
       setSessions(curr => [{ ...rest, events: [] }, ...curr.filter(s => s.issueKey !== record.issueKey)]);
     });

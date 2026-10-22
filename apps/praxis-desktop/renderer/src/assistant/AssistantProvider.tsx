@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { WireImageAttachment, AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
+import { onSessionChanged } from '../ai/sessionChangeStream';
 
 export interface AssistantRuntimeOptions {
   provider?: AiProvider;
@@ -95,7 +96,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [lastToolSession, setLastToolSession] = useState<AgentSessionRecord>();
   const [toolUsageSessions, setToolUsageSessions] = useState<AgentSessionRecord[]>([]);
   const activeToolPrefix = useRef<string>();
-  useEffect(() => window.praxis.ai.onSessionChanged(record => {
+  useEffect(() => onSessionChanged(record => {
     if (activeToolPrefix.current && record.issueKey.startsWith(`${activeToolPrefix.current}-`)) {
       setActiveToolSession(record);
       setToolUsageSessions(current => current.some(item => item.sessionId === record.sessionId)

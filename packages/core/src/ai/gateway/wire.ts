@@ -3,7 +3,7 @@
  * Host-agnostic (no vscode imports) so this can be extracted later.
  */
 
-import { anthropicThinkingBudget, detectReasoningFamily, geminiThinkingBudget } from '../providers/reasoningSupport';
+import { anthropicThinkingConfig, detectReasoningFamily, geminiThinkingBudget } from '../providers/reasoningSupport';
 
 export type WireRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -217,11 +217,24 @@ export function buildChatRequest(args: BuildChatRequestArgs): Record<string, unk
   if (args.reasoningEffort && args.reasoningEffort !== 'off') {
     const family = detectReasoningFamily(args.modelId);
     if (family === 'anthropic') {
-      const budget = anthropicThinkingBudget(args.reasoningEffort);
-      if (budget) {
-        body.max_tokens = Math.max(body.max_tokens as number, budget + 1024);
-        delete body.temperature; // Anthropic rejects a custom temperature alongside thinking.
-        providerOptions.anthropic = { thinking: { type: 'enabled', budget_tokens: budget } };
+      // Claude 4.7+ reject the `type: 'enabled'` shape, and 4.5-and-earlier
+      // reject `type: 'adaptive'`, so the mode has to come from the model id.
+      // `output_config` is a top-level Anthropic field, so it rides the same
+      // provider passthrough rather than the OpenAI-shaped body.
+      const config = anthropicThinkingConfig(args.modelId, args.reasoningEffort);
+      if (config?.thinking) {
+        const anthropicOptions: Record<string, unknown> = { thinking: config.thinking };
+        if (config.outputConfig) {
+          anthropicOptions.output_config = config.outputConfig;
+        }
+        const budget = config.thinking.budget_tokens;
+        if (typeof budget === 'number') {
+          body.max_tokens = Math.max(body.max_tokens as number, budget + 1024);
+        }
+        // Anthropic rejects a custom temperature alongside thinking. No Praxis
+        // caller sets one, so this is defensive rather than load-bearing.
+        delete body.temperature;
+        providerOptions.anthropic = anthropicOptions;
       }
     } else if (family === 'gemini') {
       const budget = geminiThinkingBudget(args.reasoningEffort);
@@ -451,7 +464,66 @@ export async function* consumeChatStream(
     if (typeof next.inputTokens === 'number') merged.inputTokens = next.inputTokens;
     if (typeof next.outputTokens === 'number') merged.outputTokens = next.outputTokens;
     if (typeof next.totalTokens === 'number') merged.totalTokens = next.totalTokens;
+    if (typeof next.reasoningTokens === 'number') merged.reasoningTokens = next.reasoningTokens;
+    if (typeof next.cachedInputTokens === 'number') merged.cachedInputTokens = next.cachedInputTokens;
     usage = merged;
+  };
+  /**
+   * How many of the billed output tokens were internal reasoning. Every
+   * provider that reports it nests it under a per-provider `*_details` object
+   * rather than a top-level field, so it was being dropped on the HTTP paths —
+   * only `acpAgentHost.ts` populated `reasoningTokens`. That matters most for
+   * GPT-6, whose reasoning text never leaves the API: the count is the only
+   * evidence thinking happened, and it was the thing being discarded.
+   */
+  const readReasoningTokens = (source: Record<string, unknown> | undefined): number | undefined => {
+    if (!source) {
+      return undefined;
+    }
+    // Documented shapes only: Anthropic's `output_tokens_details.thinking_tokens`
+    // and OpenAI-compatible providers' `completion_tokens_details.reasoning_tokens`.
+    // The camelCase spellings are kept because this file already tolerates them for
+    // `promptTokens`/`completionTokens` above.
+    const details = [
+      source.output_tokens_details,
+      source.completion_tokens_details,
+      source.completionTokensDetails,
+      source.outputTokensDetails
+    ];
+    for (const detail of details) {
+      if (!detail || typeof detail !== 'object') {
+        continue;
+      }
+      const obj = detail as Record<string, unknown>;
+      // Anthropic reports `thinking_tokens`; OpenAI-compatible providers report
+      // `reasoning_tokens`. Both are already a subset of the output tokens.
+      for (const key of ['thinking_tokens', 'reasoning_tokens', 'thinkingTokens', 'reasoningTokens']) {
+        if (typeof obj[key] === 'number') {
+          return obj[key] as number;
+        }
+      }
+    }
+    return undefined;
+  };
+  const readCachedInputTokens = (source: Record<string, unknown> | undefined): number | undefined => {
+    if (!source) {
+      return undefined;
+    }
+    // Anthropic reports `cache_read_input_tokens`; OpenAI-compatible providers
+    // nest it under `prompt_tokens_details.cached_tokens`.
+    for (const key of ['cache_read_input_tokens', 'cacheReadInputTokens']) {
+      if (typeof source[key] === 'number') {
+        return source[key] as number;
+      }
+    }
+    const details = source.prompt_tokens_details;
+    if (details && typeof details === 'object') {
+      const obj = details as Record<string, unknown>;
+      if (typeof obj.cached_tokens === 'number') {
+        return obj.cached_tokens;
+      }
+    }
+    return undefined;
   };
   const readNumber = (source: Record<string, unknown> | undefined, key: string): number | undefined =>
     typeof source?.[key] === 'number' ? (source[key] as number) : undefined;
@@ -481,7 +553,9 @@ export async function* consumeChatStream(
         if (reported) {
           noteUsage({
             inputTokens: readNumber(reported, 'input_tokens'),
-            outputTokens: readNumber(reported, 'output_tokens')
+            outputTokens: readNumber(reported, 'output_tokens'),
+            reasoningTokens: readReasoningTokens(reported),
+            cachedInputTokens: readCachedInputTokens(reported)
           });
         }
         continue;
@@ -503,6 +577,13 @@ export async function* consumeChatStream(
         if (delta?.type === 'text_delta' && typeof delta.text === 'string' && delta.text) {
           text += delta.text;
           yield { type: 'text_delta', text: delta.text };
+        } else if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string' && delta.thinking) {
+          // Anthropic reports reasoning as `thinking_delta` content-block deltas,
+          // not as an OpenAI `delta.reasoning_content` field, so it needs its own
+          // branch here. Without it a gateway-routed Claude session streams the
+          // answer and silently drops every thought — unlike `anthropicWire.ts`,
+          // which handles this and so showed reasoning on the direct route.
+          yield { type: 'thought_delta', text: delta.thinking };
         } else if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
           const index = typeof evt.index === 'number' ? evt.index : 0;
           const existing = toolCalls.get(index);
@@ -526,9 +607,14 @@ export async function* consumeChatStream(
         }
         const reported = evt.usage as Record<string, unknown> | undefined;
         if (reported) {
+          // Anthropic reports the thinking-token breakdown only on this final
+          // message_delta event, so it has to be read here rather than at
+          // message_start.
           noteUsage({
             inputTokens: readNumber(reported, 'input_tokens'),
-            outputTokens: readNumber(reported, 'output_tokens')
+            outputTokens: readNumber(reported, 'output_tokens'),
+            reasoningTokens: readReasoningTokens(reported),
+            cachedInputTokens: readCachedInputTokens(reported)
           });
         }
         continue;
@@ -550,7 +636,9 @@ export async function* consumeChatStream(
       noteUsage({
         inputTokens: readNumber(reportedUsage, 'prompt_tokens') ?? readNumber(reportedUsage, 'promptTokens') ?? readNumber(reportedUsage, 'input_tokens'),
         outputTokens: readNumber(reportedUsage, 'completion_tokens') ?? readNumber(reportedUsage, 'completionTokens') ?? readNumber(reportedUsage, 'output_tokens'),
-        totalTokens: readNumber(reportedUsage, 'total_tokens') ?? readNumber(reportedUsage, 'totalTokens')
+        totalTokens: readNumber(reportedUsage, 'total_tokens') ?? readNumber(reportedUsage, 'totalTokens'),
+        reasoningTokens: readReasoningTokens(reportedUsage),
+        cachedInputTokens: readCachedInputTokens(reportedUsage)
       });
     }
 
@@ -564,7 +652,9 @@ export async function* consumeChatStream(
       noteUsage({
         inputTokens: readNumber(choiceUsage, 'prompt_tokens') ?? readNumber(choiceUsage, 'promptTokens') ?? readNumber(choiceUsage, 'input_tokens'),
         outputTokens: readNumber(choiceUsage, 'completion_tokens') ?? readNumber(choiceUsage, 'completionTokens') ?? readNumber(choiceUsage, 'output_tokens'),
-        totalTokens: readNumber(choiceUsage, 'total_tokens') ?? readNumber(choiceUsage, 'totalTokens')
+        totalTokens: readNumber(choiceUsage, 'total_tokens') ?? readNumber(choiceUsage, 'totalTokens'),
+        reasoningTokens: readReasoningTokens(choiceUsage),
+        cachedInputTokens: readCachedInputTokens(choiceUsage)
       });
     }
     if (typeof choice.finish_reason === 'string' && choice.finish_reason) {

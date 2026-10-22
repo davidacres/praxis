@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord, IssueSummary, ProjectActivityEntry, ProjectActivitySnapshot, ProjectRecord, WorkflowTransition } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
+import { sessionLastActivityAt } from '../app/sessionRecency';
 
 type ReviewIssue = IssueSummary & { connectionId: string };
 type ReviewItem = { issue: ReviewIssue; blocked: boolean; inactive: boolean; ageDays?: number };
 
+const SESSION_PREVIEW_LIMIT = 5;
 const DAY = 86_400_000;
 /** Unfinished work with no recorded activity for this long is surfaced. Measured from the latest of updated, created and observed change. No backend records a due date, so this aging threshold is the "overdue" rule. */
 const AGING_CHOICES = [3, 7, 14, 30] as const;
@@ -56,6 +58,7 @@ interface ProjectReviewPanelProps {
   sessions: AgentSessionRecord[];
   onOpenIssue: (issue: IssueSummary, connectionId: string) => void;
   onOpenSession: (issueKey: string) => void;
+  onOpenSessions: () => void;
   onOpenBoard?: () => void;
   /** Opens a plan file by its project-relative path. */
   onOpenPlanFile?: (relativePath: string) => void;
@@ -64,7 +67,7 @@ interface ProjectReviewPanelProps {
   request?: { view: 'review' | 'changes'; at: number };
 }
 
-export function ProjectReviewPanel({ project, sessions, onOpenIssue, onOpenSession, onOpenBoard, onOpenPlanFile, onOpenCommit, request }: ProjectReviewPanelProps) {
+export function ProjectReviewPanel({ project, sessions, onOpenIssue, onOpenSession, onOpenSessions, onOpenBoard, onOpenPlanFile, onOpenCommit, request }: ProjectReviewPanelProps) {
   const [view, setView] = useState<'review' | 'changes'>(request?.view ?? 'review');
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -128,7 +131,9 @@ export function ProjectReviewPanel({ project, sessions, onOpenIssue, onOpenSessi
     setReviewed(marker);
     setShowReviewed(false);
   };
-  const pendingSessions = sessions.filter(session => session.projectId === project.id && !['completed', 'aborted'].includes(session.state));
+  const pendingSessions = sessions.filter(session => session.projectId === project.id && !['completed', 'aborted'].includes(session.state))
+    .sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)));
+  const recentSessions = pendingSessions.slice(0, SESSION_PREVIEW_LIMIT);
   // Hundreds of entries are routine (a busy week of commits); group once per input change, not per render.
   const days = useMemo(() => (history?.entries ?? [])
     .filter(entry => (source === 'all' || entry.kind === source) && Date.parse(entry.timestamp) >= Date.now() - WINDOWS[windowId])
@@ -167,7 +172,11 @@ export function ProjectReviewPanel({ project, sessions, onOpenIssue, onOpenSessi
             <div className="project-review-footer"><button className="btn" onClick={finishReview}>Done reviewing</button></div>
           </>}
       <h3>Unfinished sessions</h3>
-      {pendingSessions.length === 0 ? <p>No unfinished sessions in this project.</p> : <ul className="project-review-list">{pendingSessions.map(session => <li key={session.sessionId}><span><strong>{session.title || session.issueKey}</strong><small>{session.state.replaceAll('_', ' ')}</small></span><button className="btn" onClick={() => onOpenSession(session.issueKey)}>Open session</button></li>)}</ul>}
+      {pendingSessions.length === 0 ? <p>No unfinished sessions in this project.</p> : <ul className="project-review-list" data-testid="project-review-sessions">{recentSessions.map(session => <li key={session.sessionId}><span><strong>{session.title || session.issueKey}</strong><small>{session.state.replaceAll('_', ' ')}</small></span><button className="btn" onClick={() => onOpenSession(session.issueKey)}>Open session</button></li>)}</ul>}
+      {pendingSessions.length > SESSION_PREVIEW_LIMIT && <p className="project-review-footer">
+        Showing the {SESSION_PREVIEW_LIMIT} most recently active of {pendingSessions.length} unfinished sessions.{' '}
+        <button className="btn btn-quiet" onClick={onOpenSessions}>View all sessions</button>
+      </p>}
     </> : <>
       <p>Item and session changes recorded by Praxis from {history ? new Date(history.startedAt).toLocaleString() : 'now'}, plan files edited outside Praxis, and the last 30 days of commits in this project's repository.</p>
       <div className="project-review-filters">

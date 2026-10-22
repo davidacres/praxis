@@ -266,6 +266,15 @@ export async function* consumeGeminiStream(
         outputTokens: typeof u.candidatesTokenCount === 'number' ? u.candidatesTokenCount : undefined,
         totalTokens: typeof u.totalTokenCount === 'number' ? u.totalTokenCount : undefined
       };
+      // Gemini names its reasoning and cache fields differently again from
+      // OpenAI's `completion_tokens_details.reasoning_tokens` and Anthropic's
+      // `output_tokens_details.thinking_tokens`. Both are already subsets of the
+      // counts above, so neither may be added into the total. Assigned only when
+      // the provider reported them: an explicit `undefined` key would make this
+      // a different object from the one a provider that reports no breakdown
+      // produces.
+      if (typeof u.thoughtsTokenCount === 'number') usage.reasoningTokens = u.thoughtsTokenCount;
+      if (typeof u.cachedContentTokenCount === 'number') usage.cachedInputTokens = u.cachedContentTokenCount;
     }
 
     const candidates = Array.isArray(chunk.candidates) ? chunk.candidates : [];

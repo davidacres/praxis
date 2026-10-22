@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 659,
+  "testCount": 691,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -1958,6 +1958,54 @@
       }
     },
     {
+      "id": "PT-324EB0D27C",
+      "title": "reasoning streams open and settles into the same widget",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiThoughtDisplayVerification.spec.ts",
+        "line": 111,
+        "project": "functional"
+      },
+      "area": "ai Thought Display Verification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "reasoning streams open and settles into the same widget",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-0F440DC449",
+      "title": "a route that cannot return reasoning says so instead of blanking",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiThoughtDisplayVerification.spec.ts",
+        "line": 198,
+        "project": "functional"
+      },
+      "area": "ai Thought Display Verification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a route that cannot return reasoning says so instead of blanking",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-7039C1B532",
+      "title": "a turn with reasoning turned off says it was not requested",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiThoughtDisplayVerification.spec.ts",
+        "line": 273,
+        "project": "functional"
+      },
+      "area": "ai Thought Display Verification",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a turn with reasoning turned off says it was not requested",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-BB8E8E328A",
       "title": "a turn that narrates between tool calls renders as one assistant card",
       "source": {
@@ -1979,7 +2027,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiThoughtGrouping.spec.ts",
-        "line": 150,
+        "line": 152,
         "project": "functional"
       },
       "area": "ai Thought Grouping",
@@ -1995,7 +2043,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiThoughtGrouping.spec.ts",
-        "line": 230,
+        "line": 232,
         "project": "functional"
       },
       "area": "ai Thought Grouping",
@@ -2923,7 +2971,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 206,
+        "line": 208,
         "project": "functional"
       },
       "area": "assistant",
@@ -2939,7 +2987,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 238,
+        "line": 240,
         "project": "functional"
       },
       "area": "assistant",
@@ -2955,7 +3003,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 268,
+        "line": 270,
         "project": "functional"
       },
       "area": "assistant",
@@ -2971,7 +3019,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 297,
+        "line": 299,
         "project": "functional"
       },
       "area": "assistant",
@@ -2987,7 +3035,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 329,
+        "line": 331,
         "project": "functional"
       },
       "area": "assistant",
@@ -3003,7 +3051,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 351,
+        "line": 353,
         "project": "functional"
       },
       "area": "assistant",
@@ -3019,7 +3067,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 363,
+        "line": 365,
         "project": "functional"
       },
       "area": "assistant",
@@ -3035,7 +3083,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 424,
+        "line": 426,
         "project": "functional"
       },
       "area": "assistant",
@@ -3051,7 +3099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 441,
+        "line": 443,
         "project": "functional"
       },
       "area": "assistant",
@@ -3067,7 +3115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 455,
+        "line": 457,
         "project": "functional"
       },
       "area": "assistant",
@@ -3083,7 +3131,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 494,
+        "line": 496,
         "project": "functional"
       },
       "area": "assistant",
@@ -3099,7 +3147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 513,
+        "line": 515,
         "project": "functional"
       },
       "area": "assistant",
@@ -3115,7 +3163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 552,
+        "line": 554,
         "project": "functional"
       },
       "area": "assistant",
@@ -3131,7 +3179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 571,
+        "line": 573,
         "project": "functional"
       },
       "area": "assistant",
@@ -3147,7 +3195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 588,
+        "line": 590,
         "project": "functional"
       },
       "area": "assistant",
@@ -3163,7 +3211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 652,
+        "line": 654,
         "project": "functional"
       },
       "area": "assistant",
@@ -3179,7 +3227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 743,
+        "line": 745,
         "project": "functional"
       },
       "area": "assistant",
@@ -3750,6 +3798,38 @@
       }
     },
     {
+      "id": "PT-AE5ED7A305",
+      "title": "a turn that used code intelligence shows a lowercase badge without a count",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatCodeIntelBadge.spec.ts",
+        "line": 38,
+        "project": "functional"
+      },
+      "area": "chat Code Intel Badge",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a turn that used code intelligence shows a lowercase badge without a count",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-9F4944C1D2",
+      "title": "an ACP MCP call reported completed first still shows the code intelligence badge",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatCodeIntelBadge.spec.ts",
+        "line": 81,
+        "project": "functional"
+      },
+      "area": "chat Code Intel Badge",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an ACP MCP call reported completed first still shows the code intelligence badge",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-C1978ED838",
       "title": "tool activity is grouped into one completion gadget",
       "source": {
@@ -4050,6 +4130,38 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a conflict gadget refuses to resolve until every side is chosen",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-92A2628B78",
+      "title": "markdown, autolink and bare URLs open in the in-app browser; file names stay plain text",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatLinks.spec.ts",
+        "line": 45,
+        "project": "functional"
+      },
+      "area": "chat Links",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "markdown, autolink and bare URLs open in the in-app browser; file names stay plain text",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-9EFD52ABD4",
+      "title": "a link to a private host is refused with a visible reason",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatLinks.spec.ts",
+        "line": 76,
+        "project": "functional"
+      },
+      "area": "chat Links",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a link to a private host is refused with a visible reason",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -4822,6 +4934,22 @@
       }
     },
     {
+      "id": "PT-3DF668A3C4",
+      "title": "--border-subtle follows the theme border and --radius-xs scales with the display",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/cssTokens.spec.ts",
+        "line": 13,
+        "project": "functional"
+      },
+      "area": "css Tokens",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "--border-subtle follows the theme border and --radius-xs scales with the display",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-F55156EA04",
       "title": "an unreachable connection is skipped instead of blanking the board list",
       "source": {
@@ -5254,6 +5382,22 @@
       }
     },
     {
+      "id": "PT-B11747EA92",
+      "title": "a secondary plans root disables New issue up front and says why",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/folderMulti.spec.ts",
+        "line": 160,
+        "project": "functional"
+      },
+      "area": "folder Multi",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a secondary plans root disables New issue up front and says why",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-996985A023",
       "title": "renders the visual Git graph and commit inspector",
       "source": {
@@ -5419,7 +5563,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
-        "line": 96,
+        "line": 97,
         "project": "functional"
       },
       "area": "gitlab",
@@ -5435,7 +5579,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
-        "line": 117,
+        "line": 118,
         "project": "functional"
       },
       "area": "gitlab",
@@ -5451,13 +5595,45 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
-        "line": 135,
+        "line": 136,
         "project": "functional"
       },
       "area": "gitlab",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "tracked board renders issue cards and accepts a new comment via the mock",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-E36EB5DBF5",
+      "title": "New issue is disabled on a GitLab board until the connection allows creation",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
+        "line": 210,
+        "project": "functional"
+      },
+      "area": "gitlab",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "New issue is disabled on a GitLab board until the connection allows creation",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-AC09DFAB68",
+      "title": "New issue is enabled on a GitLab board once the connection allows creation",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/gitlab.spec.ts",
+        "line": 217,
+        "project": "functional"
+      },
+      "area": "gitlab",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "New issue is enabled on a GitLab board once the connection allows creation",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -6486,6 +6662,22 @@
       }
     },
     {
+      "id": "PT-DC65C6F2E6",
+      "title": "daily review previews only the five most recently active unfinished project sessions",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/projectReview.spec.ts",
+        "line": 236,
+        "project": "functional"
+      },
+      "area": "project Review",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "daily review previews only the five most recently active unfinished project sessions",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-A093EBE8D0",
       "title": "creates a folderless Product project through advanced setup, then adds its board",
       "source": {
@@ -7078,6 +7270,246 @@
       }
     },
     {
+      "id": "PT-8DC4807D76",
+      "title": "builds a schedule on the belt, saves it, and it survives a restart in the same order",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 79,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "builds a schedule on the belt, saves it, and it survives a restart in the same order",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-20627BB23E",
+      "title": "edit, schedule, hold and delete a schedule",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 139,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "edit, schedule, hold and delete a schedule",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-74238ECE73",
+      "title": "a start that passed while Praxis was closed is missed, and only a choice resolves it",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 175,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a start that passed while Praxis was closed is missed, and only a choice resolves it",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-3FCAD42C44",
+      "title": "a run with no usable provider cannot be scheduled, and says why",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 214,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a run with no usable provider cannot be scheduled, and says why",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-644A8319CA",
+      "title": "the whole surface is hidden until the preview is switched on",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 228,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the whole surface is hidden until the preview is switched on",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-3954D0B1FE",
+      "title": "the board toolbar offers a shortcut to the scheduled runs of its project, only while the preview is on",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 235,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the board toolbar offers a shortcut to the scheduled runs of its project, only while the preview is on",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-6050135CF2",
+      "title": "selected board tickets are saved in a new schedule",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 245,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "selected board tickets are saved in a new schedule",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-0498B7BAAE",
+      "title": "selected board tickets are appended directly to an existing schedule",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 268,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "selected board tickets are appended directly to an existing schedule",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-07C623F1C9",
+      "title": "without the preview the board toolbar has no schedule shortcut",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 295,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "without the preview the board toolbar has no schedule shortcut",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-225AEDFF55",
+      "title": "tickets can be dragged from the hopper onto the belt and reordered on it",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 304,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "tickets can be dragged from the hopper onto the belt and reordered on it",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-273152A227",
+      "title": "dragging a group ticket from the scheduler sidebar adds its unfinished child tickets",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 330,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "dragging a group ticket from the scheduler sidebar adds its unfinished child tickets",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-8738E01F29",
+      "title": "capture the composer and lineup for visual review (opt-in)",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 361,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "capture the composer and lineup for visual review (opt-in)",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-78DB6CEAAE",
+      "title": "the armed processor rings stay concentric while they spin",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 413,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the armed processor rings stay concentric while they spin",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-4FBFA8B98D",
+      "title": "scheduled runs have a grouped sidebar and project tickets stay outside the main pane",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 435,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "scheduled runs have a grouped sidebar and project tickets stay outside the main pane",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D31B062F2D",
+      "title": "sidebar uses classic recency groups and expands group tickets",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 560,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "sidebar uses classic recency groups and expands group tickets",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-4BED3303D0",
       "title": "unregistered renderers cannot read settings or emit privileged one-way messages",
       "source": {
@@ -7638,18 +8070,18 @@
       }
     },
     {
-      "id": "PT-AEE8B7A3ED",
-      "title": "a session can add several team members; a lone reviewer offers a review",
+      "id": "PT-3C45DBB445",
+      "title": "a session can add several team members; a lone reviewer offers to draft an ask",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionTeam.spec.ts",
-        "line": 19,
+        "line": 20,
         "project": "functional"
       },
       "area": "session Team",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "a session can add several team members; a lone reviewer offers a review",
+        "when": "a session can add several team members; a lone reviewer offers to draft an ask",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -7670,18 +8102,50 @@
       }
     },
     {
-      "id": "PT-6218719DD9",
-      "title": "collapsed usage names providers that report no limits instead of going blank",
+      "id": "PT-4F96A39603",
+      "title": "collapsed usage animates both bars while account limits load",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 93,
+        "line": 173,
         "project": "functional"
       },
       "area": "session Usage Quota",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "collapsed usage names providers that report no limits instead of going blank",
+        "when": "collapsed usage animates both bars while account limits load",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-EEEE457808",
+      "title": "collapsed usage skips the count-up under reduced motion",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
+        "line": 250,
+        "project": "functional"
+      },
+      "area": "session Usage Quota",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "collapsed usage skips the count-up under reduced motion",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-217FC849F2",
+      "title": "a session that ran without token reports shows a dash, never Not reported",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
+        "line": 273,
+        "project": "functional"
+      },
+      "area": "session Usage Quota",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a session that ran without token reports shows a dash, never Not reported",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -7691,7 +8155,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 120,
+        "line": 299,
         "project": "functional"
       },
       "area": "session Usage Quota",
@@ -7707,7 +8171,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 154,
+        "line": 333,
         "project": "functional"
       },
       "area": "session Usage Quota",
@@ -7723,7 +8187,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts",
-        "line": 258,
+        "line": 455,
         "project": "functional"
       },
       "area": "session Usage Quota",
@@ -7798,12 +8262,44 @@
       }
     },
     {
+      "id": "PT-31AED72E90",
+      "title": "output tab filters, copies and clears the log",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/shellPolish.spec.ts",
+        "line": 88,
+        "project": "functional"
+      },
+      "area": "shell Polish",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "output tab filters, copies and clears the log",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-2A163FAD48",
+      "title": "output history survives a restart",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/shellPolish.spec.ts",
+        "line": 110,
+        "project": "functional"
+      },
+      "area": "shell Polish",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "output history survives a restart",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-C43ACAD8DC",
       "title": "selecting an issue pins a peek card above the sidebar footer",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/shellPolish.spec.ts",
-        "line": 88,
+        "line": 130,
         "project": "functional"
       },
       "area": "shell Polish",
@@ -7819,7 +8315,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/shellPolish.spec.ts",
-        "line": 112,
+        "line": 154,
         "project": "functional"
       },
       "area": "shell Polish",
@@ -8962,6 +9458,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "\"Not now\" is remembered for the folder; the chip still builds on click",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-47C5E579CC",
+      "title": "titlebar scheduled-runs shortcut stays clickable at medium window widths",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/titlebarLayout.spec.ts",
+        "line": 4,
+        "project": "functional"
+      },
+      "area": "titlebar Layout",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "titlebar scheduled-runs shortcut stays clickable at medium window widths",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

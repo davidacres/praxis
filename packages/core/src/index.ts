@@ -33,6 +33,7 @@ export * from './ai/contextSnapshot';
 export * from './ai/coordination';
 export * from './ai/agentContracts';
 export * from './ai/agentEventUtils';
+export * from './ai/sessionChangeEncoder';
 export * from './ai/agentWorkflowCatalog';
 export * from './ai/agentPrompt';
 export * from './ai/diagnosisBrief';

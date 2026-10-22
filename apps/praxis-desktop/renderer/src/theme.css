@@ -734,10 +734,10 @@ textarea {
   .titlebar:not(.titlebar-mac) .titlebar-version { display: none; }
 }
 @media (max-width: 1680px) {
-  .titlebar:not(.titlebar-mac) .titlebar-center { position: static; transform: none; flex: 0 1 auto; min-width: 0; }
-  .titlebar:not(.titlebar-mac) .titlebar-center > .titlebar-context-wrap,
-  .titlebar:not(.titlebar-mac) .titlebar-center > .titlebar-context { flex: 0 1 auto; min-width: 0; }
-  .titlebar:not(.titlebar-mac) .titlebar-context { min-width: 160px; }
+  .titlebar-center { position: static; transform: none; flex: 0 1 auto; min-width: 0; }
+  .titlebar-center > .titlebar-context-wrap,
+  .titlebar-center > .titlebar-context { flex: 0 1 auto; min-width: 0; }
+  .titlebar-context { min-width: 160px; }
 }
 
 .praxis-wordmark {
@@ -4247,6 +4247,12 @@ textarea {
 .issue-card.active {
   border-color: color-mix(in srgb, var(--issue-card-accent, var(--accent)) 62%, var(--border));
   background: color-mix(in srgb, var(--issue-card-accent, var(--accent)) 20%, var(--bg-elevated));
+}
+
+.issue-card.selected-for-schedule,
+.board-list-row.selected-for-schedule {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .issue-card-title {
@@ -9976,6 +9982,23 @@ button.session-chat-attachment {
 
 .session-chat-thought-content > *:first-child { margin-top: 0; }
 .session-chat-thought-content > *:last-child { margin-bottom: 0; }
+
+/* Reasoning being absent is a normal outcome, not an error: several models
+   return none at all (GPT-6 over HTTP keeps reasoning items opaque), and an
+   adaptive-thinking model may skip thinking entirely on an easy prompt. Say
+   which case applies rather than showing an empty box. */
+.session-chat-thought-none {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* Nothing to show, so the block needs neither the scroll area's height nor the
+   rule that separates steps. */
+.session-chat-thought-empty .session-chat-thought-content {
+  max-height: none;
+  overflow: visible;
+}
 
 /* Steps within one turn, so a multi-step thought stays readable without
    being chopped into separate cards. */

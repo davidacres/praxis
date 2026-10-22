@@ -126,7 +126,7 @@ test('builds a schedule on the belt, saves it, and it survives a restart in the 
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
   await app!.electronApp.close();
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
-  await app.window.getByTestId('project-schedules-nav-item').click();
+  if (!(await app.window.getByTestId('schedule-sidebar').isVisible())) await app.window.getByTestId('titlebar-scheduled-runs').click();
   const reopened = app.window.getByTestId('schedule-card');
   await expect(reopened).toHaveCount(1, { timeout: 20000 });
   await expect(reopened.getByTestId('schedule-card-name')).toHaveText('Nightly cleanup');
@@ -191,7 +191,7 @@ test('a start that passed while Praxis was closed is missed, and only a choice r
   fs.writeFileSync(file, JSON.stringify(stored));
 
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
-  await app.window.getByTestId('project-schedules-nav-item').click();
+  if (!(await app.window.getByTestId('schedule-sidebar').isVisible())) await app.window.getByTestId('titlebar-scheduled-runs').click();
   const cards = app.window.getByTestId('schedule-card');
   await expect(cards).toHaveCount(2, { timeout: 20000 });
   await expect(cards.getByTestId('schedule-status')).toHaveText(['Missed', 'Missed']);
@@ -234,6 +234,7 @@ test('the whole surface is hidden until the preview is switched on', async () =>
 
 test('the board toolbar offers a shortcut to the scheduled runs of its project, only while the preview is on', async () => {
   const { page } = await launch();
+  if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
   await showProjectBoard(page);
   await page.locator('.project-board-row').first().click();
   await expect(page.getByTestId('board-view')).toBeVisible();
@@ -241,8 +242,59 @@ test('the board toolbar offers a shortcut to the scheduled runs of its project, 
   await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
 });
 
+test('selected board tickets are saved in a new schedule', async () => {
+  const { page } = await launch();
+  if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
+  await showProjectBoard(page);
+  await page.locator('.project-board-row').first().click();
+  await expect(page.getByTestId('board-view')).toBeVisible();
+  const cards = page.getByTestId('issue-card');
+  await expect(cards).toHaveCount(3);
+  await cards.nth(0).click({ modifiers: ['Meta'] });
+  await cards.nth(1).click({ modifiers: ['Meta'] });
+  await expect(cards.nth(1)).toHaveClass(/selected-for-schedule/);
+  await cards.nth(1).click({ button: 'right' });
+  await page.screenshot({ path: path.join(shots, 'board-multiselect-schedule-menu.png') });
+  await page.getByTestId('board-issue-menu-schedule').click();
+  await expect(page.getByRole('heading', { name: 'Add 2 selected tickets' })).toBeVisible();
+  await page.getByRole('button', { name: 'Create new schedule' }).click();
+  const saved = page.getByTestId('schedule-card');
+  await expect(saved).toHaveCount(1);
+  await expect(saved.getByTestId('schedule-card-name')).toHaveText('Scheduled run');
+  await expect(saved.getByTestId('schedule-mini-belt').locator('li[data-issue]')).toHaveCount(2);
+  await page.screenshot({ path: path.join(shots, 'board-multiselect-new-schedule.png') });
+});
+
+test('selected board tickets are appended directly to an existing schedule', async () => {
+  const { page, projectId } = await launch();
+  await page.evaluate(async id => {
+    await window.praxis.scheduledRuns.save({
+      projectId: id,
+      name: 'Existing schedule',
+      date: '2030-01-15',
+      time: '22:00',
+      timezone: 'UTC',
+      tickets: [{ connectionId: `project:${id}`, issueKey: 'SCH-3', title: 'Log retention' }],
+      arm: false
+    });
+  }, projectId);
+  if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
+  await showProjectBoard(page);
+  await page.locator('.project-board-row').first().click();
+  const card = page.locator('[data-testid="issue-card"][data-issue-key="SCH-1"]');
+  await card.click({ modifiers: ['Meta'] });
+  await card.click({ button: 'right' });
+  await page.getByTestId('board-issue-menu-schedule').click();
+  await page.getByRole('button', { name: 'Add to “Existing schedule”' }).click();
+  const saved = page.getByTestId('schedule-card');
+  await expect(saved).toHaveCount(1);
+  await expect(saved.getByTestId('schedule-card-name')).toHaveText('Existing schedule');
+  await expect(saved.getByTestId('schedule-mini-belt').locator('li[data-issue]')).toHaveCount(2);
+});
+
 test('without the preview the board toolbar has no schedule shortcut', async () => {
   const { page } = await launch({ preview: false });
+  if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
   await showProjectBoard(page);
   await page.locator('.project-board-row').first().click();
   await expect(page.getByTestId('board-view')).toBeVisible();
@@ -273,6 +325,32 @@ test('tickets can be dragged from the hopper onto the belt and reordered on it',
   expect(await titleOf((await beltOrder(page) as string[])[0])).toBe('Add export CSV');
   // A dragged-in ticket cannot be added twice.
   await expect(hopper('Add export CSV')).toBeDisabled();
+});
+
+test('dragging a group ticket from the scheduler sidebar adds its unfinished child tickets', async () => {
+  const { page, projectId } = await launch();
+  const groupKey = await page.evaluate(async id => {
+    const connection = `project:${id}`;
+    const group = await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Feature', summary: 'Release group', description: '' }, connection);
+    await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Grouped work', description: '', parentKey: group.key }, connection);
+    await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Other grouped work', description: '', parentKey: group.key }, connection);
+    return group.key;
+  }, projectId);
+  await page.reload();
+  await expect(page.getByTestId('schedule-sidebar')).toBeVisible();
+  await page.getByTestId('schedule-new').click();
+
+  const groupTicket = page.locator(`[data-testid="schedule-hopper-card"][data-issue="${groupKey}"]`);
+  await expect(groupTicket).toBeVisible();
+  await groupTicket.dragTo(page.getByTestId('schedule-belt-slot'));
+
+  const belt = page.getByTestId('schedule-belt');
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
+  await expect(belt).toContainText('Grouped work');
+  await expect(belt).toContainText('Other grouped work');
+  await expect(belt).not.toContainText('Release group');
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-dragged-group.png') });
 });
 
 /**
@@ -326,7 +404,7 @@ test('capture the composer and lineup for visual review (opt-in)', async () => {
     run('f', 'Hotfix batch', 'completed', -50 * H, 4, [{ status: 'done' }, { status: 'done' }, { status: 'done' }, { status: 'done' }])
   ] }));
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
-  await app.window.getByTestId('project-schedules-nav-item').click();
+  if (!(await app.window.getByTestId('schedule-sidebar').isVisible())) await app.window.getByTestId('titlebar-scheduled-runs').click();
   await expect(app.window.getByTestId('schedule-card')).toHaveCount(6, { timeout: 20000 });
   await app.window.waitForTimeout(800);
   await app.window.screenshot({ path: path.join(out, 'lineup.png') });
@@ -352,4 +430,200 @@ test('the armed processor rings stay concentric while they spin', async () => {
     }
     await page.waitForTimeout(700);
   }
+});
+
+test('scheduled runs have a grouped sidebar and project tickets stay outside the main pane', async () => {
+  const { page, projectId } = await launch();
+  await expect(page.getByTestId('schedule-sidebar')).toBeVisible();
+  await expect(page.locator('.pane-main').getByTestId('schedule-hopper')).toHaveCount(0);
+  await expect(page.locator('.pane-sidebar').getByTestId('schedule-hopper-card')).toHaveCount(3);
+  await page.evaluate(async id => {
+    for (const name of ['First schedule', 'Second schedule']) await window.praxis.scheduledRuns.save({ projectId: id, name, date: '2030-01-15', time: '22:00', timezone: 'UTC', tickets: [], arm: false });
+  }, projectId);
+  await expect(page.locator('.pane-sidebar').getByTestId('schedule-nav-run')).toHaveCount(2);
+  await expect(page.locator('.pane-aux').getByTestId('schedule-nav-run')).toHaveCount(0);
+  await expect(page.locator('.pane-sidebar').getByTestId('schedule-new')).toHaveCount(1);
+  await expect(page.getByTestId('schedule-bucket-today').getByTestId('schedule-nav-run')).toHaveCount(2);
+  const runList = await page.locator('.schedule-sidebar-runs').boundingBox();
+  const ticketList = await page.locator('.schedule-sidebar-tickets').boundingBox();
+  expect(runList!.y + runList!.height).toBeLessThanOrEqual(ticketList!.y);
+  const divider = page.getByRole('separator', { name: 'Resize project tickets section' });
+  await expect(divider).toHaveAttribute('aria-orientation', 'horizontal');
+  const handle = await divider.boundingBox();
+  await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2 - 80, { steps: 8 });
+  await page.mouse.up();
+  const expandedTickets = await page.locator('.schedule-sidebar-tickets').boundingBox();
+  expect(expandedTickets!.height).toBeCloseTo(ticketList!.height + 80, 0);
+  await divider.focus();
+  await divider.press('ArrowDown');
+  const resizedTickets = await page.locator('.schedule-sidebar-tickets').boundingBox();
+  expect(resizedTickets!.height).toBeCloseTo(expandedTickets!.height - 10, 0);
+  await page.reload();
+  await expect(page.getByTestId('schedule-nav-run')).toHaveCount(2);
+  expect((await page.locator('.schedule-sidebar-tickets').boundingBox())!.height).toBeCloseTo(resizedTickets!.height, 0);
+  await page.getByTestId('schedule-nav-run').filter({ hasText: 'First schedule' }).click();
+  await expect(page.getByTestId('schedule-card')).toHaveCount(1);
+  await expect(page.getByTestId('schedule-card-name')).toHaveText('First schedule');
+  await page.getByTestId('schedule-hopper-card').filter({ hasText: 'Fix pager bug' }).click();
+  await expect(page.getByTestId('schedule-name')).toHaveValue('First schedule');
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
+  // The secondary pane must not hide the left run list or reset the draft.
+  await page.getByTestId('titlebar-aux-toggle').click();
+  await expect(page.locator('.pane-sidebar').getByTestId('schedule-nav-run')).toHaveCount(2);
+  await expect(page.getByTestId('schedule-hopper')).toBeVisible();
+  await expect(page.getByTestId('schedule-name')).toHaveValue('First schedule');
+  await page.getByTestId('titlebar-aux-toggle').click();
+  await expect(page.locator('.pane-sidebar').getByTestId('schedule-nav-run')).toHaveCount(2);
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
+  await expect(page.locator('.pane-main').getByTestId('schedule-hopper')).toHaveCount(0);
+  const ticketHeight = (await page.locator('.schedule-sidebar-tickets').boundingBox())!.height;
+  await page.getByRole('button', { name: 'Collapse project tickets section', exact: true }).click();
+  await expect(page.getByTestId('schedule-hopper')).toBeHidden();
+  await expect(divider).toHaveCount(0);
+  await expect(page.getByTestId('schedule-name')).toHaveValue('First schedule');
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-tickets-collapsed.png') });
+  await page.getByRole('button', { name: 'Expand project tickets section', exact: true }).click();
+  expect((await page.locator('.schedule-sidebar-tickets').boundingBox())!.height).toBeCloseTo(ticketHeight, 0);
+  await page.getByRole('button', { name: 'Use full sidebar', exact: true }).click();
+  await expect(page.locator('.schedule-sidebar-runs')).toBeHidden();
+  await expect(page.getByTestId('schedule-hopper')).toBeVisible();
+  await expect(divider).toHaveCount(0);
+  const maximized = await page.locator('.schedule-sidebar-tickets').boundingBox();
+  const sidebarBounds = await page.getByTestId('schedule-sidebar').boundingBox();
+  expect(maximized!.height).toBeGreaterThan(sidebarBounds!.height - 3);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-tickets-maximized.png') });
+  await page.getByRole('button', { name: 'Restore sidebar', exact: true }).click();
+  await expect(page.locator('.schedule-sidebar-runs')).toBeVisible();
+  expect((await page.locator('.schedule-sidebar-tickets').boundingBox())!.height).toBeCloseTo(ticketHeight, 0);
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
+  await page.getByRole('textbox', { name: 'Filter tickets' }).fill('export');
+  await expect(page.getByTestId('schedule-hopper-card')).toHaveCount(1);
+  await page.getByTestId('schedule-hopper-card').click();
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
+  await page.getByTestId('schedule-save-draft').click();
+  await expect(page.getByTestId('schedule-card').getByTestId('schedule-mini-belt').locator('li[data-issue]')).toHaveCount(2);
+  // Apply persisted theme preferences on reload, as the app does at startup.
+  await page.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-dark', themeMode: 'dark' } } as never));
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
+  await page.getByTestId('schedule-new').click();
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(0);
+  await page.getByTestId('schedule-hopper-card').first().click();
+  await expect(page.getByTestId('schedule-ready')).toBeVisible();
+  await page.waitForTimeout(800); // Let the ticket entry animation settle for visual review.
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-sidebar-composer.png') });
+  await page.getByTestId('schedule-save-draft').click();
+  await page.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-light', themeMode: 'light' } } as never));
+  await page.reload();
+  await page.getByTestId('schedule-new').click();
+  await page.getByTestId('schedule-hopper-card').first().click();
+  await page.setViewportSize({ width: 1100, height: 650 });
+  const tickets = page.getByTestId('schedule-sidebar').getByTestId('schedule-hopper');
+  await expect(tickets).toBeVisible();
+  const bounds = await tickets.boundingBox();
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(650);
+  await page.getByRole('textbox', { name: 'Filter tickets' }).fill('retention');
+  await page.getByTestId('schedule-hopper-card').click();
+  await expect(page.getByTestId('schedule-belt-card')).toHaveCount(2);
+  await expect(page.locator('html')).toHaveAttribute('data-mode', 'light');
+  const belt = await page.getByTestId('schedule-belt').boundingBox();
+  const card = await page.getByTestId('schedule-belt-card').first().boundingBox();
+  expect(card!.x + card!.width).toBeLessThanOrEqual(belt!.x + belt!.width);
+  await expect(page.getByTestId('schedule-ready')).toBeVisible();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-sidebar-light-short.png') });
+  await page.getByRole('button', { name: 'Back to project', exact: true }).click();
+  await expect(page.getByTestId('schedule-sidebar')).toHaveCount(0);
+  await expect(page.getByTestId('project-schedules-nav-item')).toHaveCount(0);
+  await expect(page.getByTestId('titlebar-what-changed')).toHaveCount(0);
+  await expect(page.getByTestId('titlebar-scheduled-runs')).toHaveCount(1);
+  await page.getByTestId('titlebar-scheduled-runs').click();
+  await expect(page.getByTestId('schedule-nav-run')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Back to project', exact: true }).click();
+  await page.evaluate(() => window.praxis.settings.set({ preview: { enableEasyMode: true } }));
+  await expect(page.getByTestId('easymode-sidebar')).toBeVisible();
+  await page.getByTestId('titlebar-aux-toggle').click();
+  await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
+  await expect(page.locator('.pane-sidebar')).toHaveCount(0);
+  // The titlebar shortcut restores access even when both sidebars were hidden.
+  await page.getByTestId('titlebar-scheduled-runs').click();
+  await expect(page.getByTestId('schedule-sidebar')).toBeVisible();
+  await expect(page.getByTestId('schedule-nav-run')).toHaveCount(3);
+  await expect(page.locator('.pane-sidebar').getByTestId('schedule-nav-run')).toHaveCount(3);
+  await expect(page.locator('.pane-aux').getByTestId('schedule-nav-run')).toHaveCount(0);
+  await page.setViewportSize({ width: 1400, height: 850 });
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-titlebar-navigation.png') });
+});
+
+test('sidebar uses classic recency groups and expands group tickets', async () => {
+  const { page, projectId } = await launch();
+  const groupKey = await page.evaluate(async id => {
+    const connection = `project:${id}`;
+    const group = await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Feature', summary: 'Release group', description: '' }, connection);
+    await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Grouped work', description: '', parentKey: group.key }, connection);
+    await window.praxis.issue.create({ projectKey: 'SCH', issueType: 'Task', summary: 'Other grouped work', description: '', parentKey: group.key }, connection);
+    for (const name of ['Today run', 'Recent run', 'Old run']) await window.praxis.scheduledRuns.save({ projectId: id, name, date: '2030-01-15', time: '22:00', timezone: 'UTC', tickets: [], arm: false });
+    return group.key;
+  }, projectId);
+  const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
+  await app!.electronApp.close();
+  const file = path.join(reuse.userDataDir, 'scheduled-runs.json');
+  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (const run of stored['praxis.scheduledRuns.v1']) {
+    if (run.name === 'Recent run') run.updatedAt = new Date(today.getTime() - 2 * 86400000).toISOString();
+    if (run.name === 'Old run') run.updatedAt = new Date(today.getTime() - 10 * 86400000).toISOString();
+  }
+  fs.writeFileSync(file, JSON.stringify(stored));
+  app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
+  const reopened = app.window;
+  if (!(await reopened.getByTestId('schedule-sidebar').isVisible())) await reopened.getByTestId('titlebar-scheduled-runs').click();
+  await expect(reopened.getByTestId('schedule-bucket-today')).toContainText('Today run');
+  await expect(reopened.getByTestId('schedule-bucket-this-week')).toContainText('Recent run');
+  await expect(reopened.getByTestId('schedule-bucket-last-week')).toContainText('Old run');
+  await reopened.getByTestId('schedule-bucket-this-week').getByRole('button', { name: 'This week' }).click();
+  await expect(reopened.getByTestId('schedule-bucket-this-week').getByTestId('schedule-nav-run')).toHaveCount(0);
+  await reopened.getByTestId('schedule-new').click();
+  await reopened.locator(`[data-testid="schedule-hopper-card"][data-issue="${groupKey}"]`).click();
+  await expect(reopened.getByTestId('schedule-belt-card')).toHaveCount(2);
+  await expect(reopened.getByTestId('schedule-belt')).toContainText('Grouped work');
+  await expect(reopened.getByTestId('schedule-belt')).toContainText('Other grouped work');
+  await expect(reopened.getByTestId('schedule-ready')).toBeVisible();
+  await reopened.waitForTimeout(800);
+  const parent = reopened.locator(`[data-testid="schedule-hopper-card"][data-issue="${groupKey}"]`);
+  await expect(parent).toHaveClass(/issue-card-parent/);
+  const stack = reopened.getByTestId('schedule-ticket-stack');
+  await expect(stack).toHaveAttribute('aria-expanded', 'false');
+  await stack.focus();
+  await stack.press('Enter');
+  await expect(stack).toHaveAttribute('aria-expanded', 'true');
+  await expect(stack).toBeFocused();
+  await expect(stack).toHaveCSS('outline-style', 'none');
+  await expect(stack.locator('.board-child-stack-label')).toHaveCSS('text-decoration-line', 'underline');
+  const children = reopened.locator(`[data-testid="schedule-hopper-card"][data-child-of="${groupKey}"]`);
+  await expect(children).toHaveCount(2);
+  await expect(children.first()).toHaveClass(/issue-card-child/);
+  await expect(children.last()).toHaveClass(/issue-card-child-last/);
+  // The type badge shares the title row; short compact cards no longer need a metadata row.
+  for (const card of [parent, children.first()]) {
+    const title = await card.locator('.issue-card-title').boundingBox();
+    const badge = await card.locator('.issue-card-context').boundingBox();
+    const bounds = await card.boundingBox();
+    expect(badge!.x).toBeGreaterThanOrEqual(title!.x + title!.width);
+    expect(Math.abs(badge!.y - title!.y)).toBeLessThan(2);
+    expect(bounds!.height).toBeLessThan(70);
+  }
+  await children.last().scrollIntoViewIfNeeded();
+  await reopened.waitForTimeout(400);
+  await reopened.screenshot({ path: path.join(shots, 'scheduled-run-left-restored-groups.png') });
+  await reopened.getByTestId('schedule-hopper').screenshot({ path: path.join(shots, 'scheduled-run-sidebar-clean-seam.png') });
+  // Searching for a child retains and reveals its parent context.
+  await reopened.getByRole('textbox', { name: 'Filter tickets' }).fill('Other grouped');
+  await expect(parent).toBeVisible();
+  await expect(reopened.getByTestId('schedule-hopper-card').filter({ hasText: 'Other grouped work' })).toBeVisible();
+  await stack.click();
+  await expect(stack).toHaveAttribute('aria-expanded', 'false');
+  await expect(reopened.getByTestId('schedule-hopper-card').filter({ hasText: 'Other grouped work' })).toHaveCount(0);
 });

@@ -4,6 +4,7 @@ import type {
   SemanticModelStatus,
   SemanticModelProgressEvent,
   CheckFindings,
+  AgentSessionChange,
   AgentSessionRecord,
   AgentPermissionMode,
   AgentToolMode,
@@ -321,10 +322,10 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:respondToPermission', issueKey, decision),
     undoToolFileChange: (issueKey: string, eventTimestamp: string, path: string) =>
       ipcRenderer.invoke('ai:undoToolFileChange', issueKey, eventTimestamp, path),
-    onSessionChanged: (listener: (record: AgentSessionRecord) => void) => {
+    onSessionChanged: (listener: (change: AgentSessionChange) => void) => {
       // Wrap so the raw IpcRendererEvent never crosses the context bridge.
-      const handler = (_event: Electron.IpcRendererEvent, record: AgentSessionRecord) =>
-        listener(record);
+      const handler = (_event: Electron.IpcRendererEvent, change: AgentSessionChange) =>
+        listener(change);
       ipcRenderer.on('ai:sessionChanged', handler);
       return () => ipcRenderer.off('ai:sessionChanged', handler);
     },

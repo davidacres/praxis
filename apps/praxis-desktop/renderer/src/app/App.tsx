@@ -84,6 +84,7 @@ import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 import { useDialogs } from '../ui/dialogs';
+import { onSessionChanged } from '../ai/sessionChangeStream';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -122,6 +123,7 @@ function WindowCloseGuard() {
  * plain index into a list of routes.
  */
 interface Route {
+  scheduleTicketKeys?: string[];
   /** Durable selection of the empty New Session surface (never its draft text). */
   newSession?: boolean;
   /** Durable selection of the empty New Conversation composer (FX-BE-142). */
@@ -431,6 +433,7 @@ export function App() {
   const [mode, setMode] = useState<SidebarMode>(
     () => (localStorage.getItem('tm-sidebar-mode') as SidebarMode | null) ?? 'classic'
   );
+  const [scheduleSidebarHost, setScheduleSidebarHost] = useState<HTMLDivElement | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(() => readPaneVisible('tm-pane-sidebar-visible', true));
   const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
   const [panelVisible, setPanelVisible] = useState(() => readPaneVisible('tm-pane-panel-visible', false));
@@ -1024,7 +1027,7 @@ export function App() {
         setAgentSessionsLoaded(true);
         console.error('Failed to load AI sessions:', error);
       });
-    const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
+    const unsubscribeChanged = onSessionChanged(record => {
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
         const targetKey = activeTargetSessionKeyRef.current;
@@ -2198,6 +2201,7 @@ export function App() {
             if (board) navigate({ boardId: board.id, issueKey: issue.key });
           }}
           onOpenSession={sessionKey => navigate({ projectId: selectedProject.id, feature: 'sessions', sessionKey })}
+          onOpenSessions={() => navigate({ projectId: selectedProject.id, feature: 'sessions' })}
           onOpenBoard={() => {
             const board = boards.find(candidate => candidate.connectionId === `project:${selectedProject.id}`)
               ?? boards.find(candidate => selectedProject.linkedBoards.some(linked => linked.connectionId === candidate.connectionId));
@@ -2306,7 +2310,7 @@ export function App() {
           </div>
         );
       }
-      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} />;
+      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} />;
     }
     if (route.feature) {
       return (
@@ -2455,6 +2459,7 @@ export function App() {
         onIssueMove={onIssueMove}
         onOpenDesigner={() => navigate({ boardId: selectedBoard.id, view: 'designer' })}
         onScheduleRun={scheduleProject ? () => navigate({ projectId: scheduleProject.id, feature: 'schedules' }) : undefined}
+        onScheduleTickets={scheduleProject ? keys => navigate({ projectId: scheduleProject.id, feature: 'schedules', scheduleTicketKeys: keys }) : undefined}
         openSettings={boardSettingsOpenFor === selectedBoard.id}
         onSettingsOpened={() => setBoardSettingsOpenFor(undefined)}
       />
@@ -2517,6 +2522,10 @@ export function App() {
         onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
         onQuickSession={openQuickSession}
         onQuickCapture={() => setQuickCaptureOpen(true)}
+        onOpenScheduledRuns={settings?.preview.enableScheduledRuns && reviewProject ? () => {
+          setSidebarVisible(true);
+          navigate({ projectId: reviewProject.id, feature: 'schedules' });
+        } : undefined}
         onOpenWhatChanged={reviewProject ? () => openProjectReview(reviewProject.id, 'changes') : undefined}
         onNewProject={() => requestAddProject()}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
@@ -2629,7 +2638,9 @@ export function App() {
         {sidebarVisible && (
           <>
             <div className="pane-sidebar" style={{ width: sidebar.size }}>
-              {route.view === 'designer' && selectedBoard && boardDetails ? (
+              {route.feature === 'schedules' && selectedProject && settings?.preview.enableScheduledRuns ? (
+                <div className="schedule-sidebar-host" ref={setScheduleSidebarHost} />
+              ) : route.view === 'designer' && selectedBoard && boardDetails ? (
                 <TaskDesignerSidebar
                   board={selectedBoard}
                   issues={boardDetails.issues}
@@ -2841,8 +2852,6 @@ export function App() {
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
                   enableDeployments={settings?.preview?.enableDeployments ?? false}
                   onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
-                  enableScheduledRuns={settings?.preview?.enableScheduledRuns ?? false}
-                  onSelectSchedules={project => navigate({ projectId: project.id, feature: 'schedules' })}
                   onNewWorkflow={project => setNewWorkflowForProject(project.id)}
                   onDeleteWorkflow={async (project, workflowId) => {
                     if (

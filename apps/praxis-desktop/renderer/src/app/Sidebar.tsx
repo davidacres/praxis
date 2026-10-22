@@ -134,11 +134,8 @@ export interface SidebarProps {
   onSelectRun: (project: ProjectRecord) => void;
   /** Opens the project's deployment profiles (FX-BE-059 / FX-BE-060). */
   onSelectDeployments: (project: ProjectRecord) => void;
-  onSelectSchedules: (project: ProjectRecord) => void;
   /** Whether the experimental Deployments feature is enabled in preview settings. */
   enableDeployments?: boolean;
-  /** Show the Scheduled runs row under each project (preview). */
-  enableScheduledRuns?: boolean;
   onNewWorkflow: (project: ProjectRecord) => void;
   onDeleteWorkflow?: (project: ProjectRecord, workflowId: string) => void;
   onDeleteBoard: (board: Board) => void;
@@ -1020,9 +1017,7 @@ export function Sidebar({
   onSelectWorkflowPolicies,
   onSelectRun,
   onSelectDeployments,
-  onSelectSchedules,
   enableDeployments,
-  enableScheduledRuns,
   onNewWorkflow,
   onDeleteWorkflow,
   onDeleteBoard,
@@ -1398,13 +1393,6 @@ export function Sidebar({
                             data-testid="project-deployments-nav-item"
                             onClick={() => onSelectDeployments(project)}
                           ><span className="tree-icon"><Icon name="rocket" size={14} /></span><span className="tree-label">Deployments</span></button>
-                        )}
-                        {enableScheduledRuns && (
-                          <button
-                            className={`tree-row project-schedules-row${activeFeature === 'schedules' && selectedProjectId === project.id ? ' active' : ''}`}
-                            data-testid="project-schedules-nav-item"
-                            onClick={() => onSelectSchedules(project)}
-                          ><span className="tree-icon"><Icon name="clock" size={14} /></span><span className="tree-label">Scheduled runs</span></button>
                         )}
                         {projectDocsVisible && projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>

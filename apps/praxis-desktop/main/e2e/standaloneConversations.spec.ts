@@ -73,7 +73,7 @@ test('standalone conversation persists and resumes across floating-window pop-in
   const composerClock = floating.getByTestId('session-composer-activity-timer');
   await expect(composerClock).toHaveText(/1m \d+s/);
   await expect(floating.getByTestId('session-activity-status')).toHaveCount(0);
-  await expect(floating.getByTestId('session-chat-markdown-streaming')).toContainText('Checking the next step');
+  await expect(floating.getByTestId('session-thought-markdown')).toContainText('Checking the next step');
   await floating.locator('.session-follow-up-composer').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/detached-composer-thinking.png') });
   await app.electronApp.evaluate(({ BrowserWindow }, record) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', record);

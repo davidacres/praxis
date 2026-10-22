@@ -36,6 +36,7 @@ export interface TitleBarProps {
   onQuickCapture?: () => void;
   /** Opens the active project's What Changed view. */
   onOpenWhatChanged?: () => void;
+  onOpenScheduledRuns?: () => void;
   onNewProject?: () => void;
   onImportProjects?: () => void;
   mode?: SidebarMode;
@@ -98,6 +99,7 @@ export function TitleBar({
   onQuickSession,
   onQuickCapture,
   onOpenWhatChanged,
+  onOpenScheduledRuns,
   onNewProject,
   onImportProjects,
   mode = 'classic',
@@ -431,7 +433,11 @@ export function TitleBar({
           </button>
         )}
 
-        {!easyMode && onOpenWhatChanged && (
+        {onOpenScheduledRuns ? (
+          <button type="button" className="new-pill new-pill-icon" aria-label="Scheduled runs" title="Scheduled runs" data-testid="titlebar-scheduled-runs" onClick={onOpenScheduledRuns}>
+            <Icon name="clock" size={13} />
+          </button>
+        ) : !easyMode && onOpenWhatChanged && (
           <button type="button" className="new-pill new-pill-icon" aria-label="What Changed" data-testid="titlebar-what-changed" onClick={onOpenWhatChanged}>
             <Icon name="clock" size={13} />
           </button>
@@ -615,6 +621,8 @@ export function TitleBar({
         <button
           className={`icon-btn${auxVisible ? ' active' : ''}`}
           aria-label="Toggle secondary sidebar"
+          title="Toggle secondary sidebar"
+          data-testid="titlebar-aux-toggle"
           aria-pressed={auxVisible}
           onClick={onToggleAux}
         >

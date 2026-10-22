@@ -76,8 +76,6 @@ export function agentEventIcon(type: AgentEventType): IconName {
       return 'book';
     case 'intent':
       return 'target';
-    case 'reasoning':
-      return 'lightbulb';
     case 'message':
       return 'chats';
     case 'tool_start':

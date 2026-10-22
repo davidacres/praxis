@@ -14,6 +14,8 @@ import { useSessionTeam } from './sessionTeamStore';
 import { Icon } from '../ui/Icon';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
+import { ThoughtBlock } from '../ui/ThoughtBlock';
+import { thoughtEmptyReasonFor } from '../ui/thoughtDisplay';
 import { useDialogs } from '../ui/dialogs';
 import { providerLabel } from './modelProviders';
 import { formatCost, isLimitNoticeReply } from './sessionNav';
@@ -196,6 +198,22 @@ export function SessionChatThread({
   );
 
   const thoughtRuns = useMemo(() => collectThoughtRuns(conversationEvents), [conversationEvents]);
+
+  /**
+   * Why the live turn will show no reasoning, or `undefined` when it still
+   * might. Deliberately `undefined` for a route that *does* return reasoning
+   * text: at the start of a turn nothing has streamed yet, and announcing "no
+   * reasoning was returned" before the first delta would be wrong, and would
+   * flash on every single turn.
+   *
+   * The reason is stamped on the record by the host, which knows the route —
+   * `gpt-6-luna` streams thoughts through `codex-cli` and none through `openai`,
+   * whose HTTP API keeps reasoning items opaque.
+   */
+  const liveReasoningEmptyReason = useMemo(
+    () => thoughtEmptyReasonFor(session.reasoningAvailability),
+    [session.reasoningAvailability]
+  );
   const messageRuns = useMemo(
     () => collectMessageRuns(
       conversationEvents,
@@ -477,47 +495,13 @@ export function SessionChatThread({
             )}
 
             {hasThought && (
-              <details className="session-chat-thought" data-testid="session-thought-disclosure">
-                <summary className="session-chat-thought-summary" data-testid="session-thought-summary">
-                  <Icon name="sparkles" size={11} />
-                  <span className="session-chat-thought-label">Thought</span>
-                  {caption && <span className="session-chat-thought-meta">{caption}</span>}
-                </summary>
-                <div className="session-chat-thought-content">
-                  {turnToolCalls.length > 0 && (
-                    <ul className="session-chat-thought-tools" data-testid="session-thought-tools">
-                      {turnToolCalls.map((call, callIndex) => (
-                        <li key={callIndex} className={call.ok === false ? 'is-failed' : undefined}>
-                          <Icon name={call.ok === false ? 'close' : call.ok ? 'check' : 'tools'} size={11} />
-                          <span className="session-chat-thought-tool-name">{call.name}</span>
-                          {call.detail && <span className="session-chat-thought-tool-detail">{call.detail}</span>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {/* The tool timeline above is the index of the turn; the
-                      model's raw reasoning is the archive — one expander in,
-                      never streamed beside the timeline. */}
-                  {thoughtSteps.length > 0 && (
-                    <details className="session-chat-thought-reasoning" data-testid="session-thought-reasoning">
-                      <summary className="session-chat-thought-reasoning-summary">
-                        <Icon name="chats" size={11} />
-                        Show full reasoning
-                      </summary>
-                      <div className="session-chat-thought-reasoning-content">
-                        {thoughtSteps.map((step, stepIndex) => (
-                          <Markdown
-                            key={stepIndex}
-                            text={step}
-                            testId="session-thought-markdown"
-                            imageSessionId={session?.issueKey}
-                          />
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              </details>
+              <ThoughtBlock
+                steps={thoughtSteps}
+                caption={caption}
+                toolCalls={turnToolCalls}
+                testIdPrefix="session"
+                imageSessionId={session?.issueKey}
+              />
             )}
 
             {/* Task checklist progress if tasks are found in message */}
@@ -693,7 +677,7 @@ export function SessionChatThread({
       ))}
 
       {/* In-Progress Active Turn / Streaming Turn Indicator */}
-      {isExecuting && session.reasoningText?.trim() && (
+      {isExecuting && (session.reasoningText?.trim() || liveReasoningEmptyReason) && (
         <div
           className={`session-chat-message is-assistant is-running${session.provider ? ` session-chat-provider-${session.provider}` : ''}`}
           data-testid="session-chat-live-turn"
@@ -704,22 +688,27 @@ export function SessionChatThread({
               <span>{session.model || (session.provider ? providerLabel(session.provider) : 'AI agent')}</span>
             </div>
           </div>
-          {/* Actual streamed thoughts stay in the transcript; live activity lives in the composer. */}
-          {session.reasoningText && (
-            <details
-              open
-              className="session-chat-thought session-chat-thought-streaming"
-              data-testid="session-thought-disclosure"
-            >
-              <summary className="session-chat-thought-summary" data-testid="session-thought-summary">
-                <Icon name="sparkles" size={11} />
-                <span className="session-chat-thought-label">Thoughts</span>
-              </summary>
-              <div className="session-chat-thought-content session-chat-streaming-text" data-testid="session-chat-streaming-text">
-                <Markdown text={session.reasoningText} testId="session-chat-markdown-streaming" imageSessionId={session?.issueKey} />
-              </div>
-            </details>
-          )}
+          {/* Actual streamed thoughts stay in the transcript; live activity lives
+              in the composer. Same widget as the settled turn, so reasoning
+              doesn't collapse and move a DOM level deeper when the turn ends. */}
+          {session.reasoningText ? (
+            <ThoughtBlock
+              steps={[session.reasoningText]}
+              streaming
+              testIdPrefix="session"
+              imageSessionId={session?.issueKey}
+            />
+          ) : liveReasoningEmptyReason ? (
+            /* Nothing has streamed, and nothing will: say so rather than leave
+               the user guessing whether thoughts are broken for this model.
+               Shown only on the live turn, so history stays uncluttered. */
+            <ThoughtBlock
+              streaming
+              emptyReason={liveReasoningEmptyReason}
+              testIdPrefix="session"
+              imageSessionId={session?.issueKey}
+            />
+          ) : null}
         </div>
       )}
 

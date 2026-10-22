@@ -17,7 +17,7 @@ test('buildAnthropicRequest omits thinking when reasoningEffort is unset or off'
   assert.equal(off.thinking, undefined);
 });
 
-test('buildAnthropicRequest enables thinking and drops temperature for a set effort level', () => {
+test('buildAnthropicRequest uses adaptive thinking for Claude 4.6+ and drops temperature', () => {
   const result = buildAnthropicRequest({
     modelId: 'claude-opus-4-6',
     messages: baseMessages,
@@ -25,23 +25,45 @@ test('buildAnthropicRequest enables thinking and drops temperature for a set eff
     reasoningEffort: 'high'
   });
 
-  assert.deepEqual(result.thinking, { type: 'enabled', budget_tokens: 8192 });
-  // Thinking is incompatible with a custom temperature — Anthropic rejects both.
+  // Claude 4.6 accepts both modes; adaptive is recommended, and depth is
+  // steered by output_config.effort rather than a token budget.
+  assert.deepEqual(result.thinking, { type: 'adaptive', display: 'summarized' });
+  assert.deepEqual(result.output_config, { effort: 'high' });
+  // Thinking is incompatible with a custom temperature — Anthropic rejects it.
   assert.equal(result.temperature, undefined);
-  // max_tokens must exceed budget_tokens.
-  assert.ok((result.max_tokens as number) > 8192);
+  // No budget means no max_tokens floor to clear.
+  assert.equal(result.max_tokens, 8192);
 });
 
-test('buildAnthropicRequest raises a low default max_tokens to fit the thinking budget', () => {
-  const result = buildAnthropicRequest({
-    modelId: 'claude-opus-4-6',
-    messages: baseMessages,
-    maxTokens: 512,
-    reasoningEffort: 'low'
-  });
+test('buildAnthropicRequest sends adaptive thinking to Claude 5.x, which rejects the enabled shape', () => {
+  for (const modelId of ['claude-sonnet-5', 'claude-fable-5.1', 'claude-opus-5.5']) {
+    const result = buildAnthropicRequest({ modelId, messages: baseMessages, reasoningEffort: 'medium' });
+    assert.deepEqual(result.thinking, { type: 'adaptive', display: 'summarized' }, modelId);
+    assert.deepEqual(result.output_config, { effort: 'medium' }, modelId);
+    assert.equal('budget_tokens' in (result.thinking as object), false, modelId);
+  }
+});
 
-  assert.deepEqual(result.thinking, { type: 'enabled', budget_tokens: 1024 });
-  assert.ok((result.max_tokens as number) > 1024);
+test('buildAnthropicRequest keeps extended thinking for Claude 4.5 and earlier, which reject adaptive', () => {
+  for (const modelId of ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-3-7-sonnet']) {
+    const result = buildAnthropicRequest({ modelId, messages: baseMessages, maxTokens: 512, reasoningEffort: 'low' });
+    assert.deepEqual(result.thinking, { type: 'enabled', budget_tokens: 1024 }, modelId);
+    assert.equal('output_config' in result, false, modelId);
+    // Extended thinking requires max_tokens to exceed budget_tokens.
+    assert.ok((result.max_tokens as number) > 1024, modelId);
+  }
+});
+
+test('buildAnthropicRequest sends no thinking parameter for an unrecognizable Claude alias', () => {
+  // Guessing a mode here is a 400 error either way; omitting the parameter is
+  // always accepted, since 5.x models think by default.
+  const result = buildAnthropicRequest({
+    modelId: 'claude-internal-preview',
+    messages: baseMessages,
+    reasoningEffort: 'high'
+  });
+  assert.equal(result.thinking, undefined);
+  assert.equal('output_config' in result, false);
 });
 
 test('consumeAnthropicStream streams thinking deltas ahead of text deltas', async () => {

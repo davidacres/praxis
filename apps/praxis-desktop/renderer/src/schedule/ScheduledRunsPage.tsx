@@ -1,3 +1,7 @@
+import { createPortal } from 'react-dom';
+import { useResizable } from '../app/useResizable';
+import { RECENCY_BUCKETS, RECENCY_BUCKET_LABEL, recencyBucket } from '../app/sessionRecency';
+import { ScheduleTickets, useScheduleTickets } from './ScheduleTickets';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ProjectRecord, ScheduledRunView } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -17,6 +21,9 @@ import './schedule.css';
  */
 interface ScheduledRunsPageProps {
   project: ProjectRecord;
+  sidebarHost: HTMLElement | null;
+  onBack: () => void;
+  initialTicketKeys?: string[];
 }
 
 const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
@@ -27,11 +34,32 @@ const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
   { key: 'finished', title: 'Finished' }
 ];
 
-export function ScheduledRunsPage({ project }: ScheduledRunsPageProps) {
+export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [] }: ScheduledRunsPageProps) {
   const { confirm } = useDialogs();
+  const ticketPanel = useResizable({
+    storageKey: 'tm-pane-schedule-tickets',
+    initial: 320,
+    min: 140,
+    max: 640,
+    side: 'bottom'
+  });
+  const [ticketHost, setTicketHost] = useState<HTMLDivElement | null>(null);
+  const [ticketsCollapsed, setTicketsCollapsed] = useState(false);
+  const [ticketsMaximized, setTicketsMaximized] = useState(false);
+  const toggleTickets = () => {
+    if (ticketsMaximized) {
+      setTicketsMaximized(false);
+      setTicketsCollapsed(true);
+    } else setTicketsCollapsed(value => !value);
+  };
+  const [composerVersion, setComposerVersion] = useState(0);
+  const [selectedRunId, setSelectedRunId] = useState<string>();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const { candidates, loadError } = useScheduleTickets(project);
   const [views, setViews] = useState<ScheduledRunView[]>();
   const [error, setError] = useState('');
-  const [composing, setComposing] = useState<{ view?: ScheduledRunView }>();
+  const [composing, setComposing] = useState<{ view?: ScheduledRunView; ticketKeys?: string[]; autoAdd?: boolean }>();
+  const [ticketHandoffDismissed, setTicketHandoffDismissed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -72,35 +100,95 @@ export function ScheduledRunsPage({ project }: ScheduledRunsPageProps) {
       confirmLabel: 'Delete schedule',
       danger: true
     });
-    if (ok) await act(() => window.praxis.scheduledRuns.remove(view.run.id));
+    if (ok) await act(async () => { await window.praxis.scheduledRuns.remove(view.run.id); setSelectedRunId(undefined); });
   };
 
+  const sidebar = sidebarHost && createPortal(
+    <nav className="easymode-sidebar schedule-sidebar" aria-label="Scheduled runs and project tickets" data-testid="schedule-sidebar">
+      <header className="horizon-bar schedule-sidebar-header" hidden={ticketsMaximized}>
+        <div className="horizon-row-main">
+        <button type="button" className="easymode-btn-add" aria-label="Back to project" onClick={onBack}><Icon name="arrow-left" size={14} /></button>
+        <span className="workspace-title-wrap"><span>Scheduled runs</span></span>
+        <button type="button" className="btn-new-session-compact" data-testid="schedule-new" onClick={() => { setSelectedRunId(undefined); setComposerVersion(version => version + 1); setComposing({}); }}><Icon name="plus" size={13} /> <span>New</span></button>
+        </div>
+      </header>
+      <div className="schedule-sidebar-runs" hidden={ticketsMaximized}>
+        <button type="button" className={`easymode-automation-row schedule-nav-row${!selectedRunId && !composing ? ' is-selected' : ''}`} aria-current={!selectedRunId && !composing ? 'page' : undefined} onClick={() => { setSelectedRunId(undefined); setComposing(undefined); }}><Icon name="clock" size={14} className="easymode-automation-row__type-icon" /><span className="easymode-automation-row__title">All scheduled runs</span></button>
+        {RECENCY_BUCKETS.map(bucket => {
+          const runs = (views ?? []).filter(view => recencyBucket(view.run.updatedAt, new Date(now)) === bucket).sort((a, b) => b.run.updatedAt.localeCompare(a.run.updatedAt));
+          if (!runs.length) return null;
+          return <section className="easymode-section" key={bucket} data-testid={`schedule-bucket-${bucket}`}>
+            <button type="button" className="easymode-section-header schedule-bucket-title" aria-expanded={!collapsed[bucket]} onClick={() => setCollapsed(current => ({ ...current, [bucket]: !current[bucket] }))}>
+              <span className="easymode-section-header__title-group"><Icon name={collapsed[bucket] ? 'chevron-right' : 'chevron-down'} size={12} /><span className="easymode-section-header__title">{RECENCY_BUCKET_LABEL[bucket]}</span><span className="easymode-section-header__count">{runs.length}</span></span>
+            </button>
+            {!collapsed[bucket] && runs.map(view => <button key={view.run.id} type="button" className={`easymode-automation-row schedule-nav-row${selectedRunId === view.run.id ? ' is-selected' : ''}`} data-testid="schedule-nav-run" aria-current={selectedRunId === view.run.id ? 'page' : undefined} onClick={() => { setSelectedRunId(view.run.id); setComposing(undefined); }}>
+              <Icon name="clock" size={14} className="easymode-automation-row__type-icon" /><span className="easymode-automation-row__details"><span className="easymode-automation-row__title" title={view.run.name}>{view.run.name}</span><span className="easymode-automation-row__sub-row"><span className="easymode-automation-row__project">{STATUS_LABEL[view.run.status]} · {view.run.entries.length} ticket{view.run.entries.length === 1 ? '' : 's'}</span></span></span>
+            </button>)}
+          </section>;
+        })}
+        {views?.length === 0 && <p className="easymode-empty-hint">No scheduled runs yet</p>}
+      </div>
+      {!ticketsCollapsed && !ticketsMaximized && <div
+        className={`splitter-h${ticketPanel.dragging ? ' dragging' : ''}`}
+        aria-label="Resize project tickets section"
+        {...ticketPanel.handleProps}
+      />}
+      <div className={`schedule-sidebar-tickets${ticketsCollapsed ? ' is-collapsed' : ''}${ticketsMaximized ? ' is-maximized' : ''}`} style={ticketsCollapsed || ticketsMaximized ? undefined : { height: ticketPanel.size }}>
+        <div className="feature-section-header feature-section-toggle">
+          <button type="button" className="feature-section-title" aria-expanded={!ticketsCollapsed} onClick={toggleTickets}>
+            <span className="sidebar-section-label">Project tickets</span>
+            <span className="easymode-section-header__count">{candidates?.length ?? 0}</span>
+          </button>
+          <div className="feature-section-actions">
+            <button type="button" className="feature-section-action" aria-label={ticketsMaximized ? 'Restore sidebar' : 'Use full sidebar'} title={ticketsMaximized ? 'Restore sidebar' : 'Use full sidebar'} onClick={() => {
+              if (ticketsMaximized) setTicketsMaximized(false);
+              else { setTicketsCollapsed(false); setTicketsMaximized(true); }
+            }}><Icon name={ticketsMaximized ? 'window-restore' : 'window-maximize'} size={13} /></button>
+            <button type="button" className="feature-section-action" aria-label={ticketsCollapsed ? 'Expand project tickets section' : 'Collapse project tickets section'} title={ticketsCollapsed ? 'Expand project tickets section' : 'Collapse project tickets section'} onClick={toggleTickets}>
+              <span className={`tree-section-icon${ticketsCollapsed ? '' : ' open'}`}><Icon name={ticketsCollapsed ? 'chevron-right' : 'chevron-down'} size={14} /></span>
+            </button>
+          </div>
+        </div>
+        <div className="schedule-sidebar-ticket-content" hidden={ticketsCollapsed} ref={setTicketHost}>
+        {!composing && <ScheduleTickets candidates={candidates} loadError={loadError} onAdd={candidate => {
+          const selected = views?.find(view => view.run.id === selectedRunId);
+          setComposing({ view: selected && ['draft', 'scheduled'].includes(selected.run.status) ? selected : undefined, ticketKeys: [candidate.key] });
+        }} />}
+        </div>
+      </div>
+    </nav>, sidebarHost);
+
+
   if (composing) {
-    return (
+    return (<>{sidebar}
       <ScheduleComposer
+        key={`${composing.view?.run.id ?? 'new'}:${composerVersion}`}
         project={project}
+        ticketHost={ticketHost}
+        candidates={candidates}
+        loadError={loadError}
         initial={composing.view}
+        initialTicketKeys={composing.ticketKeys}
+        autoAddSelectedTickets={composing.autoAdd}
         onClose={() => setComposing(undefined)}
         onSaved={() => {
           setComposing(undefined);
+          setTicketHandoffDismissed(true);
           void load();
         }}
       />
-    );
+    </>);
   }
 
   const total = views?.length ?? 0;
 
   return (
-    <div className="view-scroll schedule-page" data-testid="scheduled-runs-page">
+    <>{sidebar}<div className="view-scroll schedule-page" data-testid="scheduled-runs-page">
       <header className="schedule-head">
         <div>
           <h2 className="schedule-title">Scheduled runs</h2>
           <p className="schedule-sub">Queue board tickets in a fixed order and set when to run them. One ticket at a time.</p>
         </div>
-        <button type="button" className="btn btn-primary" data-testid="schedule-new" onClick={() => setComposing({})}>
-          <Icon name="plus" size={13} /> New scheduled run
-        </button>
       </header>
 
       <div className="schedule-notice" role="note" data-testid="schedule-preview-note">
@@ -110,6 +198,12 @@ export function ScheduledRunsPage({ project }: ScheduledRunsPageProps) {
           until the runner ships.
         </span>
       </div>
+
+      {initialTicketKeys.length > 0 && !ticketHandoffDismissed && <section className="schedule-group" aria-label="Add selected tickets">
+        <h3 className="schedule-group-title">Add {initialTicketKeys.length} selected ticket{initialTicketKeys.length === 1 ? '' : 's'}</h3>
+        <button type="button" className="btn btn-primary" onClick={() => setComposing({ ticketKeys: initialTicketKeys, autoAdd: true })}>Create new schedule</button>
+        {(views ?? []).filter(view => view.run.status === 'draft' || view.run.status === 'scheduled').map(view => <button key={view.run.id} type="button" className="btn" onClick={() => setComposing({ view, ticketKeys: initialTicketKeys, autoAdd: true })}>Add to “{view.run.name}”</button>)}
+      </section>}
 
       {error && <div className="schedule-error" role="alert" data-testid="schedule-error">{error}</div>}
 
@@ -135,15 +229,15 @@ export function ScheduledRunsPage({ project }: ScheduledRunsPageProps) {
       )}
 
       {GROUPS.map(({ key, title }) =>
-        groups[key].length === 0 ? null : (
+        groups[key].filter(view => !selectedRunId || view.run.id === selectedRunId).length === 0 ? null : (
           <section key={key} className="schedule-group" aria-label={title} data-testid={`schedule-group-${key}`}>
             <h3 className="schedule-group-title">{title}<span className="schedule-group-count">{groups[key].length}</span></h3>
-            {groups[key].map(view => (
+            {groups[key].filter(view => !selectedRunId || view.run.id === selectedRunId).map(view => (
               <RunCard
                 key={view.run.id}
                 view={view}
                 now={now}
-                onEdit={() => setComposing({ view })}
+                onEdit={() => { setSelectedRunId(view.run.id); setComposing({ view }); }}
                 onDelete={() => void remove(view)}
                 onArm={armed => void act(() => window.praxis.scheduledRuns.setArmed(view.run.id, armed))}
                 onResolve={resolution => void act(() => window.praxis.scheduledRuns.resolveMissed(view.run.id, resolution))}
@@ -152,7 +246,7 @@ export function ScheduledRunsPage({ project }: ScheduledRunsPageProps) {
           </section>
         )
       )}
-    </div>
+    </div></>
   );
 }
 

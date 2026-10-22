@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { SessionsPage } from './SessionsPage';
+import { onSessionChanged } from './sessionChangeStream';
 
 /**
  * Root view of the floating chat window (FX-BE-143) — the same session
@@ -20,7 +21,7 @@ export function DetachedChatWindow({ issueKey }: { issueKey: string }) {
       setSession(sess);
       setLoaded(true);
     });
-    const offChanged = window.praxis.ai.onSessionChanged(record => {
+    const offChanged = onSessionChanged(record => {
       if (record.issueKey === issueKey) setSession(record);
     });
     const offDeleted = window.praxis.ai.onSessionDeleted(deletedKey => {

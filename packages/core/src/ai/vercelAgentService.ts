@@ -55,6 +55,13 @@ interface ActiveTask {
   };
   messageBuffer: string;
   reasoningBuffer?: string;
+  /**
+   * How much of `reasoningBuffer` is already on an earlier `message` event this
+   * turn. Each round trip records only what it added: attaching the whole
+   * buffer every time made a long tool-using turn store its reasoning
+   * quadratically (a 65 MB transcript) and ran the renderer out of heap.
+   */
+  reasoningEmitted?: number;
   turnStartTime: number;
   turnTools: string[];
   turnUsage?: TokenUsage;
@@ -395,7 +402,9 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
           task.messageBuffer.length > 200
             ? `${task.messageBuffer.slice(0, 200)}…`
             : task.messageBuffer || 'Assistant produced an empty message';
-        const reasoning = task.reasoningBuffer?.trim() || undefined;
+        const buffer = task.reasoningBuffer ?? '';
+        const reasoning = buffer.slice(task.reasoningEmitted ?? 0).trim() || undefined;
+        task.reasoningEmitted = buffer.length;
 
         // Compute turn telemetry: duration, token usage, cost, model, tools
         const durationMs = Math.max(0, Date.now() - task.turnStartTime);

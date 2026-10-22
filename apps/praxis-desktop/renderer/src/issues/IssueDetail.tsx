@@ -42,6 +42,7 @@ import {
   UncommittedBaseNotice,
   type UncommittedChoice
 } from '../workflows/UncommittedBaseNotice';
+import { onSessionChanged } from '../ai/sessionChangeStream';
 
 /** Centre-pane AI tooling views the detail panel can hand off to. */
 export type IssueAiView = 'review' | 'lpr';
@@ -960,7 +961,7 @@ export function IssueDetail({
         }
       })
       .catch(() => undefined);
-    const unsubscribe = window.praxis.ai.onSessionChanged(record => {
+    const unsubscribe = onSessionChanged(record => {
       if (record.issueKey === issueKey) {
         setAgentSession(record);
       }

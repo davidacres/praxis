@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+import { ScheduleTickets, expandScheduleTickets, type Candidate } from './ScheduleTickets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -19,20 +21,15 @@ import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './
  */
 interface ScheduleComposerProps {
   project: ProjectRecord;
+  ticketHost: HTMLElement | null;
+  candidates?: Candidate[];
+  loadError: string;
   initial?: ScheduledRunView;
   onClose: () => void;
   onSaved: () => void;
+  initialTicketKeys?: string[];
+  autoAddSelectedTickets?: boolean;
 }
-
-interface Candidate {
-  connectionId: string;
-  key: string;
-  title: string;
-  status: string;
-}
-
-const DONE_RE = /^(done|closed|resolved|complete|completed)$/i;
-const CONTAINER_TYPES = new Set(['feature', 'epic']);
 
 function refOf(candidate: Candidate): ScheduledTicketRef {
   return { connectionId: candidate.connectionId, issueKey: candidate.key, title: candidate.title };
@@ -41,57 +38,62 @@ function refOf(candidate: Candidate): ScheduledTicketRef {
 const sameTicket = (a: Pick<ScheduledTicketRef, 'connectionId' | 'issueKey'>, b: Pick<ScheduledTicketRef, 'connectionId' | 'issueKey'>) =>
   a.connectionId === b.connectionId && a.issueKey === b.issueKey;
 
-export function ScheduleComposer({ project, initial, onClose, onSaved }: ScheduleComposerProps) {
+export function ScheduleComposer({ project, ticketHost, candidates, loadError, initial, onClose, onSaved, initialTicketKeys = [], autoAddSelectedTickets = false }: ScheduleComposerProps) {
   const [name, setName] = useState(initial?.run.name ?? 'Scheduled run');
   const [date, setDate] = useState(initial?.start.date || tomorrowDate());
   const [time, setTime] = useState(initial?.start.time || '22:00');
   const [timezone, setTimezone] = useState(initial?.run.timezone ?? localTimeZone());
   const [belt, setBelt] = useState<ScheduledTicketRef[]>(() => initial?.run.entries.map(entry => ({ ...entry.ticket })) ?? []);
-  const [query, setQuery] = useState('');
-  const [candidates, setCandidates] = useState<Candidate[]>();
-  const [loadError, setLoadError] = useState('');
   const [preview, setPreview] = useState<{ readiness?: ScheduledRunReadiness; error?: string }>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [justAdded, setJustAdded] = useState<string>();
   const dragging = useRef<{ from: 'hopper' | 'belt'; key: string }>();
   const [overIndex, setOverIndex] = useState<number>();
+  const autoAddStarted = useRef(false);
+  const ticketsSeeded = useRef(false);
 
-  // Tickets the run can draw on: the project's own items and every linked board.
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const found: Candidate[] = [];
-      const sources = [{ connectionId: `project:${project.id}`, boardId: undefined as string | undefined }, ...project.linkedBoards];
-      for (const source of sources) {
-        let startAt = 0;
-        for (;;) {
-          const page = await window.praxis.issue.list(
-            { projectKeys: [], boardId: source.boardId, statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' },
-            startAt,
-            100,
-            source.connectionId
-          );
-          for (const issue of page.issues) {
-            const stage = project.workflowStages.find(candidate => candidate.name.toLowerCase() === issue.status.toLowerCase());
-            const finished = stage ? stage.category === 'done' : (issue.statusCategory ?? '').toLowerCase() === 'done' || DONE_RE.test(issue.status);
-            if (finished || CONTAINER_TYPES.has(issue.issueType.toLowerCase())) continue;
-            if (!found.some(candidate => candidate.connectionId === source.connectionId && candidate.key === issue.key)) {
-              found.push({ connectionId: source.connectionId, key: issue.key, title: issue.summary, status: issue.status });
-            }
-          }
-          startAt += page.issues.length;
-          if (!page.issues.length || (page.total !== undefined ? startAt >= page.total : page.issues.length < 100)) break;
-        }
+    if (!initialTicketKeys.length || !candidates) return;
+    const selected = expandScheduleTickets(candidates, candidates.filter(candidate => initialTicketKeys.includes(candidate.key))).map(refOf);
+    if (autoAddSelectedTickets) {
+      if (autoAddStarted.current) return;
+      autoAddStarted.current = true;
+      const queued = initial?.run.entries.map(entry => ({ ...entry.ticket })) ?? [];
+      const next = [...queued];
+      for (const ticket of selected) {
+        if (!next.some(existing => sameTicket(existing, ticket))) next.push(ticket);
       }
-      if (!cancelled) setCandidates(found);
-    })().catch(reason => {
-      if (!cancelled) setLoadError(reason instanceof Error ? reason.message : String(reason));
+      if (next.length === queued.length) {
+        if (initial) { onSaved(); return; }
+        setSaveError('None of the selected tickets are available to add to a new schedule.');
+        return;
+      }
+      setSaving(true);
+      const saveInput: SaveScheduledRunInput = {
+        id: initial?.run.id,
+        projectId: project.id,
+        name: initial?.run.name ?? 'Scheduled run',
+        date: initial?.start.date || tomorrowDate(),
+        time: initial?.start.time || '22:00',
+        timezone: initial?.run.timezone ?? localTimeZone(),
+        tickets: next,
+        arm: false
+      };
+      void window.praxis.scheduledRuns.save(saveInput).then(() => onSaved()).catch(reason => {
+        setSaveError((reason instanceof Error ? reason.message : String(reason)).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+        autoAddStarted.current = false;
+      }).finally(() => setSaving(false));
+      return;
+    }
+    if (ticketsSeeded.current) return;
+    ticketsSeeded.current = true;
+    setBelt(current => {
+      const next = [...current];
+      for (const ticket of selected) if (!next.some(existing => sameTicket(existing, ticket))) next.push(ticket);
+      return next;
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [project.id, JSON.stringify(project.linkedBoards)]);
+  }, [autoAddSelectedTickets, candidates, initial?.run.id, initial?.run.name, initial?.run.timezone, initial?.run.entries, initial?.start.date, initial?.start.time, initialTicketKeys.join('\0'), onSaved, project.id]);
 
   const input: SaveScheduledRunInput = useMemo(
     () => ({ id: initial?.run.id, projectId: project.id, name, date, time, timezone, tickets: belt, arm: false }),
@@ -113,11 +115,6 @@ export function ScheduleComposer({ project, initial, onClose, onSaved }: Schedul
   }, [input]);
 
   const onBelt = (candidate: Candidate) => belt.some(ticket => sameTicket(ticket, { connectionId: candidate.connectionId, issueKey: candidate.key }));
-  const visible = (candidates ?? []).filter(candidate => {
-    const needle = query.trim().toLowerCase();
-    return !needle || candidate.key.toLowerCase().includes(needle) || candidate.title.toLowerCase().includes(needle);
-  });
-
   const addTicket = (ticket: ScheduledTicketRef, at?: number) => {
     setBelt(current => {
       if (current.some(existing => sameTicket(existing, ticket))) return current;
@@ -127,6 +124,10 @@ export function ScheduleComposer({ project, initial, onClose, onSaved }: Schedul
     });
     setJustAdded(ticket.issueKey);
     window.setTimeout(() => setJustAdded(current => (current === ticket.issueKey ? undefined : current)), 700);
+  };
+  const addCandidate = (candidate: Candidate, at?: number) => {
+    const tickets = expandScheduleTickets(candidates ?? [], [candidate]);
+    tickets.forEach((item, offset) => addTicket(refOf(item), at === undefined ? undefined : at + offset));
   };
   const removeAt = (index: number) => setBelt(current => current.filter((_, i) => i !== index));
   const move = (from: number, to: number) =>
@@ -149,7 +150,7 @@ export function ScheduleComposer({ project, initial, onClose, onSaved }: Schedul
       return;
     }
     const candidate = (candidates ?? []).find(item => `${item.connectionId}\u0000${item.key}` === drag.key);
-    if (candidate) addTicket(refOf(candidate), index);
+    if (candidate) addCandidate(candidate, index);
   };
 
   const readiness = preview.readiness;
@@ -182,6 +183,13 @@ export function ScheduleComposer({ project, initial, onClose, onSaved }: Schedul
   const [hh, mm] = time.split(':').map(Number);
   const dial = Number.isFinite(hh) && Number.isFinite(mm) ? { hour: ((hh % 12) + mm / 60) * 30, minute: mm * 6 } : undefined;
 
+  if (autoAddSelectedTickets && !saveError && !loadError) {
+    return <div className="view-scroll schedule-page" data-testid="schedule-auto-add-progress" role="status">
+      <h2 className="schedule-title">Adding tickets {initial ? `to “${initial.run.name}”` : 'to a new schedule'}</h2>
+      <p className="schedule-sub">Saving the selected tickets as a draft scheduled run…</p>
+    </div>;
+  }
+
   return (
     <div className="view-scroll schedule-page schedule-composer" data-testid="schedule-composer">
       <header className="schedule-head">
@@ -205,48 +213,7 @@ export function ScheduleComposer({ project, initial, onClose, onSaved }: Schedul
       {saveError && <div className="schedule-error" role="alert" data-testid="schedule-save-error">{saveError}</div>}
 
       <div className="schedule-compose-grid">
-        <section className="schedule-hopper" aria-label="Ready tickets" data-testid="schedule-hopper">
-          <h3 className="schedule-panel-title">Ready tickets <span className="schedule-panel-note">{candidates?.length ?? 0}</span></h3>
-          <label className="schedule-search">
-            <Icon name="search" size={13} />
-            <input aria-label="Filter tickets" placeholder="Filter tickets" value={query} onChange={event => setQuery(event.target.value)} />
-          </label>
-          {candidates === undefined && !loadError && <p className="schedule-hint">Loading tickets…</p>}
-          {loadError && <p className="schedule-hint schedule-hint--bad">{loadError}</p>}
-          {candidates !== undefined && visible.length === 0 && <p className="schedule-hint">No unfinished tickets match.</p>}
-          <ul className="schedule-hopper-list">
-            {visible.map(candidate => {
-              const used = onBelt(candidate);
-              return (
-                <li key={`${candidate.connectionId}:${candidate.key}`}>
-                  <button
-                    type="button"
-                    className={`schedule-hopper-card${used ? ' is-used' : ''}`}
-                    data-testid="schedule-hopper-card"
-                    data-issue={candidate.key}
-                    draggable={!used}
-                    disabled={used}
-                    aria-label={used ? `${candidate.key} is on the belt` : `Add ${candidate.key} to the run`}
-                    onClick={() => addTicket(refOf(candidate))}
-                    onDragStart={event => {
-                      dragging.current = { from: 'hopper', key: `${candidate.connectionId}\u0000${candidate.key}` };
-                      event.dataTransfer.effectAllowed = 'copy';
-                      event.dataTransfer.setData('text/plain', candidate.key);
-                    }}
-                    onDragEnd={() => {
-                      dragging.current = undefined;
-                      setOverIndex(undefined);
-                    }}
-                  >
-                    <span className="schedule-hopper-key">{candidate.key}</span>
-                    <span className="schedule-hopper-status">{used ? 'on belt' : candidate.status}</span>
-                    <span className="schedule-hopper-title">{candidate.title}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+        {ticketHost && createPortal(<ScheduleTickets candidates={candidates} loadError={loadError} used={onBelt} onAdd={candidate => addCandidate(candidate)} onDrag={candidate => { dragging.current = { from: 'hopper', key: `${candidate.connectionId}\u0000${candidate.key}` }; }} onDragEnd={() => { dragging.current = undefined; setOverIndex(undefined); }} />, ticketHost)}
 
         <div className="schedule-main-col">
           <section className="schedule-stage" aria-label="Run order">

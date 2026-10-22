@@ -34,6 +34,7 @@ import {
   purposeFromTask
 } from './sessionHandover';
 import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
+import { dedupeCumulativeReasoning } from './agentEventUtils';
 import { estimateCostUsd } from './providers/modelPricing';
 import type { ReasoningEffort } from './providers/reasoningSupport';
 
@@ -403,7 +404,8 @@ export class AiSessionManager {
 
     if (transcript) {
       const rawEvents = transcript.events ?? [];
-      record.events = rawEvents.map(event => {
+      // Older transcripts repeat each turn's reasoning on every round trip.
+      record.events = dedupeCumulativeReasoning(rawEvents).map(event => {
         const output = event.data?.output;
         if (typeof output === 'string' && output.length > 20_000) {
           return {

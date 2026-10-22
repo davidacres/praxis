@@ -89,6 +89,7 @@ import type {
   InstalledAddon
 } from '../marketplace';
 import type {
+  AgentSessionChange,
   AgentSessionRecord,
   AgentPermissionMode,
   AgentTaskDefinition,
@@ -1013,8 +1014,13 @@ export interface AiIpc {
    * one) or while a turn is still running.
    */
   undoToolFileChange(issueKey: string, eventTimestamp: string, path: string): Promise<AgentSessionRecord>;
-  /** Subscribes to session record updates; returns an unsubscribe function. */
-  onSessionChanged(listener: (record: AgentSessionRecord) => void): () => void;
+  /**
+   * Subscribes to raw session updates; returns an unsubscribe function. A
+   * change may carry only the events appended since the previous one — the
+   * renderer reassembles whole records in `ai/sessionChangeStream.ts`, so
+   * subscribe through that rather than here.
+   */
+  onSessionChanged(listener: (change: AgentSessionChange) => void): () => void;
   /** Subscribes to session deletions; returns an unsubscribe function. */
   onSessionDeleted(listener: (issueKey: string) => void): () => void;
 

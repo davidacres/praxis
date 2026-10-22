@@ -7,6 +7,7 @@ import * as nodePath from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { openRestrictedHtmlPreview } from './htmlArtifactPreview';
+import { sessionChangeEncoder } from './sessionChangeBroadcast';
 import { broadcastToAllWindows } from './windowBroadcast';
 import {
   clearProviderApiKey,
@@ -52,6 +53,7 @@ import {
   type WireImageAttachment,
   isProviderLimitError,
   extractProviderLimitMessage,
+  reasoningAvailability,
   resolveTicketContext,
   mcpServerSlug
 } from '@praxis/core';
@@ -750,18 +752,33 @@ export function registerAiIpc(): void {
     } finally { recoveringSessions.delete(issueKey); }
   });
 
+  /**
+   * Stamp a session record with whether its route can produce reasoning text
+   * before it goes to a renderer.
+   *
+   * Derived, never persisted: the answer depends on the route rather than the
+   * model id, and the renderer imports types only from core so it cannot work
+   * it out itself. Applied at every path that hands a record outward, so a
+   * session read cold from `ai:listSessions` shows the same reasoning
+   * affordance as one that arrived live over `ai:sessionChanged`.
+   */
+  const withReasoningAvailability = <T extends AgentSessionRecord>(record: T): T => ({
+    ...record,
+    reasoningAvailability: reasoningAvailability(record.provider, record.model, record.reasoningEffort)
+  });
+
   ipcMain.handle('ai:listSessions', async () => {
     recoverTicketReviewProjects(sessionManager);
-    return sessionManager.listAgentSessionSummaries().sort((a, b) =>
-      b.startedAt.localeCompare(a.startedAt)
-    );
+    return sessionManager.listAgentSessionSummaries()
+      .map(withReasoningAvailability)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   });
 
   ipcMain.handle('ai:getSession', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
     const record = await sessionManager.ensureSessionTranscript(issueKey);
     if (!record) return undefined;
     const { conversationHistory, ...safeRecord } = record;
-    return safeRecord;
+    return withReasoningAvailability(safeRecord);
   });
 
   ipcMain.handle(
@@ -1321,15 +1338,18 @@ export function registerAiIpc(): void {
     }
   );
 
+  // Both of these change the route or the effort level, so the returned record
+  // can carry a different reasoning availability than the one it replaced.
   ipcMain.handle(
     'ai:updateSessionModel',
-    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) => updateSessionModel(issueKey, model)
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, model: string) =>
+      withReasoningAvailability(await updateSessionModel(issueKey, model))
   );
 
   ipcMain.handle(
     'ai:updateSessionReasoningEffort',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, reasoningEffort: ReasoningEffort) =>
-      updateSessionReasoningEffort(issueKey, reasoningEffort)
+      withReasoningAvailability(await updateSessionReasoningEffort(issueKey, reasoningEffort))
   );
 
   ipcMain.handle(
@@ -1597,8 +1617,10 @@ export function registerAiIpc(): void {
   getAcpAgentHost().onDidChangeActiveTask(scheduleWhenTaskSettles);
 
   sessionManager.onDidChangeAgentSession((record: AgentSessionRecord) => {
-    const { conversationHistory, ...broadcastRecord } = record;
-    broadcastToAllWindows('ai:sessionChanged', broadcastRecord);
+    const { conversationHistory, ...rest } = record;
+    // Only the events added since the last push travel: every streamed token
+    // fires this, and a long session's event list runs to megabytes.
+    broadcastToAllWindows('ai:sessionChanged', sessionChangeEncoder.encode(withReasoningAvailability(rest)));
     // A terminal state is published before each host removes its task. The
     // active-task listeners above schedule the next speaker only after that
     // cleanup, preserving the one-runtime-at-a-time invariant.

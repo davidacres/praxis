@@ -11,6 +11,7 @@ import { visibleMessageText } from '../ai/gadgets/messageText';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_THEME_ID, terminalColorsForTheme } from '../settings/themes';
 import { ChipSelect } from '../ui/ChipSelect';
+import { onSessionChanged } from '../ai/sessionChangeStream';
 
 export type PanelTab = 'output' | 'terminal';
 
@@ -158,7 +159,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
 
   useEffect(() => {
     if (!terminalAiSession?.issueKey) return undefined;
-    const unsubscribe = window.praxis.ai.onSessionChanged(record => {
+    const unsubscribe = onSessionChanged(record => {
       if (record.issueKey === terminalAiSession.issueKey) setTerminalAiSession(record);
     });
     return unsubscribe;

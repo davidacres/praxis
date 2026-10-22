@@ -30,6 +30,7 @@ import {
   type SpendGroupRow
 } from '../ai/sessionNav';
 import { UsageModelBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
+import { onSessionChanged } from '../ai/sessionChangeStream';
 
 /** Smaller chart/table counts stay exact; large usage totals carry Mtok/Btok/Ttok units. */
 const numberFormatter = new Intl.NumberFormat(undefined);
@@ -336,7 +337,7 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
         }
       })
       .catch(() => undefined);
-    const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
+    const unsubscribeChanged = onSessionChanged(record => {
       const { events: _ev, ...rest } = record;
       setSpendSessions(current => [{ ...rest, events: [] }, ...current.filter(session => session.issueKey !== record.issueKey)]);
     });

@@ -231,3 +231,45 @@ test('moving an item to Blocked from the review asks why, and the reason is kept
     await review.screenshot({ path: path.resolve(__dirname, '../../../../.praxis/session-artifacts/daily-review-blocker.png') });
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('daily review previews only the five most recently active unfinished project sessions', async () => {
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  const projectId = await page.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return (await window.praxis.projects.create({
+      name: 'Recent sessions review', key: 'REC', type: 'research', purpose: '', brief: {}, startingPoint: 'app-storage',
+      workflowStages: [{ id: 'todo', name: 'To do', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }],
+      starterTickets: [{ summary: 'Completed kickoff', description: '', issueType: 'Task', status: 'Done' }], defaultAiToolMode: 'read-only'
+    }, workspace.id)).id;
+  });
+  await app.electronApp.evaluate(({ ipcMain }, projectId) => {
+    const records = Array.from({ length: 9 }, (_, index) => {
+      const number = index + 1;
+      const at = new Date(Date.now() - (10 - number) * 3_600_000).toISOString();
+      return {
+        issueKey: `SESSION-recent-${number}`, sessionId: `recent-${number}`, title: `Pending session ${number}`,
+        projectId: number === 9 ? 'other-project' : projectId, state: number === 8 ? 'completed' : 'waiting_for_input',
+        provider: 'claude', startedAt: at, taskDefinition: { goal: `Review session ${number}`, sessionMode: 'task' },
+        events: number === 2 ? [{ type: 'text', text: 'Recent activity', timestamp: new Date().toISOString() }] : []
+      };
+    });
+    ipcMain.removeHandler('ai:listSessions');
+    ipcMain.handle('ai:listSessions', () => records);
+  }, projectId);
+  await page.reload();
+  await openProjectHome(page, 'Recent sessions review');
+  const review = page.getByTestId('project-review-panel');
+  await expect(review).toContainText('7 unfinished sessions');
+  const sessions = review.getByTestId('project-review-sessions').locator('li');
+  await expect(sessions).toHaveCount(5);
+  await expect(sessions.locator('strong')).toHaveText(['Pending session 2', 'Pending session 7', 'Pending session 6', 'Pending session 5', 'Pending session 4']);
+  await expect(review).toContainText('Showing the 5 most recently active of 7 unfinished sessions.');
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await review.screenshot({ path: path.join(artifacts, 'project-review-recent-sessions.png') });
+  await review.getByRole('button', { name: 'View all sessions', exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.getByTestId('project-session-nav-item')).toHaveCount(8);
+});

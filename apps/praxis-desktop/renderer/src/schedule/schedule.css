@@ -209,3 +209,60 @@
   .schedule-proc-arc, .hopper-card { transition: none; }
   .schedule-flow span { opacity: 0.6; }
 }
+
+/* The shell supplies the existing resizable left pane. Each half scrolls independently. */
+.schedule-sidebar-host { height: 100%; min-height: 0; }
+.schedule-sidebar-header .easymode-btn-add { flex: none; }
+.schedule-sidebar-runs { flex: 1; min-height: 80px; overflow-y: auto; padding: 6px 6px 12px; display: flex; flex-direction: column; gap: 4px; }
+.schedule-nav-row { width: 100%; text-align: left; font-family: inherit; background: transparent; }
+.schedule-bucket-title { width: 100%; border: 0; background: transparent; color: var(--text-tertiary); cursor: pointer; font-family: inherit; }
+.schedule-bucket-title:hover { background: var(--bg-hover); }
+.schedule-sidebar-tickets { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 140px; max-height: calc(100% - 150px); overflow: hidden; border-top: 1px solid var(--border); }
+.schedule-sidebar-tickets .schedule-hopper { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; box-sizing: border-box; border: 0; border-radius: 0; background: transparent; padding: 6px 6px 12px; }
+.schedule-sidebar-tickets h3 { margin: 0; }
+.schedule-sidebar-tickets .schedule-hopper-list { flex: 1; min-height: 0; max-height: none; overflow-y: auto; overflow-x: hidden; margin: 0; gap: 4px; padding: 2px; }
+.schedule-sidebar-tickets .easymode-search-bar { flex: none; }
+.schedule-sidebar-tickets .easymode-search-bar__input { min-width: 0; }
+.schedule-ticket-card.is-used { opacity: 0.5; cursor: default; }
+.schedule-ticket-card:not(:disabled) { cursor: grab; }
+.schedule-compose-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* Pane width changes independently of the window when the other sidebars are open. */
+.schedule-composer { container-type: inline-size; }
+@container (max-width: 720px) {
+  .schedule-stage-body { flex-direction: column; align-items: stretch; }
+  .schedule-flow { display: none; }
+  .schedule-processor { width: 160px; align-self: center; }
+  .schedule-panels { grid-template-columns: minmax(0, 1fr); }
+  .schedule-compose-title { flex-wrap: wrap; }
+  .schedule-name { min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .schedule-stage-head, .schedule-summary { flex-wrap: wrap; gap: var(--space-2); }
+  .schedule-start-row { flex-wrap: wrap; }
+  .schedule-fields { min-width: 0; }
+}
+
+/* Board ticket cards and joined sub-tickets, sized for the sidebar. */
+.schedule-sidebar .schedule-ticket-card { width: 100%; min-height: 0; text-align: left; font-family: inherit; padding: var(--space-2); }
+.schedule-ticket-card .issue-card-title { font-size: var(--text-sm); }
+.schedule-ticket-heading { display: flex; align-items: flex-start; gap: var(--space-2); width: 100%; min-width: 0; }
+.schedule-ticket-heading .issue-card-title { flex: 1; min-width: 0; }
+.schedule-ticket-heading .issue-card-context { flex: none; max-width: 40%; padding: 2px 5px; font-size: var(--text-xs); }
+.schedule-ticket-card .issue-card-foot { width: 100%; padding-top: var(--space-1); font-size: var(--text-xs); }
+.schedule-ticket-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+.schedule-ticket-children { list-style: none; margin: 0; padding: 0; }
+.schedule-ticket-family { min-width: 0; }
+.schedule-sidebar .schedule-ticket-card.issue-card-child { margin: 0; }
+.schedule-sidebar .schedule-ticket-stack { margin-top: 0; }
+.schedule-sidebar .schedule-hopper-list { gap: var(--space-2); }
+
+/* Keep keyboard focus inside the stack face so it does not outline the ticket seam. */
+.schedule-sidebar .schedule-ticket-stack:focus-visible { outline: none; }
+.schedule-sidebar .schedule-ticket-stack:focus-visible .board-child-stack-face { background: var(--accent-soft); color: var(--text); }
+.schedule-sidebar .schedule-ticket-stack:focus-visible .board-child-stack-label { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+.schedule-sidebar-header[hidden], .schedule-sidebar-runs[hidden], .schedule-sidebar-ticket-content[hidden] { display: none; }
+.schedule-sidebar-tickets.is-collapsed { flex: none; min-height: 0; max-height: none; }
+.schedule-sidebar-tickets.is-maximized { flex: 1; min-height: 0; max-height: none; }
+.schedule-sidebar-tickets > .feature-section-header { flex: none; margin: 0; }
+.schedule-sidebar-tickets .feature-section-title { gap: 6px; }
+.schedule-sidebar-ticket-content { flex: 1; min-height: 0; overflow: hidden; }

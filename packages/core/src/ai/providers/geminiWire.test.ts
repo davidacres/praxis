@@ -6,7 +6,7 @@ import {
   toGeminiContents,
   toGeminiTools
 } from './geminiWire';
-import type { GatewayToolDefinition, WireMessage } from '../gateway/wire';
+import type { GatewayToolDefinition, StreamChatEvent, WireMessage } from '../gateway/wire';
 
 test('toGeminiContents extracts leading system message into systemInstruction', () => {
   const messages: WireMessage[] = [
@@ -166,6 +166,43 @@ test('consumeGeminiStream streams text deltas and thinking deltas', async () => 
       usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 }
     }
   });
+});
+
+test('consumeGeminiStream reports Gemini reasoning tokens separately from the output count', async () => {
+  async function* sseLines(): AsyncGenerator<string> {
+    yield 'data: {"candidates":[{"content":{"parts":[{"text":"The answer."}]},"finishReason":"STOP"}],'
+      + '"usageMetadata":{"promptTokenCount":15,"candidatesTokenCount":25,"totalTokenCount":40,'
+      + '"thoughtsTokenCount":18,"cachedContentTokenCount":6}}';
+  }
+
+  let done: StreamChatEvent | undefined;
+  for await (const evt of consumeGeminiStream(sseLines())) {
+    if (evt.type === 'done') done = evt;
+  }
+
+  const usage = done?.type === 'done' ? done.result.usage : undefined;
+  // Already counted inside candidatesTokenCount, so the total must not grow.
+  assert.equal(usage?.reasoningTokens, 18);
+  assert.equal(usage?.outputTokens, 25);
+  assert.equal(usage?.totalTokens, 40);
+  assert.equal(usage?.cachedInputTokens, 6);
+});
+
+test('consumeGeminiStream omits the reasoning breakdown when Gemini does not report one', async () => {
+  async function* sseLines(): AsyncGenerator<string> {
+    yield 'data: {"candidates":[{"content":{"parts":[{"text":"The answer."}]},"finishReason":"STOP"}],'
+      + '"usageMetadata":{"promptTokenCount":15,"candidatesTokenCount":25,"totalTokenCount":40}}';
+  }
+
+  let done: StreamChatEvent | undefined;
+  for await (const evt of consumeGeminiStream(sseLines())) {
+    if (evt.type === 'done') done = evt;
+  }
+
+  const usage = done?.type === 'done' ? done.result.usage : undefined;
+  // Absent rather than `undefined`, so it deep-equals a provider that reports no
+  // breakdown — the shape `wire.ts`'s strict usage assertions compare against.
+  assert.deepEqual(usage, { inputTokens: 15, outputTokens: 25, totalTokens: 40 });
 });
 
 test('consumeGeminiStream parses functionCall in candidates', async () => {

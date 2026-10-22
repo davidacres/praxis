@@ -239,7 +239,7 @@ test('a controller session starts a project run and its stage session fills the 
   const workflowComposer = page.getByTestId('wf-run-session').locator('.session-follow-up-composer');
   await expect(workflowComposer.getByTestId('session-composer-activity-timer')).toBeVisible();
   await expect(page.getByTestId('session-activity-status')).toHaveCount(0);
-  await expect(page.getByTestId('session-chat-markdown-streaming')).toContainText('Inspecting the workflow stage');
+  await expect(page.getByTestId('session-thought-markdown')).toContainText('Inspecting the workflow stage');
   await expect(workflowComposer.getByTestId('session-follow-up-input')).toHaveCSS('opacity', '0');
   await page.getByTestId('wf-run-session').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/workflow-composer-thinking.png') });
   await app!.electronApp.evaluate(({ BrowserWindow }, record) => {

@@ -1,6 +1,6 @@
 import type { AiProvider } from '../types';
 import type { ProviderCapabilityManifest } from './providers/providerPreflight';
-import type { ReasoningEffort } from './providers/reasoningSupport';
+import type { ReasoningAvailability, ReasoningEffort } from './providers/reasoningSupport';
 import type { TokenUsage, WireImageAttachment } from './gateway';
 
 // ── Agent Task State Machine ─────────────────────────────────────────────
@@ -233,7 +233,23 @@ export interface AgentEventSummary {
    * turn; the agent still receives it as context.
    */
   gadgetAnswer?: boolean;
-  /** Model reasoning/thinking generated during this turn. */
+  /**
+   * Model reasoning/thinking generated during this turn, **cumulative within the
+   * turn** — not incremental.
+   *
+   * Each host appends thought deltas to one per-turn buffer and re-emits that
+   * buffer on every `message` event it makes (`acpAgentHost.ts`'s
+   * `assistantMessageEvent`, `vercelAgentService.ts`'s thought handler), while
+   * `agentLoop.ts` emits one `message` per model round-trip inside its tool
+   * loop. So a tool-using turn's later events carry prefix-supersets of the
+   * earlier ones.
+   *
+   * This is a contract, not a coincidence: `chatThought.mergeReasoningStep` in
+   * the renderer relies on it to fold a run of events into distinct steps
+   * without repeating the opening paragraph. A host that switched to emitting
+   * only the new delta would render duplicated reasoning rather than merged,
+   * with no type error to catch it.
+   */
   reasoning?: string;
   /** Duration of the turn execution in milliseconds. */
   durationMs?: number;
@@ -247,11 +263,17 @@ export interface AgentEventSummary {
   toolNames?: string[];
 }
 
+/**
+ * There is deliberately no `'reasoning'` member. Reasoning is not an event of
+ * its own; it rides on the `'message'` event that carries the reply it produced,
+ * as `AgentEventSummary.reasoning`. A `'reasoning'` variant existed here but
+ * nothing ever emitted it (`git log -S"type: 'reasoning'"` finds no producer),
+ * so every consumer only had to handle a case that could not occur.
+ */
 export type AgentEventType =
   | 'session_start'
   | 'plan'
   | 'intent'
-  | 'reasoning'
   | 'message'
   | 'tool_start'
   | 'tool_complete'
@@ -400,6 +422,28 @@ export interface AgentRuntimeLaunch {
 export type SessionMode = 'chat' | 'analysis' | 'review';
 
 /** Full persisted record for an AI agent session attached to an issue. */
+/**
+ * The events a session gained since the previous `ai:sessionChanged` push:
+ * `appended` belongs at index `base` of the receiver's copy.
+ */
+export interface AgentSessionEventsDelta {
+  base: number;
+  appended: AgentEventSummary[];
+}
+
+/**
+ * What `ai:sessionChanged` carries: either a whole record, or a record whose
+ * event list is sent as only the events added since the last push.
+ *
+ * Every streamed token fires a session change, and a long session's event
+ * list runs to megabytes, so sending it whole each time copied it many times a
+ * second into every window. Events are append-only (or replaced wholesale on
+ * load/evict, which is sent whole), which is what makes a delta safe.
+ */
+export type AgentSessionChange =
+  | AgentSessionRecord
+  | (Omit<AgentSessionRecord, 'events'> & { events?: undefined; eventsDelta: AgentSessionEventsDelta });
+
 export interface AgentSessionRecord {
   issueKey: string;
   sessionId: string;
@@ -497,6 +541,17 @@ export interface AgentSessionRecord {
   eventCount?: number;
   planText?: string;
   reasoningText?: string;
+  /**
+   * Whether this session's turns can produce reasoning *text* to display, and
+   * if not why — see `reasoningAvailability`.
+   *
+   * Derived, not persisted: the host stamps it onto the session record as it
+   * broadcasts to renderers (`aiIpc.ts`), because the answer depends on the
+   * route rather than the model id. The renderer must not recompute it: it
+   * imports types only from core, and mirroring `detectReasoningFamily` there
+   * would let the two copies drift into showing the wrong reason.
+   */
+  reasoningAvailability?: ReasoningAvailability;
   responseText?: string;
   /** Conversation history for vercel-gateway resume (excludes system prompt). */
   conversationHistory?: AgentConversationMessage[];

@@ -7,7 +7,7 @@ import {
   type WireImageAttachment,
   type WireMessage
 } from '../gateway/wire';
-import { anthropicThinkingBudget } from './reasoningSupport';
+import { anthropicThinkingConfig } from './reasoningSupport';
 
 /**
  * Translation between the canonical OpenAI-shaped `WireMessage[]` `agentLoop.ts`
@@ -135,12 +135,25 @@ export function buildAnthropicRequest(args: BuildChatRequestArgs): Record<string
   if (system) {
     body.system = system;
   }
-  const thinkingBudget = anthropicThinkingBudget(args.reasoningEffort);
-  if (typeof thinkingBudget === 'number') {
-    // Thinking requires max_tokens to exceed budget_tokens, and is
-    // incompatible with a custom temperature — Anthropic rejects both.
-    body.max_tokens = Math.max(body.max_tokens as number, thinkingBudget + 1024);
-    body.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
+  // Which thinking mode to send is decided by the model id: Claude 4.7+ reject
+  // the `type: 'enabled'` shape this file used to send for every model, and
+  // Claude 4.5 and earlier reject `type: 'adaptive'`. See `anthropicThinkingMode`.
+  const thinkingConfig = anthropicThinkingConfig(args.modelId, args.reasoningEffort);
+  if (thinkingConfig?.thinking) {
+    body.thinking = thinkingConfig.thinking;
+    if (thinkingConfig.outputConfig) {
+      body.output_config = thinkingConfig.outputConfig;
+    }
+    const budget = thinkingConfig.thinking.budget_tokens;
+    if (typeof budget === 'number') {
+      // Extended thinking requires max_tokens to exceed budget_tokens.
+      body.max_tokens = Math.max(body.max_tokens as number, budget + 1024);
+    }
+    // Anthropic rejects a custom temperature alongside extended thinking. The
+    // same is assumed for adaptive mode: the docs don't state it either way, and
+    // no Praxis caller sets `temperature`, so this only removes a combination
+    // that would never be built here anyway.
+    delete body.temperature;
   } else if (typeof args.temperature === 'number') {
     body.temperature = args.temperature;
   }

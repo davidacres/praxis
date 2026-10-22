@@ -62,6 +62,7 @@ export interface BoardViewProps {
    * Scheduled runs preview is on and the board belongs to a project; absent hides the button.
    */
   onScheduleRun?: () => void;
+  onScheduleTickets?: (keys: string[]) => void;
   openSettings?: boolean;
   onSettingsOpened?: () => void;
 }
@@ -150,6 +151,7 @@ interface IssueContextMenuState {
   x: number;
   y: number;
   issueKey: string;
+  issueKeys: string[];
   columnName: string;
 }
 
@@ -281,6 +283,7 @@ export function BoardView({
   onIssueMove,
   onOpenDesigner,
   onScheduleRun,
+  onScheduleTickets,
   openSettings = false,
   onSettingsOpened
 }: BoardViewProps) {
@@ -298,6 +301,7 @@ export function BoardView({
   // the board.
   const [expandedStacks, setExpandedStacks] = useState<Set<string>>(new Set());
   const [issueMenu, setIssueMenu] = useState<IssueContextMenuState | undefined>();
+  const [selectedIssueKeys, setSelectedIssueKeys] = useState<Set<string>>(new Set());
   const issueMenuRef = useRef<HTMLDivElement>(null);
 
   const [issues, setIssues] = useState<IssueSummary[]>([]);
@@ -380,13 +384,16 @@ export function BoardView({
   const openIssueMenu = useCallback((event: React.MouseEvent<HTMLElement>, column: BoardColumn, issue: IssueSummary) => {
     event.preventDefault();
     event.stopPropagation();
+    const issueKeys = selectedIssueKeys.has(issue.key) && selectedIssueKeys.size > 1 ? [...selectedIssueKeys] : [issue.key];
+    if (issueKeys.length === 1 && !selectedIssueKeys.has(issue.key)) setSelectedIssueKeys(new Set());
     setIssueMenu({
       x: Math.min(event.clientX, window.innerWidth - 220),
       y: Math.min(event.clientY, window.innerHeight - 160),
       issueKey: issue.key,
+      issueKeys,
       columnName: column.name
     });
-  }, []);
+  }, [selectedIssueKeys]);
 
   /** Shared right-click handler for board cards and list rows. */
   const cardContextMenuProps = (column: BoardColumn, issue: IssueSummary) => ({
@@ -920,7 +927,7 @@ export function BoardView({
       data-testid="issue-card"
       data-issue-key={issue.key}
       data-child-of={isChild ? issue.parentKey : undefined}
-      className={`issue-card${isChild ? ' issue-card-child' : ''}${isChild && isLastChild ? ' issue-card-child-last' : ''}${childCount > 0 ? ' issue-card-parent' : ''}${hasStack ? ' issue-card-has-stack' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
+      className={`issue-card${isChild ? ' issue-card-child' : ''}${isChild && isLastChild ? ' issue-card-child-last' : ''}${childCount > 0 ? ' issue-card-parent' : ''}${hasStack ? ' issue-card-has-stack' : ''}${issue.key === selectedIssueKey ? ' active' : ''}${selectedIssueKeys.has(issue.key) ? ' selected-for-schedule' : ''}`}
       style={{
         '--issue-card-accent': contextAccent,
         ...(revealDelayMs !== undefined ? { animationDelay: `${revealDelayMs}ms` } : {})
@@ -928,7 +935,14 @@ export function BoardView({
       {...cardDragProps(issue)}
       {...cardDropProps(column, issue)}
       {...cardContextMenuProps(column, issue)}
-      onClick={() => onOpenIssue(issue.key)}
+      onClick={event => {
+        if (event.metaKey || event.ctrlKey) {
+          setSelectedIssueKeys(current => { const next = new Set(current); next.has(issue.key) ? next.delete(issue.key) : next.add(issue.key); return next; });
+          return;
+        }
+        setSelectedIssueKeys(new Set());
+        onOpenIssue(issue.key);
+      }}
       role="button"
       tabIndex={0}
       onKeyDown={event => {
@@ -1108,12 +1122,19 @@ export function BoardView({
               key={issue.key}
               data-testid="issue-card"
               data-child-of={isChild ? issue.parentKey : undefined}
-              className={`board-list-row${isChild ? ' board-list-row-child' : ''}${childCount > 0 ? ' board-list-row-parent' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
+              className={`board-list-row${isChild ? ' board-list-row-child' : ''}${childCount > 0 ? ' board-list-row-parent' : ''}${issue.key === selectedIssueKey ? ' active' : ''}${selectedIssueKeys.has(issue.key) ? ' selected-for-schedule' : ''}`}
               style={{ borderLeftColor: childCount > 0 ? 'var(--border-strong)' : cardAccent(issue) }}
               {...cardDragProps(issue)}
               {...cardDropProps(column, issue)}
               {...cardContextMenuProps(column, issue)}
-              onClick={() => onOpenIssue(issue.key)}
+              onClick={event => {
+                if (event.metaKey || event.ctrlKey) {
+                  setSelectedIssueKeys(current => { const next = new Set(current); next.has(issue.key) ? next.delete(issue.key) : next.add(issue.key); return next; });
+                  return;
+                }
+                setSelectedIssueKeys(new Set());
+                onOpenIssue(issue.key);
+              }}
               role="button"
               tabIndex={0}
               onKeyDown={event => {
@@ -1301,6 +1322,18 @@ export function BoardView({
           >
             Move to bottom of column
           </button>
+          {onScheduleTickets && <button role="menuitem" data-testid="board-issue-menu-schedule" onClick={() => {
+            const chosen = new Set(issueMenu.issueKeys);
+            let expanded = true;
+            while (expanded) {
+              expanded = false;
+              for (const child of issues) {
+                if (child.parentKey && chosen.has(child.parentKey) && !chosen.has(child.key)) { chosen.add(child.key); expanded = true; }
+              }
+            }
+            onScheduleTickets([...chosen]);
+            setIssueMenu(undefined);
+          }}>Add to schedule…</button>}
         </div>
       )}
     </div>

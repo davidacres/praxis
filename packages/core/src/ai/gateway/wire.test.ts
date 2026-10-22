@@ -78,6 +78,46 @@ test('reads token usage from choice-level usage or camelCase format', async () =
   assert.deepEqual(result.usage, { inputTokens: 250, outputTokens: 40, totalTokens: 290 });
 });
 
+test('reads the OpenAI-compatible reasoning and cache breakdown, which Qwen and GLM use', async () => {
+  // This is the only evidence that thinking happened for a model whose HTTP
+  // endpoint never returns reasoning *text* (GPT-6 keeps its reasoning items
+  // opaque), so dropping it loses the signal entirely.
+  const result = await runStream([
+    { choices: [{ delta: { content: 'hi' } }] },
+    {
+      choices: [],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 34,
+        total_tokens: 154,
+        completion_tokens_details: { reasoning_tokens: 20 },
+        prompt_tokens_details: { cached_tokens: 96 }
+      }
+    }
+  ]);
+
+  // Both are already subsets of the counts above; neither may inflate the total.
+  assert.deepEqual(result.usage, {
+    inputTokens: 120,
+    outputTokens: 34,
+    totalTokens: 154,
+    reasoningTokens: 20,
+    cachedInputTokens: 96
+  });
+});
+
+test('a provider that reports no reasoning breakdown yields no reasoning key at all', async () => {
+  const result = await runStream([
+    { choices: [{ delta: { content: 'hi' } }] },
+    { choices: [], usage: { prompt_tokens: 120, completion_tokens: 34, total_tokens: 154 } }
+  ]);
+
+  // Absent, not `undefined` — so it deep-equals the baseline usage object above
+  // and the telemetry tooltip's `reasoningTokens ?` guard stays false.
+  assert.equal('reasoningTokens' in (result.usage ?? {}), false);
+  assert.equal('cachedInputTokens' in (result.usage ?? {}), false);
+});
+
 test('reads token usage across an Anthropic stream, input first then output', async () => {
   const result = await runStream([
     { type: 'message_start', message: { usage: { input_tokens: 900, output_tokens: 0 } } },
@@ -200,7 +240,7 @@ test('the Vercel caching hint and stream usage option are only sent when allowed
   assert.equal('stream_options' in elsewhere, false);
 });
 
-test('a Claude model id routed through the gateway gets Anthropic thinking via providerOptions, merged with the caching hint', () => {
+test('a Claude 4.6 model id routed through the gateway gets adaptive thinking via providerOptions, merged with the caching hint', () => {
   const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
   const body = buildChatRequest({
     modelId: 'anthropic/claude-sonnet-4.6',
@@ -209,14 +249,69 @@ test('a Claude model id routed through the gateway gets Anthropic thinking via p
     reasoningEffort: 'high'
   });
 
+  // 4.6 accepts both modes; adaptive is the recommended one, and depth is
+  // steered by output_config.effort rather than a token budget.
   assert.deepEqual(body.providerOptions, {
     gateway: { caching: 'auto' },
-    anthropic: { thinking: { type: 'enabled', budget_tokens: 8192 } }
+    anthropic: {
+      thinking: { type: 'adaptive', display: 'summarized' },
+      output_config: { effort: 'high' }
+    }
   });
-  // Thinking requires max_tokens above the budget and is incompatible with a custom temperature.
-  assert.ok((body.max_tokens as number) > 8192);
+  // Thinking is incompatible with a custom temperature.
   assert.equal('temperature' in body, false);
   assert.equal('reasoning_effort' in body, false);
+});
+
+test('a Claude 5.x model id routed through the gateway gets adaptive thinking, not the enabled shape it rejects', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const body = buildChatRequest({
+    modelId: 'anthropic/claude-fable-5.1',
+    messages,
+    reasoningEffort: 'medium'
+  });
+
+  const anthropic = (body.providerOptions as { anthropic?: Record<string, unknown> }).anthropic;
+  assert.deepEqual(anthropic?.thinking, { type: 'adaptive', display: 'summarized' });
+  assert.deepEqual(anthropic?.output_config, { effort: 'medium' });
+  // Sending `enabled` to a 5.x model is a 400 error, so it must never appear.
+  assert.notEqual(JSON.stringify(body).includes('budget_tokens'), true);
+});
+
+test('a Claude 4.5 model id routed through the gateway keeps extended thinking, since it rejects adaptive', () => {
+  const messages: WireMessage[] = [{ role: 'user', content: 'hi' }];
+  const body = buildChatRequest({
+    modelId: 'anthropic/claude-sonnet-4-5',
+    messages,
+    reasoningEffort: 'high'
+  });
+
+  assert.deepEqual((body.providerOptions as { anthropic?: unknown }).anthropic, {
+    thinking: { type: 'enabled', budget_tokens: 8192 }
+  });
+  // Extended thinking requires max_tokens above the budget.
+  assert.ok((body.max_tokens as number) > 8192);
+});
+
+test('Anthropic thinking deltas stream through the gateway fallback instead of being dropped', async () => {
+  async function* lines() {
+    yield `data: ${JSON.stringify({ type: 'message_start', message: { usage: { input_tokens: 10, output_tokens: 1 } } })}`;
+    yield `data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Weighing the options' } })}`;
+    yield `data: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'The answer.' } })}`;
+    yield `data: ${JSON.stringify({
+      type: 'message_delta',
+      delta: { stop_reason: 'end_turn' },
+      usage: { output_tokens: 42, output_tokens_details: { thinking_tokens: 30 } }
+    })}`;
+  }
+
+  const events: Array<{ type: string; text?: string; result?: { usage?: { reasoningTokens?: number } } }> = [];
+  for await (const event of consumeChatStream(lines())) events.push(event as never);
+
+  assert.deepEqual(events.find(e => e.type === 'thought_delta'), { type: 'thought_delta', text: 'Weighing the options' });
+  const done = events.find(e => e.type === 'done');
+  // Anthropic reports the thinking breakdown only on the final message_delta.
+  assert.equal(done?.result?.usage?.reasoningTokens, 30);
 });
 
 test('a Gemini model id routed through the gateway gets thinkingConfig via providerOptions', () => {

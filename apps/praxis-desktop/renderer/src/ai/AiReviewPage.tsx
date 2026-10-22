@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord, AiProvider, ChatBlock, IssueDetails } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
+import { ThoughtBlock } from '../ui/ThoughtBlock';
 import { SessionTeamMessages } from './SessionTeamMessages';
 import { isTerminalAgentState } from './aiSessionState';
 import { isLimitNoticeReply } from './sessionNav';
@@ -10,6 +11,7 @@ import { SessionComposer } from './SessionComposer';
 import { GadgetBlockList, GadgetSurface, isGadgetActionable } from './gadgets';
 import { gadgetMessageKey, visibleMessageText } from './gadgets/messageText';
 import { useSessionGadgets } from './gadgets/useSessionGadgets';
+import { onSessionChanged } from './sessionChangeStream';
 
 const REVIEW_COMMENT_MARKER = '<!-- praxis-ai-review:v1 -->';
 
@@ -91,7 +93,7 @@ export function AiReviewPage({
   // Live updates for this review's session.
   useEffect(() => {
     if (!sessionKey) return;
-    const unsubscribe = window.praxis.ai.onSessionChanged(record => {
+    const unsubscribe = onSessionChanged(record => {
       if (record.issueKey === sessionKey) setSession(record);
     });
     // A record can change between the snapshot we hold and the subscription
@@ -332,10 +334,9 @@ export function AiReviewPage({
           if (!text && !event.reasoning?.trim() && blocks.length === 0) return null;
           return (
             <div className="ai-review-message" key={`${event.timestamp}-${index}`}>
-              {event.reasoning?.trim() && <details className="session-chat-thought" data-testid="review-thought-disclosure">
-                <summary className="session-chat-thought-summary">Thoughts</summary>
-                <Markdown text={event.reasoning} testId="review-thought-content" />
-              </details>}
+              {event.reasoning?.trim() && (
+                <ThoughtBlock steps={[event.reasoning]} testIdPrefix="review" />
+              )}
               {text && <Markdown text={text} testId={index === firstReviewIndex ? 'ai-review-content' : 'ai-review-message'} />}
               <GadgetBlockList
                 blocks={blocks}
@@ -352,10 +353,9 @@ export function AiReviewPage({
             <Markdown text={liveText} />
           </div>
         )}
-        {running && session?.reasoningText?.trim() && <details open className="session-chat-thought session-chat-thought-streaming" data-testid="review-live-thoughts">
-          <summary className="session-chat-thought-summary">Thoughts</summary>
-          <Markdown text={session.reasoningText} testId="review-thought-content" />
-        </details>}
+        {running && session?.reasoningText?.trim() && (
+          <ThoughtBlock steps={[session.reasoningText]} streaming testIdPrefix="review" />
+        )}
         {session && <SessionTeamMessages sessionKey={session.issueKey} />}
       </div>
 

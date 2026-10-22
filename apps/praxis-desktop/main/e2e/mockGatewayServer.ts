@@ -59,7 +59,13 @@ export async function startMockGatewayServer(options: {
    *  `context_length` is what the app reads to size the context indicator. */
   models?: Array<{ id: string; name?: string; context_length?: number }>;
   /** Token usage to report on the final chunk, as a real provider does. */
-  usage?: { prompt_tokens: number; completion_tokens: number };
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    /** OpenAI-compatible breakdown; `reasoning_tokens` is what
+     *  `gateway/wire.ts` reads to populate `tokenUsage.reasoningTokens`. */
+    completion_tokens_details?: { reasoning_tokens?: number };
+  };
   /** Optional first-turn tool call; the following request receives `reply`. */
   toolCall?: { name: string; arguments: Record<string, unknown> };
   /**
@@ -75,6 +81,14 @@ export async function startMockGatewayServer(options: {
     content?: string;
     toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
   }>;
+  /**
+   * Reasoning/thinking text to stream as OpenAI-compatible
+   * `delta.reasoning_content` chunks before the assistant content, which is
+   * what `gateway/wire.ts` reads to yield `thought_delta`. A string streams as
+   * one delta; an array streams one delta per element, so a test can watch
+   * reasoning accumulate. Opt-in, so existing callers are unaffected.
+   */
+  reasoning?: string | string[];
   /** Optional first-turn tool calls; useful for exercising a long activity history. */
   toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
   /** Delay completion so a test can interact with an in-flight session. */
@@ -123,6 +137,17 @@ export async function startMockGatewayServer(options: {
           : options.toolCalls ?? (options.toolCall ? [options.toolCall] : []);
         const shouldCallTool = toolCalls.length > 0 && (roundTrips ? roundTrip !== undefined : requests.length === 1);
         const roundTripContent = roundTrip ? roundTrip.content : undefined;
+        // Reasoning arrives before content, as it does from a real provider, so
+        // a live turn shows thinking first and text after.
+        for (const chunk of options.reasoning === undefined
+          ? []
+          : Array.isArray(options.reasoning) ? options.reasoning : [options.reasoning]) {
+          res.write(sseChunk({
+            id: 'chatcmpl-mock',
+            object: 'chat.completion.chunk',
+            choices: [{ index: 0, delta: { role: 'assistant', reasoning_content: chunk } }]
+          }));
+        }
         res.write(sseChunk({
           id: 'chatcmpl-mock',
           object: 'chat.completion.chunk',
@@ -184,7 +209,10 @@ export async function startMockGatewayServer(options: {
                 usage: {
                   prompt_tokens: options.usage.prompt_tokens,
                   completion_tokens: options.usage.completion_tokens,
-                  total_tokens: options.usage.prompt_tokens + options.usage.completion_tokens
+                  total_tokens: options.usage.prompt_tokens + options.usage.completion_tokens,
+                  ...(options.usage.completion_tokens_details
+                    ? { completion_tokens_details: options.usage.completion_tokens_details }
+                    : {})
                 }
               })
             );

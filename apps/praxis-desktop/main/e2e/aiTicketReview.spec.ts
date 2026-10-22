@@ -354,8 +354,8 @@ test('review exposes shared runtime controls while preserving its review boundar
   await app!.electronApp.evaluate(({ BrowserWindow }, record) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, reasoningText: 'Checking the acceptance criteria' });
   }, activeReview);
-  await expect(win.getByTestId('review-thought-content')).toBeVisible();
-  await expect(win.getByTestId('review-thought-content')).toContainText('Checking the acceptance criteria');
+  await expect(win.getByTestId('review-thought-markdown')).toBeVisible();
+  await expect(win.getByTestId('review-thought-markdown')).toContainText('Checking the acceptance criteria');
 
   await win.getByTestId('ai-review-page').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/review-thoughts-preserved.png') });
   await expect(win.getByTestId('ai-review-content')).toContainText('Verdict: Needs work', { timeout: 20000 });

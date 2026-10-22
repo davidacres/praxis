@@ -253,8 +253,8 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   }, parentRecord);
   await expect(win.locator('.session-composer-live-activity')).toBeVisible();
   await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
-  await expect(win.getByTestId('session-chat-markdown-streaming')).toBeVisible();
-  await expect(win.getByTestId('session-chat-markdown-streaming')).toContainText('Checking authentication');
+  await expect(win.getByTestId('session-thought-markdown')).toBeVisible();
+  await expect(win.getByTestId('session-thought-markdown')).toContainText('Checking authentication');
   await expect(win.getByTestId('session-composer-activity-timer')).toHaveText(/\d+(?:\.\d+)?s|\d+m \d+s/);
   const tokens = win.getByTestId('session-composer-token-count');
   await expect(tokens).toHaveText('2,000 tokens');

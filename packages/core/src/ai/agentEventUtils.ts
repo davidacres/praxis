@@ -74,3 +74,34 @@ export function reportedSessionPaths(
   }
   return paths;
 }
+
+/**
+ * Strip reasoning a message event repeats from the message before it.
+ *
+ * The API agent used to attach the turn's whole reasoning buffer to every
+ * round trip's `message` event, so step N re-stored steps 1..N-1. A long
+ * tool-using turn grew quadratically — one real transcript reached 65 MB,
+ * 60 MB of it repeated reasoning — and the renderer, which receives the full
+ * event list on every session broadcast, ran out of heap.
+ *
+ * Applied when a transcript is loaded, so sessions saved before the fix
+ * shrink the next time they are opened. A message whose reasoning does not
+ * extend the previous one is left untouched.
+ */
+export function dedupeCumulativeReasoning(events: readonly AgentEventSummary[]): AgentEventSummary[] {
+  let previous = '';
+  return events.map(event => {
+    if (event.type !== 'message' || typeof event.reasoning !== 'string' || !event.reasoning) {
+      return event;
+    }
+    const full = event.reasoning;
+    const prior = previous;
+    previous = full;
+    if (!prior || full.length <= prior.length || !full.startsWith(prior)) {
+      return event;
+    }
+    const fresh = full.slice(prior.length).trim();
+    const { reasoning: _repeated, ...rest } = event;
+    return fresh ? { ...rest, reasoning: fresh } : rest;
+  });
+}

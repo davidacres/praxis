@@ -4,6 +4,7 @@ import { disposeCoordinationMcpForSession } from './coordinationMcp';
 import { disposeBrowserMcpForSession } from './browserMcp';
 import { disposeTrackerMcpForSession } from './trackerMcp';
 import { broadcastToAllWindows } from './windowBroadcast';
+import { sessionChangeEncoder } from './sessionChangeBroadcast';
 
 /**
  * Stops a session's active task and removes it. Shared by `ai:deleteSession`
@@ -19,5 +20,6 @@ export async function deleteAgentSession(issueKey: string): Promise<void> {
   endCoordinatedSession(issueKey);
   sessionManager.removeAgentSession(issueKey);
   sessionManager.removeSession(issueKey);
+  sessionChangeEncoder.forget(issueKey);
   broadcastToAllWindows('ai:sessionDeleted', issueKey);
 }

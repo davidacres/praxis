@@ -36,6 +36,16 @@ renderer/src/
 └── theme.css, surfaces.css
 ```
 
+## Session updates: subscribe through `ai/sessionChangeStream.ts`
+
+`ai:sessionChanged` usually carries only the events a session gained since the
+previous push (`eventsDelta`), not its whole event list — every streamed token
+fires one, and a long session's events run to megabytes. `onSessionChanged`
+from `ai/sessionChangeStream.ts` joins them back into whole records and fans
+them out from one bridge crossing. **Never call `window.praxis.ai.onSessionChanged`
+directly**: a delta has no `events`, so the first `record.events.filter` throws.
+A plain whole record (what e2e specs inject with `webContents.send`) still works.
+
 ## Theming
 
 Four independent attribute axes on `<html>`, all composing:

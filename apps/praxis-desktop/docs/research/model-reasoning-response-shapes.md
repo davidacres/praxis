@@ -2,6 +2,11 @@
 
 Research for unifying how Praxis displays thinking / thoughts / reasoning across AI models.
 
+> **Status:** §1–§7 are the research findings, written against the code *before* any fix; they
+> describe what was wrong and why. Most of them have since been implemented — see **§8**, which
+> records the implementation status per recommendation, a finding discovered only during the build,
+> and the test evidence. Read §8 before acting on a finding in §1–§7.
+
 Method: read every reasoning ingestion path in `packages/core` and every rendering path in
 `apps/praxis-desktop/renderer`, then checked each provider's published API documentation for the
 request and response shape. **No live provider calls were made** (no keys in this session), so
@@ -347,3 +352,129 @@ Ordered by value per unit of effort.
 - **Whether `qwen3.8-max` defaults thinking on through Praxis's specific preset endpoints** — the
   `coding-intl.dashscope.aliyuncs.com` Coding Plan endpoint may behave differently from the
   `compatible-mode/v1` endpoint the docs describe.
+
+---
+
+## 8. Implementation status (branch `fix/common-reasoning-display`)
+
+Recommendations 2–6, 8 and 9 are implemented; 1 is implemented for the chat pane and both
+AI-review surfaces but two other surfaces still use their own widget; 10 turned out to be already
+satisfied; 7 is deliberately not implemented. Verified against Anthropic's, OpenAI's and Alibaba's
+published docs during implementation — two findings changed what was built.
+
+| # | Recommendation | Status |
+| --- | --- | --- |
+| 1 | One `<ThoughtBlock>` for all surfaces | **Partial** — `renderer/src/ui/ThoughtBlock.tsx` now serves settled chat, streaming chat and both AI-review surfaces (4 call sites, F9 killed). Two surfaces still use their own widget: the agent timeline (`AgentActivityFeed.tsx:400`, label "Reasoning / Thought Process") and the Assistant panel (`AssistantPanel.tsx:255` has an effort slider but renders no reasoning at all). See "Remaining surfaces" below |
+| 2 | Empty state as first-class | **Done** — `thoughtDisplay.ts` + `AgentSessionRecord.reasoningAvailability`, stamped host-side |
+| 3 | Parse reasoning token counts on every wire | **Done** — `wire.ts` (4 call sites), `geminiWire.ts` |
+| 4 | `thinking_delta` in the gateway Anthropic fallback | **Done** — `wire.ts`, with a test |
+| 5 | Migrate Anthropic to adaptive thinking | **Done** — `anthropicThinkingMode`/`anthropicThinkingConfig`, both request builders |
+| 6 | Fix the family predicates (`fable`, `gpt-6`) | **Done** — plus `mythos`, verified against every id in the docs' table |
+| 7 | Send the vendor's real effort parameter (Qwen/GLM/MiniMax) | **Not done — see below** |
+| 8 | Delete the dead `'reasoning'` event type | **Done** — removed from `AgentEventType`; `git log -S` confirms it was never emitted |
+| 9 | Pin the cumulative contract | **Done** — documented on `AgentEventSummary.reasoning` |
+| 10 | Align mobile truncation | **Already satisfied** — `boundedText` inserts a visible `[…content truncated for mobile…]` marker, and `mobileSessionProjection.test.ts:91` asserts it |
+
+### New finding — `display` defaults to `omitted` on Claude 4.7+ (§F5 addendum)
+
+Migrating to `thinking: {type: 'adaptive'}` alone would **not** have fixed the chat pane. Anthropic's
+docs state `display` defaults to `"omitted"` on Claude Fable 5.1, Mythos 5.1, Fable 5, Mythos 5,
+Opus 5.5, Opus 5, Sonnet 5.5, Sonnet 5, Opus 4.8, Opus 4.7, Mythos Preview and Haiku 5.5 — thinking
+blocks come back with an empty `thinking` field. The request would have succeeded, the reasoning
+tokens would have been billed, and the pane would still have shown nothing.
+
+So adaptive mode always sends `display: 'summarized'`. Extended mode deliberately does not: the same
+docs give `"summarized"` as the default on 4.6 and earlier, so adding it there would be noise.
+
+Behavioural note that matters for recommendation 2: adaptive thinking means Claude *decides* whether
+to think, and "at lower effort settings it may skip thinking entirely on easy inputs". An empty
+thought block is therefore a legitimate normal outcome on current Claude models too — not only on
+GPT-6. That is precisely why the empty state needed a stated reason.
+
+### Why recommendation 7 was not implemented
+
+Qwen's parameters are now verified (`enable_thinking`, `thinking_budget` range 1–32768, passed via
+`extra_body`), but the docs also undercut the blanket fix the report proposed:
+
+- `qwen3.8-omni-flash` is documented as *"Adjust thinking effort via `reasoning_effort`"* — i.e. the
+  parameter Praxis already sends is the **correct** one for that model. Switching it to
+  `enable_thinking` would break it.
+- `qwen3.8-2.4t-a95b` is thinking-only and *"cannot be disabled"*, so honouring `off` by sending
+  `enable_thinking: false` would be rejected or ignored.
+
+So the correct mapping is **per model**, not per provider — and these are custom presets
+(`custom:alibaba-model-studio`, `custom:minimax`, `z-ai`), where a user may point the endpoint at any
+model. GLM's `thinking` object and MiniMax's switch remain unverified (`docs.z.ai` reference paths
+404; `platform.minimax.io` did not render), so there is no way to confirm those two at all.
+
+Sending a guessed parameter is worse than the current behaviour: today the slider is inert, which is
+a visible no-op; a wrong parameter can silently disable thinking on a model that needs it, or cause a
+request failure. Left as a follow-up needing either per-model metadata or a live probe.
+
+### Remaining surfaces not yet unified
+
+The shared component exists and is proven by four call sites, but two surfaces are still outside it:
+
+- **Agent timeline** (`AgentActivityFeed.tsx:400`) keeps its own `<details class="agent-thought-disclosure">`
+  and its own label, "Reasoning / Thought Process". It is a different visual context (a timeline card
+  with a sparkles marker and a timestamp), so unifying it means passing the timeline's marker and
+  timestamp in as the block's caption/extras rather than swapping the widget outright.
+- **Assistant panel** (`AssistantPanel.tsx`) offers a reasoning-effort slider at line 255 but never
+  renders the reasoning that slider requests. This is the one surface where a control exists with no
+  corresponding output, so it is the more user-visible gap of the two.
+
+Neither blocks the session chat pane, which is what the original request was about; both are left as
+follow-ups because each needs a design decision (what the timeline card and the assistant card look
+like) rather than a mechanical replacement.
+
+### Test and verification status
+
+- Core: **1617 tests, 0 failures** (`npm run test:core`). Was 1611 at baseline; +6 new.
+- Renderer units: **41 pass** (`tests/`, including the new `thoughtDisplay.test.ts`).
+  `tests/modelCuration.test.ts` fails to load on a clean tree too (extensionless import under
+  `--experimental-strip-types`) — pre-existing, excluded from the run.
+- Typechecks: core, renderer and main all clean. `vite build` succeeds, which also proves the
+  renderer's types-only-from-core rule holds for the new files.
+- E2E (`--project=functional`): `aiThoughtGrouping`, `aiCliAgentHost`, `standaloneConversations`,
+  `workflowRunWorkspace`, `easymode`, `aiTicketReview`. Remaining failures —
+  `aiThoughtGrouping:190` ×2, `aiTicketReview` ×3, `easymode:71` — reproduce identically on a
+  stashed clean tree, so they are pre-existing. `themes` 50/50 and `theme-regressions` 1/1 pass.
+- **No live provider calls.** Request-shape changes are verified against vendor documentation, not
+  captured traffic; a real API key would be the only way to confirm them end to end.
+
+### One bug the new tests caught
+
+Adding `reasoningTokens` to `noteUsage` initially covered only three of its four call sites. The
+missed one — the top-level `evt.usage` chunk — is the *primary* OpenAI-compatible path, because the
+final usage chunk carries no `choices` at all and is read before the choice guard. A new test
+asserting the OpenAI-shaped breakdown failed until it was fixed, so the Qwen/GLM/DeepSeek reasoning
+count would have been dropped silently.
+
+## 9. Visual verification (added after the implementation)
+
+The §8 claims above are backed by screenshots of the real renderer, driven against the in-process
+gateway mock by `main/e2e/aiThoughtDisplayVerification.spec.ts`. Reasoning is streamed as
+OpenAI-compatible `delta.reasoning_content` chunks — the exact field `gateway/wire.ts:669` reads to
+yield `thought_delta` — so the captures are the shipped UI, not a fixture. The mock gained two
+opt-in options for this (`reasoning`, and `usage.completion_tokens_details`); both default to
+absent, so no existing caller changes behaviour. Evidence lives in
+`.praxis/session-artifacts/thought-display/`:
+
+| Capture | What it shows |
+| --- | --- |
+| `01-streaming-open.png` | Live turn: the widget open by default, label **"Thought"**, reasoning streaming in the nested expander. |
+| `02-streaming-block.png` | The same block in isolation, mid-stream. |
+| `03-settled-collapsed.png` | The turn it settles into: **same widget, same label**, collapsed to a caption with duration and telemetry. No relabel to "Thoughts", no DOM-level move — the §F2 jolt is gone. |
+| `04-settled-expanded.png` | The settled block expanded: full reasoning above the reply, behind one nested expander. |
+| `05-settled-reasoning.png` | The nested reasoner open on the settled turn. |
+| `06-empty-opaque.png` | `gpt-6-luna` over `openai`: the first-class empty state, "This model doesn't return reasoning text." The host stamped `reasoningAvailability: 'opaque'` — asserted in the spec, not assumed. |
+| `07-empty-opaque-settled.png` | The same session settled: the empty block is a live-turn affordance only, so history stays uncluttered. |
+| `08-empty-not-requested.png` | `reasoningEffort: 'off'`: distinct copy, "Reasoning wasn't requested for this turn." — the two empty cases are not conflated, and the spec asserts the wire carried no `reasoning_effort`. |
+
+The spec also asserts the §8 F4 fix end to end: the `reasoning_tokens` count from the usage chunk
+reaches the telemetry tooltip's `title`, which is the only evidence of thinking for a route whose
+text never arrives.
+
+Two failures in the neighbouring `aiThoughtGrouping.spec.ts:190` pair (token-total assertions)
+reproduce with this branch's mock change stashed, so they are pre-existing and unrelated to the
+widget.

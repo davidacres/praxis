@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isLatestEditToPath, reportedSessionPaths } from './agentEventUtils';
+import { dedupeCumulativeReasoning, isLatestEditToPath, reportedSessionPaths } from './agentEventUtils';
 import type { AgentEventSummary } from './agentTypes';
 
 function toolComplete(timestamp: string, path: string): AgentEventSummary {
@@ -94,4 +94,29 @@ test('a session whose host reports nothing yields an empty set', () => {
   // "nothing was changed". Callers have to say which.
   const shellRun = { type: 'tool_complete', summary: 'Tool completed: shell', timestamp: '2026-09-13T10:00:00.000Z', data: { output: 'added 120 packages' } } as AgentEventSummary;
   assert.deepEqual([...reportedSessionPaths([shellRun], '/Users/dev/repo')], []);
+});
+
+function assistant(reasoning?: string): AgentEventSummary {
+  return { timestamp: '2026-10-21T12:00:00.000Z', type: 'message', summary: 'reply', ...(reasoning ? { reasoning } : {}) };
+}
+
+test('dedupeCumulativeReasoning keeps only the reasoning each step added', () => {
+  const out = dedupeCumulativeReasoning([
+    assistant('first.'),
+    { timestamp: '2026-10-21T12:00:01.000Z', type: 'tool_start', summary: 'Running tool' },
+    assistant('first.\n\nsecond.'),
+    assistant('first.\n\nsecond.\n\nthird.')
+  ]);
+  assert.deepEqual(out.map(event => event.reasoning), ['first.', undefined, 'second.', 'third.']);
+});
+
+test('dedupeCumulativeReasoning leaves independent reasoning alone', () => {
+  const events = [assistant('alpha'), assistant('beta'), assistant()];
+  assert.deepEqual(dedupeCumulativeReasoning(events), events);
+});
+
+test('dedupeCumulativeReasoning drops a repeat that adds nothing but whitespace', () => {
+  const out = dedupeCumulativeReasoning([assistant('same'), assistant('same\n\n')]);
+  assert.equal(out[1].reasoning, undefined);
+  assert.equal('reasoning' in out[1], false);
 });
