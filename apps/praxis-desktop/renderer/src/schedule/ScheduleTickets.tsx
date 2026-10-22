@@ -59,9 +59,10 @@ export function expandScheduleTickets(candidates: Candidate[], roots: Candidate[
   return candidates.filter(item => !item.finished && !item.container && wanted.has(`${item.connectionId}\0${item.key}`));
 }
 
-export function ScheduleTickets({ candidates, loadError, used = () => false, onAdd, onDrag, onDragEnd }: {
+export function ScheduleTickets({ candidates, loadError, used = () => false, onAdd, onDrag, onDragEnd, onDragStart }: {
   candidates?: Candidate[]; loadError: string; used?: (candidate: Candidate) => boolean;
   onAdd: (candidate: Candidate) => void; onDrag?: (candidate: Candidate) => void; onDragEnd?: () => void;
+  onDragStart?: (candidate: Candidate, dataTransfer: DataTransfer) => void;
 }) {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -105,7 +106,7 @@ export function ScheduleTickets({ candidates, loadError, used = () => false, onA
       <button type="button" className={`issue-card schedule-ticket-card${children.length ? ' issue-card-parent issue-card-has-stack' : ''}${isChild ? ' issue-card-child' : ''}${isChild && isLast && !children.length ? ' issue-card-child-last' : ''}${unavailable ? ' is-used' : ''}`}
         data-testid="schedule-hopper-card" data-issue={candidate.key} data-child-of={isChild ? candidate.parentKey : undefined}
         disabled={unavailable} draggable={!!onDrag && !unavailable} aria-label={candidate.finished ? `${candidate.key} is completed` : queued ? `${candidate.key} is on the belt` : `Add ${candidate.key} to the run`}
-        onClick={() => onAdd(candidate)} onDragStart={event => { onDrag?.(candidate); event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('text/plain', candidate.key); }} onDragEnd={onDragEnd}>
+        onClick={() => onAdd(candidate)} onDragStart={event => { onDrag?.(candidate); onDragStart?.(candidate, event.dataTransfer); if (!onDragStart) { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('text/plain', candidate.key); } }} onDragEnd={onDragEnd}>
         <span className="schedule-ticket-heading">
           <span className="issue-card-title" title={candidate.title}>{candidate.title}</span>
           <span className="issue-card-context" title={parent ? `${candidate.issueType} in ${parent.title}` : candidate.issueType}>{candidate.issueType}</span>

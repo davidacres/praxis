@@ -37,6 +37,7 @@ function refOf(candidate: Candidate): ScheduledTicketRef {
 
 const sameTicket = (a: Pick<ScheduledTicketRef, 'connectionId' | 'issueKey'>, b: Pick<ScheduledTicketRef, 'connectionId' | 'issueKey'>) =>
   a.connectionId === b.connectionId && a.issueKey === b.issueKey;
+const SCHEDULE_TICKET_DRAG_TYPE = 'application/x-praxis-schedule-ticket';
 
 export function ScheduleComposer({ project, ticketHost, candidates, loadError, initial, onClose, onSaved, initialTicketKeys = [], autoAddSelectedTickets = false }: ScheduleComposerProps) {
   const [name, setName] = useState(initial?.run.name ?? 'Scheduled run');
@@ -139,8 +140,14 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
       return next;
     });
 
-  const dropAt = (index: number) => {
-    const drag = dragging.current;
+  const dropAt = (index: number, dataTransfer?: DataTransfer) => {
+    let drag = dragging.current;
+    if (!drag && dataTransfer) {
+      try {
+        const payload = JSON.parse(dataTransfer.getData(SCHEDULE_TICKET_DRAG_TYPE)) as Partial<{ from: 'hopper' | 'belt'; key: string }>;
+        if ((payload.from === 'hopper' || payload.from === 'belt') && typeof payload.key === 'string') drag = payload as { from: 'hopper' | 'belt'; key: string };
+      } catch { /* Fall back to the in-memory drag state when custom data is unavailable. */ }
+    }
     dragging.current = undefined;
     setOverIndex(undefined);
     if (!drag) return;
@@ -213,7 +220,13 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
       {saveError && <div className="schedule-error" role="alert" data-testid="schedule-save-error">{saveError}</div>}
 
       <div className="schedule-compose-grid">
-        {ticketHost && createPortal(<ScheduleTickets candidates={candidates} loadError={loadError} used={onBelt} onAdd={candidate => addCandidate(candidate)} onDrag={candidate => { dragging.current = { from: 'hopper', key: `${candidate.connectionId}\u0000${candidate.key}` }; }} onDragEnd={() => { dragging.current = undefined; setOverIndex(undefined); }} />, ticketHost)}
+        {ticketHost && createPortal(<ScheduleTickets candidates={candidates} loadError={loadError} used={onBelt} onAdd={candidate => addCandidate(candidate)} onDrag={candidate => { dragging.current = { from: 'hopper', key: `${candidate.connectionId}\u0000${candidate.key}` }; }} onDragEnd={() => { dragging.current = undefined; setOverIndex(undefined); }} onDragStart={(candidate, dataTransfer) => {
+          const payload = { from: 'hopper' as const, key: `${candidate.connectionId}\u0000${candidate.key}` };
+          dragging.current = payload;
+          dataTransfer.effectAllowed = 'copy';
+          dataTransfer.setData(SCHEDULE_TICKET_DRAG_TYPE, JSON.stringify(payload));
+          dataTransfer.setData('text/plain', candidate.key);
+        }} />, ticketHost)}
 
         <div className="schedule-main-col">
           <section className="schedule-stage" aria-label="Run order">
@@ -226,11 +239,14 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
                 className="schedule-belt"
                 data-testid="schedule-belt"
                 onDragOver={event => {
-                  if (dragging.current) event.preventDefault();
+                  if (dragging.current || Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE)) {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = dragging.current?.from === 'belt' ? 'move' : 'copy';
+                  }
                 }}
                 onDrop={event => {
                   event.preventDefault();
-                  dropAt(belt.length);
+                  dropAt(belt.length, event.dataTransfer);
                 }}
               >
                 {belt.map((ticket, index) => (
@@ -243,19 +259,21 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
                     onDragStart={event => {
                       dragging.current = { from: 'belt', key: `${ticket.connectionId}\u0000${ticket.issueKey}` };
                       event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData(SCHEDULE_TICKET_DRAG_TYPE, JSON.stringify(dragging.current));
                       event.dataTransfer.setData('text/plain', ticket.issueKey);
                     }}
                     onDragOver={event => {
-                      if (!dragging.current) return;
+                      if (!dragging.current && !Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE)) return;
                       event.preventDefault();
                       event.stopPropagation();
+                      event.dataTransfer.dropEffect = dragging.current?.from === 'belt' ? 'move' : 'copy';
                       setOverIndex(index);
                     }}
                     onDragLeave={() => setOverIndex(current => (current === index ? undefined : current))}
                     onDrop={event => {
                       event.preventDefault();
                       event.stopPropagation();
-                      dropAt(index);
+                      dropAt(index, event.dataTransfer);
                     }}
                     onDragEnd={() => {
                       dragging.current = undefined;
