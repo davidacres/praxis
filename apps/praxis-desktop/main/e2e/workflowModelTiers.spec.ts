@@ -205,6 +205,9 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   const head = dialog.getByTestId('ai-provider-row-vercel-gateway').locator('.ai-provider-head');
   if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
+  // Tier mapping lives on the provider's Models page, alongside the catalog it picks from.
+  await dialog.getByTestId('ai-manage-models-btn').click();
+  await expect(dialog.getByTestId('model-manager-panel')).toBeVisible();
   const tiers = dialog.getByTestId('ai-model-tiers-vercel-gateway');
   await expect(tiers.getByLabel('fast tier model')).toHaveAttribute('data-value', TIERS.fast);
   await expect(tiers.getByLabel('strong tier model')).toHaveAttribute('data-value', TIERS.strong);
@@ -228,19 +231,17 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
     .toBe('vendor/not-listed');
   await page.screenshot({ path: shot('settings-model-tiers.png') });
 
-  // The same mapping can be set from the model side: Manage models shows each model's tier and sets it.
-  await dialog.getByTestId('ai-manage-models-btn').click();
-  await expect(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`)).toHaveAttribute('data-value', '');
+  // Each catalog row shows the tier its model currently holds.
   await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveAttribute('data-value', 'standard');
+  await expect(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`)).toHaveCount(0);
   // Giving another model the Standard tier takes it from the one that held it.
-  await chooseOption(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`), 'standard');
-  await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveAttribute('data-value', '');
+  await chooseOption(tiers.getByLabel('standard tier model'), TIERS.standard);
+  await expect(dialog.getByTestId('model-manager-tier-tier/other-model')).toHaveCount(0);
+  await expect(dialog.getByTestId(`model-manager-tier-${TIERS.standard}`)).toHaveAttribute('data-value', 'standard');
   await expect
     .poll(async () => (await page.evaluate(() => window.praxis.settings.get())).ai.modelTiers?.['vercel-gateway']?.standard)
     .toBe(TIERS.standard);
   await page.screenshot({ path: shot('model-manager-tiers.png') });
-  await dialog.getByTestId('model-manager-back').click();
-  await expect(dialog.getByTestId('ai-model-tier-vercel-gateway-standard')).toHaveAttribute('data-value', TIERS.standard);
   await dialog.getByRole('button', { name: 'Done' }).click();
 
   // The designer: pick a stage, change its tier, save, reload, and it is still there.

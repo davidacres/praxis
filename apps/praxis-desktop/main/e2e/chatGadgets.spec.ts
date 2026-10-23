@@ -415,9 +415,11 @@ test('internal memory citations stay persisted but do not render in the transcri
 
   // Presentation filtering must not destroy the provider response. The raw
   // event remains available for audit, diagnostics, and session recovery.
-  const storedMessage = await win.evaluate(() => window.praxis.ai.listSessions().then(sessions =>
-    sessions[0]?.events.find(event => event.type === 'message')?.detail
-  ));
+  // getSession hydrates the transcript; listSessions ships an event-free summary.
+  const storedMessage = await win.evaluate(async () =>
+    (await window.praxis.ai.getSession((await window.praxis.ai.listSessions())[0]!.issueKey))?.events
+      .find(event => event.type === 'message')?.detail
+  );
   expect(storedMessage).toContain('<oai-mem-citation>');
   expect(storedMessage).toContain(rolloutId);
 });
@@ -521,7 +523,9 @@ test('answering a choice records it through the ledger and leaves it answered', 
   // asked actually learns what was picked. Wait for that second turn to
   // settle before asserting on request counts.
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
-  expect(mock!.requests).toHaveLength(2);
+  // Polled: the badge settles as soon as the turn completes, which can be just
+  // before the request lands on the mock.
+  await expect.poll(() => mock!.requests.length, { timeout: 15000 }).toBe(2);
   const followUp = JSON.parse(mock!.requests[1]!.body) as { messages: Array<{ role: string; content: string }> };
   expect(followUp.messages.at(-1)).toMatchObject({ role: 'user' });
   expect(followUp.messages.at(-1)!.content).toContain('Claude');

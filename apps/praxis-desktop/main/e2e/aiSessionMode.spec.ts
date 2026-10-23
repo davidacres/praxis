@@ -82,9 +82,15 @@ test('switching a finished session to Review sends the mode transition and resum
     k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
   ), { timeout: 20000 }).toBe('completed');
 
-  const sentBody = JSON.parse(mock.requests.at(-1)!.body) as { messages: Array<{ role: string; content: string }> };
-  const lastUserMessage = [...sentBody.messages].reverse().find(message => message.role === 'user');
-  expect(lastUserMessage?.content).toContain('Switch this conversation into Review mode');
+  // Polled: the switch issues the follow-up asynchronously, so the mock may not
+  // hold the resumed turn yet at this point.
+  await expect.poll(() => {
+    const last = mock.requests.at(-1);
+    if (!last) return false;
+    const body = JSON.parse(last.body) as { messages: Array<{ role: string; content: string }> };
+    const lastUserMessage = [...body.messages].reverse().find(message => message.role === 'user');
+    return lastUserMessage?.content.includes('Switch this conversation into Review mode');
+  }, { timeout: 20000 }).toBe(true);
 
   await win.screenshot({ path: 'output/playwright/session-mode-chip.png', fullPage: true });
 });

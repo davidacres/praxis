@@ -3,7 +3,9 @@ import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { closeTestApp, launchTestApp } from './launchTestApp';
 
+// Fetches history for four providers and edits keys in two provider details.
 test('provider history stays separate, handles keys, coverage, zero and unavailable summaries', async () => {
+  test.slow();
   const app = await launchTestApp({ ai: { providers: { openai: { added: true }, anthropic: { added: true } } } });
   try {
     await app.electronApp.evaluate(({ ipcMain }) => {
@@ -36,10 +38,15 @@ test('provider history stays separate, handles keys, coverage, zero and unavaila
     await openai.getByRole('button', { name: 'Fetch history', exact: true }).click();
     await expect(openai).toContainText('Add an organization Admin API key.');
     await expect(section.locator('input[type="password"]')).toHaveCount(0);
-    await expect(openai).toContainText('Settings → AI Provider → OpenAI');
+    await expect(openai).toContainText('Settings → AI Providers → OpenAI');
     await win.getByTestId('settings-nav-ai').click();
     await win.getByTestId('ai-provider-row-openai').locator('.ai-provider-head').click();
     const openaiDetails = win.getByTestId('ai-provider-body-openai');
+    // Usage (and with it the admin-key field) only renders for a configured
+    // provider, so give this one a model key first.
+    await openaiDetails.getByTestId('ai-api-key-input').fill('sk-openai-model-key');
+    await openaiDetails.getByTestId('ai-api-key-save').click();
+    await expect(openaiDetails.getByTestId('ai-usage-admin-key-input')).toBeVisible();
     const key = openaiDetails.getByTestId('ai-usage-admin-key-input');
     await key.fill('test-admin');
     await openaiDetails.getByTestId('ai-usage-admin-key-save').click();
@@ -55,6 +62,10 @@ test('provider history stays separate, handles keys, coverage, zero and unavaila
     await key.fill('unsaved-openai-key');
     await win.getByTestId('ai-provider-row-anthropic').locator('.ai-provider-head').click();
     const anthropicDetails = win.getByTestId('ai-provider-body-anthropic');
+    // Same as OpenAI: a configured provider is what renders its usage card.
+    await anthropicDetails.getByTestId('ai-api-key-input').fill('sk-ant-model-key');
+    await anthropicDetails.getByTestId('ai-api-key-save').click();
+    await expect(anthropicDetails.getByTestId('ai-usage-admin-key-input')).toBeVisible();
     const anthropicKey = anthropicDetails.getByTestId('ai-usage-admin-key-input');
     await expect(anthropicKey).toHaveValue('');
     await anthropicKey.fill('reject-key');

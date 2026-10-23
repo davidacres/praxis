@@ -326,11 +326,33 @@ export async function closeTestApp(app: TestApp, options: { timeoutMs?: number }
     }
   } finally {
     child.removeListener('exit', onExit!);
-    // Never remove files while Electron could still be using them.
-    if (hasExited()) fs.rmSync(app.userDataDir, { recursive: true, force: true });
+    // Never remove files while Electron could still be using them. macOS can
+    // still be flushing the profile right after the process exits, which fails
+    // the delete with ENOTEMPTY, so retry briefly before keeping the directory.
+    if (hasExited()) removeProfile(app.userDataDir);
   }
   if (shutdownError) {
     throw new Error(`Test app cleanup failed while ${stage} (pid ${child.pid}); process exited and profile removed`, { cause: shutdownError });
+  }
+}
+
+/**
+ * Deletes a test profile after its Electron process has exited. Retries briefly:
+ * macOS can still be writing into the directory for a moment after exit, and
+ * that surfaces as ENOTEMPTY, which would otherwise fail an otherwise green test.
+ */
+function removeProfile(userDataDir: string): void {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      fs.rmSync(userDataDir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt === 4) {
+        console.warn(`Could not remove test profile ${userDataDir}; leaving it in place`, error);
+        return;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
   }
 }
 

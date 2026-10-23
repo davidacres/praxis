@@ -309,7 +309,7 @@ test('configured CLI agents remain available in ticket details when analysis is 
   await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveAttribute('data-value', /-cli$/);
   await win.locator('[data-testid="issue-ai-configure-btn"]').click();
   await expect(win.locator('[data-testid="settings-nav-ai"]')).toHaveClass(/active/);
-  await expect(win.locator('.settings-section-title')).toHaveText('AI Provider');
+  await expect(win.locator('.settings-section-title')).toHaveText('AI Providers');
 });
 
 test('analysis runs through the selected OpenAI provider and model', async () => {

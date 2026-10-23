@@ -213,7 +213,9 @@ for (const reportsUsage of [true, false]) {
 
     const session = await win.evaluate(async () => {
       const [record] = await window.praxis.ai.listSessions();
-      return { total: record.tokenUsage?.totalTokens, perMessage: record.events.filter(e => e.type === 'message').map(e => e.tokenUsage?.totalTokens) };
+      // getSession hydrates the transcript; the summary above carries none.
+      const events = (await window.praxis.ai.getSession(record.issueKey))?.events ?? [];
+      return { total: record.tokenUsage?.totalTokens, perMessage: events.filter(e => e.type === 'message').map(e => e.tokenUsage?.totalTokens) };
     });
     // Running totals only ever grow, and the last one is the session's total.
     expect(session.perMessage).toEqual([...session.perMessage].sort((a, b) => (a ?? 0) - (b ?? 0)));

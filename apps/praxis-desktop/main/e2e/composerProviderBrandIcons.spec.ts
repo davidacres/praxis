@@ -64,14 +64,17 @@ test('the composer provider chip keeps the brand logo after a choice', async () 
   await expect(chip).toContainText('Anthropic');
 });
 
-test("Settings' provider card still announces its logo, where the mark is the label", async () => {
+test("Settings' provider row names its provider in text, so the logo beside it stays decorative", async () => {
   const win = await launchWithAnthropic();
   await win.getByTestId('titlebar-settings').click();
   await win.getByTestId('settings-nav-ai').click();
   await win.getByTestId('ai-provider-list').waitFor();
 
-  const logo = win.locator('[data-testid="ai-provider-row-anthropic"] svg.provider-brand-logo');
-  await expect(logo).toHaveAttribute('role', 'img');
-  // The mark's own brand name; this artwork labels the Anthropic mark "Claude".
-  await expect(logo).toHaveAttribute('aria-label', /Claude/);
+  const row = win.locator('[data-testid="ai-provider-row-anthropic"]');
+  // The mark sits beside the provider's name in the rail, so it is decoration:
+  // announcing it too would read the brand twice.
+  await expect(row.locator('svg.provider-brand-logo')).toHaveAttribute('aria-hidden', 'true');
+  await expect(row.locator('svg.provider-brand-logo')).not.toHaveAttribute('aria-label', /.*/);
+  // The row still announces the provider, through its name.
+  await expect(row).toContainText('Anthropic');
 });

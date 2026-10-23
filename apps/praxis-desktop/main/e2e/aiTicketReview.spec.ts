@@ -306,9 +306,11 @@ test('a queued review follow-up is sent exactly once when the current turn compl
   await expect(win.getByTestId('ai-review-message').last()).toContainText('Understood', { timeout: 20000 });
   await expect(win.getByTestId('session-queued-pill')).toHaveCount(0);
   await expect(win.getByTestId('ai-review-you')).toHaveCount(1);
+  // getSession hydrates the transcript; listSessions ships an event-free summary
+  // for a finished session.
   await expect.poll(() => win.evaluate(async ({ issueKey, message }) => {
-    const records = await window.praxis.ai.listSessions();
-    return records.find(record => record.issueKey === `review~${issueKey}`)?.events.filter(turn => turn.type === 'user_input_completed' && turn.detail === message).length;
+    const record = await window.praxis.ai.getSession(`review~${issueKey}`);
+    return record?.events.filter(turn => turn.type === 'user_input_completed' && turn.detail === message).length;
   }, { issueKey, message })).toBe(1);
 });
 
@@ -337,7 +339,7 @@ test('the review composer pastes and drops images, removes one and sends the ret
   await expect(win.getByTestId('ai-review-message').last()).toContainText('Images received: 1', { timeout: 20000 });
   await expect(win.getByTestId('session-image-chip')).toHaveCount(0);
   const retained = await win.evaluate(async key => {
-    const session = (await window.praxis.ai.listSessions()).find(record => record.issueKey === `review~${key}`);
+    const session = await window.praxis.ai.getSession(`review~${key}`);
     return session?.events.filter(event => event.type === 'user_input_completed').at(-1)?.attachments;
   }, issueKey);
   expect(retained).toHaveLength(1);
@@ -424,7 +426,7 @@ test('a pending read permission is answered directly in the review composer', as
   await expect(win.getByTestId('ai-review-content')).toContainText('Verdict: Needs work', { timeout: 20000 });
   await expect(card).toHaveCount(0);
   await expect.poll(() => win.evaluate(async key => {
-    const session = (await window.praxis.ai.listSessions()).find(record => record.issueKey === `review~${key}`);
+    const session = await window.praxis.ai.getSession(`review~${key}`);
     return { toolMode: session?.toolMode, permissions: session?.events.filter(event => event.type === 'permission_completed').length };
   }, issueKey)).toEqual({ toolMode: 'read-only', permissions: 1 });
   await expect(win.getByTestId('ai-review-page')).toBeVisible();

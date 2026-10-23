@@ -78,25 +78,26 @@ test('Manage models shows a context and price badge for every model the catalog 
   await win.locator('[data-testid="model-manager-list"]').waitFor({ timeout: 10000 });
   await expect(win.locator('[data-testid="model-manager-checkbox-anthropic/claude-sonnet-4-6"]')).toBeVisible();
 
-  // Both badges, on the same row, for a model the catalog reports rates for.
+  // The catalog is a table: context and price are their own columns.
   const priced = await rowFor(win, 'anthropic/claude-sonnet-4-6');
-  await expect(priced.locator('[data-testid="model-badges"] .composer-model-badge.is-context')).toHaveText('200k');
-  await expect(priced.locator('[data-testid="model-badges"] .composer-model-badge.is-cost')).toContainText('$');
+  await expect(priced.locator('.aip-col-num .composer-model-badge.is-context')).toHaveText('200k');
+  await expect(priced.locator('.aip-col-price .composer-model-badge.is-cost')).toContainText('$');
 
   // Context still resolves when the provider sent no context_length, because the
   // catalog falls back to the known-context table rather than emitting an empty badge.
   const known = await rowFor(win, 'vendor/gemini-2.5-pro');
-  await expect(known.locator('[data-testid="model-badges"] .composer-model-badge.is-context')).toHaveText('2.1M');
+  await expect(known.locator('.aip-col-num .composer-model-badge.is-context')).toHaveText('2.1M');
 
-  // A model the catalog knows nothing about shows neither badge — and no orphaned
-  // separator, which is what a partially-resolved badge string used to produce.
+  // A model the catalog knows nothing about shows neither badge.
   const unknown = await rowFor(win, 'vendor/unknown-model');
-  await expect(unknown.locator('[data-testid="model-badges"] .composer-model-badge')).toHaveCount(0);
-  await expect(unknown.locator('[data-testid="model-badges"]')).toHaveText('');
+  await expect(unknown.locator('.composer-model-badge')).toHaveCount(0);
 });
 
 test('a tier dropdown carries the same badges as Manage models, and omits them for unpriced models', async () => {
   const win = await openProviderPage();
+  // Tier picks live on the provider's Models page.
+  await win.locator('[data-testid="ai-manage-models-btn"]').click();
+  await win.locator('[data-testid="ai-model-tiers-vercel-gateway"]').waitFor({ timeout: 10000 });
 
   await win.locator('[data-testid="ai-model-tier-vercel-gateway-fast"]').click();
   const menu = win.locator('[role="listbox"]');
@@ -136,11 +137,12 @@ test('a settings row shows the model name and badges without a raw model id', as
   // present the name wrapped onto two lines and the id truncated. The checkbox
   // still carries the id, so the row no longer needs it.
   const row = await rowFor(win, 'anthropic/claude-sonnet-4-6');
-  await expect(row.locator('.model-manager-row-name')).toHaveText('Claude Sonnet 4.6');
-  await expect(row.locator('.model-manager-row-id')).toHaveCount(0);
+  await expect(row.locator('.aip-model-name strong')).toHaveText('Claude Sonnet 4.6');
+  // The row now shows the raw id on its own line, only when it differs from the name.
+  await expect(row.locator('.aip-model-id')).toHaveText('anthropic/claude-sonnet-4-6');
 
-  // And the row fits on one line now, which is why the id could go.
-  const name = row.locator('.model-manager-row-name');
+  // And the name fits on one line, which is why it can carry the badges.
+  const name = row.locator('.aip-model-name strong');
   const box = await name.boundingBox();
   const lineHeight = await name.evaluate(node => parseFloat(getComputedStyle(node).fontSize) * 1.4);
   expect(box!.height).toBeLessThan(lineHeight * 2);

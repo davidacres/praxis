@@ -192,11 +192,12 @@ test('each turn records its reply once, and follow-ups carry the earlier answer'
   const key = session.issueKey;
   const stateOf = () =>
     win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key);
+  // getSession hydrates the transcript; listSessions ships an event-free summary
+  // once the session is finished.
   const messageEvents = async () =>
     win.evaluate(
-      k => window.praxis.ai.listSessions().then(
-        l => (l.find(s => s.issueKey === k)?.events ?? []).filter(e => e.type === 'message').map(e => e.detail ?? '')
-      ),
+      async k => (await window.praxis.ai.getSession(k))?.events
+        .filter(e => e.type === 'message').map(e => e.detail ?? ''),
       key
     );
 

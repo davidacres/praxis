@@ -99,8 +99,8 @@ for (const failure of [
     await thenRecoveredComposer(win);
     await expect(win.getByTestId('session-chat-thread')).toContainText('Replacement provider continued');
 
-    const recovered = await win.evaluate(async key =>
-      (await window.praxis.ai.listSessions()).find(item => item.issueKey === key), session.issueKey);
+    // getSession hydrates the transcript; listSessions ships an event-free summary.
+    const recovered = await win.evaluate(async key => await window.praxis.ai.getSession(key), session.issueKey);
     expect(recovered?.lastError).toBeFalsy();
     expect(recovered?.providerLimitReached).toBeFalsy();
     // Keep historical failure evidence without presenting it as an active error.
@@ -192,7 +192,7 @@ test('Given a recovery menu, When it is dismissed or Stop is selected, Then sele
   await expect(win.getByTestId('session-follow-up-input')).toBeVisible();
   expect(original.requests).toHaveLength(1);
   expect(replacement.requests).toHaveLength(0);
-  expect(await win.evaluate(async () => (await window.praxis.ai.listSessions())[0].events.some(event => event.type === 'error'))).toBe(true);
+  expect(await win.evaluate(async () => (await window.praxis.ai.getSession((await window.praxis.ai.listSessions())[0]!.issueKey))?.events.some(event => event.type === 'error'))).toBe(true);
 });
 
 test('Given six providers, When recovery appears in wide and narrow panes, Then only two chips and a split action remain inline', async () => {

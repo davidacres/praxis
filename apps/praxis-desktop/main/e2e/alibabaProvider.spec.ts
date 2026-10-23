@@ -21,8 +21,12 @@ test('Alibaba Model Studio presets carry paired base URLs, key help and the Alib
     const plan = win.getByTestId('add-provider-tile-preset-alibaba-token-plan');
     await expect(payg).toBeVisible();
     await expect(plan).toBeVisible();
-    await expect(payg.getByRole('img', { name: 'Alibaba Cloud' })).toBeVisible();
-    await expect(plan.getByRole('img', { name: 'Alibaba Cloud' })).toBeVisible();
+    // Catalog tiles label themselves with the provider name, so the mark beside
+    // it is decorative rather than announced.
+    await expect(payg.locator('svg.provider-brand-logo')).toHaveAttribute('aria-hidden', 'true');
+    await expect(plan.locator('svg.provider-brand-logo')).toHaveAttribute('aria-hidden', 'true');
+    await expect(payg).toContainText('Alibaba');
+    await expect(plan).toContainText('Alibaba');
     fs.mkdirSync(shots, { recursive: true });
     await win.getByTestId('add-provider-dialog').screenshot({ path: path.join(shots, 'alibaba-provider-tiles.png') });
 
@@ -45,7 +49,9 @@ test('Alibaba Model Studio presets carry paired base URLs, key help and the Alib
     const id = 'custom:alibaba-model-studio-token-plan';
     const row = win.getByTestId(`ai-provider-row-${id}`);
     await expect(row).toBeVisible();
-    await expect(row.getByRole('img', { name: 'Alibaba Cloud' })).toBeVisible();
+    // The rail names the provider in text, so its mark stays decorative.
+    await expect(row.locator('svg.provider-brand-logo')).toHaveAttribute('aria-hidden', 'true');
+    await expect(row).toContainText('Alibaba Model Studio');
     await row.screenshot({ path: path.join(shots, 'alibaba-provider-row.png') });
     const saved = await win.evaluate(async () => window.praxis.settings.get());
     expect(saved.ai.customProviders?.find(p => p.id === id)).toMatchObject({

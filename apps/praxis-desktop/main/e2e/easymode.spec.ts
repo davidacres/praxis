@@ -214,7 +214,20 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   await expect(primaryAgent).toBeVisible();
   await expect(primaryAgent.locator('.easymode-status--success')).toBeVisible();
 
-  // Running subagent item (glowing)
+  // Running subagent item (glowing). Idle sessions are listed without their
+  // events and App drops them again for a finished session it is not showing, so
+  // push the seeded record as running: App keeps a live session's events, which
+  // is exactly what a card mid-run carries.
+  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', {
+      ...record,
+      state: 'executing',
+      completedAt: undefined,
+      // Just the subagent call: the settled turns further down the test supply
+      // their own events, and both share the thought block test ids.
+      events: record.events.filter((event: any) => event.data?.toolName === 'invoke_subagent')
+    });
+  }, seededSessions['SESSION-101']);
   const runningSubagent = win.locator('[data-testid="easymode-subagent-live-worker-1"]');
   await expect(runningSubagent).toBeVisible();
   await expect(runningSubagent.locator('.easymode-status--running')).toBeVisible();
@@ -247,14 +260,19 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   await expect(primaryNavBtn).toBeVisible();
   await primaryNavBtn.click();
 
-  const parentRecord = await win.evaluate(async () => (await window.praxis.ai.listSessions()).find(session => session.issueKey === 'SESSION-101')!);
+  // `listSessions` ships summaries with empty events for a finished session;
+  // `getSession` hydrates the transcript these assertions build on.
+  const parentRecord = await win.evaluate(async () => await window.praxis.ai.getSession('SESSION-101')!);
   await app.electronApp.evaluate(({ BrowserWindow }, record) => {
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, state: 'executing', reasoningText: 'Checking authentication', completedAt: undefined });
   }, parentRecord);
   await expect(win.locator('.session-composer-live-activity')).toBeVisible();
   await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
-  await expect(win.getByTestId('session-thought-markdown')).toBeVisible();
-  await expect(win.getByTestId('session-thought-markdown')).toContainText('Checking authentication');
+  // Scoped to the live turn: the seeded transcript already left settled thought
+  // blocks in the thread, and all of them share the `session-thought-markdown` id.
+  const liveTurnThought = win.locator('[data-testid="session-chat-live-turn"] [data-testid="session-thought-markdown"]');
+  await expect(liveTurnThought).toBeVisible();
+  await expect(liveTurnThought).toContainText('Checking authentication');
   await expect(win.getByTestId('session-composer-activity-timer')).toHaveText(/\d+(?:\.\d+)?s|\d+m \d+s/);
   const tokens = win.getByTestId('session-composer-token-count');
   await expect(tokens).toHaveText('2,000 tokens');
@@ -1081,7 +1099,10 @@ test('classic mode: automation stage sessions appear nested under automation run
   await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/classic-automation-nested-stages.png') });
 });
 
+// Loads a session, quotes from it, and measures thread/composer geometry, so it
+// needs more than the default budget on a loaded machine.
 test('in EasyMode selecting a session opens details in the center', async () => {
+  test.slow();
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-easymode-select-details-'));
   const settingsPath = path.join(userDataDir, 'test-settings.json');
 

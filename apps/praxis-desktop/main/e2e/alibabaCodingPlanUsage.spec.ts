@@ -72,7 +72,10 @@ function startMockConsole(): Promise<{ origin: string; rpcCalls: number; close: 
   });
 }
 
+// Drives the whole console sign-in path — window, cookies, quota scrape and the
+// Overview card — so it needs more than the default budget.
 test('Coding Plan quota is read through the Praxis-hosted Alibaba console sign-in', async () => {
+  test.slow();
   const consoleMock = await startMockConsole();
   const chat = await startMockOpenAiCompatibleServer({ apiPath: '/v1', models: ['qwen3.6-plus'] });
   const app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-e2e-key', PRAXIS_ALIBABA_CONSOLE_ORIGIN: consoleMock.origin });
@@ -96,6 +99,11 @@ test('Coding Plan quota is read through the Praxis-hosted Alibaba console sign-i
 
     const id = 'custom:alibaba-model-studio-coding-plan';
     await expect(win.getByTestId(`ai-provider-row-${id}`)).toBeVisible();
+
+    // The console sign-in row lives on the endpoint form, which the saved
+    // provider's detail view links to.
+    await win.getByTestId(`ai-provider-row-${id}`).locator('.ai-provider-head').click();
+    await win.getByRole('button', { name: 'Edit connection…' }).click();
 
     // Before sign-in the card says how to fix it, and the RPC refuses.
     const before = await win.evaluate(provider => window.praxis.aiUsage.providerSnapshot(provider), id);
@@ -132,6 +140,8 @@ test('Coding Plan quota is read through the Praxis-hosted Alibaba console sign-i
     expect(after.windows[0].label).toBe('5-hour · 1,500 / 6,000 requests');
 
     // The Overview card draws the three quota windows.
+    // The endpoint form is a modal over Settings; close it before Settings itself.
+    await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Cancel', exact: true }).click();
     await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
     await win.getByTestId('nav-overview').click();
     const card = win.getByTestId(`overview-budgets-card-${id}`);

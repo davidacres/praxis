@@ -13,10 +13,11 @@ test('Bifrost preset saves a virtual key and runs a streamed session on its exac
     await win.getByTestId('titlebar-settings').click();
     await win.getByTestId('settings-nav-ai').click();
     await win.getByTestId('ai-add-provider').click();
-    const gateways = win.getByRole('region', { name: 'AI gateways', exact: true });
+    // The catalog groups gateways separately from local runtimes.
+    const gateways = win.getByRole('region', { name: 'Gateways', exact: true });
     await expect(gateways.getByTestId('add-provider-tile-preset-bifrost')).toContainText('Local or remote gateway');
     await expect(gateways.getByTestId('add-provider-tile-vercel-gateway')).toBeVisible();
-    await expect(win.getByRole('region', { name: 'Local runtimes', exact: true }).getByTestId('add-provider-tile-preset-bifrost')).toHaveCount(0);
+    await expect(win.getByRole('region', { name: 'Run on this Mac', exact: true }).getByTestId('add-provider-tile-preset-bifrost')).toHaveCount(0);
     const artifacts = path.resolve(process.cwd(), '../.praxis/session-artifacts');
     fs.mkdirSync(artifacts, { recursive: true });
     await gateways.screenshot({ path: path.join(artifacts, 'bifrost-gateway-category.png') });
@@ -60,8 +61,8 @@ test('Bifrost preset saves a virtual key and runs a streamed session on its exac
     expect(chat?.headers.authorization).toBeUndefined();
     expect(JSON.parse(chat!.body)).toMatchObject({ model: 'openai/gpt-4o-mini', stream: true, reasoning: { effort: 'medium' } });
     expect(chat?.body).not.toContain('providerOptions');
-    const session = await win.evaluate(async key =>
-      (await window.praxis.ai.listSessions()).find(s => s.issueKey === key), key);
+    // getSession hydrates the transcript; listSessions ships an event-free summary.
+    const session = await win.evaluate(async key => await window.praxis.ai.getSession(key), key);
     expect(session?.tokenUsage?.totalTokens).toBeGreaterThan(0);
     expect(session?.events?.find(event => event.type === 'message')?.cost?.amount).toBeGreaterThan(0);
   } finally {
