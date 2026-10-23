@@ -166,3 +166,90 @@ Status: Cancelled · Duration: 116h 44m
 cancelled from the run view
 
 **2026-10-20:** Plans updated from design review (see Decisions), then FX-BE-147 built: the core model, store, readiness and timezone rules; main IPC; and the composer and lineup in the renderer, behind `preview.enableScheduledRuns`. FX-BE-148 (the runner, the close-app warning, and the 95% provider hand-over) and FX-BE-173 (the processor run view and report) are not started. Do not enable the preview by default until the runner exists.
+
+
+**PRX-F47** — 2026-10-22T19:19:00.008Z
+Starting analysis of FX-BF-047: inspect all feature/story/task acceptance criteria, existing model/store/runner/IPC/UI and orchestration/usage/gadget dependency contracts; identify gaps and publish a file-level implementation plan before edits. Then implement only remaining scheduled-run scope and run the required compile, automated and visual verification gates.
+
+**PRX-F47** — 2026-10-22T19:19:24.577Z
+Kickoff blocked before code edits: tracker_transition_ticket(PRX-F47, In Progress) returned 'Transition In Progress not valid for PRX-F47'. The ticket is already presented as In Progress; available transitions omit In Progress. Initial analysis confirms schedule definition/store/readiness, composer/lineup and board integration exist, while scheduledRunIpc explicitly starts no work. Remaining feature scope includes timed sequential execution/recovery, provider allowance checks and checkpoint handover, close warning, bounded parallel safety, live controls and report. No implementation files changed and no tests run. Stopping in accordance with the supplied no-retry/no-improvised-lifecycle contract; no completion transition attempted.
+
+**PRX-F47** — 2026-10-22T20:09:35.719Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 51m 49s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-22T20:09:52.747Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 52m 6s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-22T20:10:13.813Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 52m 27s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-22T20:11:04.828Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 53m 18s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-22T20:12:28.471Z
+**Workflow run cancelled: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Cancelled · Duration: 54m 42s
+
+- ✅ Plan: succeeded
+- ⏭️ Implement: cancelled
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+cancelled from the run view
