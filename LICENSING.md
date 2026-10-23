@@ -99,7 +99,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `ajv` | 8.20.0 | MIT |
 | `ajv-formats` | 3.0.1 | MIT |
 | `argparse` | 2.0.1 | Python-2.0 |
-| `argparse` | 3.0.1 | PSF-2.0 |
+| `argparse` | 3.0.3 | PSF-2.0 |
 | `body-parser` | 2.3.0 | MIT |
 | `buffer-crc32` | 1.0.0 | MIT |
 | `builder-util-runtime` | 9.7.0 | MIT |
@@ -122,7 +122,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `electron-updater` | 6.8.9 | MIT |
 | `encodeurl` | 2.0.0 | MIT |
 | `entities` | 4.5.0 | BSD-2-Clause |
-| `entities` | 8.0.0 | BSD-2-Clause |
+| `entities` | 8.1.0 | BSD-2-Clause |
 | `es-define-property` | 1.0.1 | MIT |
 | `es-errors` | 1.3.0 | MIT |
 | `es-object-atoms` | 1.1.2 | MIT |
@@ -145,11 +145,11 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `graceful-fs` | 4.2.11 | ISC |
 | `has-symbols` | 1.1.0 | MIT |
 | `hasown` | 2.0.4 | MIT |
-| `hono` | 4.13.7 | MIT |
+| `hono` | 4.13.13 | MIT |
 | `http-errors` | 2.0.1 | MIT |
 | `iconv-lite` | 0.7.3 | MIT |
 | `inherits` | 2.0.4 | ISC |
-| `ip-address` | 10.7.2 | MIT |
+| `ip-address` | 10.7.4 | MIT |
 | `ipaddr.js` | 1.9.1 | MIT |
 | `is-promise` | 4.0.0 | MIT |
 | `isexe` | 2.0.0 | ISC |
@@ -166,8 +166,8 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `lodash.escaperegexp` | 4.1.2 | MIT |
 | `lodash.isequal` | 4.5.0 | MIT |
 | `loose-envify` | 1.4.0 | MIT |
-| `markdown-it` | 14.3.2 | MIT |
-| `markdown-it` | 15.0.1 | MIT |
+| `markdown-it` | 14.3.3 | MIT |
+| `markdown-it` | 15.0.3 | MIT |
 | `math-intrinsics` | 1.1.0 | MIT |
 | `mdurl` | 2.1.0 | MIT |
 | `media-typer` | 1.1.1 | MIT |
@@ -233,7 +233,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 
 | Package | Version | Licence | Why it ships |
 | --- | --- | --- | --- |
-| `electron` | 43.7.0 | MIT | Electron runtime (bundles Chromium and Node.js; their notices ship in LICENSES.chromium.html) |
+| `electron` | 43.8.3 | MIT | Electron runtime (bundles Chromium and Node.js; their notices ship in LICENSES.chromium.html) |
 | `typescript` | 7.0.2 | Apache-2.0 | copied into the code-intelligence package for the TypeScript sidecar |
 
 ### Code intelligence service — NuGet packages
