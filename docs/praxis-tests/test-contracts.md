@@ -1,7 +1,7 @@
 # test-contracts
 
 Frozen implementation: `93fed4f2969e6eb93ca748e76f81b6013a588171` (PRX-F47).
-The checkout HEAD matched this snapshot and was clean before this report was updated.
+The checkout was clean at HEAD `0414a49ba7513bc2f47ac90e8e1a84ec82ae0798` before this report was updated. A full snapshot-to-HEAD comparison showed only this companion report differed; all implementation files, test sources, scripts, configuration, and generated catalog files matched the frozen snapshot. Validation therefore used snapshot-identical inputs without switching the live branch.
 Inspected `.praxis/change-diff.md`, the commit diff, generator, catalog, Playwright configuration, scheduler spec, and test script registrations before editing.
 
 ## Inventory and validation
@@ -82,6 +82,7 @@ No product/test code or workflow definitions changed. No stages advanced, tracke
 
 ## Stage verification record
 
-- Initial validator invocation from the desktop-main workspace failed because that workspace has no `test:praxis-contracts` script. The root invocation passed; this was command placement, not a catalog defect.
-- Playwright JSON discovery returned 705 executions and no discovery errors; no automated journeys were executed in this stage.
+- `npm run test:praxis-contracts` from the repository root exited 0 with 695 linked tests.
+- `npx playwright test --list --reporter=json` from desktop-main exited 0: 705 project executions and no discovery errors; no automated journeys were executed in this stage.
+- `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write` exited 0 and produced no catalog or index diff. Independent inventory checks confirmed 153 files, 18 scheduler contracts, zero duplicate IDs, zero duplicate source/title pairs, and 69 literal scheduler Node test declarations.
 - Required artifact: this `test-contracts` report. Only this companion report changed; the deterministic catalog and index remained current.
