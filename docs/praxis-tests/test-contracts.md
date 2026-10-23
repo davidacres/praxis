@@ -1,6 +1,6 @@
 # test-contracts
 
-Frozen implementation: `0408661dad4893ee7e48294facff4e19c4175bee` (PRX-F47).
+Frozen implementation: `9287220077dcbf58d354e7b9a304285a3395c16a` (PRX-F47).
 The checkout HEAD matched this snapshot and was clean before this report was added.
 Inspected `.praxis/change-diff.md`, the commit diff, generator, catalog, Playwright configuration, scheduler spec, and test script registrations before editing.
 
@@ -47,11 +47,28 @@ Automation: [scheduledRuns.spec.ts:766](../../apps/praxis-desktop/main/e2e/sched
 
 **Then** the pause names the uncommitted file; initially no workflow exists and both entries remain queued; skipping records one skipped entry; after clearing the cause and resuming exactly one workflow run exists. This proves launch, not successful agent completion.
 
+## Additional core coverage links
+
+These Node tests use a fake clock, store and workflow observations; they prove runner logic rather than a live Electron timer or provider completion. They are registered in `packages/core/package.json`, outside the generated Playwright IDs.
+
+- [scheduledRunRunner.test.ts:91](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L91), “a due run starts once and launches only the first ticket”: **Given** a due harness schedule, **When** the runner ticks twice, **Then** only T-1 launches and only one attempt exists.
+- [scheduledRunRunner.test.ts:122](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L122), “tickets run in order, each waiting for the one before to settle”: **Given** three queued tickets, **When** ticks observe each predecessor succeeding, **Then** launch order is T-1, T-2, T-3 and the schedule completes with an ended attempt.
+- [scheduledRunRunner.test.ts:140](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L140), “a gate pauses the run, and it carries on by itself once the gate clears”: **Given** an active first ticket, **When** its workflow reports an approval gate then running, **Then** the schedule pauses without another launch, rejects manual resume through the gate, and returns to running after the gate clears.
+
 ## QA return dispositions
 
-1. **Missed-run failure near former line 190:** snapshot now uses `quitWithArmedSchedule` to acknowledge Quit anyway and wait for close before editing persisted storage (helper at line 82; call at line 199). The 2020 timestamp deliberately bypasses save validation as a closed-app fixture. Static recovery is present. The supplied error is truncated and does not establish the original root cause conclusively; runtime resolution is not verified by this stage.
-2. **Due-schedule save rejected as past:** `scheduleSoon` now rounds the requested delay plus 60 seconds upward to a minute before saving (line 684), avoiding loss of seconds into a past minute. Subsequent due-time rewrites occur after confirmed quit. Static fix is present; runtime resolution is not verified here.
-3. **Iterations 1–3:** only “npm exited 1” and no findings were supplied. There is no actionable failure detail to disposition or evidence to claim those runs passed.
+The frozen commit changes only `.praxis/change-diff.md`; it documents an implementation-stage rerun, not a source fix. This contracts stage did not rerun `test:git` and does not independently certify recovery.
+
+| Reported failure | Disposition at the frozen snapshot |
+| --- | --- |
+| `gitService.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
+| `minimaxUsage.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
+| `ticketReviewApply.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
+| `windowBroadcast.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
+| `windowState.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
+| Iterations 1–4, “npm exited 1” without findings | Insufficient diagnostics to attribute a defect or claim resolution for any individual run. No speculative fix. |
+
+[Implement recovery evidence](../../.praxis/change-diff.md) records compile success, **74 passed / 4 failed**, with the four failures in `semanticModelDownload.test.js` at HTTP fixture startup (`listen EPERM` on `127.0.0.1`). Therefore broad QA is still unresolved: rerun those fixtures where loopback binding is permitted. The report does not establish that the original five file failures had the same cause.
 
 ## Stale or ambiguous contracts and coverage findings
 
