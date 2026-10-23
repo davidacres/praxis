@@ -46,6 +46,19 @@ jobs:
             scripts/check-secrets.sh --range "${{ github.event.before }}..${{ github.sha }}"
           fi
 
+      # The two scans above only see the current state, so a credential that was
+      # committed and later deleted stays invisible to both — which is how the
+      # GitHub PAT in e2e/marketplace.spec.ts survived across six commits on
+      # main. This one reads every reachable commit. Findings already confirmed
+      # rotated are listed by fingerprint in .gitleaksignore; anything not in
+      # that file fails the build, so a newly committed secret is caught even if
+      # it is removed again in the next commit.
+      #
+      # ~25s on this history, and the checkout above already has fetch-depth: 0,
+      # so it runs on every push rather than on a schedule.
+      - name: Scan the full history
+        run: scripts/check-secrets.sh --history
+
   build:
     runs-on: ubuntu-latest
 

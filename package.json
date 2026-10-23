@@ -10,6 +10,8 @@
   ],
   "scripts": {
     "check-secrets": "scripts/check-secrets.sh --tree",
+    "check-secrets:history": "scripts/check-secrets.sh --history",
+    "check-secrets:baseline": "scripts/check-secrets.sh --history-baseline",
     "hooks:install": "git config core.hooksPath .githooks",
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:code-intelligence && npm run build:mobile-protocol && npm run build:mobile-relay && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",

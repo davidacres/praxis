@@ -1,17 +1,76 @@
 # gitleaks configuration (FX security gate, SEC-003 prevention).
 # Extends the default ruleset; only the allowlist below is local.
+#
+# Test fixtures are allowlisted by *content*, not by path. A path exemption on
+# `*.test.*` / `*.spec.*` is far too broad: it suppresses every rule in those
+# files, so a real credential committed into one is invisible to the gate. That
+# was not hypothetical — a real GitHub PAT sat in e2e/marketplace.spec.ts across
+# six commits on main, and `github-pat` flagged it the moment the path exemption
+# was removed. Verified: a real-format `sk_live_` token in a `.test.ts` is caught
+# by the default ruleset but suppressed by a path allowlist.
+#
+# Content patterns are also the more durable choice. The original design
+# (task-107-3) rejected line-anchored `.gitleaksignore` fingerprints because
+# they go stale whenever a fixture file moves; regexes matching the synthetic
+# values themselves are stable across moves and refactors.
 title = "praxis gitleaks config"
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Test fixtures and generated output. Path-based on purpose: gitleaks fingerprints are line-anchored and go stale whenever a fixture file moves."
-paths = [
+description = "Synthetic test fixtures and known false positives, matched on content so that a real secret in a test file is still caught."
+regexes = [
   # Fixtures that exist to prove redaction / validation code strips secrets.
-  '''(^|/)[^/]+\.(test|spec)\.(ts|tsx|mts|cjs|mjs|js)$''',
+  # Every value is synthetic and deliberately unguessable (sequential `abcdef`,
+  # `AKIAABCDEFGHIJKLMNOP`, `e2e-*-key`). A real credential never matches these
+  # shapes, so exempting them costs no coverage.
+  '''sk_live_(abcdef1234567890|abcdefghij1234567890|1234567890abcdef)''',
+  '''ghp_abcdef1234567890''',
+  '''AKIAABCDEFGHIJKLMNOP''',
+  '''abcdef0123456789abcdef''',
+  '''abcd1234efgh5678''',
+  '''e2e-(curation|conversation|directed-conversation|focus-tabs|coordination)-key''',
+  # Workflow-run session keys (WF-<id>-<step>) — a domain identifier, not a secret.
+  '''WF-[A-Za-z0-9]+-(implement|verify|review|test|plan|execute)''',
+  # Fixtures from the removed Expo app (apps/praxis-mobile), still reachable in
+  # history: `a1b2c3d4e5f6` / `tok123456789` are placeholder pairing secrets.
+  '''a1b2c3d4e5f6''',
+  '''tok123456789''',
+  # A JWT *shape* fixture; a real JWT is three long base64url segments.
+  '''eyJhbGciOiJIUzI1NiJ9\.payload\.sig''',
+  # Prose in a markdown-table fixture, not a credential.
+  '''expiry/stale/dedupe''',
+  # A localStorage key name, which generic-api-key misreads as key=value.
+  '''praxis\.scheduledRuns\.v1''',
+]
+paths = [
+  # Generated code-intelligence benchmark reports, which embed SHA-256
+  # source-manifest integrity digests that generic-api-key misreads as keys.
+  # Scoped to this one artifact type (9 files) rather than the whole
+  # docs/evaluations/ tree (35 files), since only these carry the digests.
+  #
+  # Two narrower alternatives were tried and rejected:
+  #   * a `[0-9a-f]{64}` content rule — would also suppress genuine hex-encoded
+  #     API keys anywhere in the repo;
+  #   * `regexTarget = "line"` with a digest-line rule — verified to
+  #     over-suppress: a real secret on the same line as any allowlisted fixture
+  #     is then hidden repo-wide, a worse trade than blinding 9 generated
+  #     reports. gitleaks defaults to match-scoped, and that default is what
+  #     keeps the fixture rules above precise.
+  '''(^|/)docs/evaluations/.+\.praxis\.json$''',
+  # Dart fixtures (the content regexes above do not cover the mobile suite).
   '''(^|/)[^/]+_test\.dart$''',
   '''(^|/)__fixtures__/''',
+  # App-generated runtime profiles. These hold *real* credentials (the mobile
+  # pairing key is a live 112-char secret) but are gitignored, so they can never
+  # be committed — flagging them is noise that trains people to skim the
+  # scanner, which is how SEC-003's four credentials went unnoticed. Exempting a
+  # runtime-output directory is not the same mistake as exempting `*.spec.ts`:
+  # source files are where new secrets get written, these are where the app
+  # persists its own. Verified no tracked file matches either pattern.
+  '''(^|/)main/output/''',
+  '''(^|/)\.praxis/session-artifacts/''',
   # Build output and dependencies.
   '''(^|/)node_modules/''',
   '''(^|/)(dist|out|build|test-results|playwright-report)/''',

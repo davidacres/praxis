@@ -1,0 +1,31 @@
+# Credentials known to be exposed in git history and already rotated.
+#
+# This file suppresses findings in *immutable* commits, so unlike the working-tree
+# fingerprints task-107-3 rejected, these cannot go stale: a commit SHA and its
+# line numbers never change once pushed.
+#
+# Fingerprints only — never add a secret value here, this file is committed.
+# Regenerate with: scripts/check-secrets.sh --history-baseline
+#
+# Entries and their status:
+#   .vscode/settings.json            GitLab PAT/API key, Jira id (SEC-003, rotated)
+#   claude-bedrock-capture.json      AWS access tokens        (SEC-003, rotated)
+#   e2e/marketplace.spec.ts          GitHub PAT               (rotated; 401 Bad credentials)
+#   e2e/verify-marketplace.spec.ts   GitHub PAT               (same token)
+495a2cbb6fb5bdfb29abc546664600468fa947cf:apps/praxis-desktop/main/e2e/marketplace.spec.ts:github-pat:326
+495a2cbb6fb5bdfb29abc546664600468fa947cf:apps/praxis-desktop/main/e2e/verify-marketplace.spec.ts:github-pat:23
+4cdd8cfabf48aa76315c529fbcb9579dd36f1fbc:.vscode/settings.json:generic-api-key:14
+4cdd8cfabf48aa76315c529fbcb9579dd36f1fbc:.vscode/settings.json:generic-api-key:17
+4cdd8cfabf48aa76315c529fbcb9579dd36f1fbc:.vscode/settings.json:gitlab-pat:14
+53c6030898f7d8ee3818c7ef1c86885feb90153d:apps/praxis-desktop/main/e2e/verify-marketplace.spec.ts:github-pat:23
+6730f70355f7d670f87c8356585be60ff2f5d603:.vscode/settings.json:generic-api-key:8
+6730f70355f7d670f87c8356585be60ff2f5d603:.vscode/settings.json:gitlab-pat:8
+7b83533ffe1fc20bb4f04e7c50ea64b985addbb1:apps/praxis-desktop/main/e2e/marketplace.spec.ts:github-pat:318
+7b83533ffe1fc20bb4f04e7c50ea64b985addbb1:apps/praxis-desktop/main/e2e/marketplace.spec.ts:github-pat:350
+a7521de50bf58c9f3099c24d2532738418348f80:.vscode/settings.json:generic-api-key:10
+f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:123
+f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:24
+f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:42
+f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:6
+f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:61
+f80af9944b1084f3991cb6c635c523870eaa469f:claude-bedrock-capture.json:aws-access-token:92
