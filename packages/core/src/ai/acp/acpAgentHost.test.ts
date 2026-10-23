@@ -99,6 +99,55 @@ for await (const line of createInterface({ input: process.stdin })) {
 });
 
 /**
+ * The ACP SDK settles a response the moment it is read, but routes notifications
+ * through an async handler chain. When an agent's last reply chunk and the end of
+ * its turn arrive in one read, a resumed follow-up used to close its update gate
+ * first and drop the reply, so the turn completed with no answer.
+ */
+test('a resumed ACP turn keeps a reply chunk that arrives together with the end of the turn', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'praxis-acp-resume-'));
+  const fixture = join(folder, 'agent.mjs');
+  await writeFile(fixture, `
+import { createInterface } from 'node:readline';
+const send = message => JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n';
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') {
+    process.stdout.write(send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: true } } } }));
+  } else if (request.method === 'session/prompt') {
+    const chunk = send({ method: 'session/update', params: { sessionId: request.params.sessionId,
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Fresh answer.' } } } });
+    // One write, so the client reads the chunk and the turn's end together.
+    process.stdout.write(chunk + send({ id: request.id, result: { stopReason: 'end_turn' } }));
+  } else if (request.id !== undefined) {
+    process.stdout.write(send({ id: request.id, result: {} }));
+  }
+}
+`);
+  try {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      let reply = '';
+      const client = new AcpClientWrapper({
+        command: process.execPath, args: [fixture], workingDirectory: folder, resumeSessionId: 'resumed-session',
+        requestPermission: async () => 'deny',
+        onSessionUpdate: update => {
+          if (update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text') reply += update.content.text;
+        }
+      });
+      try {
+        await client.connect();
+        await client.prompt('Follow-up question');
+      } finally {
+        await client.shutdown();
+      }
+      assert.equal(reply, 'Fresh answer.', `attempt ${attempt + 1} lost the reply`);
+    }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+/**
  * A workflow stage that hits a usage limit is retried on another AI under the same
  * session key about half a second later — sooner than the failed attempt's client can
  * finish shutting down. The failed attempt's cleanup must not then forget the new one.

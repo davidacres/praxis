@@ -698,6 +698,11 @@ export class AcpClientWrapper {
           prompt: typeof promptContent === 'string' ? [{ type: 'text', text: promptContent }] : promptContent
         });
       } finally {
+        // The SDK settles a response as soon as it is read but passes
+        // notifications through an async handler chain, so the turn's last
+        // chunks can still be in flight. Yield a macrotask so they land before
+        // the gate closes; the agent sent them before its response.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
         this.promptInFlight = false;
       }
     }
