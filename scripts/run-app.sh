@@ -4,7 +4,11 @@
 #
 # Compiles the three workspaces in dependency order and starts Electron:
 #
-#   1. packages/core          -> tsc, produces out/ that the main process imports
+#   0. npm install            -> only when package-lock.json is newer than the last
+#                                 install (node_modules/.package-lock.json), so a pulled
+#                                 dependency is never missing at launch
+#   1. packages/core, packages/mobile-protocol, packages/mobile-relay
+#                             -> tsc, produces out/ that the main process imports
 #   2. apps/praxis-desktop/renderer      -> vite build, produces dist/ that the window loads
 #   3. apps/praxis-desktop/main  -> tsc, produces out/main + out/preload
 #   4. copy-renderer          -> apps/praxis-desktop/renderer/dist -> apps/praxis-desktop/main/renderer
@@ -48,6 +52,8 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE="$REPO_ROOT/packages/core"
+MOBILE_PROTOCOL="$REPO_ROOT/packages/mobile-protocol"
+MOBILE_RELAY="$REPO_ROOT/packages/mobile-relay"
 FRONTEND="$REPO_ROOT/apps/praxis-desktop/renderer"
 ELECTRON_APP="$REPO_ROOT/apps/praxis-desktop/main"
 NODE_PTY_BINARY="$REPO_ROOT/node_modules/node-pty/build/Release/pty.node"
@@ -73,6 +79,17 @@ invoke_npm() {
   (cd "$dir" && npm run "$script")
 }
 
+# npm writes node_modules/.package-lock.json at the end of every successful
+# install. A lockfile newer than that (or no install at all) means a pull or
+# commit changed dependencies; launching anyway fails with "Cannot find module".
+# --skip-build is the fast path, so it does not install.
+INSTALLED_LOCK="$REPO_ROOT/node_modules/.package-lock.json"
+if [[ "$SKIP_BUILD" -eq 0 && ( ! -f "$INSTALLED_LOCK" || "$REPO_ROOT/package-lock.json" -nt "$INSTALLED_LOCK" ) ]]; then
+  step 'Dependencies changed; running npm install'
+  (cd "$REPO_ROOT" && npm install)
+  ok 'node_modules up to date'
+fi
+
 # node-pty's generic macOS prebuild can fail to spawn on newer macOS releases.
 # A local source build uses the current SDK and remains N-API compatible with
 # both Node and Electron. Only pay the rebuild cost when the artifact is absent.
@@ -85,6 +102,8 @@ fi
 if [[ "$SKIP_BUILD" -eq 1 ]]; then
   step 'Skipping build; checking existing output'
   assert_built "$CORE/out/index.js" 'core is not compiled'
+  assert_built "$MOBILE_PROTOCOL/out/index.js" 'mobile-protocol is not compiled'
+  assert_built "$MOBILE_RELAY/out/index.js" 'mobile-relay is not compiled'
   assert_built "$ELECTRON_APP/out/main/index.js" 'electron-app is not compiled'
   if [[ "$DEV" -eq 0 ]]; then
     assert_built "$FRONTEND/dist/index.html" 'frontend is not built'
@@ -96,6 +115,11 @@ else
   step 'Compiling packages/core'
   invoke_npm "$CORE" compile
   ok 'core -> out/'
+
+  step 'Compiling packages/mobile-protocol and packages/mobile-relay'
+  invoke_npm "$MOBILE_PROTOCOL" compile
+  invoke_npm "$MOBILE_RELAY" compile
+  ok 'mobile packages -> out/'
 
   if [[ "$DEV" -eq 0 ]]; then
     step 'Building apps/praxis-desktop/renderer'
