@@ -22,6 +22,7 @@ interface ScheduleRunMonitorProps {
 
 export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: ScheduleRunMonitorProps) {
   const { run, live } = view;
+  const headroom = view.headroom ?? live?.headroom ?? [];
   const { confirm } = useDialogs();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -43,6 +44,8 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
   const active = run.entries.find(entry => entry.outcome?.status === 'running' || entry.outcome?.status === 'paused' || entry.outcome?.status === 'failed');
   const done = run.entries.filter(entry => entry.outcome?.status === 'done' || entry.outcome?.status === 'skipped');
   const pause = run.status === 'paused' ? run.pause : undefined;
+  // A ticket that could not be launched is put back on the belt, so the pause names it rather than an active entry.
+  const pausedOn = pause?.entryId ? run.entries.find(entry => entry.id === pause.entryId && !['done', 'skipped'].includes(entry.outcome?.status ?? 'queued')) : undefined;
   const atGate = !!active?.outcome?.gate;
   const waiting = !!pause;
 
@@ -93,9 +96,9 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
               )}
             </span>
           )}
-          {active && pause.reason !== 'failure' && pause.reason !== 'launch-interrupted' && !atGate && pause.entryId === active.id && (
+          {pausedOn && !(active && (pause.reason === 'failure' || pause.reason === 'launch-interrupted')) && !atGate && (
             <span className="schedule-pause-actions">
-              <button type="button" className="btn" data-testid="schedule-skip-entry" disabled={busy} onClick={() => void act(() => api.skipEntry(run.id, active.id))}>Skip ticket</button>
+              <button type="button" className="btn" data-testid="schedule-skip-entry" disabled={busy} onClick={() => void act(() => api.skipEntry(run.id, pausedOn.id))}>Skip ticket</button>
             </span>
           )}
         </div>
@@ -150,9 +153,9 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
 
       <section className="schedule-panel" aria-label="Provider allowance" data-testid="schedule-budget">
         <h3 className="schedule-panel-title">Provider allowance <span className="schedule-panel-note">work moves to another provider at 95%</span></h3>
-        {live && live.headroom.length > 0 ? (
+        {headroom.length > 0 ? (
           <ul className="schedule-budget-list">
-            {live.headroom.map(item => (
+            {headroom.map(item => (
               <li key={item.provider} data-provider={item.provider}>
                 <span className="schedule-budget-name">{item.provider}</span>
                 {item.usedFraction === undefined ? (

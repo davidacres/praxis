@@ -1278,6 +1278,11 @@ export interface ScheduledRunView {
   start: { date: string; time: string };
   /** Present while a ticket is running or waiting at a gate: only what has actually been reported. */
   live?: ScheduledRunLive;
+  /**
+   * Allowance each usable provider has used, while the run is running or paused —
+   * including a budget pause, when no ticket has launched and there is no `live`.
+   */
+  headroom?: ScheduledRunLive['headroom'];
 }
 
 /** Where the running ticket is, read fresh from its workflow run. */

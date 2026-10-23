@@ -373,6 +373,10 @@ async function stopTestWork(app: TestApp): Promise<void> {
         // records, so the native close guard cannot veto teardown in that gap.
         if (session.state !== 'idle') await window.praxis.ai.abort(session.issueKey);
       }));
+      // An armed schedule makes the app ask before quitting, which would veto
+      // teardown. The profile is thrown away next, so removing them loses nothing.
+      const schedules = await window.praxis.scheduledRuns.list().catch(() => []);
+      await Promise.all(schedules.map(view => window.praxis.scheduledRuns.remove(view.run.id).catch(() => undefined)));
     });
   }
 }

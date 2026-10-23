@@ -75,7 +75,18 @@ async function launch(options: { preview?: boolean; provider?: boolean; titles?:
 }
 
 const beltOrder = (page: Page) => page.getByTestId('schedule-belt-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-issue')));
-const miniOrder = (card: ReturnType<Page['locator']>) => card.getByTestId('schedule-mini-belt').locator('li').evaluateAll(items => items.map(item => item.getAttribute('data-issue')));
+/**
+ * Quits while a schedule is armed. The app asks first (and vetoes a plain
+ * `electronApp.close()`), so answer the warning the way a user would.
+ */
+async function quitWithArmedSchedule(): Promise<void> {
+  const closed = app!.electronApp.waitForEvent('close');
+  void app!.electronApp.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined);
+  await app!.window.getByRole('button', { name: 'Quit anyway' }).click();
+  await closed;
+}
+
+const miniOrder =(card: ReturnType<Page['locator']>) => card.getByTestId('schedule-mini-belt').locator('li').evaluateAll(items => items.map(item => item.getAttribute('data-issue')));
 
 test('builds a schedule on the belt, saves it, and it survives a restart in the same order', async () => {
   const { page } = await launch();
@@ -185,7 +196,7 @@ test('a start that passed while Praxis was closed is missed, and only a choice r
   }, projectId);
 
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
-  await app!.electronApp.close();
+  await quitWithArmedSchedule();
   const file = path.join(reuse.userDataDir, 'scheduled-runs.json');
   const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
   for (const run of stored['praxis.scheduledRuns.v1']) run.scheduledStartAt = '2020-01-01T10:00:00.000Z';
@@ -663,25 +674,48 @@ test('sidebar uses classic recency groups and expands group tickets', async () =
 // ── The runner (FX-BE-148) and the live view / report (FX-BE-173) ─────────────────────
 
 /** Schedules the first `count` tickets to start `seconds` from now, through the real save path. */
-async function scheduleSoon(page: Page, projectId: string, name: string, count = 2, seconds = 4): Promise<string> {
-  return page.evaluate(async ({ id, name, count, seconds }) => {
+async function scheduleSoon(page: Page, projectId: string, name: string, count = 2, seconds = 4, workflowId?: string): Promise<string> {
+  return page.evaluate(async ({ id, name, count, seconds, workflowId }) => {
     const issues = await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 10, `project:${id}`);
     const tickets = issues.issues.slice(0, count).map(issue => ({ connectionId: `project:${id}`, issueKey: issue.key, title: issue.summary }));
-    const at = new Date(Date.now() + seconds * 1000);
+    // `HH:mm` has no seconds: choose the next minute after the requested delay,
+    // leaving enough time for IPC/save and avoiding a start that is already past.
+    const at = new Date(Math.ceil((Date.now() + (seconds + 60) * 1000) / 60000) * 60000);
     const pad = (value: number) => String(value).padStart(2, '0');
     const view = await window.praxis.scheduledRuns.save({
-      projectId: id, name, timezone: 'UTC', tickets, arm: true,
+      projectId: id, name, timezone: 'UTC', tickets, arm: true, ...(workflowId ? { workflowId } : {}),
       date: `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`,
       time: `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())}:${pad(at.getUTCSeconds())}`.slice(0, 5)
     });
     return view.run.id;
-  }, { id: projectId, name, count, seconds });
+  }, { id: projectId, name, count, seconds, workflowId });
 }
 
-/** `HH:mm` has no seconds, so a schedule made this way starts on the next whole minute; make it due now instead. */
+/**
+ * A one-stage project workflow — a single approval, so no agent and no skills — for
+ * runner tests whose subject is the launch itself. The default governed workflow
+ * needs bundled skills a fresh profile has not installed, which would block every
+ * launch before the check under test is reached.
+ */
+async function saveApprovalWorkflow(page: Page, projectId: string): Promise<string> {
+  return page.evaluate(async id => {
+    const now = new Date().toISOString();
+    const workflowId = 'schedule-approval-only';
+    await window.praxis.workflows.save(id, {
+      schemaVersion: 1, id: workflowId, name: 'Approval only', scope: 'project', projectId: id, version: 1,
+      entryNodeId: 'approve', createdAt: now, updatedAt: now, edges: [],
+      nodes: [{ type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [], prompt: 'Approve?', requiredGates: [], allowBypass: false }]
+    } as never);
+    return workflowId;
+  }, projectId);
+}
+
+/**
+ * `HH:mm` has no seconds, so a schedule made this way starts on the next whole minute;
+ * make it due now instead. Call it while the app is closed, so nothing rewrites the file.
+ */
 async function makeDueNow(runId: string): Promise<void> {
   const file = path.join(app!.userDataDir, 'scheduled-runs.json');
-  await app!.electronApp.evaluate(() => undefined);
   const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
   for (const run of stored['praxis.scheduledRuns.v1']) if (run.id === runId) run.scheduledStartAt = new Date(Date.now() - 1000).toISOString();
   fs.writeFileSync(file, JSON.stringify(stored));
@@ -696,7 +730,7 @@ test('a due schedule starts by itself, and a provider at its allowance pauses it
   const runId = await scheduleSoon(page, projectId, 'Overnight', 2);
   // The save path rounds to the minute; rewind the stored start so it is due on the next tick.
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
-  await app!.electronApp.close();
+  await quitWithArmedSchedule();
   await makeDueNow(runId);
   app = await launchTestApp(undefined, reuse, { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.97 }) }, { openNewSession: false });
   const window = app.window;
@@ -715,7 +749,8 @@ test('a due schedule starts by itself, and a provider at its allowance pauses it
   const banner = window.getByTestId('schedule-pause-banner');
   await expect(banner).toHaveAttribute('data-reason', 'budget');
   await expect(banner).toContainText('95%');
-  await expect(window.getByTestId('schedule-processor')).toHaveAttribute('data-state', 'idle');
+  // A budget stop needs a person, so the processor stops and shows the warning tone (see ScheduleRunMonitor).
+  await expect(window.getByTestId('schedule-processor')).toHaveAttribute('data-state', 'waiting');
   await expect(window.getByTestId('schedule-budget')).toContainText('97% used');
   await expect(window.getByTestId('schedule-belt').locator('li')).toHaveCount(2);
 
@@ -723,7 +758,7 @@ test('a due schedule starts by itself, and a provider at its allowance pauses it
 
   // Stopping ends the run with its tickets skipped, and the page turns into the run's report.
   await window.getByTestId('schedule-stop').click();
-  await window.getByRole('button', { name: 'Stop run' }).click();
+  await window.getByRole('dialog').getByRole('button', { name: 'Stop run' }).click();
   await expect(window.getByTestId('schedule-report-status')).toHaveText('Skipped');
   await expect(window.getByTestId('schedule-report-table').locator('tbody tr')).toHaveCount(2);
 });
@@ -733,9 +768,10 @@ test('a ticket that cannot be launched pauses the run with the reason, keeps its
   const { page, projectId, repo } = await launch({ env });
   // An uncommitted file in the base checkout is the one thing an unattended start must not decide for itself.
   fs.writeFileSync(path.join(repo, 'wip.txt'), 'uncommitted\n');
-  const runId = await scheduleSoon(page, projectId, 'Dirty base', 2);
+  const workflowId = await saveApprovalWorkflow(page, projectId);
+  const runId = await scheduleSoon(page, projectId, 'Dirty base', 2, 4, workflowId);
   const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
-  await app!.electronApp.close();
+  await quitWithArmedSchedule();
   await makeDueNow(runId);
   app = await launchTestApp(undefined, reuse, env, { openNewSession: false });
   const window = app.window;
@@ -747,6 +783,7 @@ test('a ticket that cannot be launched pauses the run with the reason, keeps its
 
   const banner = window.getByTestId('schedule-pause-banner');
   await expect(banner).toContainText('could not be started');
+  await expect(banner).toContainText('uncommitted file');
   // Only the first ticket was attempted; the second is still waiting behind it, in order.
   expect(await window.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).toHaveLength(0);
   const states = await window.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.entries.map(entry => entry.outcome?.status ?? 'queued'), runId);

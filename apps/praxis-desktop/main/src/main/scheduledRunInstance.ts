@@ -113,11 +113,13 @@ export async function buildScheduledRunView(run: ScheduledRun, all: ScheduledRun
     probe: ticket => byTicket.get(`${ticket.connectionId}\u0000${ticket.issueKey}`) ?? { state: 'missing' }
   });
   const start = instantToZonedParts(run.scheduledStartAt, run.timezone) ?? { date: '', time: '' };
-  const liveEntry = run.status === 'running' || run.status === 'paused' ? describeLiveEntry(run) : undefined;
-  const live = liveEntry
-    ? { ...liveEntry, headroom: (usage?.usable ?? []).map(provider => ({ provider, ...(usage?.used[provider] !== undefined ? { usedFraction: usage.used[provider] } : {}) })) }
+  const inFlight = run.status === 'running' || run.status === 'paused';
+  const headroom = inFlight
+    ? (usage?.usable ?? []).map(provider => ({ provider, ...(usage?.used[provider] !== undefined ? { usedFraction: usage.used[provider] } : {}) }))
     : undefined;
-  return { run, readiness, start, ...(live ? { live } : {}) };
+  const liveEntry = inFlight ? describeLiveEntry(run) : undefined;
+  const live = liveEntry && headroom ? { ...liveEntry, headroom } : undefined;
+  return { run, readiness, start, ...(live ? { live } : {}), ...(headroom ? { headroom } : {}) };
 }
 
 /** Whether the schedule's workflow is trusted and whether the project's base is clean, as readiness facts. */

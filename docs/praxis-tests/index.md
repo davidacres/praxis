@@ -459,24 +459,24 @@ This catalogue describes **695 Playwright tests** under `apps/praxis-desktop/mai
 | PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
 | PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:69` |
 | PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:79` |
-| PT-8DC4807D76 | scheduled Runs | builds a schedule on the belt, saves it, and it survives a restart in the same order | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:80` |
-| PT-20627BB23E | scheduled Runs | edit, schedule, hold and delete a schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:140` |
-| PT-74238ECE73 | scheduled Runs | a start that passed while Praxis was closed is missed, and only a choice resolves it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:176` |
-| PT-3FCAD42C44 | scheduled Runs | a run with no usable provider cannot be scheduled, and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:215` |
-| PT-644A8319CA | scheduled Runs | the whole surface is hidden until the preview is switched on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:229` |
-| PT-3954D0B1FE | scheduled Runs | the board toolbar offers a shortcut to the scheduled runs of its project, only while the preview is on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:236` |
-| PT-6050135CF2 | scheduled Runs | selected board tickets are saved in a new schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:246` |
-| PT-0498B7BAAE | scheduled Runs | selected board tickets are appended directly to an existing schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:269` |
-| PT-07C623F1C9 | scheduled Runs | without the preview the board toolbar has no schedule shortcut | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:296` |
-| PT-225AEDFF55 | scheduled Runs | tickets can be dragged from the hopper onto the belt and reordered on it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:305` |
-| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:337` |
-| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:383` |
-| PT-78DB6CEAAE | scheduled Runs | the armed processor rings stay concentric while they spin | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:435` |
-| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:457` |
-| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:582` |
-| PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:694` |
-| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:731` |
-| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:767` |
+| PT-8DC4807D76 | scheduled Runs | builds a schedule on the belt, saves it, and it survives a restart in the same order | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:91` |
+| PT-20627BB23E | scheduled Runs | edit, schedule, hold and delete a schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:151` |
+| PT-74238ECE73 | scheduled Runs | a start that passed while Praxis was closed is missed, and only a choice resolves it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:187` |
+| PT-3FCAD42C44 | scheduled Runs | a run with no usable provider cannot be scheduled, and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:226` |
+| PT-644A8319CA | scheduled Runs | the whole surface is hidden until the preview is switched on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:240` |
+| PT-3954D0B1FE | scheduled Runs | the board toolbar offers a shortcut to the scheduled runs of its project, only while the preview is on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:247` |
+| PT-6050135CF2 | scheduled Runs | selected board tickets are saved in a new schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:257` |
+| PT-0498B7BAAE | scheduled Runs | selected board tickets are appended directly to an existing schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:280` |
+| PT-07C623F1C9 | scheduled Runs | without the preview the board toolbar has no schedule shortcut | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:307` |
+| PT-225AEDFF55 | scheduled Runs | tickets can be dragged from the hopper onto the belt and reordered on it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:316` |
+| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:348` |
+| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:394` |
+| PT-78DB6CEAAE | scheduled Runs | the armed processor rings stay concentric while they spin | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:446` |
+| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:468` |
+| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:593` |
+| PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:728` |
+| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:766` |
+| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:804` |
 | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
 | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
 | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |
