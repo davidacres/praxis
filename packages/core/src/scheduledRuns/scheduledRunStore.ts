@@ -16,6 +16,8 @@ import {
   renumberEntries,
   type ScheduledEntryOutcome,
   type ScheduledEntryStatus,
+  type ScheduledHandover,
+  type ScheduledPauseReason,
   type ScheduledQueueEntry,
   type ScheduledRun,
   type ScheduledRunAttempt,
@@ -28,8 +30,11 @@ const RUNS_KEY = 'praxis.scheduledRuns.v1';
 const RUN_STATUSES: ReadonlySet<string> = new Set(['draft', 'scheduled', 'missed', 'running', 'paused', 'completed', 'cancelled', 'failed']);
 const ENTRY_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'paused', 'done', 'failed', 'skipped']);
 const EVENT_KINDS: ReadonlySet<string> = new Set([
-  'created', 'renamed', 'tickets-added', 'ticket-removed', 'reordered', 'rescheduled', 'armed', 'held', 'missed', 'start-now', 'skipped'
+  'created', 'renamed', 'tickets-added', 'ticket-removed', 'reordered', 'rescheduled', 'armed', 'held', 'missed', 'start-now', 'skipped',
+  'workflow-changed', 'started', 'entry-launching', 'entry-started', 'entry-gate', 'entry-done', 'entry-failed', 'entry-skipped',
+  'entry-retried', 'paused', 'resumed', 'budget-checked', 'provider-handover', 'completed', 'cancelled'
 ]);
+const PAUSE_REASONS: ReadonlySet<string> = new Set(['budget', 'approval', 'policy', 'trust', 'no-provider', 'failure', 'user', 'launch-interrupted']);
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
@@ -39,14 +44,57 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
   const status = typeof raw.status === 'string' && ENTRY_STATUSES.has(raw.status) ? (raw.status as ScheduledEntryStatus) : 'queued';
+  const gate = normalizeGate(raw.gate);
+  const spend = normalizeSpend(raw.spend);
+  const handovers = (Array.isArray(raw.handovers) ? raw.handovers : []).map(normalizeHandover).filter((h): h is ScheduledHandover => !!h);
   return {
     status,
     ...(text(raw.sessionId) ? { sessionId: text(raw.sessionId) } : {}),
     ...(text(raw.workflowRunId) ? { workflowRunId: text(raw.workflowRunId) } : {}),
     ...(text(raw.startedAt) ? { startedAt: text(raw.startedAt) } : {}),
     ...(text(raw.endedAt) ? { endedAt: text(raw.endedAt) } : {}),
-    ...(text(raw.reason) ? { reason: text(raw.reason) } : {})
+    ...(text(raw.reason) ? { reason: text(raw.reason) } : {}),
+    ...(text(raw.provider) ? { provider: text(raw.provider) } : {}),
+    ...(text(raw.launchToken) ? { launchToken: text(raw.launchToken) } : {}),
+    ...(gate ? { gate } : {}),
+    ...(handovers.length > 0 ? { handovers } : {}),
+    ...(spend ? { spend } : {}),
+    ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {})
   };
+}
+
+function num(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeGate(value: unknown): ScheduledEntryOutcome['gate'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const nodeId = text(raw.nodeId);
+  const since = text(raw.since);
+  return nodeId && since ? { nodeId, label: text(raw.label) ?? nodeId, since } : undefined;
+}
+
+function normalizeSpend(value: unknown): ScheduledEntryOutcome['spend'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const spend = {
+    ...(num(raw.tokens) !== undefined ? { tokens: num(raw.tokens) } : {}),
+    ...(num(raw.cost) !== undefined ? { cost: num(raw.cost) } : {}),
+    ...(text(raw.currency) ? { currency: text(raw.currency) } : {}),
+    ...(raw.estimated === true ? { estimated: true } : {})
+  };
+  return Object.keys(spend).length > 0 ? spend : undefined;
+}
+
+function normalizeHandover(value: unknown): ScheduledHandover | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const at = text(raw.at);
+  const from = text(raw.from);
+  const to = text(raw.to);
+  if (!at || !from || !to) return undefined;
+  return { at, from, to, usedPercent: num(raw.usedPercent) ?? 0, ...(text(raw.checkpointRef) ? { checkpointRef: text(raw.checkpointRef) } : {}) };
 }
 
 function normalizeEntry(value: unknown, fallbackSequence: number): ScheduledQueueEntry | undefined {
@@ -108,6 +156,19 @@ export function normalizeScheduledRun(value: unknown): ScheduledRun | undefined 
     .map(item => item.entry);
 
   const createdAt = text(raw.createdAt) ?? start;
+  const status = typeof raw.status === 'string' && RUN_STATUSES.has(raw.status) ? (raw.status as ScheduledRunStatus) : 'draft';
+  const rawPolicy = raw.policy && typeof raw.policy === 'object' ? (raw.policy as Record<string, unknown>) : undefined;
+  const workflowId = text(rawPolicy?.workflowId);
+  const rawPause = raw.pause && typeof raw.pause === 'object' ? (raw.pause as Record<string, unknown>) : undefined;
+  const pause =
+    status === 'paused' && rawPause && text(rawPause.message) && text(rawPause.at)
+      ? {
+          reason: (typeof rawPause.reason === 'string' && PAUSE_REASONS.has(rawPause.reason) ? rawPause.reason : 'user') as ScheduledPauseReason,
+          ...(text(rawPause.entryId) ? { entryId: text(rawPause.entryId) } : {}),
+          message: text(rawPause.message)!,
+          at: text(rawPause.at)!
+        }
+      : undefined;
   return {
     schemaVersion: SCHEDULED_RUN_SCHEMA_VERSION,
     id,
@@ -115,10 +176,11 @@ export function normalizeScheduledRun(value: unknown): ScheduledRun | undefined 
     ...(text(raw.projectId) ? { projectId: text(raw.projectId) } : {}),
     scheduledStartAt: new Date(start).toISOString(),
     timezone: text(raw.timezone) && isValidTimeZone(raw.timezone as string) ? (raw.timezone as string) : 'UTC',
-    policy: { mode: 'sequential' },
+    policy: { mode: 'sequential', ...(workflowId ? { workflowId } : {}) },
     entries: renumberEntries(ordered),
-    status: typeof raw.status === 'string' && RUN_STATUSES.has(raw.status) ? (raw.status as ScheduledRunStatus) : 'draft',
+    status,
     attempts: (Array.isArray(raw.attempts) ? raw.attempts : []).map(normalizeAttempt).filter((a): a is ScheduledRunAttempt => !!a),
+    ...(pause ? { pause } : {}),
     createdAt,
     updatedAt: text(raw.updatedAt) ?? createdAt,
     events: (Array.isArray(raw.events) ? raw.events : []).map(normalizeEvent).filter((e): e is ScheduledRunEvent => !!e)

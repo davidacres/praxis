@@ -304,6 +304,12 @@ export interface WorkflowRun {
   /** The connection `issueKey` lives on; undefined means the demo/default backend. */
   issueConnectionId?: string;
   /**
+   * Set when a scheduled run launched this run (FX-BF-047). The schedule saves the same
+   * token on its entry *before* launching, so after a crash it can find the run it
+   * launched instead of launching the ticket a second time.
+   */
+  scheduledLaunchToken?: string;
+  /**
    * Set once the terminal outcome has been written back to `issueKey` as a
    * comment. An idempotency marker only — set directly by the host after a
    * successful write-back (via `WorkflowRunPersistence.save`), never through a
@@ -407,6 +413,7 @@ export function createWorkflowRun(input: {
   /** The ticket this run was started from, if any — see `WorkflowRun.issueKey`. */
   issueKey?: string;
   issueConnectionId?: string;
+  scheduledLaunchToken?: string;
   controllerSessionKey?: string;
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
@@ -436,6 +443,7 @@ export function createWorkflowRun(input: {
     startedAt: input.at,
     ...(input.issueKey ? { issueKey: input.issueKey } : {}),
     ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {}),
+    ...(input.scheduledLaunchToken ? { scheduledLaunchToken: input.scheduledLaunchToken } : {}),
     ...(input.controllerSessionKey ? { controllerSessionKey: input.controllerSessionKey } : {}),
     ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
     ...(input.planInput ? { planInput: input.planInput } : {}),
@@ -1522,6 +1530,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
+    ...(typeof raw.scheduledLaunchToken === 'string' ? { scheduledLaunchToken: raw.scheduledLaunchToken } : {}),
     ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {}),
     ...(raw.archived === true ? { archived: true } : {}),
     ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})

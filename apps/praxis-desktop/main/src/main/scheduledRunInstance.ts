@@ -15,6 +15,11 @@ import { getServiceForConnection } from './serviceRegistry';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getProjectStore } from './projectStoreInstance';
 import { usableProviders } from './providerFallback';
+import { describeLiveEntry, readProviderUsage } from './scheduledRunLive';
+import { getWorkflowBackingStore } from './workflowStoreInstance';
+import { projectWorkflowTrust } from './workflowProjectTrust';
+import { projectFolder, runnableDefinition } from './workflowIpc';
+import { workflowBlockingFiles } from './workflowWorkspace';
 
 /**
  * Scheduled ticket runs live in `scheduled-runs.json` under `userData` (FX-BF-047
@@ -43,8 +48,8 @@ const ACCEPTANCE_RE = /acceptance|\[[ xX]\]|definition of done/i;
  * `hasFolder` is only asserted when it can be known — a project-linked ticket
  * reads its project's folder, a folder-backed connection always has one. For any
  * other tracker it is left undefined, which readiness treats as "not assessed".
- * `hasWorkflow` is likewise left unassessed: starting a ticket does not need a saved
- * workflow, and how a scheduled ticket picks one is the runner's decision (TASK-385).
+ * The workflow is the schedule's own (`policy.workflowId`), so it is checked once for
+ * the run in `buildScheduledRunView`, not per ticket.
  */
 export async function probeScheduledTicket(
   ref: ScheduledTicketRef,
@@ -97,11 +102,34 @@ export async function buildScheduledRunView(run: ScheduledRun, all: ScheduledRun
   );
   const byTicket = new Map(run.entries.map(entry => [`${entry.ticket.connectionId}\u0000${entry.ticket.issueKey}`, probes.get(entry.id)!] as const));
 
+  const usage = await readProviderUsage().catch(() => undefined);
+  const usable = usage?.usable ?? (await usableProviders());
+  const lowAllowance = usage ? usage.usable.find(provider => (usage.used[provider] ?? 0) >= 0.95) : undefined;
   const readiness = assessScheduledRunReadiness(run, {
     now: new Date().toISOString(),
-    usableProviderCount: (await usableProviders()).length,
+    usableProviderCount: usable.length,
+    ...(await workflowFacts(run)),
+    ...(lowAllowance ? { lowAllowanceProvider: lowAllowance } : {}),
     probe: ticket => byTicket.get(`${ticket.connectionId}\u0000${ticket.issueKey}`) ?? { state: 'missing' }
   });
   const start = instantToZonedParts(run.scheduledStartAt, run.timezone) ?? { date: '', time: '' };
-  return { run, readiness, start };
+  const liveEntry = run.status === 'running' || run.status === 'paused' ? describeLiveEntry(run) : undefined;
+  const live = liveEntry
+    ? { ...liveEntry, headroom: (usage?.usable ?? []).map(provider => ({ provider, ...(usage?.used[provider] !== undefined ? { usedFraction: usage.used[provider] } : {}) })) }
+    : undefined;
+  return { run, readiness, start, ...(live ? { live } : {}) };
+}
+
+/** Whether the schedule's workflow is trusted and whether the project's base is clean, as readiness facts. */
+async function workflowFacts(run: ScheduledRun): Promise<{ workflowTrusted?: boolean; baseDirty?: boolean }> {
+  if (!run.projectId || !run.policy.workflowId) return {};
+  try {
+    const definition = await runnableDefinition(run.projectId, run.policy.workflowId);
+    if (!definition) return {};
+    const trust = await projectWorkflowTrust(getWorkflowBackingStore(), await projectFolder(run.projectId), run.policy.workflowId, definition);
+    const blocking = await workflowBlockingFiles(run.projectId).catch(() => []);
+    return { workflowTrusted: trust.trusted, baseDirty: blocking.length > 0 };
+  } catch {
+    return {};
+  }
 }

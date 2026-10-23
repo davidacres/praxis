@@ -89,30 +89,49 @@ import { onSessionChanged } from '../ai/sessionChangeStream';
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
 function WindowCloseGuard() {
-  const { confirm } = useDialogs();
+  const { confirm, confirmChoice } = useDialogs();
   const handlingRequest = useRef(false);
 
   useEffect(() => window.praxis.window.onCloseRequested(request => {
     if (handlingRequest.current) return;
     handlingRequest.current = true;
     void (async () => {
+      let confirmed = false;
       try {
         const sessionWord = request.runningSessionCount === 1 ? 'session' : 'sessions';
-        const shouldClose = await confirm({
-          title: 'AI sessions still running',
-          message: `Closing Praxis will stop ${request.runningSessionCount} active AI ${sessionWord}. Keep Praxis open until they finish, or close now and stop them.`,
-          confirmLabel: 'Close Praxis',
-          cancelLabel: 'Keep Praxis open',
-          danger: true
-        });
-        if (shouldClose) {
-          await window.praxis.window.confirmClose();
+        const sessions = request.runningSessionCount > 0
+          ? `Closing Praxis will stop ${request.runningSessionCount} active AI ${sessionWord}. `
+          : '';
+        if (request.nextSchedule) {
+          const when = new Date(request.nextSchedule.scheduledStartAt).toLocaleString(undefined, {
+            dateStyle: 'medium', timeStyle: 'short', timeZone: request.nextSchedule.timezone
+          });
+          const choice = await confirmChoice({
+            title: 'A scheduled run is waiting',
+            message: `${sessions}"${request.nextSchedule.name}" is set to start ${when}, and it only starts while Praxis is open. Minimise Praxis to keep it running in the background, or quit and the run will be missed.`,
+            confirmLabel: 'Quit anyway',
+            tertiaryLabel: 'Minimise',
+            cancelLabel: 'Cancel',
+            danger: true
+          });
+          if (choice === 'tertiary') await window.praxis.window.minimize();
+          confirmed = choice === 'confirm';
+        } else {
+          confirmed = await confirm({
+            title: 'AI sessions still running',
+            message: `${sessions}Keep Praxis open until they finish, or close now and stop them.`,
+            confirmLabel: 'Close Praxis',
+            cancelLabel: 'Keep Praxis open',
+            danger: true
+          });
         }
+        if (confirmed) await window.praxis.window.confirmClose();
       } finally {
+        if (!confirmed) await window.praxis.window.cancelClose();
         handlingRequest.current = false;
       }
     })();
-  }), [confirm]);
+  }), [confirm, confirmChoice]);
 
   return null;
 }
@@ -2310,7 +2329,7 @@ export function App() {
           </div>
         );
       }
-      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} />;
+      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} onOpenWorkflowRun={workflowRunId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId })} />;
     }
     if (route.feature) {
       return (

@@ -27,7 +27,7 @@ function ref(key: string, connectionId = 'c1'): ScheduledTicketRef {
 }
 
 function draft(keys: string[] = ['PRX-1', 'PRX-2', 'PRX-3']): ScheduledRun {
-  return createScheduledRun({ name: 'Nightly', scheduledStartAt: LATER, timezone: 'Europe/London', tickets: keys.map(key => ref(key)), at: NOW });
+  return createScheduledRun({ name: 'Nightly', scheduledStartAt: LATER, timezone: 'Europe/London', tickets: keys.map(key => ref(key)), workflowId: 'governed-delivery', at: NOW });
 }
 
 const keys = (run: ScheduledRun) => run.entries.map(entry => entry.ticket.issueKey);
@@ -205,7 +205,7 @@ test('warnings do not block', () => {
 test('empty queue, a past start and no provider are blockers', () => {
   const past = createScheduledRun({ name: 'x', scheduledStartAt: '2026-10-19T00:00:00Z', timezone: 'UTC', at: NOW });
   const result = ready(past, {}, 0);
-  assert.deepEqual(result.issues.map(issue => issue.code).sort(), ['no-provider', 'no-tickets', 'start-in-past']);
+  assert.deepEqual(result.issues.map(issue => issue.code).sort(), ['no-provider', 'no-tickets', 'no-workflow', 'start-in-past']);
 });
 
 test('a scheduled run whose time has come is due, not flagged as late', () => {
@@ -315,4 +315,22 @@ test('a schedule remembers its project and keeps it through edits', () => {
   const edited = composeScheduledRun(first, { ...FORM, projectId: 'other', name: 'Renamed', tickets: [ref('PRX-1'), ref('PRX-2')] });
   assert.equal(edited.projectId, 'p1');
   assert.equal(composeScheduledRun(undefined, { ...FORM, tickets: [] }).projectId, undefined);
+});
+
+test('a schedule with no workflow is blocked, and an untrusted one is blocked with its own message', () => {
+  const noWorkflow = createScheduledRun({ name: 'N', scheduledStartAt: LATER, timezone: 'UTC', tickets: [ref('PRX-1')], at: NOW });
+  const context = { now: NOW, usableProviderCount: 1, probe: () => ({ state: 'found' as const }) };
+  assert.ok(assessScheduledRunReadiness(noWorkflow, context).issues.some(issue => issue.code === 'no-workflow' && issue.severity === 'blocker'));
+
+  const untrusted = assessScheduledRunReadiness(draft(['PRX-1']), { ...context, workflowTrusted: false });
+  assert.equal(untrusted.ready, false);
+  assert.ok(untrusted.issues.some(issue => issue.code === 'workflow-untrusted'));
+});
+
+test('a dirty base and a nearly-empty provider warn without blocking', () => {
+  const readiness = assessScheduledRunReadiness(draft(['PRX-1']), {
+    now: NOW, usableProviderCount: 1, probe: () => ({ state: 'found' }), baseDirty: true, lowAllowanceProvider: 'claude'
+  });
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(readiness.issues.map(issue => issue.code).sort(), ['allowance-low', 'base-dirty']);
 });

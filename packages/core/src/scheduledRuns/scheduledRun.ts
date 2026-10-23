@@ -5,9 +5,10 @@
  * A `ScheduledRun` is the *definition* — a name, one absolute start time, and an
  * explicitly ordered queue of board tickets. What actually happens when the run
  * starts is recorded separately: `attempts` say when and why it was started, and
- * each queue entry's `outcome` carries its session link and result. Those stay
- * empty until the runner (FX-BE-148) exists, so everything here is side-effect
- * free: no clock reads, no I/O, and every operation takes the time it happened at.
+ * each queue entry's `outcome` carries its session link and result. The runner
+ * (`scheduledRunRunner.ts`, FX-BE-148) writes those through the transitions in
+ * `scheduledRunExecution.ts`; everything here is side-effect free: no clock
+ * reads, no I/O, and every operation takes the time it happened at.
  *
  * Three rules shape the contract:
  *
@@ -49,6 +50,32 @@ export interface ScheduledTicketRef {
   title: string;
 }
 
+/** A provider switch the runner made mid-ticket because the first one was nearly out of allowance. */
+export interface ScheduledHandover {
+  at: string;
+  from: string;
+  to: string;
+  /** 0-100, the allowance the first provider had used when the switch happened. */
+  usedPercent: number;
+  /** The commit that preserved the work in progress, when there was anything to commit. */
+  checkpointRef?: string;
+}
+
+/** An approval gate the ticket's workflow is waiting at. */
+export interface ScheduledEntryGate {
+  nodeId: string;
+  label: string;
+  since: string;
+}
+
+/** What a ticket's run has cost so far; `estimated` marks a figure the provider did not report. */
+export interface ScheduledEntrySpend {
+  tokens?: number;
+  cost?: number;
+  currency?: string;
+  estimated?: boolean;
+}
+
 /** What happened to one queue entry once the run started. Written by the runner, not the editor. */
 export interface ScheduledEntryOutcome {
   status: ScheduledEntryStatus;
@@ -58,6 +85,19 @@ export interface ScheduledEntryOutcome {
   endedAt?: string;
   /** Why it was skipped, failed, or paused, in words a person can act on. */
   reason?: string;
+  /** The AI provider the ticket is running on (changes on a hand-over). */
+  provider?: string;
+  /**
+   * Written and saved *before* the workflow run is launched, and carried onto it.
+   * After a crash an entry that is running with a token but no `workflowRunId` is
+   * looked up by token, so a ticket is never launched twice.
+   */
+  launchToken?: string;
+  gate?: ScheduledEntryGate;
+  handovers?: ScheduledHandover[];
+  spend?: ScheduledEntrySpend;
+  /** Times the user retried this ticket after it failed or stopped. */
+  retries?: number;
 }
 
 export interface ScheduledQueueEntry {
@@ -90,7 +130,22 @@ export type ScheduledRunEventKind =
   | 'held'
   | 'missed'
   | 'start-now'
-  | 'skipped';
+  | 'skipped'
+  | 'workflow-changed'
+  | 'started'
+  | 'entry-launching'
+  | 'entry-started'
+  | 'entry-gate'
+  | 'entry-done'
+  | 'entry-failed'
+  | 'entry-skipped'
+  | 'entry-retried'
+  | 'paused'
+  | 'resumed'
+  | 'budget-checked'
+  | 'provider-handover'
+  | 'completed'
+  | 'cancelled';
 
 export interface ScheduledRunEvent {
   at: string;
@@ -99,9 +154,26 @@ export interface ScheduledRunEvent {
   entryId?: string;
 }
 
-/** `sequential` is the only mode until FX-BE-149 adds bounded parallel lanes. */
+/**
+ * `sequential` is the only mode until FX-BE-149 adds bounded parallel lanes.
+ * `workflowId` is the one governed workflow every ticket in the run is started
+ * with; without it the run cannot start (readiness says so), because nothing
+ * should silently pick a workflow for an unattended run.
+ */
 export interface ScheduledRunPolicy {
   mode: 'sequential';
+  workflowId?: string;
+}
+
+/** Why a running schedule stopped and is waiting for the user. */
+export type ScheduledPauseReason = 'budget' | 'approval' | 'policy' | 'trust' | 'no-provider' | 'failure' | 'user' | 'launch-interrupted';
+
+export interface ScheduledRunPause {
+  reason: ScheduledPauseReason;
+  /** The queue entry the pause is about, when it is about one. */
+  entryId?: string;
+  message: string;
+  at: string;
 }
 
 export interface ScheduledRun {
@@ -118,6 +190,8 @@ export interface ScheduledRun {
   entries: ScheduledQueueEntry[];
   status: ScheduledRunStatus;
   attempts: ScheduledRunAttempt[];
+  /** Present only while `status` is `paused`. */
+  pause?: ScheduledRunPause;
   createdAt: string;
   updatedAt: string;
   events: ScheduledRunEvent[];
@@ -157,7 +231,7 @@ function renumber(entries: readonly ScheduledQueueEntry[]): ScheduledQueueEntry[
   return entries.map((entry, index) => (entry.sequence === index + 1 ? entry : { ...entry, sequence: index + 1 }));
 }
 
-function touch(run: ScheduledRun, at: string, event?: Omit<ScheduledRunEvent, 'at'>): ScheduledRun {
+export function touch(run: ScheduledRun, at: string, event?: Omit<ScheduledRunEvent, 'at'>): ScheduledRun {
   return {
     ...run,
     updatedAt: at,
@@ -178,6 +252,7 @@ export interface CreateScheduledRunInput {
   scheduledStartAt: string;
   timezone: string;
   tickets?: readonly ScheduledTicketRef[];
+  workflowId?: string;
   at: string;
 }
 
@@ -204,7 +279,7 @@ export function createScheduledRun(input: CreateScheduledRunInput): ScheduledRun
     ...(input.projectId ? { projectId: input.projectId } : {}),
     scheduledStartAt: new Date(input.scheduledStartAt).toISOString(),
     timezone: input.timezone,
-    policy: { mode: 'sequential' },
+    policy: { mode: 'sequential', ...(input.workflowId?.trim() ? { workflowId: input.workflowId.trim() } : {}) },
     entries,
     status: 'draft',
     attempts: [],
@@ -358,6 +433,8 @@ export interface ComposeScheduledRunInput {
   timezone: string;
   /** In run order; the position here becomes the sequence. */
   tickets: readonly ScheduledTicketRef[];
+  /** The governed workflow each ticket is started with. */
+  workflowId?: string;
   /** True to schedule it, false to keep it as a draft. */
   arm: boolean;
   at: string;
@@ -384,18 +461,29 @@ export function composeScheduledRun(existing: ScheduledRun | undefined, input: C
 
   let run: ScheduledRun;
   if (!existing) {
-    run = createScheduledRun({ projectId: input.projectId, name: input.name, scheduledStartAt: startAt, timezone: input.timezone, tickets: input.tickets, at: input.at });
+    run = createScheduledRun({ projectId: input.projectId, name: input.name, scheduledStartAt: startAt, timezone: input.timezone, tickets: input.tickets, workflowId: input.workflowId, at: input.at });
   } else {
     assertEditable(existing);
     run = existing.name === input.name.trim() ? existing : renameScheduledRun(existing, input.name, input.at);
     run = rescheduleScheduledRun(run, startAt, input.timezone, input.at);
     run = replaceQueue(run, input.tickets, input.at);
+    run = setWorkflow(run, input.workflowId, input.at);
     if (run.status === 'scheduled' && !input.arm) run = holdScheduledRun(run, input.at);
   }
   if (input.arm && Date.parse(run.scheduledStartAt) <= Date.parse(input.at)) {
     throw new Error('The start time has already passed. Choose a later time.');
   }
   return input.arm ? armScheduledRun(run, input.at) : run;
+}
+
+function setWorkflow(run: ScheduledRun, workflowId: string | undefined, at: string): ScheduledRun {
+  const next = workflowId?.trim() || undefined;
+  if (next === run.policy.workflowId) return run;
+  const { workflowId: _previous, ...rest } = run.policy;
+  return touch({ ...run, policy: { ...rest, ...(next ? { workflowId: next } : {}) } }, at, {
+    kind: 'workflow-changed',
+    message: next ? `Workflow set to ${next}.` : 'Workflow cleared.'
+  });
 }
 
 function replaceQueue(run: ScheduledRun, tickets: readonly ScheduledTicketRef[], at: string): ScheduledRun {

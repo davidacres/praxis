@@ -155,7 +155,7 @@ function alibabaConsoleRegion(provider: AiProvider) {
   return isAlibabaCodingPlanEndpoint(provider, config) ? regionForEndpoint(config.baseUrl) : undefined;
 }
 
-async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot> {
+export async function providerSnapshot(provider: AiProvider): Promise<ProviderUsageSnapshot> {
   const adapter = providerUsageAdapters.get(provider);
   if (adapter) return adapter();
   const custom = await customEndpointSnapshot(provider);

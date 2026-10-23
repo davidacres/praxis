@@ -60,6 +60,36 @@ run, run report; animated MP4s plus stills).
    bar on the board, plus a *Scheduled runs* page in the navigation. Scheduling
    applies to board tickets only, never to a session that is already running.
 
+## Runner decisions (2026-10-23)
+
+Made while building FX-BE-148 and FX-BE-173; the sequential path is built, parallel
+lanes (FX-BE-149) are not.
+
+1. **One workflow per schedule.** `policy.workflowId`, chosen in the composer (default:
+   a ticket-owned project workflow, else the governed-delivery template). Readiness
+   blocks a schedule with none, or whose workflow needs workspace trust that has not
+   been given — an unattended start cannot ask. Nothing falls back silently.
+2. **Unattended launch options are fixed.** `providerLimitPolicy: 'switch'`, provider
+   from the budget gate, no controller session, and `uncommittedChanges` left unset: a
+   dirty base pauses the schedule instead of choosing "include" on the user's behalf.
+3. **A failure pauses the run.** The user retries, skips or stops; the run never moves
+   past a failed ticket by itself.
+4. **Unknown allowance is never a destination.** A provider that reports no usage may
+   be the one a run is already on (flagged "not checked"), but work is only handed to
+   a provider with a known allowance under 95%. With none, the run pauses (`budget`).
+5. **Hand-over takes effect at the next stage.** At 95% the run records the provider
+   switch and a checkpoint commit in the worktree, and sets the workflow run's provider
+   for stages not yet started. A turn in flight is never cut off.
+6. **No double launch.** The entry is saved as running with a `launchToken` before the
+   workflow is launched; the token is carried on the workflow run
+   (`scheduledLaunchToken`). After a crash the run is found by token, otherwise the
+   schedule pauses (`launch-interrupted`) and asks.
+7. **Warning on close.** On Windows and Linux closing the last window quits, so the
+   window guard warns; on macOS only a quit (Cmd+Q) stops the runner, so the quit
+   guard warns. Choices: Minimise, Quit anyway, Cancel.
+8. **The preview stays off by default.** The runner checks `preview.enableScheduledRuns`
+   on every tick. Turning it on by default is a release decision after real overnight use.
+
 ## Scope
 
 - Create a scheduled work-run model with start time, timezone, ticket list,

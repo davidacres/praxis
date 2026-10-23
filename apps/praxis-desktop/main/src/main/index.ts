@@ -28,10 +28,10 @@ import { registerAssistantIpc } from './assistantIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
-import { attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, getInitialZoomFactor, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
+import { attachQuitGuard, attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, getInitialZoomFactor, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
 import { attachWindowStatePersistence, loadWindowState } from './windowState';
 import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
-import { setMcpOAuthProviderSource } from '@praxis/core';
+import { nextScheduledRun, setMcpOAuthProviderSource } from '@praxis/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
 import { getAcpAgentHost, getAllActiveTaskIssueKeys } from './aiInstance';
@@ -42,6 +42,8 @@ import { registerRunControlIpc } from './runControlIpc';
 import { registerDeploymentControlIpc } from './deploymentControlIpc';
 import { registerDeploymentProfileIpc } from './deploymentProfileIpc';
 import { reconcileScheduledRunsOnLaunch, registerScheduledRunIpc } from './scheduledRunIpc';
+import { startScheduledRunRunner, stopScheduledRunRunner } from './scheduledRunRunnerInstance';
+import { getScheduledRunStore } from './scheduledRunInstance';
 import { registerDeploymentArtifactIpc } from './deploymentArtifactIpc';
 import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
@@ -254,7 +256,8 @@ function createMainWindow(): void {
   attachWindowStateEvents(win);
   attachWindowStatePersistence(win);
   attachWindowZoomShortcuts(win);
-  attachWindowCloseGuard(win, () => getAllActiveTaskIssueKeys().length);
+  // On macOS closing the window leaves the app (and the scheduled-run runner) alive, so only a quit needs the schedule warning there.
+  attachWindowCloseGuard(win, () => getAllActiveTaskIssueKeys().length, isMac ? undefined : pendingSchedule);
   if (vibrancy) {
     setWindowVibrancy(win, 'glass');
   }
@@ -384,7 +387,10 @@ void app.whenReady().then(async () => {
   registerDeploymentProfileIpc();
   registerDeploymentArtifactIpc();
   registerScheduledRunIpc();
-  void reconcileScheduledRunsOnLaunch().catch(error => console.error('Scheduled run reconciliation failed:', error));
+  // Missed runs are marked before the runner exists, so one that was due while Praxis was closed asks instead of starting.
+  void reconcileScheduledRunsOnLaunch()
+    .then(() => startScheduledRunRunner())
+    .catch(error => console.error('Scheduled run startup failed:', error));
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();
@@ -438,6 +444,19 @@ void app.whenReady().then(async () => {
   app.quit();
 });
 
+/** The next armed schedule, which only starts while Praxis is open. Undefined when none is waiting or the preview is off. */
+function pendingSchedule() {
+  try {
+    if (!getSettingsBackend().read().preview.enableScheduledRuns) return undefined;
+    const next = nextScheduledRun(getScheduledRunStore().list());
+    return next ? { name: next.name, scheduledStartAt: next.scheduledStartAt, timezone: next.timezone } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+attachQuitGuard(pendingSchedule);
+
 app.on('window-all-closed', () => {
   if (!isMac) {
     app.quit();
@@ -447,7 +466,9 @@ app.on('window-all-closed', () => {
 // Close any folder/user-workspace file watchers before the process
 // exits — an open chokidar watcher otherwise keeps the event loop alive and
 // hangs a graceful quit (see disposeAllServices' doc comment).
-app.on('before-quit', () => {
+app.on('before-quit', event => {
+  if (event.defaultPrevented) return; // the quit guard is asking the user first
+  stopScheduledRunRunner();
   closeAllDetachedChats();
   disposeAllServices();
   // An ACP-hosted session's subprocess (Claude Code, Codex, or GitHub
