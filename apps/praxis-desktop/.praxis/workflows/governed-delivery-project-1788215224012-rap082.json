@@ -59,7 +59,7 @@
       ],
       "mutatesWorktree": true,
       "maxAttempts": 2,
-      "modelTier": "strong"
+      "modelTier": "standard"
     },
     {
       "id": "test-contracts",
@@ -383,7 +383,7 @@
   ],
   "entryNodeId": "plan",
   "createdAt": "2026-09-23T23:26:52.387Z",
-  "updatedAt": "2026-10-15T15:20:54.019Z",
+  "updatedAt": "2026-10-23T09:46:34.170Z",
   "description": "Plan and implement, then converge test contracts, review, build, QA, and security before human approval. Failures and actionable review findings return to Implement with two automatic repair iterations per route; all downstream evidence is regenerated after repair.",
   "projectId": "project-1788215224012-rap082"
 }

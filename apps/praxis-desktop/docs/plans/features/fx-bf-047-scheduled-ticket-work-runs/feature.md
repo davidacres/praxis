@@ -253,3 +253,83 @@ Status: Cancelled · Duration: 54m 42s
 - ⏭️ Security scan: cancelled
 
 cancelled from the run view
+
+**PRX-F47** — 2026-10-23T09:19:41.069Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 2s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
+
+**PRX-F47** — 2026-10-23T10:02:50.253Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 29m 3s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-23T10:04:28.595Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 30m 41s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-23T10:19:26.177Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 45m 39s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
+
+**PRX-F47** — 2026-10-23T10:20:49.725Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 13s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
