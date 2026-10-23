@@ -28,6 +28,8 @@ export function Connections({ onChanged }: ConnectionsProps) {
   const [pickingBoardsFor, setPickingBoardsFor] = useState<string | undefined>();
   const [trackedBoards, setTrackedBoards] = useState<TrackedBoard[]>([]);
   const [boardCounts, setBoardCounts] = useState<Record<string, number>>({});
+  /** Bumped whenever tracked boards change, which no longer changes `connections`. */
+  const [trackedBoardRevision, setTrackedBoardRevision] = useState(0);
   const [pendingRemoval, setPendingRemoval] = useState<Connection | undefined>();
   const [error, setError] = useState<string | undefined>();
   const reloadSequence = useRef(0);
@@ -90,7 +92,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
     return () => {
       cancelled = true;
     };
-  }, [connections]);
+  }, [connections, trackedBoardRevision]);
 
   const removeConnection = async (connection: Connection) => {
     const boardCount = boardCounts[connection.id] ?? 0;
@@ -127,6 +129,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
       .removeTrackedBoard(board.connectionId, board.boardId)
       .then(() => {
         reloadTracked();
+        setTrackedBoardRevision(current => current + 1);
         onChanged?.();
       });
   };

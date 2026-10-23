@@ -117,8 +117,16 @@ export function AgentDetailsPage({
     const node = bodyRef.current;
     if (!node) return;
     followRef.current = true;
+    let lastScrollTop = node.scrollTop;
     const onScroll = () => {
-      followRef.current = node.scrollHeight - node.clientHeight - node.scrollTop <= 64;
+      const nearBottom = node.scrollHeight - node.clientHeight - node.scrollTop <= 64;
+      // Only an upward scroll stops following. A scroll event can arrive after
+      // content has already grown again, which leaves the view far from the
+      // bottom without the user having moved; treating that as "scrolled up"
+      // stopped the thread following for good.
+      if (nearBottom) followRef.current = true;
+      else if (node.scrollTop < lastScrollTop) followRef.current = false;
+      lastScrollTop = node.scrollTop;
     };
     node.addEventListener('scroll', onScroll, { passive: true });
     // Markdown, gadgets, the ticket card and the composer dock below all settle
