@@ -115,6 +115,7 @@ for await (const line of createInterface({ input: process.stdin })) {
   if (request.method === 'initialize') {
     process.stdout.write(send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: { sessionCapabilities: { resume: true } } } }));
   } else if (request.method === 'session/prompt') {
+    if (request.params.prompt[0].text !== 'Follow-up question') throw new Error('Replayed history on native resume');
     const chunk = send({ method: 'session/update', params: { sessionId: request.params.sessionId,
       update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Fresh answer.' } } } });
     // One write, so the client reads the chunk and the turn's end together.
@@ -136,7 +137,7 @@ for await (const line of createInterface({ input: process.stdin })) {
       });
       try {
         await client.connect();
-        await client.prompt('Follow-up question');
+        await client.prompt('Old history'.repeat(110_000), undefined, 'Follow-up question');
       } finally {
         await client.shutdown();
       }
@@ -520,5 +521,71 @@ test('an ACP tool published initially as completed or failed never emits a runni
     assert.equal(events.length, 1);
     assert.equal(events[0].type, 'tool_complete');
     assert.equal(events[0].data?.ok, status === 'completed');
+  }
+});
+
+
+test('ACP fallback replay bounds old history and retains recent conversation', () => {
+  const host = new AcpAgentHost({} as never, { appendLine: () => {} });
+  const transcript = (host as unknown as {
+    buildConversationTranscript(events: AgentEventSummary[]): string | undefined;
+  }).buildConversationTranscript([
+    { type: 'message', detail: 'old'.repeat(400_000) },
+    { type: 'user_input_completed', detail: 'Latest question' },
+    { type: 'message', detail: 'Latest answer' }
+  ] as AgentEventSummary[]);
+  assert.ok(transcript && transcript.length < 129_000);
+  assert.match(transcript, /Earlier conversation omitted/);
+  assert.ok(transcript.endsWith('User:\nLatest question\n\nAssistant:\nLatest answer'));
+});
+
+test('ACP rejects oversized current input with an actionable error before sending', async () => {
+  const client = new AcpClientWrapper({
+    command: process.execPath, workingDirectory: tmpdir(),
+    requestPermission: async () => 'deny', onSessionUpdate: () => {}
+  });
+  await assert.rejects(client.prompt('x'.repeat(1_000_001)), /ACP prompt is too large.*Shorten the message/);
+});
+
+
+test('ACP sends reconstructed context when native resume fails or is unavailable', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'praxis-acp-fallback-'));
+  const fixture = join(folder, 'agent.mjs');
+  await writeFile(fixture, `
+import { createInterface } from 'node:readline';
+const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') {
+    send({ id: request.id, result: { protocolVersion: 1,
+      agentCapabilities: process.env.RESUME_FAILS ? { sessionCapabilities: { resume: true } } : {} } });
+  } else if (request.method === 'session/resume') {
+    send({ id: request.id, error: { code: -32603, message: 'Session no longer exists' } });
+  } else if (request.method === 'session/new') {
+    send({ id: request.id, result: { sessionId: 'new-session' } });
+  } else if (request.method === 'session/prompt') {
+    if (request.params.prompt[0].text !== 'Reconstructed conversation and current request') throw new Error('Lost fallback history');
+    send({ id: request.id, result: { stopReason: 'end_turn' } });
+  }
+}
+`);
+  try {
+    for (const fails of ['', '1']) {
+      const client = new AcpClientWrapper({
+        command: process.execPath, args: [fixture], workingDirectory: folder,
+        env: { RESUME_FAILS: fails }, resumeSessionId: 'old-session',
+        requestPermission: async () => 'deny', onSessionUpdate: () => {}
+      });
+      try {
+        await client.connect();
+        const result = await client.prompt('Reconstructed conversation and current request', undefined, 'Current request only');
+        assert.equal(result.stopReason, 'end_turn');
+        assert.equal(client.sessionId, 'new-session');
+      } finally {
+        await client.shutdown();
+      }
+    }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
   }
 });

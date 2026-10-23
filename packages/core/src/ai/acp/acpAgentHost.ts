@@ -1061,10 +1061,15 @@ export class AcpAgentHost {
       }
       return [];
     });
-    return turns.length > 0 ? `Previous conversation:\n\n${turns.join('\n\n')}` : undefined;
+    if (turns.length === 0) return undefined;
+    const transcript = turns.join('\n\n');
+    const budget = 128_000;
+    return `Previous conversation:\n\n${transcript.length > budget
+      ? `[Earlier conversation omitted to fit the prompt; the following is the most recent text.]\n${transcript.slice(-budget)}`
+      : transcript}`;
   }
 
-  /** Continues through native ACP resume when available, with full transcript fallback. */
+  /** Continues through native ACP resume when available, with bounded transcript fallback. */
   public async continueTask(
     issueKey: string,
     message: string,
@@ -1117,10 +1122,12 @@ export class AcpAgentHost {
         ? `\n\n${CODE_INTELLIGENCE_PROMPT}`
         : ''
     }${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
+    const currentTurn = `${options.internalConversationTurn ? 'Conversation routing instruction' : 'User follow-up'}:\n${followUp}`;
+    const resumedPrompt = [systemPrompt, currentTurn].join('\n\n');
     const prompt = [
       systemPrompt,
       this.buildConversationTranscript(record.events),
-      `${options.internalConversationTurn ? 'Conversation routing instruction' : 'User follow-up'}:\n${followUp}`
+      currentTurn
     ].filter((part): part is string => Boolean(part)).join('\n\n');
 
     const client = new AcpClientWrapper({
@@ -1179,7 +1186,7 @@ export class AcpAgentHost {
       task.agentModel = (record.model ?? options.model) ? undefined : await currentAcpModel(client);
       // Cancelled while the agent was still starting: the request is never sent.
       if (task.ending) return;
-      const response = await client.prompt(prompt, followUpImages);
+      const response = await client.prompt(prompt, followUpImages, resumedPrompt);
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
       }

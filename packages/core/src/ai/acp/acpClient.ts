@@ -669,22 +669,30 @@ export class AcpClientWrapper {
    * a normal protocol error, surfaced the same way any other prompt failure
    * already is.
    */
-  public async prompt(text: string, images?: readonly WireImageAttachment[]): Promise<acp.PromptResponse> {
+  // Use resumedText only after native resume/load succeeds; a new session needs replay.
+  public async prompt(text: string, images?: readonly WireImageAttachment[], resumedText?: string): Promise<acp.PromptResponse> {
     try {
-      return await this.promptInner(text, images);
+      return await this.promptInner(text, images, resumedText);
     } catch (error) {
       throw withAgentErrorDetail(error);
     }
   }
 
-  private async promptInner(text: string, images?: readonly WireImageAttachment[]): Promise<acp.PromptResponse> {
+  private async promptInner(text: string, images?: readonly WireImageAttachment[], resumedText?: string): Promise<acp.PromptResponse> {
+    const resumed = await this.tryResumeSession();
+    const selectedText = resumed ? (resumedText ?? text) : text;
+    // Leave room below adapters' 1 Mi-character input limit. Never silently
+    // truncate the current request or the instructions that govern its tools.
+    if (selectedText.length > 1_000_000) {
+      throw new Error(`ACP prompt is too large (${selectedText.length} characters; maximum 1000000). Shorten the message or attached context before retrying.`);
+    }
     const promptContent: string | acp.ContentBlock[] = images?.length
       ? [
-          { type: 'text', text },
+          { type: 'text', text: selectedText },
           ...images.map(image => ({ type: 'image' as const, data: image.dataBase64, mimeType: image.mimeType }))
         ]
-      : text;
-    if (await this.tryResumeSession()) {
+      : selectedText;
+    if (resumed) {
       if (!this.connection || !this.acpModule) throw new Error('ACP client is not connected.');
       // Let replay notifications queued by session/resume or session/load
       // drain while the prompt gate is still closed, rather than trusting one
