@@ -333,3 +333,19 @@ Status: Failed · Duration: 13s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+
+**PRX-F47** — 2026-10-23T16:41:16.698Z
+**Workflow run failed: Governed delivery — FX-BF-047: Scheduled ticket work runs with ordered execution**
+
+Status: Failed · Duration: 6h 19m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
