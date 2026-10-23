@@ -1,7 +1,7 @@
 # test-contracts
 
-Frozen implementation: `9287220077dcbf58d354e7b9a304285a3395c16a` (PRX-F47).
-The checkout HEAD matched this snapshot and was clean before this report was added.
+Frozen implementation: `93fed4f2969e6eb93ca748e76f81b6013a588171` (PRX-F47).
+The checkout HEAD matched this snapshot and was clean before this report was updated.
 Inspected `.praxis/change-diff.md`, the commit diff, generator, catalog, Playwright configuration, scheduler spec, and test script registrations before editing.
 
 ## Inventory and validation
@@ -10,7 +10,7 @@ Inspected `.praxis/change-diff.md`, the commit diff, generator, catalog, Playwri
 - `npm run test:praxis-contracts`: exit 0, “Praxis Tests: 695 Playwright tests catalogued and linked.” Existing generated catalog is current; no regeneration or identifier changes needed.
 - `npx playwright test --list` from `apps/praxis-desktop/main`: exit 0, **705 project executions in 153 files**. This is discovery, not a test pass count.
 - [Generated structured contracts](catalog.json) and [complete source-link inventory](index.md).
-- IDs are SHA1-derived from source path plus title. Line shifts preserve IDs; file moves or title changes do not. Preserve the existing IDs in this companion catalog.
+- IDs are SHA1-derived from source path plus title. Line shifts preserve IDs; file moves or title changes do not. Existing generated IDs were preserved. Renames would require generator support to retain identity; the current algorithm does not meet the file-move stability requirement.
 - The generated inventory covers desktop Playwright only. Root test scripts also register core Node, desktop Git/workflow/mobile Node, skills, consent, and mobile protocol/relay checks. These are outside the generator's scope; 695 must not be reported as the whole monorepo's automated-test count. The four scheduler core source files contain **69 literal test declarations** (33 domain, 7 store, 9 budget, 20 runner); these are additional source inventory, not executed results.
 
 ## Curated recovery contracts
@@ -61,14 +61,13 @@ The frozen commit changes only `.praxis/change-diff.md`; it documents an impleme
 
 | Reported failure | Disposition at the frozen snapshot |
 | --- | --- |
-| `gitService.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
-| `minimaxUsage.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
-| `ticketReviewApply.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
-| `windowBroadcast.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
-| `windowState.test.js` | Implement reports it passed in the same rerun; no source change. Original truncated failure cause remains unproven. |
-| Iterations 1–4, “npm exited 1” without findings | Insufficient diagnostics to attribute a defect or claim resolution for any individual run. No speculative fix. |
+| `autoUpdate.test.js` | Implement reports it passed in the rerun; no source change. Original truncated failure cause remains unproven. |
+| `gitService.test.js` | Implement reports it passed in the rerun; no source change. Original truncated failure cause remains unproven. |
+| `ticketReviewApply.test.js` | Implement reports it passed in the rerun; no source change. Original truncated failure cause remains unproven. |
+| `windowBroadcast.test.js` | Implement reports it passed in the rerun; no source change. Original truncated failure cause remains unproven. |
+| Iterations 1–5, “npm exited 1” without findings | Insufficient diagnostics to attribute a defect or claim resolution for any individual run. No speculative fix. |
 
-[Implement recovery evidence](../../.praxis/change-diff.md) records compile success, **74 passed / 4 failed**, with the four failures in `semanticModelDownload.test.js` at HTTP fixture startup (`listen EPERM` on `127.0.0.1`). Therefore broad QA is still unresolved: rerun those fixtures where loopback binding is permitted. The report does not establish that the original five file failures had the same cause.
+[Implement recovery evidence](../../.praxis/change-diff.md) records compile success, **74 passed / 4 failed**, with the four failures in `semanticModelDownload.test.js` at HTTP fixture startup (`listen EPERM` on `127.0.0.1`). Therefore broad QA is still unresolved: rerun those fixtures where loopback binding is permitted. This report does not establish that the original four file failures had the same cause.
 
 ## Stale or ambiguous contracts and coverage findings
 
@@ -77,6 +76,12 @@ The frozen commit changes only `.praxis/change-diff.md`; it documents an impleme
 - **Incorrect project metadata:** the generator hardcodes `functional` for every entry, while Playwright routes appearance, theme-tagged, and live-agent tests to other projects. Source links/counts validate, but runner-project metadata is ambiguous outside functional tests. Configuration is the authority.
 - **Incomplete suite scope:** Node tests are registered but not represented in the generated Playwright catalog. No complete monorepo runtime test count is claimed.
 - **Opt-in coverage:** PT-8738E01F29 at scheduledRuns.spec.ts:394 skips unless `PRAXIS_SHOTS` is set. Catalog presence does not prove that visual capture ran.
-- **Validator limits:** validates JSON test count and exact entries, not Markdown index freshness, top-level schema metadata, actual assertion quality, or runtime success. No stale source links or duplicate IDs were found in the current generated entries.
+- **Validator limits:** validates JSON test count and exact entries, not Markdown index freshness, top-level schema metadata, actual assertion quality, or runtime success. No stale source links or duplicate IDs were found in the current generated entries. Regenerating both catalog files produced no changes, independently checking Markdown freshness.
 
 No product/test code or workflow definitions changed. No stages advanced, tracker comments posted, or UI verification performed. This stage ran deterministic catalog validation and test discovery only; inherited implementation test claims were not treated as new execution evidence.
+
+## Stage verification record
+
+- Initial validator invocation from the desktop-main workspace failed because that workspace has no `test:praxis-contracts` script. The root invocation passed; this was command placement, not a catalog defect.
+- Playwright JSON discovery returned 705 executions and no discovery errors; no automated journeys were executed in this stage.
+- Required artifact: this `test-contracts` report. Only this companion report changed; the deterministic catalog and index remained current.
