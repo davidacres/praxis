@@ -20,14 +20,25 @@ validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
 Add the UI and evidence needed for users to enable, monitor, and trust bounded
 parallel scheduled work.
 
-## Done when
+## Acceptance criteria
 
-- The schedule editor exposes parallel lanes only as an advanced explicit
-  option with max-concurrency and budget warning controls.
-- The run view shows active lanes, queued work, blocked entries, pause reasons,
-  and actual spend while the run is active.
-- E2E evidence proves the UI prevents unsafe parallel starts and records lane
-  assignment in the run ledger.
+- New schedules use sequential execution by default. Parallel lanes are an
+  explicit advanced option, and enabling them requires choosing a maximum
+  concurrency greater than one.
+- The editor rejects invalid concurrency values and shows a budget warning
+  before a parallel schedule can be saved or started. Reopening a saved
+  schedule preserves the selected execution mode and concurrency limit.
+- While a run is active, its view shows active lane assignments, queued work,
+  blocked entries with reasons, run pause reasons, actual spend, and estimated
+  remaining budget. Unavailable budget data is shown as unknown.
+- Each concurrent launch has a persisted ledger entry identifying the ticket,
+  lane, linked workflow run, and rationale for allowing parallel execution;
+  the evidence remains available after reopening the run.
+- Desktop E2E tests enable parallel mode, inspect the warning, save and reopen
+  the schedule, and observe two independent entries running within the cap.
+- Desktop E2E tests prove dependent or exclusive-resource-conflicting entries
+  cannot overlap, blocked readiness and insufficient or unknown budget prevent
+  unsafe starts, and the UI and ledger expose the corresponding reasons.
 
 ## Notes
 
@@ -42,5 +53,4 @@ toward completion, not maximum simultaneous spend.
 
 
 ## Comments
-
 

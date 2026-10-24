@@ -20,12 +20,24 @@ validation: [npm run test:core]
 Define when scheduled ticket entries may run concurrently and when they must
 remain sequential or paused.
 
-## Done when
+## Acceptance criteria
 
-- The policy considers declared dependencies, shared resources, readiness,
-  workflow gates, trust, provider allowance, and remaining budget.
-- Max concurrency is stored on the scheduled run policy and defaults to one.
-- Tests prove dependent or blocked tickets do not run concurrently.
+- A scheduled run stores its maximum concurrency as a positive integer,
+  defaults to one when no parallel policy is supplied, and rejects invalid
+  values before dispatch.
+- An entry can launch only after its declared dependencies have completed
+  successfully; unresolved, failed, or incomplete dependencies block launch
+  even when a lane is idle.
+- Entries requiring the same exclusive resource cannot overlap. Independent
+  entries may overlap only within the configured concurrency limit.
+- Before every launch, the policy checks readiness, workflow approval gates,
+  trust, provider allowance, and remaining budget. A failed or unknown check
+  prevents that launch and produces a specific blocked or paused reason.
+- Budget checks account for already active work; insufficient or uncertain
+  remaining budget prevents another lane from starting.
+- Core tests prove the sequential default, valid and invalid concurrency
+  settings, dependency blocking, exclusive-resource conflicts, each launch
+  gate, budget pauses, and enforcement of the cap across repeated dispatches.
 
 ## Notes
 
@@ -40,5 +52,4 @@ lanes than requested whenever safety or budget checks require it.
 
 
 ## Comments
-
 
