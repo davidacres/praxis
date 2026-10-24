@@ -37,6 +37,7 @@ Json? _map(Json json, String key) {
 }
 
 extension type HostInfo(Json json) {
+  String? get scheduledRunExecution => _str(json, 'scheduledRunExecution');
   String get hostId => _str(json, 'hostId') ?? '';
   String get hostName => _str(json, 'hostName') ?? '';
   int get protocolVersion => _int(json, 'protocolVersion') ?? 1;
@@ -191,6 +192,7 @@ extension type PendingPermission(Json json) {
 
 /// A session summary (`sessions.list`) or snapshot (`sessions.get`, `session.snapshot`).
 extension type SessionSnapshot(Json json) {
+  String? get latestActivity => _str(json, 'latestActivity');
   String get sessionId => _str(json, 'sessionId') ?? '';
   String get sessionKey => _str(json, 'sessionKey') ?? sessionId;
   String? get projectId => _str(json, 'projectId');
@@ -315,4 +317,25 @@ class AttentionItem {
   final bool resolved;
 
   AttentionItem resolve() => AttentionItem(id: id, kind: kind, hostId: hostId, projectId: projectId, sessionId: sessionId, runId: runId, requestId: requestId, summary: summary, detail: detail, createdAt: createdAt, resolved: true);
+}
+
+extension type ScheduledRunSnapshot(Json json) {
+  String get id => _str(json, 'id') ?? '';
+  String get projectId => _str(json, 'projectId') ?? '';
+  String get name => _str(json, 'name') ?? 'Scheduled run';
+  String get status => _str(json, 'status') ?? 'draft';
+  String get scheduledStartAt => _str(json, 'scheduledStartAt') ?? '';
+  String get timezone => _str(json, 'timezone') ?? 'UTC';
+  List<ScheduledEntry> get entries =>
+      _list(json, 'entries').map(ScheduledEntry.new).toList();
+}
+
+extension type ScheduledEntry(Json json) {
+  String get id => _str(json, 'id') ?? '';
+  int get sequence => _int(json, 'sequence') ?? 0;
+  String get issueKey => _str(json, 'issueKey') ?? '';
+  String get title => _str(json, 'title') ?? issueKey;
+  String get status => _str(json, 'status') ?? 'queued';
+  String? get workflowRunId => _str(json, 'workflowRunId');
+  String? get reason => _str(json, 'reason');
 }

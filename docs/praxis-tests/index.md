@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **692 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **701 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -210,6 +210,12 @@ This catalogue describes **692 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0000309442 | auto Update | an unpackaged build reports that updates are unsupported and offers no check | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:22` |
 | PT-24D162FA28 | auto Update | shows download progress, then offers a restart once the update is ready | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:32` |
 | PT-92B7424B04 | auto Update | an update this build cannot install links to the release page | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:48` |
+| PT-CC54F83A0D | background Tasks | background completion arrives after the turn, updates the session, and notifies once | `apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts:26` |
+| PT-B61A27A5EB | background Tasks | background failure is reported after the foreground reply | `apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts:69` |
+| PT-0D80392F88 | background Tasks | a lost background connection becomes unknown rather than completed | `apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts:71` |
+| PT-FE74B5E007 | background Tasks | native subagent completion is distinct from successful spawn | `apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts:73` |
+| PT-A1760EEA2F | background Tasks | AIR child completion and its result reach the owning session separately from the parent transcript | `apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts:75` |
+| PT-A9058D99D0 | background Tasks | a direct API agent shell process reports its exit after the AI reply without inventing success | `apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts:78` |
 | PT-E3A403D47C | bifrost Provider | Bifrost preset saves a virtual key and runs a streamed session on its exact endpoint | `apps/praxis-desktop/main/e2e/bifrostProvider.spec.ts:7` |
 | PT-A9888638A2 | board Filters | load-more fetches the next ten for a busy status without starving the other lanes | `apps/praxis-desktop/main/e2e/boardFilters.spec.ts:32` |
 | PT-41ED9F62A9 | board Filters | dropping a ticket into another lane still applies its workflow transition | `apps/praxis-desktop/main/e2e/boardFilters.spec.ts:65` |
@@ -312,7 +318,7 @@ This catalogue describes **692 Playwright tests** under `apps/praxis-desktop/mai
 | PT-4D8075BFEA | coordination | a file another session holds is not written; recovery is a person's call, then the fix lands | `apps/praxis-desktop/main/e2e/coordination.spec.ts:48` |
 | PT-761127B80B | coordination Wait | an agent refused a held file waits for it once, is woken when it is released, and then writes | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:58` |
 | PT-8B10456AD1 | coordination Wait | a server an agent left running stays claimed after its turn, and Stop in the inspector ends it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:112` |
-| PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:145` |
+| PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:147` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:30` |
 | PT-842B523925 | easymode | default sidebar is standard when enableEasyMode is false | `apps/praxis-desktop/main/e2e/easymode.spec.ts:29` |
@@ -359,6 +365,7 @@ This catalogue describes **692 Playwright tests** under `apps/praxis-desktop/mai
 | PT-AC09DFAB68 | gitlab | New issue is enabled on a GitLab board once the connection allows creation | `apps/praxis-desktop/main/e2e/gitlab.spec.ts:217` |
 | PT-3FFA8FE2C9 | git Onboarding | Git Graph explains that a project workspace is required | `apps/praxis-desktop/main/e2e/gitOnboarding.spec.ts:13` |
 | PT-64BEE7E4CE | git Onboarding | project Git navigation opens the graph for its workspace repository | `apps/praxis-desktop/main/e2e/gitOnboarding.spec.ts:37` |
+| PT-6B6471DE4C | governed Application.live | a real AI creates a calculator application through Governed delivery and passes QA | `apps/praxis-desktop/main/e2e/governedApplication.live.spec.ts:26` |
 | PT-9D9D7DC61F | governed Delivery Loop.live | Governed delivery with a real AI: review findings loop back to Implement and the run converges or escalates | `apps/praxis-desktop/main/e2e/governedDeliveryLoop.live.spec.ts:64` |
 | PT-0EE345E8DC | icon Button Tooltips | every visible icon-only control on the main screens has a tooltip | `apps/praxis-desktop/main/e2e/iconButtonTooltips.spec.ts:96` |
 | PT-4031809C97 | icon Button Tooltips | an icon-only button shows its accessible name as its tooltip | `apps/praxis-desktop/main/e2e/iconButtonTooltips.spec.ts:160` |
@@ -577,6 +584,8 @@ This catalogue describes **692 Playwright tests** under `apps/praxis-desktop/mai
 | PT-2BC0402306 | task Designer | designer sidebar shows board tickets, supports drag to canvas, and restores workspace on exit | `apps/praxis-desktop/main/e2e/taskDesigner.spec.ts:222` |
 | PT-A9ADF6DF41 | task Designer | AI recommend flow previews an ordering and applying stacks the tickets vertically | `apps/praxis-desktop/main/e2e/taskDesigner.spec.ts:258` |
 | PT-55CBD1F16D | task Designer | generate master plan writes plans/master-plan.md under the working directory | `apps/praxis-desktop/main/e2e/taskDesigner.spec.ts:298` |
+| PT-DECD91D299 | task Notifications | desktop notification preferences persist, live transitions deliver once, and clicks open the session | `apps/praxis-desktop/main/e2e/taskNotifications.spec.ts:9` |
+| PT-E3EDB999D6 | task Notifications | workflow transitions notify once and clicking opens the run in its project | `apps/praxis-desktop/main/e2e/taskNotifications.spec.ts:84` |
 | PT-98B1DBFD7A | terminal | runs a real PTY and preserves it when the panel is closed | `apps/praxis-desktop/main/e2e/terminal.spec.ts:11` |
 | PT-2832CE2917 | terminal | captures shell-integrated command records and exposes failed-command actions | `apps/praxis-desktop/main/e2e/terminal.spec.ts:40` |
 | PT-0D89836F29 | terminal | creates and kills terminal sessions from the panel toolbar | `apps/praxis-desktop/main/e2e/terminal.spec.ts:59` |

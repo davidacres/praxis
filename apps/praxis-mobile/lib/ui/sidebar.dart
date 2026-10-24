@@ -12,26 +12,16 @@ import '../core/workflow_runs.dart';
 import 'app_icon.dart';
 import 'kit.dart';
 import 'project_switcher.dart';
+import 'scheduled_runs.dart';
 import 'provider_brand_logo.dart';
 
 enum _SettingsPage { desktops, server, permissions, app }
-
-/// The desktop easy-mode filter rail: everything, what is moving, what is waiting on a person.
-enum _Filter { all, live, gates }
 
 /// Finished sessions shown before the rest fold behind "Show more", as on the desktop.
 const _collapsedSessionLimit = 5;
 
 bool _workIsLive(WorkItem item) =>
     item.draft || item.status == 'active' || item.status == 'awaiting-input';
-bool _workIsGate(WorkItem item) =>
-    !item.draft && item.status == 'awaiting-input';
-bool _runIsLive(RunSnapshot run) =>
-    run.status == 'running' || run.status == 'awaiting-approval';
-bool _runIsGate(RunSnapshot run) =>
-    run.status == 'awaiting-approval' ||
-    run.stages.any((stage) => stage.lane == 'awaiting');
-
 const _settings = [
   (
     _SettingsPage.desktops,
@@ -82,7 +72,6 @@ class AppSidebar extends StatefulWidget {
 }
 
 class _AppSidebarState extends State<AppSidebar> {
-  _Filter _filter = _Filter.all;
   bool _showAllSessions = false;
 
   @override
@@ -105,31 +94,8 @@ class _AppSidebarState extends State<AppSidebar> {
     final allRuns = store.runsSupported
         ? store.workflowRuns
         : const <RunSnapshot>[];
-    final counts = {
-      _Filter.all: visible.length + allRuns.length,
-      _Filter.live:
-          visible.where(_workIsLive).length + allRuns.where(_runIsLive).length,
-      _Filter.gates:
-          visible.where(_workIsGate).length + allRuns.where(_runIsGate).length,
-    };
-    final sessions = visible
-        .where(
-          (item) => switch (_filter) {
-            _Filter.all => true,
-            _Filter.live => _workIsLive(item),
-            _Filter.gates => _workIsGate(item),
-          },
-        )
-        .toList();
-    final runs = allRuns
-        .where(
-          (run) => switch (_filter) {
-            _Filter.all => true,
-            _Filter.live => _runIsLive(run),
-            _Filter.gates => _runIsGate(run),
-          },
-        )
-        .toList();
+    final sessions = visible;
+    final runs = allRuns;
     // Live, waiting and open sessions always stay; the cap only trims the finished tail.
     final shownSessions = _showAllSessions
         ? sessions
@@ -274,32 +240,20 @@ class _AppSidebarState extends State<AppSidebar> {
           ),
         ),
 
-        // Micro Filter Rail (All / Live / Gates)
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(5)),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: p.border.withValues(alpha: 0.5)),
+        if (store.openAttention.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.fromLTRB(t.s(8), 0, t.s(8), t.s(4)),
+            child: _EasyNavRow(
+              icon: 'warning',
+              label: 'Attention',
+              active:
+                  store.primaryRoute == 'attention' &&
+                  store.openWorkId == null &&
+                  store.openRunId == null,
+              badge: '${store.openAttention.length}',
+              onTap: () => navigate('attention'),
             ),
           ),
-          child: Row(
-            children: [
-              for (final filter in _Filter.values) ...[
-                if (filter != _Filter.all) SizedBox(width: t.s(3)),
-                _EasyFilterTab(
-                  label:
-                      '${filter.name[0].toUpperCase()}${filter.name.substring(1)}',
-                  count: counts[filter] ?? 0,
-                  active: _filter == filter,
-                  onTap: () => setState(() {
-                    _filter = filter;
-                    _showAllSessions = false;
-                  }),
-                ),
-              ],
-            ],
-          ),
-        ),
 
         // Scrollable Feed
         Expanded(
@@ -318,9 +272,7 @@ class _AppSidebarState extends State<AppSidebar> {
                 Padding(
                   padding: EdgeInsets.fromLTRB(t.s(8), t.s(4), t.s(8), t.s(10)),
                   child: Text(
-                    _filter != _Filter.all
-                        ? 'Nothing matches this filter.'
-                        : store.access.value?.projects.isNotEmpty == true
+                    store.access.value?.projects.isNotEmpty == true
                         ? 'This phone has project-only access. Sessions require desktop-wide access in Desktop Settings → Mobile access.'
                         : 'No sessions yet. Start one with + New.',
                     style: ts(context, 11, lineHeight: 16, color: p.textDim),
@@ -367,12 +319,17 @@ class _AppSidebarState extends State<AppSidebar> {
                   ),
                 ),
 
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: ScheduledRunsSection(key: ValueKey(store.contextKey)),
+              ),
+
               // Runs Section
               if (store.runsSupported) ...[
                 SizedBox(height: t.s(8)),
                 _EasySectionHeader(title: 'RUNS', count: runs.length),
                 if (runs.isEmpty) ...[
-                  if (store.workflows.isNotEmpty && _filter == _Filter.all) ...[
+                  if (store.workflows.isNotEmpty) ...[
                     // Compact Launchpad matching desktop EasyMode
                     Padding(
                       padding: EdgeInsets.fromLTRB(
@@ -458,9 +415,7 @@ class _AppSidebarState extends State<AppSidebar> {
                         t.s(8),
                       ),
                       child: Text(
-                        _filter != _Filter.all
-                            ? 'Nothing matches this filter.'
-                            : 'No runs in this project yet.',
+                        'No runs in this project yet.',
                         style: ts(
                           context,
                           11,
@@ -651,81 +606,6 @@ class _AppNavigationDrawerState extends State<AppNavigationDrawer> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Compact EasyMode filter tab button with inline count pill.
-class _EasyFilterTab extends StatelessWidget {
-  const _EasyFilterTab({
-    required this.label,
-    required this.count,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final int count;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.t;
-    final p = t.palette;
-
-    return Pressable(
-      label: '$label, $count items',
-      selected: active,
-      onTap: onTap,
-      excludeChildSemantics: true,
-      builder: (context, pressed) => Container(
-        padding: EdgeInsets.symmetric(horizontal: t.s(8), vertical: t.s(4)),
-        decoration: BoxDecoration(
-          color: active
-              ? p.surfaceRaised
-              : pressed
-              ? p.surface
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(t.s(4)),
-          border: active ? Border.all(color: p.border) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: ts(
-                context,
-                11,
-                weight: active ? FontWeight.w600 : FontWeight.w500,
-                color: active ? p.text : p.textDim,
-              ),
-            ),
-            SizedBox(width: t.s(5)),
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: t.s(5),
-                vertical: t.s(1),
-              ),
-              decoration: BoxDecoration(
-                color: p.bgSunken,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '$count',
-                style: ts(
-                  context,
-                  10,
-                  scaled: false,
-                  family: monospace,
-                  color: active ? p.textSecondary : p.textDim,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -974,6 +854,17 @@ class _EasyModeSessionCardWidget extends StatelessWidget {
                 statusIndicator,
               ],
             ),
+            if (isGate)
+              Padding(
+                padding: EdgeInsets.only(left: t.s(20), top: t.s(4)),
+                child: Text('Action required', style: ts(context, 11, color: p.warn)),
+              ),
+            if ((isRunning || isGate) && item.latestActivity?.isNotEmpty == true)
+              Padding(
+                padding: EdgeInsets.only(left: t.s(20), top: t.s(4)),
+                child: Text(item.latestActivity!, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: ts(context, 11, color: p.textDim)),
+              ),
             // AI Provider and Model on a new line below title
             if (hasAiSubtitle) ...[
               SizedBox(height: t.s(3)),

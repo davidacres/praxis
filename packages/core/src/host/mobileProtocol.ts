@@ -15,9 +15,9 @@ export type MobileCapability = 'view' | 'execute' | 'approve';
  * to fit the 1 MiB secure-record limit and added references for images attached to user messages. A phone
  * reads `host.info` first and treats a missing operation (an older desktop) as "unsupported", not an error.
  */
-export const MOBILE_HOST_SURFACE_REVISION = 7 as const;
-export type MobileReadOperation = 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get' | 'sessions.imagePreview';
-export type MobileCommandOperation = 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve' | 'workflowGates.reject' | 'gadgets.submit';
+export const MOBILE_HOST_SURFACE_REVISION = 8 as const;
+export type MobileReadOperation = 'scheduledRuns.list' | 'hosts.list' | 'host.info' | 'projects.snapshot' | 'work.list' | 'sessions.list' | 'sessions.get' | 'sessions.usage' | 'workflows.list' | 'workflowRuns.list' | 'workflowRuns.get' | 'changes.get' | 'attention.list' | 'providers.list' | 'models.list' | 'access.get' | 'sessions.imagePreview';
+export type MobileCommandOperation = 'scheduledRuns.save' | 'scheduledRuns.setArmed' | 'scheduledRuns.resolveMissed' | 'sessions.create' | 'sessions.continue' | 'sessions.cancel' | 'sessions.configure' | 'workflowRuns.start' | 'workflowRuns.cancel' | 'workflowRuns.retryStage' | 'permissions.respond' | 'workflowGates.approve' | 'workflowGates.reject' | 'gadgets.submit';
 export type MobileOperation = MobileReadOperation | MobileCommandOperation;
 export interface MobileCaller { deviceId: string; subject?: string; capabilities: readonly MobileCapability[]; }
 export interface MobileTarget { hostId: string; projectId?: string; sessionId?: string; runId?: string; requestId?: string; }
@@ -47,6 +47,8 @@ export interface MobileHostInfo {
   surfaceRevision: number;
   readOperations: readonly MobileReadOperation[];
   commandOperations: readonly MobileCommandOperation[];
+  /** Schedules may be planned before a desktop ships its execution runner. */
+  scheduledRunExecution?: 'planning-only' | 'enabled';
   /** Highest event sequence appended so far. Replay after this to follow live changes. */
   latestSequence: number;
   /** Changes whenever the desktop process restarts; event sequences restart with it. */
@@ -235,6 +237,8 @@ export interface MobileDeviceAccess {
 
 export type MobileSessionLifecycle = 'idle' | 'active' | 'awaiting-input' | 'completed' | 'failed' | 'stopped';
 export interface MobileSessionSummary {
+  /** Latest desktop event summary, bounded for the home activity line. */
+  latestActivity?: string;
   sessionId: string;
   sessionKey: string;
   projectId?: string;
@@ -411,13 +415,14 @@ const COMMAND_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEVICE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const CAPABILITY_BY_OPERATION: Record<MobileOperation, MobileCapability> = {
+  'scheduledRuns.list': 'view', 'scheduledRuns.save': 'execute', 'scheduledRuns.setArmed': 'execute', 'scheduledRuns.resolveMissed': 'execute',
   'hosts.list':'view','host.info':'view','sessions.usage':'view','providers.list':'view','models.list':'view','access.get':'view','projects.snapshot':'view','work.list':'view','sessions.list':'view','sessions.get':'view','workflows.list':'view','workflowRuns.list':'view','workflowRuns.get':'view','changes.get':'view','attention.list':'view','sessions.imagePreview':'view',
   'sessions.create':'execute','sessions.continue':'execute','sessions.configure':'execute','sessions.cancel':'execute','workflowRuns.start':'execute','workflowRuns.cancel':'execute','workflowRuns.retryStage':'execute','permissions.respond':'approve','workflowGates.approve':'approve','workflowGates.reject':'approve',
   // Answering a gadget is a turn in the conversation; an approval-effect answer additionally needs `approve`, checked by the host.
   'gadgets.submit':'execute',
 };
 export function mobileCapabilityFor(operation: MobileOperation): MobileCapability { return CAPABILITY_BY_OPERATION[operation]; }
-export function mobileOperationRequiresMutation(operation: MobileOperation): boolean { return operation in {'sessions.create':true,'sessions.continue':true,'sessions.configure':true,'sessions.cancel':true,'workflowRuns.start':true,'workflowRuns.cancel':true,'workflowRuns.retryStage':true,'permissions.respond':true,'workflowGates.approve':true,'workflowGates.reject':true,'gadgets.submit':true}; }
+export function mobileOperationRequiresMutation(operation: MobileOperation): boolean { return operation in {'scheduledRuns.save':true,'scheduledRuns.setArmed':true,'scheduledRuns.resolveMissed':true,'sessions.create':true,'sessions.continue':true,'sessions.configure':true,'sessions.cancel':true,'workflowRuns.start':true,'workflowRuns.cancel':true,'workflowRuns.retryStage':true,'permissions.respond':true,'workflowGates.approve':true,'workflowGates.reject':true,'gadgets.submit':true}; }
 export function callerHasCapability(caller: MobileCaller, operation: MobileOperation): boolean { return caller.capabilities.includes(mobileCapabilityFor(operation)); }
 export function createMobileCommand<TPayload>(input: Omit<MobileCommand<TPayload>, 'protocolVersion'>): MobileCommand<TPayload> { const command={protocolVersion:MOBILE_PROTOCOL_VERSION,...input}; const validation=validateMobileCommand(command); if(!validation.ok) throw new Error(validation.error.message); return command; }
 export function validateMobileCommand(command: MobileCommand): {ok:true}|{ok:false;error:MobileProtocolError} {
@@ -429,3 +434,22 @@ export function validateMobileCommand(command: MobileCommand): {ok:true}|{ok:fal
  return {ok:true};
 }
 export function validateMobileCursor(cursor: MobileEventCursor): MobileProtocolError|undefined { if(!cursor.hostId.trim()||!Number.isInteger(cursor.sequence)||cursor.sequence<0) return {code:'invalid-envelope',message:'Event cursors require a host and non-negative sequence.',retryable:false}; return undefined; }
+
+/** Revision 8: project-scoped schedules without connection settings or filesystem paths. */
+export interface MobileScheduledRun {
+  id: string;
+  projectId: string;
+  name: string;
+  status: string;
+  scheduledStartAt: string;
+  timezone: string;
+  entries: Array<{ id: string; sequence: number; issueKey: string; title: string; status: string; workflowRunId?: string; reason?: string }>;
+}
+export interface MobileScheduleInput {
+  name: string;
+  date: string;
+  time: string;
+  timezone: string;
+  /** Project ticket keys in execution order. The desktop resolves their backing connection. */
+  issueKeys: string[];
+}

@@ -153,7 +153,7 @@ export async function abortActiveTask(issueKey: string): Promise<void> {
   if (getVercelAgentService().hasActiveTask(issueKey)) {
     await getVercelAgentService().abortTask(issueKey);
   }
-  if (getAcpAgentHost().hasActiveTask(issueKey)) {
+  if (getAcpAgentHost().hasActiveTask(issueKey) || getAcpAgentHost().hasBackgroundTasks(issueKey)) {
     await getAcpAgentHost().abortTask(issueKey);
   }
 }

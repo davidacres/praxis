@@ -604,3 +604,23 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [TASK-434](plans/features/fx-bf-108-adaptive-workflow-engine/stories/fx-be-167-designer-run-view-and-cost/tasks/task-434-designer-edge-and-node-editing.md) | Task | Designer: findings edges, loop edges, map node and independentOf | Complete | TASK-422, TASK-427, TASK-429 |
 | [TASK-435](plans/features/fx-bf-108-adaptive-workflow-engine/stories/fx-be-167-designer-run-view-and-cost/tasks/task-435-run-view-iterations-and-decision.md) | Task | Run view: iteration state, history and needs-decision actions | Complete | TASK-425, TASK-424 |
 | [TASK-436](plans/features/fx-bf-108-adaptive-workflow-engine/stories/fx-be-167-designer-run-view-and-cost/tasks/task-436-projected-cost-in-start-dialog.md) | Task | Projected worst-case cost in the start-run dialog | Complete | TASK-431, TASK-429 |
+
+## Sidebar parity and Easy Mode conversation organization
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| [FX-BF-110](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/feature.md) | Feature | Sidebar parity and Easy Mode conversation organization | Backlog | None |
+| [FX-BE-174](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-174-shared-sidebar-behavior/story.md) | Story | Define sidebar parity and shared organization behavior | Backlog | None |
+| [TASK-467](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-174-shared-sidebar-behavior/tasks/task-467-sidebar-parity-contract.md) | Task | Document the parity contract and resolve organization semantics | Backlog | None |
+| [TASK-468](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-174-shared-sidebar-behavior/tasks/task-468-shared-organizer.md) | Task | Reuse the organizer with stable identity and mode compatibility | Backlog | TASK-467 |
+| [FX-BE-175](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-175-easy-mode-drag-order-and-groups/story.md) | Story | Add Easy Mode drag ordering and named groups | Backlog | FX-BE-174 |
+| [TASK-469](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-175-easy-mode-drag-order-and-groups/tasks/task-469-easy-ordering.md) | Task | Add persistent Easy Mode ordering and predictable filtered views | Backlog | FX-BE-174 |
+| [TASK-470](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-175-easy-mode-drag-order-and-groups/tasks/task-470-easy-groups.md) | Task | Add named group lifecycle and accessible move operations | Backlog | TASK-469 |
+| [FX-BE-176](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-176-chat-project-assignment/story.md) | Story | Assign chats to projects from Easy Mode | Backlog | FX-BE-174, FX-BE-175 |
+| [TASK-471](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-176-chat-project-assignment/tasks/task-471-session-project-drops.md) | Task | Add validated project drop targets for AI conversations | Backlog | FX-BE-174, FX-BE-175 |
+| [TASK-472](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-176-chat-project-assignment/tasks/task-472-team-chat-assignment.md) | Task | Include persisted team chats with explicit ownership semantics | Backlog | TASK-471 |
+| [FX-BE-177](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-177-sidebar-parity-verification/story.md) | Story | Verify both sidebar modes and retain interaction evidence | Backlog | FX-BE-175, FX-BE-176, FX-BE-178 |
+| [TASK-473](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-177-sidebar-parity-verification/tasks/task-473-sidebar-verification.md) | Task | Prove organization and assignment in the loaded desktop app | Backlog | FX-BE-175, FX-BE-176, FX-BE-178 |
+| [FX-BE-178](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-178-easy-mode-ticket-suggestions/story.md) | Story | Suggest the next ticket from recent work in Easy Mode | Backlog | FX-BE-174 |
+| [TASK-474](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-178-easy-mode-ticket-suggestions/tasks/task-474-rank-ticket-suggestions.md) | Task | Rank relevant tickets from recent project work | Backlog | FX-BE-174 |
+| [TASK-475](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-178-easy-mode-ticket-suggestions/tasks/task-475-ticket-suggestion-panel.md) | Task | Add the floating single-ticket suggestion panel | Backlog | TASK-474 |

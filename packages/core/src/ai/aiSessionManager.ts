@@ -1,3 +1,5 @@
+import { backgroundTaskIsLive } from './backgroundTasks';
+import type { BackgroundTask } from './agentTypes';
 import { Emitter } from '../host/emitter';
 import type { KeyValueStore } from '../host/stateStore';
 import type { AiAssignment, AiProvider } from '../types';
@@ -615,6 +617,28 @@ export class AiSessionManager {
       if (record) delete record.interruptedByRestart;
     }
     await this.persistAgentSessions();
+  }
+
+  /** Persist lifecycle updates independently of the foreground turn and its transcript. */
+  public updateBackgroundTask(issueKey: string, task: BackgroundTask): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return;
+    const current = record.backgroundTasks ?? [];
+    const previous = current.find(item => item.id === task.id);
+    // A replayed spawn/progress beat must never resurrect a finished task.
+    if (previous && !backgroundTaskIsLive(previous) && previous.state !== 'unknown' && backgroundTaskIsLive(task)) return;
+    const next = { ...previous, ...task, label: task.label.slice(0, 180), detail: task.detail?.slice(0, 2000) };
+    if (previous && previous.state === next.state && previous.label === next.label && previous.detail === next.detail) return;
+    const others = current.filter(item => item.id !== task.id && !(task.callId && item.source === task.source && item.producerId === task.producerId && item.callId === task.callId && item.state === 'unknown'));
+    const live = others.filter(backgroundTaskIsLive);
+    const history = others.filter(item => !backgroundTaskIsLive(item)).slice(-49);
+    record.backgroundTasks = [...live, ...history, next];
+    if (!previous || previous.state !== next.state) {
+      this.appendAgentEvents(issueKey, [{ type: 'background_task', timestamp: task.updatedAt, summary: `Background task ${next.state}: ${next.label}`, detail: next.detail }]);
+    } else {
+      void this.persistAgentSessions();
+      this._onDidChangeAgentSession.fire(record);
+    }
   }
 
   /** Update agent session state and optionally set completedAt and failure reason. */
@@ -1426,6 +1450,7 @@ export class AiSessionManager {
 
         const sessionRecord: AgentSessionRecord = hydrateSessionHandoverFields({
           ...value,
+          backgroundTasks: Array.isArray(value.backgroundTasks) ? value.backgroundTasks.filter(task => task && typeof task.id === 'string' && typeof task.label === 'string').map(task => backgroundTaskIsLive(task) ? { ...task, state: 'unknown' as const, updatedAt: new Date().toISOString(), detail: 'Praxis restarted and no longer has a live completion connection. The task outcome is unknown.' } : task) : undefined,
           toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full',
           state: interrupted ? 'aborted' : value.state,
           ...(interrupted ? { interruptedByRestart: true } : {}),

@@ -137,3 +137,38 @@ physical iOS/Android QR/LAN/resume and release qualification remains open, as do
 attachment-draft handling and the complete visual/interruption matrix. See
 [implementation contract and evidence](docs/multiple-desktop-connections.md).
 FX-BF-108 remains Backlog; FX-BE-167–169 stay behind their delivery gates.
+
+## Mobile home and scheduled runs — 2026-10-24
+
+Home now follows desktop Easy Mode without the obsolete All / Live / Gates
+filters. Activity and live Attention remain accessible, and active/waiting
+sessions stay visible when completed history is collapsed.
+
+Mobile surface revision 8 adds project-scoped scheduled-run reads, draft
+creation from ordered project tickets, arm/hold, and explicit missed-run
+start-now/skip decisions. Definitions use the desktop's existing persistent
+store and core scheduling rules. Desktop edits invalidate the phone's list
+through the encrypted event stream; reconnect re-reads it. Late reads and
+identity prompts cannot apply to another desktop. The composer explicitly
+uses UTC; existing schedules show their configured zone and phone-local start.
+
+This checkout's desktop scheduling support is planning-only: it does not
+contain the automatic ticket-execution runner. The API reports that capability
+and mobile displays it. These changes do not implement the execution runner.
+Hook-driven session lifecycle and permission updates continue through existing
+session snapshots; the bounded latest event now appears on active home cards,
+with an explicit action-required callout for waiting sessions. No second hook
+listener is installed on the phone.
+
+Verification: core and desktop compile; all 106 tests in desktop `test:mobile`, 50 focused shared-core tests and all
+121 Flutter tests pass; Flutter analysis is clean; iOS simulator debug build
+succeeds. Real-protocol tests cover creation, ordered tickets, arming, desktop
+change events, command replay, project access and desktop switching. Simulator
+checks use the sample host, including the themed editor, repeated draft saves,
+Hold, and the identity gate before Arm (cancelled at the simulator passcode
+prompt). Physical-device and actual desktop application acceptance are not
+claimed. One earlier simulator save hit a Flutter lifecycle assertion; the
+final build's modal regression test and subsequent live saves pass.
+
+Screenshots: `.praxis/session-artifacts/mobile-scheduled-runs.png` and
+`.praxis/session-artifacts/mobile-schedule-editor.png`.

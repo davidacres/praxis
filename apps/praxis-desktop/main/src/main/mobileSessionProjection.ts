@@ -58,6 +58,7 @@ export function mobileSessionSummary(record: AgentSessionRecord): MobileSessionS
     ...(record.parentSessionKey ? { parentSessionKey: record.parentSessionKey } : {}),
     title: record.title?.trim() || record.taskDefinition.goal.trim() || record.issueKey,
     lifecycle: lifecycleFor(record),
+    ...(record.events.at(-1)?.summary?.trim() ? { latestActivity: record.events.at(-1)!.summary.trim().slice(0, 280) } : {}),
     ...(record.provider ? { provider: record.provider } : {}),
     ...(record.model ? { model: record.model } : {}),
     mode: record.mode ?? 'chat',

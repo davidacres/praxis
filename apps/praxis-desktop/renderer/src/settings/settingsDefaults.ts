@@ -90,6 +90,7 @@ export const DEFAULT_WORKING_STYLE = [
 ].join('\n');
 
 export const DEFAULT_APP_SETTINGS = {
+  notifications: { completed: true, failed: true, needsAttention: true, sound: true, suppressWhenViewing: true },
   ai: {
     gatewayUrl: '',
     defaultModel: '',

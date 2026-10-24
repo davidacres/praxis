@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AgentSessionRecord, AgentTaskState } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
+import { sessionVisualState, sessionStatusLabel } from '../../ai/aiSessionState';
 import { StatusGlyph } from '../../ui/StatusGlyph';
 import { useDialogs } from '../../ui/dialogs';
 import { sessionTitle, extractSubagents, formatStarted, extractSessionAiProviders } from '../../ai/sessionNav';
@@ -265,10 +266,10 @@ export function EasyModeSessionCard({
 
         <div className="easymode-session-card__status-col">
           <StatusGlyph
-            status={session.state}
+            status={sessionVisualState(session)}
             size="md"
             title={
-              session.state === 'awaiting_approval'
+              session.backgroundTasks?.length ? sessionStatusLabel(session) : session.state === 'awaiting_approval'
                 ? 'Action Gate: Approval required'
                 : session.state === 'awaiting_input'
                   ? 'Action Gate: Input required'

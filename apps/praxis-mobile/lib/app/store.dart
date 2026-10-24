@@ -40,6 +40,7 @@ class WorkItem {
     this.mode = 'chat',
     this.draft = false,
     this.selection,
+    this.latestActivity,
   });
 
   final String workId;
@@ -51,6 +52,7 @@ class WorkItem {
   final String? provider;
   final String? model;
   final String mode;
+  final String? latestActivity;
 
   /// Not yet created on the desktop; [selection] is what the first message will launch.
   final bool draft;
@@ -68,6 +70,7 @@ class WorkItem {
     mode: mode,
     draft: draft,
     selection: selection,
+    latestActivity: latestActivity,
   );
 }
 
@@ -75,6 +78,7 @@ WorkItem workFromSession(SessionSnapshot session) => WorkItem(
   workId: session.sessionKey,
   title: session.title,
   status: session.lifecycle,
+  latestActivity: session.latestActivity,
   sessionId: session.sessionId,
   mode: session.mode,
   provider: session.provider,
@@ -438,6 +442,9 @@ class AppStore extends ChangeNotifier {
   final Map<String, RunSummary> runs = {};
   List<RunSnapshot> workflowRuns = const [];
   bool runsSupported = false;
+  Remote<List<ScheduledRunSnapshot>> schedules = const Remote(RemoteStatus.idle);
+  int _scheduleRead = 0;
+  bool get schedulesSupported => _supports('scheduledRuns.list');
   String? openWorkId;
   String? openRunId;
   ConnectionIssue? connectionIssue;
@@ -622,6 +629,8 @@ class AppStore extends ChangeNotifier {
     final event = envelope['event'];
     if (event is! Map<String, dynamic>) return;
     switch (event['type']) {
+      case 'scheduledRuns.changed':
+        refreshSchedules();
       case 'host.appearance':
         _wearAppearance(event['appearance']);
       case 'run.snapshot':
@@ -800,6 +809,7 @@ class AppStore extends ChangeNotifier {
       workflowRuns = const [];
       openRunId = null;
     }
+    if (schedulesSupported) await _loadSchedules(connection);
     _polledAttention = (await _readList(connection, 'attention.list', target)).whereType<Map<String, dynamic>>().map(AttentionItem.fromJson).toList();
     Diagnostics.instance.refreshSucceeded();
     _changed();
@@ -1040,6 +1050,8 @@ class AppStore extends ChangeNotifier {
     runs.clear();
     workflowRuns = const [];
     runsSupported = false;
+    schedules = const Remote(RemoteStatus.idle);
+    _scheduleRead++;
     openRunId = null;
     providers = const Remote(RemoteStatus.idle);
     models.clear();
@@ -1421,6 +1433,83 @@ class AppStore extends ChangeNotifier {
     await _command('workflowGates.reject', 'reject', {'runId': runId}, {'reason': reason.trim()});
     _markResolved('approval:$runId');
     return true;
+  }
+
+  Future<void> _loadSchedules(NativeMobileConnection connection) async {
+    final request = ++_scheduleRead;
+    schedules = Remote(RemoteStatus.loading, schedules.value);
+    _changed();
+    try {
+      final listed = await _readList(
+        connection,
+        'scheduledRuns.list',
+        _target(),
+      );
+      _ensureCurrent(connection);
+      if (request != _scheduleRead) return;
+      schedules = Remote(
+        RemoteStatus.ready,
+        listed
+            .whereType<Map<String, dynamic>>()
+            .map(ScheduledRunSnapshot.new)
+            .where((run) => run.projectId == project.projectId)
+            .toList(),
+      );
+    } catch (error) {
+      if (!_current(connection) || request != _scheduleRead) return;
+      schedules = Remote(
+        RemoteStatus.error,
+        schedules.value,
+        Diagnostics.messageOf(error),
+      );
+    }
+    _changed();
+  }
+
+  Future<void> refreshSchedules() async {
+    final connection = _live;
+    if (connection != null && schedulesSupported) {
+      await _loadSchedules(connection);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> scheduleTickets() async {
+    final connection = _requireConnection();
+    final result = await _readList(connection, 'work.list', _target());
+    _ensureCurrent(connection);
+    return result.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<void> createSchedule(Map<String, Object?> input) async {
+    final connection = _requireConnection();
+    if (!_offers('scheduledRuns.save')) throw StateError(_updateDesktop);
+    await _command('scheduledRuns.save', 'schedule', const {}, input);
+    _ensureCurrent(connection);
+    await refreshSchedules();
+  }
+
+  Future<void> changeSchedule(
+    String id, {
+    bool? armed,
+    String? resolution,
+  }) async {
+    final connection = _requireConnection();
+    final operation = armed != null
+        ? 'scheduledRuns.setArmed'
+        : 'scheduledRuns.resolveMissed';
+    if (!_offers(operation)) throw StateError(_updateDesktop);
+    if ((armed == true || resolution == 'start-now') &&
+        !await _identityCheck('Arm this scheduled run on $desktopLabel')) {
+      return;
+    }
+    _ensureCurrent(connection);
+    await _command(operation, 'schedule', const {}, {
+      'id': id,
+      if (armed != null) 'armed': armed,
+      if (resolution != null) 'resolution': resolution,
+    });
+    _ensureCurrent(connection);
+    await refreshSchedules();
   }
 
   Future<void> loadRun(String runId) async {

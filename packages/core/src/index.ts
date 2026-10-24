@@ -197,3 +197,5 @@ export * from './workflows/checkEnvironmentFailure';
 
 export * from './projects/projectActivity';
 export * from './codeIntelligence/runtimePaths';
+
+export * from './ai/backgroundTasks';

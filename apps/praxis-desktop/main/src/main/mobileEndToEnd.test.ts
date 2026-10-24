@@ -221,7 +221,7 @@ test('the phone lists providers and models, and the desktop launches exactly the
   const phone = nodeClient(server.port!, hostKey, phoneKey);
   try {
     const mirror = await phoneMirror(phone);
-    assert.equal(mirror.info.surfaceRevision, 7);
+    assert.equal(mirror.info.surfaceRevision, 8);
 
     // (1) the real provider list reaches the phone — availability, labels, no secrets
     const providers = await phone.read<MobileProviderCatalog>(read('providers.list'));

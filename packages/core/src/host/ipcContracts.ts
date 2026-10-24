@@ -227,11 +227,24 @@ export interface FolderIpc {
   discoverPlans(connectionId: string): Promise<IdentifiedPlanFolder[]>;
 }
 
+/** Destination opened by a desktop task notification. */
+export interface TaskNotificationTarget {
+  sessionKey?: string;
+  runId?: string;
+  workflowId?: string;
+  projectId?: string;
+  conversation?: boolean;
+}
+
 /**
  * Window chrome control. The app runs frameless (no native title bar or menu), so the renderer
  * owns the caption buttons and needs to drive the native window itself.
  */
 export interface WindowIpc {
+  /** Reports the current destination for focused-window notification suppression. */
+  setNotificationView(target: TaskNotificationTarget): Promise<void>;
+  /** Opens the destination when a native task notification is clicked. */
+  onNotificationOpen(listener: (target: TaskNotificationTarget) => void): () => void;
   /** Reloads the current renderer window without quitting the desktop process. */
   reload(): Promise<void>;
   minimize(): Promise<void>;

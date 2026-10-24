@@ -41,7 +41,7 @@ void main() {
     expect(statuses, ['pairing-required', 'pairing-pending', 'ready']);
 
     final info = await client.read(_read('host.info')) as Map<String, dynamic>;
-    expect(info['surfaceRevision'], 7);
+    expect(info['surfaceRevision'], 8);
     final sessions = await client.read(_read('sessions.list')) as List<dynamic>;
     expect(sessions, isNotEmpty);
     final standaloneList = _read('sessions.list');

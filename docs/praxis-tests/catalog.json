@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 692,
+  "testCount": 701,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -3302,6 +3302,102 @@
       }
     },
     {
+      "id": "PT-CC54F83A0D",
+      "title": "background completion arrives after the turn, updates the session, and notifies once",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts",
+        "line": 26,
+        "project": "functional"
+      },
+      "area": "background Tasks",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "background completion arrives after the turn, updates the session, and notifies once",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-B61A27A5EB",
+      "title": "background failure is reported after the foreground reply",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts",
+        "line": 69,
+        "project": "functional"
+      },
+      "area": "background Tasks",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "background failure is reported after the foreground reply",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-0D80392F88",
+      "title": "a lost background connection becomes unknown rather than completed",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts",
+        "line": 71,
+        "project": "functional"
+      },
+      "area": "background Tasks",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a lost background connection becomes unknown rather than completed",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-FE74B5E007",
+      "title": "native subagent completion is distinct from successful spawn",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts",
+        "line": 73,
+        "project": "functional"
+      },
+      "area": "background Tasks",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "native subagent completion is distinct from successful spawn",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-A1760EEA2F",
+      "title": "AIR child completion and its result reach the owning session separately from the parent transcript",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts",
+        "line": 75,
+        "project": "functional"
+      },
+      "area": "background Tasks",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "AIR child completion and its result reach the owning session separately from the parent transcript",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-A9058D99D0",
+      "title": "a direct API agent shell process reports its exit after the AI reply without inventing success",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/backgroundTasks.spec.ts",
+        "line": 78,
+        "project": "functional"
+      },
+      "area": "background Tasks",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a direct API agent shell process reports its exit after the AI reply without inventing success",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-E3A403D47C",
       "title": "Bifrost preset saves a virtual key and runs a streamed session on its exact endpoint",
       "source": {
@@ -4939,7 +5035,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/coordinationWait.spec.ts",
-        "line": 145,
+        "line": 147,
         "project": "functional"
       },
       "area": "coordination Wait",
@@ -5682,6 +5778,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "project Git navigation opens the graph for its workspace repository",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-6B6471DE4C",
+      "title": "a real AI creates a calculator application through Governed delivery and passes QA",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/governedApplication.live.spec.ts",
+        "line": 26,
+        "project": "functional"
+      },
+      "area": "governed Application.live",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a real AI creates a calculator application through Governed delivery and passes QA",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -9170,6 +9282,38 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "generate master plan writes plans/master-plan.md under the working directory",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-DECD91D299",
+      "title": "desktop notification preferences persist, live transitions deliver once, and clicks open the session",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/taskNotifications.spec.ts",
+        "line": 9,
+        "project": "functional"
+      },
+      "area": "task Notifications",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "desktop notification preferences persist, live transitions deliver once, and clicks open the session",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-E3EDB999D6",
+      "title": "workflow transitions notify once and clicking opens the run in its project",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/taskNotifications.spec.ts",
+        "line": 84,
+        "project": "functional"
+      },
+      "area": "task Notifications",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "workflow transitions notify once and clicking opens the run in its project",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

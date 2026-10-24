@@ -1,3 +1,6 @@
+import { getServiceForConnection } from './serviceRegistry';
+import { createMobileSchedules } from './mobileScheduledRuns';
+import { getScheduledRunStore, notifyScheduledRunsChanged, onDidChangeScheduledRuns } from './scheduledRunInstance';
 /**
  * Supplies the real `MobileHostServiceDeps` from the running desktop stores and
  * assembles the `MobileHostApplication` that `registerMobileElectronIpc` serves.
@@ -279,7 +282,7 @@ export function createDesktopMobileHostServiceDeps(
       for (const run of runStore().forProject(projectId)) {
         if (run.issueKey) runsByWork.set(run.issueKey, run.runId);
       }
-      return project.workItems.map((item): MobileWorkItem => ({
+      return (await mobileProjectTickets(projectId)).map((item): MobileWorkItem => ({
         workId: item.key,
         title: item.summary,
         status: item.status,
@@ -296,6 +299,13 @@ export function createDesktopMobileHostServiceDeps(
       if (!record) return undefined;
       return mobileSessionSnapshot(withRunProject(record), ledger.latestSequence(), resolveMobileGadgets);
     },
+    schedules: createMobileSchedules({
+      store: getScheduledRunStore,
+      changed: notifyScheduledRunsChanged,
+      tickets: async projectId => {
+        return (await mobileProjectTickets(projectId)).map(item => ({ connectionId: `project:${projectId}`, issueKey: item.key, title: item.summary }));
+      },
+    }),
     listWorkflows: async projectId => listWorkflowChoices(projectId),
     listRuns: async projectId => runStore()
       .forProject(projectId)
@@ -423,6 +433,21 @@ export function createDesktopMobileHostServiceDeps(
   };
 }
 
+/** Resolve through the project's actual backend, including folder-backed projects. */
+async function mobileProjectTickets(projectId: string) {
+  const project = getProjectStore().get(projectId);
+  if (!project) throw new Error('That project no longer exists.');
+  const service = await getServiceForConnection(`project:${projectId}`);
+  const items = [];
+  for (let offset = 0; ; ) {
+    const page = await service.getIssues({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, offset, 200);
+    items.push(...page.issues);
+    if (!page.hasMore || page.issues.length === 0) break;
+    offset += page.issues.length;
+  }
+  return items;
+}
+
 export function composeDesktopMobileHost(hostId?: string): MobileHostApplication {
   const ledger = new InMemoryMobileCommandLedger();
   const deps = createDesktopMobileHostServiceDeps(hostId, ledger);
@@ -452,6 +477,12 @@ export function composeDesktopMobileHost(hostId?: string): MobileHostApplication
     }
     runProjects.set(runId, run.projectId);
     appendMobileRunEvent(ledger, deps.hostId, { summary: summarize(run) });
+  });
+  onDidChangeScheduledRuns(projectId => {
+    const sequence = ledger.latestSequence() + 1;
+    ledger.appendEvent({ protocolVersion: 1, eventId: `schedules:${sequence}`, sequence,
+      emittedAt: new Date().toISOString(), target: { hostId: deps.hostId, projectId },
+      event: { type: 'scheduledRuns.changed' } });
   });
   onDidChangeDesktopAppearance(appearance => appendMobileAppearanceEvent(ledger, deps.hostId, appearance));
   return app;

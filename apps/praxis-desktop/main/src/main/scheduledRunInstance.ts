@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+import { broadcastToAllWindows } from './windowBroadcast';
 import * as path from 'node:path';
 import { app } from 'electron';
 import {
@@ -104,4 +106,14 @@ export async function buildScheduledRunView(run: ScheduledRun, all: ScheduledRun
   });
   const start = instantToZonedParts(run.scheduledStartAt, run.timezone) ?? { date: '', time: '' };
   return { run, readiness, start };
+}
+
+const scheduleEvents = new EventEmitter();
+export function onDidChangeScheduledRuns(listener: (projectId: string) => void): () => void {
+  scheduleEvents.on('changed', listener);
+  return () => { scheduleEvents.off('changed', listener); };
+}
+export function notifyScheduledRunsChanged(projectId?: string): void {
+  broadcastToAllWindows('scheduledRuns:changed');
+  if (projectId) scheduleEvents.emit('changed', projectId);
 }

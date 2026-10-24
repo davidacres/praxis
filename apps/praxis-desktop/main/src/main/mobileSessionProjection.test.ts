@@ -190,3 +190,13 @@ test('a gadget answer is not repeated as a user message on the phone', () => {
     ['assistant', 'Streaming now'],
   ]);
 });
+
+test('home activity follows the latest hook-driven event and is bounded', () => {
+  const session = record({ events: [{ type: 'tool_start', timestamp: '2026-10-24T08:00:00.000Z', summary: 'Reading project files' }] });
+  assert.equal(mobileSessionSnapshot(session, 1).latestActivity, 'Reading project files');
+  session.events.push({ type: 'task_complete', timestamp: '2026-10-24T08:01:00.000Z', summary: 'x'.repeat(1000) });
+  session.state = 'completed';
+  const finished = mobileSessionSnapshot(session, 2);
+  assert.equal(finished.lifecycle, 'completed');
+  assert.equal(finished.latestActivity?.length, 280);
+});

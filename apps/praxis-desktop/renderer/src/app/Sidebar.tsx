@@ -12,7 +12,7 @@ import type {
   WorkflowRunSummary,
   WorkspaceRecord
 } from '@praxis/core';
-import { agentStateLabel, agentStateLaneClass, isTerminalAgentState } from '../ai/aiSessionState';
+import { agentStateLaneClass, isTerminalAgentState, sessionVisualState, sessionStatusLabel } from '../ai/aiSessionState';
 import { extractSessionAiProviders, formatElapsed, formatTokenCompact, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { providerLabel } from '../ai/modelProviders';
@@ -323,8 +323,8 @@ function ProjectSessionRow({
                 )}
                 <span className="easymode-session-card__model-tag session-nav-card-runtime">{[modelName ?? runtimeLabel, session.tokenUsage?.totalTokens ? `${formatTokenCompact(session.tokenUsage.totalTokens)} tok` : undefined].filter(Boolean).join(' · ')}</span>
                 {/* E6: state is one dot at the end of the meta line, under the time. */}
-                <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`} data-testid="session-nav-state">
-                  <span className={`ledger-dot ${ledgerTone(session.state === 'completed' ? 'done' : session.state === 'failed' || session.state === 'aborted' ? 'failed' : session.state === 'not_started' || session.state === 'paused' ? 'idle' : 'running')}`} role="img" aria-label={agentStateLabel(session.state)} title={agentStateLabel(session.state)} />
+                <span className={`session-nav-card-status ${agentStateLaneClass(sessionVisualState(session))}`} data-testid="session-nav-state">
+                  <span className={`ledger-dot ${ledgerTone(sessionVisualState(session) === 'completed' ? 'done' : sessionVisualState(session) === 'failed' || sessionVisualState(session) === 'aborted' ? 'failed' : sessionVisualState(session) === 'not_started' || sessionVisualState(session) === 'paused' ? 'idle' : 'running')}`} role="img" aria-label={sessionStatusLabel(session)} title={sessionStatusLabel(session)} />
                 </span>
               </div>
             )}
@@ -2052,11 +2052,11 @@ function SessionsNav({
               </div>}
             </div>
             <div className="easymode-session-card__status-col">
-              <span className={`session-nav-card-status ${agentStateLaneClass(session.state)}`} data-testid="session-nav-state">
+              <span className={`session-nav-card-status ${agentStateLaneClass(sessionVisualState(session))}`} data-testid="session-nav-state">
                 <StatusGlyph
-                  status={session.state}
+                  status={sessionVisualState(session)}
                   size="md"
-                  title={agentStateLabel(session.state)}
+                  title={sessionStatusLabel(session)}
                 />
               </span>
             </div>

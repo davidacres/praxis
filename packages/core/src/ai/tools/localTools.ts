@@ -4,10 +4,10 @@ import * as nodePath from 'node:path';
 import * as nodeOs from 'node:os';
 import type { GatewayToolDefinition } from '../gateway';
 import type { WireImageAttachment } from '../gateway/wire';
-import type { AgentToolEventData, AgentToolMode } from '../agentTypes';
+import type { BackgroundTask, AgentToolEventData, AgentToolMode } from '../agentTypes';
 import { PathSandboxError, resolveSandboxedPath, readSandboxedFile, writeSandboxedFile, listSandboxedDirectory } from './pathSandbox';
 import { createUnifiedDiff } from './unifiedDiff';
-import { listeningPorts, processGroupMembers, runShellCommand, stopProcessGroup } from './processTree';
+import { listeningPorts, processGroupMembers, readProcessGroupMembers, runShellCommand, stopProcessGroup } from './processTree';
 
 export type PermissionDecision = 'allow_once' | 'allow_always' | 'deny';
 
@@ -21,6 +21,7 @@ export interface ToolPermissionRequest {
 }
 
 export interface LocalToolContext {
+  onBackgroundTask?: (task: BackgroundTask) => void;
   workingDirectory: string;
   toolMode?: AgentToolMode;
   requestPermission: (request: ToolPermissionRequest) => Promise<PermissionDecision>;
@@ -428,7 +429,7 @@ export interface TrackedService {
   startedAt: number;
 }
 
-const services = new Map<number, TrackedService & { releases: Array<(evidence?: string) => Promise<void>>; timer: NodeJS.Timeout; checking?: boolean }>();
+const services = new Map<number, TrackedService & { releases: Array<(evidence?: string) => Promise<void>>; timer: NodeJS.Timeout; report?: (task: BackgroundTask) => void; checking?: boolean; unobserved?: boolean }>();
 const SERVICE_POLL_MS = 2000;
 
 /** Services started by agent shell commands in this process that are still running. */
@@ -455,6 +456,7 @@ async function settleService(pgid: number, how: string): Promise<void> {
   if (!service) return;
   services.delete(pgid);
   clearInterval(service.timer);
+  service.report?.({ id: `shell:${pgid}:${service.startedAt}`, source: 'shell', label: service.command, state: how === 'exited' ? 'exited' : 'stopped', startedAt: new Date(service.startedAt).toISOString(), updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), detail: how === 'exited' ? 'All observed processes exited. Their final exit code is unavailable.' : how });
   for (const release of service.releases) await release(`its processes (group ${pgid}) ${how}`).catch(() => undefined);
 }
 
@@ -496,7 +498,16 @@ async function trackService(ctx: LocalToolContext, command: string, pgid: number
   const timer = setInterval(() => {
     const service = services.get(pgid);
     if (!service || service.checking) return;
-    const members = processGroupMembers(pgid);
+    const members = readProcessGroupMembers(pgid);
+    if (!members) {
+      if (!service.unobserved) service.report?.({ id: `shell:${pgid}:${service.startedAt}`, source: 'shell', label: service.command, state: 'unknown', startedAt: new Date(service.startedAt).toISOString(), updatedAt: new Date().toISOString(), detail: 'Process observation failed. Completion has not been confirmed; Praxis will retry.' });
+      service.unobserved = true;
+      return;
+    }
+    if (service.unobserved && members.length > 0) {
+      service.unobserved = false;
+      service.report?.({ id: `shell:${pgid}:${service.startedAt}`, source: 'shell', label: service.command, state: 'running', startedAt: new Date(service.startedAt).toISOString(), updatedAt: new Date().toISOString(), detail: 'Process observation resumed.' });
+    }
     if (members.length === 0) {
       void settleService(pgid, 'exited');
       return;
@@ -507,7 +518,9 @@ async function trackService(ctx: LocalToolContext, command: string, pgid: number
     });
   }, SERVICE_POLL_MS);
   timer.unref?.();
-  services.set(pgid, { pgid, command, workingDirectory: ctx.workingDirectory, ports: [], startedAt: Date.now(), releases: decision?.ok ? [decision.release] : [], timer });
+  services.set(pgid, { pgid, command, workingDirectory: ctx.workingDirectory, ports: [], startedAt: Date.now(), releases: decision?.ok ? [decision.release] : [], timer, report: ctx.onBackgroundTask });
+  const service = services.get(pgid)!;
+  service.report?.({ id: `shell:${pgid}:${service.startedAt}`, source: 'shell', label: command, state: 'running', startedAt: new Date(service.startedAt).toISOString(), updatedAt: new Date().toISOString(), detail: 'Praxis is watching the processes left running by this shell command.' });
   const ports = await claimNewPorts(gate, pgid, survivors);
   const what = `${survivors.length} process${survivors.length === 1 ? '' : 'es'} (group ${pgid})${ports.claimed.length ? `, listening on port ${ports.claimed.join(', ')}` : ''}`;
   const refused = decision && !decision.ok ? decision.reason : ports.refused;

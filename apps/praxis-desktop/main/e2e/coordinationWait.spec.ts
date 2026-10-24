@@ -124,7 +124,8 @@ test('a server an agent left running stays claimed after its turn, and Stop in t
     repo
   );
   await openSession(win);
-  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 20000 });
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Background running', { timeout: 20000 });
+  await expect(win.locator('[data-testid="session-background-task"]')).toHaveAttribute('data-state', 'running');
   // The server is usually still starting when the shell returns: its port is claimed when it opens.
   expect(mock.requests[1].body).toMatch(/Still running in the background: 1 process \(group \d+\)/);
 
@@ -140,6 +141,7 @@ test('a server an agent left running stays claimed after its turn, and Stop in t
   await service.locator('[data-testid="session-coordination-stop"]').click();
   await expect(panel.locator('[data-testid="session-coordination-claim"]')).toHaveCount(0, { timeout: 10000 });
   expect(() => process.kill(-pgid, 0)).toThrow();
+  await expect(win.locator('[data-testid="session-background-task"]')).toHaveAttribute('data-state', 'stopped');
 });
 
 test('a person clicking in the in-app browser takes it from the agent driving it', async () => {

@@ -107,6 +107,7 @@ export async function launchTestApp(
     );
     const seedAi = (seedSettings?.ai ?? {}) as Record<string, unknown>;
     seedSettings = {
+      notifications: { completed: false, failed: false, needsAttention: false },
       ...seedSettings,
       ai: { workingDirectory: userDataDir, ...seedAi, providers: { ...isolatedProviders, ...((seedAi.providers ?? {}) as Record<string, unknown>) } }
     };

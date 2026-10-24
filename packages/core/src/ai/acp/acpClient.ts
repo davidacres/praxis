@@ -1,3 +1,4 @@
+import { readProviderBackgroundUpdate, readUnobservedBackgroundLaunch, type ProviderBackgroundUpdate } from '../backgroundTasks';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { refusalForAgent, type CoordinationGate } from '../coordination/coordinationGate';
 import { PROCESS_GROUPS_SUPPORTED, processGroupMembers, stopProcessGroup } from '../tools/processTree';
@@ -150,6 +151,8 @@ export interface AcpClientOptions {
   >;
   requestPermission: (request: AcpPermissionRequest) => Promise<PermissionDecision>;
   onSessionUpdate: (update: acp.SessionUpdate) => void;
+  onBackgroundTaskUpdate?: (update: ProviderBackgroundUpdate) => void;
+  onTransportClosed?: () => void;
   onCursorAskQuestion?: (request: CursorAskQuestionRequest) => Promise<CursorAskQuestionResponse>;
   onCursorCreatePlan?: (request: CursorCreatePlanRequest) => Promise<CursorCreatePlanResponse>;
   onCursorUpdateTodos?: (notification: CursorUpdateTodosNotification) => void;
@@ -225,6 +228,7 @@ export class AcpClientWrapper {
    * forward notifications while `session/prompt` itself is in flight.
    */
   private promptInFlight = false;
+  private acceptingBackgroundUpdates = false;
   private lastReplayNotificationAt = 0;
   private disposed = false;
   private shuttingDown = false;
@@ -278,6 +282,7 @@ export class AcpClientWrapper {
       this.options.logSink?.appendLine(`[acp] subprocess error: ${err.message}`);
     });
     child.on('exit', (code, signal) => {
+      this.options.onTransportClosed?.();
       if (this.disposed || this.shuttingDown) {
         return;
       }
@@ -297,6 +302,46 @@ export class AcpClientWrapper {
       Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
     );
 
+    const toolNames = new Map<string, string>();
+    // Native subagent traffic names its own session. Keep it separate from the
+    // parent transcript and route only lifecycle/results into its task record.
+    const childSessions = new Set<string>();
+    const childResults = new Map<string, string>();
+    const readable = stream.readable.pipeThrough(new TransformStream({
+      transform: (message, controller) => {
+        const params = 'method' in message && message.method === 'session/update' ? message.params as { sessionId?: string; update?: unknown } : undefined;
+        const wireUpdate = params?.update && typeof params.update === 'object' ? params.update as Record<string, unknown> : undefined;
+        if (wireUpdate && typeof wireUpdate.toolCallId === 'string') {
+          const name = typeof wireUpdate.title === 'string' && /^(Start|Complete|Interrupt) subagent /i.test(wireUpdate.title) ? wireUpdate.title : typeof wireUpdate.name === 'string' ? wireUpdate.name : typeof wireUpdate.title === 'string' ? wireUpdate.title : undefined;
+          if (name) {
+            if (toolNames.size >= 1000) toolNames.delete(toolNames.keys().next().value!);
+            toolNames.set(wireUpdate.toolCallId, name);
+          }
+        }
+        const observedUpdate = wireUpdate && typeof wireUpdate.toolCallId === 'string'
+          ? { ...wireUpdate, title: wireUpdate.title ?? toolNames.get(wireUpdate.toolCallId) } : wireUpdate;
+        const extension = readProviderBackgroundUpdate(observedUpdate);
+        const kind = params?.update && typeof params.update === 'object' ? (params.update as { sessionUpdate?: string }).sessionUpdate : undefined;
+        const isAsyncExtension = kind === 'async_task_spawned' || kind === 'async_task_progress' || kind === 'async_task_state_update' || kind === 'subagent_spawned' || kind === 'subagent_state_update';
+        const isChild = !!params?.sessionId && childSessions.has(params.sessionId);
+        if (params && (params.sessionId === this.sessionId || isChild) && this.acceptingBackgroundUpdates) {
+          if (kind === 'subagent_spawned' && typeof wireUpdate?.subagentSessionId === 'string') childSessions.add(wireUpdate.subagentSessionId);
+          if (isChild && kind === 'agent_message_chunk') {
+            const content = wireUpdate?.content as { type?: string; text?: string } | undefined;
+            if (content?.type === 'text' && typeof content.text === 'string') childResults.set(params.sessionId!, ((childResults.get(params.sessionId!) ?? '') + content.text).slice(-2000));
+          }
+          const update = extension ?? readUnobservedBackgroundLaunch(params.update);
+          if (update) {
+            const result = kind === 'subagent_state_update' && typeof wireUpdate?.subagentSessionId === 'string' ? childResults.get(wireUpdate.subagentSessionId) : undefined;
+            this.options.onBackgroundTaskUpdate?.({ ...update, detail: update.detail ?? result });
+          }
+        }
+        // The installed stable SDK rejects extension variants; consume only the
+        // negotiated variants and child traffic here; standard parent messages
+        // continue through the installed stable SDK unchanged.
+        if (!isAsyncExtension && !isChild) controller.enqueue(message);
+      }
+    }));
     const app = acpModule.client({ name: 'praxis' });
 
     app.onRequest(acpModule.CLIENT_METHODS.session_request_permission, async ctx => {
@@ -394,11 +439,12 @@ export class AcpClientWrapper {
       this.options.onCursorGenerateImage?.(ctx.params);
     });
 
-    this.connection = app.connect(stream);
+    this.connection = app.connect({ ...stream, readable });
 
     this.initializeResponse = await this.connection.agent.request(acpModule.AGENT_METHODS.initialize, {
       protocolVersion: acpModule.PROTOCOL_VERSION,
       clientCapabilities: {
+        ...(this.options.onBackgroundTaskUpdate ? { _meta: { jetbrains: { air: { version: 1, capabilities: ['asyncTasks', 'nativeSubagentSessions'] } } } } : {}),
         fs: {
           readTextFile: this.options.toolMode !== 'project-only',
           writeTextFile: this.options.toolMode === 'full'
@@ -700,6 +746,7 @@ export class AcpClientWrapper {
       // can still be arriving after any single fixed wait.
       await this.waitForReplayToQuiet();
       this.promptInFlight = true;
+      this.acceptingBackgroundUpdates = true;
       try {
         return await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_prompt, {
           sessionId: this.resumedSessionId!,
@@ -715,6 +762,7 @@ export class AcpClientWrapper {
       }
     }
     const session = await this.ensureSession();
+    this.acceptingBackgroundUpdates = true;
     const promptPromise = session.prompt(promptContent);
     for (;;) {
       const message = await session.nextUpdate();

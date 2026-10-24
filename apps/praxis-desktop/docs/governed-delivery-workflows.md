@@ -80,6 +80,37 @@ project points `praxis-planner` / `praxis-implementer` / `praxis-test-author` /
 `praxis-reviewer` at real agents, and the designer's template list flags any id
 that does not resolve *before* a run starts.
 
+## Live application smoke test
+
+The opt-in `main/e2e/governedApplication.live.spec.ts` test asks a real Claude
+Code ACP agent to create a calculator CLI from a scaffold with no implementation.
+It instantiates the current built-in Governed delivery template, including the
+test author, review, install, build, QA, security and human approval stages.
+
+After building the desktop renderer, copying it and compiling the host, run:
+
+```bash
+cd apps/praxis-desktop/main
+PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent governedApplication
+```
+
+This spends real model calls using the CLI's signed-in account. The default
+adapter is `claude-agent-acp`; override it with `PRAXIS_LIVE_AGENT_CMD`. Allow up
+to 45 minutes. It is excluded from ordinary desktop runs.
+
+Success requires every verification stage to succeed with evidence and the run
+to reach human approval. The test also runs separate acceptance checks against
+the built CLI and verifies that the original checkout was not delivered into.
+It does not approve or merge. A pause, exhausted loop, failed stage or timeout
+fails the test rather than counting as delivery success.
+
+Each attempt retains its repository, isolated profile, worktree, progress log,
+run summary and stage reports under
+`apps/praxis-desktop/.praxis/session-artifacts/governed-application-*`.
+The run summary is also attached to the Playwright result. Use its QA evidence
+path and attempt counts to distinguish actual check failures from provider or environment
+pauses; there are no harness retries that hide a flaky run.
+
 ## Fix loops
 
 A finding can send work back. In Governed delivery, a review finding at `high` or above loops back

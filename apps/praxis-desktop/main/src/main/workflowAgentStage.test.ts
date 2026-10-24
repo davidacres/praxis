@@ -1,3 +1,4 @@
+import { stageSessionCompletion } from './workflowAgentStage';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { IssueDetails, IssueTrackerService } from '@praxis/core';
@@ -89,4 +90,13 @@ test('resolveStageTicketContext tolerates missing or deleted tickets gracefully 
   );
 
   assert.deepEqual(result, {});
+});
+
+
+test('a stage waits for provider background work and cannot claim success from an unknown or failed result', () => {
+  const background = { id: 'bg', source: 'provider' as const, label: 'Checks', startedAt: '2026-01-01', updatedAt: '2026-01-01' };
+  for (const state of ['running', 'paused'] as const) assert.equal(stageSessionCompletion({ state: 'completed', backgroundTasks: [{ ...background, state }] }), undefined);
+  for (const state of ['failed', 'unknown', 'stopped'] as const) assert.equal(stageSessionCompletion({ state: 'completed', backgroundTasks: [{ ...background, state }] })?.state, 'failed');
+  assert.equal(stageSessionCompletion({ state: 'completed', backgroundTasks: [{ ...background, state: 'completed' }] })?.state, 'completed');
+  assert.equal(stageSessionCompletion({ state: 'completed', backgroundTasks: [{ ...background, source: 'shell', state: 'running' }] })?.state, 'completed', 'a long-lived service does not hold a stage open');
 });

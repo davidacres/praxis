@@ -1,0 +1,29 @@
+.session-background-tasks {
+  flex: 0 0 auto;
+  margin: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: var(--text-sm);
+  max-height: 240px;
+  overflow: auto;
+}
+.session-background-tasks summary { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.session-background-tasks summary > span { margin-left: auto; color: var(--text-secondary); }
+.session-background-tasks ul { list-style: none; padding: 0; margin: 8px 0 0; }
+.session-background-tasks li { padding: 8px 0; border-top: 1px solid var(--border); }
+.session-background-task-heading { display: flex; align-items: baseline; gap: 10px; }
+.session-background-task-heading > strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.session-background-task-heading > span { flex-shrink: 0; color: var(--text-secondary); }
+.session-background-task-state { font-weight: 600; }
+.session-background-tasks li[data-state='running'] .session-background-task-state { color: var(--accent); }
+.session-background-tasks li[data-state='failed'] .session-background-task-state { color: var(--danger); }
+.session-background-tasks li[data-state='unknown'] .session-background-task-state,
+.session-background-tasks li[data-state='paused'] .session-background-task-state { color: var(--warning); }
+.session-background-tasks p { margin: 6px 0 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.session-background-task-note { font-size: 0.92em; }
+
+.session-background-tasks summary::after { content: "▸"; color: var(--text-secondary); }
+.session-background-tasks[open] summary::after { content: "▾"; }

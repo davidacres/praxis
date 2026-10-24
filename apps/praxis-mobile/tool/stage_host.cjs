@@ -553,6 +553,7 @@ run({
   ],
 });
 
+sessions.get('sess-ci').latestActivity = 'Checking workflow cache keys';
 // ---------------------------------------------------------------- projections
 
 function snapshotOf(record, sequence = ledger.latestSequence()) {
@@ -708,7 +709,20 @@ function findGadgetView(sessionId, gadgetId) {
   return undefined;
 }
 
+const { createMobileSchedules } = require(path.join(repo, 'apps/praxis-desktop/main/out/main/mobileScheduledRuns.js'));
+const scheduleData = new Map();
+const scheduleStore = new core.ScheduledRunStore({ get: key => scheduleData.get(key), update: async (key, value) => { scheduleData.set(key, value); } });
+const scheduleTickets = [
+  { connectionId: `project:${PROJECT_ID}`, issueKey: 'PRX-101', title: 'Improve the mobile home screen' },
+  { connectionId: `project:${PROJECT_ID}`, issueKey: 'PRX-102', title: 'Verify provider hooks' },
+];
+const seedSchedule = core.createScheduledRun({ id: 'stage-schedule', projectId: PROJECT_ID, name: 'Evening mobile checks', scheduledStartAt: iso(2 * HOUR), timezone: 'Europe/London', tickets: scheduleTickets, at: iso(-MIN) });
+// The synchronous adapter applies the save immediately; these are isolated sample definitions.
+scheduleStore.save(core.armScheduledRun(seedSchedule, iso(-MIN)));
+const mobileSchedules = createMobileSchedules({ store: () => scheduleStore, tickets: async projectId => projectId === PROJECT_ID ? scheduleTickets : [], changed: projectId => emit({ type: 'scheduledRuns.changed' }, { projectId }) });
+
 const deps = {
+  schedules: mobileSchedules,
   hostId: HOST_ID,
   hostName: () => HOST_NAME,
   hostOnline: () => true,
@@ -731,7 +745,7 @@ const deps = {
   },
   listProjects: async () => [{ projectId: PROJECT_ID, name: PROJECT_NAME, workflow: 'governed-delivery' }],
   getProject: async projectId => (projectId === PROJECT_ID ? { projectId, name: PROJECT_NAME, workflow: 'governed-delivery' } : undefined),
-  listWork: async () => [],
+  listWork: async () => scheduleTickets.map(ticket => ({ workId: ticket.issueKey, title: ticket.title, status: 'Backlog' })),
   listSessions: async projectId => [...sessions.values()].filter(record => !projectId || record.projectId === projectId).sort((a, b) => b.startedAt.localeCompare(a.startedAt)).map(summaryOf),
   getSession: async sessionId => (sessions.has(sessionId) ? snapshotOf(sessions.get(sessionId)) : undefined),
   listWorkflows: async () => [
@@ -988,6 +1002,8 @@ http.createServer((request, response) => {
     publishSession(record);
   } else if (url === '/fail-next') {
     failNext = true;
+  } else if (url === '/schedule/hold') {
+    mobileSchedules.setArmed(PROJECT_ID, 'stage-schedule', false).catch(console.error);
   } else if (url === '/invitation') {
     body = invitation();
   } else {

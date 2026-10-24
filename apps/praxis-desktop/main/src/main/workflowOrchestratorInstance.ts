@@ -1,3 +1,4 @@
+import { taskNotificationPolicy, deliverTaskNotice } from './taskNotifications';
 import { projectWorkflowTrust } from './workflowProjectTrust';
 import { runAsAgent } from './projectActivityInstance';
 import { cancelWorkflowMap, runWorkflowMap } from './workflowMapRunner';
@@ -206,12 +207,14 @@ function ensureTimeoutTick(): void {
 
 export function getWorkflowOrchestrator(): WorkflowOrchestrator {
   if (!orchestrator) {
+    for (const run of new WorkflowRunStore(getWorkflowBackingStore()).list()) taskNotificationPolicy.run(run, true);
     orchestrator = new WorkflowOrchestrator({
       runs: new WorkflowRunStore(getWorkflowBackingStore()),
       dispatcher,
       workspace: createWorkflowWorkspaceProvider(),
       chooseFallbackProvider: fallbackProviderForStage,
       onRunChanged: run => {
+        deliverTaskNotice(taskNotificationPolicy.run(run));
         broadcastRunChanged(run);
         // A stage may have just gone `running`; make sure the tick is armed.
         if (Object.values(run.nodes).some(state => state.outcome === 'running')) ensureTimeoutTick();

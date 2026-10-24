@@ -10,8 +10,7 @@ import {
   type ScheduledRun,
   type ScheduledRunView
 } from '@praxis/core';
-import { broadcastToAllWindows } from './windowBroadcast';
-import { buildScheduledRunView, getScheduledRunStore } from './scheduledRunInstance';
+import { buildScheduledRunView, getScheduledRunStore, notifyScheduledRunsChanged } from './scheduledRunInstance';
 
 /**
  * Scheduled ticket runs IPC (FX-BF-047 / FX-BE-147).
@@ -21,9 +20,6 @@ import { buildScheduledRunView, getScheduledRunStore } from './scheduledRunInsta
  * live in one tested place. Nothing here starts a run: the runner is FX-BE-148,
  * which is why saving a schedule only ever changes its definition.
  */
-function changed(): void {
-  broadcastToAllWindows('scheduledRuns:changed');
-}
 
 function requireRun(id: string): ScheduledRun {
   const run = getScheduledRunStore().get(id);
@@ -48,7 +44,7 @@ export function registerScheduledRunIpc(): void {
     const { id: _id, ...form } = input;
     const run = composeScheduledRun(existing, { ...form, at: new Date().toISOString() });
     await store.save(run);
-    changed();
+    notifyScheduledRunsChanged(run.projectId);
     return buildScheduledRunView(run);
   });
 
@@ -67,22 +63,23 @@ export function registerScheduledRunIpc(): void {
   );
 
   ipcMain.handle('scheduledRuns:remove', async (_event, id: string): Promise<void> => {
+    const run = getScheduledRunStore().get(id);
     await getScheduledRunStore().remove(id);
-    changed();
+    notifyScheduledRunsChanged(run?.projectId);
   });
 
   ipcMain.handle('scheduledRuns:setArmed', async (_event, id: string, armed: boolean): Promise<ScheduledRunView> => {
     const at = new Date().toISOString();
     const run = armed ? armScheduledRun(requireRun(id), at) : holdScheduledRun(requireRun(id), at);
     await getScheduledRunStore().save(run);
-    changed();
+    notifyScheduledRunsChanged(run.projectId);
     return buildScheduledRunView(run);
   });
 
   ipcMain.handle('scheduledRuns:resolveMissed', async (_event, id: string, resolution: MissedResolution): Promise<ScheduledRunView> => {
     const run = resolveMissedScheduledRun(requireRun(id), resolution, new Date().toISOString());
     await getScheduledRunStore().save(run);
-    changed();
+    notifyScheduledRunsChanged(run.projectId);
     return buildScheduledRunView(run);
   });
 }
@@ -90,5 +87,5 @@ export function registerScheduledRunIpc(): void {
 /** Marks armed schedules whose time passed while Praxis was closed as missed. Call once at launch. */
 export async function reconcileScheduledRunsOnLaunch(): Promise<void> {
   const changedRuns = await getScheduledRunStore().reconcileOnLaunch(new Date().toISOString());
-  if (changedRuns.length > 0) changed();
+  for (const run of changedRuns) notifyScheduledRunsChanged(run.projectId);
 }

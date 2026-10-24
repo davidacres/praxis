@@ -524,7 +524,11 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     }
 
     const gate = this.coordinationFor?.(issueKey, options.workingDirectory);
+    const ownerSessionId = this.sessionManager.getAgentSession(issueKey)?.sessionId;
     const toolExecutor = new LocalToolExecutor({
+      onBackgroundTask: background => {
+        if (this.sessionManager.getAgentSession(issueKey)?.sessionId === ownerSessionId) this.sessionManager.updateBackgroundTask(issueKey, background);
+      },
       workingDirectory: options.workingDirectory,
       toolMode: options.toolMode,
       shouldAutoAllow: options.permissionMode === 'auto' ? shouldAutoAllowToolPermission : undefined,

@@ -170,7 +170,7 @@ interface HostInternals {
 }
 
 function host(): { host: AcpAgentHost; internals: HostInternals } {
-  const instance = new AcpAgentHost({} as never, { appendLine: () => {} } as never);
+  const instance = new AcpAgentHost({ getAgentSession: () => undefined } as never, { appendLine: () => {} } as never);
   return { host: instance, internals: instance as unknown as HostInternals };
 }
 

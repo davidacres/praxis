@@ -1,3 +1,4 @@
+import { taskNotificationPolicy, deliverTaskNotice } from './taskNotifications';
 import { runAsAgent } from './projectActivityInstance';
 import { takeContextSnapshot } from './contextSnapshotHost';
 import { getLogBus } from './logBusInstance';
@@ -1616,7 +1617,13 @@ export function registerAiIpc(): void {
   agentService.onDidChangeActiveTask(scheduleWhenTaskSettles);
   getAcpAgentHost().onDidChangeActiveTask(scheduleWhenTaskSettles);
 
+  for (const record of sessionManager.getAllAgentSessions().values()) {
+    taskNotificationPolicy.session(record, true);
+    taskNotificationPolicy.background(record, true);
+  }
   sessionManager.onDidChangeAgentSession((record: AgentSessionRecord) => {
+    deliverTaskNotice(taskNotificationPolicy.session(record));
+    for (const notice of taskNotificationPolicy.background(record)) deliverTaskNotice(notice);
     const { conversationHistory, ...rest } = record;
     // Only the events added since the last push travel: every streamed token
     // fires this, and a long session's event list runs to megabytes.

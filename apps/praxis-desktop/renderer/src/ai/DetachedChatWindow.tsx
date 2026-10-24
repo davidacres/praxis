@@ -34,6 +34,11 @@ export function DetachedChatWindow({ issueKey }: { issueKey: string }) {
     };
   }, [issueKey]);
 
+  useEffect(() => {
+    void window.praxis.window.setNotificationView({ sessionKey: issueKey });
+    return () => { void window.praxis.window.setNotificationView({}); };
+  }, [issueKey]);
+
   const popIn = () => {
     void window.praxis.detachedChat.close(issueKey);
   };

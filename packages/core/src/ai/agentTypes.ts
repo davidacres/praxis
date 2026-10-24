@@ -289,7 +289,8 @@ export type AgentEventType =
   | 'warning'
   | 'model_change'
   | 'provider_handover'
-  | 'conversation_turn';
+  | 'conversation_turn'
+  | 'background_task';
 
 export type AgentConversationMode = 'consult' | 'debate' | 'pair';
 export type AgentConversationState = 'idle' | 'running' | 'stopped' | 'capped' | 'failed';
@@ -444,7 +445,24 @@ export type AgentSessionChange =
   | AgentSessionRecord
   | (Omit<AgentSessionRecord, 'events'> & { events?: undefined; eventsDelta: AgentSessionEventsDelta });
 
+export type BackgroundTaskState = 'running' | 'paused' | 'completed' | 'failed' | 'stopped' | 'exited' | 'unknown';
+
+/** Work that can outlive its launching AI turn. Unknown is never a successful result. */
+export interface BackgroundTask {
+  id: string;
+  source: 'provider' | 'shell';
+  label: string;
+  state: BackgroundTaskState;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  detail?: string;
+  callId?: string;
+  producerId?: string;
+}
+
 export interface AgentSessionRecord {
+  backgroundTasks?: BackgroundTask[];
   issueKey: string;
   sessionId: string;
   /** User-editable display title. Falls back to the task goal for older records. */

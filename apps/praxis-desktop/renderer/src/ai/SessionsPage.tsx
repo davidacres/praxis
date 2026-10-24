@@ -1,3 +1,4 @@
+import { SessionBackgroundTasks } from './SessionBackgroundTasks';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
@@ -2462,6 +2463,7 @@ export function SessionsPage({
               </div>
             )}
 
+            <SessionBackgroundTasks key={selected.sessionId} session={selected} />
             {activeErrorMessage && (
               <div className="session-error-banner" data-testid="session-error-banner">
                 <Icon name="warning" size={15} />

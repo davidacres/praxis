@@ -1,3 +1,4 @@
+import type { AgentSessionRecord } from '@praxis/core';
 import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -573,7 +574,18 @@ async function removeRunFiles(worktreePath: string): Promise<void> {
 
 export async function cancelWorkflowAgentStage(runId: string, nodeId: string): Promise<void> {
   const issueKey = stageSessionKey(runId, nodeId);
-  if (hasActiveTask(issueKey)) await abortActiveTask(issueKey);
+  await abortActiveTask(issueKey);
+}
+
+/** Provider background jobs are part of the stage; shell services may deliberately outlive it. */
+export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks'>): { state: FinishedStageSession['state']; error?: string } | undefined {
+  if (record.state === 'failed' || record.state === 'aborted') return { state: record.state };
+  if (record.state !== 'completed') return;
+  const tasks = (record.backgroundTasks ?? []).filter(task => task.source === 'provider');
+  if (tasks.some(task => task.state === 'running' || task.state === 'paused')) return;
+  const unresolved = tasks.find(task => task.state !== 'completed');
+  if (unresolved) return { state: 'failed', error: `Background task "${unresolved.label}" ${unresolved.state === 'unknown' ? 'has no confirmed result' : `ended ${unresolved.state}`}. ${unresolved.detail ?? ''}`.trim() };
+  return { state: 'completed' };
 }
 
 /** Resolves when the stage's session reaches a terminal state. */
@@ -582,7 +594,7 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
   let dispose: (() => void) | undefined;
 
   const promise = new Promise<FinishedStageSession>(resolve => {
-    const settle = (state: FinishedStageSession['state']): void => {
+    const settle = (state: FinishedStageSession['state'], backgroundError?: string): void => {
       const record = sessions.getAgentSession(issueKey);
       dispose?.();
       const limitCandidate = (record?.lastError && isProviderLimitError(record.lastError))
@@ -593,7 +605,7 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
       const isLimit = Boolean(record?.providerLimitReached || limitCandidate);
       const effectiveLastError = limitCandidate
         ? extractProviderLimitMessage(limitCandidate)
-        : record?.lastError;
+        : backgroundError ?? record?.lastError;
       resolve({
         state,
         ...(record?.responseText ? { responseText: record.responseText } : {}),
@@ -604,9 +616,8 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
 
     const subscription = sessions.onDidChangeAgentSession(record => {
       if (record.issueKey !== issueKey) return;
-      if (record.state === 'completed') settle('completed');
-      else if (record.state === 'failed') settle('failed');
-      else if (record.state === 'aborted') settle('aborted');
+      const completion = stageSessionCompletion(record);
+      if (completion) settle(completion.state, completion.error);
     });
     dispose = () => subscription.dispose();
   });

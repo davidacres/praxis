@@ -21,6 +21,8 @@ import {
   type AnyGadgetEnvelope,
   type GadgetActionResult,
   type MobileCaller,
+  type MobileScheduleInput,
+  type MobileScheduledRun,
   type MobileFileDiff,
   type MobileGadgetSubmitPayload,
   type MobileSessionChanges,
@@ -70,6 +72,12 @@ export interface MobileSessionRuntimeChange {
 export type MobileDeviceRecord = Omit<MobileDeviceAccess, 'deviceId' | 'capabilities' | 'transport' | 'protocolVersion' | 'surfaceRevision'>;
 
 export interface MobileHostServiceDeps {
+  schedules?: {
+    list(projectId: string): Promise<MobileScheduledRun[]>;
+    save(projectId: string, input: MobileScheduleInput): Promise<MobileScheduledRun>;
+    setArmed(projectId: string, id: string, armed: boolean): Promise<MobileScheduledRun>;
+    resolveMissed(projectId: string, id: string, resolution: 'start-now' | 'skip'): Promise<MobileScheduledRun>;
+  };
   hostId: string;
   hostName(): string;
   hostOnline(): boolean;
@@ -305,6 +313,7 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       surfaceRevision: MOBILE_HOST_SURFACE_REVISION,
       readOperations: Object.keys(reads) as MobileReadOperation[],
       commandOperations,
+      ...(deps.schedules ? { scheduledRunExecution: 'planning-only' as const } : {}),
       latestSequence: deps.latestSequence(),
       hostEpoch: deps.hostEpoch,
       ...(deps.appearance?.() ? { appearance: deps.appearance() } : {}),
@@ -392,11 +401,37 @@ export function createMobileHostReads(deps: MobileHostServiceDeps, commandOperat
       return preview ?? {};
     },
   };
+  if (deps.schedules) reads['scheduledRuns.list'] = request => deps.schedules!.list(requireTarget(request, 'projectId'));
   return reads;
 }
 
 export function createMobileHostExecutionHandlers(deps: MobileHostServiceDeps): MobileExecutionHandlers {
   return {
+    ...(deps.schedules ? {
+      'scheduledRuns.save': async (command: MobileCommand) => {
+        const fields = ['name', 'date', 'time', 'timezone'].map(key => payloadField(command, key));
+        const keys = payloadField(command, 'issueKeys');
+        if (fields.some(value => typeof value !== 'string' || !value.trim()) ||
+            !Array.isArray(keys) || keys.length > 200 || keys.some(key => typeof key !== 'string' || !key.trim())) {
+          throw new Error('A schedule needs a name, date, time, timezone and ordered project ticket keys.');
+        }
+        return deps.schedules!.save(requireTarget(command, 'projectId'), {
+          name: fields[0] as string, date: fields[1] as string, time: fields[2] as string, timezone: fields[3] as string, issueKeys: keys,
+        });
+      },
+      'scheduledRuns.setArmed': async (command: MobileCommand) => {
+        const id = payloadField(command, 'id');
+        const armed = payloadField(command, 'armed');
+        if (typeof id !== 'string' || !id.trim() || typeof armed !== 'boolean') throw new Error('A schedule id and armed boolean are required.');
+        return deps.schedules!.setArmed(requireTarget(command, 'projectId'), id, armed);
+      },
+      'scheduledRuns.resolveMissed': async (command: MobileCommand) => {
+        const id = payloadField(command, 'id');
+        const resolution = payloadField(command, 'resolution');
+        if (typeof id !== 'string' || !id.trim() || (resolution !== 'start-now' && resolution !== 'skip')) throw new Error('Choose start-now or skip for a missed schedule.');
+        return deps.schedules!.resolveMissed(requireTarget(command, 'projectId'), id, resolution);
+      },
+    } : {}),
     'sessions.create': async (command: MobileCommand) => {
       const projectId = requireTarget(command, 'projectId');
       const title = String(payloadField(command, 'title') ?? '').trim();

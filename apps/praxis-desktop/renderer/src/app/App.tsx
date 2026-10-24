@@ -666,6 +666,28 @@ export function App() {
     });
   }, []);
 
+  useEffect(() => window.praxis.window.onNotificationOpen(target => {
+    setSettingsDialogCategory(undefined);
+    const projectId = target.projectId;
+    const workspace = projectId && workspaces.find(item => item.projectIds.includes(projectId));
+    if (workspace && workspace.id !== activeWorkspaceId) {
+      setActiveWorkspaceId(workspace.id);
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+    }
+    setGettingStarted(false);
+    setProjectWizardMode(undefined);
+    navigate(target.runId
+      ? { feature: 'workflows', projectId: target.projectId, workflowId: target.workflowId, workflowRunId: target.runId }
+      : { feature: target.conversation ? 'conversations' : 'sessions', projectId: target.projectId, sessionKey: target.sessionKey });
+  }), [navigate, workspaces, activeWorkspaceId]);
+
+  useEffect(() => {
+    void window.praxis.window.setNotificationView({
+      sessionKey: !settingsDialogCategory && (route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined,
+      runId: !settingsDialogCategory && route.feature === 'workflows' ? route.workflowRunId : undefined
+    });
+  }, [route, settingsDialogCategory]);
+
   const openBoard = useCallback((boardId: string) => {
     setAuxVisible(true);
     navigate({ boardId });

@@ -1,3 +1,4 @@
+import { backgroundTaskIsLive, type ProviderBackgroundUpdate } from '../backgroundTasks';
 import { randomUUID } from 'node:crypto';
 import type { CoordinationGate } from '../coordination/coordinationGate';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
@@ -121,6 +122,8 @@ interface ActiveAcpTask {
   reasoningBuffer: string;
   promptPromise?: Promise<void>;
   shutdownPromise?: Promise<void>;
+  ownerSessionId?: string;
+  monitorTimer?: NodeJS.Timeout;
   ending?: boolean;
   /** When the turn began, so its reply can say how long it took. */
   startedAt: number;
@@ -885,6 +888,8 @@ export class AcpAgentHost {
         }
         this.handleSessionUpdate(issue.key, update, active);
       },
+      onBackgroundTaskUpdate: update => this.handleBackgroundTaskUpdate(issue.key, update, task),
+      onTransportClosed: () => this.backgroundConnectionLost(issue.key, task),
       onCursorCreatePlan: req => this.handleCursorCreatePlan(issue.key, req),
       onCursorUpdateTodos: req => this.handleCursorUpdateTodos(issue.key, req),
       onCursorAskQuestion: req => this.handleCursorAskQuestion(issue.key, req),
@@ -904,6 +909,7 @@ export class AcpAgentHost {
       costBefore: this.sessionManager.getAgentSession(issue.key)?.cost,
       reasoningBuffer: ''
     };
+    task.ownerSessionId = sessionId;
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
@@ -1144,6 +1150,8 @@ export class AcpAgentHost {
         const active = this.activeTasks.get(issueKey);
         if (active && !active.ending) this.handleSessionUpdate(issueKey, update, active);
       },
+      onBackgroundTaskUpdate: update => this.handleBackgroundTaskUpdate(issueKey, update, task),
+      onTransportClosed: () => this.backgroundConnectionLost(issueKey, task),
       onCursorCreatePlan: req => this.handleCursorCreatePlan(issueKey, req),
       onCursorUpdateTodos: req => this.handleCursorUpdateTodos(issueKey, req),
       onCursorAskQuestion: req => this.handleCursorAskQuestion(issueKey, req),
@@ -1163,6 +1171,7 @@ export class AcpAgentHost {
       costBefore: this.sessionManager.getAgentSession(issueKey)?.cost,
       reasoningBuffer: ''
     };
+    task.ownerSessionId = record.sessionId;
     this.activeTasks.set(issueKey, task);
     this.emitActiveTaskChange(issueKey);
     // The previous turn recorded its own reply when it ended, so there is
@@ -1271,12 +1280,22 @@ export class AcpAgentHost {
     }
   }
 
+  public hasBackgroundTasks(issueKey: string): boolean {
+    return [...this.backgroundClients].some(task => task.issueKey === issueKey);
+  }
+
   public async abortTask(issueKey: string): Promise<void> {
     await this.stopTask(issueKey, {
       terminalState: 'aborted',
       event: evt('aborted', 'Task aborted by user'),
       logLine: `[AcpAgent] Aborted task for ${issueKey}`
     });
+    for (const task of [...this.backgroundClients].filter(item => item.issueKey === issueKey)) {
+      task.ending = true;
+      this.backgroundConnectionLost(issueKey, task, 'Background monitoring was cancelled. The provider task outcome has not been confirmed.');
+      await task.client.shutdown();
+      await task.client.terminateProcessTree();
+    }
   }
 
   /**
@@ -1297,6 +1316,10 @@ export class AcpAgentHost {
   }
 
   public dispose(): void {
+    for (const task of this.backgroundClients) {
+      this.backgroundConnectionLost(task.issueKey, task, 'Praxis stopped monitoring this provider. Completion has not been confirmed.');
+      void task.client.shutdown();
+    }
     for (const issueKey of [...this.activeTasks.keys()]) {
       this.sessionManager.markAgentSessionInterrupted(issueKey);
       void this.abortTask(issueKey);
@@ -1349,8 +1372,57 @@ export class AcpAgentHost {
    * even its timeout found nothing to stop — a run that looked frozen forever while the
    * agent kept working in its worktree.
    */
+  private readonly backgroundClients = new Set<ActiveAcpTask>();
+
+  private backgroundTasksFor(issueKey: string, task: ActiveAcpTask) {
+    const record = this.sessionManager.getAgentSession(issueKey);
+    if (task.ownerSessionId && record?.sessionId !== task.ownerSessionId) return [];
+    return (record?.backgroundTasks ?? []).filter(item => item.producerId === String(task.startedAt) && backgroundTaskIsLive(item));
+  }
+
+  private backgroundConnectionLost(issueKey: string, task: ActiveAcpTask, detail = 'The provider connection ended before a completion result arrived. The outcome is unknown.'): void {
+    for (const item of this.backgroundTasksFor(issueKey, task)) this.sessionManager.updateBackgroundTask(issueKey, { ...item, state: 'unknown', updatedAt: new Date().toISOString(), detail });
+    clearTimeout(task.monitorTimer);
+    this.backgroundClients.delete(task);
+  }
+
+  private handleBackgroundTaskUpdate(issueKey: string, update: ProviderBackgroundUpdate, task: ActiveAcpTask): void {
+    const record = this.sessionManager.getAgentSession(issueKey);
+    if (!record || record.sessionId !== task.ownerSessionId) return;
+    const id = `provider:${task.startedAt}:${update.id}`;
+    const previous = record.backgroundTasks?.find(item => item.id === id);
+    if (!update.state && !previous) return;
+    const state = update.state ?? previous!.state;
+    const now = new Date().toISOString();
+    this.sessionManager.updateBackgroundTask(issueKey, {
+      ...previous, id, source: 'provider', producerId: String(task.startedAt),
+      label: update.label ?? previous?.label ?? 'Provider background task', state,
+      startedAt: previous?.startedAt ?? now, updatedAt: now,
+      ...(state === 'completed' || state === 'failed' || state === 'stopped' ? { completedAt: now } : {}),
+      detail: update.detail ?? previous?.detail, callId: update.callId ?? previous?.callId
+    });
+    if (this.backgroundClients.has(task) && this.backgroundTasksFor(issueKey, task).length === 0) {
+      this.backgroundClients.delete(task);
+      clearTimeout(task.monitorTimer);
+      void task.client.shutdown();
+    }
+  }
+
   private async cleanupTask(issueKey: string, task: ActiveAcpTask | undefined = this.activeTasks.get(issueKey)): Promise<void> {
     if (!task) {
+      return;
+    }
+    if (!task.ending && this.backgroundTasksFor(issueKey, task).length > 0) {
+      this.backgroundClients.add(task);
+      task.monitorTimer ??= setTimeout(() => {
+        this.backgroundConnectionLost(issueKey, task, 'Background monitoring reached its one-hour limit. Completion has not been confirmed.');
+        void task.client.shutdown();
+      }, 60 * 60 * 1000);
+      task.monitorTimer.unref?.();
+      if (this.activeTasks.get(issueKey) === task) {
+        this.activeTasks.delete(issueKey);
+        this.emitActiveTaskChange(issueKey);
+      }
       return;
     }
     task.shutdownPromise ??= task.client.shutdown();

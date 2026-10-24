@@ -140,6 +140,12 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('folder:discoverPlans', connectionId)
   },
   window: {
+    setNotificationView: target => ipcRenderer.invoke('window:setNotificationView', target),
+    onNotificationOpen: listener => {
+      const handler = (_event: Electron.IpcRendererEvent, target: import('@praxis/core').TaskNotificationTarget) => listener(target);
+      ipcRenderer.on('window:notificationOpen', handler);
+      return () => ipcRenderer.off('window:notificationOpen', handler);
+    },
     reload: () => ipcRenderer.invoke('window:reload'),
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),

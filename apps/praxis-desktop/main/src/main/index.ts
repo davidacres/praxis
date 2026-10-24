@@ -1,3 +1,4 @@
+import { registerTaskNotifications } from './taskNotifications';
 import { registerProjectActivityIpc } from './projectActivityInstance';
 import { registerCodeIntelligenceIpc, replaceOutdatedOwner } from './codeIntelligenceIpc';
 import { registerCoordinationIpc } from './coordinationIpc';
@@ -363,6 +364,7 @@ void app.whenReady().then(async () => {
   registerShellIpc();
   registerBrowserIpc();
   registerBoardPrefsIpc();
+  registerTaskNotifications();
   registerAiIpc();
   registerCodeIntelligenceIpc();
   // A code intelligence owner outlives the app; one left by an earlier build is replaced so

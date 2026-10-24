@@ -6,6 +6,9 @@ import {
 } from './mobileProtocol';
 
 export interface MobileExecutionHandlers {
+  'scheduledRuns.save'?: (command: MobileCommand) => Promise<unknown>;
+  'scheduledRuns.setArmed'?: (command: MobileCommand) => Promise<unknown>;
+  'scheduledRuns.resolveMissed'?: (command: MobileCommand) => Promise<unknown>;
   'sessions.create': (command: MobileCommand) => Promise<unknown>;
   'sessions.continue': (command: MobileCommand) => Promise<unknown>;
   'sessions.cancel': (command: MobileCommand) => Promise<unknown>;

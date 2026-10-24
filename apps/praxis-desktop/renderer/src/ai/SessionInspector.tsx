@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { AgentSessionRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
-import { agentStateBadgeClass, isTerminalAgentState } from './aiSessionState';
+import { agentStateBadgeClass, isTerminalAgentState, sessionVisualState, sessionStatusLabel } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
 import { SessionHandoverBrief, SessionPurposeBlock, SessionRuntimeHistory } from './SessionHandover';
 import { SessionTasks } from './SessionTasks';
@@ -10,7 +10,7 @@ import { SessionCoordination } from './SessionCoordination';
 import { SessionActivity } from './SessionActivity';
 import { SessionSubagentsSummaryBlock, SessionSubagentsTab } from './SessionSubagents';
 import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, sessionMode, sessionTitle } from './sessionNav';
-import { agentStateLaneClass, agentStateLabel } from './aiSessionState';
+import { agentStateLaneClass } from './aiSessionState';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -178,8 +178,8 @@ export function SessionInspector({
   return (
     <section className="inspector inspector--tabbed session-inspector" aria-label="Session context" data-testid="session-inspector">
       <div className="agent-runtime-status">
-        <span className={agentStateBadgeClass(session.state)} data-testid="session-state-badge">
-          {agentStateLabel(session.state)}
+        <span className={agentStateBadgeClass(sessionVisualState(session))} data-testid="session-state-badge">
+          {sessionStatusLabel(session)}
         </span>
         <div>
           <strong data-testid="session-mode-badge">{sessionMode(session)}</strong>
@@ -567,10 +567,10 @@ function SessionBrowserRow({
       </span>
       {!session.archived && (
         <span
-          className={agentStateLaneClass(session.state)}
+          className={agentStateLaneClass(sessionVisualState(session))}
           role="img"
-          aria-label={`Status: ${agentStateLabel(session.state)}`}
-          title={agentStateLabel(session.state)}
+          aria-label={`Status: ${sessionStatusLabel(session)}`}
+          title={sessionStatusLabel(session)}
         >
           ●
         </span>

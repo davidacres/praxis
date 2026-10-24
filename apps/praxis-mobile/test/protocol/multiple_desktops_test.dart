@@ -74,6 +74,28 @@ void main() {
       expect(store.connection, ShellConnection.ready);
       expect(store.desktops.entries, hasLength(2));
       final b = store.selectedDesktop!;
+      expect(store.schedulesSupported, isTrue);
+      expect(store.schedules.value, hasLength(1));
+      final tomorrow = DateTime.now().toUtc().add(const Duration(days: 1));
+      await store.createSchedule({
+        'name': 'Only desktop B schedule',
+        'date': tomorrow.toIso8601String().substring(0, 10),
+        'time': '20:00', 'timezone': 'UTC', 'issueKeys': ['PRX-102', 'PRX-101'],
+      });
+      final created = store.schedules.value!.firstWhere((run) => run.name == 'Only desktop B schedule');
+      expect(created.entries.map((entry) => entry.issueKey), ['PRX-102', 'PRX-101']);
+      await store.changeSchedule(created.id, armed: true);
+      expect(store.schedules.value!.firstWhere((run) => run.id == created.id).status, 'scheduled');
+      final control = await Socket.connect('127.0.0.1', ports[3]);
+      control.write('GET /schedule/hold HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
+      await control.flush();
+      await control.drain<void>();
+      await control.close();
+      for (var attempt = 0; attempt < 50 && store.schedules.value!.firstWhere((run) => run.id == 'stage-schedule').status != 'draft'; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      expect(store.schedules.value!.firstWhere((run) => run.id == 'stage-schedule').status, 'draft', reason: 'Desktop changes must arrive through the live event stream.');
+
       expect(a.configuration.hostPublicKeyHex, isNot(b.configuration.hostPublicKeyHex));
       final pairedA = jsonDecode(File('${root.path}/host-0/paired.json').readAsStringSync()) as List;
       final pairedB = jsonDecode(File('${root.path}/host-1/paired.json').readAsStringSync()) as List;
@@ -87,9 +109,11 @@ void main() {
       await store.selectDesktop(a.entryId);
       expect(store.connection, ShellConnection.ready);
       expect(store.transcriptFor('sess-pairing').any((message) => message.text == 'Only desktop B'), isFalse);
+      expect(store.schedules.value!.any((run) => run.name == 'Only desktop B schedule'), isFalse);
       await store.sendFollowUp(store.work.firstWhere((item) => item.sessionId == 'sess-pairing'), 'Only desktop A');
       await store.selectDesktop(b.entryId);
       expect(store.transcriptFor('sess-pairing').any((message) => message.text == 'Only desktop A'), isFalse);
+      expect(store.schedules.value!.any((run) => run.name == 'Only desktop B schedule'), isTrue);
       await store.forgetDesktop(a.entryId);
       expect(store.selectedDesktop!.entryId, b.entryId);
       expect(store.connection, ShellConnection.ready);

@@ -44,7 +44,7 @@ void main() {
     ),
   );
 
-  testWidgets('home renders the sidebar feed with filter rail and sections', (
+  testWidgets('home renders the desktop sections without obsolete filters', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(430, 932));
@@ -58,9 +58,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('New'), findsOneWidget);
-    expect(find.text('All'), findsOneWidget);
-    expect(find.text('Live'), findsOneWidget);
-    expect(find.text('Gates'), findsOneWidget);
+    expect(find.text('All'), findsNothing);
+    expect(find.text('Live'), findsNothing);
+    expect(find.text('Gates'), findsNothing);
     expect(find.text('SESSIONS'), findsOneWidget);
     expect(find.text('Activity'), findsOneWidget);
     expect(
@@ -72,20 +72,90 @@ void main() {
     expect(find.text('Desktops'), findsNothing);
   });
 
-  testWidgets('filter rail switches active filter tab', (tester) async {
+  testWidgets('home attention shortcut follows live permissions and clears', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(430, 932));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    store.host = (hostId: 'desktop', hostName: 'Desktop', online: true);
+    store.setSnapshotForTesting(
+      SessionSnapshot({
+        'sessionId': 'permission-session',
+        'sessionKey': 'SESSION-abcdef',
+        'projectId': 'praxis',
+        'title': 'Waiting session',
+        'lifecycle': 'awaiting-input',
+        'sequence': 1,
+        'pendingPermissions': [
+          {
+            'requestId': 'read-file',
+            'summary': 'Read source',
+            'createdAt': '2026-10-24T00:00:00.000Z',
+          },
+        ],
+      }),
+    );
     await tester.pumpWidget(app());
     await tester.pump();
-
-    await tester.tap(find.text('Live'));
+    expect(find.text('Attention'), findsOneWidget);
+    await tester.tap(find.text('Attention'));
     await tester.pump();
-
-    await tester.tap(find.text('Gates'));
+    expect(store.primaryRoute, 'attention');
+    expect(store.openWorkId, isNull);
+    store.setSnapshotForTesting(
+      SessionSnapshot({
+        'sessionId': 'permission-session',
+        'sessionKey': 'SESSION-abcdef',
+        'projectId': 'praxis',
+        'title': 'Waiting session',
+        'lifecycle': 'active',
+        'sequence': 2,
+        'pendingPermissions': <Map<String, dynamic>>[],
+      }),
+    );
     await tester.pump();
+    expect(find.text('Attention'), findsNothing);
+  });
 
-    await tester.tap(find.text('All'));
+  testWidgets('collapsed history keeps active and waiting sessions visible', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(430, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    store.setWorkForTesting([
+      for (var i = 0; i < 6; i++)
+        WorkItem(
+          workId: 'done-$i',
+          title: 'Finished $i',
+          status: 'completed',
+          sessionId: 'done-$i',
+        ),
+      const WorkItem(
+        workId: 'live',
+        title: 'Still running',
+        status: 'active',
+        sessionId: 'live',
+      ),
+      const WorkItem(
+        workId: 'waiting',
+        title: 'Needs your reply',
+        status: 'awaiting-input',
+        sessionId: 'waiting',
+      ),
+    ]);
+    await tester.pumpWidget(app());
     await tester.pump();
+    expect(find.text('Still running'), findsOneWidget);
+    expect(find.text('Needs your reply'), findsOneWidget);
+    expect(find.text('Finished 5'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('Show 1 more sessions'));
+    await tester.pump();
+    expect(find.text('Finished 5'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Show fewer sessions'));
+    await tester.pump();
+    expect(find.text('Finished 5'), findsNothing);
+    expect(find.text('Still running'), findsOneWidget);
+    expect(find.text('Needs your reply'), findsOneWidget);
   });
 
   testWidgets(
@@ -98,6 +168,7 @@ void main() {
       final work = const WorkItem(
         workId: 'TEST-1',
         title: 'Test AI Session',
+        latestActivity: 'Checking workflow hooks',
         status: 'active',
         sessionId: 'sess-test-1',
         provider: 'anthropic',
@@ -113,6 +184,7 @@ void main() {
         findsOneWidget,
       ); // session icon on the left
       expect(find.text('Test AI Session'), findsOneWidget);
+      expect(find.text('Checking workflow hooks'), findsOneWidget);
       expect(
         find.text('claude-sonnet-4-6'),
         findsOneWidget,

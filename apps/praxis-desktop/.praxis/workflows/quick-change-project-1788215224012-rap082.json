@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "quick-change-project-1788215224012-rap082",
+  "name": "Quick change",
+  "scope": "project",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "implement",
+      "name": "Implement",
+      "x": 40,
+      "y": 40,
+      "inputs": [],
+      "type": "agent-task",
+      "agent": {
+        "agentId": "praxis-implementer",
+        "profileId": "praxis-implementer",
+        "hostId": "praxis-implementer",
+        "scope": "global",
+        "toolMode": "full",
+        "skillNames": [
+          "verification-report",
+          "visual-verification"
+        ]
+      },
+      "instructions": "Implement the assigned change.",
+      "outputs": [
+        {
+          "id": "change-diff",
+          "kind": "diff",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": true,
+      "modelTier": "strong"
+    },
+    {
+      "id": "approve",
+      "name": "Approve",
+      "x": 40,
+      "y": 202,
+      "inputs": [
+        "change-diff"
+      ],
+      "type": "approval",
+      "prompt": "Approve this change?",
+      "requiredGates": [],
+      "allowBypass": false
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-impl-approve",
+      "from": "implement",
+      "to": "approve",
+      "on": "success",
+      "required": true
+    }
+  ],
+  "entryNodeId": "implement",
+  "createdAt": "2026-09-27T19:47:10.782Z",
+  "updatedAt": "2026-10-24T09:46:40.255Z",
+  "description": "One implementation stage and a human sign-off. No automated gates.",
+  "projectId": "project-1788215224012-rap082"
+}

@@ -5,7 +5,7 @@ import { Icon } from '../../ui/Icon';
 import { ProviderBrandLogo } from '../../ui/ProviderBrandLogo';
 import { fetchModelOptions, hasModelCatalog, providerIconName } from '../../ai/modelProviders';
 import { isProviderUsableForSessions } from '../../ai/providerAvailability';
-import { DebouncedTextArea, DebouncedTextField } from '../settingsFields';
+import { DebouncedTextArea, DebouncedTextField, Toggle } from '../settingsFields';
 import { McpServersPanel } from '../McpServersPanel';
 import { ProviderMark } from './ProviderDetail';
 import { MODEL_TIER_NAMES } from './ModelTiers';
@@ -165,6 +165,17 @@ export function BehaviourTab({ settings, update }: { settings: AppSettings; upda
   const analysisOn = settings.ai.analysisPrompt.trim().length > 0;
   return (
     <div className="aip-stack">
+      <TabCard title="Desktop notifications">
+        <p className="aip-hint">Alerts for AI sessions and workflow runs. Allow notifications for Praxis in your system settings.</p>
+        {([
+          ['completed', 'Task completed', 'Notify when an AI turn or workflow finishes.'],
+          ['failed', 'Task failed', 'Notify when an AI task or workflow fails.'],
+          ['needsAttention', 'Needs attention', 'Notify when approval, input, or recovery is needed.'],
+          ['sound', 'Notification sound', 'Use the system notification sound.'],
+          ['suppressWhenViewing', 'Quiet while viewing', 'Suppress alerts for the session or run you are actively viewing.']
+        ] as const).map(([key, label, description]) => <Toggle key={key} label={label} description={description}
+          checked={settings.notifications[key]} onChange={value => update({ notifications: { [key]: value } })} />)}
+      </TabCard>
       <TabCard title="Identity">
         <SettingLine label="Display name" help="On the agent’s comments and commits.">
           <DebouncedTextField ariaLabel="AI agent display name" value={settings.ai.agentName} onCommit={value => update({ ai: { agentName: value } })} placeholder="e.g. Ticket Agent" />

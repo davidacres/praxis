@@ -1,4 +1,4 @@
-import type { AgentEventType, AgentTaskState } from '@praxis/core';
+import type { AgentEventType, AgentTaskState, AgentSessionRecord } from '@praxis/core';
 import type { IconName } from '../ui/Icon';
 
 /**
@@ -116,4 +116,23 @@ export function agentEventToneClass(type: AgentEventType): string {
     return `event-icon ${type}`;
   }
   return 'event-icon';
+}
+
+
+/** Visual status includes work that continues after the foreground turn. */
+export function sessionVisualState(session: AgentSessionRecord): AgentTaskState {
+  if (session.state !== 'completed') return session.state;
+  const tasks = session.backgroundTasks ?? [];
+  if (tasks.some(task => task.state === 'running')) return 'executing';
+  if (tasks.some(task => task.state === 'paused')) return 'paused';
+  if (tasks.some(task => task.state === 'unknown')) return 'awaiting_input';
+  if (tasks.some(task => task.state === 'failed')) return 'failed';
+  return session.state;
+}
+
+export function sessionStatusLabel(session: AgentSessionRecord): string {
+  const visual = sessionVisualState(session);
+  if (session.state !== 'completed' || visual === session.state) return agentStateLabel(session.state);
+  return visual === 'executing' ? 'Background running' : visual === 'paused' ? 'Background paused'
+    : visual === 'awaiting_input' ? 'Background status unknown' : 'Background failed';
 }

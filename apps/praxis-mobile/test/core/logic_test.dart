@@ -34,6 +34,39 @@ String typeOf(Object block) => switch (block) {
 };
 
 void main() {
+  test('session snapshots carry live desktop activity', () {
+    final snapshot = SessionSnapshot({'latestActivity': 'Checking hooks'});
+    expect(snapshot.latestActivity, 'Checking hooks');
+  });
+
+  test('schedule projection retains ordered tickets and execution links', () {
+    final run = ScheduledRunSnapshot({
+      'id': 'schedule',
+      'projectId': 'praxis',
+      'name': 'Tonight',
+      'status': 'scheduled',
+      'scheduledStartAt': '2026-10-25T20:00:00.000Z',
+      'timezone': 'Europe/London',
+      'entries': [
+        {
+          'id': 'second',
+          'sequence': 1,
+          'issueKey': 'PRX-2',
+          'title': 'Second ticket',
+          'status': 'running',
+          'workflowRunId': 'run-2',
+        },
+        {'id': 'first', 'sequence': 2, 'issueKey': 'PRX-1', 'status': 'queued'},
+      ],
+    });
+    expect(run.projectId, 'praxis');
+    expect(run.entries.map((entry) => entry.issueKey), ['PRX-2', 'PRX-1']);
+    expect(run.entries.first.workflowRunId, 'run-2');
+    expect(run.entries.last.title, 'PRX-1');
+    expect(run.timezone, 'Europe/London');
+  });
+
+
   group('markdown', () {
     test('headings, paragraphs and rules', () {
       final blocks = parseBlocks('# Title\n\nFirst line\nsecond line\n\n---\n\n### Small');

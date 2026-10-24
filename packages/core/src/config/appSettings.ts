@@ -545,8 +545,18 @@ export interface GitVisualSettings {
   performanceMode: boolean;
 }
 
+/** Desktop alerts for managed AI sessions and workflow runs. */
+export interface TaskNotificationSettings {
+  completed: boolean;
+  failed: boolean;
+  needsAttention: boolean;
+  sound: boolean;
+  suppressWhenViewing: boolean;
+}
+
 /** Top-level settings shape — one nested object per Settings-page category. */
 export interface AppSettings {
+  notifications: TaskNotificationSettings;
   ai: AiSettings;
   jira: JiraSettings;
   performance: PerformanceSettings;
@@ -599,6 +609,7 @@ export const BUILT_IN_LOOKS: AppearanceLook[] = [
 
 /** Shipped defaults — kept in sync with `package.json` contributes.configuration. */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
+  notifications: { completed: true, failed: true, needsAttention: true, sound: true, suppressWhenViewing: true },
   ai: {
     gatewayUrl: '',
     defaultModel: '',
@@ -715,6 +726,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * per-key so a patch touching one priority doesn't reset the others.
  */
 export interface AppSettingsPatch {
+  notifications?: Partial<TaskNotificationSettings>;
   ai?: Partial<Omit<AiSettings, 'browserTools' | 'nativeSources' | 'workingStyle' | 'codeIntelligence'>> & {
     browserTools?: Partial<AiSettings['browserTools']>;
     nativeSources?: Partial<NativeSourceSettings>;
@@ -1451,7 +1463,17 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
       }
     : { ...DEFAULT_APP_SETTINGS.terminal };
 
+  const notificationInput = isRecord(raw) && isRecord(raw.notifications) ? raw.notifications : {};
+  const notifications: TaskNotificationSettings = {
+    completed: readBoolean(notificationInput.completed, DEFAULT_APP_SETTINGS.notifications.completed),
+    failed: readBoolean(notificationInput.failed, DEFAULT_APP_SETTINGS.notifications.failed),
+    needsAttention: readBoolean(notificationInput.needsAttention, DEFAULT_APP_SETTINGS.notifications.needsAttention),
+    sound: readBoolean(notificationInput.sound, DEFAULT_APP_SETTINGS.notifications.sound),
+    suppressWhenViewing: readBoolean(notificationInput.suppressWhenViewing, DEFAULT_APP_SETTINGS.notifications.suppressWhenViewing)
+  };
+
   return {
+    notifications,
     ai,
     jira,
     performance,
@@ -1661,6 +1683,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
   const mobileAccess: MobileAccessSettings = { ...base.mobileAccess, ...(patch.mobileAccess ?? {}) };
 
   return {
+    notifications: { ...base.notifications, ...patch.notifications },
     ai,
     jira,
     performance,

@@ -30,6 +30,11 @@ export const PROCESS_GROUPS_SUPPORTED = process.platform !== 'win32';
 
 /** Members of a process group, by pid. Empty when the group is gone or cannot be listed. */
 export function processGroupMembers(pgid: number): number[] {
+  return readProcessGroupMembers(pgid) ?? [];
+}
+
+/** Undefined means observation failed, not that the process exited. */
+export function readProcessGroupMembers(pgid: number): number[] | undefined {
   if (!PROCESS_GROUPS_SUPPORTED) return [];
   try {
     const out = nodeChildProcess.execFileSync('ps', ['-A', '-o', 'pid=,pgid=,stat='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -40,7 +45,7 @@ export function processGroupMembers(pgid: number): number[] {
       .filter(([pid, group, stat]) => Number(group) === pgid && pid && !stat?.startsWith('Z'))
       .map(([pid]) => Number(pid));
   } catch {
-    return [];
+    return undefined;
   }
 }
 
@@ -76,12 +81,12 @@ export async function stopProcessGroup(pgid: number, graceMs = 2000): Promise<bo
   signalProcessGroup(pgid, 'SIGTERM');
   const deadline = Date.now() + graceMs;
   while (Date.now() < deadline) {
-    if (processGroupMembers(pgid).length === 0) return true;
+    if (readProcessGroupMembers(pgid)?.length === 0) return true;
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   signalProcessGroup(pgid, 'SIGKILL');
   await new Promise(resolve => setTimeout(resolve, 100));
-  return processGroupMembers(pgid).length === 0;
+  return readProcessGroupMembers(pgid)?.length === 0;
 }
 
 export function runShellCommand(command: string, options: { cwd: string; timeoutMs: number; maxBuffer: number; signal?: AbortSignal }): Promise<ShellRun> {
