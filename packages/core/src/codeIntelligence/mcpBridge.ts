@@ -13,6 +13,9 @@ export interface CodeIntelligenceBridgeOptions {
   /** One repository ID, or {@link ALL_GRANTED} to serve every repository granted to `client`. */
   repositoryId: string;
   client: string;
+  /** Read the composer's saved preference for each query, including changes mid-session. */
+  settingsPath?: string;
+  workingDirectory?: string;
   contracts: Record<string, { inputSchema: Record<string, unknown>; outputSchema: Record<string, unknown> }>;
 }
 /** Bridge repository argument meaning "every repository this client holds a grant for". */
@@ -30,7 +33,8 @@ export function invokeCodeIntelligence(options: CodeIntelligenceBridgeOptions, t
   if (!options.contracts[tool]) return Promise.resolve(failure(options.repositoryId, 'INVALID_ARGUMENT', 'Unknown read-only tool.'));
   // The bridge serves exactly one repository: an omitted ID means that one; any other ID is refused.
   if (arguments_.repositoryId !== undefined && arguments_.repositoryId !== options.repositoryId) return Promise.resolve(failure(options.repositoryId, 'ACCESS_DENIED', 'This bridge is scoped to one repository.'));
-  const payload = JSON.stringify({ tool, arguments: { ...arguments_, repositoryId: options.repositoryId } });
+  const mode = savedSearchMode(options, tool, arguments_);
+  const payload = JSON.stringify({ tool, arguments: { ...arguments_, ...(mode ? { mode } : {}), repositoryId: options.repositoryId } });
   if (Buffer.byteLength(payload) > MAXIMUM_REQUEST) return Promise.resolve(failure(options.repositoryId, 'INPUT_TOO_LARGE', 'Query exceeds the request limit.'));
   if (signal?.aborted) return Promise.resolve(failure(options.repositoryId, 'CANCELLED', 'Query cancelled.'));
   return new Promise(resolve => {
@@ -59,6 +63,21 @@ export function invokeCodeIntelligence(options: CodeIntelligenceBridgeOptions, t
     });
     child.stdin.end(payload);
   });
+}
+
+function savedSearchMode(options: CodeIntelligenceBridgeOptions, tool: string, arguments_: Record<string, unknown>): string | undefined {
+  if ((tool !== 'search_code' && tool !== 'search_knowledge') || arguments_.mode !== undefined || !options.settingsPath) return undefined;
+  try {
+    const settings = JSON.parse(readFileSync(options.settingsPath, 'utf8'));
+    const config = settings?.ai?.codeIntelligence;
+    const directory = options.workingDirectory;
+    const mode = (directory ? config?.projectSearchModes?.[directory] ?? config?.projectSearchModes?.[path.resolve(directory)] : undefined)
+      ?? config?.searchMode;
+    return mode === 'hybrid' || mode === 'lexical' || mode === 'vector' ? mode : undefined;
+  } catch {
+    // Missing or unreadable settings retain the service's automatic search policy.
+    return undefined;
+  }
 }
 
 /**
@@ -106,7 +125,7 @@ function withoutRepository(schema: Record<string, unknown>): Record<string, unkn
 
 // When to reach for each tool. The generic contract name alone gave agents no reason to prefer it over grep.
 const TOOL_GUIDANCE: Record<string, string> = {
-  search_code: 'Find code by concept or name when you do not know the exact identifier ("where is session handover handled"). Ask a plain-language question and leave mode unset: it picks the best-measured search for the question and the index.',
+  search_code: 'Find code by concept or name when you do not know the exact identifier ("where is session handover handled"). Leave mode unset to follow the session composer\'s saved search preference, or automatic search when none is saved.',
   find_symbol: 'Find where a class, function, method or field is declared, by name or qualified name. Returns symbol IDs for the other tools.',
   get_symbol: 'Get the declaration, kind and signature of a symbol ID.',
   get_source: 'Read the source of a symbol, file or range found by another tool, without opening the whole file.',
@@ -117,7 +136,7 @@ const TOOL_GUIDANCE: Record<string, string> = {
   find_related: 'Find structural and semantic neighbours of a symbol, each with the reason it is related.',
   summarize_project: 'Summarize one project\'s components, index coverage and unresolved boundaries.',
   get_index_status: 'Check whether the index is current. Call it when results look empty, partial or stale.',
-  search_knowledge: 'Search the repository\'s docs and plans (Markdown and similar) by concept or keyword.',
+  search_knowledge: 'Search the repository\'s docs and plans (Markdown and similar) by concept or keyword. Leave mode unset to follow the session composer\'s saved search preference.',
   get_knowledge_section: 'Read one docs section found by search_knowledge.',
   find_related_knowledge: 'Find docs that mention a symbol, file or ticket.'
 };
@@ -199,7 +218,9 @@ if (require.main === module) {
   if (!executable || !assembly || !dataDirectory || !repositoryId || !client || !contractsPath) process.exitCode = 2;
   else {
     const contracts = JSON.parse(readFileSync(contractsPath, 'utf8')) as CodeIntelligenceBridgeOptions['contracts'];
-    void createCodeIntelligenceMcpServer({ executable, ...(assembly === '-' ? {} : { assembly }), dataDirectory, repositoryId, client, contracts })
+    void createCodeIntelligenceMcpServer({ executable, ...(assembly === '-' ? {} : { assembly }), dataDirectory, repositoryId, client, contracts,
+      settingsPath: process.env.PRAXIS_CODE_INTELLIGENCE_SETTINGS_PATH,
+      workingDirectory: process.env.PRAXIS_CODE_INTELLIGENCE_WORKING_DIRECTORY })
       .connect(new StdioServerTransport()).catch(() => { process.exitCode = 5; });
   }
 }

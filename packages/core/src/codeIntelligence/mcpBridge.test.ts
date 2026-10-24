@@ -13,6 +13,44 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ALL_GRANTED, createCodeIntelligenceMcpServer, invokeCodeIntelligence, repositoryNames, type CodeIntelligenceBridgeOptions } from './mcpBridge';
 import { mcpServerAppliesToProvider, type McpServerConfig } from '../ai/mcp/mcpServerConfig';
 
+test('stdio searches follow live composer settings for code and knowledge, with explicit overrides', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'pci-search-mode-'));
+  const mock = path.join(directory, 'service.cjs');
+  const settingsPath = path.join(directory, 'settings.json');
+  const received = path.join(directory, 'received.json');
+  await writeFile(mock, `const fs=require('node:fs');let input='';process.stdin.on('data',b=>input+=b);process.stdin.on('end',()=>{const request=JSON.parse(input);fs.writeFileSync(${JSON.stringify(received)},input);console.log(JSON.stringify({schemaVersion:'1.2',repositoryId:request.arguments.repositoryId,indexGeneration:null,queryEpoch:null,error:{code:'INVALID_ARGUMENT',message:'recorded',retryable:false}}));});`);
+  const contracts = path.resolve(__dirname, '../../../../services/code-intelligence/contracts.json');
+  const client = new Client({ name: 'mode-fixture', version: '1.0' });
+  const transport = new StdioClientTransport({ command: process.execPath,
+    args: [path.join(__dirname, 'mcpBridge.js'), process.execPath, mock, directory, 'repo', 'codex', contracts],
+    env: { ...process.env as Record<string, string>, PRAXIS_CODE_INTELLIGENCE_SETTINGS_PATH: settingsPath,
+      PRAXIS_CODE_INTELLIGENCE_WORKING_DIRECTORY: '/work/docs' } });
+  const configure = (config: unknown) => writeFile(settingsPath, JSON.stringify({ ai: { codeIntelligence: config } }));
+  const query = async (tool: string, mode?: string) => {
+    await client.callTool({ name: tool, arguments: { query: 'session knowledge', ...(mode ? { mode } : {}) } });
+    return JSON.parse(await readFile(received, 'utf8')).arguments;
+  };
+  try {
+    await client.connect(transport);
+    for (const mode of ['hybrid', 'lexical', 'vector']) {
+      await configure({ searchMode: 'lexical', projectSearchModes: { '/work/docs': mode } });
+      for (const tool of ['search_code', 'search_knowledge']) assert.equal((await query(tool)).mode, mode);
+    }
+    assert.equal((await query('search_code', 'lexical')).mode, 'lexical', 'Explicit tool mode takes precedence');
+    await configure({ searchMode: 'hybrid' });
+    assert.equal((await query('search_knowledge')).mode, 'hybrid', 'Global preference is the fallback');
+    await configure({ searchMode: 'invalid' });
+    assert.equal((await query('search_code')).mode, undefined);
+    await writeFile(settingsPath, '{broken');
+    assert.equal((await query('search_code')).mode, undefined);
+    await rm(settingsPath);
+    assert.equal((await query('search_code')).mode, undefined);
+    await configure({ searchMode: 'vector' });
+    await client.callTool({ name: 'get_index_status', arguments: {} });
+    assert.equal(JSON.parse(await readFile(received, 'utf8')).arguments.mode, undefined);
+  } finally { await client.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test('native stdio MCP reads indexed source only with the selected provider grant', { skip: !process.env.PRAXIS_CODE_INTELLIGENCE_EXE }, async () => {
   const executable = process.env.PRAXIS_CODE_INTELLIGENCE_EXE!;
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'pci-mcp-'));

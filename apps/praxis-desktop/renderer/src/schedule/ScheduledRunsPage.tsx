@@ -62,6 +62,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   const { candidates, loadError } = useScheduleTickets(project);
   const [views, setViews] = useState<ScheduledRunView[]>();
   const [error, setError] = useState('');
+  const [startingRunId, setStartingRunId] = useState<string>();
   const [composing, setComposing] = useState<{ view?: ScheduledRunView; ticketKeys?: string[]; autoAdd?: boolean }>();
   const [ticketHandoffDismissed, setTicketHandoffDismissed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -105,6 +106,16 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
       danger: true
     });
     if (ok) await act(async () => { await window.praxis.scheduledRuns.remove(view.run.id); setSelectedRunId(undefined); });
+  };
+
+  const runNow = async (id: string) => {
+    setStartingRunId(id);
+    await act(async () => {
+      await window.praxis.scheduledRuns.startNow(id);
+      await load();
+      setDetailRunId(id);
+    });
+    setStartingRunId(undefined);
   };
 
   const sidebar = sidebarHost && createPortal(
@@ -175,8 +186,9 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
         initialTicketKeys={composing.ticketKeys}
         autoAddSelectedTickets={composing.autoAdd}
         onClose={() => setComposing(undefined)}
-        onSaved={() => {
+        onSaved={startedRunId => {
           setComposing(undefined);
+          if (startedRunId) setDetailRunId(startedRunId);
           setTicketHandoffDismissed(true);
           void load();
         }}
@@ -253,6 +265,8 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
                 onOpen={() => setDetailRunId(view.run.id)}
                 onDelete={() => void remove(view)}
                 onArm={armed => void act(() => window.praxis.scheduledRuns.setArmed(view.run.id, armed))}
+                onRunNow={() => void runNow(view.run.id)}
+                starting={startingRunId === view.run.id}
                 onResolve={resolution => void act(() => window.praxis.scheduledRuns.resolveMissed(view.run.id, resolution))}
               />
             ))}
@@ -270,6 +284,8 @@ function RunCard({
   onOpen,
   onDelete,
   onArm,
+  onRunNow,
+  starting,
   onResolve
 }: {
   view: ScheduledRunView;
@@ -278,12 +294,16 @@ function RunCard({
   onOpen: () => void;
   onDelete: () => void;
   onArm: (armed: boolean) => void;
+  onRunNow: () => void;
+  starting: boolean;
   onResolve: (resolution: 'start-now' | 'skip') => void;
 }) {
   const { run, readiness } = view;
   const editable = run.status === 'draft' || run.status === 'scheduled';
   const blockers = readiness.issues.filter(issue => issue.severity === 'blocker');
   const canArm = readiness.ready && run.entries.length > 0;
+  const startBlocker = blockers.find(issue => issue.code !== 'start-in-past');
+  const canRunNow = run.entries.length > 0 && !startBlocker;
 
   return (
     <article className="schedule-card" data-testid="schedule-card" data-status={run.status} data-run-id={run.id}>
@@ -327,6 +347,7 @@ function RunCard({
       )}
 
       <div className="schedule-actions">
+        {editable && <button type="button" className="btn btn-primary" data-testid="schedule-run-now" disabled={starting || !canRunNow} title={canRunNow ? 'Start this run immediately' : startBlocker?.message ?? 'Add a ticket first'} onClick={onRunNow}>{starting ? 'Starting…' : 'Run now'}</button>}
         {run.status === 'missed' && (
           <>
             <button type="button" className="btn" data-testid="schedule-start-now" onClick={() => onResolve('start-now')}>Start now</button>

@@ -3,9 +3,10 @@ import { execFile } from 'node:child_process';
 import fs, { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { CODE_INTELLIGENCE_SERVER_NAME, codeIntelligenceDataDirectory, type CodeIntelligenceOwnerStatus, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
+import { codeIntelligenceDataDirectory, type CodeIntelligenceOwnerStatus, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
+import { sessionCodeIntelligenceServer } from './codeIntelligenceSession';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain.js';
-import { getSettingsBackend } from './settingsBackendInstance.js';
+import { getSettingsBackend, getSharedSettingsFilePath } from './settingsBackendInstance.js';
 import {
   getSemanticModelDirectory,
   isSemanticModelInstalled,
@@ -252,73 +253,21 @@ export function registerCodeIntelligenceIpc(): void {
   });
 }
 
-/**
- * Returns the code intelligence McpServerConfig for an agent session if enabled.
- * Auto-registers the repository folder and grants provider client access.
- */
+/** Code and knowledge tools for both folder-backed and folderless agent sessions. */
 export async function getSessionCodeIntelligenceServer(
   workingDirectory: string | undefined,
   provider: string | undefined
 ): Promise<McpServerConfig | undefined> {
-  if (!workingDirectory || !provider) return undefined;
-  try {
-    const settings = getSettingsBackend().read();
-    const config = settings.ai.codeIntelligence;
-    const globalEnabled = config?.enabled ?? true;
-    const normalizedDir = path.resolve(workingDirectory);
-    const override = config?.projectOverrides?.[normalizedDir] ?? config?.projectOverrides?.[workingDirectory];
-    const isEnabled = override !== undefined ? override : globalEnabled;
-    if (!isEnabled) return undefined;
-
-    const runtime = service();
-    if (!existsSync(runtime.contracts)) return undefined;
-
-    const listResponse = await invoke(['list']).catch(() => undefined);
-    if (!listResponse || listResponse.error) return undefined;
-
-    const list = Array.isArray(listResponse.data) ? (listResponse.data as Array<Record<string, unknown>>) : [];
-    let repo = list.find(r => typeof r.root === 'string' && (path.resolve(r.root) === normalizedDir || r.root === workingDirectory));
-
-    if (!repo) {
-      const regResponse = await invoke(['register', workingDirectory]).catch(() => undefined);
-      if (!regResponse || regResponse.error) return undefined;
-      const repoId = (regResponse.data as Record<string, unknown>)?.repositoryId;
-      if (typeof repoId !== 'string') return undefined;
-      void invoke(['index', repoId]).catch(() => {});
-      repo = { id: repoId, root: workingDirectory };
-    }
-
-    const repositoryId = String(repo.id);
-    const fp = await installedModelFingerprint().catch(() => undefined);
-    if (fp) {
-      const failures = await activateModel(fp, [repositoryId]);
-      if (failures.length) console.error('Semantic model activation failed:', failures.join('; '));
-    }
-    const grant = await invoke(['grant', repositoryId, '--client', provider]).catch(() => undefined);
-    if (!grant || grant.error) return undefined;
-
-    const id = createHash('sha256').update(JSON.stringify([repositoryId, provider])).digest('hex').slice(0, 24);
-    const mcpServer: McpServerConfig = {
-      id: `praxis-code-intelligence-${id}`,
-      name: CODE_INTELLIGENCE_SERVER_NAME,
-      enabled: true,
-      transport: 'stdio',
-      requireApproval: false,
-      command: process.execPath,
-      args: [
-        path.join(path.dirname(require.resolve('@praxis/core')), 'codeIntelligence', 'mcpBridge.js'),
-        runtime.executable,
-        runtime.assembly || '-',
-        dataDirectory(),
-        repositoryId,
-        provider,
-        runtime.contracts
-      ],
-      env: { ELECTRON_RUN_AS_NODE: '1', PRAXIS_CODE_INTELLIGENCE_PROVIDER: provider }
-    };
-    return mcpServer;
-  } catch {
-    return undefined;
-  }
+  return sessionCodeIntelligenceServer(workingDirectory, provider, {
+    settings: getSettingsBackend().read().ai.codeIntelligence,
+    settingsPath: getSharedSettingsFilePath(),
+    runtime: service,
+    nodeExecutable: process.execPath,
+    bridgePath: path.join(path.dirname(require.resolve('@praxis/core')), 'codeIntelligence', 'mcpBridge.js'),
+    dataDirectory: dataDirectory(),
+    invoke,
+    installedModelFingerprint,
+    activateModel,
+    warn: (message, error) => console.warn(message, error)
+  });
 }
-

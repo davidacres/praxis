@@ -336,3 +336,28 @@ test('runner fields survive the store round trip', async () => {
   assert.equal(h.run.pause?.reason, 'approval');
   assert.equal(h.run.policy.workflowId, 'governed');
 });
+
+
+test('Run now starts a future schedule immediately and serializes repeated clicks with timer ticks', async () => {
+  const h = new Harness();
+  h.clock = Date.parse(CREATED);
+  const results = await Promise.allSettled([h.runner.startNow(h.run.id), h.runner.startNow(h.run.id), h.runner.tick()]);
+  assert.equal(results[0].status, 'fulfilled');
+  assert.equal(results[1].status, 'rejected');
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.attempts[0].trigger, 'start-now');
+  assert.equal(h.launches.length, 1);
+  assert.equal(h.run.attempts.length, 1);
+});
+
+test('Run now obeys the preview switch and provider budget gate', async () => {
+  const h = new Harness();
+  h.enabled = false;
+  await assert.rejects(h.runner.startNow(h.run.id), /Enable scheduled runs/);
+  assert.equal(h.run.status, 'scheduled');
+  h.enabled = true;
+  h.usage.used = { claude: 0.99, codex: 1 };
+  await h.runner.startNow(h.run.id);
+  assert.equal(h.run.status, 'paused');
+  assert.equal(h.launches.length, 0);
+});

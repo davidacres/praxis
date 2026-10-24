@@ -1319,7 +1319,11 @@ export interface ScheduledWorkflowChoice {
 }
 
 /** What the composer submits. `id` present means editing that schedule. */
-export type SaveScheduledRunInput = Omit<ComposeScheduledRunInput, 'at'> & { id?: string };
+export type SaveScheduledRunInput = Omit<ComposeScheduledRunInput, 'at'> & {
+  id?: string;
+  /** Explicit immediate start: ignores date/time and uses the normal runner checks. */
+  startNow?: boolean;
+};
 
 /**
  * Scheduled ticket runs (FX-BF-047 / FX-BE-147, FX-BE-148). Saving a schedule arms
@@ -1341,6 +1345,8 @@ export interface ScheduledRunsIpc {
   preview(input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; error?: string }>;
   /** Arms a draft, or puts an armed schedule back on hold. */
   setArmed(id: string, armed: boolean): Promise<ScheduledRunView>;
+  /** Starts a saved draft or future schedule immediately through the normal runner checks. */
+  startNow(id: string): Promise<ScheduledRunView>;
   /** The user's explicit decision about a schedule whose start passed while Praxis was closed. */
   resolveMissed(id: string, resolution: MissedResolution): Promise<ScheduledRunView>;
   /** The workflows a schedule in this project can start tickets with, and the one used when none is chosen. */

@@ -73,7 +73,7 @@ export function nextLaunchableEntry(run: ScheduledRun): ScheduledQueueEntry | un
   return run.entries.find(entry => outcomeOf(entry).status === 'queued');
 }
 
-/** Starts an armed run. The trigger is `start-now` when the user started a missed run late. */
+/** Starts an armed run. The trigger records an explicit Run now decision. */
 export function startScheduledRunAttempt(run: ScheduledRun, at: string): ScheduledRun {
   if (run.status !== 'scheduled') throw new Error(`A ${run.status} run cannot be started.`);
   const lastDecision = [...run.events].reverse().find(event => event.kind === 'start-now' || event.kind === 'armed');
@@ -81,7 +81,7 @@ export function startScheduledRunAttempt(run: ScheduledRun, at: string): Schedul
   const attempt = { id: newScheduledId('attempt'), trigger, startedAt: at };
   return touch({ ...run, status: 'running', attempts: [...run.attempts, attempt] }, at, {
     kind: 'started',
-    message: trigger === 'start-now' ? 'Started late at the user’s request.' : 'Started on schedule.'
+    message: trigger === 'start-now' ? 'Started at the user’s request.' : 'Started on schedule.'
   });
 }
 

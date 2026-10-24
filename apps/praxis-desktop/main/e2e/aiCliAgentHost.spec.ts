@@ -314,7 +314,9 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
   const byName = Object.fromEntries(received.map(server => [server.name as string, server]));
   // Names are slugged the way tool names are; a switched-off server is not sent.
   // praxis-coordination is Praxis's own: a full-tools session can see and claim what other sessions hold (FX-BF-048).
-  expect(Object.keys(byName).sort()).toEqual(['docs_search', 'files', 'praxis-coordination', 'praxis-tracker']);
+  // Code and knowledge tools are also built in when the local service runtime is
+  // installed. Their presence must not make this user-added-server test host-dependent.
+  expect(Object.keys(byName).filter(name => name !== 'code_intelligence').sort()).toEqual(['docs_search', 'files', 'praxis-coordination', 'praxis-tracker']);
   expect(byName.docs_search).toMatchObject({
     type: 'http',
     url: 'https://mcp.example.com/mcp',
@@ -325,6 +327,9 @@ test('MCP servers the user added reach a CLI agent at session start', async () =
     args: ['-y', 'some-server', '/tmp'],
     env: [{ name: 'TOKEN', value: 'secret' }]
   });
+  await openSession(win, 'APP-214');
+  await expect(win.getByTestId('session-chat-assistant').last()).toContainText('MCP_SERVERS:');
+  await win.screenshot({ path: test.info().outputPath('mcp-session.png') });
 });
 
 test('ACP resume replay does not duplicate the previous answer into a follow-up', async () => {

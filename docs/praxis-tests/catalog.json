@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 704,
+  "testCount": 706,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -395,7 +395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 330,
+        "line": 335,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -411,7 +411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 389,
+        "line": 394,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -427,7 +427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 420,
+        "line": 425,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -443,7 +443,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 439,
+        "line": 444,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -459,7 +459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 486,
+        "line": 491,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -475,7 +475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 507,
+        "line": 512,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -491,7 +491,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 536,
+        "line": 541,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -507,7 +507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 546,
+        "line": 551,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -523,7 +523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 612,
+        "line": 617,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -539,7 +539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 625,
+        "line": 630,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -555,7 +555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 648,
+        "line": 653,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -7654,12 +7654,44 @@
       }
     },
     {
+      "id": "PT-9EEC436CE9",
+      "title": "Run now starts drafts and future schedules immediately, records one attempt and opens the live view",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 766,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Run now starts drafts and future schedules immediately, records one attempt and opens the live view",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-76F292ED66",
+      "title": "the editor can Run now without a scheduled start time and still obeys the provider budget gate",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 790,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the editor can Run now without a scheduled start time and still obeys the provider budget gate",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-9EBCCE6CC4",
       "title": "a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 766,
+        "line": 807,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7675,7 +7707,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 804,
+        "line": 845,
         "project": "functional"
       },
       "area": "scheduled Runs",

@@ -102,7 +102,9 @@ export const CODE_INTELLIGENCE_SERVER_NAME = 'code_intelligence';
  * they get stuck on lagging, uncovered or failed lookups. So: route, don't replace.
  */
 export const CODE_INTELLIGENCE_PROMPT = `## Code intelligence
-This session has read-only \`code_intelligence\` tools over a local index of the working folder (C#, TypeScript, JavaScript and docs).
+This session has read-only \`code_intelligence\` tools for indexed code and knowledge, including documentation and plans. They are useful for knowledge questions even when no code change or working folder is involved.
+- If list_repositories is available, use it to discover the indexes this provider may read, then pass a repository name to queries.
+- Use search_knowledge for documentation, plans and domain knowledge, then get_knowledge_section to read the relevant section. Use find_related_knowledge to connect documentation to a symbol, file or ticket.
 - Use them first for structure: find_symbol for definitions, get_callers / get_callees / trace_flow for call paths, search_code when you know the concept but not the identifier, search_knowledge for project docs. Then get_source to read just the part you need.
 - Use grep or text search instead for exact strings (messages, setting keys, CSS classes, test IDs), files the index does not cover, and code you changed in this session, because the index can lag recent edits.
 - An empty, external-only or error result does not mean the code is missing. Check get_index_status if needed, then fall back to text search.`;

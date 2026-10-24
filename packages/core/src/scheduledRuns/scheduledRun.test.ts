@@ -13,6 +13,7 @@ import {
   renameScheduledRun,
   rescheduleScheduledRun,
   resolveMissedScheduledRun,
+  startScheduledRunNow,
   type ScheduledRun,
   type ScheduledTicketRef
 } from './scheduledRun';
@@ -333,4 +334,21 @@ test('a dirty base and a nearly-empty provider warn without blocking', () => {
   });
   assert.equal(readiness.ready, true);
   assert.deepEqual(readiness.issues.map(issue => issue.code).sort(), ['allowance-low', 'base-dirty']);
+});
+
+
+test('Run now makes drafts and future schedules due without changing queue order, and rejects empty or started runs', () => {
+  const draft = createScheduledRun({ name: 'Now', scheduledStartAt: LATER, timezone: 'UTC', tickets: [ref('T-2'), ref('T-1')], at: NOW });
+  for (const run of [draft, armScheduledRun(draft, NOW)]) {
+    const due = startScheduledRunNow(run, NOW);
+    assert.equal(due.status, 'scheduled');
+    assert.equal(due.scheduledStartAt, NOW);
+    assert.deepEqual(due.entries, draft.entries);
+    assert.equal(due.events.at(-1)?.kind, 'start-now');
+    assert.equal(dueScheduledRuns([due], NOW).length, 1);
+  }
+  assert.throws(() => startScheduledRunNow({ ...draft, entries: [] }, NOW), /at least one ticket/);
+  for (const status of ['running', 'paused', 'completed', 'cancelled', 'failed'] as const) {
+    assert.throws(() => startScheduledRunNow({ ...draft, status }, NOW), /cannot be started now/);
+  }
 });

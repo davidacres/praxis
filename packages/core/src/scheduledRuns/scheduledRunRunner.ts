@@ -21,7 +21,7 @@
  */
 
 import type { ScheduledPauseReason, ScheduledQueueEntry, ScheduledRun, ScheduledTicketRef } from './scheduledRun';
-import { dueScheduledRuns } from './scheduledRun';
+import { dueScheduledRuns, startScheduledRunNow } from './scheduledRun';
 import { decideProviderForEntry, DEFAULT_HANDOVER_THRESHOLD } from './scheduledBudget';
 import {
   activeScheduledEntry,
@@ -135,6 +135,13 @@ export class ScheduledRunRunner {
   }
 
   // ── user commands ──────────────────────────────────────────────────────
+
+  public startNow(runId: string): Promise<ScheduledRun> {
+    return this.command(runId, run => {
+      if (!this.ports.isEnabled()) throw new Error('Enable scheduled runs before starting this run.');
+      return startScheduledRunNow(run, this.ports.now());
+    }, true);
+  }
 
   public pause(runId: string): Promise<ScheduledRun> {
     return this.command(runId, run => pauseScheduledRun(run, 'user', 'Paused by the user.', this.ports.now()));

@@ -3,6 +3,7 @@ import {
   armScheduledRun,
   composeScheduledRun,
   holdScheduledRun,
+  instantToZonedParts,
   resolveMissedScheduledRun,
   type MissedResolution,
   type SaveScheduledRunInput,
@@ -20,9 +21,9 @@ import { defaultScheduleWorkflow } from './scheduledWorkflow';
  *
  * Every mutation is a pure core function applied to the stored run and saved,
  * so the rules (what is editable, what arming needs, what a missed run can do)
- * live in one tested place. Nothing here *starts* a schedule: saving only changes
- * its definition, and the runner (`scheduledRunRunnerInstance.ts`, FX-BE-148) starts
- * it at its time. The pause/resume/skip/retry/cancel/approve handlers hand the
+ * live in one tested place. Saving normally changes only the definition; Run now
+ * explicitly hands it to the runner (`scheduledRunRunnerInstance.ts`, FX-BE-148)
+ * immediately instead of waiting for its time. The pause/resume/skip/retry/cancel/approve handlers hand the
  * user's decision to that runner, which applies it in order with its other work.
  */
 
@@ -53,6 +54,7 @@ export function registerScheduledRunIpc(): void {
     return { choices, defaultWorkflowId: defaultScheduleWorkflow(choices) };
   });
   ipcMain.handle('scheduledRuns:pause', decide(id => getScheduledRunRunner().pause(id)));
+  ipcMain.handle('scheduledRuns:startNow', decide(id => getScheduledRunRunner().startNow(id)));
   ipcMain.handle('scheduledRuns:resume', decide(id => getScheduledRunRunner().resume(id)));
   ipcMain.handle('scheduledRuns:cancel', decide(id => getScheduledRunRunner().cancel(id)));
   ipcMain.handle('scheduledRuns:skipEntry', async (_event, id: string, entryId: string) => {
@@ -84,10 +86,15 @@ export function registerScheduledRunIpc(): void {
   ipcMain.handle('scheduledRuns:save', async (_event, input: SaveScheduledRunInput): Promise<ScheduledRunView> => {
     const store = getScheduledRunStore();
     const existing = input.id ? requireRun(input.id) : undefined;
-    const { id: _id, ...form } = await withDefaultWorkflow(input, existing);
-    const run = composeScheduledRun(existing, { ...form, at: new Date().toISOString() });
+    const { id: _id, startNow, ...form } = await withDefaultWorkflow(input, existing);
+    const at = new Date().toISOString();
+    // An immediate start does not require a future date or a valid scheduled wall time.
+    const start = startNow ? instantToZonedParts(at, form.timezone) : undefined;
+    if (startNow && !start) throw new Error('Choose a valid timezone before starting this run.');
+    const run = composeScheduledRun(existing, { ...form, ...(start ? { ...start, arm: false } : {}), at });
     await store.save(run);
     notifyScheduledRunsChanged(run.projectId);
+    if (startNow) return buildScheduledRunView(await getScheduledRunRunner().startNow(run.id));
     return buildScheduledRunView(run);
   });
 

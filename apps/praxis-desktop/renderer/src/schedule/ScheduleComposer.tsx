@@ -26,7 +26,7 @@ interface ScheduleComposerProps {
   loadError: string;
   initial?: ScheduledRunView;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (startedRunId?: string) => void;
   initialTicketKeys?: string[];
   autoAddSelectedTickets?: boolean;
 }
@@ -193,12 +193,12 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
     };
   })();
 
-  const save = async (arm: boolean) => {
+  const save = async (arm: boolean, startNow = false) => {
     setSaving(true);
     setSaveError('');
     try {
-      await window.praxis.scheduledRuns.save({ ...input, arm });
-      onSaved();
+      const saved = await window.praxis.scheduledRuns.save({ ...input, arm, ...(startNow ? { startNow } : {}) });
+      onSaved(startNow ? saved.run.id : undefined);
     } catch (reason) {
       setSaveError((reason instanceof Error ? reason.message : String(reason)).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
     } finally {
@@ -235,6 +235,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
         <div className="schedule-head-actions">
           <button type="button" className="btn" data-testid="schedule-cancel" onClick={onClose}>Cancel</button>
           <button type="button" className="btn" data-testid="schedule-save-draft" disabled={saving} onClick={() => void save(false)}>Save draft</button>
+          <button type="button" className="btn btn-primary" data-testid="schedule-run-now" disabled={saving || !name.trim() || !belt.length || !workflowId} onClick={() => void save(false, true)}>Run now</button>
         </div>
       </header>
 

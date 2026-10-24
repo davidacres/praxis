@@ -811,6 +811,7 @@ const praxis: PraxisIpc = {
     workflowChoices: (projectId: string) =>
       ipcRenderer.invoke('scheduledRuns:workflowChoices', projectId) as Promise<{ choices: ScheduledWorkflowChoice[]; defaultWorkflowId?: string }>,
     pause: (id: string) => ipcRenderer.invoke('scheduledRuns:pause', id) as Promise<ScheduledRunView>,
+    startNow: (id: string) => ipcRenderer.invoke('scheduledRuns:startNow', id) as Promise<ScheduledRunView>,
     resume: (id: string) => ipcRenderer.invoke('scheduledRuns:resume', id) as Promise<ScheduledRunView>,
     cancel: (id: string) => ipcRenderer.invoke('scheduledRuns:cancel', id) as Promise<ScheduledRunView>,
     skipEntry: (id: string, entryId: string) => ipcRenderer.invoke('scheduledRuns:skipEntry', id, entryId) as Promise<ScheduledRunView>,

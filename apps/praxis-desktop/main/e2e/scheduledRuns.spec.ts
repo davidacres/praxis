@@ -763,6 +763,47 @@ test('a due schedule starts by itself, and a provider at its allowance pauses it
   await expect(window.getByTestId('schedule-report-table').locator('tbody tr')).toHaveCount(2);
 });
 
+test('Run now starts drafts and future schedules immediately, records one attempt and opens the live view', async () => {
+  const { page, projectId } = await launch({ env: { PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) } });
+  const workflowId = await saveApprovalWorkflow(page, projectId);
+  for (const draft of [true, false]) {
+    const name = draft ? 'Start this draft' : 'Start this future schedule';
+    const id = await scheduleSoon(page, projectId, name, 1, 86400, workflowId);
+    if (draft) await page.evaluate(id => window.praxis.scheduledRuns.setArmed(id, false), id);
+    const card = page.getByTestId('schedule-card').filter({ hasText: name });
+    await expect(card.getByTestId('schedule-status')).toHaveText(draft ? 'Draft' : 'Scheduled');
+    await card.getByTestId('schedule-run-now').click();
+    await expect(page.getByTestId('schedule-monitor')).toBeVisible();
+    await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).length).toBe(draft ? 1 : 2);
+    const run = await page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run, id);
+    expect(run.attempts).toHaveLength(1);
+    expect(run.attempts[0].trigger).toBe('start-now');
+    await expect(page.getByTestId('schedule-run-now')).toHaveCount(0);
+    if (draft) {
+      await page.getByTestId('schedule-monitor-back').click();
+    } else {
+      await page.screenshot({ path: path.join(shots, 'scheduled-run-now-live.png') });
+    }
+  }
+});
+
+test('the editor can Run now without a scheduled start time and still obeys the provider budget gate', async () => {
+  const { page } = await launch({ env: { PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.97 }) } });
+  await page.getByTestId('schedule-new').click();
+  await expect(page.getByTestId('schedule-run-now')).toBeDisabled();
+  await page.getByTestId('schedule-hopper-card').first().press('Enter');
+  await page.getByTestId('schedule-name').fill('Run this now');
+  await page.getByTestId('schedule-date').fill('');
+  await page.getByTestId('schedule-time').fill('');
+  await expect(page.getByTestId('schedule-save')).toBeDisabled();
+  await expect(page.getByTestId('schedule-run-now')).toBeEnabled();
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-now-composer.png') });
+  await page.getByTestId('schedule-run-now').click();
+  await expect(page.getByTestId('schedule-monitor')).toBeVisible();
+  await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'budget');
+  await expect(page.getByTestId('schedule-belt').locator('li')).toHaveCount(1);
+});
+
 test('a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped', async () => {
   const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
   const { page, projectId, repo } = await launch({ env });

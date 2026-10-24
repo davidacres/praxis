@@ -385,6 +385,16 @@ export function reconcileScheduledRunOnLaunch(run: ScheduledRun, now: string): S
   });
 }
 
+/** Makes a saved draft, future schedule or missed run due at the user's request. */
+export function startScheduledRunNow(run: ScheduledRun, at: string): ScheduledRun {
+  if (!['draft', 'scheduled', 'missed'].includes(run.status)) throw new Error(`A ${run.status} run cannot be started now.`);
+  if (run.entries.length === 0) throw new Error('Add at least one ticket before starting the run.');
+  return touch({ ...run, status: 'scheduled', scheduledStartAt: new Date(at).toISOString() }, at, {
+    kind: 'start-now',
+    message: 'Run now requested by the user.'
+  });
+}
+
 export type MissedResolution = 'start-now' | 'skip';
 
 /**

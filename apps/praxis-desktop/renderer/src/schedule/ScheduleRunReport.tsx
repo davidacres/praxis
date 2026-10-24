@@ -50,7 +50,7 @@ export function ScheduleRunReport({ view, onBack, onOpenWorkflowRun }: ScheduleR
       </div>
       {attempt && (
         <p className="schedule-hint">
-          Started {formatStart(attempt.startedAt, run.timezone)} ({attempt.trigger === 'start-now' ? 'started late at your request' : 'on schedule'}).
+          Started {formatStart(attempt.startedAt, run.timezone)} ({attempt.trigger === 'start-now' ? 'started at your request' : 'on schedule'}).
         </p>
       )}
 
