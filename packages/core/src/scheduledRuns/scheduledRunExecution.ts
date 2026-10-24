@@ -31,14 +31,14 @@ import { newScheduledId } from './scheduledRun';
  * the schedule acts on. `exhausted` lists the providers that ran out during the
  * run, so a retry or a hand-over never goes back to one of them.
  */
-export type EntryProgress =
+export type EntryProgress = Pick<ScheduledEntryOutcome, 'estimate' | 'artifacts'> & (
   | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   /** Stopped on the provider's limit or a stage's tooling; waiting for the user. */
   | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'succeeded'; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
-  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] };
+  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] });
 
 function findEntry(run: ScheduledRun, entryId: string): ScheduledQueueEntry {
   const entry = run.entries.find(candidate => candidate.id === entryId);
@@ -104,6 +104,8 @@ export function markEntryLaunching(run: ScheduledRun, entryId: string, launchTok
     launchToken,
     startedAt: at,
     ...(provider ? { provider } : {}),
+    ...(previous.estimate ? { estimate: previous.estimate } : {}),
+    ...(previous.artifacts ? { artifacts: previous.artifacts } : {}),
     ...(previous.retries ? { retries: previous.retries } : {}),
     ...(previous.handovers ? { handovers: previous.handovers } : {}),
     ...(previous.exhausted ? { exhausted: previous.exhausted } : {})
@@ -175,6 +177,16 @@ export function resumeScheduledRun(run: ScheduledRun, at: string): ScheduledRun 
  * person, to the run). Idempotent: repeating the same progress changes nothing.
  */
 export function applyEntryProgress(run: ScheduledRun, entryId: string, progress: EntryProgress, at: string): ScheduledRun {
+  const outcome = outcomeOf(findEntry(run, entryId));
+  if (outcome.status === 'done' || outcome.status === 'skipped') return run;
+  const estimate = outcome.estimate ?? progress.estimate;
+  const artifacts = [...new Map([...(outcome.artifacts ?? []), ...(progress.artifacts ?? [])].map(artifact => [artifact.artifactId, artifact])).values()];
+  const changed = JSON.stringify(estimate) !== JSON.stringify(outcome.estimate) || JSON.stringify(artifacts) !== JSON.stringify(outcome.artifacts ?? []);
+  const enriched = changed ? withOutcome(run, entryId, { ...outcome, ...(estimate ? { estimate } : {}), ...(artifacts.length ? { artifacts } : {}) }) : run;
+  return applyProgressState(enriched, entryId, progress, at);
+}
+
+function applyProgressState(run: ScheduledRun, entryId: string, progress: EntryProgress, at: string): ScheduledRun {
   const entry = findEntry(run, entryId);
   const outcome = outcomeOf(entry);
   const key = entry.ticket.issueKey;
@@ -185,7 +197,7 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
   switch (progress.kind) {
     case 'running': {
       const exhausted = exhaustedAfter(outcome, progress.exhausted);
-      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || run.pause.reason === 'budget' || run.pause.reason === 'policy' || run.pause.reason === 'failure');
+      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || (run.pause.reason === 'budget' && outcome.status === 'paused') || run.pause.reason === 'policy' || run.pause.reason === 'failure');
       const unchanged =
         outcome.status === 'running' && !outcome.gate && !wasWaiting && sameSpend(outcome.spend, spend) && sameExhausted(outcome.exhausted, exhausted) &&
         (!progress.provider || progress.provider === outcome.provider) && (!progress.sessionId || progress.sessionId === outcome.sessionId);
@@ -272,6 +284,8 @@ export function retryScheduledEntry(run: ScheduledRun, entryId: string, at: stri
   const next = withOutcome(run, entryId, {
     status: 'queued',
     retries,
+    ...(outcome.estimate ? { estimate: outcome.estimate } : {}),
+    ...(outcome.artifacts ? { artifacts: outcome.artifacts } : {}),
     ...(outcome.handovers ? { handovers: outcome.handovers } : {}),
     ...(outcome.exhausted ? { exhausted: outcome.exhausted } : {})
   });

@@ -1,3 +1,4 @@
+import { applyEntryProgress, markEntryLaunching, startScheduledRunAttempt } from './scheduledRunExecution';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { KeyValueStore } from '../host/stateStore';
@@ -140,4 +141,20 @@ test('the project id survives a round trip and an unset one stays unset', async 
   await store.save(makeRun('Loose', '2026-10-22T10:00:00Z', 'loose'));
   assert.equal(store.get('mine')?.projectId, 'p1');
   assert.ok(!('projectId' in store.get('loose')!));
+});
+
+test('ledger estimates and artifacts survive progress and a store restart', async () => {
+  let run = startScheduledRunAttempt(armScheduledRun(makeRun('Audit', '2026-10-21T21:00:00Z'), NOW), NOW);
+  const entryId = run.entries[0].id;
+  run = markEntryLaunching(run, entryId, 'token', 'claude', NOW);
+  const estimate = { tokens: { low: 10, high: 100 }, spend: { low: 1, high: 2, currency: 'USD' }, basedOnSessions: 3 };
+  const artifact = { artifactId: 'a', contractId: 'change-diff', nodeId: 'implement', runId: 'w', kind: 'diff' as const, path: '.praxis/change-diff.md', createdAt: NOW };
+  run = applyEntryProgress(run, entryId, { kind: 'running', estimate, artifacts: [artifact] }, NOW);
+  run = applyEntryProgress(run, entryId, { kind: 'succeeded', spend: { tokens: 50 } }, NOW);
+  const state = memoryStore();
+  await new ScheduledRunStore(state).save(run);
+  const outcome = new ScheduledRunStore(state).get(run.id)?.entries[0].outcome;
+  assert.deepEqual(outcome?.estimate, estimate);
+  assert.deepEqual(outcome?.artifacts, [artifact]);
+  assert.deepEqual(outcome?.spend, { tokens: 50 });
 });

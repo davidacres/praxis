@@ -46,6 +46,9 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
   const status = typeof raw.status === 'string' && ENTRY_STATUSES.has(raw.status) ? (raw.status as ScheduledEntryStatus) : 'queued';
   const gate = normalizeGate(raw.gate);
   const spend = normalizeSpend(raw.spend);
+  const estimate = normalizeEstimate(raw.estimate);
+  const artifacts = (Array.isArray(raw.artifacts) ? raw.artifacts : []).filter((artifact): artifact is NonNullable<ScheduledEntryOutcome['artifacts']>[number] =>
+    !!artifact && typeof artifact === 'object' && ['artifactId', 'contractId', 'nodeId', 'runId', 'kind', 'createdAt'].every(key => typeof artifact[key] === 'string'));
   const handovers = (Array.isArray(raw.handovers) ? raw.handovers : []).map(normalizeHandover).filter((h): h is ScheduledHandover => !!h);
   const exhausted = (Array.isArray(raw.exhausted) ? raw.exhausted : []).filter((value): value is string => typeof value === 'string' && !!value);
   return {
@@ -61,6 +64,8 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
     ...(handovers.length > 0 ? { handovers } : {}),
     ...(exhausted.length > 0 ? { exhausted: [...new Set(exhausted)] } : {}),
     ...(spend ? { spend } : {}),
+    ...(estimate ? { estimate } : {}),
+    ...(artifacts.length ? { artifacts } : {}),
     ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {})
   };
 }
@@ -87,6 +92,25 @@ function normalizeSpend(value: unknown): ScheduledEntryOutcome['spend'] {
     ...(raw.estimated === true ? { estimated: true } : {})
   };
   return Object.keys(spend).length > 0 ? spend : undefined;
+}
+
+function normalizeEstimate(value: unknown): ScheduledEntryOutcome['estimate'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const range = (value: unknown) => {
+    if (!value || typeof value !== 'object') return undefined;
+    const r = value as Record<string, unknown>;
+    return typeof r.low === 'number' && Number.isFinite(r.low) && r.low >= 0 && typeof r.high === 'number' && Number.isFinite(r.high) && r.high >= r.low ? { low: r.low, high: r.high } : undefined;
+  };
+  const tokens = range(raw.tokens);
+  const cost = range(raw.spend);
+  const currency = raw.spend && typeof raw.spend === 'object' ? text((raw.spend as Record<string, unknown>).currency) : undefined;
+  return {
+    ...(tokens ? { tokens } : {}),
+    ...(cost && currency ? { spend: { ...cost, currency } } : {}),
+    ...(text(raw.notEstimable) ? { notEstimable: text(raw.notEstimable) } : {}),
+    ...(num(raw.basedOnSessions) !== undefined ? { basedOnSessions: num(raw.basedOnSessions) } : {})
+  };
 }
 
 function normalizeHandover(value: unknown): ScheduledHandover | undefined {

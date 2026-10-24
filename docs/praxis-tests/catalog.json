@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 708,
+  "testCount": 710,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -7398,6 +7398,22 @@
       }
     },
     {
+      "id": "PT-F32409778D",
+      "title": "scheduled allowance handover checkpoints and continues the active stage in the same session",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts",
+        "line": 21,
+        "project": "functional"
+      },
+      "area": "scheduled Provider Handover",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "scheduled allowance handover checkpoints and continues the active stage in the same session",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-8DC4807D76",
       "title": "builds a schedule on the belt, saves it, and it survives a restart in the same order",
       "source": {
@@ -7670,12 +7686,28 @@
       }
     },
     {
+      "id": "PT-9DA156CF24",
+      "title": "the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 790,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-76F292ED66",
       "title": "the editor can Run now without a scheduled start time and still obeys the provider budget gate",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 790,
+        "line": 807,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7691,7 +7723,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 807,
+        "line": 824,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7707,7 +7739,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 845,
+        "line": 862,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7723,7 +7755,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 862,
+        "line": 879,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -7739,7 +7771,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 902,
+        "line": 919,
         "project": "functional"
       },
       "area": "scheduled Runs",

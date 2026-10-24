@@ -1,5 +1,7 @@
 import {
   WorkflowRunStore,
+  estimateWorkflowRun,
+  stageUsageSample,
   exhaustedProviders,
   providerHeadroom,
   resolveApprovalTarget,
@@ -13,6 +15,7 @@ import {
   type WorkflowObservation,
   type WorkflowRun
 } from '@praxis/core';
+import { getAiSessionManager } from './aiInstance';
 import { getAiUsageLog } from './aiUsageLogInstance';
 import { providerSnapshot } from './aiUsageIpc';
 import { getSettingsBackend } from './settingsBackendInstance';
@@ -88,15 +91,17 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
     progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField, ...exhaustedField };
   } else {
     const live = summary.stages.find(stage => stage.lane === 'running') ?? [...summary.stages].reverse().find(stage => stage.provider);
+    const session = live?.sessionId ? getAiSessionManager().listAgentSessionSummaries().find(session => session.sessionId === live.sessionId) : undefined;
     progress = {
       kind: 'running',
-      provider: live?.provider ?? summary.aiProvider,
+      provider: session?.provider ?? live?.provider ?? summary.aiProvider,
       ...(live?.sessionId ? { sessionId: live.sessionId } : {}),
       ...spendField,
       ...exhaustedField
     };
   }
-  return { progress };
+  const estimate = estimateWorkflowRun(run.definition, { parameters: run.parameters, usage: stageUsageSample(getAiUsageLog().list()) });
+  return { progress: { ...progress, estimate: { tokens: estimate.tokens, spend: estimate.spend, notEstimable: estimate.notEstimable, basedOnSessions: estimate.basedOnSessions }, artifacts: Object.values(run.nodes).flatMap(node => node.artifacts) } };
 }
 
 /** A run's progress through its stages, for the live view. */

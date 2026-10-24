@@ -58,7 +58,7 @@ export class ScheduledLaunchError extends Error {
 /** A workflow run as the runner sees it. */
 export interface WorkflowObservation {
   progress: EntryProgress;
-  /** True when no agent turn is in flight, so a stage may be handed to another provider without cutting it off. */
+  /** Informational: false while an agent turn is in flight. The handover port owns safe interruption. */
   idle?: boolean;
 }
 
@@ -289,7 +289,7 @@ export class ScheduledRunRunner {
       }
       return next;
     }
-    if (observation?.progress.kind === 'running' && observation.idle !== false && next.status === 'running') {
+    if (observation?.progress.kind === 'running' && next.status === 'running') {
       next = await this.checkHandover(next, entry.id, workflowRunId, observation.progress.provider ?? entry.outcome?.provider);
     }
     return next;
@@ -308,17 +308,19 @@ export class ScheduledRunRunner {
     });
     if (decision.kind === 'handover' && decision.from) {
       const usedFraction = decision.usedFraction ?? this.ports.threshold?.() ?? DEFAULT_HANDOVER_THRESHOLD;
-      const { checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction });
+      let checkpointRef: string | undefined;
+      try {
+        ({ checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction }));
+      } catch (error) {
+        return this.save(pauseScheduledRun(run, 'budget', `Provider handover failed: ${error instanceof Error ? error.message : String(error)}`, this.ports.now(), entryId));
+      }
       const at = this.ports.now();
       return this.save(
         recordProviderHandover(run, entryId, { at, from: decision.from, to: decision.provider, usedPercent: usedFraction * 100, ...(checkpointRef ? { checkpointRef } : {}) }, at)
       );
     }
     if (decision.kind === 'pause') {
-      // The stage cannot be stopped mid-flight just because nothing else is free: say so once, and let the
-      // workflow's own limit policy deal with the hard limit.
-      const last = [...run.events].reverse().find(event => event.kind === 'budget-checked' && event.entryId === entryId);
-      if (!last || last.message !== decision.reason) return this.save(recordBudgetCheck(run, decision.reason, this.ports.now(), entryId));
+      return this.save(pauseScheduledRun(run, 'budget', decision.reason, this.ports.now(), entryId));
     }
     return run;
   }

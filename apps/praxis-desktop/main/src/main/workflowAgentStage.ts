@@ -1,3 +1,4 @@
+import { stageHandoverGuard } from './stageHandoverGuard';
 import type { AgentSessionRecord } from '@praxis/core';
 import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
@@ -614,12 +615,18 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
       });
     };
 
-    const subscription = sessions.onDidChangeAgentSession(record => {
-      if (record.issueKey !== issueKey) return;
+    const check = () => {
+      if (stageHandoverGuard.isHeld(issueKey)) return;
+      const record = sessions.getAgentSession(issueKey);
+      if (!record) return;
       const completion = stageSessionCompletion(record);
       if (completion) settle(completion.state, completion.error);
+    };
+    const unobserve = stageHandoverGuard.observe(issueKey, check);
+    const subscription = sessions.onDidChangeAgentSession(record => {
+      if (record.issueKey === issueKey) check();
     });
-    dispose = () => subscription.dispose();
+    dispose = () => { subscription.dispose(); unobserve(); };
   });
 
   return { promise, cancel: () => dispose?.() };

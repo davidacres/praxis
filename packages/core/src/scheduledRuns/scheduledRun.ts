@@ -23,6 +23,8 @@
  *   resolves it.
  */
 
+import type { RunEstimate } from '../workflows/workflowEstimate';
+import type { WorkflowArtifactRef } from '../workflows/workflowTypes';
 import { randomUUID } from 'node:crypto';
 import { zonedTimeToInstant } from './scheduledRunTime';
 
@@ -96,6 +98,9 @@ export interface ScheduledEntryOutcome {
   gate?: ScheduledEntryGate;
   handovers?: ScheduledHandover[];
   spend?: ScheduledEntrySpend;
+  /** First observed estimate, retained independently of actual spend. */
+  estimate?: Pick<RunEstimate, 'tokens' | 'spend' | 'notEstimable' | 'basedOnSessions'>;
+  artifacts?: WorkflowArtifactRef[];
   /** Times the user retried this ticket after it failed or stopped. */
   retries?: number;
   /**

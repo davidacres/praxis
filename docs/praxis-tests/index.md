@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **710 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -466,6 +466,7 @@ This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/mai
 | PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
 | PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:69` |
 | PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:79` |
+| PT-F32409778D | scheduled Provider Handover | scheduled allowance handover checkpoints and continues the active stage in the same session | `apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts:21` |
 | PT-8DC4807D76 | scheduled Runs | builds a schedule on the belt, saves it, and it survives a restart in the same order | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:91` |
 | PT-20627BB23E | scheduled Runs | edit, schedule, hold and delete a schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:151` |
 | PT-74238ECE73 | scheduled Runs | a start that passed while Praxis was closed is missed, and only a choice resolves it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:187` |
@@ -483,11 +484,12 @@ This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/mai
 | PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:593` |
 | PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:728` |
 | PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:766` |
-| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:790` |
-| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:807` |
-| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:845` |
-| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
-| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:902` |
+| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:790` |
+| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:807` |
+| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:824` |
+| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
+| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:879` |
+| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
 | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
 | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
 | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |

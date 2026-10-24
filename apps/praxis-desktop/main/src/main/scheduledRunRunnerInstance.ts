@@ -6,6 +6,7 @@ import {
   WorkflowRunStore,
   approveStage,
   resolveApprovalTarget,
+  type AiProvider,
   type ScheduledRunnerPorts
 } from '@praxis/core';
 import { handoverThreshold, observeWorkflowRun, readProviderUsage } from './scheduledRunLive';
@@ -15,6 +16,9 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getWorkflowOrchestrator, onDidChangeWorkflowRun } from './workflowOrchestratorInstance';
 import { startWorkflowRun } from './workflowIpc';
+import { stageHandoverGuard } from './stageHandoverGuard';
+import { getAiSessionManager, abortActiveTask } from './aiInstance';
+import { handoverSession } from './aiIpc';
 import { preserveUncommittedWork } from './runWork';
 
 /**
@@ -89,13 +93,32 @@ function ports(): ScheduledRunnerPorts {
     threshold: handoverThreshold,
     handOver: async ({ entry, workflowRunId, from, to, usedFraction: used }) => {
       const run = runStore().get(workflowRunId);
-      // A running turn is never cut off: the run's provider changes for every stage not yet started.
-      await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
+      if (!run) throw new Error('The workflow run no longer exists.');
+      const sessions = getAiSessionManager();
+      const active = sessions.listAgentSessionSummaries().filter(session => session.workflowRunId === workflowRunId && session.workflowRole === 'stage' && session.provider === from && !['completed', 'failed', 'aborted'].includes(session.state));
+      if (active.length !== 1) throw new Error('Provider handover requires exactly one active workflow stage session.');
+      const session = active[0];
+      const worktreePath = session.worktreePath ?? run.worktreePath;
       let checkpointRef: string | undefined;
-      if (run?.worktreePath) {
-        const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
-        if (await preserveUncommittedWork(run.worktreePath, message)) checkpointRef = await headOf(run.worktreePath);
-      }
+      await stageHandoverGuard.during(session.issueKey, async () => {
+        await abortActiveTask(session.issueKey);
+        if (worktreePath) {
+          const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
+          await preserveUncommittedWork(worktreePath, message);
+          checkpointRef = await headOf(worktreePath);
+          if (!checkpointRef) throw new Error('Could not record the handover checkpoint.');
+        }
+        if (runStore().get(workflowRunId)?.status !== 'running') throw new Error('The workflow stopped during provider handover.');
+        await handoverSession(session.issueKey, {
+          provider: to as AiProvider,
+          expectedBriefRevision: sessions.getAgentSession(session.issueKey)?.handoverBrief?.revision ?? 0
+        });
+        if (runStore().get(workflowRunId)?.status !== 'running') {
+          await abortActiveTask(session.issueKey);
+          throw new Error('The workflow stopped during provider handover.');
+        }
+        await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
+      });
       return { ...(checkpointRef ? { checkpointRef } : {}) };
     },
     onChanged: run => notifyScheduledRunsChanged(run.projectId),

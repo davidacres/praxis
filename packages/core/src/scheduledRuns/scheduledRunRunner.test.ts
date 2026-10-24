@@ -306,13 +306,13 @@ test('budget: the hand-over point comes from the threshold port, read at every d
   assert.equal(h.run.status, 'running');
 });
 
-test('mid-ticket hand-over waits for the current turn to finish', async () => {
+test('mid-ticket hand-over interrupts the active turn through the handover port', async () => {
   const h = new Harness(['T-1']);
   await h.runner.tick();
   h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.99, codex: 0.3 } };
   h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' }, idle: false });
   await h.runner.tick();
-  assert.equal(h.handovers.length, 0);
+  assert.equal(h.handovers.length, 1);
 });
 
 test('a retry does not go back to the provider that ran out', async () => {
@@ -460,4 +460,27 @@ test('only an idle failed workflow needs manual scheduled recovery', () => {
   assert.equal(scheduledWorkflowBlocker({ ...summary, needsDecision: { edgeId: 'repair', message: 'Loop budget spent' } }), undefined);
   assert.equal(scheduledWorkflowBlocker({ ...summary, stages: [{ ...summary.stages[0], lane: 'paused' }] }), undefined);
   assert.equal(scheduledWorkflowBlocker({ ...summary, loops: [{ firing: true, needsDecision: false }] as typeof summary.loops }), undefined);
+});
+
+test('a threshold pause persists while the active turn still reports running', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+  h.usage = { usable: ['claude'], active: 'claude', used: { claude: 0.99 } };
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+  assert.equal(h.launches.length, 1);
+});
+
+test('a failed handover pauses once instead of retrying each tick', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.99, codex: 0.2 } };
+  let calls = 0;
+  h.ports.handOver = async () => { calls++; throw new Error('checkpoint refused'); };
+  await h.runner.tick();
+  assert.match(h.run.pause?.message ?? '', /checkpoint refused/);
+  await h.runner.tick();
+  assert.equal(calls, 1);
 });
