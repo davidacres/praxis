@@ -289,6 +289,23 @@ test('mid-ticket hand-over at 95% records the brief, checkpoint and switch', asy
   assert.equal(h.run.entries[0].outcome?.provider, 'codex');
 });
 
+test('budget: the hand-over point comes from the threshold port, read at every decision', async () => {
+  const h = new Harness(['T-1']);
+  let threshold = 0.8;
+  h.ports.threshold = () => threshold;
+  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.85, codex: 0.2 } };
+  await h.runner.tick();
+  // 85% is past a user's 80% point, so the ticket starts on the other provider.
+  assert.equal(h.launches[0].provider, 'codex');
+
+  // Raised to 99%, a provider at 97% carries on instead of handing over mid-ticket.
+  threshold = 0.99;
+  h.usage = { usable: ['claude', 'codex'], active: 'codex', used: { claude: 0.85, codex: 0.97 } };
+  await h.runner.tick();
+  assert.deepEqual(h.handovers, []);
+  assert.equal(h.run.status, 'running');
+});
+
 test('mid-ticket hand-over waits for the current turn to finish', async () => {
   const h = new Harness(['T-1']);
   await h.runner.tick();

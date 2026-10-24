@@ -22,6 +22,21 @@ test('merge updates the startup preference without changing other settings', () 
   assert.equal(merged.preview.enableNewProject, DEFAULT_APP_SETTINGS.preview.enableNewProject);
 });
 
+test('provider hand-over defaults to 95% and is clamped to a whole percent between 50 and 100', () => {
+  assert.equal(sanitizeAppSettings({}).ai.providerHandoverPercent, 95);
+  assert.equal(sanitizeAppSettings({ ai: {} }).ai.providerHandoverPercent, 95);
+  const at = (value: unknown) => sanitizeAppSettings({ ai: { providerHandoverPercent: value } }).ai.providerHandoverPercent;
+  assert.equal(at(80), 80);
+  assert.equal(at(10), 50);
+  assert.equal(at(150), 100);
+  assert.equal(at(87.6), 88);
+  assert.equal(at('90'), 95);
+  assert.equal(at(Number.NaN), 95);
+  const merged = sanitizeAppSettings(mergeAppSettings(DEFAULT_APP_SETTINGS, { ai: { providerHandoverPercent: 85 } }));
+  assert.equal(merged.ai.providerHandoverPercent, 85);
+  assert.equal(merged.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider);
+});
+
 test('mobile access is off by default and mode is validated to the known set', () => {
   assert.equal(sanitizeAppSettings({}).mobileAccess.mode, 'off');
   assert.equal(sanitizeAppSettings({ mobileAccess: { mode: 'local-only' } }).mobileAccess.mode, 'local-only');

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { ScheduledQueueEntry, ScheduledRunView } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
+import { useSettings } from '../settings/useSettings';
+import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { ENTRY_STATUS_LABEL, STATUS_LABEL, formatClock, formatSpend } from './scheduleFormat';
 
 /**
@@ -24,6 +26,7 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
   const { run, live } = view;
   const headroom = view.headroom ?? live?.headroom ?? [];
   const { confirm } = useDialogs();
+  const handoverPercent = useSettings().settings?.ai.providerHandoverPercent ?? DEFAULT_APP_SETTINGS.ai.providerHandoverPercent;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const api = window.praxis.scheduledRuns;
@@ -162,7 +165,7 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
       </section>
 
       <section className="schedule-panel" aria-label="Provider allowance" data-testid="schedule-budget">
-        <h3 className="schedule-panel-title">Provider allowance <span className="schedule-panel-note">work moves to another provider at 95%</span></h3>
+        <h3 className="schedule-panel-title">Provider allowance <span className="schedule-panel-note">work moves to another provider at {handoverPercent}%</span></h3>
         {headroom.length > 0 ? (
           <ul className="schedule-budget-list">
             {headroom.map(item => (
@@ -173,7 +176,7 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
                 ) : (
                   <>
                     <span className="schedule-progress schedule-progress--small" role="progressbar" aria-label={`${item.provider} allowance used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(item.usedFraction * 100)}>
-                      <span className={item.usedFraction >= 0.95 ? 'is-full' : undefined} style={{ width: `${Math.min(100, item.usedFraction * 100)}%` }} />
+                      <span className={item.usedFraction * 100 >= handoverPercent ? 'is-full' : undefined} style={{ width: `${Math.min(100, item.usedFraction * 100)}%` }} />
                     </span>
                     <span>{Math.round(item.usedFraction * 100)}% used</span>
                   </>

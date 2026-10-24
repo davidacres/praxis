@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef, ScheduledWorkflowChoice } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
+import { useSettings } from '../settings/useSettings';
+import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './scheduleFormat';
 
 /**
@@ -40,6 +42,7 @@ const sameTicket = (a: Pick<ScheduledTicketRef, 'connectionId' | 'issueKey'>, b:
 const SCHEDULE_TICKET_DRAG_TYPE = 'application/x-praxis-schedule-ticket';
 
 export function ScheduleComposer({ project, ticketHost, candidates, loadError, initial, onClose, onSaved, initialTicketKeys = [], autoAddSelectedTickets = false }: ScheduleComposerProps) {
+  const handoverPercent = useSettings().settings?.ai.providerHandoverPercent ?? DEFAULT_APP_SETTINGS.ai.providerHandoverPercent;
   const [name, setName] = useState(initial?.run.name ?? 'Scheduled run');
   const [date, setDate] = useState(initial?.start.date || tomorrowDate());
   const [time, setTime] = useState(initial?.start.time || '22:00');
@@ -403,7 +406,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
               <p className="schedule-policy"><strong>Sequential.</strong> One ticket finishes, pauses or is skipped before the next starts.</p>
               <p className="schedule-policy"><strong>Approval gates always pause the run.</strong> Nothing is approved while you are away.</p>
               <p className="schedule-policy">
-                <strong>Provider allowance.</strong> At 95% of a provider&rsquo;s allowance the run records its status, commits a
+                <strong>Provider allowance.</strong> At {handoverPercent}% of a provider&rsquo;s allowance the run records its status, commits a
                 checkpoint and hands over to the next provider, or pauses if none has room.
               </p>
             </section>

@@ -17,7 +17,7 @@ import { getServiceForConnection } from './serviceRegistry';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getProjectStore } from './projectStoreInstance';
 import { usableProviders } from './providerFallback';
-import { describeLiveEntry, readProviderUsage } from './scheduledRunLive';
+import { describeLiveEntry, handoverThreshold, readProviderUsage } from './scheduledRunLive';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { projectWorkflowTrust } from './workflowProjectTrust';
 import { projectFolder, runnableDefinition } from './workflowIpc';
@@ -106,7 +106,8 @@ export async function buildScheduledRunView(run: ScheduledRun, all: ScheduledRun
 
   const usage = await readProviderUsage().catch(() => undefined);
   const usable = usage?.usable ?? (await usableProviders());
-  const lowAllowance = usage ? usage.usable.find(provider => (usage.used[provider] ?? 0) >= 0.95) : undefined;
+  const threshold = handoverThreshold();
+  const lowAllowance = usage ? usage.usable.find(provider => (usage.used[provider] ?? 0) >= threshold) : undefined;
   const readiness = assessScheduledRunReadiness(run, {
     now: new Date().toISOString(),
     usableProviderCount: usable.length,

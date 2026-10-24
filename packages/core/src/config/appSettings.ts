@@ -160,6 +160,13 @@ export interface AiSettings {
    * money needs a price table this app does not have and could not keep true).
    */
   spendLimit: number;
+  /**
+   * A scheduled run hands a ticket to another AI provider once the current one
+   * reports this share of its allowance used, as a whole percent (50–100).
+   * Only providers that report usage can trigger it; an outright provider-limit
+   * error hands over regardless.
+   */
+  providerHandoverPercent: number;
   /** Which configured provider new sessions use by default. */
   activeProvider: AiProvider;
   /**
@@ -618,6 +625,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     analysisPrompt: '',
     analysisGateEnabled: false,
     spendLimit: 0,
+    providerHandoverPercent: 95,
     activeProvider: 'vercel-gateway',
     providers: {},
     browserTools: { enabled: false, allowedHosts: [] },
@@ -1241,6 +1249,9 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         workingDirectory: readString(raw.ai.workingDirectory, DEFAULT_APP_SETTINGS.ai.workingDirectory),
         analysisPrompt: readString(raw.ai.analysisPrompt, DEFAULT_APP_SETTINGS.ai.analysisPrompt),
         spendLimit: clampNumber(raw.ai.spendLimit, 0, Number.MAX_SAFE_INTEGER, DEFAULT_APP_SETTINGS.ai.spendLimit),
+        providerHandoverPercent: Math.round(
+          clampNumber(raw.ai.providerHandoverPercent, 50, 100, DEFAULT_APP_SETTINGS.ai.providerHandoverPercent)
+        ),
         analysisGateEnabled: readBoolean(
           raw.ai.analysisGateEnabled,
           DEFAULT_APP_SETTINGS.ai.analysisGateEnabled

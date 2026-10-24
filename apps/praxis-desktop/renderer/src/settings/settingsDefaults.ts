@@ -96,6 +96,7 @@ export const DEFAULT_APP_SETTINGS = {
     defaultModel: '',
     agentName: '',
     spendLimit: 0,
+    providerHandoverPercent: 95,
     browserTools: { enabled: false, allowedHosts: [] as string[] },
     nativeSources: {
       ecosystems: {} as Record<string, boolean>,

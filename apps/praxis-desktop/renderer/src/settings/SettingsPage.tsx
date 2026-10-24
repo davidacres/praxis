@@ -2430,6 +2430,20 @@ function PreviewSection({
         onChange={next => void update({ preview: { enableScheduledRuns: next } })}
         testId="toggle-enable-scheduled-runs"
       />
+      {settings.preview.enableScheduledRuns && (
+        <FieldRow
+          label="Switch AI provider at"
+          description="Percent of a provider's allowance used before a scheduled run hands the ticket to another provider. Only providers that report usage can reach it; an outright limit error switches regardless."
+        >
+          <DebouncedNumberField
+            ariaLabel="Switch AI provider at this percent of allowance used"
+            value={settings.ai.providerHandoverPercent}
+            min={50}
+            max={100}
+            onCommit={value => update({ ai: { providerHandoverPercent: value } })}
+          />
+        </FieldRow>
+      )}
     </>
   );
 }

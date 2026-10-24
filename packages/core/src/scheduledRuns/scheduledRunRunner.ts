@@ -4,7 +4,7 @@
  * Orchestration only: every decision about *what happens to a run* is a pure
  * transition in `scheduledRunExecution.ts` / `scheduledBudget.ts`, and every
  * side effect (storage, the workflow engine, provider usage, the clock) is a
- * port. That is what lets restart recovery, ordering and the 95% hand-over be
+ * port. That is what lets restart recovery, ordering and the allowance hand-over be
  * unit-tested with fakes.
  *
  * Three guarantees the design is built around:
@@ -104,7 +104,8 @@ export interface ScheduledRunnerPorts {
   approveGate?(workflowRunId: string, nodeId: string): Promise<void>;
   /** A run was saved. */
   onChanged?(run: ScheduledRun): void;
-  threshold?: number;
+  /** Share of an allowance (0–1) at which a provider is handed over. Read at every decision so a settings change applies at once. */
+  threshold?(): number;
 }
 
 export class ScheduledRunRunner {
@@ -303,10 +304,10 @@ export class ScheduledRunRunner {
       usable: usage.usable,
       used: usage.used,
       exclude: entry.outcome?.exhausted,
-      threshold: this.ports.threshold
+      threshold: this.ports.threshold?.()
     });
     if (decision.kind === 'handover' && decision.from) {
-      const usedFraction = decision.usedFraction ?? this.ports.threshold ?? DEFAULT_HANDOVER_THRESHOLD;
+      const usedFraction = decision.usedFraction ?? this.ports.threshold?.() ?? DEFAULT_HANDOVER_THRESHOLD;
       const { checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction });
       const at = this.ports.now();
       return this.save(
@@ -357,7 +358,7 @@ export class ScheduledRunRunner {
         // Starting work is different from moving it mid-ticket: an old limit may have cleared, and refusing
         // to start anything at all is worse than trying the only provider there is.
         excludedAsLastResort: true,
-        threshold: this.ports.threshold
+        threshold: this.ports.threshold?.()
       });
       if (decision.kind === 'pause') {
         await this.save(pauseScheduledRun(run, decision.why === 'no-provider' ? 'no-provider' : 'budget', decision.reason, this.ports.now(), entry.id));

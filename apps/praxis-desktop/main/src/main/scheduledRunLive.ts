@@ -119,6 +119,11 @@ export function stageProgressFor(workflowRunId: string): Pick<ScheduledRunLive, 
 
 let usageCache: { at: number; reading: ProviderUsageReading } | undefined;
 
+/** The user's hand-over point (`ai.providerHandoverPercent`) as a share of an allowance, 0–1. */
+export function handoverThreshold(): number {
+  return getSettingsBackend().read().ai.providerHandoverPercent / 100;
+}
+
 /** An e2e stand-in for provider quotas: `{"claude-code-cli":0.97}` — fractions of allowance used. */
 function usageOverride(): Record<string, number> | undefined {
   const raw = process.env.PRAXIS_E2E_PROVIDER_USAGE?.trim();

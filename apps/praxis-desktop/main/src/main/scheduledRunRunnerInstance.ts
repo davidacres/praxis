@@ -8,7 +8,7 @@ import {
   resolveApprovalTarget,
   type ScheduledRunnerPorts
 } from '@praxis/core';
-import { observeWorkflowRun, readProviderUsage } from './scheduledRunLive';
+import { handoverThreshold, observeWorkflowRun, readProviderUsage } from './scheduledRunLive';
 import { getScheduledRunStore, notifyScheduledRunsChanged } from './scheduledRunInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { getSettingsBackend } from './settingsBackendInstance';
@@ -86,6 +86,7 @@ function ports(): ScheduledRunnerPorts {
       await getWorkflowOrchestrator().cancel(workflowRunId, reason);
     },
     usage: readProviderUsage,
+    threshold: handoverThreshold,
     handOver: async ({ entry, workflowRunId, from, to, usedFraction: used }) => {
       const run = runStore().get(workflowRunId);
       // A running turn is never cut off: the run's provider changes for every stage not yet started.

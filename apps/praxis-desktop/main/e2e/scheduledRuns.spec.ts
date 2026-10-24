@@ -787,6 +787,23 @@ test('Run now starts drafts and future schedules immediately, records one attemp
   }
 });
 
+test('the hand-over point is a setting: raised past a provider\'s usage, Run now launches instead of pausing', async () => {
+  const { page, projectId } = await launch({ env: { PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.97 }) } });
+  await page.evaluate(() => window.praxis.settings.set({ ai: { providerHandoverPercent: 99 } }));
+  const workflowId = await saveApprovalWorkflow(page, projectId);
+  await page.getByTestId('schedule-new').click();
+  await expect(page.locator('.schedule-policy').filter({ hasText: 'Provider allowance' })).toContainText('At 99%');
+  await page.getByTestId('schedule-cancel').click();
+  const id = await scheduleSoon(page, projectId, 'Under a raised limit', 1, 86400, workflowId);
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Under a raised limit' });
+  await card.getByTestId('schedule-run-now').click();
+  await expect(page.getByTestId('schedule-monitor')).toBeVisible();
+  // 97% used is under the user's 99% point, so the ticket launches rather than pausing for budget.
+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).length).toBe(1);
+  expect((await page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run, id)).pause?.reason).not.toBe('budget');
+  await expect(page.getByTestId('schedule-monitor')).toContainText('work moves to another provider at 99%');
+});
+
 test('the editor can Run now without a scheduled start time and still obeys the provider budget gate', async () => {
   const { page } = await launch({ env: { PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.97 }) } });
   await page.getByTestId('schedule-new').click();
