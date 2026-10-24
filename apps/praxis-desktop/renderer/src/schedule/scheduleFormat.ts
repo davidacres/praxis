@@ -132,3 +132,42 @@ export function tomorrowDate(): string {
   date.setDate(date.getDate() + 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
+
+/** "12k tokens · $0.42", or "No usage reported" — spend the provider did not report is never invented. */
+export function formatSpend(spend: { tokens?: number; cost?: number; currency?: string } | undefined): string {
+  if (!spend || (spend.tokens === undefined && spend.cost === undefined)) return 'No usage reported';
+  const parts: string[] = [];
+  if (spend.tokens !== undefined) parts.push(spend.tokens >= 1000 ? `${Math.round(spend.tokens / 100) / 10}k tokens` : `${spend.tokens} tokens`);
+  if (spend.cost !== undefined && spend.currency) {
+    try {
+      parts.push(new Intl.NumberFormat(undefined, { style: 'currency', currency: spend.currency }).format(spend.cost));
+    } catch {
+      parts.push(`${spend.cost.toFixed(2)} ${spend.currency}`);
+    }
+  }
+  return parts.join(' · ');
+}
+
+/** "1h 05m", "7m 12s", "42s"; empty when either end is missing or the span is negative. */
+export function formatSpan(startIso: string | undefined, endIso: string | undefined): string {
+  if (!startIso || !endIso) return '';
+  const seconds = Math.round((Date.parse(endIso) - Date.parse(startIso)) / 1000);
+  if (!Number.isFinite(seconds) || seconds < 0) return '';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, '0')}s`;
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+}
+
+export function formatClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+}
+
+export const ENTRY_STATUS_LABEL: Record<string, string> = {
+  queued: 'Waiting',
+  running: 'Running',
+  paused: 'Waiting for you',
+  done: 'Done',
+  failed: 'Failed',
+  skipped: 'Skipped'
+};

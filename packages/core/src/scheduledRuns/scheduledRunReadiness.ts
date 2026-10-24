@@ -25,6 +25,9 @@ export type ScheduledReadinessCode =
   | 'ticket-closed'
   | 'no-folder'
   | 'no-workflow'
+  | 'workflow-untrusted'
+  | 'base-dirty'
+  | 'allowance-low'
   | 'no-acceptance-criteria'
   | 'in-other-schedule';
 
@@ -60,6 +63,15 @@ export interface ScheduledReadinessContext {
   probe: (ticket: ScheduledTicketRef) => ScheduledTicketProbe;
   /** Enabled AI providers that are set up. */
   usableProviderCount: number;
+  /**
+   * False when the chosen workflow needs local workspace trust that has not been
+   * given. An unattended start cannot stop to ask, so this blocks. Undefined = not assessed.
+   */
+  workflowTrusted?: boolean;
+  /** The project's base checkout has uncommitted changes, which would pause an unattended start. */
+  baseDirty?: boolean;
+  /** A provider that is already at or past the hand-over point. */
+  lowAllowanceProvider?: string;
 }
 
 export function assessScheduledRunReadiness(run: ScheduledRun, context: ScheduledReadinessContext): ScheduledRunReadiness {
@@ -73,6 +85,30 @@ export function assessScheduledRunReadiness(run: ScheduledRun, context: Schedule
   }
   if (context.usableProviderCount <= 0) {
     issues.push({ code: 'no-provider', severity: 'blocker', message: 'No AI provider is enabled and set up to run the tickets.' });
+  }
+
+  if (!run.policy.workflowId) {
+    issues.push({ code: 'no-workflow', severity: 'blocker', message: 'Choose the workflow each ticket is started with.' });
+  } else if (context.workflowTrusted === false) {
+    issues.push({
+      code: 'workflow-untrusted',
+      severity: 'blocker',
+      message: 'This workflow needs workspace trust. Review and approve it before the run, because an unattended start cannot ask.'
+    });
+  }
+  if (context.baseDirty) {
+    issues.push({
+      code: 'base-dirty',
+      severity: 'warning',
+      message: 'The project folder has uncommitted changes. The run will pause at the first ticket until they are committed or set aside.'
+    });
+  }
+  if (context.lowAllowanceProvider) {
+    issues.push({
+      code: 'allowance-low',
+      severity: 'warning',
+      message: `${context.lowAllowanceProvider} is nearly out of allowance, so the run may start on another provider or pause.`
+    });
   }
 
   for (const entry of run.entries) {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ScheduledRunStore, createScheduledRun, InMemoryMobileCommandLedger, handleMobileCommand, type MobileCommand, type MobileHostApplication } from '@praxis/core';
 import { createMobileSchedules } from './mobileScheduledRuns';
+import { defaultScheduleWorkflow } from './scheduledWorkflow';
 import { createMobileHostExecutionHandlers, createMobileHostReads, type MobileHostServiceDeps } from './mobileHostServices';
 
 const form = { name: 'Tonight', date: '2026-10-25', time: '20:30', timezone: 'Europe/London', issueKeys: ['A-2', 'A-1'] };
@@ -58,4 +59,27 @@ test('missed runs require explicit resolution; empty schedules cannot be armed',
   assert.equal((await schedules.list('A')).find(run => run.id === missed.id)?.status, 'missed');
   assert.equal((await schedules.resolveMissed('A', missed.id, 'skip')).status, 'cancelled');
   await assert.rejects(schedules.resolveMissed('A', missed.id, 'start-now'), /missed/);
+});
+
+test('phone schedules retain the default workflow and explicitly starting a missed run wakes the runner', async () => {
+  const { store } = fixture();
+  let ticks = 0;
+  const schedules = createMobileSchedules({
+    store: () => store,
+    tickets: async () => [{ connectionId: 'project:A', issueKey: 'A-1', title: 'First' }],
+    changed: () => {},
+    defaultWorkflow: async () => defaultScheduleWorkflow([
+      { workflowId: 'governed-delivery', name: 'Governed', trigger: 'manual' },
+      { workflowId: 'ticket-flow', name: 'Ticket flow', trigger: 'ticket' },
+    ]),
+    startNow: async () => { ticks++; },
+    now: () => '2026-10-24T00:00:00.000Z',
+  });
+  const saved = await schedules.save('A', { ...form, issueKeys: ['A-1'] });
+  const run = store.get(saved.id)!;
+  assert.equal(run.policy.workflowId, 'ticket-flow');
+  await store.save({ ...run, status: 'missed' });
+  await schedules.resolveMissed('A', run.id, 'start-now');
+  assert.equal(store.get(run.id)?.status, 'scheduled');
+  assert.equal(ticks, 1);
 });

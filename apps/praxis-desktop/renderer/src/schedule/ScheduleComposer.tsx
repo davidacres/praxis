@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { ScheduleTickets, expandScheduleTickets, type Candidate } from './ScheduleTickets';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef } from '@praxis/core';
+import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef, ScheduledWorkflowChoice } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './scheduleFormat';
@@ -44,6 +44,8 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   const [date, setDate] = useState(initial?.start.date || tomorrowDate());
   const [time, setTime] = useState(initial?.start.time || '22:00');
   const [timezone, setTimezone] = useState(initial?.run.timezone ?? localTimeZone());
+  const [workflowId, setWorkflowId] = useState(initial?.run.policy.workflowId ?? '');
+  const [workflowChoices, setWorkflowChoices] = useState<ScheduledWorkflowChoice[]>([]);
   const [belt, setBelt] = useState<ScheduledTicketRef[]>(() => initial?.run.entries.map(entry => ({ ...entry.ticket })) ?? []);
   const [preview, setPreview] = useState<{ readiness?: ScheduledRunReadiness; error?: string }>({});
   const [saving, setSaving] = useState(false);
@@ -53,6 +55,16 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   const [overIndex, setOverIndex] = useState<number>();
   const autoAddStarted = useRef(false);
   const ticketsSeeded = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.praxis.scheduledRuns.workflowChoices(project.id).then(({ choices, defaultWorkflowId }) => {
+      if (cancelled) return;
+      setWorkflowChoices(choices);
+      setWorkflowId(current => current || defaultWorkflowId || '');
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [project.id]);
 
   useEffect(() => {
     if (!initialTicketKeys.length || !candidates) return;
@@ -97,8 +109,8 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   }, [autoAddSelectedTickets, candidates, initial?.run.id, initial?.run.name, initial?.run.timezone, initial?.run.entries, initial?.start.date, initial?.start.time, initialTicketKeys.join('\0'), onSaved, project.id]);
 
   const input: SaveScheduledRunInput = useMemo(
-    () => ({ id: initial?.run.id, projectId: project.id, name, date, time, timezone, tickets: belt, arm: false }),
-    [initial?.run.id, project.id, name, date, time, timezone, belt]
+    () => ({ id: initial?.run.id, projectId: project.id, name, date, time, timezone, tickets: belt, arm: false, ...(workflowId ? { workflowId } : {}) }),
+    [initial?.run.id, project.id, name, date, time, timezone, belt, workflowId]
   );
 
   // Readiness is derived from the live board in main, so ask it as the form changes.
@@ -381,11 +393,17 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
 
             <section className="schedule-panel" aria-label="Run policy">
               <h3 className="schedule-panel-title">Run policy</h3>
+              <label className="schedule-field">Workflow for each ticket
+                <select aria-label="Workflow" data-testid="schedule-workflow" value={workflowId} onChange={event => setWorkflowId(event.target.value)}>
+                  {!workflowId && <option value="">Choose a workflow…</option>}
+                  {workflowChoices.map(choice => <option key={choice.workflowId} value={choice.workflowId}>{choice.name}</option>)}
+                </select>
+              </label>
               <p className="schedule-policy"><strong>Sequential.</strong> One ticket finishes, pauses or is skipped before the next starts.</p>
               <p className="schedule-policy"><strong>Approval gates always pause the run.</strong> Nothing is approved while you are away.</p>
               <p className="schedule-policy">
                 <strong>Provider allowance.</strong> At 95% of a provider&rsquo;s allowance the run records its status, commits a
-                checkpoint and hands over to the next provider. <span className="schedule-tag">with the runner</span>
+                checkpoint and hands over to the next provider, or pauses if none has room.
               </p>
             </section>
           </div>

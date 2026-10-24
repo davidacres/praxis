@@ -29,6 +29,8 @@ export function createMobileSchedules(deps: {
   store(): MobileScheduleStore;
   tickets(projectId: string): Promise<ScheduledTicketRef[]>;
   changed(projectId: string): void;
+  defaultWorkflow?(projectId: string): Promise<string | undefined>;
+  startNow?(): Promise<void>;
   now?(): string;
 }): NonNullable<MobileHostServiceDeps['schedules']> {
   const now = () => deps.now?.() ?? new Date().toISOString();
@@ -51,9 +53,14 @@ export function createMobileSchedules(deps: {
         if (matches.length !== 1) throw new Error(`Ticket ${key} is unavailable or ambiguous in this project.`);
         return matches[0];
       });
-      return save(composeScheduledRun(undefined, { ...input, projectId, tickets, arm: false, at: now() }));
+      const workflowId = await deps.defaultWorkflow?.(projectId);
+      return save(composeScheduledRun(undefined, { ...input, projectId, tickets, workflowId, arm: false, at: now() }));
     },
     setArmed: async (projectId, id, armed) => save(armed ? armScheduledRun(requireRun(projectId, id), now()) : holdScheduledRun(requireRun(projectId, id), now())),
-    resolveMissed: async (projectId, id, resolution) => save(resolveMissedScheduledRun(requireRun(projectId, id), resolution, now())),
+    resolveMissed: async (projectId, id, resolution) => {
+      const saved = await save(resolveMissedScheduledRun(requireRun(projectId, id), resolution, now()));
+      if (resolution === 'start-now') await deps.startNow?.();
+      return saved;
+    },
   };
 }

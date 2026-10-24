@@ -292,7 +292,7 @@ export interface PreviewSettings {
   enableEasyMode: boolean;
   /** Enable deployment profiles, targets, and delivery runs for projects. */
   enableDeployments: boolean;
-  /** Enable scheduled ticket runs: the schedule composer and the Scheduled runs page. Off until the runner ships, so nothing can be scheduled that will not start. */
+  /** Enable scheduled ticket runs: the schedule composer and the Scheduled runs page. The runner only starts and observes schedules while this is on; it stays a preview until it has been used on real overnight runs. */
   enableScheduledRuns: boolean;
 }
 

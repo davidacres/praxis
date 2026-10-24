@@ -1,5 +1,7 @@
 import { getServiceForConnection } from './serviceRegistry';
 import { createMobileSchedules } from './mobileScheduledRuns';
+import { defaultScheduleWorkflow } from './scheduledWorkflow';
+import { getScheduledRunRunner } from './scheduledRunRunnerInstance';
 import { getScheduledRunStore, notifyScheduledRunsChanged, onDidChangeScheduledRuns } from './scheduledRunInstance';
 /**
  * Supplies the real `MobileHostServiceDeps` from the running desktop stores and
@@ -302,6 +304,8 @@ export function createDesktopMobileHostServiceDeps(
     schedules: createMobileSchedules({
       store: getScheduledRunStore,
       changed: notifyScheduledRunsChanged,
+      defaultWorkflow: async projectId => defaultScheduleWorkflow(await listWorkflowChoices(projectId)),
+      startNow: () => getScheduledRunRunner().tick(),
       tickets: async projectId => {
         return (await mobileProjectTickets(projectId)).map(item => ({ connectionId: `project:${projectId}`, issueKey: item.key, title: item.summary }));
       },

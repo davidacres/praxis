@@ -252,7 +252,7 @@ export async function recoverWorkflowRunsOnStartup(): Promise<void> {
  * a restart. Reads merge both, folder winning.
  */
 
-async function projectFolder(projectId: string): Promise<string | undefined> {
+export async function projectFolder(projectId: string): Promise<string | undefined> {
   const project = getProjectStore().get(projectId);
   return project?.workspaceFolder;
 }
@@ -341,7 +341,7 @@ export async function listWorkflowChoices(projectId: string): Promise<Array<{ wo
 }
 
 /** A project workflow by id, or the template it would be instantiated from — without saving anything. */
-async function runnableDefinition(projectId: string, workflowId: string): Promise<WorkflowDefinition | undefined> {
+export async function runnableDefinition(projectId: string, workflowId: string): Promise<WorkflowDefinition | undefined> {
   const own = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
   if (own) return own;
   const template = (await resolveTemplateLibrary(projectId)).find(candidate => candidate.definition.id === workflowId);
@@ -381,9 +381,11 @@ export async function startWorkflowRun(input: {
   issue?: { issueKey: string; connectionId?: string };
   controller?: { sessionKey: string; sessionId: string };
   planInput?: WorkflowPlanInput;
+  /** Set by the scheduled-run runner so a restart can find the run it launched (FX-BF-047). */
+  scheduledLaunchToken?: string;
   options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown; parameters?: unknown };
 }): Promise<WorkflowRunSummary> {
-  const { projectId, workflowId, taskTitle, issue, controller, planInput, options } = input;
+  const { projectId, workflowId, taskTitle, issue, controller, planInput, scheduledLaunchToken, options } = input;
   let instantiated = false;
   let definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
   if (!definition) {
@@ -464,6 +466,7 @@ export async function startWorkflowRun(input: {
     definition: { ...definition, name: `${definition.name} — ${taskTitle}`.trim() },
     at: new Date().toISOString(),
     ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {}),
+    ...(scheduledLaunchToken ? { scheduledLaunchToken } : {}),
     ...(controller ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId } : {}),
     ...(planInput ? { planInput } : {}),
     ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),

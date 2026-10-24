@@ -253,11 +253,13 @@ export interface WindowIpc {
   close(): Promise<void>;
   /** Closes after the renderer has confirmed that active sessions may be interrupted. */
   confirmClose(): Promise<void>;
+  /** The user declined a close or quit confirmation; a pending quit is dropped so the next one asks again. */
+  cancelClose(): Promise<void>;
   isMaximized(): Promise<boolean>;
   /** Subscribes to maximize/unmaximize; returns an unsubscribe function. */
   onMaximizeChange(listener: (maximized: boolean) => void): () => void;
   /** Notifies the renderer that closing would interrupt active AI sessions. */
-  onCloseRequested(listener: (request: { runningSessionCount: number }) => void): () => void;
+  onCloseRequested(listener: (request: WindowCloseRequest) => void): () => void;
   /** Returns the current whole-window UI zoom factor. */
   getZoomFactor(): Promise<number>;
   /** Sets the whole-window UI zoom factor and returns the clamped value. */
@@ -1273,6 +1275,13 @@ export interface PraxisIpc {
   scheduledRuns: ScheduledRunsIpc;
 }
 
+/** What closing or quitting would interrupt or prevent, when the renderer is asked to confirm. */
+export interface WindowCloseRequest {
+  runningSessionCount: number;
+  /** The next armed schedule, which only starts while Praxis is open. */
+  nextSchedule?: { name: string; scheduledStartAt: string; timezone: string };
+}
+
 /** A schedule plus what the editor and lineup need to show it, derived fresh on every read. */
 export interface ScheduledRunView {
   run: ScheduledRun;
@@ -1280,15 +1289,43 @@ export interface ScheduledRunView {
   readiness: ScheduledRunReadiness;
   /** The start as wall-clock parts in the run's own timezone, for the editor's date and time fields. */
   start: { date: string; time: string };
+  /** Present while a ticket is running or waiting at a gate: only what has actually been reported. */
+  live?: ScheduledRunLive;
+  /**
+   * Allowance each usable provider has used, while the run is running or paused —
+   * including a budget pause, when no ticket has launched and there is no `live`.
+   */
+  headroom?: ScheduledRunLive['headroom'];
+}
+
+/** Where the running ticket is, read fresh from its workflow run. */
+export interface ScheduledRunLive {
+  entryId: string;
+  workflowRunId: string;
+  stageLabel: string;
+  /** 1-based; 0 before the first stage starts. */
+  stageIndex: number;
+  stageCount: number;
+  provider?: string;
+  /** Allowance each usable provider has used (0-1); absent when the provider does not report it. */
+  headroom: Array<{ provider: string; usedFraction?: number }>;
+}
+
+/** A workflow a scheduled run can start each ticket with. */
+export interface ScheduledWorkflowChoice {
+  workflowId: string;
+  name: string;
+  trigger: string;
 }
 
 /** What the composer submits. `id` present means editing that schedule. */
 export type SaveScheduledRunInput = Omit<ComposeScheduledRunInput, 'at'> & { id?: string };
 
 /**
- * Scheduled ticket runs (FX-BF-047 / FX-BE-147). Definitions only until the
- * runner ships: saving a schedule arms it, but nothing starts it yet, which is
- * why the whole surface sits behind the `enableScheduledRuns` preview.
+ * Scheduled ticket runs (FX-BF-047 / FX-BE-147, FX-BE-148). Saving a schedule arms
+ * it; the runner in the main process starts it at its time, runs its tickets one
+ * at a time in order, and pauses for gates, failures and provider budget. It only
+ * runs while the `enableScheduledRuns` preview is on.
  */
 export interface ScheduledRunsIpc {
   /** Every schedule, soonest start first. */
@@ -1306,6 +1343,20 @@ export interface ScheduledRunsIpc {
   setArmed(id: string, armed: boolean): Promise<ScheduledRunView>;
   /** The user's explicit decision about a schedule whose start passed while Praxis was closed. */
   resolveMissed(id: string, resolution: MissedResolution): Promise<ScheduledRunView>;
+  /** The workflows a schedule in this project can start tickets with, and the one used when none is chosen. */
+  workflowChoices(projectId: string): Promise<{ choices: ScheduledWorkflowChoice[]; defaultWorkflowId?: string }>;
+  /** Stops launching further tickets until resumed. The ticket already running carries on. */
+  pause(id: string): Promise<ScheduledRunView>;
+  /** Continues a paused schedule. Rejects with what to do instead when the pause needs a specific decision. */
+  resume(id: string): Promise<ScheduledRunView>;
+  /** Stops the schedule and the ticket in flight; tickets not yet started are skipped. */
+  cancel(id: string): Promise<ScheduledRunView>;
+  /** Leaves a ticket out; the schedule carries on with the next one. */
+  skipEntry(id: string, entryId: string): Promise<ScheduledRunView>;
+  /** Starts a failed, stalled or interrupted ticket again. */
+  retryEntry(id: string, entryId: string): Promise<ScheduledRunView>;
+  /** Approves the gate a ticket is waiting at, so the schedule continues. */
+  approveGate(id: string, entryId: string): Promise<ScheduledRunView>;
   /** A schedule changed (here or in another window). Re-query to show it. */
   onChanged(listener: () => void): () => void;
 }

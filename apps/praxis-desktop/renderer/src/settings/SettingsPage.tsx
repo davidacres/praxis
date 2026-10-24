@@ -2425,7 +2425,7 @@ function PreviewSection({
       />
       <Toggle
         label="Scheduled runs (experimental)"
-        description="Queue several board tickets in a fixed order for a one-off run at a set time. The schedule can be built and saved, but nothing starts it yet."
+        description="Queue several board tickets in a fixed order for a one-off run at a set time. Praxis starts it at that time while the app is open, runs the tickets one at a time, and pauses to ask at approval gates, failures, or when a provider is nearly out of allowance."
         checked={settings.preview.enableScheduledRuns ?? false}
         onChange={next => void update({ preview: { enableScheduledRuns: next } })}
         testId="toggle-enable-scheduled-runs"

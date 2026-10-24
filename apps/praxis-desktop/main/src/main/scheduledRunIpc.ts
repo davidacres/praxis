@@ -11,14 +11,19 @@ import {
   type ScheduledRunView
 } from '@praxis/core';
 import { buildScheduledRunView, getScheduledRunStore, notifyScheduledRunsChanged } from './scheduledRunInstance';
+import { getScheduledRunRunner } from './scheduledRunRunnerInstance';
+import { listWorkflowChoices } from './workflowIpc';
+import { defaultScheduleWorkflow } from './scheduledWorkflow';
 
 /**
  * Scheduled ticket runs IPC (FX-BF-047 / FX-BE-147).
  *
  * Every mutation is a pure core function applied to the stored run and saved,
  * so the rules (what is editable, what arming needs, what a missed run can do)
- * live in one tested place. Nothing here starts a run: the runner is FX-BE-148,
- * which is why saving a schedule only ever changes its definition.
+ * live in one tested place. Nothing here *starts* a schedule: saving only changes
+ * its definition, and the runner (`scheduledRunRunnerInstance.ts`, FX-BE-148) starts
+ * it at its time. The pause/resume/skip/retry/cancel/approve handlers hand the
+ * user's decision to that runner, which applies it in order with its other work.
  */
 
 function requireRun(id: string): ScheduledRun {
@@ -27,7 +32,45 @@ function requireRun(id: string): ScheduledRun {
   return run;
 }
 
+async function withDefaultWorkflow(input: SaveScheduledRunInput, existing: ScheduledRun | undefined): Promise<SaveScheduledRunInput> {
+  if (input.workflowId) return input;
+  const kept = existing?.policy.workflowId;
+  if (kept) return { ...input, workflowId: kept };
+  const projectId = input.projectId ?? existing?.projectId;
+  if (!projectId) return input;
+  const workflowId = defaultScheduleWorkflow(await listWorkflowChoices(projectId));
+  return workflowId ? { ...input, workflowId } : input;
+}
+
 export function registerScheduledRunIpc(): void {
+  const decide = (apply: (id: string) => Promise<ScheduledRun>) => async (_event: unknown, id: string): Promise<ScheduledRunView> => {
+    const run = await apply(id);
+    notifyScheduledRunsChanged(run.projectId);
+    return buildScheduledRunView(run);
+  };
+  ipcMain.handle('scheduledRuns:workflowChoices', async (_event, projectId: string) => {
+    const choices = await listWorkflowChoices(projectId);
+    return { choices, defaultWorkflowId: defaultScheduleWorkflow(choices) };
+  });
+  ipcMain.handle('scheduledRuns:pause', decide(id => getScheduledRunRunner().pause(id)));
+  ipcMain.handle('scheduledRuns:resume', decide(id => getScheduledRunRunner().resume(id)));
+  ipcMain.handle('scheduledRuns:cancel', decide(id => getScheduledRunRunner().cancel(id)));
+  ipcMain.handle('scheduledRuns:skipEntry', async (_event, id: string, entryId: string) => {
+    const run = await getScheduledRunRunner().skipEntry(id, entryId);
+    notifyScheduledRunsChanged(run.projectId);
+    return buildScheduledRunView(run);
+  });
+  ipcMain.handle('scheduledRuns:retryEntry', async (_event, id: string, entryId: string) => {
+    const run = await getScheduledRunRunner().retryEntry(id, entryId);
+    notifyScheduledRunsChanged(run.projectId);
+    return buildScheduledRunView(run);
+  });
+  ipcMain.handle('scheduledRuns:approveGate', async (_event, id: string, entryId: string) => {
+    const run = await getScheduledRunRunner().approveGate(id, entryId);
+    notifyScheduledRunsChanged(run.projectId);
+    return buildScheduledRunView(run);
+  });
+
   ipcMain.handle('scheduledRuns:list', async (): Promise<ScheduledRunView[]> => {
     const runs = getScheduledRunStore().list();
     return Promise.all(runs.map(run => buildScheduledRunView(run, runs)));
@@ -41,7 +84,7 @@ export function registerScheduledRunIpc(): void {
   ipcMain.handle('scheduledRuns:save', async (_event, input: SaveScheduledRunInput): Promise<ScheduledRunView> => {
     const store = getScheduledRunStore();
     const existing = input.id ? requireRun(input.id) : undefined;
-    const { id: _id, ...form } = input;
+    const { id: _id, ...form } = await withDefaultWorkflow(input, existing);
     const run = composeScheduledRun(existing, { ...form, at: new Date().toISOString() });
     await store.save(run);
     notifyScheduledRunsChanged(run.projectId);
@@ -53,7 +96,7 @@ export function registerScheduledRunIpc(): void {
     async (_event, input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; error?: string }> => {
       try {
         const existing = input.id ? getScheduledRunStore().get(input.id) : undefined;
-        const { id: _id, ...form } = input;
+        const { id: _id, ...form } = await withDefaultWorkflow(input, existing);
         const run = composeScheduledRun(existing, { ...form, at: new Date().toISOString() });
         return { readiness: (await buildScheduledRunView(run)).readiness };
       } catch (error) {
@@ -80,6 +123,8 @@ export function registerScheduledRunIpc(): void {
     const run = resolveMissedScheduledRun(requireRun(id), resolution, new Date().toISOString());
     await getScheduledRunStore().save(run);
     notifyScheduledRunsChanged(run.projectId);
+    // "Start now" means now: do not wait for the next tick.
+    if (resolution === 'start-now') void getScheduledRunRunner().tick().catch(error => console.error('Scheduled run start failed:', error));
     return buildScheduledRunView(run);
   });
 }

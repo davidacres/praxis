@@ -7,6 +7,8 @@ import type { ProjectRecord, ScheduledRunView } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { ScheduleComposer } from './ScheduleComposer';
+import { ScheduleRunMonitor } from './ScheduleRunMonitor';
+import { ScheduleRunReport } from './ScheduleRunReport';
 import { STATUS_LABEL, condenseIssues, describeCountdown, formatStart, groupScheduledRuns, type ScheduledRunGroups } from './scheduleFormat';
 import './schedule.css';
 
@@ -15,15 +17,16 @@ import './schedule.css';
  *
  * Each schedule is a card with its tickets drawn as a mini belt, in the order they
  * will run, grouped by what needs a person: running, up next, needs attention,
- * drafts, finished. This is a surface for *definitions* today — the runner that
- * starts them is FX-BE-148 — so the page says so plainly rather than letting a
- * saved schedule look like something that will fire.
+ * drafts, finished. The runner in the main process starts a schedule at its time
+ * (only while Praxis is open); a running or paused card opens the live view, a
+ * finished one opens its report.
  */
 interface ScheduledRunsPageProps {
   project: ProjectRecord;
   sidebarHost: HTMLElement | null;
   onBack: () => void;
   initialTicketKeys?: string[];
+  onOpenWorkflowRun?: (workflowRunId: string) => void;
 }
 
 const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
@@ -34,7 +37,7 @@ const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
   { key: 'finished', title: 'Finished' }
 ];
 
-export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [] }: ScheduledRunsPageProps) {
+export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], onOpenWorkflowRun }: ScheduledRunsPageProps) {
   const { confirm } = useDialogs();
   const ticketPanel = useResizable({
     storageKey: 'tm-pane-schedule-tickets',
@@ -54,6 +57,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   };
   const [composerVersion, setComposerVersion] = useState(0);
   const [selectedRunId, setSelectedRunId] = useState<string>();
+  const [detailRunId, setDetailRunId] = useState<string>();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const { candidates, loadError } = useScheduleTickets(project);
   const [views, setViews] = useState<ScheduledRunView[]>();
@@ -180,6 +184,14 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     </>);
   }
 
+  const detail = detailRunId ? views?.find(view => view.run.id === detailRunId) : undefined;
+  if (detail) {
+    const live = detail.run.status === 'running' || detail.run.status === 'paused';
+    return (<>{sidebar}{live
+      ? <ScheduleRunMonitor view={detail} onBack={() => setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} />
+      : <ScheduleRunReport view={detail} onBack={() => setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} />}</>);
+  }
+
   const total = views?.length ?? 0;
 
   return (
@@ -194,8 +206,8 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
       <div className="schedule-notice" role="note" data-testid="schedule-preview-note">
         <Icon name="info" size={14} />
         <span>
-          <strong>Preview.</strong> Schedules are saved and kept in order, but Praxis cannot start them yet. Start tickets from the board
-          until the runner ships.
+          <strong>Preview.</strong> A schedule starts at its time while Praxis is open, runs its tickets one at a time in order, and
+          pauses to ask you at an approval gate, a failure, or when a provider is nearly out of allowance.
         </span>
       </div>
 
@@ -238,6 +250,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
                 view={view}
                 now={now}
                 onEdit={() => { setSelectedRunId(view.run.id); setComposing({ view }); }}
+                onOpen={() => setDetailRunId(view.run.id)}
                 onDelete={() => void remove(view)}
                 onArm={armed => void act(() => window.praxis.scheduledRuns.setArmed(view.run.id, armed))}
                 onResolve={resolution => void act(() => window.praxis.scheduledRuns.resolveMissed(view.run.id, resolution))}
@@ -254,6 +267,7 @@ function RunCard({
   view,
   now,
   onEdit,
+  onOpen,
   onDelete,
   onArm,
   onResolve
@@ -261,6 +275,7 @@ function RunCard({
   view: ScheduledRunView;
   now: number;
   onEdit: () => void;
+  onOpen: () => void;
   onDelete: () => void;
   onArm: (armed: boolean) => void;
   onResolve: (resolution: 'start-now' | 'skip') => void;
@@ -334,6 +349,11 @@ function RunCard({
           <button type="button" className="btn" data-testid="schedule-hold" onClick={() => onArm(false)}>Put on hold</button>
         )}
         {editable && <button type="button" className="btn" data-testid="schedule-edit" onClick={onEdit}>Edit</button>}
+        {!editable && run.status !== 'missed' && (
+          <button type="button" className="btn btn-primary" data-testid="schedule-open" onClick={onOpen}>
+            {run.status === 'running' || run.status === 'paused' ? 'Open live view' : 'View report'}
+          </button>
+        )}
         <button type="button" className="btn btn-icon" data-testid="schedule-delete" aria-label={`Delete ${run.name}`} onClick={onDelete}>
           <Icon name="trash" size={13} />
         </button>

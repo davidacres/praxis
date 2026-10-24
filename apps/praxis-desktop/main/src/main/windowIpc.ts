@@ -1,10 +1,14 @@
 import * as os from 'node:os';
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
+import type { WindowCloseRequest } from '@praxis/core';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { safeSend } from './windowBroadcast';
 
 const confirmedWindows = new WeakSet<BrowserWindow>();
+/** A quit is waiting on the renderer's answer; `window:confirmClose` then quits instead of closing one window. */
+let quitPending = false;
+let quitConfirmed = false;
 const APP_ZOOM_MIN = 0.7;
 const APP_ZOOM_MAX = 1.5;
 const APP_ZOOM_STEP = 0.1;
@@ -121,8 +125,19 @@ export function registerWindowIpc(): void {
   ipcMain.handle('window:confirmClose', async (event: Electron.IpcMainInvokeEvent) => {
     const win = senderWindow(event);
     if (!win || win.isDestroyed()) return;
+    // A confirmed quit (Cmd+Q / app menu) carries on quitting; a confirmed window close just closes it.
+    if (quitPending) {
+      quitConfirmed = true;
+      quitPending = false;
+      app.quit();
+      return;
+    }
     confirmedWindows.add(win);
     win.close();
+  });
+
+  ipcMain.handle('window:cancelClose', async () => {
+    quitPending = false;
   });
 
   ipcMain.handle('window:isMaximized', async (event: Electron.IpcMainInvokeEvent) => {
@@ -184,17 +199,43 @@ export function attachWindowZoomShortcuts(win: BrowserWindow): void {
 
 /**
  * Intercepts native and renderer-requested closes while an app-owned AI task
- * is live. The renderer owns the themed confirmation surface; the main
- * process owns the close veto so macOS traffic lights and Windows caption
+ * is live, or — where closing the last window quits the app — while a scheduled
+ * run is waiting to start. The renderer owns the themed confirmation surface; the
+ * main process owns the close veto so macOS traffic lights and Windows caption
  * buttons behave identically.
  */
-export function attachWindowCloseGuard(win: BrowserWindow, getRunningSessionCount: () => number): void {
+export function attachWindowCloseGuard(
+  win: BrowserWindow,
+  getRunningSessionCount: () => number,
+  getNextSchedule: () => WindowCloseRequest['nextSchedule'] = () => undefined
+): void {
   win.on('close', event => {
-    if (confirmedWindows.delete(win)) return;
+    if (confirmedWindows.delete(win) || quitConfirmed) return;
     const runningSessionCount = getRunningSessionCount();
-    if (runningSessionCount <= 0) return;
+    const nextSchedule = getNextSchedule();
+    if (runningSessionCount <= 0 && !nextSchedule) return;
     event.preventDefault();
-    safeSend(win, 'window:closeRequested', { runningSessionCount });
+    safeSend(win, 'window:closeRequested', { runningSessionCount, ...(nextSchedule ? { nextSchedule } : {}) } satisfies WindowCloseRequest);
+  });
+}
+
+/**
+ * Warns before the app quits (Cmd+Q, the app menu) while a schedule is waiting to
+ * start. Closing a macOS window does not quit, so the window guard alone would miss
+ * the one path that really stops a schedule. Register it before any other
+ * `before-quit` listener, and have those listeners return when `event.defaultPrevented`.
+ */
+export function attachQuitGuard(getNextSchedule: () => WindowCloseRequest['nextSchedule']): void {
+  app.on('before-quit', event => {
+    if (quitConfirmed) return;
+    const nextSchedule = getNextSchedule();
+    const win = BrowserWindow.getAllWindows().find(candidate => !candidate.isDestroyed());
+    if (!nextSchedule || !win) return;
+    event.preventDefault();
+    quitPending = true;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    safeSend(win, 'window:closeRequested', { runningSessionCount: 0, nextSchedule } satisfies WindowCloseRequest);
   });
 }
 

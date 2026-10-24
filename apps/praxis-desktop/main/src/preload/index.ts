@@ -41,7 +41,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
-import type { MissedResolution, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView } from '@praxis/core';
+import type { MissedResolution, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledWorkflowChoice, WindowCloseRequest } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
 import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/core';
@@ -151,6 +151,7 @@ const praxis: PraxisIpc = {
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close'),
     confirmClose: () => ipcRenderer.invoke('window:confirmClose'),
+    cancelClose: () => ipcRenderer.invoke('window:cancelClose'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
     supportsVibrancy: () => ipcRenderer.invoke('window:supportsVibrancy'),
     setSurfaceVibrancy: (mode: 'off' | 'glass') => ipcRenderer.invoke('window:setSurfaceVibrancy', mode),
@@ -161,8 +162,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.on('window:maximizeChanged', handler);
       return () => ipcRenderer.off('window:maximizeChanged', handler);
     },
-    onCloseRequested: (listener: (request: { runningSessionCount: number }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, request: { runningSessionCount: number }) =>
+    onCloseRequested: (listener: (request: WindowCloseRequest) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, request: WindowCloseRequest) =>
         listener(request);
       ipcRenderer.on('window:closeRequested', handler);
       return () => ipcRenderer.off('window:closeRequested', handler);
@@ -807,6 +808,14 @@ const praxis: PraxisIpc = {
     preview: (input: SaveScheduledRunInput) =>
       ipcRenderer.invoke('scheduledRuns:preview', input) as Promise<{ readiness?: ScheduledRunReadiness; error?: string }>,
     remove: (id: string) => ipcRenderer.invoke('scheduledRuns:remove', id) as Promise<void>,
+    workflowChoices: (projectId: string) =>
+      ipcRenderer.invoke('scheduledRuns:workflowChoices', projectId) as Promise<{ choices: ScheduledWorkflowChoice[]; defaultWorkflowId?: string }>,
+    pause: (id: string) => ipcRenderer.invoke('scheduledRuns:pause', id) as Promise<ScheduledRunView>,
+    resume: (id: string) => ipcRenderer.invoke('scheduledRuns:resume', id) as Promise<ScheduledRunView>,
+    cancel: (id: string) => ipcRenderer.invoke('scheduledRuns:cancel', id) as Promise<ScheduledRunView>,
+    skipEntry: (id: string, entryId: string) => ipcRenderer.invoke('scheduledRuns:skipEntry', id, entryId) as Promise<ScheduledRunView>,
+    retryEntry: (id: string, entryId: string) => ipcRenderer.invoke('scheduledRuns:retryEntry', id, entryId) as Promise<ScheduledRunView>,
+    approveGate: (id: string, entryId: string) => ipcRenderer.invoke('scheduledRuns:approveGate', id, entryId) as Promise<ScheduledRunView>,
     setArmed: (id: string, armed: boolean) => ipcRenderer.invoke('scheduledRuns:setArmed', id, armed) as Promise<ScheduledRunView>,
     resolveMissed: (id: string, resolution: MissedResolution) =>
       ipcRenderer.invoke('scheduledRuns:resolveMissed', id, resolution) as Promise<ScheduledRunView>,
