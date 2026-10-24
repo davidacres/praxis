@@ -60,6 +60,7 @@ import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 import { stageCapableProvider, usableProviders } from './providerFallback';
 import { restoreWorktreeTo } from './runWork';
+import { getCurrentBranch } from './gitService';
 
 /**
  * Agent stages as real, attributed sessions (FX-BE-025 / TASK-114, TASK-115).
@@ -308,6 +309,19 @@ export async function runWorkflowAgentStage(
     )
   );
   if (logs) taskDefinition.scope += `\n\n${logs}`;
+
+  // A diff input is only a commit ref. A read-only stage is told not to run shell commands, so
+  // without the patch as a file it cannot see the change at all — and goes looking for a diff
+  // tool that does not exist. Write the whole change since the run branched, for its file tools.
+  if (canReadRunFiles) {
+    const diffInputs = stageContext.inputs.filter(input => input.kind === 'diff' && input.path);
+    for (const input of diffInputs) {
+      const patchPath = await writeDiffRunFile(worktreePath, input.contractId, input.path as string, projectRoot);
+      taskDefinition.scope += patchPath
+        ? `\n\nThe full patch for diff "${input.contractId}" (the change since this run branched, up to ${(input.path as string).slice(0, 12)}) is the file ${patchPath} in your working directory. Read it with your file tools; there is no diff tool.`
+        : `\n\nThe patch for diff "${input.contractId}" could not be prepared. Read the changed files directly with your file tools.`;
+    }
+  }
 
   // Running again — a later loop iteration, or a retry after a failed attempt: hand the stage
   // the findings that sent it round and why its last attempt failed, so it does not repeat itself.
@@ -578,6 +592,27 @@ async function writeRunFile(worktreePath: string, name: string, text: string): P
     await writeFile(path.join(dir, safeName), text.endsWith('\n') ? text : `${text}\n`, 'utf8');
     return `${RUN_FILES_DIR}/${safeName}`;
   } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Writes the change up to `ref` as a run file: from where the run branched off the project's
+ * branch (falling back to `ref`'s parent), so a review sees the whole change, not only the last commit.
+ */
+async function writeDiffRunFile(worktreePath: string, contractId: string, ref: string, projectRoot: string | undefined): Promise<string | undefined> {
+  try {
+    const baseBranch = (projectRoot ? await getCurrentBranch(projectRoot) : undefined)
+      ?? (getSettingsBackend().read().delivery.defaultBaseBranch.trim() || undefined);
+    const forkPoint = baseBranch
+      ? (await run('git', ['merge-base', baseBranch, ref], { cwd: worktreePath }).catch(() => undefined))?.stdout.trim()
+      : undefined;
+    const base = forkPoint && forkPoint !== ref ? forkPoint : `${ref}^`;
+    const patch = (await run('git', ['diff', '--no-color', '--no-ext-diff', '-M', base, ref], { cwd: worktreePath, maxBuffer: 64 * 1024 * 1024 })).stdout;
+    if (!patch.trim()) return undefined;
+    return await writeRunFile(worktreePath, `${contractId}.patch`, patch);
+  } catch (error) {
+    workflowLogSink.appendLine(`Could not write the patch for diff "${contractId}": ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
 }
