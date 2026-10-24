@@ -47,6 +47,7 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
   const gate = normalizeGate(raw.gate);
   const spend = normalizeSpend(raw.spend);
   const handovers = (Array.isArray(raw.handovers) ? raw.handovers : []).map(normalizeHandover).filter((h): h is ScheduledHandover => !!h);
+  const exhausted = (Array.isArray(raw.exhausted) ? raw.exhausted : []).filter((value): value is string => typeof value === 'string' && !!value);
   return {
     status,
     ...(text(raw.sessionId) ? { sessionId: text(raw.sessionId) } : {}),
@@ -58,6 +59,7 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
     ...(text(raw.launchToken) ? { launchToken: text(raw.launchToken) } : {}),
     ...(gate ? { gate } : {}),
     ...(handovers.length > 0 ? { handovers } : {}),
+    ...(exhausted.length > 0 ? { exhausted: [...new Set(exhausted)] } : {}),
     ...(spend ? { spend } : {}),
     ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {})
   };

@@ -102,6 +102,22 @@ test('runner fields survive a round trip untouched', async () => {
   assert.deepEqual(new ScheduledRunStore(state).get('r'), run);
 });
 
+test('the providers that ran out survive a round trip, deduplicated', async () => {
+  const state = memoryStore();
+  const store = new ScheduledRunStore(state);
+  const base = makeRun('Spent', '2026-10-21T10:00:00Z', 'spent');
+  await store.save({
+    ...base,
+    status: 'running',
+    entries: base.entries.map((entry, index) =>
+      index === 0 ? { ...entry, outcome: { status: 'failed' as const, retries: 1, exhausted: ['claude', 'claude', 'codex'] } } : entry
+    )
+  });
+  const stored = new ScheduledRunStore(state).get('spent')!;
+  assert.deepEqual(stored.entries[0].outcome?.exhausted, ['claude', 'codex']);
+  assert.equal(stored.entries[0].outcome?.retries, 1);
+});
+
 test('reconcileOnLaunch marks only overdue armed runs missed, and persists once', async () => {
   const state = memoryStore();
   const store = new ScheduledRunStore(state);

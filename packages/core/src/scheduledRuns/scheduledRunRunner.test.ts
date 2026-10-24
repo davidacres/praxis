@@ -298,6 +298,55 @@ test('mid-ticket hand-over waits for the current turn to finish', async () => {
   assert.equal(h.handovers.length, 0);
 });
 
+test('a retry does not go back to the provider that ran out', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+  assert.equal(h.launches[0].provider, 'claude');
+  h.setWorkflow('T-1', { progress: { kind: 'failed', reason: 'claude-code-cli ran out of credits', exhausted: ['claude'] } });
+  await h.runner.tick();
+  assert.equal(h.run.entries[0].outcome?.exhausted?.[0], 'claude');
+  await h.runner.retryEntry(h.run.id, h.run.entries[0].id);
+  assert.equal(h.launches[1].provider, 'codex', 'the retry starts elsewhere');
+  assert.equal(h.run.entries[0].outcome?.exhausted?.[0], 'claude', 'and remembers it after relaunching');
+});
+
+test('a stalled entry keeps what ran out, so the next provider is not the same one', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'succeeded', exhausted: ['claude'] } });
+  await h.runner.tick();
+  assert.equal(h.launches[1].provider, 'codex', 'the next ticket does not start on a spent provider');
+  assert.ok(h.run.events.some(event => event.kind === 'budget-checked'));
+});
+
+test('when every provider ran out the ticket still starts, on the best of them', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.4, codex: 0.9 } };
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'succeeded', exhausted: ['claude', 'codex'] } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.launches[1].provider, 'claude');
+});
+
+test('a provider that reports nothing is used rather than stopping the run', async () => {
+  const h = new Harness(['T-1']);
+  h.usage = { usable: ['claude', 'copilot'], active: 'claude', used: { claude: 0.97 } };
+  await h.runner.tick();
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.launches[0].provider, 'copilot');
+});
+
+test('a mid-ticket hand-over never goes back to the provider that already ran out', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+  // Claude ran out, the workflow's own switch policy moved the stage to codex, and codex is nearly spent.
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'codex', exhausted: ['claude'] } });
+  h.usage = { usable: ['claude', 'codex', 'copilot'], active: 'claude', used: { claude: 0.1, codex: 0.96 } };
+  await h.runner.tick();
+  assert.deepEqual(h.handovers, [{ from: 'codex', to: 'copilot' }]);
+});
+
 test('workflow-change events that arrive mid-step are queued, not dropped', async () => {
   const h = new Harness(['T-1', 'T-2']);
   await h.runner.tick();

@@ -26,14 +26,19 @@ import {
 import { newScheduledId } from './scheduledRun';
 
 /** What the workflow engine says about an entry's workflow run, reduced to what the schedule cares about. */
+/**
+ * What the workflow engine says about an entry's workflow run, reduced to what
+ * the schedule acts on. `exhausted` lists the providers that ran out during the
+ * run, so a retry or a hand-over never goes back to one of them.
+ */
 export type EntryProgress =
-  | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend }
-  | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend }
+  | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   /** Stopped on the provider's limit or a stage's tooling; waiting for the user. */
-  | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; spend?: ScheduledEntrySpend }
-  | { kind: 'succeeded'; spend?: ScheduledEntrySpend }
-  | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend }
-  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend };
+  | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'succeeded'; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] };
 
 function findEntry(run: ScheduledRun, entryId: string): ScheduledQueueEntry {
   const entry = run.entries.find(candidate => candidate.id === entryId);
@@ -100,7 +105,8 @@ export function markEntryLaunching(run: ScheduledRun, entryId: string, launchTok
     startedAt: at,
     ...(provider ? { provider } : {}),
     ...(previous.retries ? { retries: previous.retries } : {}),
-    ...(previous.handovers ? { handovers: previous.handovers } : {})
+    ...(previous.handovers ? { handovers: previous.handovers } : {}),
+    ...(previous.exhausted ? { exhausted: previous.exhausted } : {})
   };
   return touch(withOutcome(run, entryId, next), at, {
     kind: 'entry-launching',
@@ -124,6 +130,15 @@ export function bindEntryWorkflow(run: ScheduledRun, entryId: string, workflowRu
 function sameSpend(left?: ScheduledEntrySpend, right?: ScheduledEntrySpend): boolean {
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
+
+/** The providers known to have run out, merging what the run reports with what was already recorded. */
+function exhaustedAfter(outcome: ScheduledEntryOutcome, reported?: readonly string[]): string[] | undefined {
+  const merged = [...new Set([...(outcome.exhausted ?? []), ...(reported ?? [])])];
+  return merged.length > 0 ? merged : undefined;
+}
+
+const sameExhausted = (left: readonly string[] | undefined, right: readonly string[] | undefined) =>
+  JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 
 function pausedRun(run: ScheduledRun, reason: ScheduledPauseReason, message: string, at: string, entryId?: string): ScheduledRun {
   return { ...run, status: 'paused', pause: { reason, message, at, ...(entryId ? { entryId } : {}) } };
@@ -169,9 +184,10 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
 
   switch (progress.kind) {
     case 'running': {
+      const exhausted = exhaustedAfter(outcome, progress.exhausted);
       const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || run.pause.reason === 'budget' || run.pause.reason === 'policy' || run.pause.reason === 'failure');
       const unchanged =
-        outcome.status === 'running' && !outcome.gate && !wasWaiting && sameSpend(outcome.spend, spend) &&
+        outcome.status === 'running' && !outcome.gate && !wasWaiting && sameSpend(outcome.spend, spend) && sameExhausted(outcome.exhausted, exhausted) &&
         (!progress.provider || progress.provider === outcome.provider) && (!progress.sessionId || progress.sessionId === outcome.sessionId);
       if (unchanged) return run;
       let next = withOutcome(run, entryId, {
@@ -179,7 +195,8 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
         status: 'running',
         ...(progress.provider ? { provider: progress.provider } : {}),
         ...(progress.sessionId ? { sessionId: progress.sessionId } : {}),
-        ...(spend ? { spend } : {})
+        ...(spend ? { spend } : {}),
+        ...(exhausted ? { exhausted } : {})
       });
       if (wasWaiting) {
         next = touch(runningAgain(next), at, { kind: 'resumed', message: `${key} is running again.`, entryId });
@@ -190,19 +207,22 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
     }
     case 'gate': {
       if (outcome.status === 'paused' && outcome.gate?.nodeId === progress.nodeId && sameSpend(outcome.spend, spend)) return run;
+      const exhausted = exhaustedAfter(outcome, progress.exhausted);
       const gate = { nodeId: progress.nodeId, label: progress.label, since: outcome.gate?.nodeId === progress.nodeId ? outcome.gate.since : at };
       const message = `${key} is waiting for approval: ${progress.label}.`;
-      const next = withOutcome(run, entryId, { ...outcome, status: 'paused', gate, reason: message, ...(spend ? { spend } : {}) });
+      const next = withOutcome(run, entryId, { ...outcome, status: 'paused', gate, reason: message, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
       if (outcome.gate?.nodeId === progress.nodeId) return touch(next, at);
       return touch(pausedRun(next, 'approval', message, at, entryId), at, { kind: 'entry-gate', message, entryId });
     }
     case 'stalled': {
-      if (outcome.status === 'paused' && outcome.reason === progress.reason && run.status === 'paused') return run;
-      const next = withOutcome(run, entryId, { ...withoutGate, status: 'paused', reason: progress.reason, ...(spend ? { spend } : {}) });
+      const exhausted = exhaustedAfter(outcome, progress.exhausted);
+      if (outcome.status === 'paused' && outcome.reason === progress.reason && run.status === 'paused' && sameExhausted(outcome.exhausted, exhausted)) return run;
+      const next = withOutcome(run, entryId, { ...withoutGate, status: 'paused', reason: progress.reason, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
       return touch(pausedRun(next, progress.pauseReason, progress.reason, at, entryId), at, { kind: 'paused', message: progress.reason, entryId });
     }
     case 'succeeded': {
-      const next = withOutcome(run, entryId, { ...withoutGate, status: 'done', endedAt: at, ...(spend ? { spend } : {}) });
+      const exhausted = exhaustedAfter(outcome, progress.exhausted);
+      const next = withOutcome(run, entryId, { ...withoutGate, status: 'done', endedAt: at, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
       const settled = touch(
         run.status === 'paused' && run.pause?.entryId === entryId ? runningAgain(next) : next,
         at,
@@ -213,7 +233,8 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
     case 'failed':
     case 'cancelled': {
       const message = `${key} ${progress.kind === 'failed' ? 'failed' : 'was cancelled'}: ${progress.reason}`;
-      const next = withOutcome(run, entryId, { ...withoutGate, status: 'failed', endedAt: at, reason: progress.reason, ...(spend ? { spend } : {}) });
+      const exhausted = exhaustedAfter(outcome, progress.exhausted);
+      const next = withOutcome(run, entryId, { ...withoutGate, status: 'failed', endedAt: at, reason: progress.reason, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
       return touch(pausedRun(next, 'failure', message, at, entryId), at, { kind: 'entry-failed', message, entryId });
     }
   }
@@ -248,7 +269,12 @@ export function retryScheduledEntry(run: ScheduledRun, entryId: string, at: stri
     throw new Error(`${entry.ticket.issueKey} is not stopped, so there is nothing to retry.`);
   }
   const retries = (outcome.retries ?? 0) + 1;
-  const next = withOutcome(run, entryId, { status: 'queued', retries, ...(outcome.handovers ? { handovers: outcome.handovers } : {}) });
+  const next = withOutcome(run, entryId, {
+    status: 'queued',
+    retries,
+    ...(outcome.handovers ? { handovers: outcome.handovers } : {}),
+    ...(outcome.exhausted ? { exhausted: outcome.exhausted } : {})
+  });
   const resumed = run.status === 'paused' ? runningAgain(next) : next;
   return touch(resumed, at, { kind: 'entry-retried', message: `Retrying ${entry.ticket.issueKey}.`, entryId });
 }

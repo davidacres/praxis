@@ -26,10 +26,42 @@ test('hand-over prefers the provider with the most room', () => {
   assert.equal(decision.kind === 'handover' && decision.provider, 'c');
 });
 
-test('an unknown provider is never a place to move work to', () => {
+test('a known provider under the threshold beats one that reports nothing', () => {
+  const decision = decideProviderForEntry({ active: 'a', usable: ['a', 'b', 'c'], used: { a: 0.97, c: 0.5 } });
+  assert.equal(decision.kind === 'handover' && decision.provider, 'c');
+});
+
+test('a provider that reports nothing is a last resort rather than a stop', () => {
   const decision = decideProviderForEntry({ active: 'claude', usable: ['claude', 'copilot'], used: { claude: 0.97 } });
+  assert.equal(decision.kind, 'handover');
+  assert.equal(decision.kind === 'handover' && decision.provider, 'copilot');
+  assert.equal(decision.kind === 'handover' && decision.allowanceKnown, false);
+});
+
+test('when every known provider is spent the ticket pauses', () => {
+  const decision = decideProviderForEntry({ active: 'a', usable: ['a', 'b'], used: { a: 0.97, b: 0.99 } });
   assert.equal(decision.kind, 'pause');
   assert.equal(decision.kind === 'pause' && decision.why, 'budget');
+});
+
+test('a provider that ran out is never chosen again, whatever it reports now', () => {
+  const decision = decideProviderForEntry({ active: 'a', usable: ['a', 'b', 'c'], used: { a: 0.1, b: 0.2, c: 0.3 }, exclude: ['a'] });
+  assert.equal(decision.kind === 'handover' && decision.provider, 'b');
+  const exhausted = decideProviderForEntry({ active: 'a', usable: ['a', 'b'], used: { a: 0.1, b: 0.2 }, exclude: ['a', 'b'] });
+  assert.equal(exhausted.kind, 'pause');
+  assert.equal(exhausted.kind === 'pause' && exhausted.why, 'budget');
+});
+
+test('an excluded active provider with an unknown allowance is still replaced', () => {
+  const decision = decideProviderForEntry({ active: 'a', usable: ['a', 'b'], used: { b: 0.4 }, exclude: ['a'] });
+  assert.equal(decision.kind === 'handover' && decision.provider, 'b');
+});
+
+test('starting work falls back to an excluded provider rather than stopping; moving work does not', () => {
+  const start = decideProviderForEntry({ active: 'a', usable: ['a'], used: { a: 0.1 }, exclude: ['a'], excludedAsLastResort: true });
+  assert.equal(start.kind === 'ok' && start.provider, 'a');
+  const midTicket = decideProviderForEntry({ active: 'a', usable: ['a'], used: { a: 0.1 }, exclude: ['a'] });
+  assert.equal(midTicket.kind, 'pause');
 });
 
 test('an active provider that reports nothing still runs, flagged as unchecked', () => {

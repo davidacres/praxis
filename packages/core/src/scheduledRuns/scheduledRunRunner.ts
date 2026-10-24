@@ -42,6 +42,11 @@ import {
   type EntryProgress
 } from './scheduledRunExecution';
 
+/** Every provider that ran out on an earlier ticket of this run: the next ticket should not start on one. */
+function exhaustedInRun(run: ScheduledRun): string[] {
+  return [...new Set(run.entries.flatMap(entry => entry.outcome?.exhausted ?? []))];
+}
+
 /** Thrown by the `launch` port when a ticket cannot be started, with the reason the run should pause for. */
 export class ScheduledLaunchError extends Error {
   public constructor(message: string, public readonly reason: ScheduledPauseReason = 'policy') {
@@ -255,7 +260,13 @@ export class ScheduledRunRunner {
     return current;
   }
 
-  /** Brings the running entry up to date with its workflow run, and hands over if its provider is nearly out. */
+  /**
+   * Brings the running entry up to date with its workflow run, and hands over if
+   * its provider is nearly out. A stall on a provider's limit is recorded rather
+   * than handed over: by the time the schedule sees it the workflow's own `switch`
+   * policy has already tried every provider it could, so what is left is a note
+   * for the user and a provider the next ticket must not start on.
+   */
   private async observeActive(run: ScheduledRun): Promise<ScheduledRun> {
     const entry = activeScheduledEntry(run);
     const workflowRunId = entry?.outcome?.workflowRunId;
@@ -267,6 +278,16 @@ export class ScheduledRunRunner {
     let next = applyEntryProgress(run, entry.id, progress, at);
     if (next !== run) next = await this.save(next);
 
+    if (observation?.progress.kind === 'stalled' && observation.progress.pauseReason === 'budget') {
+      // The workflow's own limit policy owns the switch; the schedule only records what it learned.
+      const exhausted = next.entries.find(candidate => candidate.id === entry.id)?.outcome?.exhausted ?? entry.outcome?.exhausted;
+      if (exhausted?.length) {
+        const message = `${exhausted.join(', ')} ran out while working on ${entry.ticket.issueKey}; they will not be started on again.`;
+        const last = [...next.events].reverse().find(event => event.kind === 'budget-checked' && event.entryId === entry.id);
+        if (!last || last.message !== message) next = await this.save(recordBudgetCheck(next, message, at, entry.id));
+      }
+      return next;
+    }
     if (observation?.progress.kind === 'running' && observation.idle !== false && next.status === 'running') {
       next = await this.checkHandover(next, entry.id, workflowRunId, observation.progress.provider ?? entry.outcome?.provider);
     }
@@ -277,7 +298,13 @@ export class ScheduledRunRunner {
     const entry = run.entries.find(candidate => candidate.id === entryId);
     if (!entry || !provider) return run;
     const usage = await this.ports.usage();
-    const decision = decideProviderForEntry({ active: provider, usable: usage.usable, used: usage.used, threshold: this.ports.threshold });
+    const decision = decideProviderForEntry({
+      active: provider,
+      usable: usage.usable,
+      used: usage.used,
+      exclude: entry.outcome?.exhausted,
+      threshold: this.ports.threshold
+    });
     if (decision.kind === 'handover' && decision.from) {
       const usedFraction = decision.usedFraction ?? this.ports.threshold ?? DEFAULT_HANDOVER_THRESHOLD;
       const { checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction });
@@ -320,7 +347,18 @@ export class ScheduledRunRunner {
       }
 
       const usage = await this.ports.usage();
-      const decision = decideProviderForEntry({ active: usage.active, usable: usage.usable, used: usage.used, threshold: this.ports.threshold });
+      const decision = decideProviderForEntry({
+        active: usage.active,
+        usable: usage.usable,
+        used: usage.used,
+        // A retry never lands back on a provider that ran out on this ticket, whatever its quota says now,
+        // and the next ticket does not start on one that ran out on an earlier one.
+        exclude: [...new Set([...(entry.outcome?.exhausted ?? []), ...exhaustedInRun(run)])],
+        // Starting work is different from moving it mid-ticket: an old limit may have cleared, and refusing
+        // to start anything at all is worse than trying the only provider there is.
+        excludedAsLastResort: true,
+        threshold: this.ports.threshold
+      });
       if (decision.kind === 'pause') {
         await this.save(pauseScheduledRun(run, decision.why === 'no-provider' ? 'no-provider' : 'budget', decision.reason, this.ports.now(), entry.id));
         return;

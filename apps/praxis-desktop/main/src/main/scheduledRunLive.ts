@@ -1,5 +1,6 @@
 import {
   WorkflowRunStore,
+  exhaustedProviders,
   providerHeadroom,
   resolveApprovalTarget,
   summarizeWorkflowRun,
@@ -62,12 +63,15 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
   const spendField = spend ? { spend } : {};
   const blocker = scheduledWorkflowBlocker(summary);
   const failing = summary.stages.find(stage => stage.outcome === 'failed');
+  // Providers that hit their limit during this run: the schedule must never start a retry on one of them.
+  const ranOut = exhaustedProviders(run);
+  const exhaustedField = ranOut.length > 0 ? { exhausted: ranOut } : {};
   let progress: EntryProgress;
-  if (summary.status === 'succeeded') progress = { kind: 'succeeded', ...spendField };
-  else if (summary.status === 'failed') progress = { kind: 'failed', reason: failing?.lastError || summary.explanation, ...spendField };
-  else if (summary.status === 'cancelled') progress = { kind: 'cancelled', reason: summary.explanation, ...spendField };
+  if (summary.status === 'succeeded') progress = { kind: 'succeeded', ...spendField, ...exhaustedField };
+  else if (summary.status === 'failed') progress = { kind: 'failed', reason: failing?.lastError || summary.explanation, ...spendField, ...exhaustedField };
+  else if (summary.status === 'cancelled') progress = { kind: 'cancelled', reason: summary.explanation, ...spendField, ...exhaustedField };
   else if (summary.paused) {
-    progress = { kind: 'stalled', reason: summary.explanation, pauseReason: summary.pauseReason === 'provider-limit' ? 'budget' : 'policy', ...spendField };
+    progress = { kind: 'stalled', reason: summary.explanation, pauseReason: summary.pauseReason === 'provider-limit' ? 'budget' : 'policy', ...spendField, ...exhaustedField };
   } else if (summary.status === 'awaiting-approval') {
     let nodeId = '';
     try {
@@ -76,19 +80,20 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
       /* more than one approval is open; the run view decides which */
     }
     const stage = summary.stages.find(row => row.nodeId === nodeId);
-    progress = { kind: 'gate', nodeId, label: stage?.name ?? 'Approval', ...spendField };
+    progress = { kind: 'gate', nodeId, label: stage?.name ?? 'Approval', ...spendField, ...exhaustedField };
   } else if (blocker) {
     const stage = blocker;
-    progress = { kind: 'stalled', pauseReason: 'failure', reason: `${stage.name} failed: ${stage.lastError ?? 'No error was reported.'} Retry the stage or open the workflow to review it.`, ...spendField };
+    progress = { kind: 'stalled', pauseReason: 'failure', reason: `${stage.name} failed: ${stage.lastError ?? 'No error was reported.'} Retry the stage or open the workflow to review it.`, ...spendField, ...exhaustedField };
   } else if (summary.needsDecision) {
-    progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField };
+    progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField, ...exhaustedField };
   } else {
     const live = summary.stages.find(stage => stage.lane === 'running') ?? [...summary.stages].reverse().find(stage => stage.provider);
     progress = {
       kind: 'running',
       provider: live?.provider ?? summary.aiProvider,
       ...(live?.sessionId ? { sessionId: live.sessionId } : {}),
-      ...spendField
+      ...spendField,
+      ...exhaustedField
     };
   }
   return { progress };

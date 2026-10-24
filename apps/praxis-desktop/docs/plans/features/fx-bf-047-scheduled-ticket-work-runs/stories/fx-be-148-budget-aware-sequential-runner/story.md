@@ -95,6 +95,26 @@ Status: Failed · Duration: 53m 54s
 - ⏳ Deploy: pending
 
 Required stage "implement" failed.
+
+**PRX-S47-148** — 2026-10-24T19:23:24.304Z
+**Workflow run failed: Full SDLC — Budget-aware sequential runner and audit trail**
+
+Status: Failed · Duration: 2s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ Lint: pending
+- ⏳ Type check: pending
+- ⏳ Unit tests & coverage: pending
+- ⏳ SAST scan: pending
+- ⏳ Secret scan: pending
+- ⏳ SCA scan: pending
+- ⏳ Structured code review: pending
+- ⏳ Deploy: pending
+
+Required stage "plan" failed.
 ## Delivery status (2026-10-24)
 
 The sequential runner and close warning are implemented and verified (TASK-385 and TASK-463 Done). Keep this story open for the ledger completeness and existing provider-handover-path gaps on TASK-386 and TASK-464. Runner unit tests and Electron checks prove queue order, recovery, budget pause and launch-failure/resume behavior, not full live-provider handover completion.

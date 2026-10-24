@@ -98,6 +98,13 @@ export interface ScheduledEntryOutcome {
   spend?: ScheduledEntrySpend;
   /** Times the user retried this ticket after it failed or stopped. */
   retries?: number;
+  /**
+   * Providers that ran out of credits or hit their limit while this ticket was
+   * being worked on. They are never started on again, on a retry or by a
+   * hand-over, even when their reported allowance looks fine — a hard limit
+   * arrives long before a quota figure shows one.
+   */
+  exhausted?: string[];
 }
 
 export interface ScheduledQueueEntry {
