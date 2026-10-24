@@ -98,8 +98,11 @@ export interface ScheduledRunnerPorts {
   launch(request: { run: ScheduledRun; entry: ScheduledQueueEntry; workflowId: string; token: string; provider?: string }): Promise<string>;
   cancelWorkflow(workflowRunId: string, reason: string): Promise<void>;
   usage(): Promise<ProviderUsageReading>;
-  /** Preserves work in progress and moves the running stage to another provider. */
-  handOver(request: { run: ScheduledRun; entry: ScheduledQueueEntry; workflowRunId: string; from: string; to: string; usedFraction: number }): Promise<{ checkpointRef?: string }>;
+  /**
+   * Preserves work in progress and moves the run to another provider. Returns `provider` when the
+   * host handed to a different AI than `to` because `to` could not run the active stage.
+   */
+  handOver(request: { run: ScheduledRun; entry: ScheduledQueueEntry; workflowRunId: string; from: string; to: string; usedFraction: number }): Promise<{ checkpointRef?: string; provider?: string }>;
   /** Approves the gate the entry is waiting at. */
   approveGate?(workflowRunId: string, nodeId: string): Promise<void>;
   /** A run was saved. */
@@ -309,14 +312,17 @@ export class ScheduledRunRunner {
     if (decision.kind === 'handover' && decision.from) {
       const usedFraction = decision.usedFraction ?? this.ports.threshold?.() ?? DEFAULT_HANDOVER_THRESHOLD;
       let checkpointRef: string | undefined;
+      let to = decision.provider;
       try {
-        ({ checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction }));
+        let provider: string | undefined;
+        ({ checkpointRef, provider } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction }));
+        if (provider) to = provider;
       } catch (error) {
         return this.save(pauseScheduledRun(run, 'budget', `Provider handover failed: ${error instanceof Error ? error.message : String(error)}`, this.ports.now(), entryId));
       }
       const at = this.ports.now();
       return this.save(
-        recordProviderHandover(run, entryId, { at, from: decision.from, to: decision.provider, usedPercent: usedFraction * 100, ...(checkpointRef ? { checkpointRef } : {}) }, at)
+        recordProviderHandover(run, entryId, { at, from: decision.from, to, usedPercent: usedFraction * 100, ...(checkpointRef ? { checkpointRef } : {}) }, at)
       );
     }
     if (decision.kind === 'pause') {

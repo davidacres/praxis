@@ -6,6 +6,7 @@
 import {
   listProviderIds,
   exhaustedProviders,
+  providerCanRunStage,
   stageProvider,
   type AiProvider,
   type WorkflowRun
@@ -31,7 +32,17 @@ export async function nextUsableProvider(exclude: readonly string[], preferred: 
 export function fallbackProviderForStage(run: WorkflowRun, nodeId: string): Promise<AiProvider | undefined> {
   const active = getSettingsBackend().read().ai.activeProvider;
   const current = stageProvider(run, nodeId, run.aiProvider || active);
-  return nextUsableProvider([current, ...exhaustedProviders(run), ...authorProviders(run, nodeId)], run.aiProvider ? [run.aiProvider] : []);
+  return stageCapableProvider(run, nodeId, [current, ...exhaustedProviders(run), ...authorProviders(run, nodeId)], run.aiProvider ? [run.aiProvider] : []);
+}
+
+/** The first usable AI not in `exclude` that can run this stage (see `providerCanRunStage`). */
+export async function stageCapableProvider(
+  run: WorkflowRun,
+  nodeId: string,
+  exclude: readonly string[],
+  preferred: readonly string[] = []
+): Promise<AiProvider | undefined> {
+  return (await usableProviders(preferred)).find(id => !exclude.includes(id) && providerCanRunStage(run, nodeId, id));
 }
 
 /**

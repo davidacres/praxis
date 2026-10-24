@@ -1,5 +1,5 @@
 import { stageHandoverGuard } from './stageHandoverGuard';
-import type { AgentSessionRecord } from '@praxis/core';
+import type { AgentSessionRecord, BackgroundTask } from '@praxis/core';
 import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -24,6 +24,8 @@ import {
   projectConnectionId,
   nodeOutputs,
   stageProvider,
+  stagePermissionMode,
+  providerCanRunStage,
   chooseIndependentStage,
   assessTestChanges,
   isGuardedPath,
@@ -56,7 +58,7 @@ import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
-import { usableProviders } from './providerFallback';
+import { stageCapableProvider, usableProviders } from './providerFallback';
 import { restoreWorktreeTo } from './runWork';
 
 /**
@@ -241,6 +243,16 @@ export async function runWorkflowAgentStage(
   let provider = (item
     ? workflowRun.stageProviders?.[recordNodeId] ?? (node.agent.providerId?.trim() || undefined) ?? runProvider
     : stageProvider(workflowRun, node.id, runProvider)) as AiProvider;
+  // An AI picked for the whole run (or by default) that cannot run this stage — Antigravity on a
+  // read-only stage, or on a run that asks for approval — is swapped for one that can, rather than
+  // failing the stage. An AI chosen for this stage specifically is kept, and its error shown.
+  if (!providerCanRunStage(workflowRun, node.id, provider) && !workflowRun.stageProviders?.[recordNodeId] && !node.agent.providerId?.trim()) {
+    const replacement = await stageCapableProvider(workflowRun, node.id, [provider]);
+    if (replacement) {
+      workflowLogSink.appendLine(`[workflow ${workflowRun.runId}] ${node.name}: ${provider} cannot run this stage unattended; using ${replacement}.`);
+      provider = replacement;
+    }
+  }
   const toolMode = preflight.binding.toolMode;
   const taskDefinition = buildStageTaskDefinition(stageContext);
 
@@ -339,7 +351,7 @@ export async function runWorkflowAgentStage(
         ...(authorAttempt?.model ? { model: authorAttempt.model } : {})
       },
       chosenByPerson: switched || Boolean(switchedModel),
-      usableProviders: await usableProviders([provider]),
+      usableProviders: (await usableProviders([provider])).filter(id => providerCanRunStage(workflowRun, node.id, id)),
       tiers: settings.ai.modelTiers,
       ...(node.modelTier ? { tier: node.modelTier } : {})
     });
@@ -382,6 +394,7 @@ export async function runWorkflowAgentStage(
       ...(modelChoice.model ? { model: modelChoice.model } : {}),
       workingDirectory: worktreePath,
       toolMode,
+      ...(stagePermissionMode(workflowRun) === 'autopilot' ? { permissionMode: 'autopilot' as const } : {}),
       autoApprovePermissions: workflowRun.permissionMode === 'auto'
     });
     skillActivations = prepared.skillActivations;
@@ -578,13 +591,27 @@ export async function cancelWorkflowAgentStage(runId: string, nodeId: string): P
   await abortActiveTask(issueKey);
 }
 
-/** Provider background jobs are part of the stage; shell services may deliberately outlive it. */
-export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks'>): { state: FinishedStageSession['state']; error?: string } | undefined {
+/**
+ * Provider background jobs are part of the stage; shell services may deliberately outlive it.
+ *
+ * A job that failed or was stopped before the agent's turn ended was in front of the
+ * agent: it saw the result and carried on (a failed edit, a sandboxed test it re-ran
+ * outside the sandbox). Judging that is the agent's job and the review stages', not a
+ * reason to fail the stage. A job that ended after the turn, or whose result is unknown,
+ * was never seen by anyone, so it still fails the stage.
+ */
+export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks' | 'completedAt'>): { state: FinishedStageSession['state']; error?: string } | undefined {
   if (record.state === 'failed' || record.state === 'aborted') return { state: record.state };
   if (record.state !== 'completed') return;
   const tasks = (record.backgroundTasks ?? []).filter(task => task.source === 'provider');
   if (tasks.some(task => task.state === 'running' || task.state === 'paused')) return;
-  const unresolved = tasks.find(task => task.state !== 'completed');
+  const turnEnded = record.completedAt ? Date.parse(record.completedAt) : NaN;
+  const seenDuringTurn = (task: BackgroundTask): boolean => {
+    if (task.state !== 'failed' && task.state !== 'stopped') return false;
+    const ended = Date.parse(task.completedAt ?? task.updatedAt);
+    return Number.isFinite(turnEnded) && Number.isFinite(ended) && ended <= turnEnded;
+  };
+  const unresolved = tasks.find(task => task.state !== 'completed' && !seenDuringTurn(task));
   if (unresolved) return { state: 'failed', error: `Background task "${unresolved.label}" ${unresolved.state === 'unknown' ? 'has no confirmed result' : `ended ${unresolved.state}`}. ${unresolved.detail ?? ''} A later foreground success does not confirm this background job. Inspect its result, then retry the workflow stage.`.trim() };
   return { state: 'completed' };
 }

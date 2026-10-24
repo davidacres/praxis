@@ -484,3 +484,14 @@ test('a failed handover pauses once instead of retrying each tick', async () => 
   await h.runner.tick();
   assert.equal(calls, 1);
 });
+
+test('a handover records the AI the host actually handed to when it had to pick another', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+  h.usage = { usable: ['claude', 'antigravity-cli', 'codex'], active: 'claude', used: { claude: 0.99, 'antigravity-cli': 0.1, codex: 0.3 } };
+  h.ports.handOver = async () => ({ checkpointRef: 'abc1234', provider: 'codex' });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.entries[0].outcome?.handovers?.[0]?.to, 'codex');
+  assert.equal(h.run.entries[0].outcome?.provider, 'codex');
+});

@@ -112,3 +112,24 @@ test('a later success does not silently clear a different failed background job'
   assert.match(result?.error ?? '', /Desktop build.*Exit code 1: missing module/);
   assert.match(result?.error ?? '', /retry the workflow stage/);
 });
+
+test('a job that failed while the agent was still working does not fail the stage', () => {
+  const job = { source: 'provider' as const, startedAt: '2026-10-24T21:04:00.000Z' };
+  // PRX-S47-148: the sandboxed test run failed, the agent re-ran it outside the sandbox and finished.
+  const result = stageSessionCompletion({ state: 'completed', completedAt: '2026-10-24T21:14:38.690Z', backgroundTasks: [
+    { ...job, id: 'sandboxed', label: 'npm run test:core', state: 'failed', updatedAt: '2026-10-24T21:04:26.149Z', completedAt: '2026-10-24T21:04:26.149Z' },
+    { ...job, id: 'stopped', label: 'e2e', state: 'stopped', updatedAt: '2026-10-24T21:05:00.000Z', completedAt: '2026-10-24T21:05:00.000Z' },
+    { ...job, id: 'rerun', label: 'npm run test:core > log', state: 'completed', updatedAt: '2026-10-24T21:04:48.002Z', completedAt: '2026-10-24T21:04:48.002Z' }
+  ] });
+  assert.equal(result?.state, 'completed');
+});
+
+test('a job that fails after the turn ended, or has no known result, still fails the stage', () => {
+  const job = { id: 'late', source: 'provider' as const, label: 'Desktop build', startedAt: '2026-10-24T21:00:00.000Z' };
+  const turn = { state: 'completed' as const, completedAt: '2026-10-24T21:10:00.000Z' };
+  const late = stageSessionCompletion({ ...turn, backgroundTasks: [{ ...job, state: 'failed', updatedAt: '2026-10-24T21:12:00.000Z', completedAt: '2026-10-24T21:12:00.000Z', detail: 'Exit code 1.' }] });
+  assert.equal(late?.state, 'failed');
+  assert.match(late?.error ?? '', /Desktop build.*Exit code 1/);
+  const unknown = stageSessionCompletion({ ...turn, backgroundTasks: [{ ...job, state: 'unknown', updatedAt: '2026-10-24T21:05:00.000Z' }] });
+  assert.equal(unknown?.state, 'failed', 'an unconfirmed result is never treated as seen');
+});

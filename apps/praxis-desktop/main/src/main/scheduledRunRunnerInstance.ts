@@ -5,6 +5,8 @@ import {
   ScheduledRunRunner,
   WorkflowRunStore,
   approveStage,
+  exhaustedProviders,
+  providerCanRunStage,
   resolveApprovalTarget,
   type AiProvider,
   type ScheduledRunnerPorts
@@ -20,6 +22,7 @@ import { stageHandoverGuard } from './stageHandoverGuard';
 import { getAiSessionManager, abortActiveTask } from './aiInstance';
 import { handoverSession } from './aiIpc';
 import { preserveUncommittedWork } from './runWork';
+import { stageCapableProvider } from './providerFallback';
 
 /**
  * Wires the scheduled-run runner (FX-BF-047 / FX-BE-148) to the real app: the
@@ -78,7 +81,9 @@ function ports(): ScheduledRunnerPorts {
           issue: { issueKey: entry.ticket.issueKey, connectionId: entry.ticket.connectionId },
           scheduledLaunchToken: token,
           // `uncommittedChanges` is deliberately unset: a dirty base pauses the schedule rather than letting it choose.
-          options: { providerLimitPolicy: 'switch', ...(provider ? { aiProvider: provider } : {}) }
+          // Nobody is there to answer a permission prompt, so stages auto-approve and run in Autopilot,
+          // still bounded by each stage's own tool mode.
+          options: { permissionMode: 'auto', providerLimitPolicy: 'switch', ...(provider ? { aiProvider: provider } : {}) }
         });
         return summary.runId;
       } catch (error) {
@@ -94,32 +99,47 @@ function ports(): ScheduledRunnerPorts {
     handOver: async ({ entry, workflowRunId, from, to, usedFraction: used }) => {
       const run = runStore().get(workflowRunId);
       if (!run) throw new Error('The workflow run no longer exists.');
+      const checkpointMessage = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
       const sessions = getAiSessionManager();
       const active = sessions.listAgentSessionSummaries().filter(session => session.workflowRunId === workflowRunId && session.workflowRole === 'stage' && session.provider === from && !['completed', 'failed', 'aborted'].includes(session.state));
-      if (active.length !== 1) throw new Error('Provider handover requires exactly one active workflow stage session.');
+      // Between stages, or with stages running side by side, nothing is cut off: the run's AI changes
+      // for every stage not yet started, and each stage launch still checks it can run there.
+      const switchForNextStages = async (): Promise<{ checkpointRef?: string; provider: string }> => {
+        let checkpointRef: string | undefined;
+        if (run.worktreePath && await preserveUncommittedWork(run.worktreePath, checkpointMessage)) checkpointRef = await headOf(run.worktreePath);
+        await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
+        return { ...(checkpointRef ? { checkpointRef } : {}), provider: to };
+      };
+      if (active.length !== 1) return switchForNextStages();
       const session = active[0];
+      // A mid-turn handover moves the live session, so the AI must be able to run this stage (Antigravity
+      // can't run a read-only or approval-gated one). If the planner's pick can't, take the next that can.
+      const nodeId = session.workflowNodeId ?? '';
+      const target = providerCanRunStage(run, nodeId, to)
+        ? to
+        : await stageCapableProvider(run, nodeId, [from, ...exhaustedProviders(run)], [to]);
+      if (!target) return switchForNextStages();
       const worktreePath = session.worktreePath ?? run.worktreePath;
       let checkpointRef: string | undefined;
       await stageHandoverGuard.during(session.issueKey, async () => {
         await abortActiveTask(session.issueKey);
         if (worktreePath) {
-          const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
-          await preserveUncommittedWork(worktreePath, message);
+          await preserveUncommittedWork(worktreePath, checkpointMessage);
           checkpointRef = await headOf(worktreePath);
           if (!checkpointRef) throw new Error('Could not record the handover checkpoint.');
         }
         if (runStore().get(workflowRunId)?.status !== 'running') throw new Error('The workflow stopped during provider handover.');
         await handoverSession(session.issueKey, {
-          provider: to as AiProvider,
+          provider: target as AiProvider,
           expectedBriefRevision: sessions.getAgentSession(session.issueKey)?.handoverBrief?.revision ?? 0
         });
         if (runStore().get(workflowRunId)?.status !== 'running') {
           await abortActiveTask(session.issueKey);
           throw new Error('The workflow stopped during provider handover.');
         }
-        await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
+        await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: target as typeof current.aiProvider }));
       });
-      return { ...(checkpointRef ? { checkpointRef } : {}) };
+      return { ...(checkpointRef ? { checkpointRef } : {}), provider: target };
     },
     onChanged: run => notifyScheduledRunsChanged(run.projectId),
     approveGate: async (workflowRunId, nodeId) => {
