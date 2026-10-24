@@ -165,11 +165,11 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
   const key = entry.ticket.issueKey;
   if (outcome.status === 'done' || outcome.status === 'skipped') return run;
   const spend = progress.spend ?? outcome.spend;
-  const { gate: _gate, ...withoutGate } = outcome;
+  const { gate: _gate, reason: _reason, ...withoutGate } = outcome;
 
   switch (progress.kind) {
     case 'running': {
-      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || run.pause.reason === 'budget' || run.pause.reason === 'policy');
+      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || run.pause.reason === 'budget' || run.pause.reason === 'policy' || run.pause.reason === 'failure');
       const unchanged =
         outcome.status === 'running' && !outcome.gate && !wasWaiting && sameSpend(outcome.spend, spend) &&
         (!progress.provider || progress.provider === outcome.provider) && (!progress.sessionId || progress.sessionId === outcome.sessionId);

@@ -3,10 +3,12 @@ import {
   providerHeadroom,
   resolveApprovalTarget,
   summarizeWorkflowRun,
+  scheduledWorkflowBlocker,
   type EntryProgress,
   type ProviderUsageReading,
   type ScheduledEntrySpend,
   type ScheduledRun,
+  type ScheduledRunLive,
   type WorkflowObservation,
   type WorkflowRun
 } from '@praxis/core';
@@ -58,6 +60,7 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
   const summary = summarize(run);
   const spend = spendFor(workflowRunId);
   const spendField = spend ? { spend } : {};
+  const blocker = scheduledWorkflowBlocker(summary);
   const failing = summary.stages.find(stage => stage.outcome === 'failed');
   let progress: EntryProgress;
   if (summary.status === 'succeeded') progress = { kind: 'succeeded', ...spendField };
@@ -74,6 +77,11 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
     }
     const stage = summary.stages.find(row => row.nodeId === nodeId);
     progress = { kind: 'gate', nodeId, label: stage?.name ?? 'Approval', ...spendField };
+  } else if (blocker) {
+    const stage = blocker;
+    progress = { kind: 'stalled', pauseReason: 'failure', reason: `${stage.name} failed: ${stage.lastError ?? 'No error was reported.'} Retry the stage or open the workflow to review it.`, ...spendField };
+  } else if (summary.needsDecision) {
+    progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField };
   } else {
     const live = summary.stages.find(stage => stage.lane === 'running') ?? [...summary.stages].reverse().find(stage => stage.provider);
     progress = {
@@ -87,17 +95,19 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
 }
 
 /** A run's progress through its stages, for the live view. */
-export function stageProgressFor(workflowRunId: string): { stageLabel: string; stageIndex: number; stageCount: number; provider?: string } | undefined {
+export function stageProgressFor(workflowRunId: string): Pick<ScheduledRunLive, 'stageLabel' | 'stageIndex' | 'stageCount' | 'provider' | 'recovery'> | undefined {
   const run = runStore().get(workflowRunId);
   if (!run) return undefined;
   const summary = summarize(run);
   const stages = summary.stages;
-  const current = stages.find(stage => stage.lane === 'running' || stage.lane === 'awaiting' || stage.lane === 'paused');
+  const blocker = scheduledWorkflowBlocker(summary);
+  const current = stages.find(stage => stage.lane === 'running' || stage.lane === 'awaiting' || stage.lane === 'paused') ?? blocker ?? stages.find(stage => stage.lane === 'failed');
   const done = stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
   return {
-    stageLabel: current?.name ?? (summary.status === 'succeeded' ? 'Finished' : 'Starting'),
+    stageLabel: current ? `${current.name}${current.outcome === 'failed' ? ' — needs attention' : ''}` : summary.status === 'succeeded' ? 'Finished' : summary.explanation,
     stageIndex: current ? stages.indexOf(current) + 1 : done,
     stageCount: stages.length,
+    ...(blocker ? { recovery: { nodeId: blocker.nodeId, error: blocker.lastError, attempts: blocker.attemptsThisRevision ?? blocker.attempts, maxAttempts: blocker.maxAttempts } } : {}),
     ...(current?.provider ? { provider: current.provider } : {})
   };
 }

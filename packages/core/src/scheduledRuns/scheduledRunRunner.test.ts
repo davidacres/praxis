@@ -7,7 +7,7 @@ import {
   reconcileScheduledRunOnLaunch,
   type ScheduledRun
 } from './scheduledRun';
-import { ScheduledLaunchError, ScheduledRunRunner, type ProviderUsageReading, type ScheduledRunnerPorts, type WorkflowObservation } from './scheduledRunRunner';
+import { ScheduledLaunchError, ScheduledRunRunner, scheduledWorkflowBlocker, type ProviderUsageReading, type ScheduledRunnerPorts, type WorkflowObservation } from './scheduledRunRunner';
 import { nextLaunchableEntry } from './scheduledRunExecution';
 import { normalizeScheduledRun } from './scheduledRunStore';
 
@@ -360,4 +360,38 @@ test('Run now obeys the preview switch and provider budget gate', async () => {
   await h.runner.startNow(h.run.id);
   assert.equal(h.run.status, 'paused');
   assert.equal(h.launches.length, 0);
+});
+
+
+test('a stalled failure pauses once, keeps its workflow, and resumes after stage recovery', async () => {
+  const h = new Harness();
+  await h.runner.tick();
+  const entry = h.run.entries[0];
+  const workflowRunId = entry.outcome!.workflowRunId!;
+  h.workflows.set(workflowRunId, { progress: { kind: 'stalled', pauseReason: 'failure', reason: 'Implement failed: build exited 1. Retry the stage.' } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+  assert.equal(h.run.pause?.reason, 'failure');
+  assert.equal(h.run.entries[0].outcome?.workflowRunId, workflowRunId);
+  const events = h.run.events.length;
+  await h.runner.tick();
+  assert.equal(h.run.events.length, events, 'polling does not repeat failure events');
+  h.workflows.set(workflowRunId, { progress: { kind: 'running' } });
+  await h.runner.handleWorkflowChanged(workflowRunId);
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.entries[0].outcome?.reason, undefined, 'recovery clears the stale error');
+  assert.equal(h.launches.length, 1, 'stage recovery never launches a duplicate workflow');
+});
+
+test('only an idle failed workflow needs manual scheduled recovery', () => {
+  const failed = { nodeId: 'implement', outcome: 'failed', lane: 'failed' };
+  const summary = { status: 'running', stages: [failed], loops: [] } as unknown as Parameters<typeof scheduledWorkflowBlocker>[0];
+  assert.equal(scheduledWorkflowBlocker(summary), failed);
+  for (const lane of ['running', 'ready'] as const) {
+    assert.equal(scheduledWorkflowBlocker({ ...summary, stages: [...summary.stages, { ...summary.stages[0], nodeId: 'repair', lane }] }), undefined);
+  }
+  assert.equal(scheduledWorkflowBlocker({ ...summary, status: 'succeeded' }), undefined);
+  assert.equal(scheduledWorkflowBlocker({ ...summary, needsDecision: { edgeId: 'repair', message: 'Loop budget spent' } }), undefined);
+  assert.equal(scheduledWorkflowBlocker({ ...summary, stages: [{ ...summary.stages[0], lane: 'paused' }] }), undefined);
+  assert.equal(scheduledWorkflowBlocker({ ...summary, loops: [{ firing: true, needsDecision: false }] as typeof summary.loops }), undefined);
 });

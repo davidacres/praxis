@@ -84,7 +84,7 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
           <span><strong>{PAUSE_TITLE[pause.reason]}</strong> {pause.message}</span>
           {active && (pause.reason === 'failure' || pause.reason === 'launch-interrupted') && (
             <span className="schedule-pause-actions">
-              <button type="button" className="btn btn-primary" data-testid="schedule-retry" disabled={busy} onClick={() => void act(() => api.retryEntry(run.id, active.id))}>Retry</button>
+              <button type="button" className="btn btn-primary" data-testid="schedule-retry" disabled={busy} onClick={() => void act(() => live?.recovery ? window.praxis.workflows.retryStage(live.workflowRunId, live.recovery.nodeId) : api.retryEntry(run.id, active.id))}>{live?.recovery ? 'Retry stage' : 'Retry ticket'}</button>
               <button type="button" className="btn" data-testid="schedule-skip-entry" disabled={busy} onClick={() => void act(() => api.skipEntry(run.id, active.id))}>Skip</button>
             </span>
           )}
@@ -103,6 +103,16 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
           )}
         </div>
       )}
+
+      {active?.outcome?.workflowRunId && onOpenWorkflowRun && <div className="schedule-head-actions">
+        <button type="button" className="btn" data-testid="schedule-review-workflow" onClick={() => onOpenWorkflowRun(active.outcome!.workflowRunId!)}>Open workflow and logs</button>
+      </div>}
+      {live?.recovery && <section className="schedule-panel" aria-label="Stage failure" data-testid="schedule-stage-failure">
+        <h3 className="schedule-panel-title">Stage needs attention</h3>
+        <p>{live.stageLabel} · Attempt {live.recovery.attempts}{live.recovery.maxAttempts ? ` of ${live.recovery.maxAttempts}` : ''}</p>
+        {live.recovery.error && <pre className="schedule-failure-detail">{live.recovery.error}</pre>}
+        <p className="schedule-hint">Retry continues this workflow in its existing worktree. Completed stages are kept. Remaining attempts do not start automatically. Waiting tickets stay queued.</p>
+      </section>}
 
       <section className="schedule-line" aria-label="Run progress" data-testid="schedule-line">
         <div className="schedule-line-col">
@@ -192,7 +202,7 @@ const PAUSE_TITLE: Record<string, string> = {
   policy: 'Needs a decision.',
   trust: 'Workflow not trusted.',
   'no-provider': 'No AI provider available.',
-  failure: 'A ticket failed.',
+  failure: 'A stage needs attention.',
   user: 'Paused.',
   'launch-interrupted': 'Praxis stopped while starting a ticket.'
 };

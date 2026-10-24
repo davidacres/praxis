@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 706,
+  "testCount": 708,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -7714,6 +7714,38 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "quitting with a schedule pending asks first, and offers to minimise instead",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-7600A815C3",
+      "title": "an idle failed stage pauses the schedule and retries in the same workflow",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 862,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an idle failed stage pauses the schedule and retries in the same workflow",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-2370A6254B",
+      "title": "an older schedule refresh cannot overwrite a newer failure status",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 902,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an older schedule refresh cannot overwrite a newer failure status",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

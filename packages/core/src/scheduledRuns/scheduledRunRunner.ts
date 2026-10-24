@@ -20,6 +20,7 @@
  *   the user retries, skips or stops.
  */
 
+import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
 import type { ScheduledPauseReason, ScheduledQueueEntry, ScheduledRun, ScheduledTicketRef } from './scheduledRun';
 import { dueScheduledRuns, startScheduledRunNow } from './scheduledRun';
 import { decideProviderForEntry, DEFAULT_HANDOVER_THRESHOLD } from './scheduledBudget';
@@ -54,6 +55,14 @@ export interface WorkflowObservation {
   progress: EntryProgress;
   /** True when no agent turn is in flight, so a stage may be handed to another provider without cutting it off. */
   idle?: boolean;
+}
+
+/** A failure awaiting manual recovery is not active work, even while the run stays open. */
+export function scheduledWorkflowBlocker(summary: WorkflowRunSummary) {
+  const active = summary.stages.some(stage => stage.lane === 'running' || stage.lane === 'ready');
+  const looping = summary.loops.some(loop => loop.firing && !loop.needsDecision);
+  if (summary.status !== 'running' || summary.needsDecision || active || looping) return undefined;
+  return summary.stages.find(stage => stage.lane === 'failed');
 }
 
 export interface ProviderUsageReading {

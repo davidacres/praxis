@@ -1303,6 +1303,8 @@ export interface ScheduledRunLive {
   entryId: string;
   workflowRunId: string;
   stageLabel: string;
+  /** A failed stage waiting for a person, in the existing workflow and worktree. */
+  recovery?: { nodeId: string; error?: string; attempts: number; maxAttempts?: number };
   /** 1-based; 0 before the first stage starts. */
   stageIndex: number;
   stageCount: number;

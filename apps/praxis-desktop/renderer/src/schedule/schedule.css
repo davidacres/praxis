@@ -314,3 +314,5 @@
 @keyframes schedule-pulse { 0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); } 50% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 8px 28px color-mix(in srgb, var(--accent) 16%, transparent); } }
 @media (max-width: 1000px) { .schedule-line { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) { .schedule-proc.is-working { animation: none; } }
+
+.schedule-failure-detail { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--text); }

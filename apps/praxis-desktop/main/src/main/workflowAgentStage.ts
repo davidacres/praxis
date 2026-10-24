@@ -584,7 +584,7 @@ export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' 
   const tasks = (record.backgroundTasks ?? []).filter(task => task.source === 'provider');
   if (tasks.some(task => task.state === 'running' || task.state === 'paused')) return;
   const unresolved = tasks.find(task => task.state !== 'completed');
-  if (unresolved) return { state: 'failed', error: `Background task "${unresolved.label}" ${unresolved.state === 'unknown' ? 'has no confirmed result' : `ended ${unresolved.state}`}. ${unresolved.detail ?? ''}`.trim() };
+  if (unresolved) return { state: 'failed', error: `Background task "${unresolved.label}" ${unresolved.state === 'unknown' ? 'has no confirmed result' : `ended ${unresolved.state}`}. ${unresolved.detail ?? ''} A later foreground success does not confirm this background job. Inspect its result, then retry the workflow stage.`.trim() };
   return { state: 'completed' };
 }
 

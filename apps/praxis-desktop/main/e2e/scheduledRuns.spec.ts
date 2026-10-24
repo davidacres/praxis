@@ -858,3 +858,71 @@ test('quitting with a schedule pending asks first, and offers to minimise instea
   // Cancelled: the app is still alive and still has its schedule.
   expect(await page.evaluate(() => window.praxis.scheduledRuns.list().then(list => list.length))).toBe(1);
 });
+
+test('an idle failed stage pauses the schedule and retries in the same workflow', async () => {
+  const { page, projectId, repo } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500' } });
+  const marker = path.join(repo, 'retry-ready');
+  const workflowId = await page.evaluate(async ({ projectId, marker }) => {
+    const now = new Date().toISOString();
+    const id = 'schedule-retry-stage';
+    await window.praxis.workflows.save(projectId, {
+      schemaVersion: 1, id, name: 'Recover build', scope: 'project', projectId, version: 1,
+      entryNodeId: 'build', createdAt: now, updatedAt: now,
+      nodes: [
+        { type: 'check', id: 'build', name: 'Build', x: 0, y: 0, inputs: [], command: 'test', args: ['-f', marker], successExitCodes: [0], maxAttempts: 3, outputs: [] },
+        { type: 'approval', id: 'approve', name: 'Approve', x: 240, y: 0, inputs: [], prompt: 'Ship?', requiredGates: [], allowBypass: false }
+      ],
+      edges: [{ id: 'next', from: 'build', to: 'approve', on: 'success', required: true }]
+    } as never);
+    return id;
+  }, { projectId, marker });
+  const scheduleId = await scheduleSoon(page, projectId, 'Recover failed build', 2, 120, workflowId);
+  await page.evaluate(id => window.praxis.scheduledRuns.startNow(id), scheduleId);
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Recover failed build' });
+  await expect(card.getByTestId('schedule-status')).toHaveText('Paused', { timeout: 30000 });
+  await card.getByTestId('schedule-open').click();
+  await expect(page.getByTestId('schedule-proc-state')).toHaveText('Build — needs attention');
+  await expect(page.getByTestId('schedule-stage-failure')).toContainText('Attempt 1 of 3');
+  await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'failure');
+  await expect(page.getByTestId('schedule-review-workflow')).toBeVisible();
+  await expect(page.getByTestId('schedule-belt').locator('li[data-issue]')).toHaveCount(1);
+  const before = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
+  expect(before).toHaveLength(1);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-stage-failure.png') });
+  fs.writeFileSync(marker, 'ready');
+  await page.getByTestId('schedule-retry').click();
+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].status, { timeout: 10000 }).toBe('awaiting-approval');
+  await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'approval', { timeout: 10000 });
+  await expect(page.getByTestId('schedule-stage-failure')).toHaveCount(0);
+  const after = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
+  expect(after.map(run => run.runId)).toEqual(before.map(run => run.runId));
+  expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(2);
+});
+
+test('an older schedule refresh cannot overwrite a newer failure status', async () => {
+  const { page, projectId } = await launch();
+  await scheduleSoon(page, projectId, 'Refresh ordering', 1, 120);
+  const views = await page.evaluate(() => window.praxis.scheduledRuns.list());
+  await app!.electronApp.evaluate(({ ipcMain }, views) => {
+    let calls = 0;
+    const state = globalThis as typeof globalThis & { releaseScheduleRefresh?: () => void };
+    ipcMain.removeHandler('scheduledRuns:list');
+    ipcMain.handle('scheduledRuns:list', async () => {
+      const first = ++calls === 1;
+      if (first) await new Promise<void>(resolve => { state.releaseScheduleRefresh = resolve; });
+      return views.map(view => ({ ...view, run: { ...view.run, status: first ? 'running' : 'paused' } }));
+    });
+  }, views);
+  const changed = () => app!.electronApp.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('scheduledRuns:changed');
+  });
+  await changed();
+  await expect.poll(() => app!.electronApp.evaluate(() => !!(globalThis as typeof globalThis & { releaseScheduleRefresh?: () => void }).releaseScheduleRefresh)).toBe(true);
+  await changed();
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Refresh ordering' });
+  await expect(card.getByTestId('schedule-status')).toHaveText('Paused');
+  await app!.electronApp.evaluate(() => (globalThis as typeof globalThis & { releaseScheduleRefresh?: () => void }).releaseScheduleRefresh!());
+  // Wait for the old promise, its load handler, and React's paint to finish.
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(card.getByTestId('schedule-status')).toHaveText('Paused');
+});

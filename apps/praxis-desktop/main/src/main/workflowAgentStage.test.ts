@@ -100,3 +100,15 @@ test('a stage waits for provider background work and cannot claim success from a
   assert.equal(stageSessionCompletion({ state: 'completed', backgroundTasks: [{ ...background, state: 'completed' }] })?.state, 'completed');
   assert.equal(stageSessionCompletion({ state: 'completed', backgroundTasks: [{ ...background, source: 'shell', state: 'running' }] })?.state, 'completed', 'a long-lived service does not hold a stage open');
 });
+
+
+test('a later success does not silently clear a different failed background job', () => {
+  const job = { source: 'provider' as const, label: 'Desktop build', startedAt: '2026-01-01', updatedAt: '2026-01-01' };
+  const result = stageSessionCompletion({ state: 'completed', backgroundTasks: [
+    { ...job, id: 'failed-build', state: 'failed', detail: 'Exit code 1: missing module.' },
+    { ...job, id: 'later-job', state: 'completed' }
+  ] });
+  assert.equal(result?.state, 'failed');
+  assert.match(result?.error ?? '', /Desktop build.*Exit code 1: missing module/);
+  assert.match(result?.error ?? '', /retry the workflow stage/);
+});

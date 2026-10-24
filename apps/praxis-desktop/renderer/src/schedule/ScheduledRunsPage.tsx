@@ -2,7 +2,7 @@ import { createPortal } from 'react-dom';
 import { useResizable } from '../app/useResizable';
 import { RECENCY_BUCKETS, RECENCY_BUCKET_LABEL, recencyBucket } from '../app/sessionRecency';
 import { ScheduleTickets, useScheduleTickets } from './ScheduleTickets';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ProjectRecord, ScheduledRunView } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
@@ -67,19 +67,24 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   const [ticketHandoffDismissed, setTicketHandoffDismissed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
+  const loadRequest = useRef(0);
   const load = useCallback(async () => {
+    const request = ++loadRequest.current;
     try {
       const all = await window.praxis.scheduledRuns.list();
+      if (request !== loadRequest.current) return;
       setViews(all.filter(view => view.run.projectId === project.id));
       setError('');
     } catch (reason) {
+      if (request !== loadRequest.current) return;
       setError(reason instanceof Error ? reason.message : String(reason));
     }
   }, [project.id]);
 
   useEffect(() => {
     void load();
-    return window.praxis.scheduledRuns.onChanged(() => void load());
+    const unsubscribe = window.praxis.scheduledRuns.onChanged(() => void load());
+    return () => { ++loadRequest.current; unsubscribe(); };
   }, [load]);
 
   useEffect(() => {
