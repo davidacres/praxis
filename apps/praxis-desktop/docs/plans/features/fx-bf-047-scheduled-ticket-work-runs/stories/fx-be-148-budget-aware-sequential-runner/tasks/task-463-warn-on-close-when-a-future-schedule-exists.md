@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Done
 **Created:** 2026-10-20T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-463
 title: Warn on close when a future schedule exists and recommend minimising
-status: Backlog
+status: Done
 story: FX-BE-148
-updated: 2026-10-20
+updated: 2026-10-24
 dependencies: [TASK-383]
 validation: [npm run test:desktop]
 ---
@@ -39,3 +39,8 @@ Keep the check in main behind the existing close handling. It must not block qui
 
 ## Comments
 
+## Delivery status (2026-10-24)
+
+Pending schedules trigger a themed quit warning naming the schedule/start and offering Minimise, Quit anyway and Cancel. On macOS window close leaves the app running, so the schedule warning applies to quit; Windows/Linux also guard last-window close. The focused Electron quit-warning test passes.
+
+Implementation and verification evidence are recorded in the parent feature's Delivery status section (`FX-BF-047`, merge `f297b332`).

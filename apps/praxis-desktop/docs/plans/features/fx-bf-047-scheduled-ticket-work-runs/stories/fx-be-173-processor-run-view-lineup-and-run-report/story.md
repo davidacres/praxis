@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-10-20T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-173
 title: Processor run view and run report
-status: Backlog
+status: In Progress
 feature: FX-BF-047
-updated: 2026-10-20
+updated: 2026-10-24
 tasks: [TASK-465, TASK-466]
 dependencies: [FX-BE-148]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
@@ -61,3 +61,8 @@ A user can follow a scheduled run live and review it afterwards.
 
 ## Comments
 
+## Delivery status (2026-10-24)
+
+The live processor monitor is delivered (TASK-465 Done), and the initial ledger-based report is present. Keep this story open until TASK-466 meets the remaining session-link/report detail requirements. Budget and failed-launch pause screens were captured and visually inspected; no manual native-input verification is claimed because the inspection tool stalled.
+
+Implementation and verification evidence are recorded in the parent feature's Delivery status section (`FX-BF-047`, merge `f297b332`).

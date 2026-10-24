@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Done
 **Created:** 2026-09-29T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-385
 title: Implement scheduled sequential execution
-status: Backlog
+status: Done
 story: FX-BE-148
-updated: 2026-09-29
+updated: 2026-10-24
 dependencies: [TASK-383, TASK-384]
 validation: [npm run test:core, npm run test:desktop]
 ---
@@ -43,4 +43,8 @@ should coordinate work, not become a separate automation runtime.
 
 ## Comments
 
+## Delivery status (2026-10-24)
 
+The runner discovers due schedules while enabled, launches one queue entry at a time through the workflow engine, persists launch tokens before launch, and reconciles interrupted starts without duplicate launches. Scheduled-run core tests cover sequential ordering, missed starts, crash recovery and workflow-event serialization; Electron checks cover due starts and pause/skip/resume after a dirty-base launch refusal.
+
+Implementation and verification evidence are recorded in the parent feature's Delivery status section (`FX-BF-047`, merge `f297b332`).

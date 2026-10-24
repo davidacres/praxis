@@ -9,7 +9,7 @@ slug: scheduled-ticket-work-runs
 title: Scheduled ticket work runs with ordered execution
 status: In Progress
 owner: Electron desktop app
-updated: 2026-10-20
+updated: 2026-10-24
 stories: [FX-BE-147, FX-BE-148, FX-BE-149, FX-BE-173]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run build:desktop, npm run test:core, npm run test:desktop]
 ---
@@ -379,3 +379,9 @@ Status: Failed · Duration: 6h 19m
 - ✅ Security scan: succeeded
 
 Required stage "qa" failed.
+
+## Delivery status (2026-10-24)
+
+Sequential scheduled-task implementation merged into local main in `f297b332`. Queue/editor and live monitor are delivered. Remaining work: finish the ledger/report details and provider handover requirements noted on TASK-386, TASK-464 and TASK-466; optional parallel lanes (FX-BE-149) remain Backlog. The preview remains off by default; no overnight/live-provider handover qualification is claimed.
+
+Verification for merged implementation (2026-10-24): core/renderer/desktop builds passed; registered core suite 1,667 passed and 2 skipped at lower concurrency; scheduled-run core checks 69 passed; scheduled Electron suite 17 passed and 1 skipped; focused desktop unit checks 33 passed. Full desktop run: 638 passed, 12 skipped and 2 failed; both failures passed on serial rerun. The original full run is not a clean-suite result. Evidence: `.praxis/session-artifacts/scheduled-run-monitor-budget-pause.png` and `.praxis/session-artifacts/scheduled-run-monitor-launch-paused.png`. Integration is local; it has not been pushed.

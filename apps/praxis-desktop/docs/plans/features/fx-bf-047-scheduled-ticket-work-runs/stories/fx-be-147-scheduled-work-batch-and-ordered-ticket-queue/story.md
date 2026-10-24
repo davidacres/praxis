@@ -1,14 +1,14 @@
 ---
-**Status:** 🔄 In Progress
+**Status:** ✅ Done
 **Created:** 2026-09-29T11:22:33.341Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-147
 title: Scheduled work batch and ordered ticket queue
-status: In Progress
+status: Done
 feature: FX-BF-047
-updated: 2026-10-20
+updated: 2026-10-24
 tasks: [TASK-383, TASK-384, TASK-462]
 dependencies: [FX-BF-040]
 validation: [npm run test:core, npm run test:desktop]
@@ -74,3 +74,9 @@ order, and readiness state after an app restart.
 ## Comments
 
 **2026-10-20:** TASK-383 and TASK-384 are done and TASK-462 is in progress (board selection bar outstanding). The close condition — a saved schedule reopened after an app restart with the same start time, ticket list and running order — is covered by `e2e/scheduledRuns.spec.ts`. Readiness is recomputed on every read, so a deleted or unreadable ticket stays visible with its reason. Nothing starts a schedule yet: that is FX-BE-148, and the whole surface stays behind the Scheduled runs preview until it does.
+
+## Delivery status (2026-10-24)
+
+Ordered schedules, board entry points, editing, persistence, timezone validation, missed-start decisions and readiness are implemented on main. TASK-383 and TASK-384 were already Done; TASK-462 is now Done. Verified by the scheduled-run core and Electron checks recorded below.
+
+Implementation and verification evidence are recorded in the parent feature's Delivery status section (`FX-BF-047`, merge `f297b332`).

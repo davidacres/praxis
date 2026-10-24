@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-09-29T11:22:33.342Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-148
 title: Budget-aware sequential runner and audit trail
-status: Backlog
+status: In Progress
 feature: FX-BF-047
-updated: 2026-10-20
+updated: 2026-10-24
 tasks: [TASK-385, TASK-386, TASK-463, TASK-464]
 dependencies: [FX-BE-147, FX-BF-041]
 validation: [npm run test:core, npm run test:desktop]
@@ -75,3 +75,8 @@ or pause, and the user can understand exactly what happened to every ticket.
 
 ## Comments
 
+## Delivery status (2026-10-24)
+
+The sequential runner and close warning are implemented and verified (TASK-385 and TASK-463 Done). Keep this story open for the ledger completeness and existing provider-handover-path gaps on TASK-386 and TASK-464. Runner unit tests and Electron checks prove queue order, recovery, budget pause and launch-failure/resume behavior, not full live-provider handover completion.
+
+Implementation and verification evidence are recorded in the parent feature's Delivery status section (`FX-BF-047`, merge `f297b332`).

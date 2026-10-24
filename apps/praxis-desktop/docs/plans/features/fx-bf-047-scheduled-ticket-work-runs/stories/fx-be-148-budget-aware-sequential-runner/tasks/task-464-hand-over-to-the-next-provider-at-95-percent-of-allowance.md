@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🔄 In Progress
 **Created:** 2026-10-20T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-464
 title: Hand over to the next provider at 95% of the active provider allowance
-status: Backlog
+status: In Progress
 story: FX-BE-148
-updated: 2026-10-20
+updated: 2026-10-24
 dependencies: [TASK-385, TASK-386]
 validation: [npm run test:core, npm run test:desktop]
 ---
@@ -44,3 +44,8 @@ policy only reacts after a provider reports a limit.
 
 ## Comments
 
+## Delivery status (2026-10-24)
+
+Threshold checks, below-95% provider selection, checkpoint references, switch events and pause-with-no-headroom are implemented; core tests cover threshold and handover decisions. Remaining acceptance work: use the existing session/provider handover path and a durable handover brief to continue the same ticket on the replacement provider. The current Electron adapter updates the workflow provider for stages not yet started and leaves the active turn alone; that is narrower than this task requires. A real multi-provider handover is not proven by the mock-port tests.
+
+Implementation and verification evidence are recorded in the parent feature's Delivery status section (`FX-BF-047`, merge `f297b332`).
