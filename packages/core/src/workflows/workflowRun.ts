@@ -920,6 +920,28 @@ export function stageProvider(run: WorkflowRun, nodeId: string, fallback: string
 }
 
 /**
+ * The permission mode a stage's agent session starts in. A run that
+ * auto-approves stage permissions has nobody watching it, so its stages run in
+ * Autopilot: tool requests are approved and the agent finishes the work without
+ * stopping to ask. Tool access is still bounded by the stage's own tool mode.
+ */
+export function stagePermissionMode(run: Pick<WorkflowRun, 'permissionMode'>): 'manual' | 'autopilot' {
+  return run.permissionMode === 'auto' ? 'autopilot' : 'manual';
+}
+
+/**
+ * Whether `provider` can run this stage at all. Antigravity has no permission
+ * relay, so it can only run a Full-tools stage in Autopilot — never a read-only
+ * stage (nothing would enforce read-only) and never a run that asks for approval.
+ */
+export function providerCanRunStage(run: WorkflowRun, nodeId: string, provider: string): boolean {
+  if (provider !== 'antigravity-cli') return true;
+  const node = findNode(run, nodeId);
+  const toolMode = node && isAgentTaskNode(node) ? node.agent.toolMode : undefined;
+  return toolMode === 'full' && stagePermissionMode(run) === 'autopilot';
+}
+
+/**
  * The model a stage was switched to during this run, if any.
  */
 export function stageModel(run: WorkflowRun, nodeId: string): string | undefined {

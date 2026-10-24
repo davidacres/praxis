@@ -74,7 +74,9 @@ function ports(): ScheduledRunnerPorts {
           issue: { issueKey: entry.ticket.issueKey, connectionId: entry.ticket.connectionId },
           scheduledLaunchToken: token,
           // `uncommittedChanges` is deliberately unset: a dirty base pauses the schedule rather than letting it choose.
-          options: { providerLimitPolicy: 'switch', ...(provider ? { aiProvider: provider } : {}) }
+          // Nobody is there to answer a permission prompt, so stages auto-approve and run in Autopilot,
+          // still bounded by each stage's own tool mode.
+          options: { permissionMode: 'auto', providerLimitPolicy: 'switch', ...(provider ? { aiProvider: provider } : {}) }
         });
         return summary.runId;
       } catch (error) {

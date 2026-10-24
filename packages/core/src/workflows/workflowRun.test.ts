@@ -6,6 +6,8 @@ import {
   exhaustedProviders,
   stageProvider,
   stageModel,
+  stagePermissionMode,
+  providerCanRunStage,
   createWorkflowRun,
   compactWorkflowRunEvents,
   normalizeWorkflowRun,
@@ -932,6 +934,26 @@ test('a stage runs on the AI it was switched to, else its own, else the run’s,
   run = { ...run, stageProviders: { plan: 'gemini' } };
   assert.equal(stageProvider(run, 'plan', 'vercel-gateway'), 'gemini');
   assert.deepEqual(exhaustedProviders(run), []);
+});
+
+test('an auto-approved run runs its stages in Autopilot; one that asks does not', () => {
+  const def = definitionForAi();
+  const asks = createWorkflowRun({ runId: 'r', projectId: 'p', definition: def, at: '2026-09-23T00:00:00.000Z' });
+  const auto = createWorkflowRun({ runId: 'r', projectId: 'p', definition: def, at: '2026-09-23T00:00:00.000Z', permissionMode: 'auto' });
+  assert.equal(stagePermissionMode(asks), 'manual');
+  assert.equal(stagePermissionMode(auto), 'autopilot');
+});
+
+test('Antigravity only runs a Full-tools stage of an auto-approved run', () => {
+  const def = JSON.parse(JSON.stringify(definitionForAi())) as WorkflowDefinition;
+  const plan = def.nodes.find(node => node.id === 'plan');
+  if (plan?.type === 'agent-task') plan.agent.toolMode = 'read-only';
+  const asks = createWorkflowRun({ runId: 'r', projectId: 'p', definition: def, at: '2026-09-23T00:00:00.000Z' });
+  const auto = createWorkflowRun({ runId: 'r', projectId: 'p', definition: def, at: '2026-09-23T00:00:00.000Z', permissionMode: 'auto' });
+  assert.equal(providerCanRunStage(auto, 'build', 'antigravity-cli'), true);
+  assert.equal(providerCanRunStage(auto, 'plan', 'antigravity-cli'), false, 'nothing would enforce read-only');
+  assert.equal(providerCanRunStage(asks, 'build', 'antigravity-cli'), false, 'it cannot relay a permission prompt');
+  assert.equal(providerCanRunStage(asks, 'plan', 'codex-cli'), true);
 });
 
 function definitionForAi(): WorkflowDefinition {

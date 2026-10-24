@@ -23,6 +23,8 @@ import {
   projectConnectionId,
   nodeOutputs,
   stageProvider,
+  stagePermissionMode,
+  providerCanRunStage,
   chooseIndependentStage,
   assessTestChanges,
   isGuardedPath,
@@ -55,7 +57,7 @@ import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
 import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
-import { usableProviders } from './providerFallback';
+import { stageCapableProvider, usableProviders } from './providerFallback';
 import { restoreWorktreeTo } from './runWork';
 
 /**
@@ -240,6 +242,16 @@ export async function runWorkflowAgentStage(
   let provider = (item
     ? workflowRun.stageProviders?.[recordNodeId] ?? (node.agent.providerId?.trim() || undefined) ?? runProvider
     : stageProvider(workflowRun, node.id, runProvider)) as AiProvider;
+  // An AI picked for the whole run (or by default) that cannot run this stage — Antigravity on a
+  // read-only stage, or on a run that asks for approval — is swapped for one that can, rather than
+  // failing the stage. An AI chosen for this stage specifically is kept, and its error shown.
+  if (!providerCanRunStage(workflowRun, node.id, provider) && !workflowRun.stageProviders?.[recordNodeId] && !node.agent.providerId?.trim()) {
+    const replacement = await stageCapableProvider(workflowRun, node.id, [provider]);
+    if (replacement) {
+      workflowLogSink.appendLine(`[workflow ${workflowRun.runId}] ${node.name}: ${provider} cannot run this stage unattended; using ${replacement}.`);
+      provider = replacement;
+    }
+  }
   const toolMode = preflight.binding.toolMode;
   const taskDefinition = buildStageTaskDefinition(stageContext);
 
@@ -338,7 +350,7 @@ export async function runWorkflowAgentStage(
         ...(authorAttempt?.model ? { model: authorAttempt.model } : {})
       },
       chosenByPerson: switched || Boolean(switchedModel),
-      usableProviders: await usableProviders([provider]),
+      usableProviders: (await usableProviders([provider])).filter(id => providerCanRunStage(workflowRun, node.id, id)),
       tiers: settings.ai.modelTiers,
       ...(node.modelTier ? { tier: node.modelTier } : {})
     });
@@ -381,6 +393,7 @@ export async function runWorkflowAgentStage(
       ...(modelChoice.model ? { model: modelChoice.model } : {}),
       workingDirectory: worktreePath,
       toolMode,
+      ...(stagePermissionMode(workflowRun) === 'autopilot' ? { permissionMode: 'autopilot' as const } : {}),
       autoApprovePermissions: workflowRun.permissionMode === 'auto'
     });
     skillActivations = prepared.skillActivations;
