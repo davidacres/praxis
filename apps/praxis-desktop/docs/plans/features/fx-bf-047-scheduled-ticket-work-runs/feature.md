@@ -382,6 +382,15 @@ Required stage "qa" failed.
 
 ## Delivery status (2026-10-24)
 
+Status rechecked against local main (`d2d9a4ad`) and the implementation on 2026-10-24: retain **In Progress**. The existing child statuses correctly reflect the remaining acceptance work:
+
+- TASK-386: persist spend estimates and artifact references in the run ledger.
+- TASK-464: complete session/provider handover with a durable brief; the current adapter changes the provider for future stages.
+- TASK-466: add direct session navigation, artifacts, approvals and per-stage timing to the report.
+- FX-BE-149: optional bounded parallel lanes remain Backlog.
+
+Fresh verification for this status check: `npm run build:core` passed; all four scheduled-run core test files passed (69 tests, no failures or skips). The read-only plan parser confirmed FX-BF-047 resolves to In Progress and its 4 stories and 11 tasks remain visible. Whole-board counts are unchanged: 55 features, 170 stories, 380 tasks and 18 bugs. No runtime/UI changes were made, and desktop e2e, visual checks and overnight/live-provider qualification were not rerun during this status check. The merged implementation results below are historical evidence, not fresh full-suite results.
+
 Sequential scheduled-task implementation merged into local main in `f297b332`. Queue/editor and live monitor are delivered. Remaining work: finish the ledger/report details and provider handover requirements noted on TASK-386, TASK-464 and TASK-466; optional parallel lanes (FX-BE-149) remain Backlog. The preview remains off by default; no overnight/live-provider handover qualification is claimed.
 
 Verification for merged implementation (2026-10-24): core/renderer/desktop builds passed; registered core suite 1,667 passed and 2 skipped at lower concurrency; scheduled-run core checks 69 passed; scheduled Electron suite 17 passed and 1 skipped; focused desktop unit checks 33 passed. Full desktop run: 638 passed, 12 skipped and 2 failed; both failures passed on serial rerun. The original full run is not a clean-suite result. Evidence: `.praxis/session-artifacts/scheduled-run-monitor-budget-pause.png` and `.praxis/session-artifacts/scheduled-run-monitor-launch-paused.png`. Integration is local; it has not been pushed.
