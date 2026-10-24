@@ -14,7 +14,7 @@
  * stamped by the host here — a model that could name its own scope could aim an
  * approval at another project, so those fields are overwritten, never merged.
  */
-import { GADGET_CONTRACT_VERSION, type GadgetScope } from './contracts';
+import { GADGET_CONTRACT_VERSION, GADGET_KINDS, type GadgetScope } from './contracts';
 import type { RawChatBlockInput } from './gadgetService';
 import { parseLenientJson } from './jsonRepair';
 
@@ -22,7 +22,7 @@ export const GADGET_FENCE_LANGUAGE = 'praxis-gadget';
 
 /** Cheap pre-check so a caller can skip parsing text that cannot contain one. */
 export function mayContainGadget(text: string): boolean {
-  return text.includes(GADGET_FENCE_LANGUAGE);
+  return text.includes(GADGET_FENCE_LANGUAGE) || text.includes('"kind"');
 }
 
 /**
@@ -97,6 +97,43 @@ function clampChoiceText(gadget: unknown): unknown {
   };
 }
 
+function isGadgetShaped(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const { kind, payload } = value as { kind?: unknown; payload?: unknown };
+  return (
+    typeof kind === 'string' &&
+    (GADGET_KINDS as readonly string[]).includes(kind) &&
+    !!payload &&
+    typeof payload === 'object' &&
+    !Array.isArray(payload)
+  );
+}
+
+/**
+ * Models sometimes write a gadget's JSON bare on its own line, with no fence. A
+ * line that is a whole gadget-shaped object is wrapped in a fence so it takes the
+ * same path as a fenced one. Lines inside any other code fence are left alone, so
+ * a JSON sample shown as code is never turned into a gadget.
+ */
+function fenceBareGadgetLines(text: string): string {
+  let inCodeFence = false;
+  return text
+    .split('\n')
+    .map(line => {
+      if (line.includes('```')) {
+        inCodeFence = !inCodeFence;
+        return line;
+      }
+      if (inCodeFence) return line;
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return line;
+      const lenient = parseLenientJson(trimmed);
+      if (!lenient.ok || !isGadgetShaped(lenient.value)) return line;
+      return `\`\`\`${GADGET_FENCE_LANGUAGE}\n${trimmed}\n\`\`\``;
+    })
+    .join('\n');
+}
+
 /**
  * Split `text` into ordered markdown and gadget blocks.
  *
@@ -104,7 +141,8 @@ function clampChoiceText(gadget: unknown): unknown {
  * than dropped: the user sees exactly what the model produced, which is the
  * most debuggable outcome, and nothing silently disappears from a transcript.
  */
-export function parseChatBlocks(text: string, options: ChatBlockParseOptions): ParsedChatBlocks {
+export function parseChatBlocks(raw: string, options: ChatBlockParseOptions): ParsedChatBlocks {
+  const text = fenceBareGadgetLines(raw);
   const blocks: RawChatBlockInput[] = [];
   let lastIndex = 0;
   let found = 0;

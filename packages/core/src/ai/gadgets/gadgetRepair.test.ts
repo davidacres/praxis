@@ -101,3 +101,46 @@ test('an option that is already within its limits is not altered', () => {
   const block = parsed.blocks.find(candidate => candidate.type === 'gadget') as { gadget: { payload: { options: { description: string }[] } } };
   assert.equal(block.gadget.payload.options[0].description, 'exactly this');
 });
+
+test('a bare gadget object on its own line becomes a gadget, and the surrounding prose survives', () => {
+  const text = `Here is the choice.\n${JSON.stringify(choice('short'))}\nPick one above.`;
+  const parsed = parseChatBlocks(text, OPTIONS);
+  assert.equal(parsed.malformed, 0);
+  assert.equal(parsed.blocks.map(block => block.type).join(','), 'markdown,gadget,markdown');
+  assert.equal((parsed.blocks[0] as { markdown: string }).markdown, 'Here is the choice.');
+  assert.equal((parsed.blocks[2] as { markdown: string }).markdown, 'Pick one above.');
+});
+
+test('a bare artifact object — the reported visual-verification shape — renders as a validated gadget', () => {
+  const artifact = {
+    version: 1,
+    kind: 'artifact',
+    gadgetId: 'visual-verification',
+    payload: {
+      title: 'Visual verification',
+      artifacts: [{ name: 'provider-handover-setting.png', path: '.praxis/session-artifacts/provider-handover-setting.png', mediaType: 'image/png', description: "Settings → Preview with the new 'Switch AI provider at' field set to 85" }]
+    },
+    actions: []
+  };
+  const parsed = parseChatBlocks(JSON.stringify(artifact), OPTIONS);
+  const raw = parsed.blocks.find(block => block.type === 'gadget') as { blockId: string; gadget: unknown } | undefined;
+  assert.ok(raw, 'the bare object was recognised as a gadget');
+  const coerced = coerceGadgetBlock(raw.gadget, raw.blockId);
+  assert.equal(coerced.type, 'gadget', coerced.type === 'fallback' ? coerced.reason?.message : '');
+});
+
+test('a gadget-shaped JSON sample inside another code fence stays code', () => {
+  const text = `Example output:\n\`\`\`json\n${JSON.stringify(choice('short'))}\n\`\`\``;
+  const parsed = parseChatBlocks(text, OPTIONS);
+  assert.equal(parsed.containsGadget, false);
+  assert.equal(parsed.blocks.filter(block => block.type === 'gadget').length, 0);
+});
+
+test('a bare JSON object with an unknown kind or no payload stays text', () => {
+  const unknownKind = JSON.stringify({ kind: 'widget', payload: {} });
+  const noPayload = JSON.stringify({ kind: 'choice', question: 'x' });
+  for (const text of [unknownKind, noPayload]) {
+    const parsed = parseChatBlocks(text, OPTIONS);
+    assert.equal(parsed.blocks.filter(block => block.type === 'gadget').length, 0, text);
+  }
+});
