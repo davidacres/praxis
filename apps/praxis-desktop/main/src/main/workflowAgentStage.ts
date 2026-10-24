@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from '@praxis/core';
+import type { AgentSessionRecord, BackgroundTask } from '@praxis/core';
 import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -590,13 +590,27 @@ export async function cancelWorkflowAgentStage(runId: string, nodeId: string): P
   await abortActiveTask(issueKey);
 }
 
-/** Provider background jobs are part of the stage; shell services may deliberately outlive it. */
-export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks'>): { state: FinishedStageSession['state']; error?: string } | undefined {
+/**
+ * Provider background jobs are part of the stage; shell services may deliberately outlive it.
+ *
+ * A job that failed or was stopped before the agent's turn ended was in front of the
+ * agent: it saw the result and carried on (a failed edit, a sandboxed test it re-ran
+ * outside the sandbox). Judging that is the agent's job and the review stages', not a
+ * reason to fail the stage. A job that ended after the turn, or whose result is unknown,
+ * was never seen by anyone, so it still fails the stage.
+ */
+export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks' | 'completedAt'>): { state: FinishedStageSession['state']; error?: string } | undefined {
   if (record.state === 'failed' || record.state === 'aborted') return { state: record.state };
   if (record.state !== 'completed') return;
   const tasks = (record.backgroundTasks ?? []).filter(task => task.source === 'provider');
   if (tasks.some(task => task.state === 'running' || task.state === 'paused')) return;
-  const unresolved = tasks.find(task => task.state !== 'completed');
+  const turnEnded = record.completedAt ? Date.parse(record.completedAt) : NaN;
+  const seenDuringTurn = (task: BackgroundTask): boolean => {
+    if (task.state !== 'failed' && task.state !== 'stopped') return false;
+    const ended = Date.parse(task.completedAt ?? task.updatedAt);
+    return Number.isFinite(turnEnded) && Number.isFinite(ended) && ended <= turnEnded;
+  };
+  const unresolved = tasks.find(task => task.state !== 'completed' && !seenDuringTurn(task));
   if (unresolved) return { state: 'failed', error: `Background task "${unresolved.label}" ${unresolved.state === 'unknown' ? 'has no confirmed result' : `ended ${unresolved.state}`}. ${unresolved.detail ?? ''} A later foreground success does not confirm this background job. Inspect its result, then retry the workflow stage.`.trim() };
   return { state: 'completed' };
 }
