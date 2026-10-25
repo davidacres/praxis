@@ -100,7 +100,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `ajv-formats` | 3.0.1 | MIT |
 | `argparse` | 2.0.1 | Python-2.0 |
 | `argparse` | 3.0.3 | PSF-2.0 |
-| `body-parser` | 2.3.0 | MIT |
+| `body-parser` | 2.4.0 | MIT |
 | `buffer-crc32` | 1.0.0 | MIT |
 | `builder-util-runtime` | 9.7.0 | MIT |
 | `bytes` | 3.1.2 | MIT |
@@ -133,7 +133,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `express` | 5.2.1 | MIT |
 | `express-rate-limit` | 8.7.0 | MIT |
 | `fast-deep-equal` | 3.1.3 | MIT |
-| `fast-uri` | 3.1.8 | BSD-3-Clause |
+| `fast-uri` | 3.1.9 | BSD-3-Clause |
 | `finalhandler` | 2.1.1 | MIT |
 | `forwarded` | 0.2.0 | MIT |
 | `fresh` | 2.0.0 | MIT |
@@ -190,7 +190,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `pkce-challenge` | 5.0.1 | MIT |
 | `proxy-addr` | 2.0.8 | MIT |
 | `punycode.js` | 2.3.1 | MIT |
-| `qs` | 6.16.0 | BSD-3-Clause |
+| `qs` | 6.16.1 | BSD-3-Clause |
 | `range-parser` | 1.3.0 | MIT |
 | `raw-body` | 3.0.2 | MIT |
 | `react` | 18.3.1 | MIT |
@@ -226,7 +226,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `ws` | 8.22.0 | MIT |
 | `yallist` | 5.0.0 | BlueOak-1.0.0 |
 | `yazl` | 3.3.1 | MIT |
-| `zod` | 4.6.2 | MIT |
+| `zod` | 4.6.7 | MIT |
 | `zod-to-json-schema` | 3.25.2 | ISC |
 
 ### Desktop app — shipped tools
