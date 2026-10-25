@@ -51,7 +51,8 @@ test('TASK-248: fullSdlcTemplate passes workflow validation', () => {
   assert.ok(approveNode && approveNode.type === 'approval');
   assert.deepStrictEqual(approveNode.requiredGates, ['qa', 'security', 'review']);
   assert.strictEqual(approveNode.allowBypass, false);
-  assert.ok(approveNode.gateThresholds?.qa);
+  // QA passes on its stages' exit codes: nothing in the template writes a coverage report to threshold.
+  assert.strictEqual(approveNode.gateThresholds?.qa, undefined);
   assert.ok(approveNode.gateThresholds?.security);
   assert.ok(approveNode.gateThresholds?.review);
 
@@ -225,4 +226,34 @@ test('full-sdlc-dotnet identifies agent dependencies and reports autoInstallable
   // ..., skills (...) available for installation"), not the old "agent"
   // phrasing this assertion checked before.
   assert.ok(csharpDep.reason?.includes('available for installation'));
+});
+
+test('full-sdlc: a check that must produce findings says how to parse them, so a clean pass can succeed', () => {
+  for (const variant of ['node', 'dotnet', 'python', 'generic'] as const) {
+    const template = fullSdlcTemplate(variant);
+    for (const node of template.nodes) {
+      if (node.type !== 'check') continue;
+      const needsFindings = node.outputs.some(output => output.required && output.kind === 'findings');
+      if (!needsFindings) continue;
+      // Without an adapter the runner never builds findings, and settleNode fails the stage
+      // with "produced no structured findings" even when the tool exited clean.
+      assert.ok(node.adapter, `${variant}/${node.id} requires findings but has no adapter`);
+      assert.ok(node.reportPath, `${variant}/${node.id} requires findings but names no report`);
+    }
+    const approve = template.nodes.find(node => node.type === 'approval');
+    assert.ok(approve && approve.type === 'approval');
+    // No stage writes a coverage report, so a metric threshold could only ever read "missing".
+    for (const condition of Object.values(approve.gateThresholds ?? {}).flat()) {
+      assert.notStrictEqual(condition.type, 'metric', `${variant} gates on a metric nothing produces`);
+    }
+  }
+});
+
+test('full-sdlc: osv-scanner scans a run worktree that sits under a git-ignored folder', () => {
+  const sca = fullSdlcTemplate('node').nodes.find(node => node.id === 'sca');
+  assert.ok(sca && sca.type === 'check');
+  assert.strictEqual(sca.command, 'osv-scanner');
+  assert.ok(sca.args?.includes('--no-ignore'));
+  assert.ok(sca.args?.includes('--output-file'));
+  assert.strictEqual(sca.reportPath, 'osv.sarif');
 });

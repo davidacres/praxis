@@ -916,6 +916,87 @@ test('an idle failed stage pauses the schedule and retries in the same workflow'
   expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(2);
 });
 
+test('the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script', async () => {
+  // The shape of a real Full SDLC run on a repo the template did not fit: SAST paused
+  // because semgrep was missing, while a different stage had failed. The panel titled
+  // itself "SAST scan" but showed the other stage's error and retried that stage.
+  const { page, projectId, repo } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500' } });
+  fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: 'fixture', private: true, scripts: {} }));
+  execFileSync('git', ['add', '.'], { cwd: repo, stdio: 'ignore' });
+  execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=E2E', 'commit', '-qm', 'package.json'], { cwd: repo, stdio: 'ignore' });
+  const workflowId = await page.evaluate(async ({ projectId, missing }) => {
+    const now = new Date().toISOString();
+    const id = 'schedule-mixed-stages';
+    const check = (id: string, name: string, x: number, command: string, args: string[]) =>
+      ({ type: 'check', id, name, x, y: 120, inputs: [], command, args, successExitCodes: [0], maxAttempts: 2, outputs: [] });
+    await window.praxis.workflows.save(projectId, {
+      schemaVersion: 1, id, name: 'Mixed stages', scope: 'project', projectId, version: 1,
+      entryNodeId: 'start', createdAt: now, updatedAt: now,
+      nodes: [
+        check('start', 'Start', 0, 'true', []),
+        // exit 127 is how a shell reports a missing command; a made-up command name
+        // would now be refused before the run starts.
+        check('sast', 'SAST scan', 0, 'sh', ['-c', 'exit 127']),
+        check('lint', 'Lint', 240, 'npm', ['run', 'lint']),
+        check('build', 'Build', 480, 'test', ['-f', missing])
+      ],
+      edges: ['sast', 'lint', 'build'].map(to => ({ id: `start-${to}`, from: 'start', to, on: 'success', required: true }))
+    } as never);
+    return id;
+  }, { projectId, missing: path.join(repo, 'never-created') });
+  const scheduleId = await scheduleSoon(page, projectId, 'Mixed stage outcomes', 1, 120, workflowId);
+  await page.evaluate(id => window.praxis.scheduledRuns.startNow(id), scheduleId);
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Mixed stage outcomes' });
+  await expect(card.getByTestId('schedule-status')).toHaveText('Paused', { timeout: 30000 });
+  await card.getByTestId('schedule-open').click();
+
+  const failure = page.getByTestId('schedule-stage-failure');
+  await expect(page.getByTestId('schedule-proc-state')).toHaveText('Build — needs attention');
+  await expect(failure).toContainText('Build — needs attention');
+  await expect(failure).toContainText('test exited 1');
+
+  // A missing script is the project's setup, not lint's verdict: it pauses with the reason.
+  const stages = (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].stages;
+  const lint = stages.find(stage => stage.nodeId === 'lint');
+  expect(lint?.lane).toBe('paused');
+  expect(lint?.lastError).toContain('This project has no "lint" script');
+  expect(stages.find(stage => stage.nodeId === 'sast')?.lane).toBe('paused');
+});
+
+test('a workflow whose check stage needs a tool that is not installed is refused before the run starts', async () => {
+  // A Full SDLC run used to spend Implement's time and only then pause at SAST
+  // because semgrep was missing. The tool is now checked when the run starts.
+  const { page, projectId } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500' } });
+  const workflowId = await page.evaluate(async projectId => {
+    const now = new Date().toISOString();
+    const id = 'schedule-missing-scanner';
+    const check = (id: string, name: string, x: number, command: string) =>
+      ({ type: 'check', id, name, x, y: 120, inputs: [], command, args: [], successExitCodes: [0], outputs: [] });
+    await window.praxis.workflows.save(projectId, {
+      schemaVersion: 1, id, name: 'Missing scanner', scope: 'project', projectId, version: 1,
+      entryNodeId: 'start', createdAt: now, updatedAt: now,
+      nodes: [
+        check('start', 'Start', 0, 'true'),
+        check('sast', 'SAST scan', 240, 'praxis-e2e-no-such-scanner'),
+        check('sast-strict', 'SAST (strict)', 480, 'praxis-e2e-no-such-scanner')
+      ],
+      edges: ['sast', 'sast-strict'].map(to => ({ id: `start-${to}`, from: 'start', to, on: 'success', required: true }))
+    } as never);
+    return id;
+  }, projectId);
+  const scheduleId = await scheduleSoon(page, projectId, 'Missing scanner', 1, 120, workflowId);
+  await page.evaluate(id => window.praxis.scheduledRuns.startNow(id), scheduleId);
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Missing scanner' });
+  await expect(card.getByTestId('schedule-status')).toHaveText('Paused', { timeout: 30000 });
+  await card.getByTestId('schedule-open').click();
+
+  const banner = page.getByTestId('schedule-pause-banner');
+  await expect(banner).toContainText('praxis-e2e-no-such-scanner (needed by SAST scan, SAST (strict))');
+  await expect(banner).toContainText('make sure it is on your PATH');
+  expect(await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).toHaveLength(0);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-missing-tool.png') });
+});
+
 test('an older schedule refresh cannot overwrite a newer failure status', async () => {
   const { page, projectId } = await launch();
   await scheduleSoon(page, projectId, 'Refresh ordering', 1, 120);

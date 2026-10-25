@@ -1,4 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { WorkflowCheckNode } from '@praxis/core';
 import { ensureEnvironmentPath } from './shellEnvironment';
 
@@ -7,6 +9,32 @@ export interface CheckProcessResult {
   output: string;
   timedOut: boolean;
   error?: string;
+}
+
+function isExecutableFile(file: string): boolean {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    if (process.platform !== 'win32') fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether `spawnCheck` would find this command: no shell, the app's PATH, and
+ * PATHEXT on Windows. Used before a run starts, so a missing scanner is
+ * reported then rather than when the run reaches its stage.
+ */
+export function isCheckCommandAvailable(command: string): boolean {
+  ensureEnvironmentPath();
+  const extensions = process.platform === 'win32'
+    ? ['', ...(process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+    : [''];
+  const candidates = (file: string) => extensions.map(ext => file + ext);
+  if (path.isAbsolute(command)) return candidates(command).some(isExecutableFile);
+  const dirs = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter).filter(Boolean);
+  return dirs.some(dir => candidates(path.join(dir, command)).some(isExecutableFile));
 }
 
 /** Own the process tree until it has stopped, including on cancellation. */

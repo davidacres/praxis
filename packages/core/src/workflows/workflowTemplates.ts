@@ -488,7 +488,11 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
     ? { command: 'dotnet', args: ['list', 'package', '--vulnerable'] }
     : isGeneric
     ? { command: 'echo', args: ['Configure SCA scan'] }
-    : { command: 'osv-scanner', args: ['--format=sarif', '--output=osv.sarif', '.'] };
+    : // `--no-ignore`: a run's worktree sits under the main checkout's git-ignored `.worktrees/`, and
+      // osv-scanner applies that rule to the whole tree, finds no lockfile and exits 128.
+      { command: 'osv-scanner', args: ['scan', 'source', '--no-ignore', '--format', 'sarif', '--output-file', 'osv.sarif', '.'] };
+  // Only osv-scanner writes a report Praxis can parse; the other stacks' SCA commands are judged by exit code.
+  const scaReport = scaCmd.command === 'osv-scanner' ? { reportPath: 'osv.sarif', adapter: 'sarif' as const } : undefined;
 
   const deployCmd = isDotnet
     ? { command: 'dotnet', args: ['publish'] }
@@ -551,7 +555,9 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         inputs: ['change-diff'],
         ...lintCmd,
         successExitCodes: [0],
-        outputs: [{ id: 'lint-findings', kind: 'findings', required: true }],
+        // Not required: nothing parses findings from this command's output, so requiring them would
+        // fail a clean pass. The stage is judged by its exit code.
+        outputs: [{ id: 'lint-findings', kind: 'findings', required: false }],
         satisfiesGate: 'qa'
       },
       {
@@ -563,7 +569,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         inputs: ['change-diff'],
         ...typecheckCmd,
         successExitCodes: [0],
-        outputs: [{ id: 'typecheck-findings', kind: 'findings', required: true }],
+        outputs: [{ id: 'typecheck-findings', kind: 'findings', required: false }],
         satisfiesGate: 'qa'
       },
       {
@@ -575,7 +581,7 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         inputs: ['change-diff'],
         ...testCmd,
         successExitCodes: [0],
-        outputs: [{ id: 'test-findings', kind: 'findings', required: true }],
+        outputs: [{ id: 'test-findings', kind: 'findings', required: false }],
         satisfiesGate: 'qa'
       },
       // Security gate checks
@@ -587,9 +593,11 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         y: 200,
         inputs: ['change-diff'],
         command: 'semgrep',
-        args: ['scan', '--config=auto', '--sarif', '--output=semgrep.sarif'],
+        args: ['scan', '--config=auto', '--baseline-commit={baseCommit}', '--sarif', '--output=semgrep.sarif'],
         successExitCodes: [0],
-        outputs: [{ id: 'sast-findings', kind: 'findings', required: true }],
+        outputs: [{ id: 'sast-findings', kind: 'findings', required: true, adapter: 'sarif' }],
+        reportPath: 'semgrep.sarif',
+        adapter: 'sarif',
         satisfiesGate: 'security'
       },
       {
@@ -602,7 +610,9 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         command: 'gitleaks',
         args: ['detect', '--no-git', '--report-format=sarif', '--report-path=gitleaks.sarif'],
         successExitCodes: [0],
-        outputs: [{ id: 'secret-findings', kind: 'findings', required: true }],
+        outputs: [{ id: 'secret-findings', kind: 'findings', required: true, adapter: 'sarif' }],
+        reportPath: 'gitleaks.sarif',
+        adapter: 'sarif',
         satisfiesGate: 'security'
       },
       {
@@ -614,7 +624,8 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         inputs: ['change-diff'],
         ...scaCmd,
         successExitCodes: [0],
-        outputs: [{ id: 'sca-findings', kind: 'findings', required: true }],
+        outputs: [{ id: 'sca-findings', kind: 'findings', required: !!scaReport, ...(scaReport ? { adapter: scaReport.adapter } : {}) }],
+        ...(scaReport ?? {}),
         satisfiesGate: 'security'
       },
       // Review gate
@@ -654,7 +665,9 @@ export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): Workfl
         requiredGates: ['qa', 'security', 'review'],
         allowBypass: false,
         gateThresholds: {
-          qa: [{ type: 'metric', metric: 'coverage', operator: '>=', value: 80 }],
+          // No QA threshold: no stage here writes a coverage report, so a coverage gate could only ever
+          // read "missing" and block every run. The QA gate passes when its stages do; add a threshold
+          // alongside a test stage that writes a coverage report.
           security: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }],
           review: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }]
         }

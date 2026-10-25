@@ -37,7 +37,7 @@ export const SAST_SEMGREP_PRESET: CheckPreset = {
   description: 'Static application security testing with curated ruleset',
   category: 'security',
   command: 'semgrep',
-  args: ['scan', '--config', 'rulesets/semgrep-curated.yaml', '--sarif', '--output', 'semgrep.sarif'],
+  args: ['scan', '--config', 'rulesets/semgrep-curated.yaml', '--baseline-commit={baseCommit}', '--sarif', '--output', 'semgrep.sarif'],
   rulesetPath: 'rulesets/semgrep-curated.yaml',
   adapter: 'sarif',
   reportPath: 'semgrep.sarif',
@@ -51,7 +51,8 @@ export const SCA_OSV_PRESET: CheckPreset = {
   description: 'Software composition analysis for vulnerable open-source dependencies',
   category: 'security',
   command: 'osv-scanner',
-  args: ['scan', '--format', 'sarif', '--output', 'osv-report.sarif', '.'],
+  // --no-ignore: a run worktree under a git-ignored `.worktrees/` would otherwise be skipped whole.
+  args: ['scan', 'source', '--no-ignore', '--format', 'sarif', '--output-file', 'osv-report.sarif', '.'],
   adapter: 'sarif',
   reportPath: 'osv-report.sarif',
   satisfiesGate: 'security',

@@ -70,13 +70,13 @@ function stackCommands(variant: SdlcLoopStackVariant) {
       : isGeneric
       ? { command: 'echo', args: ['Configure BDD test command'] }
       : { command: 'npx', args: ['cucumber-js', '--format', 'junit:reports/bdd-junit.xml'] },
-    sast: { command: 'semgrep', args: ['scan', '--config=auto', '--sarif', '--output=semgrep.sarif'] },
+    sast: { command: 'semgrep', args: ['scan', '--config=auto', '--baseline-commit={baseCommit}', '--sarif', '--output=semgrep.sarif'] },
     secrets: { command: 'gitleaks', args: ['detect', '--no-git', '--report-format=sarif', '--report-path=gitleaks.sarif'] },
     sca: isDotnet
       ? { command: 'dotnet', args: ['list', 'package', '--vulnerable'] }
       : isGeneric
       ? { command: 'echo', args: ['Configure SCA scan'] }
-      : { command: 'osv-scanner', args: ['--format=sarif', '--output=osv.sarif', '.'] },
+      : { command: 'osv-scanner', args: ['scan', 'source', '--no-ignore', '--format', 'sarif', '--output-file', 'osv.sarif', '.'] },
     deploy: isDotnet
       ? { command: 'dotnet', args: ['publish'] }
       : isPython

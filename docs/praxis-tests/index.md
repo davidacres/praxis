@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **710 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **713 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -489,7 +489,9 @@ This catalogue describes **710 Playwright tests** under `apps/praxis-desktop/mai
 | PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:824` |
 | PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
 | PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:879` |
-| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
+| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
+| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:966` |
+| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1000` |
 | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
 | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
 | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |
@@ -672,6 +674,7 @@ This catalogue describes **710 Playwright tests** under `apps/praxis-desktop/mai
 | PT-B0842DA89F | workflow Policy | creating a project policy from the sidebar persists it and composes it into the effective policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:50` |
 | PT-9BA804745D | workflow Policy | a global policy composes strictest-wins with a project policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:77` |
 | PT-3C3795C3D1 | workflow Retry Failed | a failed step on a failed run has a retry icon button that reopens the run | `apps/praxis-desktop/main/e2e/workflowRetryFailed.spec.ts:97` |
+| PT-BFED3B2E58 | workflow Review Diff | a read-only review stage is handed the whole implementation patch as a file | `apps/praxis-desktop/main/e2e/workflowReviewDiff.spec.ts:77` |
 | PT-5E977102C0 | workflow Run | runs the governed pipeline: parallel branches converge, then approval unlocks | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:109` |
 | PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:152` |
 | PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:164` |

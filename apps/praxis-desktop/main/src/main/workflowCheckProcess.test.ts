@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { WorkflowCheckNode } from '@praxis/core';
-import { spawnCheck } from './workflowCheckProcess';
+import { isCheckCommandAvailable, spawnCheck } from './workflowCheckProcess';
 
 function check(script: string): WorkflowCheckNode {
   return { type: 'check', id: 'check', name: 'Check', x: 0, y: 0, inputs: [], outputs: [], command: process.execPath, args: ['-e', script] };
@@ -135,4 +135,11 @@ test('workflow checks do not inherit secret-shaped variables from the app enviro
   } finally {
     delete process.env.PRAXIS_TEST_API_KEY;
   }
+});
+
+test('the pre-run tool lookup finds what spawnCheck can run and nothing else', () => {
+  assert.equal(isCheckCommandAvailable(process.execPath), true);
+  assert.equal(isCheckCommandAvailable(basename(process.execPath)), true);
+  assert.equal(isCheckCommandAvailable('praxis-no-such-scanner-9f3a'), false);
+  assert.equal(isCheckCommandAvailable(join(tmpdir(), 'praxis-no-such-scanner-9f3a')), false);
 });

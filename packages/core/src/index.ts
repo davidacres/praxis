@@ -197,6 +197,8 @@ export * from './host/mobileHostApplication';
 export * from './host/mobileHostListener';
 
 export * from './workflows/checkEnvironmentFailure';
+export * from './workflows/checkToolPreflight';
+export * from './workflows/checkCommandArgs';
 
 export * from './projects/projectActivity';
 export * from './codeIntelligence/runtimePaths';

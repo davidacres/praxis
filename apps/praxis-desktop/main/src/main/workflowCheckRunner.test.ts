@@ -265,3 +265,39 @@ test('an npm audit against a registry with no audit endpoint pauses, even with t
     assert.match(outcome.error ?? '', /does not support security audits/);
   });
 });
+
+test('{baseCommit} is the commit the run branched from, not the run branch\'s own head', { skip: process.platform === 'win32' }, async () => {
+  const { execFileSync } = await import('node:child_process');
+  const root = await mkdtemp(join(tmpdir(), 'praxis-check-base-'));
+  const project = join(root, 'project');
+  const worktree = join(root, 'run');
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd }).toString().trim();
+  try {
+    execFileSync('git', ['init', '-q', '-b', 'main', project]);
+    await writeFile(join(project, 'a.txt'), 'a');
+    git(project, 'add', '.');
+    git(project, 'commit', '-qm', 'base');
+    const fork = git(project, 'rev-parse', 'HEAD');
+    git(project, 'worktree', 'add', '-q', '-b', 'run-branch', worktree);
+    await writeFile(join(worktree, 'b.txt'), 'b');
+    git(worktree, 'add', '.');
+    git(worktree, 'commit', '-qm', 'run change');
+
+    const node = check('process.stdout.write(JSON.stringify(process.argv.slice(1)))', {
+      args: ['-e', 'process.stdout.write(JSON.stringify(process.argv.slice(1)))', '--', '--baseline-commit={baseCommit}', 'keep']
+    });
+    const progress: string[] = [];
+    const outcome = await runWorkflowCheck(node, { ...runContext(node, worktree), reportProgress: line => progress.push(line) }, project, join(root, 'evidence'));
+    assert.equal(outcome.status, 'succeeded');
+    const log = await readFile(outcome.artifacts![0].path!, 'utf8');
+    assert.match(log, new RegExp(`--baseline-commit=${fork}`));
+    assert.ok(progress.some(line => line.includes(fork.slice(0, 12))));
+
+    const outside = await runWorkflowCheck(node, { run: runContext(node, worktree).run }, project, join(root, 'evidence'));
+    const outsideLog = await readFile(outside.artifacts![0].path!, 'utf8');
+    assert.doesNotMatch(outsideLog, /baseline-commit/);
+    assert.match(outsideLog, /keep/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

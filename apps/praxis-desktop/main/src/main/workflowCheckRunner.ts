@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import {
+  checkArgsNeedBaseCommit,
   classifyCheckEnvironmentFailure,
   captureEvidenceEntry,
   commitEvidenceSource,
@@ -11,6 +12,7 @@ import {
   evidenceBundleId,
   parseCheckResult,
   redactEvidenceContent,
+  resolveCheckArgs,
   unknownEvidenceSource,
   withEvidenceEntry,
   writeEvidenceBundle,
@@ -56,7 +58,17 @@ export async function runWorkflowCheck(
 
   const successCodes = node.successExitCodes?.length ? node.successExitCodes : [0];
   const capturedAt = new Date().toISOString();
-  const result = await spawnCheck(node, cwd, context.signal, line => {
+  // `{baseCommit}` lets a scanner report only what this run changed. Without a
+  // run worktree there is no run branch to compare, so the scan covers everything.
+  let command = node;
+  if (checkArgsNeedBaseCommit(node.args)) {
+    const baseCommit = context.worktreePath && fallbackCwd ? await runForkPoint(context.worktreePath, fallbackCwd) : undefined;
+    command = { ...node, args: resolveCheckArgs(node.args, { baseCommit }) };
+    context.reportProgress?.(baseCommit
+      ? `Checking only what changed since ${baseCommit.slice(0, 12)}, where this run branched.`
+      : 'Could not tell where this run branched, so checking everything.');
+  }
+  const result = await spawnCheck(command, cwd, context.signal, line => {
     const progress = checkProgressLine(line);
     if (progress) context.reportProgress?.(progress);
   });
@@ -132,7 +144,7 @@ export async function runWorkflowCheck(
     return { status: 'failed', error: `Check timed out after ${node.timeoutMs}ms.${persistNote}`, artifacts };
   }
   if (spawnFailed) {
-    const missing = classifyCheckEnvironmentFailure({ command: node.command, args: node.args, output: '', spawnError: `${result.error ?? ''} ${entry.missingReason ?? ''}` });
+    const missing = classifyCheckEnvironmentFailure({ command: node.command, args: command.args, output: '', spawnError: `${result.error ?? ''} ${entry.missingReason ?? ''}` });
     return {
       status: 'failed',
       error: `${entry.missingReason}${missing ? ` ${missing.hint}` : ''}${persistNote}`,
@@ -149,7 +161,7 @@ export async function runWorkflowCheck(
     // A report that could not be parsed because the tool itself could not run (an audit
     // against a registry with no audit endpoint, say) is the environment's failure: pause.
     const environment = result.code !== null && !successCodes.includes(result.code)
-      ? classifyCheckEnvironmentFailure({ command: node.command, args: node.args, exitCode: result.code, output: redactedOutput })
+      ? classifyCheckEnvironmentFailure({ command: node.command, args: command.args, exitCode: result.code, output: redactedOutput })
       : undefined;
     if (environment) {
       return {
@@ -192,7 +204,7 @@ export async function runWorkflowCheck(
   // the run on it instead of failing it and spending the stage's attempt.
   const environment = classifyCheckEnvironmentFailure({
     command: node.command,
-    args: node.args,
+    args: command.args,
     exitCode: result.code,
     output: redactedOutput
   });
@@ -208,6 +220,22 @@ export async function runWorkflowCheck(
     ...(environment ? { pause: 'environment' as const } : {}),
     ...(parsedFindings ? { findings: parsedFindings } : {})
   };
+}
+
+/**
+ * Where the run's branch left the project's current branch: the newest commit the
+ * run did not make. Undefined when the project checkout has no branch (detached
+ * HEAD) or git cannot answer, and the caller then checks everything.
+ */
+async function runForkPoint(worktreePath: string, projectFolder: string): Promise<string | undefined> {
+  try {
+    const branch = (await execFileAsync('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd: projectFolder })).stdout.trim();
+    if (!branch) return undefined;
+    const fork = (await execFileAsync('git', ['merge-base', branch, 'HEAD'], { cwd: worktreePath })).stdout.trim();
+    return /^[0-9a-f]{7,64}$/i.test(fork) ? fork : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Best-effort HEAD lookup. No repository, no git, or a bare/unborn tree all fall back to `unknown` rather than guessing. */

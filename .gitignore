@@ -92,3 +92,10 @@ __pycache__/
 *$py.class
 *.egg-info/
 
+
+# Reports the workflow scanner stages (SAST, secrets, SCA) write into a run's worktree.
+# A stage that commits leftover changes must not commit these.
+/semgrep.sarif
+/gitleaks.sarif
+/osv.sarif
+/osv-report.sarif

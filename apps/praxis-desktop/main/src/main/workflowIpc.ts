@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { projectWorkflowTrust } from './workflowProjectTrust';
+import { isCheckCommandAvailable } from './workflowCheckProcess';
 import {
   applyWorkflowRunCommand,
   approveStage,
@@ -38,6 +39,8 @@ import {
   estimateWorkflowRun,
   stageUsageSample,
   preflightWorkflow,
+  missingCheckTools,
+  describeMissingCheckTools,
   getProviderDescriptor,
   workflowFileName,
   writeProjectWorkflow,
@@ -420,6 +423,10 @@ export async function startWorkflowRun(input: {
     const blockers = Object.values(livePreflight.byNode).flatMap(stage => stage.failures).map(failure => `${failure.message} ${failure.remediation}`);
     throw new Error(`Cannot start workflow until its Agent Hub bindings are ready: ${blockers.join(' ')}`);
   }
+  // A check stage's tool that is not installed would otherwise surface only when
+  // the run reaches that stage, after the agent stages have spent their time.
+  const missingTools = describeMissingCheckTools(missingCheckTools(definition.nodes, isCheckCommandAvailable, process.platform));
+  if (missingTools) throw new Error(missingTools);
 
   let aiProvider = typeof options?.aiProvider === 'string' && options.aiProvider ? options.aiProvider as AiProvider : undefined;
   let aiModel = typeof options?.aiModel === 'string' && options.aiModel.trim() ? options.aiModel.trim() : undefined;

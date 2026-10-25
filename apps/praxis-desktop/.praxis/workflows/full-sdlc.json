@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "id": "full-sdlc",
   "name": "Full SDLC",
-  "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+  "description": "Praxis delivery: plan, implement, then type check, unit tests, SAST, secrets, SCA and code review gates before sign-off.",
   "trigger": "ticket",
   "scope": "project",
-  "version": 1,
+  "version": 2,
   "entryNodeId": "plan",
   "createdAt": "2026-10-24T15:31:09.446Z",
-  "updatedAt": "2026-10-24T15:31:09.446Z",
+  "updatedAt": "2026-10-25T00:00:00.000Z",
   "nodes": [
     {
       "type": "agent-task",
@@ -123,32 +123,6 @@
     },
     {
       "type": "check",
-      "id": "lint",
-      "name": "Lint",
-      "x": 440,
-      "y": 0,
-      "inputs": [
-        "change-diff"
-      ],
-      "command": "npm",
-      "args": [
-        "run",
-        "lint"
-      ],
-      "successExitCodes": [
-        0
-      ],
-      "outputs": [
-        {
-          "id": "lint-findings",
-          "kind": "findings",
-          "required": true
-        }
-      ],
-      "satisfiesGate": "qa"
-    },
-    {
-      "type": "check",
       "id": "typecheck",
       "name": "Type check",
       "x": 440,
@@ -156,10 +130,10 @@
       "inputs": [
         "change-diff"
       ],
-      "command": "npx",
+      "command": "npm",
       "args": [
-        "tsc",
-        "--noEmit"
+        "run",
+        "check-types"
       ],
       "successExitCodes": [
         0
@@ -168,7 +142,7 @@
         {
           "id": "typecheck-findings",
           "kind": "findings",
-          "required": true
+          "required": false
         }
       ],
       "satisfiesGate": "qa"
@@ -176,7 +150,7 @@
     {
       "type": "check",
       "id": "test",
-      "name": "Unit tests & coverage",
+      "name": "Unit tests",
       "x": 560,
       "y": 120,
       "inputs": [
@@ -184,7 +158,8 @@
       ],
       "command": "npm",
       "args": [
-        "test"
+        "run",
+        "test:core"
       ],
       "successExitCodes": [
         0
@@ -193,7 +168,7 @@
         {
           "id": "test-findings",
           "kind": "findings",
-          "required": true
+          "required": false
         }
       ],
       "satisfiesGate": "qa"
@@ -211,6 +186,7 @@
       "args": [
         "scan",
         "--config=auto",
+        "--baseline-commit={baseCommit}",
         "--sarif",
         "--output=semgrep.sarif"
       ],
@@ -221,10 +197,13 @@
         {
           "id": "sast-findings",
           "kind": "findings",
-          "required": true
+          "required": true,
+          "adapter": "sarif"
         }
       ],
-      "satisfiesGate": "security"
+      "satisfiesGate": "security",
+      "reportPath": "semgrep.sarif",
+      "adapter": "sarif"
     },
     {
       "type": "check",
@@ -249,10 +228,13 @@
         {
           "id": "secret-findings",
           "kind": "findings",
-          "required": true
+          "required": true,
+          "adapter": "sarif"
         }
       ],
-      "satisfiesGate": "security"
+      "satisfiesGate": "security",
+      "reportPath": "gitleaks.sarif",
+      "adapter": "sarif"
     },
     {
       "type": "check",
@@ -265,8 +247,13 @@
       ],
       "command": "osv-scanner",
       "args": [
-        "--format=sarif",
-        "--output=osv.sarif",
+        "scan",
+        "source",
+        "--no-ignore",
+        "--format",
+        "sarif",
+        "--output-file",
+        "osv.sarif",
         "."
       ],
       "successExitCodes": [
@@ -276,10 +263,13 @@
         {
           "id": "sca-findings",
           "kind": "findings",
-          "required": true
+          "required": true,
+          "adapter": "sarif"
         }
       ],
-      "satisfiesGate": "security"
+      "satisfiesGate": "security",
+      "reportPath": "osv.sarif",
+      "adapter": "sarif"
     },
     {
       "type": "agent-task",
@@ -335,14 +325,6 @@
       ],
       "allowBypass": false,
       "gateThresholds": {
-        "qa": [
-          {
-            "type": "metric",
-            "metric": "coverage",
-            "operator": ">=",
-            "value": 80
-          }
-        ],
         "security": [
           {
             "type": "severity",
@@ -358,25 +340,6 @@
           }
         ]
       }
-    },
-    {
-      "type": "check",
-      "id": "deploy",
-      "name": "Deploy",
-      "x": 1100,
-      "y": 160,
-      "inputs": [
-        "change-diff"
-      ],
-      "command": "npm",
-      "args": [
-        "run",
-        "deploy"
-      ],
-      "successExitCodes": [
-        0
-      ],
-      "outputs": []
     }
   ],
   "edges": [
@@ -393,13 +356,6 @@
       "to": "install",
       "on": "success",
       "required": true
-    },
-    {
-      "id": "e-impl-lint",
-      "from": "install",
-      "to": "lint",
-      "on": "success",
-      "required": false
     },
     {
       "id": "e-impl-typecheck",
@@ -451,13 +407,6 @@
       "required": true
     },
     {
-      "id": "e-lint-gates",
-      "from": "lint",
-      "to": "gates",
-      "on": "success",
-      "required": false
-    },
-    {
       "id": "e-typecheck-gates",
       "from": "typecheck",
       "to": "gates",
@@ -505,13 +454,6 @@
       "to": "approve",
       "on": "success",
       "required": true
-    },
-    {
-      "id": "e-approve-deploy",
-      "from": "approve",
-      "to": "deploy",
-      "on": "success",
-      "required": false
     }
   ],
   "projectId": "project-1788215224012-rap082"

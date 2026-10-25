@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 710,
+  "testCount": 713,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -7766,12 +7766,44 @@
       }
     },
     {
+      "id": "PT-5153FD33AA",
+      "title": "the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 919,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-EB1C51515B",
+      "title": "a workflow whose check stage needs a tool that is not installed is refused before the run starts",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 966,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a workflow whose check stage needs a tool that is not installed is refused before the run starts",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-2370A6254B",
       "title": "an older schedule refresh cannot overwrite a newer failure status",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 919,
+        "line": 1000,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -10690,6 +10722,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a failed step on a failed run has a retry icon button that reopens the run",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-BFED3B2E58",
+      "title": "a read-only review stage is handed the whole implementation patch as a file",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowReviewDiff.spec.ts",
+        "line": 77,
+        "project": "functional"
+      },
+      "area": "workflow Review Diff",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a read-only review stage is handed the whole implementation patch as a file",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

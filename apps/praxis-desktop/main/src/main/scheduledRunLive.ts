@@ -111,7 +111,9 @@ export function stageProgressFor(workflowRunId: string): Pick<ScheduledRunLive, 
   const summary = summarize(run);
   const stages = summary.stages;
   const blocker = scheduledWorkflowBlocker(summary);
-  const current = stages.find(stage => stage.lane === 'running' || stage.lane === 'awaiting' || stage.lane === 'paused') ?? blocker ?? stages.find(stage => stage.lane === 'failed');
+  // When the run is stuck, the stage it is stuck on leads: the label, the error and
+  // Retry must all name the same stage, not a paused one beside it.
+  const current = blocker ?? stages.find(stage => stage.lane === 'running' || stage.lane === 'awaiting' || stage.lane === 'paused') ?? stages.find(stage => stage.lane === 'failed');
   const done = stages.filter(stage => stage.lane === 'done' || stage.lane === 'skipped').length;
   return {
     stageLabel: current ? `${current.name}${current.outcome === 'failed' ? ' — needs attention' : ''}` : summary.status === 'succeeded' ? 'Finished' : summary.explanation,
