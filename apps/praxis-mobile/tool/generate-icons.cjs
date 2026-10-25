@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..');
   try {
     const page = await browser.newPage({ viewport: { width: 1024, height: 1024 }, deviceScaleFactor: 1 });
     const svg = fs.readFileSync(path.join(root, 'assets/icon/praxis-icon.svg'), 'utf8');
+    // nosemgrep: javascript.playwright.security.audit.playwright-setcontent-injection.playwright-setcontent-injection -- renders the repo's own icon SVG
     await page.setContent('<style>html,body{margin:0;overflow:hidden}</style>' + svg);
     const master = path.join(root, 'assets/icon/praxis-icon.png');
     await page.screenshot({ path: master, omitBackground: false });

@@ -15,6 +15,24 @@ import { MobileRelayStream } from './mobileRelayStream';
 
 export type MobileRelayState = 'stopped' | 'connecting' | 'registered' | 'error';
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * Whether a relay URL may be used: `wss:` anywhere, unencrypted `ws:` only to
+ * this machine (a relay run locally for development). A remote `ws:` relay
+ * would carry the pairing handshake in clear text.
+ */
+export function isAllowedRelayUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'wss:') return true;
+  return url.protocol === 'ws:' && LOOPBACK_HOSTS.has(url.hostname.toLowerCase());
+}
+
 export interface MobileRelayIdentity {
   /** Raw Ed25519 public key, 64 hex characters. */
   publicKeyHex: string;
@@ -22,7 +40,7 @@ export interface MobileRelayIdentity {
 }
 
 export interface MobileRelayClientOptions {
-  /** `wss://relay.example.com` (or `ws://` for a local relay). */
+  /** A `wss:` URL, or `ws:` to this machine only; see `isAllowedRelayUrl`. */
   relayUrl: string;
   identity: MobileRelayIdentity;
   /** A phone's relayed connection, ready to serve. */

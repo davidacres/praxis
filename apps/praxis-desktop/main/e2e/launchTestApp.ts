@@ -349,7 +349,7 @@ function removeProfile(userDataDir: string): void {
       return;
     } catch (error) {
       if (attempt === 4) {
-        console.warn(`Could not remove test profile ${userDataDir}; leaving it in place`, error);
+        console.warn('Could not remove test profile %s; leaving it in place', userDataDir, error);
         return;
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);

@@ -46,6 +46,7 @@ public static class OwnerService
         NamedPipeServerStream? next = Server(endpoint);
         try
         {
+            // nosemgrep: csharp.lang.security.filesystem.unsafe-path-combine.unsafe-path-combine -- fixed file name under the owner directory
             File.WriteAllText(staging, new JsonObject { ["version"] = 1, ["endpoint"] = endpoint, ["token"] = token,
                 ["processId"] = Environment.ProcessId, ["build"] = Build, ["startedUtc"] = startedUtc }.ToJsonString());
             if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(staging, UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -160,6 +161,7 @@ public static class OwnerService
                 if (File.Exists(rendezvous))
                     try
                     {
+                        // nosemgrep: csharp.lang.security.filesystem.unsafe-path-combine.unsafe-path-combine -- fixed file name under the owner directory
                         var bytes = File.ReadAllBytes(rendezvous); if (bytes.Length > 4096) throw new IOException("Invalid owner rendezvous.");
                         var owner = JsonNode.Parse(bytes)!; var endpoint = owner["endpoint"]!.GetValue<string>();
                         if (endpoint != Endpoint(directory) || owner["version"]!.GetValue<int>() != 1) throw new IOException("Invalid owner endpoint.");

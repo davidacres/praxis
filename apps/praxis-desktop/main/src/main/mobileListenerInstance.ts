@@ -15,7 +15,7 @@ import { registerMobileElectronIpc } from './mobileIpc';
 import { composeDesktopMobileHost } from './mobileHostComposition';
 import { getMobileHostId, getMobileHostIdentity, getMobileRelayIdentity } from './mobileHostIdentity';
 import { MobileLanServer } from './mobileLanServer';
-import { MobileRelayClient } from './mobileRelayClient';
+import { MobileRelayClient, isAllowedRelayUrl } from './mobileRelayClient';
 import { mobileAccessPolicyFromSettings, resolveMobileListenerChange } from './mobileAccessLifecycle';
 import {
   startMobileDiscoveryAdvertisement,
@@ -40,7 +40,7 @@ let relayClientUrl: string | undefined;
 /** The relay to register with. An environment override for now; a Settings field is a follow-up. */
 function configuredRelayUrl(): string | undefined {
   const url = process.env.PRAXIS_MOBILE_RELAY_URL?.trim();
-  return url && /^wss?:\/\//i.test(url) ? url : undefined;
+  return url && isAllowedRelayUrl(url) ? url : undefined;
 }
 
 function stopRelay(): void {

@@ -150,17 +150,29 @@ else if (model) {
   else { await call('model-activate', repositoryId, fingerprint); console.log('Semantic model activated; vectors build in the background.'); }
 } else if (noDownload) console.log('No semantic model, so search is keyword-only (--no-download). Download it in Praxis or run connect without --no-download.');
 
+/**
+ * Runs a CLI found on PATH. Windows needs a shell to run `claude.cmd` / `node.cmd`
+ * shims, and `cmd.exe` gets one joined string, so each part is double-quoted
+ * there: unquoted, a path with a space would split into two arguments.
+ */
+function runTool(command, args, stdio = 'ignore') {
+  if (process.platform !== 'win32') return spawnSync(command, args, { stdio });
+  const line = [command, ...args].map(part => `"${String(part).replaceAll('"', '""')}"`).join(' ');
+  // nosemgrep: javascript.lang.security.audit.spawn-shell-true.spawn-shell-true -- every part is quoted above; Windows cannot run .cmd shims without a shell
+  return spawnSync(line, { stdio, shell: true });
+}
+
 // `node` from PATH survives Node upgrades; a versioned install path (Homebrew's Cellar) does not.
-const node = spawnSync('node', ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0 ? 'node' : process.execPath;
+const node = runTool('node', ['--version']).status === 0 ? 'node' : process.execPath;
 const add = ['mcp', 'add', '--scope', 'user', MCP_NAME, '--', node, bridge, executable, '-', data, '*', client, contracts];
 // Quote anything the shell would interpret: the bridge's '*' would otherwise expand as a glob.
 const quoted = ['claude', ...add].map(part => /^[\w@%+=:,./-]+$/.test(part) ? part : `'${part.replaceAll("'", `'\\''`)}'`).join(' ');
-const claudeAvailable = !printOnly && spawnSync('claude', ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0;
+const claudeAvailable = !printOnly && runTool('claude', ['--version']).status === 0;
 if (!claudeAvailable) console.log(`\nAdd the MCP server to Claude Code once (it serves every granted repository):\n  ${quoted}`);
-else if (spawnSync('claude', ['mcp', 'get', MCP_NAME], { stdio: 'ignore', shell: process.platform === 'win32' }).status === 0)
+else if (runTool('claude', ['mcp', 'get', MCP_NAME]).status === 0)
   console.log(`Claude Code already has the ${MCP_NAME} MCP server; it picks up this repository automatically.`);
 else {
-  const added = spawnSync('claude', add, { stdio: 'inherit', shell: process.platform === 'win32' });
+  const added = runTool('claude', add, 'inherit');
   if (added.status !== 0) fail(`claude mcp add failed. Run it yourself:\n  ${quoted}`);
   console.log(`Added the ${MCP_NAME} MCP server to Claude Code (user scope).`);
 }

@@ -173,6 +173,7 @@ function unsupportedReason(): string | undefined {
 
 /** The GitHub release page for `version`, read from the baked-in feed config. */
 export function githubReleaseUrl(feedYaml: string, version: string): string | undefined {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- name is always a literal field name
   const field = (name: string) => new RegExp(`^${name}:\\s*['"]?([^'"\\s]+)`, 'm').exec(feedYaml)?.[1];
   if (field('provider') !== 'github') return undefined;
   const owner = field('owner');

@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp as launchApp, type TestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
+import { escapeRegExp } from './textPattern';
 
 /**
  * FX-BE-022 — the run monitor and the governed delivery pipeline end to end.
@@ -89,7 +90,8 @@ async function openRun(page: Page, name: RegExp = /./): Promise<void> {
 /** Selects a stage in the pipeline, then marks it done from its detail. */
 async function markDone(page: Page, stageName: string): Promise<void> {
   await runPanel(page)
-    .getByRole('button', { name: new RegExp(`^${stageName} `) })
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- input escaped
+    .getByRole('button', { name: new RegExp(`^${escapeRegExp(stageName)} `) })
     .click();
   await runPanel(page).getByRole('button', { name: 'Mark done' }).click();
 }
@@ -97,7 +99,8 @@ async function markDone(page: Page, stageName: string): Promise<void> {
 /** The detail text for a stage, selected via the pipeline. */
 async function stageDetail(page: Page, stageName: string) {
   await runPanel(page)
-    .getByRole('button', { name: new RegExp(`^${stageName} `) })
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- input escaped
+    .getByRole('button', { name: new RegExp(`^${escapeRegExp(stageName)} `) })
     .click();
   return runPanel(page);
 }

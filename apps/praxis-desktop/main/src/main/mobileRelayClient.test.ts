@@ -19,7 +19,7 @@ import { MobileConnectionError, MobileSecureClient, generateKeyPair, type KeyPai
 import { RelayServer, channelIdForKey } from '@praxis/mobile-relay';
 import WebSocket, { WebSocketServer } from 'ws';
 import { MobileLanServer } from './mobileLanServer';
-import { MobileRelayClient, type MobileRelayIdentity } from './mobileRelayClient';
+import { MobileRelayClient, isAllowedRelayUrl, type MobileRelayIdentity } from './mobileRelayClient';
 
 const caller: MobileCaller = { deviceId: 'phone-1', capabilities: ['view'] };
 const internet: MobileAccessPolicy = { mode: 'internet', allowedInterfaces: [], allowedSubnets: [] };
@@ -224,4 +224,14 @@ test('everything the relay forwards is ciphertext', async () => {
     // The detector is not vacuous: the same markers in a plaintext exchange are found.
     assert.equal(leaks(Buffer.from(JSON.stringify({ projects: [{ projectId: 'p1', name: 'Praxis' }] }))), true);
   });
+});
+
+test('a relay URL must be wss:, or plain ws: only to this machine', () => {
+  for (const url of ['wss://relay.example.com', 'WSS://relay.example.com/x', 'ws://localhost:8787', 'ws://127.0.0.1:8787', 'ws://[::1]:8787']) {
+    assert.equal(isAllowedRelayUrl(url), true, url);
+  }
+  // nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket -- these remote ws: URLs are the ones being rejected
+  for (const url of ['ws://relay.example.com', 'ws://192.168.1.10:8787', 'ws://localhost.example.com', 'https://relay.example.com', 'not a url', '']) {
+    assert.equal(isAllowedRelayUrl(url), false, url);
+  }
 });

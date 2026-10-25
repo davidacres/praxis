@@ -27,6 +27,7 @@ function startMockConsole(): Promise<{ origin: string; rpcCalls: number; close: 
         'Content-Type': 'text/html',
         'Set-Cookie': ['login_aliyunid_ticket=e2e-ticket; Path=/; HttpOnly', 'cna=e2e-anon; Path=/']
       });
+      // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag -- mock server; value is a test constant
       res.end(`<html><head><title>Coding Plan</title><script>window.ALIYUN_CONSOLE_CONFIG = { SEC_TOKEN: "${signedIn ? SEC_TOKEN : ''}" };</script></head><body>Mock Coding Plan console</body></html>`);
       return;
     }

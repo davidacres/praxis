@@ -250,6 +250,7 @@ export async function inferGitLabProjectFromRepo(repoPath: string): Promise<GitL
 
 export function createIssueKeyMatcher(issueKey: string): RegExp {
   const escapedKey = escapeForRegExp(issueKey.trim().toUpperCase());
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- key escaped above
   return new RegExp(`(^|[^A-Z0-9])${escapedKey}([^A-Z0-9]|$)`, 'i');
 }
 

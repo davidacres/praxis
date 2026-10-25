@@ -116,6 +116,7 @@ function extractFrontmatterValue(frontmatter: string | undefined, key: string): 
   if (!frontmatter) {
     return undefined;
   }
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- key is always a literal field name
   const match = new RegExp(String.raw`^${key}:\s*(.+)$`, 'm').exec(frontmatter);
   return match?.[1]?.trim() || undefined;
 }

@@ -18,6 +18,7 @@ for remote, name, checksum, size in assets:
     temporary = path.with_suffix(path.suffix + '.partial')
     try:
         digest = hashlib.sha256(); count = 0
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- fixed https URL; revision is pinned and the download is hash-checked
         with urllib.request.urlopen(f'https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/{revision}/{remote}', timeout=60) as response, temporary.open('wb') as output:
             while chunk := response.read(1024 * 1024):
                 count += len(chunk)

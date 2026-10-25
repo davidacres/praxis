@@ -85,7 +85,9 @@ function missingScript(command: string, args: string[] | undefined, output: stri
   if (!script) return undefined;
   const name = escapeRegExp(script);
   const signatures = [
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- script name escaped above
     new RegExp(`Missing script: "?${name}"?(?:\\s|$)`, 'i'), // npm, pnpm
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- script name escaped above
     new RegExp(`Command "${name}" not found`, 'i') // yarn
   ];
   return signatures.some(signature => signature.test(output)) ? script : undefined;

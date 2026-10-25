@@ -891,8 +891,9 @@ export class DemoService implements IssueTrackerService {
     const nextNumber =
       this.issues
         .map(issue => {
-          const match = issue.key.match(new RegExp(`^${projectKey}-(\\d+)$`));
-          const numericPart = match?.[1];
+          const numericPart = issue.key.startsWith(`${projectKey}-`)
+            ? /^(\d+)$/.exec(issue.key.slice(projectKey.length + 1))?.[1]
+            : undefined;
           return numericPart ? Number.parseInt(numericPart, 10) : undefined;
         })
         .reduce<number>(

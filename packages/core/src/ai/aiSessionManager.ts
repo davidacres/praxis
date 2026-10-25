@@ -400,7 +400,7 @@ export class AiSessionManager {
       try {
         transcript = await this.transcriptStore.loadTranscript(record.sessionId);
       } catch (err) {
-        console.error(`[ai] Failed to load transcript for ${record.sessionId}:`, err);
+        console.error('[ai] Failed to load transcript for %s:', record.sessionId, err);
       }
     }
 
@@ -471,7 +471,7 @@ export class AiSessionManager {
     this.transcriptCache.set(record.sessionId, transcript);
     this.touchLru(record.sessionId);
     void this.transcriptStore.saveTranscript(record.sessionId, transcript).catch(err => {
-      console.error(`[ai] Failed to save transcript for ${record.sessionId}:`, err);
+      console.error('[ai] Failed to save transcript for %s:', record.sessionId, err);
     });
   }
 
@@ -1482,7 +1482,7 @@ export class AiSessionManager {
       try {
         await this.transcriptStore.saveTranscript(item.sessionId, item.transcript);
       } catch (err) {
-        console.error(`[ai] Failed to migrate transcript for ${item.sessionId}:`, err);
+        console.error('[ai] Failed to migrate transcript for %s:', item.sessionId, err);
       }
     }
     await this.persistAgentSessions();

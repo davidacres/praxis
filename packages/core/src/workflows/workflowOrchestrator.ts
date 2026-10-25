@@ -187,7 +187,7 @@ export class WorkflowOrchestrator {
       .catch(error => {
         // A failure must never poison the chain; the run stays where it is and
         // the next trigger retries.
-        console.error(`[workflow] ${label} failed for run ${runId}:`, error);
+        console.error('[workflow] %s failed for run %s:', label, runId, error);
       });
     this.chains.set(runId, chained);
     return chained;
@@ -614,7 +614,7 @@ export class WorkflowOrchestrator {
     try {
       await this.options.workspace.release(run);
     } catch (error) {
-      console.error(`[workflow] could not release the worktree for run ${run.runId}:`, error);
+      console.error('[workflow] could not release the worktree for run %s:', run.runId, error);
       return; // Keep the path so cleanup can be retried, including after restart.
     }
     await this.persist({ ...run, worktreePath: undefined });

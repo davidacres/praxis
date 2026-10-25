@@ -112,6 +112,7 @@ export async function discoverLanguageServer(): Promise<ServerConnectionInfo | u
 
 export function queryQuotaRpc(port: number, csrfToken: string, timeoutMs = 3000): Promise<AntigravityQuotaResponse> {
   return new Promise((resolve, reject) => {
+    // nosemgrep: problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification -- 127.0.0.1 only: the local Antigravity language server uses a self-signed cert
     const options: https.RequestOptions = {
       hostname: '127.0.0.1',
       port,

@@ -50,6 +50,7 @@ function buildMsiUploadName(
     options.buildIdentifier ?? getFallbackBuildIdentifier(options.artifactIndex)
   );
   const baseStem = normalizeAttachmentSegment(originalStem);
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- issue key escaped
   const suffixPattern = new RegExp(
     `-${escapeRegExp(normalizedIssueKey)}(?:-[a-z0-9-]+)?$`,
     'i'

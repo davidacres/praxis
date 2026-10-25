@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { escapeRegExp } from './textPattern';
 
 let app: TestApp | undefined;
 
@@ -97,7 +98,8 @@ test('each workspace resumes at its own last route, not the other one\'s', async
 
   const switchTo = async (name: string) => {
     await win.getByRole('button', { name: 'Select workspace' }).click();
-    await win.getByRole('menuitem', { name: new RegExp(name) }).click();
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- input escaped
+    await win.getByRole('menuitem', { name: new RegExp(escapeRegExp(name)) }).click();
   };
 
   await switchTo('Second Workspace');

@@ -84,6 +84,7 @@ public sealed class IndexDatabase
             using var schema = connection.CreateCommand();
             schema.Transaction = transaction; schema.CommandText = Migrations[next - 1].Sql; schema.ExecuteNonQuery();
             using var record = connection.CreateCommand(); record.Transaction = transaction;
+            // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli -- only an int is concatenated; PRAGMA cannot take a parameter
             record.CommandText = "INSERT INTO schema_migrations(version,checksum,applied_utc) VALUES($version,$checksum,$utc); PRAGMA user_version=" + next.ToString(CultureInfo.InvariantCulture) + ";";
             record.Parameters.AddWithValue("$version", next);
             record.Parameters.AddWithValue("$checksum", Migrations[next - 1].Checksum);
@@ -220,6 +221,7 @@ public sealed class IndexDatabase
 
     private static void Execute(SqliteConnection connection, string sql)
     {
+        // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli -- callers pass constant SQL
         using var command = connection.CreateCommand(); command.CommandText = sql; command.ExecuteNonQuery();
     }
 

@@ -140,6 +140,7 @@ function getFrontmatterBlock(content: string): string | undefined {
 
 function extractFrontMatterValue(content: string, key: string): string | undefined {
   const frontmatter = getFrontmatterBlock(content);
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- key is always a literal field name
   return frontmatter?.match(new RegExp(`^${key}:\\s*["']?(.+?)["']?\\s*$`, 'm'))?.[1]?.trim();
 }
 

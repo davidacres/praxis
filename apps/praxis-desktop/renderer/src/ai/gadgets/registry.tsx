@@ -93,7 +93,7 @@ export class GadgetErrorBoundary extends Component<BoundaryProps, { failed: bool
   public componentDidCatch(error: Error, info: ErrorInfo): void {
     // Surfaced in the renderer console and the app's log pane; a gadget that
     // cannot draw is a real defect even though the user has a way forward.
-    console.error(`[gadget] renderer for "${this.props.gadget.kind}" threw`, error, info.componentStack);
+    console.error('[gadget] renderer for "%s" threw', this.props.gadget.kind, error, info.componentStack);
   }
 
   public render(): ReactNode {

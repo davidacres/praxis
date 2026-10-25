@@ -321,6 +321,7 @@ export function ensureFrontMatter(content: string, issueType: IssueType): string
 
   // ── Section upgrades ──
   const hasSection = (name: string): boolean =>
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- section name escaped inline
     lines.some(l => new RegExp(`^##\\s+${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(l));
 
   // Handle alias renames first

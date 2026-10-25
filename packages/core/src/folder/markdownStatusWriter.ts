@@ -3,6 +3,10 @@ import { readUtf8 } from './markdownPlanParser';
 import { ensureFrontMatter, type IssueType } from './markdownTemplate';
 import { composeIdeaContent } from '../issues/ideaTranscript';
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Reverse-map plan statuses back to the emoji-prefixed markdown format. */
 export function planStatusToMarkdown(planStatus: string): string {
   switch (planStatus) {
@@ -94,8 +98,12 @@ export async function updateFeatureStoryTable(
     }
     // Check if the story name appears in the row (fuzzy match)
     const nameCell = cells[2] ?? '';
-    const nameWords = storyName.split(/\s+/).slice(0, 3).join('.*');
-    if (nameWords.length > 0 && !new RegExp(nameWords, 'i').test(nameCell) && !new RegExp(nameWords, 'i').test(line)) {
+    // Escaped: a story name is free text, and "Fix (legacy) parser" must match
+    // literally, not throw or match something else.
+    const nameWords = storyName.split(/\s+/).filter(Boolean).slice(0, 3).map(escapeRegExp).join('.*');
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- every word escaped above
+    const namePattern = nameWords ? new RegExp(nameWords, 'i') : undefined;
+    if (namePattern && !namePattern.test(nameCell) && !namePattern.test(line)) {
       continue;
     }
     // Find the status cell — typically cells[3]
@@ -133,8 +141,9 @@ export async function appendFeatureItemTableRow(
   }
 
   const mdStatus = planStatusToMarkdown(planStatus);
-  const escapedReference = itemReference.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedType = itemType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedReference = escapeRegExp(itemReference);
+  const escapedType = escapeRegExp(itemType);
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- both parts escaped above
   const existingRow = new RegExp(`^\\|\\s*${escapedReference}\\s*\\|\\s*${escapedType}\\s*\\|`, 'mi');
   if (existingRow.test(content)) {
     return false;

@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { escapeRegExp } from './textPattern';
 
 /**
  * FX-BE-021 / FX-BF-014 — the visual workflow designer.
@@ -186,7 +187,8 @@ test('auto arrange lays out workflow stages in dependency order without overlap'
   }
 
   const left = async (name: string) =>
-    Number(await canvas.getByRole('button', { name: new RegExp(`^${name} \\(`) }).evaluate(element => (element as HTMLElement).style.left.replace('px', '')));
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- input escaped
+    Number(await canvas.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)} \\(`) }).evaluate(element => (element as HTMLElement).style.left.replace('px', '')));
   expect(await left('Plan')).toBeLessThan(await left('Implement'));
   expect(await left('Implement')).toBeLessThan(await left('QA'));
   expect(await left('QA')).toBeLessThan(await left('Approve'));
@@ -227,7 +229,8 @@ test('auto arrange vertical lays out workflow stages top to bottom in dependency
   }
 
   const top = async (name: string) =>
-    Number(await canvas.getByRole('button', { name: new RegExp(`^${name} \\(`) }).evaluate(element => (element as HTMLElement).style.top.replace('px', '')));
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- input escaped
+    Number(await canvas.getByRole('button', { name: new RegExp(`^${escapeRegExp(name)} \\(`) }).evaluate(element => (element as HTMLElement).style.top.replace('px', '')));
   expect(await top('Plan')).toBeLessThan(await top('Implement'));
   expect(await top('Implement')).toBeLessThan(await top('QA'));
   expect(await top('QA')).toBeLessThan(await top('Approve'));

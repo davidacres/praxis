@@ -49,6 +49,7 @@ function globToRegExp(glob: string): RegExp {
     .replace(/\*\*\/?/g, '\u0000')
     .replace(/\*/g, '[^/]*')
     .replace(/\u0000/g, '(?:.*/)?');
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- glob escaped above; only * and ** become patterns
   return new RegExp(`^${escaped}${glob.endsWith('/') ? '' : '$'}`);
 }
 

@@ -137,6 +137,7 @@ test('masks secret-shaped strings anywhere in the payload and flags the envelope
   const result = expectOk(
     envelope('table', {
       columns: [{ key: 'name', label: 'Name' }, { key: 'value', label: 'Value' }],
+      // nosemgrep: generic.secrets.security.detected-github-token.detected-github-token -- synthetic fixture
       rows: [{ name: 'token', value: 'ghp_abcdefghijklmnopqrstuvwxyz0123456789' }]
     })
   );

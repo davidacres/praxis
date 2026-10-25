@@ -23,10 +23,11 @@ description = "Synthetic test fixtures and known false positives, matched on con
 regexes = [
   # Fixtures that exist to prove redaction / validation code strips secrets.
   # Every value is synthetic and deliberately unguessable (sequential `abcdef`,
-  # `AKIAABCDEFGHIJKLMNOP`, `e2e-*-key`). A real credential never matches these
+  # `AKIAABCDEFGHIJKLMNOP`, `e2e-*-key`). A real credential never matches these  # nosemgrep: generic.secrets.security.detected-aws-access-key-id-value.detected-aws-access-key-id-value -- synthetic fixture value
   # shapes, so exempting them costs no coverage.
   '''sk_live_(abcdef1234567890|abcdefghij1234567890|1234567890abcdef)''',
   '''ghp_abcdef1234567890''',
+  # nosemgrep: generic.secrets.security.detected-aws-access-key-id-value.detected-aws-access-key-id-value -- synthetic fixture value
   '''AKIAABCDEFGHIJKLMNOP''',
   '''abcdef0123456789abcdef''',
   '''abcd1234efgh5678''',

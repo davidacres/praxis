@@ -1386,7 +1386,7 @@ export function App() {
         await refreshBoardDetails();
         return true;
       } catch (error) {
-        console.error(`[board] failed to move ${issueKey} to "${targetStatus}"`, error);
+        console.error('[board] failed to move %s to "%s"', issueKey, targetStatus, error);
         return false;
       }
     },

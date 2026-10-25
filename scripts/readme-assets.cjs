@@ -16,6 +16,7 @@ const { chromium } = require(require.resolve('playwright', {
   paths: [path.join(root, 'apps/praxis-desktop/main'), root],
 }));
 
+// nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- names are literals in this script
 const url = (name) => 'file://' + path.join(shots, name);
 
 const BG = 'radial-gradient(120% 90% at 15% 0%, #f4c9b4 0%, #d9826a 38%, #a9472f 72%, #5b2418 100%)';

@@ -357,8 +357,10 @@ test('redactEvidenceContent scrubs a bearer token, keeping the scheme', () => {
 });
 
 test('redactEvidenceContent scrubs a bare AWS access key id with no surrounding key', () => {
+  // nosemgrep: generic.secrets.security.detected-aws-access-key-id-value.detected-aws-access-key-id-value -- synthetic fixture
   const { content, redacted } = redactEvidenceContent('found credentials: AKIAABCDEFGHIJKLMNOP in env dump');
   assert.equal(redacted, true);
+  // nosemgrep: generic.secrets.security.detected-aws-access-key-id-value.detected-aws-access-key-id-value -- synthetic fixture
   assert.doesNotMatch(content, /AKIAABCDEFGHIJKLMNOP/);
   assert.match(content, /\[REDACTED\]/);
 });

@@ -141,7 +141,7 @@ async function runTestConnection(
     ([id]) => window.praxis!.connection.check(id),
     [connectionId] as [string]
   )) as { status?: string; message?: string };
-  console.log(`[jiraAuth] check(${connectionId}) →`, JSON.stringify(result));
+  console.log('[jiraAuth] check(%s) → %s', connectionId, JSON.stringify(result));
   return { status: result?.status ?? 'unknown', message: result?.message ?? '' };
 }
 

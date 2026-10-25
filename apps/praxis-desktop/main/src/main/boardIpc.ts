@@ -36,7 +36,9 @@ export function registerBoardIpc(): void {
         } else {
           const connection = getSupportedConnections()[index];
           console.error(
-            `board:list — skipping connection ${connection?.name ?? index} (${connection?.id ?? 'unknown'}):`,
+            'board:list — skipping connection %s (%s):',
+            connection?.name ?? index,
+            connection?.id ?? 'unknown',
             result.reason
           );
         }

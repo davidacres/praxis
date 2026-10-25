@@ -145,6 +145,7 @@ internal static class RetainedBenchmark
         if (after.Generation != repository.Generation || after.QueryEpoch != repository.QueryEpoch || after.Root != repository.Root
             || after.State != repository.State) throw new IOException("Retained index changed during measurements.");
         using var connection = database.Open(readOnly: true);
+        // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli -- benchmark passes constant SQL only
         object? Scalar(string sql) { using var command = connection.CreateCommand(); command.CommandText = sql; return command.ExecuteScalar(); }
         var retrievalP95 = samples.Select(sample => sample.Hybrid?.QueryPhases?.Retrieval.P95Ms).Max();
         var gates = new Dictionary<string, bool?> {

@@ -1,4 +1,5 @@
 import { expect, type Locator } from '@playwright/test';
+import { escapeRegExp } from './textPattern';
 
 /**
  * Drives the renderer's `ChipSelect` (ui/ChipSelect.tsx) — the themed stand-in for a
@@ -34,7 +35,8 @@ export async function chooseOption(target: Locator, choice: string | { label: st
       ? menu.locator(`[role="option"][data-value="${choice.replace(/["\\]/g, '\\$&')}"]`)
       : menu
           .locator('[role="option"]')
-          .filter({ has: chip.page().locator('.chip-select-option-label', { hasText: new RegExp(`^${choice.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }) });
+          // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- input escaped
+          .filter({ has: chip.page().locator('.chip-select-option-label', { hasText: new RegExp(`^${escapeRegExp(choice.label)}$`) }) });
   await option.click();
   // Closed — or gone, when the choice swaps the chip for another control (e.g. "Other model id…").
   await expect

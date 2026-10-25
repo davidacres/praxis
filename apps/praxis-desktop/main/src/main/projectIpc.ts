@@ -97,7 +97,7 @@ export async function healLegacyFolderProjects(): Promise<void> {
       }
     }
     await syncProjectConnection(healed).catch(error =>
-      console.error(`projects — could not write the connection for "${healed.name}":`, error));
+      console.error('projects — could not write the connection for "%s":', healed.name, error));
   }
 }
 

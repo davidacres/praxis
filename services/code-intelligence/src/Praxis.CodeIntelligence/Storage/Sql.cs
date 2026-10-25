@@ -6,6 +6,7 @@ internal static class Sql
 {
     public static SqliteCommand Command(this SqliteConnection connection, SqliteTransaction? transaction, string sql, params object?[] values)
     {
+        // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli -- sql is a constant from the caller; values are bound as parameters
         var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = sql;
         for (var i = 0; i < values.Length; i++) command.Parameters.AddWithValue("$" + i, values[i] ?? DBNull.Value);
         return command;
