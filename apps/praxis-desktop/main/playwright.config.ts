@@ -1,4 +1,41 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { defineConfig } from '@playwright/test';
+
+/**
+ * The smoke set: one or two spec files per product area, run by `npm test` and
+ * so by unattended governed-workflow test stages. It trades depth for speed and
+ * stability. Every file here must avoid hover, `page.mouse`, drag and
+ * `toHaveScreenshot` assertions. Those depend on the real pointer and pixels,
+ * and they fail when the suite shares a desktop with a person or with other
+ * test windows. Plain `screenshot({ path })` evidence captures are fine.
+ *
+ * The full functional suite (`npm run test:desktop`) is still the gate for a UI
+ * change.
+ */
+const SMOKE_SPECS = [
+  // App shell and settings
+  'app', 'commandPalette', 'keyboardFocus', 'settingsReset', 'windowState', 'terminal', 'backgroundTasks',
+  // Boards and backends (folder/edit/new is the folder-compatibility gate)
+  'folder', 'folderMulti', 'editIssue', 'newIssue', 'journey', 'boardFilters', 'issueDetail',
+  'github', 'gitlab', 'jira',
+  // Workspaces and projects
+  'savedWorkspaces', 'workspaceFile', 'importProjects',
+  // AI sessions and providers
+  'aiSessionMode', 'aiMcpServers', 'aiSessionTasks', 'aiSpendLimit', 'aiWorktree', 'cancelTurn',
+  'sessionRecovery', 'standaloneConversations', 'quickSession', 'aiProviderTabs', 'aiWorkflows',
+  // Workflow runs and scheduled runs
+  'workflowLoops', 'workflowAgentStage', 'workflowBuildStage', 'workflowInstallDeps', 'workflowRetryFailed',
+  'workflowPolicy', 'workflowReviewDiff', 'workflowTemplateAddon', 'scheduledProviderHandover', 'securityReviewRun',
+  // Code intelligence, git and other surfaces
+  'codeIntelligence', 'codeSearchDialog', 'gitGraph', 'gitOnboarding', 'quickCapture', 'whatChanged', 'mobileAccess'
+].map(name => `${name}.spec.ts`);
+
+// A renamed or deleted spec would silently drop out of the set, so fail loudly instead.
+const missingSmokeSpecs = SMOKE_SPECS.filter(file => !fs.existsSync(path.join(__dirname, 'e2e', file)));
+if (missingSmokeSpecs.length > 0) {
+  throw new Error(`playwright.config.ts: smoke spec(s) not found in e2e/: ${missingSmokeSpecs.join(', ')}`);
+}
 
 function configuredWorkers(): number {
   const explicit = Number.parseInt(process.env.PRAXIS_E2E_WORKERS ?? '', 10);
@@ -47,6 +84,14 @@ export default defineConfig({
         '**/*.live.spec.ts'
       ],
       grepInvert: /@theme/
+    },
+    {
+      name: 'smoke',
+      testMatch: SMOKE_SPECS.map(file => `**/${file}`),
+      grepInvert: /@theme/,
+      // One retry so a single slow Electron launch doesn't fail an unattended run.
+      // A test that fails twice is still a failure.
+      retries: 1
     },
     {
       name: 'themes',
