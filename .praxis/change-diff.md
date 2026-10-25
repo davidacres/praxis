@@ -106,6 +106,10 @@ QA reported failures in `autoUpdate.test.js`, `gitService.test.js`, `minimaxUsag
 
 The full implementation patch is preserved at `session-artifacts/change-diff.patch` for this recovery handoff.
 
+### Recovery iteration 3 (2026-10-25)
+
+QA reported five failing test files: `autoUpdate.test.js`, `gitService.test.js`, `minimaxUsage.test.js`, `ticketReviewApply.test.js`, and `windowBroadcast.test.js`. The exact `npm run test:git --workspace=@praxis/desktop-main` command was rerun. All five reported files passed; the restricted run instead failed four tests in `semanticModelDownload.test.js` because the sandbox denied binding local HTTP fixtures to `127.0.0.1` (`listen EPERM`). With local loopback access, the complete suite passed: 84 passed, 0 failed. No product-code repair was indicated; the finding was an execution-environment restriction.
+
 ## Risks
 
 - Allowance detection remains polling-based and can overshoot the threshold between readings.
