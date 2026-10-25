@@ -135,6 +135,26 @@ Status: Cancelled · Duration: 1h 21m
 - ⏭️ Deploy: cancelled
 
 Deleted by the user.
+
+**PRX-S47-148** — 2026-10-25T09:39:39.143Z
+**Workflow run cancelled: Full SDLC — Budget-aware sequential runner and audit trail**
+
+Status: Cancelled · Duration: 10h 38m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ Lint: failed
+- ❌ Type check: failed
+- ❌ Unit tests & coverage: failed
+- ❌ SAST scan: failed
+- ❌ Secret scan: failed
+- ❌ SCA scan: failed
+- ✅ Structured code review: succeeded
+- ⏭️ Deploy: cancelled
+
+The scheduled run was stopped.
 ## Delivery status (2026-10-24)
 
 The sequential runner and close warning are implemented and verified (TASK-385 and TASK-463 Done). Keep this story open for the ledger completeness and existing provider-handover-path gaps on TASK-386 and TASK-464. Runner unit tests and Electron checks prove queue order, recovery, budget pause and launch-failure/resume behavior, not full live-provider handover completion.
