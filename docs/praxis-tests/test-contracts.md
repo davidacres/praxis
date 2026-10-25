@@ -1,6 +1,6 @@
 # test-contracts
 
-Target: PRX-S47-148, frozen implementation `960e78c8fac778a40976ebca9f12bcca1dfc8acf`.
+Target: PRX-S47-148, frozen implementation `00ba06920e696caecae7908025e16e61b5f49988`.
 The checkout was clean and HEAD exactly matched the target before edits. Inspected
 `.praxis/change-diff.md`, its referenced implementation history, generator,
 existing catalog/report, scheduler tests, handover guard tests, root scripts and
@@ -11,9 +11,9 @@ below are freshly derived from the target, rather than copied from that report.
 ## Exact inventory and validation
 
 - **713 generated Playwright source contracts in 158 spec files**; **26 scheduling contracts** (25 scheduler, one provider handover).
-- **723 Playwright project executions discovered**, exit 0, no discovery errors, using `npx playwright test --list --reporter=json` in desktop-main. Discovery is not execution or a passing-test count.
+- **723 Playwright project executions discovered** (661 functional, 50 themes, one theme-regressions, 11 live-agent), exit 0, no discovery errors, using `npx playwright test --list --reporter=json` in desktop-main. Discovery is not execution or a passing-test count.
 - Zero duplicate generated IDs; zero duplicate source-file/title pairs.
-- Initial validator exited 0 but warned of **43 stale source-line links**. Regeneration repaired them without changing IDs or titles.
+- Initial validator exited 0 with no stale source-line warnings. The prior contract stage already repaired the 43 moved links; this snapshot retains those repairs.
 - `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write`: exit 0, 713 contracts, all 713 prior flows carried over.
 - Final `npm run test:praxis-contracts`: exit 0, **“Praxis Tests: 713 Playwright tests catalogued and linked.”** No line-drift warnings.
 - [Structured English catalog](catalog.json), [complete exact-source index](index.md).
@@ -25,7 +25,7 @@ monorepo automated execution count is not established by this generator.
 
 ## Curated contracts and acceptance coverage
 
-Two existing catalog flows were enriched in place; all identifiers are preserved.
+Two existing enriched catalog flows were checked against their assertions and retained unchanged; all identifiers are preserved.
 All Playwright automation below uses the `functional` project. Exact titles,
 runner, files and lines are retained in catalog.json.
 
@@ -76,7 +76,7 @@ Quit/minimise is indexed as **PT-6890A4393F**, Playwright
 
 ## Stale, ambiguous or incomplete evidence
 
-1. The prior companion report described a different snapshot and 695 contracts. Replaced here; 43 generated location hints were refreshed.
+1. The inherited companion report targeted `960e78c8`; updated to the required frozen snapshot. The catalog is already current: no stale links or duplicate IDs were found in this iteration.
 2. Generator labels every entry `functional`; theme and live-agent routing must be read from [playwright.config.ts](../../apps/praxis-desktop/main/playwright.config.ts). Project metadata remains inaccurate for those entries.
 3. Dynamic template titles and non-direct `test(...)` calls are not inventoried by this generator. The 713 count is the exact generated static inventory, not a claim of complete runtime case enumeration.
 4. Most generated flows remain generic fixture/assertion boilerplate. Shape validation does not prove behavioral precision. The generator now preserves curated prose: the old report's assertion that enrichment would fail validation was stale.
@@ -87,9 +87,33 @@ Quit/minimise is indexed as **PT-6890A4393F**, Playwright
 9. PT-8738E01F29 is opt-in visual capture. Catalog presence proves neither screenshot quality nor that capture ran.
 10. Validator checks generated identities and nonempty flows, but not prose truth, runtime success, Markdown freshness or all top-level schema fields. Regeneration also refreshes the Markdown index.
 
+## Returned QA findings: disposition
+
+The frozen `.praxis/change-diff.md` recovery section records an exact-command
+rerun of `npm run test:git --workspace=@praxis/desktop-main`, with **84 passed,
+0 failed** when loopback access was available. This is inherited implementation
+verification, not a fresh execution by this contract stage. The supplied QA
+excerpt contains file-level failures without underlying exception details, so
+it does not independently establish a common root cause for the five files.
+
+| Returned finding | Addressed in frozen implementation / remaining limit |
+| --- | --- |
+| `autoUpdate.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
+| `gitService.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
+| `minimaxUsage.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
+| `ticketReviewApply.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
+| `windowState.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
+
+The recovery also records four restricted-environment failures in
+`semanticModelDownload.test.js` from `listen EPERM` on `127.0.0.1`, followed by a
+permitted passing run. Referenced recovery command logs are absent from this
+snapshot's `.praxis/session-artifacts/` directory, which contains only the patch;
+therefore the recorded 84-pass recovery is not independently corroborated here.
+No tests were weakened, skipped or edited to address these findings.
+
 ## Handoff boundaries
 
-Only catalog, index and this report changed. No product/test code, workflow
+Only this report changed; deterministic catalog/index regeneration produced no changes. No product/test code, workflow
 configuration, tracker state or other stage was changed. No automated journeys
 were executed in this catalog stage, and no UI/visual verification was performed.
 Inherited test results in change-diff are historical evidence, not fresh passes.
