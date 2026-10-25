@@ -158,7 +158,7 @@ This catalogue describes **713 Playwright tests** under `apps/praxis-desktop/mai
 | PT-A5306CD7F1 | ai Workflows | local peer review runs the three sections against the gateway | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:471` |
 | PT-3F16D9601E | ai Workflows | merge requests list empty, then create after a delivery recorded a branch | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:524` |
 | PT-CBE42CD885 | ai Worktree | a worktree session creates the branch + checkout and the console can remove it | `apps/praxis-desktop/main/e2e/aiWorktree.spec.ts:55` |
-| PT-46C81218A5 | alibaba Coding Plan Usage | Coding Plan quota is read through the Praxis-hosted Alibaba console sign-in | `apps/praxis-desktop/main/e2e/alibabaCodingPlanUsage.spec.ts:77` |
+| PT-46C81218A5 | alibaba Coding Plan Usage | Coding Plan quota is read through the Praxis-hosted Alibaba console sign-in | `apps/praxis-desktop/main/e2e/alibabaCodingPlanUsage.spec.ts:78` |
 | PT-67A9D74A51 | alibaba Provider | Alibaba Model Studio presets carry paired base URLs, key help and the Alibaba Cloud mark | `apps/praxis-desktop/main/e2e/alibabaProvider.spec.ts:9` |
 | PT-142C2B7A1B | app | groups all layout toggles on the right side of the title bar | `apps/praxis-desktop/main/e2e/app.spec.ts:19` |
 | PT-865C5ABA3C | app | focus mode button in titlebar is available in a session and toggles panels | `apps/praxis-desktop/main/e2e/app.spec.ts:36` |
@@ -461,11 +461,11 @@ This catalogue describes **713 Playwright tests** under `apps/praxis-desktop/mai
 | PT-E65F2B46F5 | quick Session | the title-bar quick session opens the composer scoped to the current project with quick-change ready | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:61` |
 | PT-515B50E6B1 | quick Session | a project session action scopes the composer to that project | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:102` |
 | PT-4B8B596B62 | quick Session | draft and existing sessions share the composer frame and input layout | `apps/praxis-desktop/main/e2e/quickSession.spec.ts:168` |
-| PT-AAC7A98AEE | saved Workspaces | project creation requires a valid workspace and assigns the first project as default | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:21` |
-| PT-E4A652D7E0 | saved Workspaces | deleting the active workspace returns to Getting Started without deleting projects | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:42` |
-| PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
-| PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:69` |
-| PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:79` |
+| PT-AAC7A98AEE | saved Workspaces | project creation requires a valid workspace and assigns the first project as default | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:22` |
+| PT-E4A652D7E0 | saved Workspaces | deleting the active workspace returns to Getting Started without deleting projects | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:43` |
+| PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:59` |
+| PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:70` |
+| PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:80` |
 | PT-F32409778D | scheduled Provider Handover | scheduled allowance handover checkpoints and continues the active stage in the same session | `apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts:21` |
 | PT-8DC4807D76 | scheduled Runs | builds a schedule on the belt, saves it, and it survives a restart in the same order | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:91` |
 | PT-20627BB23E | scheduled Runs | edit, schedule, hold and delete a schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:151` |
@@ -633,30 +633,30 @@ This catalogue describes **713 Playwright tests** under `apps/praxis-desktop/mai
 | PT-01868F6849 | workflow Build Stage | a governed run refuses a dirty product checkout instead of testing an older committed snapshot | `apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts:110` |
 | PT-E0ECD22131 | workflow Build Stage | a build stage produces the output in the run's worktree, so QA passes — and the main checkout gets none | `apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts:131` |
 | PT-F75C48C431 | workflow Build Stage | a project with no build script is not failed by the build stage having nothing to say | `apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts:143` |
-| PT-DC013E489D | workflow Designer | creates a workflow from a template, edits a stage in the right pane, and persists it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:93` |
-| PT-E049A4DE12 | workflow Designer | blocks save while the graph is invalid and announces the errors | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:124` |
-| PT-37B15BC378 | workflow Designer | the canvas moves a stage with the keyboard and selects it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:140` |
-| PT-2576004142 | workflow Designer | auto arrange lays out workflow stages in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:158` |
-| PT-0B66AF09D4 | workflow Designer | auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:199` |
-| PT-5AFE08A88C | workflow Designer | edge badge shows condition tooltip and opens edge inspector in sidebar when clicked | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:238` |
-| PT-81DBC1358A | workflow Designer | workflow nodes display distinct green success and red failure handles and color-code connector strokes | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:254` |
-| PT-814CF4A563 | workflow Designer | nudging a stage past the canvas edge clamps its position instead of losing it off-screen | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:278` |
-| PT-D7BA2AF937 | workflow Designer | builds an agent handoff stage from the palette and attaches a specialist skill | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:296` |
-| PT-B1FCE4E164 | workflow Designer | a folder-backed project commits its workflow to .praxis/workflows and reloads it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:323` |
-| PT-C90D5C8EDD | workflow Designer | instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:374` |
-| PT-9B225D3890 | workflow Designer | validates workflow connections, flow, and configuration via validate workflow button | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:403` |
-| PT-4B8346DC79 | workflow Designer | clicking a connection on the canvas selects it and deletes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:455` |
-| PT-D0F572C234 | workflow Designer | selecting a connection and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:476` |
-| PT-2CBC383956 | workflow Designer | clicking delete on an agent task removes it from the canvas | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:493` |
-| PT-1748C28492 | workflow Designer | selecting an agent task and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:507` |
-| PT-AA92BCD6EA | workflow Designer | a stage can run on its own AI and model, chosen from the AIs that are set up | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:522` |
-| PT-91A53C6CCE | workflow Designer | stage skills are added from the picker dialog and removed from their chip | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:576` |
-| PT-FA495A15F3 | workflow Designer | a connection selected on the canvas is edited in the inspector, with no separate tab | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:603` |
-| PT-05295BB166 | workflow Designer | floating toolbar provides stage tools, canvas tools, and deletion | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:626` |
-| PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:695` |
-| PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:730` |
-| PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:853` |
-| PT-F895248CB0 | workflow Designer | walks the workflow designer, rings each area, and directs the user through all steps | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:922` |
+| PT-DC013E489D | workflow Designer | creates a workflow from a template, edits a stage in the right pane, and persists it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:94` |
+| PT-E049A4DE12 | workflow Designer | blocks save while the graph is invalid and announces the errors | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:125` |
+| PT-37B15BC378 | workflow Designer | the canvas moves a stage with the keyboard and selects it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:141` |
+| PT-2576004142 | workflow Designer | auto arrange lays out workflow stages in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:159` |
+| PT-0B66AF09D4 | workflow Designer | auto arrange vertical lays out workflow stages top to bottom in dependency order without overlap | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:201` |
+| PT-5AFE08A88C | workflow Designer | edge badge shows condition tooltip and opens edge inspector in sidebar when clicked | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:241` |
+| PT-81DBC1358A | workflow Designer | workflow nodes display distinct green success and red failure handles and color-code connector strokes | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:257` |
+| PT-814CF4A563 | workflow Designer | nudging a stage past the canvas edge clamps its position instead of losing it off-screen | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:281` |
+| PT-D7BA2AF937 | workflow Designer | builds an agent handoff stage from the palette and attaches a specialist skill | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:299` |
+| PT-B1FCE4E164 | workflow Designer | a folder-backed project commits its workflow to .praxis/workflows and reloads it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:326` |
+| PT-C90D5C8EDD | workflow Designer | instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:377` |
+| PT-9B225D3890 | workflow Designer | validates workflow connections, flow, and configuration via validate workflow button | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:406` |
+| PT-4B8346DC79 | workflow Designer | clicking a connection on the canvas selects it and deletes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:458` |
+| PT-D0F572C234 | workflow Designer | selecting a connection and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:479` |
+| PT-2CBC383956 | workflow Designer | clicking delete on an agent task removes it from the canvas | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:496` |
+| PT-1748C28492 | workflow Designer | selecting an agent task and pressing Delete key removes it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:510` |
+| PT-AA92BCD6EA | workflow Designer | a stage can run on its own AI and model, chosen from the AIs that are set up | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:525` |
+| PT-91A53C6CCE | workflow Designer | stage skills are added from the picker dialog and removed from their chip | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:579` |
+| PT-FA495A15F3 | workflow Designer | a connection selected on the canvas is edited in the inspector, with no separate tab | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:606` |
+| PT-05295BB166 | workflow Designer | floating toolbar provides stage tools, canvas tools, and deletion | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:629` |
+| PT-693476E991 | workflow Designer | clicking and dragging on the designer surface pans the canvas without changing zoom | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:698` |
+| PT-7AF3949BE5 | workflow Designer | floating toolbar provides agent and skill submenus with scrolling list, icon, and text | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:733` |
+| PT-44E72F938B | workflow Designer | submenu displays search box when items exceed 10, filters real-time, and clears on escape or button click | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:856` |
+| PT-F895248CB0 | workflow Designer | walks the workflow designer, rings each area, and directs the user through all steps | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:925` |
 | PT-2CA87FB459 | workflow Environment Pause | a registry that cannot audit pauses the run instead of failing it; siblings finish and Resume completes it | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:126` |
 | PT-4B8D3275C8 | workflow Environment Pause | a genuine audit finding still fails the run, and the sibling it left running is stopped and recorded | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:175` |
 | PT-F5764CCA2F | workflow Install Deps | without an install stage a fresh run worktree cannot load the dependency, so QA fails — however good the change is | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:111` |
@@ -675,19 +675,19 @@ This catalogue describes **713 Playwright tests** under `apps/praxis-desktop/mai
 | PT-9BA804745D | workflow Policy | a global policy composes strictest-wins with a project policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:77` |
 | PT-3C3795C3D1 | workflow Retry Failed | a failed step on a failed run has a retry icon button that reopens the run | `apps/praxis-desktop/main/e2e/workflowRetryFailed.spec.ts:97` |
 | PT-BFED3B2E58 | workflow Review Diff | a read-only review stage is handed the whole implementation patch as a file | `apps/praxis-desktop/main/e2e/workflowReviewDiff.spec.ts:77` |
-| PT-5E977102C0 | workflow Run | runs the governed pipeline: parallel branches converge, then approval unlocks | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:109` |
-| PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:152` |
-| PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:164` |
-| PT-9E73225070 | workflow Run | a deterministic check runs on its own in the run worktree and unblocks approval | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:202` |
-| PT-354EF7395F | workflow Run | a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:290` |
-| PT-0BDE1D2468 | workflow Run | approving one of two simultaneously-awaiting approval nodes never touches the other | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:405` |
-| PT-5421ABC27D | workflow Run | the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:513` |
-| PT-AA73D62E79 | workflow Run | the run monitor reflects an unattended run as the orchestrator drives it | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:684` |
-| PT-8EEB06754D | workflow Run | a run started against a ticket writes its outcome back as a comment once it settles | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:706` |
-| PT-7CC1A86833 | workflow Run | a write-back that fails is visible in the Output tab, not just the main-process console | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:827` |
-| PT-519C8E31CC | workflow Run | a check that outruns its timeout is failed with a stated reason | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:859` |
-| PT-897905ACD7 | workflow Run | the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:878` |
-| PT-718FF673F2 | workflow Run | the stage detail panel shows the empty state for a check that produced no output | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:916` |
+| PT-5E977102C0 | workflow Run | runs the governed pipeline: parallel branches converge, then approval unlocks | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:112` |
+| PT-9FE32CECFE | workflow Run | a run can be cancelled from the monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:155` |
+| PT-5A88D7A45B | workflow Run | completed stages are not re-run after an app restart | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:167` |
+| PT-9E73225070 | workflow Run | a deterministic check runs on its own in the run worktree and unblocks approval | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:205` |
+| PT-354EF7395F | workflow Run | a gate the workflow allows bypassing, but no policy has granted, explains why in the run monitor | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:293` |
+| PT-0BDE1D2468 | workflow Run | approving one of two simultaneously-awaiting approval nodes never touches the other | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:408` |
+| PT-5421ABC27D | workflow Run | the run monitor shows one Approve button per simultaneously-awaiting approval node, each targeting its own | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:516` |
+| PT-AA73D62E79 | workflow Run | the run monitor reflects an unattended run as the orchestrator drives it | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:687` |
+| PT-8EEB06754D | workflow Run | a run started against a ticket writes its outcome back as a comment once it settles | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:709` |
+| PT-7CC1A86833 | workflow Run | a write-back that fails is visible in the Output tab, not just the main-process console | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:830` |
+| PT-519C8E31CC | workflow Run | a check that outruns its timeout is failed with a stated reason | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:862` |
+| PT-897905ACD7 | workflow Run | the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:881` |
+| PT-718FF673F2 | workflow Run | the stage detail panel shows the empty state for a check that produced no output | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:919` |
 | PT-13ACC04A37 | workflow Run Work | the delete confirm says what work the run has, and deleting the run keeps its branch by default | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:100` |
 | PT-5CE920C30E | workflow Run Work | ticking the option deletes the run's branch and worktree too — and only those | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:135` |
 | PT-4F95DF8F4A | workflow Run Work | cancelling the confirm deletes nothing | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:156` |

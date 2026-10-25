@@ -2475,7 +2475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/alibabaCodingPlanUsage.spec.ts",
-        "line": 77,
+        "line": 78,
         "project": "functional"
       },
       "area": "alibaba Coding Plan Usage",
@@ -7323,7 +7323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts",
-        "line": 21,
+        "line": 22,
         "project": "functional"
       },
       "area": "saved Workspaces",
@@ -7339,7 +7339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts",
-        "line": 42,
+        "line": 43,
         "project": "functional"
       },
       "area": "saved Workspaces",
@@ -7355,7 +7355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts",
-        "line": 58,
+        "line": 59,
         "project": "functional"
       },
       "area": "saved Workspaces",
@@ -7371,7 +7371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts",
-        "line": 69,
+        "line": 70,
         "project": "functional"
       },
       "area": "saved Workspaces",
@@ -7387,7 +7387,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts",
-        "line": 79,
+        "line": 80,
         "project": "functional"
       },
       "area": "saved Workspaces",
@@ -7408,9 +7408,9 @@
       },
       "area": "scheduled Provider Handover",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "scheduled allowance handover checkpoints and continues the active stage in the same session",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated Electron app with a temporary Git repository, a held mock gateway stage, fixture ACP provider below its allowance, and a scheduled single-ticket workflow ending at approval",
+        "when": "the active stage worktree gains checkpoint.txt and gateway usage changes from 10% to 95%",
+        "then": "one handover records 95% and a checkpoint containing checkpoint.txt; workflow and session identity are preserved, provider becomes codex-cli, the handover brief revision increases, the workflow reaches awaiting-approval and scheduled outcome artifacts are collected"
       }
     },
     {
@@ -7664,9 +7664,9 @@
       },
       "area": "scheduled Runs",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "a due schedule starts by itself, and a provider at its allowance pauses it before anything launches",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a persisted two-ticket schedule made overdue while the app is closed and a mock provider reporting 97% usage",
+        "when": "the app reopens into Missed and the user chooses Start now and opens the monitor",
+        "then": "the run pauses for budget before any workflow launches, the monitor displays the 95% threshold and 97% usage with two queued tickets, and confirmed Stop produces a skipped report"
       }
     },
     {
@@ -10075,7 +10075,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 93,
+        "line": 94,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10091,7 +10091,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 124,
+        "line": 125,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10107,7 +10107,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 140,
+        "line": 141,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10123,7 +10123,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 158,
+        "line": 159,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10139,7 +10139,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 199,
+        "line": 201,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10155,7 +10155,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 238,
+        "line": 241,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10171,7 +10171,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 254,
+        "line": 257,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10187,7 +10187,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 278,
+        "line": 281,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10203,7 +10203,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 296,
+        "line": 299,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10219,7 +10219,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 323,
+        "line": 326,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10235,7 +10235,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 374,
+        "line": 377,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10251,7 +10251,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 403,
+        "line": 406,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10267,7 +10267,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 455,
+        "line": 458,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10283,7 +10283,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 476,
+        "line": 479,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10299,7 +10299,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 493,
+        "line": 496,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10315,7 +10315,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 507,
+        "line": 510,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10331,7 +10331,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 522,
+        "line": 525,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10347,7 +10347,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 576,
+        "line": 579,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10363,7 +10363,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 603,
+        "line": 606,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10379,7 +10379,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 626,
+        "line": 629,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10395,7 +10395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 695,
+        "line": 698,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10411,7 +10411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 730,
+        "line": 733,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10427,7 +10427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 853,
+        "line": 856,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10443,7 +10443,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts",
-        "line": 922,
+        "line": 925,
         "project": "functional"
       },
       "area": "workflow Designer",
@@ -10747,7 +10747,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 109,
+        "line": 112,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10763,7 +10763,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 152,
+        "line": 155,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10779,7 +10779,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 164,
+        "line": 167,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10795,7 +10795,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 202,
+        "line": 205,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10811,7 +10811,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 290,
+        "line": 293,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10827,7 +10827,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 405,
+        "line": 408,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10843,7 +10843,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 513,
+        "line": 516,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10859,7 +10859,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 684,
+        "line": 687,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10875,7 +10875,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 706,
+        "line": 709,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10891,7 +10891,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 827,
+        "line": 830,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10907,7 +10907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 859,
+        "line": 862,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10923,7 +10923,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 878,
+        "line": 881,
         "project": "functional"
       },
       "area": "workflow Run",
@@ -10939,7 +10939,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRun.spec.ts",
-        "line": 916,
+        "line": 919,
         "project": "functional"
       },
       "area": "workflow Run",
