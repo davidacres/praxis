@@ -923,11 +923,12 @@ test('automation rows have rename, archive, delete and run actions like a sessio
   const recordedCalls = () => app!.electronApp.evaluate(() => (globalThis as { __runCalls?: unknown[] }).__runCalls ?? []);
 
   await win.reload();
-  const row = win.locator('[data-testid="easymode-run-run-actions"]');
+  const automationCard = win.locator('[data-testid="easymode-run-run-actions"]');
+  const row = automationCard.locator('.easymode-automation-row');
   await expect(row).toBeVisible();
 
   // Hover-only overlay: hidden at rest, no room taken from the title, hidden again after a click once the pointer leaves
-  const rowActions = row.locator('.easymode-automation-row__actions');
+  const rowActions = automationCard.locator('.easymode-automation-row__actions');
   const rowTitle = row.locator('.easymode-automation-row__title');
   await win.mouse.move(0, 0);
   await expect.poll(() => opacityOf(rowActions)).toBe('0');
@@ -935,7 +936,7 @@ test('automation rows have rename, archive, delete and run actions like a sessio
   await row.hover();
   await expect.poll(() => opacityOf(rowActions)).toBe('1');
   expect((await rowTitle.boundingBox())!.width).toBeCloseTo(restingTitleWidth, 0);
-  await row.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
+  await row.click({ position: { x: 20, y: 10 } });
   await win.mouse.move(0, 0);
   await expect.poll(() => opacityOf(rowActions)).toBe('0');
   await row.hover();

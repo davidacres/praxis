@@ -119,3 +119,13 @@ QA reported five failing test files: `autoUpdate.test.js`, `gitService.test.js`,
 - No workflow definitions, tracker statuses, approvals or other delivery stages were changed. No push or deployment performed.
 
 Full command logs are retained in `session-artifacts/` alongside the inspected screenshot.
+
+### Recovery iteration 5 (2026-10-25)
+
+QA finding addressed: the test hovered the outer `.easymode-automation-card`, while CSS reveals actions from `.easymode-automation-row:hover`. The test now scopes hover and click to that styled child, preserving the hidden-at-rest, visible-on-hover, stable-title-width, and action behavior assertions. No production CSS change was needed.
+
+- Focused Electron Playwright test passed: 1 passed, 0 failed.
+- `git diff --check` passed.
+- The first sandboxed test attempt stopped before assertions because Electron could not bind `127.0.0.1` (`listen EPERM`). The focused test passed when rerun with loopback access.
+- The resulting sidebar screenshot is preserved at `session-artifacts/easymode-automation-row-actions.png`.
+- The recovery patch is [change-diff-recovery.patch](session-artifacts/change-diff-recovery.patch).
