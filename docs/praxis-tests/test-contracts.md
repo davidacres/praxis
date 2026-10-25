@@ -1,6 +1,6 @@
 # test-contracts
 
-Target: PRX-S47-148, frozen implementation `00ba06920e696caecae7908025e16e61b5f49988`.
+Target: PRX-S47-148, frozen implementation `fc1c5ca0a0abfb169eea7bbc781d4f8acb5cf5f7`.
 The checkout was clean and HEAD exactly matched the target before edits. Inspected
 `.praxis/change-diff.md`, its referenced implementation history, generator,
 existing catalog/report, scheduler tests, handover guard tests, root scripts and
@@ -76,7 +76,7 @@ Quit/minimise is indexed as **PT-6890A4393F**, Playwright
 
 ## Stale, ambiguous or incomplete evidence
 
-1. The inherited companion report targeted `960e78c8`; updated to the required frozen snapshot. The catalog is already current: no stale links or duplicate IDs were found in this iteration.
+1. The inherited companion report targeted `00ba06920e696caecae7908025e16e61b5f49988`; updated to the required frozen snapshot. The catalog is already current: no stale links or duplicate IDs were found in this iteration.
 2. Generator labels every entry `functional`; theme and live-agent routing must be read from [playwright.config.ts](../../apps/praxis-desktop/main/playwright.config.ts). Project metadata remains inaccurate for those entries.
 3. Dynamic template titles and non-direct `test(...)` calls are not inventoried by this generator. The 713 count is the exact generated static inventory, not a claim of complete runtime case enumeration.
 4. Most generated flows remain generic fixture/assertion boilerplate. Shape validation does not prove behavioral precision. The generator now preserves curated prose: the old report's assertion that enrichment would fail validation was stale.
@@ -89,10 +89,12 @@ Quit/minimise is indexed as **PT-6890A4393F**, Playwright
 
 ## Returned QA findings: disposition
 
-The frozen `.praxis/change-diff.md` recovery section records an exact-command
+The frozen `.praxis/change-diff.md` recovery iteration 3 section records an exact-command
 rerun of `npm run test:git --workspace=@praxis/desktop-main`, with **84 passed,
 0 failed** when loopback access was available. This is inherited implementation
-verification, not a fresh execution by this contract stage. The supplied QA
+verification, not a fresh execution by this contract stage. Iterations 1 and 2 supplied no actionable findings beyond npm exit 1; their
+root causes cannot be established from those excerpts. Iteration 3 supplies
+the five file-level failures dispositioned below. The supplied QA
 excerpt contains file-level failures without underlying exception details, so
 it does not independently establish a common root cause for the five files.
 
@@ -102,7 +104,7 @@ it does not independently establish a common root cause for the five files.
 | `gitService.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
 | `minimaxUsage.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
 | `ticketReviewApply.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
-| `windowState.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
+| `windowBroadcast.test.js` failed | Recovery records this file passing in the exact-command rerun; no product change was made. Not rerun in this stage. |
 
 The recovery also records four restricted-environment failures in
 `semanticModelDownload.test.js` from `listen EPERM` on `127.0.0.1`, followed by a
@@ -110,6 +112,23 @@ permitted passing run. Referenced recovery command logs are absent from this
 snapshot's `.praxis/session-artifacts/` directory, which contains only the patch;
 therefore the recorded 84-pass recovery is not independently corroborated here.
 No tests were weakened, skipped or edited to address these findings.
+
+## Architecture and scope analysis
+
+Core scheduled-run domain, budget, runner and store modules own durable queue
+state and decisions. Electron scheduledRunRunnerInstance supplies workflow launch,
+live observations and provider handover ports; scheduledRunLive adds usage,
+estimates and artifact observations. The stage handover guard keeps intentional
+interruption from settling the active workflow waiter. Exact regression links
+above cover these boundaries through fake ports or isolated Electron fixtures.
+The supplied patch and current assertions were inspected before edits.
+
+The implementation plan for this stage was to verify snapshot identity, audit
+source contracts and project discovery, preserve existing curated flows and IDs,
+refresh this companion report, regenerate deterministically, and validate.
+Only docs/praxis-tests/test-contracts.md required an edit; catalog.json and
+index.md regeneration produced no changes. No generator expansion or test repair
+is required to describe the snapshot accurately.
 
 ## Handoff boundaries
 
