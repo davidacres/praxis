@@ -155,6 +155,20 @@ Status: Cancelled · Duration: 10h 38m
 - ⏭️ Deploy: cancelled
 
 The scheduled run was stopped.
+
+**PRX-S47-148** — 2026-10-25T20:21:37.334Z
+**Workflow run succeeded: Governed delivery — Budget-aware sequential runner and audit trail**
+
+Status: Succeeded · Duration: 10h 18m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ✅ QA: succeeded
+- ✅ Security scan: succeeded
 ## Delivery status (2026-10-24)
 
 The sequential runner and close warning are implemented and verified (TASK-385 and TASK-463 Done). Keep this story open for the ledger completeness and existing provider-handover-path gaps on TASK-386 and TASK-464. Runner unit tests and Electron checks prove queue order, recovery, budget pause and launch-failure/resume behavior, not full live-provider handover completion.
