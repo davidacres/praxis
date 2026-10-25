@@ -254,12 +254,14 @@ and fails on drift. Copies, not symlinks, so Windows checkouts work.
 
 ## Build and test
 
-Root scripts are prefixed by the surface they act on. `build` and `test` with no
-prefix run **everything**, in dependency order.
+Root scripts are prefixed by the surface they act on. `build` runs **everything**,
+in dependency order. `test` runs every unit suite but only the e2e **smoke** set.
+`test:full` runs everything, including the full functional and theme e2e suites.
 
 ```bash
 npm run build          # core -> renderer -> copy-renderer -> desktop
-npm run test           # test:core, test:desktop
+npm run test           # all unit suites + test:desktop:smoke (governed workflows run this)
+npm run test:full      # all unit suites + test:desktop + test:desktop:themes
 npm run check-types    # every workspace
 
 # or one surface at a time
@@ -269,9 +271,18 @@ npm run desktop:copy-renderer   # REQUIRED before e2e
 npm run build:desktop
 
 npm run test:core             # node:test
-npm run test:desktop          # Playwright e2e
+npm run test:desktop          # Playwright e2e, full functional suite
+npm run test:desktop:smoke    # Playwright e2e, smoke set (~185 tests)
 npm run test:desktop:git      # gitService unit tests
 ```
+
+**The smoke set** (`SMOKE_SPECS` in `apps/praxis-desktop/main/playwright.config.ts`)
+covers each product area with one or two spec files and no theme tests. It is
+what unattended workflow runs use. A spec in it must not use hover,
+`page.mouse`, drag or `toHaveScreenshot`. Those depend on the real pointer and
+pixels, and fail when the suite shares a desktop with a person or with other
+test windows. The config throws if a listed file is missing. The smoke set does
+not replace `test:desktop` for a UI change.
 
 **The e2e suite loads the pre-built renderer** from `apps/praxis-desktop/main/renderer/`, not
 a dev server. A frontend change is invisible to e2e until you rebuild **and** run
