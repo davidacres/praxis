@@ -1,6 +1,6 @@
 # test-contracts
 
-Target: PRX-S47-148, frozen implementation `4de9ceb40d76f3c9ae714c55f4d7b906b996f94f`.
+Target: PRX-S47-148, frozen implementation `a8d574e71021b427576e4461882280d6ce199039`.
 The checkout was clean and HEAD exactly matched the target before edits. Inspected
 `.praxis/change-diff.md`, its referenced implementation history, generator,
 existing catalog/report, scheduler tests, handover guard tests, root scripts and
@@ -13,7 +13,7 @@ below are freshly derived from the target, rather than copied from that report.
 - **713 generated Playwright source contracts in 158 spec files**; **26 scheduling contracts** (25 scheduler, one provider handover).
 - **723 Playwright project executions discovered** (661 functional, 50 themes, one theme-regressions, 11 live-agent), exit 0, no discovery errors, using `npx playwright test --list --reporter=json` in desktop-main. Discovery is not execution or a passing-test count.
 - Zero duplicate generated IDs; zero duplicate source-file/title pairs.
-- Initial validator exited 0 with no stale source-line warnings. The prior contract stage already repaired the 43 moved links; this snapshot retains those repairs.
+- Initial validator exited 0 but warned of five moved Easy Mode source links (PT-C7547B818D, PT-D6E1059F2C, PT-2516802E6F, PT-21C54F260E, PT-BD3466D9E5). Regeneration refreshed all five without changing IDs.
 - `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write`: exit 0, 713 contracts, all 713 prior flows carried over.
 - Final `npm run test:praxis-contracts`: exit 0, **“Praxis Tests: 713 Playwright tests catalogued and linked.”** No line-drift warnings.
 - [Structured English catalog](catalog.json), [complete exact-source index](index.md).
@@ -25,7 +25,7 @@ monorepo automated execution count is not established by this generator.
 
 ## Curated contracts and acceptance coverage
 
-Two existing enriched catalog flows were checked against their assertions and retained unchanged; all identifiers are preserved.
+Two existing enriched scheduling flows were retained. PT-ED816D0823 was enriched against its recovered assertions; all identifiers are preserved.
 All Playwright automation below uses the `functional` project. Exact titles,
 runner, files and lines are retained in catalog.json.
 
@@ -76,7 +76,7 @@ Quit/minimise is indexed as **PT-6890A4393F**, Playwright
 
 ## Stale, ambiguous or incomplete evidence
 
-1. The inherited companion report targeted `fc1c5ca0a0abfb169eea7bbc781d4f8acb5cf5f7`; updated to the required frozen snapshot. The catalog is already current: no stale links or duplicate IDs were found in this iteration.
+1. The inherited report targeted `4de9ceb40d76f3c9ae714c55f4d7b906b996f94f`; updated to the required frozen snapshot. Five moved source links were refreshed. No duplicate IDs or file/title pairs were found.
 2. Generator labels every entry `functional`; theme and live-agent routing must be read from [playwright.config.ts](../../apps/praxis-desktop/main/playwright.config.ts). Project metadata remains inaccurate for those entries.
 3. Dynamic template titles and non-direct `test(...)` calls are not inventoried by this generator. The 713 count is the exact generated static inventory, not a claim of complete runtime case enumeration.
 4. Most generated flows remain generic fixture/assertion boilerplate. Shape validation does not prove behavioral precision. The generator now preserves curated prose: the old report's assertion that enrichment would fail validation was stale.
@@ -89,32 +89,28 @@ Quit/minimise is indexed as **PT-6890A4393F**, Playwright
 
 ## Returned QA findings: disposition
 
-The frozen implementation adds `pretest:git: node -e "require('electron')"`
-in desktop-main/package.json. This resolves Electron before Node test workers
-start; it does not exercise application behavior or prove the cause of earlier
-worker failures. The provided QA excerpts omit their underlying exceptions.
-Iterations 1–3 report npm exit 1 without actionable root-cause evidence;
-no causal diagnosis can be established for those iterations from the excerpts.
+- Iterations 1, 2, 3 and 4: each supplied only npm exit 1 with no findings or underlying exception. They cannot be causally diagnosed from those excerpts; no unrelated repair was made in this stage.
+- Iteration 5: opacity remained 0 when the test hovered the outer automation card. Frozen commit `a8d574e7` changes hover/click to the styled `.easymode-automation-row` child; CSS reveals actions through that child's `:hover` selector. The opacity, unchanged-title-width and action assertions remain intact. The implementation change-diff records a focused pass with loopback access after a sandbox EPERM attempt. That is inherited runtime evidence, not a fresh run in this contract stage.
 
-Fresh command: `npm run test:git --workspace=@praxis/desktop-main` exited **1**.
-Compilation and the new preload hook succeeded. The suite recorded **80 passed,
-4 failed, 84 total**. All four failures were local HTTP fixture binds in
-`semanticModelDownload.test.js`: `listen EPERM: operation not permitted 127.0.0.1`.
-No retry or unrelated repair was attempted in this catalog stage.
-Full [command log](../../.praxis/session-artifacts/test-contracts-test-git.log).
+### PT-ED816D0823 — recovered automation-row contract
 
-| Iteration 4 returned finding | Current disposition |
-| --- | --- |
-| `gitService.test.js` failed | Passed in the fresh exact-command rerun; no test or product repair in this stage. Earlier failure cause remains unproven. |
-| `minimaxUsage.test.js` failed | Passed in the fresh exact-command rerun; no test or product repair in this stage. Earlier failure cause remains unproven. |
-| `ticketReviewApply.test.js` failed | Passed in the fresh exact-command rerun; no test or product repair in this stage. Earlier failure cause remains unproven. |
-| `windowBroadcast.test.js` failed | Passed in the fresh exact-command rerun; no test or product repair in this stage. Earlier failure cause remains unproven. |
-| `windowState.test.js` failed | Passed in the fresh exact-command rerun; no test or product repair in this stage. Earlier failure cause remains unproven. |
+Automation: Playwright, functional,
+[easymode.spec.ts:874](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L874),
+“automation rows have rename, archive, delete and run actions like a session row”.
 
-Historical recovery reports mention 84 passing tests with loopback access; those
-results are inherited evidence and do not replace this stage's failing rerun.
-The remaining environment failure means the broad Node suite is not green here.
-No tests were weakened, skipped or edited to address the findings.
+**Given** an isolated Easy Mode app with a mocked succeeded Nightly Audit run and
+recording rename/archive/delete IPC handlers. **When** its styled row is hovered,
+clicked and left, then rename, archive and delete are used. **Then** actions reveal
+without shrinking the title and hide after the pointer leaves; all four controls
+are visible; Enter saves Weekly Audit; archive sends true; delete sends
+`deleteWork: false` only after confirmation. The run control is not clicked:
+this title does not establish run execution or real persistence of mocked mutations.
+The catalog now records these exact limits rather than generic boilerplate.
+
+No runtime suite was executed in this contract stage; fresh evidence consists of
+source inspection, Playwright discovery and deterministic catalog validation.
+Earlier report test:git results belong to an older stage and were removed from
+the current-results section to avoid attributing them to this snapshot audit.
 
 ## Architecture and scope analysis
 
@@ -129,16 +125,13 @@ The supplied patch and current assertions were inspected before edits.
 The implementation plan for this stage was to verify snapshot identity, audit
 source contracts and project discovery, preserve existing curated flows and IDs,
 refresh this companion report, regenerate deterministically, and validate.
-Only docs/praxis-tests/test-contracts.md and the retained command log required updates; catalog.json and
-index.md regeneration produced no changes. No generator expansion or test repair
+The report, catalog flow and five moved catalog/index links required updates. No generator expansion or test repair
 is required to describe the snapshot accurately.
 
 ## Handoff boundaries
 
-This report and its retained command log are the stage artifacts; deterministic
-catalog/index regeneration produced no changes. No product/test code, workflow
-configuration, tracker state or other stage was changed. Node test execution is
-reported above; Playwright discovery did not execute journeys. No UI changes or
-visual verification were performed. The required artifact is this **test-contracts**
-report. Catalog validation passes; broad QA remains limited by the recorded
-sandbox loopback failures.
+The required **test-contracts** report is this file. Catalog and index updates
+are documentation only. No product/test code, workflow configuration, tracker
+state or other stage was changed. Discovery did not execute journeys. No UI
+changes or visual verification were performed in this stage. Runtime success
+is not claimed by catalog validation.

@@ -334,11 +334,11 @@ This catalogue describes **713 Playwright tests** under `apps/praxis-desktop/mai
 | PT-797C06EBE5 | easymode | opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions | `apps/praxis-desktop/main/e2e/easymode.spec.ts:642` |
 | PT-8C982E7F97 | easymode | automation stage sessions appear nested under automation and are excluded from sessions list | `apps/praxis-desktop/main/e2e/easymode.spec.ts:739` |
 | PT-ED816D0823 | easymode | automation rows have rename, archive, delete and run actions like a session row | `apps/praxis-desktop/main/e2e/easymode.spec.ts:874` |
-| PT-C7547B818D | easymode | classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree | `apps/praxis-desktop/main/e2e/easymode.spec.ts:974` |
-| PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1104` |
-| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1277` |
-| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1499` |
-| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1645` |
+| PT-C7547B818D | easymode | classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree | `apps/praxis-desktop/main/e2e/easymode.spec.ts:975` |
+| PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1105` |
+| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1278` |
+| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1500` |
+| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1646` |
 | PT-60D8BF1214 | edit Issue | editing a live folder issue writes the priority back to markdown | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:108` |
 | PT-B5CC8CC324 | edit Issue | changing a folder ticket parent moves it to the selected feature | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:143` |
 | PT-AB88717169 | folder | folder board lists the fixture feature task | `apps/praxis-desktop/main/e2e/folder.spec.ts:64` |

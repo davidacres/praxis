@@ -5280,9 +5280,9 @@
       },
       "area": "easymode",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "automation rows have rename, archive, delete and run actions like a session row",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated Easy Mode Electron app with a project, a mocked succeeded Nightly Audit workflow run, and recorded rename/archive/delete IPC handlers",
+        "when": "the styled automation row is hovered, clicked and left, then its rename, archive and delete controls are used",
+        "then": "actions change opacity from 0 to 1 on hover without changing title width and hide after the pointer leaves; all four controls are visible; Enter saves Weekly Audit, archive records true, and deletion occurs only after confirmation with deleteWork false; the run control is visible but is not clicked"
       }
     },
     {
@@ -5291,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 974,
+        "line": 975,
         "project": "functional"
       },
       "area": "easymode",
@@ -5307,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1104,
+        "line": 1105,
         "project": "functional"
       },
       "area": "easymode",
@@ -5323,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1277,
+        "line": 1278,
         "project": "functional"
       },
       "area": "easymode",
@@ -5339,7 +5339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1499,
+        "line": 1500,
         "project": "functional"
       },
       "area": "easymode",
@@ -5355,7 +5355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1645,
+        "line": 1646,
         "project": "functional"
       },
       "area": "easymode",
