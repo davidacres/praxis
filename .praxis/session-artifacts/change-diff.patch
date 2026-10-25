@@ -1,0 +1,708 @@
+diff --git a/apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts b/apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts
+new file mode 100644
+index 00000000..976ae8e3
+--- /dev/null
++++ b/apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts
+@@ -0,0 +1,90 @@
++import { execFileSync } from 'node:child_process';
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import { expect, test } from '@playwright/test';
++import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
++import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
++
++test.slow();
++let app: TestApp | undefined;
++let mock: MockGatewayServer | undefined;
++const roots: string[] = [];
++test.afterEach(async () => {
++  if (app) await closeTestApp(app);
++  if (mock) await mock.close();
++  app = undefined;
++  mock = undefined;
++  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
++});
++
++test('scheduled allowance handover checkpoints and continues the active stage in the same session', async () => {
++  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-scheduled-handover-'));
++  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-scheduled-handover-repo-'));
++  roots.push(profile, repo);
++  const agentDir = path.join(profile, 'agents', 'scheduled-reviewer');
++  fs.mkdirSync(agentDir, { recursive: true });
++  fs.writeFileSync(path.join(agentDir, 'agent.json'), JSON.stringify({ schemaVersion: 1, id: 'scheduled-reviewer', name: 'Scheduled reviewer', type: 'gateway', entry: 'session' }));
++  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
++  git('init', '-q', '--initial-branch=main');
++  fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n');
++  git('add', '.');
++  git('-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', 'commit', '-qm', 'initial');
++  mock = await startMockGatewayServer({ mode: 'hang' });
++  app = await launchTestApp({
++    preview: { enableScheduledRuns: true },
++    ai: {
++      activeProvider: 'vercel-gateway', workingDirectory: repo,
++      providers: {
++        'codex-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') },
++        'claude-code-cli': { enabled: false }, 'copilot-cli': { enabled: false },
++        'antigravity-cli': { enabled: false }, 'cursor-cli': { enabled: false }
++      }
++    }
++  }, { userDataDir: profile, settingsPath: path.join(profile, 'settings.json') }, {
++    AI_GATEWAY_API_KEY: 'e2e-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_AI_GATEWAY_URL: undefined,
++    PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'vercel-gateway': 0.1, 'codex-cli': 0.1 })
++  }, { openNewSession: false });
++  const page = app.window;
++  const scheduleId = await page.evaluate(async repo => {
++    const workspace = (await window.praxis.workspaces.list())[0];
++    const project = await window.praxis.projects.create({
++      name: 'Handover', key: 'HND', type: 'software', purpose: '', brief: {}, startingPoint: 'existing-folder', folderPath: repo,
++      workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done', category: 'done' }],
++      starterTickets: [{ summary: 'Continue this ticket', description: '', issueType: 'Task', status: 'Backlog' }], defaultAiToolMode: 'read-only'
++    }, workspace.id);
++    await window.praxis.agentRuntime.refresh();
++    const now = new Date().toISOString();
++    await window.praxis.workflows.save(project.id, {
++      schemaVersion: 1, id: 'scheduled-handover', name: 'Scheduled handover', scope: 'project', projectId: project.id, version: 1,
++      entryNodeId: 'review', createdAt: now, updatedAt: now,
++      nodes: [
++        { type: 'agent-task', id: 'review', name: 'Review', x: 0, y: 0, inputs: [], agent: { agentId: 'scheduled-reviewer', scope: 'global', toolMode: 'read-only' }, instructions: 'Review the ticket and report your findings.', outputs: [{ id: 'review-report', kind: 'report', required: true }], mutatesWorktree: false },
++        { type: 'approval', id: 'approve', name: 'Approve', x: 240, y: 0, inputs: ['review-report'], prompt: 'Ship?', requiredGates: [], allowBypass: false }
++      ], edges: [{ id: 'next', from: 'review', to: 'approve', on: 'success', required: true }]
++    } as never);
++    const issues = await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 10, `project:${project.id}`);
++    const view = await window.praxis.scheduledRuns.save({ projectId: project.id, name: 'Handover', timezone: 'UTC', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '12:00', workflowId: 'scheduled-handover', tickets: issues.issues.map(issue => ({ connectionId: `project:${project.id}`, issueKey: issue.key, title: issue.summary })) });
++    await window.praxis.scheduledRuns.startNow(view.run.id);
++    return view.run.id;
++  }, repo);
++  await expect.poll(() => mock!.requests.length).toBeGreaterThan(0);
++  const original = await page.evaluate(async () => (await window.praxis.ai.listSessions()).find(session => session.workflowRole === 'stage'));
++  expect(['planning', 'executing']).toContain(original?.state);
++  expect(original?.worktreePath).toBeTruthy();
++  fs.writeFileSync(path.join(original!.worktreePath!, 'checkpoint.txt'), 'work before handover\n');
++  await app.electronApp.evaluate(() => { process.env.PRAXIS_E2E_PROVIDER_USAGE = JSON.stringify({ 'vercel-gateway': 0.95, 'codex-cli': 0.1 }); });
++  await expect.poll(async () => (await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId))?.run.entries[0].outcome?.handovers?.length, { timeout: 30000 }).toBe(1);
++  const view = await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId);
++  const outcome = view!.run.entries[0].outcome!;
++  expect(outcome.workflowRunId).toBe(original!.workflowRunId);
++  expect(outcome.handovers![0].usedPercent).toBe(95);
++  const checkpoint = outcome.handovers![0].checkpointRef!;
++  expect(execFileSync('git', ['show', `${checkpoint}:checkpoint.txt`], { cwd: original!.worktreePath!, encoding: 'utf8' })).toBe('work before handover\n');
++  const replacement = await page.evaluate(async key => (await window.praxis.ai.listSessions()).find(session => session.issueKey === key), original!.issueKey);
++  expect(replacement?.sessionId).toBe(original!.sessionId);
++  expect(replacement?.provider).toBe('codex-cli');
++  expect(replacement?.handoverBrief?.revision).toBeGreaterThan(0);
++  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.getRun(id), outcome.workflowRunId!))?.status, { timeout: 30000 }).toBe('awaiting-approval');
++  await expect.poll(async () => (await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId))?.run.entries[0].outcome?.artifacts?.length).toBeGreaterThan(0);
++});
+diff --git a/apps/praxis-desktop/main/package.json b/apps/praxis-desktop/main/package.json
+index 5e799fb7..95076d2c 100644
+--- a/apps/praxis-desktop/main/package.json
++++ b/apps/praxis-desktop/main/package.json
+@@ -29,7 +29,7 @@
+     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
+     "start": "npm run compile && electron .",
+     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
+-    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/taskNotificationPolicy.test.js out/main/workflowAgentStage.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
++    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/taskNotificationPolicy.test.js out/main/workflowAgentStage.test.js out/main/stageHandoverGuard.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
+     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/minimaxUsage.test.js out/main/alibabaCodingPlanUsage.test.js out/main/antigravityUsage.test.js out/main/providerUsageBatch.test.js out/main/providerUsageHistory.test.js out/main/ticketReviewApply.test.js out/main/windowState.test.js out/main/autoUpdate.test.js out/main/windowBroadcast.test.js out/main/logPersistence.test.js out/main/semanticModelDownload.test.js out/main/codeIntelligenceSession.test.js",
+     "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileScheduledRuns.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobileImagePreview.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobileRelayClient.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js",
+     "check-ipc-senders": "node scripts/checkTrustedIpc.cjs",
+diff --git a/apps/praxis-desktop/main/src/main/scheduledRunLive.ts b/apps/praxis-desktop/main/src/main/scheduledRunLive.ts
+index 3c6976d2..6d8e281a 100644
+--- a/apps/praxis-desktop/main/src/main/scheduledRunLive.ts
++++ b/apps/praxis-desktop/main/src/main/scheduledRunLive.ts
+@@ -1,5 +1,7 @@
+ import {
+   WorkflowRunStore,
++  estimateWorkflowRun,
++  stageUsageSample,
+   exhaustedProviders,
+   providerHeadroom,
+   resolveApprovalTarget,
+@@ -13,6 +15,7 @@ import {
+   type WorkflowObservation,
+   type WorkflowRun
+ } from '@praxis/core';
++import { getAiSessionManager } from './aiInstance';
+ import { getAiUsageLog } from './aiUsageLogInstance';
+ import { providerSnapshot } from './aiUsageIpc';
+ import { getSettingsBackend } from './settingsBackendInstance';
+@@ -88,15 +91,17 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
+     progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField, ...exhaustedField };
+   } else {
+     const live = summary.stages.find(stage => stage.lane === 'running') ?? [...summary.stages].reverse().find(stage => stage.provider);
++    const session = live?.sessionId ? getAiSessionManager().listAgentSessionSummaries().find(session => session.sessionId === live.sessionId) : undefined;
+     progress = {
+       kind: 'running',
+-      provider: live?.provider ?? summary.aiProvider,
++      provider: session?.provider ?? live?.provider ?? summary.aiProvider,
+       ...(live?.sessionId ? { sessionId: live.sessionId } : {}),
+       ...spendField,
+       ...exhaustedField
+     };
+   }
+-  return { progress };
++  const estimate = estimateWorkflowRun(run.definition, { parameters: run.parameters, usage: stageUsageSample(getAiUsageLog().list()) });
++  return { progress: { ...progress, estimate: { tokens: estimate.tokens, spend: estimate.spend, notEstimable: estimate.notEstimable, basedOnSessions: estimate.basedOnSessions }, artifacts: Object.values(run.nodes).flatMap(node => node.artifacts) } };
+ }
+ 
+ /** A run's progress through its stages, for the live view. */
+diff --git a/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts b/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts
+index 5e38a82d..d2b93f36 100644
+--- a/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts
++++ b/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts
+@@ -6,6 +6,7 @@ import {
+   WorkflowRunStore,
+   approveStage,
+   resolveApprovalTarget,
++  type AiProvider,
+   type ScheduledRunnerPorts
+ } from '@praxis/core';
+ import { handoverThreshold, observeWorkflowRun, readProviderUsage } from './scheduledRunLive';
+@@ -15,6 +16,9 @@ import { getSettingsBackend } from './settingsBackendInstance';
+ import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
+ import { getWorkflowOrchestrator, onDidChangeWorkflowRun } from './workflowOrchestratorInstance';
+ import { startWorkflowRun } from './workflowIpc';
++import { stageHandoverGuard } from './stageHandoverGuard';
++import { getAiSessionManager, abortActiveTask } from './aiInstance';
++import { handoverSession } from './aiIpc';
+ import { preserveUncommittedWork } from './runWork';
+ 
+ /**
+@@ -89,13 +93,32 @@ function ports(): ScheduledRunnerPorts {
+     threshold: handoverThreshold,
+     handOver: async ({ entry, workflowRunId, from, to, usedFraction: used }) => {
+       const run = runStore().get(workflowRunId);
+-      // A running turn is never cut off: the run's provider changes for every stage not yet started.
+-      await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
++      if (!run) throw new Error('The workflow run no longer exists.');
++      const sessions = getAiSessionManager();
++      const active = sessions.listAgentSessionSummaries().filter(session => session.workflowRunId === workflowRunId && session.workflowRole === 'stage' && session.provider === from && !['completed', 'failed', 'aborted'].includes(session.state));
++      if (active.length !== 1) throw new Error('Provider handover requires exactly one active workflow stage session.');
++      const session = active[0];
++      const worktreePath = session.worktreePath ?? run.worktreePath;
+       let checkpointRef: string | undefined;
+-      if (run?.worktreePath) {
+-        const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
+-        if (await preserveUncommittedWork(run.worktreePath, message)) checkpointRef = await headOf(run.worktreePath);
+-      }
++      await stageHandoverGuard.during(session.issueKey, async () => {
++        await abortActiveTask(session.issueKey);
++        if (worktreePath) {
++          const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
++          await preserveUncommittedWork(worktreePath, message);
++          checkpointRef = await headOf(worktreePath);
++          if (!checkpointRef) throw new Error('Could not record the handover checkpoint.');
++        }
++        if (runStore().get(workflowRunId)?.status !== 'running') throw new Error('The workflow stopped during provider handover.');
++        await handoverSession(session.issueKey, {
++          provider: to as AiProvider,
++          expectedBriefRevision: sessions.getAgentSession(session.issueKey)?.handoverBrief?.revision ?? 0
++        });
++        if (runStore().get(workflowRunId)?.status !== 'running') {
++          await abortActiveTask(session.issueKey);
++          throw new Error('The workflow stopped during provider handover.');
++        }
++        await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
++      });
+       return { ...(checkpointRef ? { checkpointRef } : {}) };
+     },
+     onChanged: run => notifyScheduledRunsChanged(run.projectId),
+diff --git a/apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts b/apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts
+new file mode 100644
+index 00000000..ae2a8c6e
+--- /dev/null
++++ b/apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts
+@@ -0,0 +1,29 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { StageHandoverGuard } from './stageHandoverGuard';
++
++test('intentional abort is held until the replacement turn is launched', async () => {
++  const guard = new StageHandoverGuard();
++  let state = 'executing';
++  const settled: string[] = [];
++  const check = () => { if (!guard.isHeld('stage') && state !== 'executing') settled.push(state); };
++  guard.observe('stage', check);
++  await guard.during('stage', async () => {
++    state = 'aborted'; check();
++    await assert.rejects(guard.during('stage', async () => {}), /already in progress/);
++    state = 'executing'; check();
++  });
++  assert.deepEqual(settled, []);
++  state = 'completed'; check();
++  assert.deepEqual(settled, ['completed']);
++});
++
++test('failed handover releases the waiter and preserves the stopped result', async () => {
++  const guard = new StageHandoverGuard();
++  let checked = false;
++  const dispose = guard.observe('stage', () => { checked = true; });
++  await assert.rejects(guard.during('stage', async () => { throw new Error('checkpoint failed'); }), /checkpoint failed/);
++  assert.equal(checked, true);
++  assert.equal(guard.isHeld('stage'), false);
++  dispose();
++});
+diff --git a/apps/praxis-desktop/main/src/main/stageHandoverGuard.ts b/apps/praxis-desktop/main/src/main/stageHandoverGuard.ts
+new file mode 100644
+index 00000000..1d5e36bf
+--- /dev/null
++++ b/apps/praxis-desktop/main/src/main/stageHandoverGuard.ts
+@@ -0,0 +1,25 @@
++/** Keeps a workflow stage attached while an intentional provider interruption is in progress. */
++export class StageHandoverGuard {
++  private readonly held = new Set<string>();
++  private readonly observers = new Map<string, () => void>();
++
++  public observe(key: string, check: () => void): () => void {
++    this.observers.set(key, check);
++    return () => this.observers.delete(key);
++  }
++
++  public isHeld(key: string): boolean { return this.held.has(key); }
++
++  public async during<T>(key: string, action: () => Promise<T>): Promise<T> {
++    if (this.held.has(key)) throw new Error('A provider handover is already in progress.');
++    this.held.add(key);
++    try {
++      return await action();
++    } finally {
++      this.held.delete(key);
++      this.observers.get(key)?.();
++    }
++  }
++}
++
++export const stageHandoverGuard = new StageHandoverGuard();
+diff --git a/apps/praxis-desktop/main/src/main/workflowAgentStage.ts b/apps/praxis-desktop/main/src/main/workflowAgentStage.ts
+index 38012241..f67d5016 100644
+--- a/apps/praxis-desktop/main/src/main/workflowAgentStage.ts
++++ b/apps/praxis-desktop/main/src/main/workflowAgentStage.ts
+@@ -1,3 +1,4 @@
++import { stageHandoverGuard } from './stageHandoverGuard';
+ import type { AgentSessionRecord } from '@praxis/core';
+ import { runAsAgent } from './projectActivityInstance';
+ import { createHash } from 'node:crypto';
+@@ -614,12 +615,18 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
+       });
+     };
+ 
+-    const subscription = sessions.onDidChangeAgentSession(record => {
+-      if (record.issueKey !== issueKey) return;
++    const check = () => {
++      if (stageHandoverGuard.isHeld(issueKey)) return;
++      const record = sessions.getAgentSession(issueKey);
++      if (!record) return;
+       const completion = stageSessionCompletion(record);
+       if (completion) settle(completion.state, completion.error);
++    };
++    const unobserve = stageHandoverGuard.observe(issueKey, check);
++    const subscription = sessions.onDidChangeAgentSession(record => {
++      if (record.issueKey === issueKey) check();
+     });
+-    dispose = () => subscription.dispose();
++    dispose = () => { subscription.dispose(); unobserve(); };
+   });
+ 
+   return { promise, cancel: () => dispose?.() };
+diff --git a/docs/praxis-tests/catalog.json b/docs/praxis-tests/catalog.json
+index a73c2154..7b2a6453 100644
+--- a/docs/praxis-tests/catalog.json
++++ b/docs/praxis-tests/catalog.json
+@@ -3,7 +3,7 @@
+   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
+   "runner": "playwright",
+   "scope": "apps/praxis-desktop/main/e2e",
+-  "testCount": 708,
++  "testCount": 710,
+   "tests": [
+     {
+       "id": "PT-DD79DC7C96",
+@@ -7397,6 +7397,22 @@
+         "then": "the automated assertions for this test pass and record the described user-visible result"
+       }
+     },
++    {
++      "id": "PT-F32409778D",
++      "title": "scheduled allowance handover checkpoints and continues the active stage in the same session",
++      "source": {
++        "runner": "playwright",
++        "file": "apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts",
++        "line": 21,
++        "project": "functional"
++      },
++      "area": "scheduled Provider Handover",
++      "flow": {
++        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
++        "when": "scheduled allowance handover checkpoints and continues the active stage in the same session",
++        "then": "the automated assertions for this test pass and record the described user-visible result"
++      }
++    },
+     {
+       "id": "PT-8DC4807D76",
+       "title": "builds a schedule on the belt, saves it, and it survives a restart in the same order",
+@@ -7669,13 +7685,29 @@
+         "then": "the automated assertions for this test pass and record the described user-visible result"
+       }
+     },
++    {
++      "id": "PT-9DA156CF24",
++      "title": "the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing",
++      "source": {
++        "runner": "playwright",
++        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
++        "line": 790,
++        "project": "functional"
++      },
++      "area": "scheduled Runs",
++      "flow": {
++        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
++        "when": "the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing",
++        "then": "the automated assertions for this test pass and record the described user-visible result"
++      }
++    },
+     {
+       "id": "PT-76F292ED66",
+       "title": "the editor can Run now without a scheduled start time and still obeys the provider budget gate",
+       "source": {
+         "runner": "playwright",
+         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+-        "line": 790,
++        "line": 807,
+         "project": "functional"
+       },
+       "area": "scheduled Runs",
+@@ -7691,7 +7723,7 @@
+       "source": {
+         "runner": "playwright",
+         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+-        "line": 807,
++        "line": 824,
+         "project": "functional"
+       },
+       "area": "scheduled Runs",
+@@ -7707,7 +7739,7 @@
+       "source": {
+         "runner": "playwright",
+         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+-        "line": 845,
++        "line": 862,
+         "project": "functional"
+       },
+       "area": "scheduled Runs",
+@@ -7723,7 +7755,7 @@
+       "source": {
+         "runner": "playwright",
+         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+-        "line": 862,
++        "line": 879,
+         "project": "functional"
+       },
+       "area": "scheduled Runs",
+@@ -7739,7 +7771,7 @@
+       "source": {
+         "runner": "playwright",
+         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+-        "line": 902,
++        "line": 919,
+         "project": "functional"
+       },
+       "area": "scheduled Runs",
+diff --git a/docs/praxis-tests/index.md b/docs/praxis-tests/index.md
+index dfedc8cd..3499a9f4 100644
+--- a/docs/praxis-tests/index.md
++++ b/docs/praxis-tests/index.md
+@@ -1,6 +1,6 @@
+ # Praxis Test catalogue
+ 
+-This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
++This catalogue describes **710 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+ 
+ | ID | Area | Test | Automation |
+ | --- | --- | --- | --- |
+@@ -466,6 +466,7 @@ This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/mai
+ | PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
+ | PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:69` |
+ | PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:79` |
++| PT-F32409778D | scheduled Provider Handover | scheduled allowance handover checkpoints and continues the active stage in the same session | `apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts:21` |
+ | PT-8DC4807D76 | scheduled Runs | builds a schedule on the belt, saves it, and it survives a restart in the same order | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:91` |
+ | PT-20627BB23E | scheduled Runs | edit, schedule, hold and delete a schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:151` |
+ | PT-74238ECE73 | scheduled Runs | a start that passed while Praxis was closed is missed, and only a choice resolves it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:187` |
+@@ -483,11 +484,12 @@ This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/mai
+ | PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:593` |
+ | PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:728` |
+ | PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:766` |
+-| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:790` |
+-| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:807` |
+-| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:845` |
+-| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
+-| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:902` |
++| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:790` |
++| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:807` |
++| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:824` |
++| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
++| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:879` |
++| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
+ | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
+ | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
+ | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |
+diff --git a/packages/core/src/scheduledRuns/scheduledRun.ts b/packages/core/src/scheduledRuns/scheduledRun.ts
+index 6ad1b7a8..78852578 100644
+--- a/packages/core/src/scheduledRuns/scheduledRun.ts
++++ b/packages/core/src/scheduledRuns/scheduledRun.ts
+@@ -23,6 +23,8 @@
+  *   resolves it.
+  */
+ 
++import type { RunEstimate } from '../workflows/workflowEstimate';
++import type { WorkflowArtifactRef } from '../workflows/workflowTypes';
+ import { randomUUID } from 'node:crypto';
+ import { zonedTimeToInstant } from './scheduledRunTime';
+ 
+@@ -96,6 +98,9 @@ export interface ScheduledEntryOutcome {
+   gate?: ScheduledEntryGate;
+   handovers?: ScheduledHandover[];
+   spend?: ScheduledEntrySpend;
++  /** First observed estimate, retained independently of actual spend. */
++  estimate?: Pick<RunEstimate, 'tokens' | 'spend' | 'notEstimable' | 'basedOnSessions'>;
++  artifacts?: WorkflowArtifactRef[];
+   /** Times the user retried this ticket after it failed or stopped. */
+   retries?: number;
+   /**
+diff --git a/packages/core/src/scheduledRuns/scheduledRunExecution.ts b/packages/core/src/scheduledRuns/scheduledRunExecution.ts
+index d9424f43..1025b046 100644
+--- a/packages/core/src/scheduledRuns/scheduledRunExecution.ts
++++ b/packages/core/src/scheduledRuns/scheduledRunExecution.ts
+@@ -31,14 +31,14 @@ import { newScheduledId } from './scheduledRun';
+  * the schedule acts on. `exhausted` lists the providers that ran out during the
+  * run, so a retry or a hand-over never goes back to one of them.
+  */
+-export type EntryProgress =
++export type EntryProgress = Pick<ScheduledEntryOutcome, 'estimate' | 'artifacts'> & (
+   | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+   | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+   /** Stopped on the provider's limit or a stage's tooling; waiting for the user. */
+   | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+   | { kind: 'succeeded'; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+   | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+-  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] };
++  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] });
+ 
+ function findEntry(run: ScheduledRun, entryId: string): ScheduledQueueEntry {
+   const entry = run.entries.find(candidate => candidate.id === entryId);
+@@ -104,6 +104,8 @@ export function markEntryLaunching(run: ScheduledRun, entryId: string, launchTok
+     launchToken,
+     startedAt: at,
+     ...(provider ? { provider } : {}),
++    ...(previous.estimate ? { estimate: previous.estimate } : {}),
++    ...(previous.artifacts ? { artifacts: previous.artifacts } : {}),
+     ...(previous.retries ? { retries: previous.retries } : {}),
+     ...(previous.handovers ? { handovers: previous.handovers } : {}),
+     ...(previous.exhausted ? { exhausted: previous.exhausted } : {})
+@@ -175,6 +177,16 @@ export function resumeScheduledRun(run: ScheduledRun, at: string): ScheduledRun
+  * person, to the run). Idempotent: repeating the same progress changes nothing.
+  */
+ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress: EntryProgress, at: string): ScheduledRun {
++  const outcome = outcomeOf(findEntry(run, entryId));
++  if (outcome.status === 'done' || outcome.status === 'skipped') return run;
++  const estimate = outcome.estimate ?? progress.estimate;
++  const artifacts = [...new Map([...(outcome.artifacts ?? []), ...(progress.artifacts ?? [])].map(artifact => [artifact.artifactId, artifact])).values()];
++  const changed = JSON.stringify(estimate) !== JSON.stringify(outcome.estimate) || JSON.stringify(artifacts) !== JSON.stringify(outcome.artifacts ?? []);
++  const enriched = changed ? withOutcome(run, entryId, { ...outcome, ...(estimate ? { estimate } : {}), ...(artifacts.length ? { artifacts } : {}) }) : run;
++  return applyProgressState(enriched, entryId, progress, at);
++}
++
++function applyProgressState(run: ScheduledRun, entryId: string, progress: EntryProgress, at: string): ScheduledRun {
+   const entry = findEntry(run, entryId);
+   const outcome = outcomeOf(entry);
+   const key = entry.ticket.issueKey;
+@@ -185,7 +197,7 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
+   switch (progress.kind) {
+     case 'running': {
+       const exhausted = exhaustedAfter(outcome, progress.exhausted);
+-      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || run.pause.reason === 'budget' || run.pause.reason === 'policy' || run.pause.reason === 'failure');
++      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || (run.pause.reason === 'budget' && outcome.status === 'paused') || run.pause.reason === 'policy' || run.pause.reason === 'failure');
+       const unchanged =
+         outcome.status === 'running' && !outcome.gate && !wasWaiting && sameSpend(outcome.spend, spend) && sameExhausted(outcome.exhausted, exhausted) &&
+         (!progress.provider || progress.provider === outcome.provider) && (!progress.sessionId || progress.sessionId === outcome.sessionId);
+@@ -272,6 +284,8 @@ export function retryScheduledEntry(run: ScheduledRun, entryId: string, at: stri
+   const next = withOutcome(run, entryId, {
+     status: 'queued',
+     retries,
++    ...(outcome.estimate ? { estimate: outcome.estimate } : {}),
++    ...(outcome.artifacts ? { artifacts: outcome.artifacts } : {}),
+     ...(outcome.handovers ? { handovers: outcome.handovers } : {}),
+     ...(outcome.exhausted ? { exhausted: outcome.exhausted } : {})
+   });
+diff --git a/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts b/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts
+index 81402f98..8ad1b059 100644
+--- a/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts
++++ b/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts
+@@ -306,13 +306,13 @@ test('budget: the hand-over point comes from the threshold port, read at every d
+   assert.equal(h.run.status, 'running');
+ });
+ 
+-test('mid-ticket hand-over waits for the current turn to finish', async () => {
++test('mid-ticket hand-over interrupts the active turn through the handover port', async () => {
+   const h = new Harness(['T-1']);
+   await h.runner.tick();
+   h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.99, codex: 0.3 } };
+   h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' }, idle: false });
+   await h.runner.tick();
+-  assert.equal(h.handovers.length, 0);
++  assert.equal(h.handovers.length, 1);
+ });
+ 
+ test('a retry does not go back to the provider that ran out', async () => {
+@@ -461,3 +461,26 @@ test('only an idle failed workflow needs manual scheduled recovery', () => {
+   assert.equal(scheduledWorkflowBlocker({ ...summary, stages: [{ ...summary.stages[0], lane: 'paused' }] }), undefined);
+   assert.equal(scheduledWorkflowBlocker({ ...summary, loops: [{ firing: true, needsDecision: false }] as typeof summary.loops }), undefined);
+ });
++
++test('a threshold pause persists while the active turn still reports running', async () => {
++  const h = new Harness(['T-1', 'T-2']);
++  await h.runner.tick();
++  h.usage = { usable: ['claude'], active: 'claude', used: { claude: 0.99 } };
++  await h.runner.tick();
++  assert.equal(h.run.status, 'paused');
++  await h.runner.tick();
++  assert.equal(h.run.status, 'paused');
++  assert.equal(h.launches.length, 1);
++});
++
++test('a failed handover pauses once instead of retrying each tick', async () => {
++  const h = new Harness(['T-1']);
++  await h.runner.tick();
++  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.99, codex: 0.2 } };
++  let calls = 0;
++  h.ports.handOver = async () => { calls++; throw new Error('checkpoint refused'); };
++  await h.runner.tick();
++  assert.match(h.run.pause?.message ?? '', /checkpoint refused/);
++  await h.runner.tick();
++  assert.equal(calls, 1);
++});
+diff --git a/packages/core/src/scheduledRuns/scheduledRunRunner.ts b/packages/core/src/scheduledRuns/scheduledRunRunner.ts
+index b7f05759..95c0220a 100644
+--- a/packages/core/src/scheduledRuns/scheduledRunRunner.ts
++++ b/packages/core/src/scheduledRuns/scheduledRunRunner.ts
+@@ -58,7 +58,7 @@ export class ScheduledLaunchError extends Error {
+ /** A workflow run as the runner sees it. */
+ export interface WorkflowObservation {
+   progress: EntryProgress;
+-  /** True when no agent turn is in flight, so a stage may be handed to another provider without cutting it off. */
++  /** Informational: false while an agent turn is in flight. The handover port owns safe interruption. */
+   idle?: boolean;
+ }
+ 
+@@ -289,7 +289,7 @@ export class ScheduledRunRunner {
+       }
+       return next;
+     }
+-    if (observation?.progress.kind === 'running' && observation.idle !== false && next.status === 'running') {
++    if (observation?.progress.kind === 'running' && next.status === 'running') {
+       next = await this.checkHandover(next, entry.id, workflowRunId, observation.progress.provider ?? entry.outcome?.provider);
+     }
+     return next;
+@@ -308,17 +308,19 @@ export class ScheduledRunRunner {
+     });
+     if (decision.kind === 'handover' && decision.from) {
+       const usedFraction = decision.usedFraction ?? this.ports.threshold?.() ?? DEFAULT_HANDOVER_THRESHOLD;
+-      const { checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction });
++      let checkpointRef: string | undefined;
++      try {
++        ({ checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction }));
++      } catch (error) {
++        return this.save(pauseScheduledRun(run, 'budget', `Provider handover failed: ${error instanceof Error ? error.message : String(error)}`, this.ports.now(), entryId));
++      }
+       const at = this.ports.now();
+       return this.save(
+         recordProviderHandover(run, entryId, { at, from: decision.from, to: decision.provider, usedPercent: usedFraction * 100, ...(checkpointRef ? { checkpointRef } : {}) }, at)
+       );
+     }
+     if (decision.kind === 'pause') {
+-      // The stage cannot be stopped mid-flight just because nothing else is free: say so once, and let the
+-      // workflow's own limit policy deal with the hard limit.
+-      const last = [...run.events].reverse().find(event => event.kind === 'budget-checked' && event.entryId === entryId);
+-      if (!last || last.message !== decision.reason) return this.save(recordBudgetCheck(run, decision.reason, this.ports.now(), entryId));
++      return this.save(pauseScheduledRun(run, 'budget', decision.reason, this.ports.now(), entryId));
+     }
+     return run;
+   }
+diff --git a/packages/core/src/scheduledRuns/scheduledRunStore.test.ts b/packages/core/src/scheduledRuns/scheduledRunStore.test.ts
+index 51632ff7..94058c18 100644
+--- a/packages/core/src/scheduledRuns/scheduledRunStore.test.ts
++++ b/packages/core/src/scheduledRuns/scheduledRunStore.test.ts
+@@ -1,3 +1,4 @@
++import { applyEntryProgress, markEntryLaunching, startScheduledRunAttempt } from './scheduledRunExecution';
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+ import type { KeyValueStore } from '../host/stateStore';
+@@ -141,3 +142,19 @@ test('the project id survives a round trip and an unset one stays unset', async
+   assert.equal(store.get('mine')?.projectId, 'p1');
+   assert.ok(!('projectId' in store.get('loose')!));
+ });
++
++test('ledger estimates and artifacts survive progress and a store restart', async () => {
++  let run = startScheduledRunAttempt(armScheduledRun(makeRun('Audit', '2026-10-21T21:00:00Z'), NOW), NOW);
++  const entryId = run.entries[0].id;
++  run = markEntryLaunching(run, entryId, 'token', 'claude', NOW);
++  const estimate = { tokens: { low: 10, high: 100 }, spend: { low: 1, high: 2, currency: 'USD' }, basedOnSessions: 3 };
++  const artifact = { artifactId: 'a', contractId: 'change-diff', nodeId: 'implement', runId: 'w', kind: 'diff' as const, path: '.praxis/change-diff.md', createdAt: NOW };
++  run = applyEntryProgress(run, entryId, { kind: 'running', estimate, artifacts: [artifact] }, NOW);
++  run = applyEntryProgress(run, entryId, { kind: 'succeeded', spend: { tokens: 50 } }, NOW);
++  const state = memoryStore();
++  await new ScheduledRunStore(state).save(run);
++  const outcome = new ScheduledRunStore(state).get(run.id)?.entries[0].outcome;
++  assert.deepEqual(outcome?.estimate, estimate);
++  assert.deepEqual(outcome?.artifacts, [artifact]);
++  assert.deepEqual(outcome?.spend, { tokens: 50 });
++});
+diff --git a/packages/core/src/scheduledRuns/scheduledRunStore.ts b/packages/core/src/scheduledRuns/scheduledRunStore.ts
+index 17c5045c..2a5b0e0a 100644
+--- a/packages/core/src/scheduledRuns/scheduledRunStore.ts
++++ b/packages/core/src/scheduledRuns/scheduledRunStore.ts
+@@ -46,6 +46,9 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
+   const status = typeof raw.status === 'string' && ENTRY_STATUSES.has(raw.status) ? (raw.status as ScheduledEntryStatus) : 'queued';
+   const gate = normalizeGate(raw.gate);
+   const spend = normalizeSpend(raw.spend);
++  const estimate = normalizeEstimate(raw.estimate);
++  const artifacts = (Array.isArray(raw.artifacts) ? raw.artifacts : []).filter((artifact): artifact is NonNullable<ScheduledEntryOutcome['artifacts']>[number] =>
++    !!artifact && typeof artifact === 'object' && ['artifactId', 'contractId', 'nodeId', 'runId', 'kind', 'createdAt'].every(key => typeof artifact[key] === 'string'));
+   const handovers = (Array.isArray(raw.handovers) ? raw.handovers : []).map(normalizeHandover).filter((h): h is ScheduledHandover => !!h);
+   const exhausted = (Array.isArray(raw.exhausted) ? raw.exhausted : []).filter((value): value is string => typeof value === 'string' && !!value);
+   return {
+@@ -61,6 +64,8 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
+     ...(handovers.length > 0 ? { handovers } : {}),
+     ...(exhausted.length > 0 ? { exhausted: [...new Set(exhausted)] } : {}),
+     ...(spend ? { spend } : {}),
++    ...(estimate ? { estimate } : {}),
++    ...(artifacts.length ? { artifacts } : {}),
+     ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {})
+   };
+ }
+@@ -89,6 +94,25 @@ function normalizeSpend(value: unknown): ScheduledEntryOutcome['spend'] {
+   return Object.keys(spend).length > 0 ? spend : undefined;
+ }
+ 
++function normalizeEstimate(value: unknown): ScheduledEntryOutcome['estimate'] {
++  if (!value || typeof value !== 'object') return undefined;
++  const raw = value as Record<string, unknown>;
++  const range = (value: unknown) => {
++    if (!value || typeof value !== 'object') return undefined;
++    const r = value as Record<string, unknown>;
++    return typeof r.low === 'number' && Number.isFinite(r.low) && r.low >= 0 && typeof r.high === 'number' && Number.isFinite(r.high) && r.high >= r.low ? { low: r.low, high: r.high } : undefined;
++  };
++  const tokens = range(raw.tokens);
++  const cost = range(raw.spend);
++  const currency = raw.spend && typeof raw.spend === 'object' ? text((raw.spend as Record<string, unknown>).currency) : undefined;
++  return {
++    ...(tokens ? { tokens } : {}),
++    ...(cost && currency ? { spend: { ...cost, currency } } : {}),
++    ...(text(raw.notEstimable) ? { notEstimable: text(raw.notEstimable) } : {}),
++    ...(num(raw.basedOnSessions) !== undefined ? { basedOnSessions: num(raw.basedOnSessions) } : {})
++  };
++}
++
+ function normalizeHandover(value: unknown): ScheduledHandover | undefined {
+   if (!value || typeof value !== 'object') return undefined;
+   const raw = value as Record<string, unknown>;

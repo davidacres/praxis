@@ -100,6 +100,12 @@ The new Electron regression holds a gateway response open, writes a file to a te
 - Root type checking is not fully green because mobile-protocol imports are unavailable.
 - No separate mouse-driven manual session or complete theme matrix was run; visual inspection covers the retained light-theme budget-pause state.
 
+## Recovery verification (2026-10-25)
+
+QA reported failures in `autoUpdate.test.js`, `gitService.test.js`, `minimaxUsage.test.js`, `ticketReviewApply.test.js`, and `windowState.test.js`. The exact `npm run test:git --workspace=@praxis/desktop-main` command was rerun in this checkout: all five reported files passed, and the complete suite passed (84 passed, 0 failed) when local loopback access was available. In the restricted invocation, the four failures were instead in `semanticModelDownload.test.js`, each caused by `listen EPERM` while binding its local HTTP fixture to `127.0.0.1`; rerunning with loopback access passed those tests too. No product-code change was warranted by this environment-only failure.
+
+The full implementation patch is preserved at `session-artifacts/change-diff.patch` for this recovery handoff.
+
 ## Risks
 
 - Allowance detection remains polling-based and can overshoot the threshold between readings.
