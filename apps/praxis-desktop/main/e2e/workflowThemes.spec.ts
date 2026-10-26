@@ -93,5 +93,7 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
   await page.getByTestId('project-workflow-run-new').first().click();
   await expect(page.getByTestId('wf-runstart-dialog')).toBeVisible();
+  // The async estimate changes the dialog's height; capture the settled form.
+  await expect(page.getByTestId('wf-runstart-estimate')).toBeVisible();
   await expect(page.getByTestId('wf-runstart-dialog')).toHaveScreenshot('workflow-themes-start-run-dark.png');
 });

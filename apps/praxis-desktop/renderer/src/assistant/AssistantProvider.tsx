@@ -115,6 +115,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const messagesRef = useRef<AssistantMessage[]>([]);
   const chatIdRef = useRef<string | undefined>();
+  const toolConversationId = useRef(crypto.randomUUID());
   const projectIdRef = useRef<string | undefined>();
   const persistQueue = useRef<Promise<void>>(Promise.resolve());
   const delegateRef = useRef<((prompt: string) => void) | undefined>();
@@ -185,6 +186,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reset = useCallback(() => {
+    toolConversationId.current = crypto.randomUUID();
     messagesRef.current = [];
     chatIdRef.current = undefined;
     setMessages([]);
@@ -227,11 +229,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setError(undefined);
     setActiveTurnStartedAt(Date.now());
     setBusy(true);
-    const toolSessionPrefix = runtime?.toolMode && runtime.toolMode !== 'project-only' ? `ASSISTANT-${crypto.randomUUID()}` : undefined;
-    activeToolPrefix.current = toolSessionPrefix;
-    setActiveToolSession(undefined);
-    const selectedRuntime = { ...runtime, ...(toolSessionPrefix ? { toolSessionPrefix } : {}) };
     try {
+      // Wait for first-use chat creation so the execution identity survives reloads.
+      await persistQueue.current;
+      const toolSessionPrefix = runtime?.toolMode && runtime.toolMode !== 'project-only'
+        ? `ASSISTANT-${chatIdRef.current ?? toolConversationId.current}` : undefined;
+      activeToolPrefix.current = toolSessionPrefix;
+      setActiveToolSession(undefined);
+      const selectedRuntime = { ...runtime, ...(toolSessionPrefix ? { toolSessionPrefix } : {}) };
       if (selected.length > 1) {
         // Run only the selected seats. Keep the lead last when selected so it can
         // synthesise the earlier replies; the UI default is a one-to-one with Dev.

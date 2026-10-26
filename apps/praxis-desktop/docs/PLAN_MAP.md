@@ -624,3 +624,27 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [FX-BE-178](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-178-easy-mode-ticket-suggestions/story.md) | Story | Suggest the next ticket from recent work in Easy Mode | Backlog | FX-BE-174 |
 | [TASK-474](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-178-easy-mode-ticket-suggestions/tasks/task-474-rank-ticket-suggestions.md) | Task | Rank relevant tickets from recent project work | Backlog | FX-BE-174 |
 | [TASK-475](plans/features/fx-bf-110-sidebar-parity-and-easy-mode-organization/stories/fx-be-178-easy-mode-ticket-suggestions/tasks/task-475-ticket-suggestion-panel.md) | Task | Add the floating single-ticket suggestion panel | Backlog | TASK-474 |
+
+## Durable team-chat conversations
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| [FX-BF-111](plans/features/fx-bf-111-durable-team-chat/feature.md) | Feature | Durable team-chat conversations | To Do | None (existing assistant foundation) |
+| [FX-BE-179](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-179-durable-conversation-store/story.md) | Story | Durable conversation contracts and atomic storage | To Do | None; existing assistant foundation |
+| [FX-BE-180](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-180-main-owned-coordinator/story.md) | Story | Main-owned turn scheduling and command delivery | To Do | FX-BE-179 |
+| [FX-BE-181](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-181-provider-binding-and-context/story.md) | Story | Explicit provider bindings and bounded context delivery | To Do | FX-BE-180 |
+| [FX-BE-182](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-182-interruption-and-recovery/story.md) | Story | Interruption, cancellation, and tool-outcome recovery | To Do | FX-BE-181 |
+| [FX-BE-183](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-183-renderer-and-migration/story.md) | Story | Renderer subscription, single navigation entry, and legacy migration | To Do | FX-BE-182 |
+| [FX-BE-184](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-184-release-proof/story.md) | Story | Durable team-chat release verification | To Do | FX-BE-183 |
+| [TASK-476](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-179-durable-conversation-store/tasks/task-476-conversation-contracts.md) | Task | Define typed conversation, turn, attempt, and binding contracts | To Do | None |
+| [TASK-477](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-179-durable-conversation-store/tasks/task-477-atomic-chat-repository.md) | Task | Implement serialized durable conversation transactions | To Do | TASK-476 |
+| [TASK-478](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-180-main-owned-coordinator/tasks/task-478-turn-coordinator.md) | Task | Implement the durable sequential turn coordinator | To Do | TASK-477 |
+| [TASK-479](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-180-main-owned-coordinator/tasks/task-479-command-and-event-ipc.md) | Task | Expose validated commands and revisioned conversation updates | To Do | TASK-478 |
+| [TASK-480](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-181-provider-binding-and-context/tasks/task-480-execution-adapter.md) | Task | Connect API and ACP execution through typed bindings | To Do | TASK-479 |
+| [TASK-481](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-181-provider-binding-and-context/tasks/task-481-context-delivery.md) | Task | Build versioned context with delivery receipts and summaries | To Do | TASK-480 |
+| [TASK-482](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-182-interruption-and-recovery/tasks/task-482-recovery-reconciliation.md) | Task | Reconcile interrupted attempts and uncertain tool outcomes | To Do | TASK-481 |
+| [TASK-483](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-182-interruption-and-recovery/tasks/task-483-cancel-retry-permissions.md) | Task | Implement safe cancellation, retry, and approval restoration | To Do | TASK-482 |
+| [TASK-484](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-183-renderer-and-migration/tasks/task-484-conversation-ui.md) | Task | Make the assistant UI a conversation command client | To Do | TASK-483 |
+| [TASK-485](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-183-renderer-and-migration/tasks/task-485-legacy-migration.md) | Task | Migrate existing chats and stage the durable-writer cutover | To Do | TASK-484 |
+| [TASK-486](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-184-release-proof/tasks/task-486-failure-matrix-tests.md) | Task | Complete deterministic crash and provider contract coverage | To Do | TASK-485 |
+| [TASK-487](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-184-release-proof/tasks/task-487-desktop-release-verification.md) | Task | Verify built desktop UI and record release evidence | To Do | TASK-486 |

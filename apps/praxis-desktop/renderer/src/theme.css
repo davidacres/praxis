@@ -437,63 +437,6 @@ textarea {
   max-width: 220px;
 }
 
-/* EasyMode's project picker lives inside the centre pill, left of the context
-   label, separated by a dash — clicking it opens the project list. */
-.titlebar-context-project {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 1 auto;
-  max-width: 45%;
-  min-width: 0;
-  margin-left: calc(var(--space-2) * -1);
-}
-
-.titlebar-context-project-button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  height: 20px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--text);
-  background: transparent;
-  font: inherit;
-  font-weight: 600;
-  font-size: var(--text-xs);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.titlebar-context-project-button:hover,
-.titlebar-context-project-button[aria-expanded='true'] {
-  background: var(--bg-hover);
-}
-
-.titlebar-context-project-button > svg {
-  flex-shrink: 0;
-  color: var(--accent);
-}
-
-.titlebar-context-project-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.titlebar-context-project-menu {
-  left: auto;
-  right: 0;
-}
-
-.titlebar-context-project-menu button {
-  width: 100%;
-}
-
 .titlebar-spacer {
   flex: 1;
 }
@@ -537,28 +480,10 @@ textarea {
   cursor: pointer;
 }
 
-.titlebar-context-button.active,
-.titlebar-context-filter-pill.active {
+.titlebar-context-button.active {
   border-color: var(--border-strong);
   background: var(--bg-active);
   color: var(--text);
-}
-
-/* On a board the pill holds the project picker and, beside it, the issue-filter trigger. */
-.titlebar-context-filter-trigger {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
 }
 
 .titlebar-context-search-hint {
@@ -662,11 +587,6 @@ textarea {
   border-color: var(--border-strong);
   color: var(--text);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
-}
-
-.titlebar-context-sep {
-  color: var(--text-tertiary);
-  margin: 0 1px;
 }
 
 .titlebar-divider {
@@ -1538,6 +1458,13 @@ textarea {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Keep the project switcher visible while the sidebar feeds scroll. */
+.sidebar-project-header {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
 }
 
 .sidebar-header {
@@ -18243,6 +18170,12 @@ button.session-chat-attachment {
   gap: 8px;
 }
 
+.horizon-row-main > .sidebar-project-select {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+}
+
 .workspace-title-wrap {
   display: flex;
   align-items: center;
@@ -21248,7 +21181,8 @@ button.session-chat-attachment {
 .team-chat-row.ledger-row:hover .ledger-time { visibility: hidden; }
 
 /* The project's "New session" bar: sticky to the bottom of the sidebar while the project is in view. */
-.ledger-footer { position: sticky; z-index: 6; bottom: 0; display: flex; gap: 8px; margin-top: 10px; padding: 10px 10px; border-top: 1px solid var(--border); background: var(--bg-elevated); }
+/* The pinned composer actions stay beneath the Projects and project headers. */
+.ledger-footer { position: sticky; z-index: 3; bottom: 0; display: flex; gap: 8px; margin-top: 10px; padding: 10px 10px; border-top: 1px solid var(--border); background: var(--bg-elevated); }
 .ledger-new-session { display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 6px; height: 32px; border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text); background: transparent; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .ledger-new-chat { display: inline-flex; flex: 0 0 32px; align-items: center; justify-content: center; height: 32px; border: 1px solid var(--border-strong); border-radius: 50%; color: var(--text-secondary); background: transparent; cursor: pointer; }
 .ledger-new-session:hover,

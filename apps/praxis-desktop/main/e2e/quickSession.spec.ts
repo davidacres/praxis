@@ -109,13 +109,13 @@ test('a project session action scopes the composer to that project', async ({ pa
 
   await seedProjects(page);
   await page.reload();
-  // Classic mode shows one project at a time; the title chip's project picker switches between them.
+  // Classic mode shows one project at a time; the sidebar's project picker switches between them.
   await expect(page.getByTestId('project-tree')).toHaveCount(1);
-  const picker = page.getByTestId('titlebar-project-select');
+  const picker = page.getByTestId('sidebar-project-select');
   await picker.click();
-  const menu = page.locator('.titlebar-context-project-menu');
-  await expect(menu.getByRole('menuitem')).toHaveCount(2);
-  await menu.getByRole('menuitem', { name: 'Target project' }).click();
+  const menu = page.getByRole('listbox', { name: 'Select project options' });
+  await expect(menu.getByRole('option')).toHaveCount(2);
+  await menu.getByRole('option', { name: 'Target project' }).click();
   await expect(picker).toContainText('Target project');
   await expect(page.getByTestId('project-tree')).toHaveCount(1);
   await expect(page.getByTestId('project-tree')).toContainText('Target project');
@@ -132,11 +132,11 @@ test('a project session action scopes the composer to that project', async ({ pa
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'classic-project-picker.png'),
     fullPage: true
   });
-  await menu.getByRole('menuitem', { name: 'First project' }).click();
+  await menu.getByRole('option', { name: 'First project' }).click();
   await expect(page.getByTestId('project-tree')).toContainText('First project');
   await expect(page.getByTestId('project-tree')).toHaveCount(1);
   await picker.click();
-  await menu.getByRole('menuitem', { name: 'Target project' }).click();
+  await menu.getByRole('option', { name: 'Target project' }).click();
   await page.reload();
   await expect(picker).toContainText('Target project');
   await expect(page.getByTestId('project-tree')).toHaveCount(1);
@@ -151,7 +151,7 @@ test('a project session action scopes the composer to that project', async ({ pa
 
   await page.locator('.composer-input').fill('Keep the target project selected.');
   await page.getByTestId('new-session-submit').click();
-  await expect(page.getByTestId('session-console')).toBeVisible();
+  await expect(page.getByTestId('session-follow-up-input')).toBeVisible();
   await expect(picker).toContainText('Target project');
   await expect(page.getByTestId('project-tree')).toHaveCount(1);
   await expect(page.getByTestId('project-tree').getByTestId('project-session-nav-item')).toHaveCount(1);
@@ -200,7 +200,7 @@ test('draft and existing sessions share the composer frame and input layout', as
   const artifacts = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
   await page.screenshot({ path: path.join(artifacts, 'composer-draft-matched.png'), fullPage: true });
   await draft.getByTestId('new-session-submit').click();
-  await expect(page.getByTestId('session-console')).toBeVisible();
+  await expect(page.getByTestId('session-follow-up-input')).toBeVisible();
   await expect(page.getByTestId('session-follow-up-input')).toBeEnabled();
   const active = page.getByTestId('session-follow-up-input');
   expect(await active.evaluate(element => {
@@ -210,3 +210,29 @@ test('draft and existing sessions share the composer frame and input layout', as
   await expect(page.getByTestId('session-mode-panel')).toBeVisible();
   await page.screenshot({ path: path.join(artifacts, 'composer-existing-matched.png'), fullPage: true });
 });
+
+for (const easyMode of [false, true]) {
+  test(`the ${easyMode ? 'EasyMode' : 'classic'} sidebar switches projects without a titlebar picker`, async () => {
+    app = await launchTestApp({ preview: { enableEasyMode: easyMode } }, undefined, undefined, { openNewSession: false });
+    const page = app.window;
+    await seedProjects(page);
+    await page.reload();
+    const sidebar = page.locator(easyMode ? '.easymode-sidebar' : 'nav.sidebar');
+    const picker = sidebar.getByTestId('sidebar-project-select');
+    await expect(picker).toContainText('First project');
+    await expect(page.locator('.titlebar').getByRole('button', { name: 'Select project', exact: true })).toHaveCount(0);
+    await picker.click();
+    await expect(page.getByRole('listbox', { name: 'Select project options' }).getByRole('option')).toHaveCount(2);
+    await page.keyboard.press('Escape');
+    await expect(picker).toBeFocused();
+    await chooseOption(picker, { label: 'Target project' });
+    await expect(picker).toContainText('Target project');
+    await page.reload();
+    await expect(picker).toContainText('Target project');
+    await picker.click();
+    await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts', `${easyMode ? 'easy' : 'classic'}-sidebar-project-picker.png`), animations: 'disabled' });
+    await page.keyboard.press('Escape');
+    await chooseOption(picker, { label: 'First project' });
+    await expect(picker).toContainText('First project');
+  });
+}

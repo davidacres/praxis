@@ -35,6 +35,13 @@ export function isTicketReviewKey(issueKey: string): boolean {
   return issueKey.startsWith('review~');
 }
 
+/** Virtual Team tool calls have durable runtime records, but their conversation
+ * lives in TeamChatStore. Listing each persona's tool turn as a chat duplicates
+ * that transcript and exposes the internal persona prompt as its title. */
+export function isAssistantToolSession(session: AgentSessionRecord): boolean {
+  return session.issueKey.startsWith('ASSISTANT-');
+}
+
 /**
  * A governed workflow stage (FX-BF-013) is stored under a synthesized
  * `WF-<run>-<node>` key too, but unlike a composer session it belongs to a run

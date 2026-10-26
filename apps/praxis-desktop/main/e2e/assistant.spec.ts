@@ -268,6 +268,7 @@ test('an image can be dropped or pasted into the assistant composer and is sent 
 });
 
 test('assistant full tools uses the selected working folder through an agent session', async () => {
+  test.setTimeout(60000);
   const win = await launch(0, false, { name: 'read_file', arguments: JSON.stringify({ path: 'features/feature-01-demo/task-01-01-fix-login-bug.md' }) });
   await app!.electronApp.evaluate(({ ipcMain }, folder) => {
     ipcMain.removeHandler('dialog:pickFolder');
@@ -282,6 +283,8 @@ test('assistant full tools uses the selected working folder through an agent ses
   await win.getByTestId('assistant-input').fill('Inspect the working folder and answer.');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-tool-permission')).toBeVisible({ timeout: 15000 });
+  // Internal tool turns stay in the runtime store, never in conversation navigation.
+  await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
   await win.getByTestId('assistant-tool-permission').getByRole('button', { name: 'Allow' }).click();
   await expect(win.getByTestId('assistant-message-dev')).toBeVisible({ timeout: 30000 });
   const sessions = await win.evaluate(() => window.praxis.ai.listSessions());
@@ -293,7 +296,102 @@ test('assistant full tools uses the selected working folder through an agent ses
   expect(toolTurn!.workingDirectory).toBe(plansDir);
   expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && JSON.parse(request.body).tools?.length > 0)).toBe(true);
   expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && request.body.includes('Users cannot log in.'))).toBe(true);
+  await win.getByTestId('assistant-input').fill('Continue with the same team member.');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
+  const continued = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
+  expect(continued).toHaveLength(1);
+  expect(continued[0].sessionId).toBe(toolTurn!.sessionId);
+  const latestRequest = JSON.parse(mock!.requests.filter(request => request.url.endsWith('/chat/completions')).at(-1)!.body);
+  const latestUser = latestRequest.messages.filter((message: { role: string }) => message.role === 'user').at(-1);
+  expect(latestUser.content).toContain('Continue with the same team member.');
+  expect(latestUser.content).not.toContain('Inspect the working folder and answer.');
   await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-full-tools.png') });
+  await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
+  // Exercise the initial list as well as live pushes: existing records remain hidden after reload.
+  await win.reload();
+  await expect(win.getByTestId('project-nav-item').first()).toBeVisible();
+  await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
+  expect((await win.evaluate(() => window.praxis.ai.listSessions())).some(session => session.issueKey === toolTurn!.issueKey)).toBe(true);
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+  await win.getByTestId('team-chat-row').getByRole('button', { name: /^Inspect the working folder and answer\./ }).click();
+  await expect(win.getByTestId('assistant-message-user')).toHaveText(['Inspect the working folder and answer.', 'Continue with the same team member.']);
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
+  await win.getByTestId('assistant-working-directory').click();
+  await chooseOption(win.getByTestId('assistant-tool-mode'), 'full');
+  await win.getByTestId('assistant-input').fill('Continue after reopening this chat.');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(3);
+  const reopened = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
+  expect(reopened).toHaveLength(1);
+  expect(reopened[0].sessionId).toBe(toolTurn!.sessionId);
+  // Permissions are a session boundary; returning to Full resumes its prior execution.
+  await chooseOption(win.getByTestId('assistant-tool-mode'), 'read-only');
+  replyText = 'Read-only answer checkpoint sentinel';
+  await win.getByTestId('assistant-input').fill('Answer with read-only tools.');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(4);
+  await chooseOption(win.getByTestId('assistant-tool-mode'), 'full');
+  replyText = REPLY;
+  await win.getByTestId('assistant-input').fill('Continue with full tools again.');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(5);
+  const returned = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
+  expect(returned).toHaveLength(2);
+  expect(returned.find(session => session.toolMode === 'full')!.sessionId).toBe(toolTurn!.sessionId);
+  const returnedRequest = JSON.parse(mock!.requests.filter(request => request.url.endsWith('/chat/completions')).at(-1)!.body);
+  expect(returnedRequest.messages.filter((message: { role: string }) => message.role === 'user').at(-1).content).toContain('Read-only answer checkpoint sentinel');
+  await win.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'team-chat-navigation.png') });
+});
+
+test('CLI team-chat replies continue the same execution session', async () => {
+  app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } } } }, undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  const folder = app.userDataDir;
+  const first = await win.evaluate(folder => window.praxis.assistant.turn({
+    message: 'First CLI team-chat question.', personaId: 'dev',
+    provider: 'claude-code-cli', toolMode: 'read-only', workingDirectory: folder,
+    toolSessionPrefix: 'ASSISTANT-cli-continuation'
+  } as Parameters<typeof window.praxis.assistant.turn>[0]), folder);
+  expect(first.messages[0].error).toBeUndefined();
+  const original = (await win.evaluate(() => window.praxis.ai.listSessions()))[0];
+  const next = await win.evaluate(({ folder, history }) => window.praxis.assistant.turn({
+    message: 'DISTINCT_FOLLOW_UP', personaId: 'dev', history,
+    provider: 'claude-code-cli', toolMode: 'read-only', workingDirectory: folder,
+    toolSessionPrefix: 'ASSISTANT-cli-continuation'
+  } as Parameters<typeof window.praxis.assistant.turn>[0]), { folder, history: first.messages });
+  expect(next.messages[0].error).toBeUndefined();
+  const sessions = await win.evaluate(() => window.praxis.ai.listSessions());
+  expect(sessions).toHaveLength(1);
+  expect(sessions[0].sessionId).toBe(original.sessionId);
+  const record = await win.evaluate(key => window.praxis.ai.getSession(key), original.issueKey);
+  expect(record!.events.filter(event => event.type === 'message')).toHaveLength(2);
+});
+
+test('team members reuse their own sessions and a new chat gets separate sessions', async () => {
+  test.setTimeout(60000);
+  const win = await launch(0, true);
+  await win.getByTestId('titlebar-assistant').click();
+  await chooseOption(win.getByTestId('assistant-tool-mode'), 'read-only');
+  await win.getByTestId('assistant-member-qa').click();
+  const send = async (message: string, replies: number) => {
+    await win.getByTestId('assistant-input').fill(message);
+    await win.getByTestId('assistant-send').click();
+    await expect(win.getByTestId('assistant-message-dev')).toHaveCount(replies);
+    await expect(win.getByTestId('assistant-message-qa')).toHaveCount(replies);
+    await expect(win.getByTestId('assistant-input')).toBeEnabled();
+  };
+  await send('Discuss the first step.', 1);
+  const first = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
+  expect(first).toHaveLength(2);
+  await send('Discuss the second step.', 2);
+  const second = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
+  expect(second.map(session => session.sessionId).sort()).toEqual(first.map(session => session.sessionId).sort());
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+  await win.getByTestId('assistant-new-chat').click();
+  await send('A separate conversation.', 1);
+  expect((await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'))).toHaveLength(4);
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(2);
 });
 
 test('an @mention routes to that persona and transcript suggestions are read-only', async () => {

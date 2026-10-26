@@ -8,12 +8,12 @@ import { chooseOption, chipOptionValues } from './chipSelect';
 let app: TestApp;
 test.afterEach(async () => { if (app) await closeTestApp(app); });
 
-// The classic sidebar shows one project at a time: pick the project in the title chip, then open its home.
+// The classic sidebar shows one project at a time: pick the project in the sidebar, then open its home.
 async function openProjectHome(page: Page, name: string): Promise<void> {
   const tree = page.getByTestId('project-tree').filter({ hasText: name });
   if (!(await tree.isVisible())) {
-    await page.getByTestId('titlebar-project-select').click();
-    await page.locator('.titlebar-context-project-menu').getByRole('menuitem', { name }).click();
+    await page.getByTestId('sidebar-project-select').click();
+    await page.getByRole('listbox', { name: 'Select project options' }).getByRole('option', { name }).click();
   }
   await tree.getByTestId('project-nav-item').click();
 }

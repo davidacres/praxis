@@ -5,6 +5,7 @@ import { EasyModeSessionsList } from './EasyModeSessionsList';
 import { EasyModeAutomationsList } from './EasyModeAutomationsList';
 import { AssignSessionDialog } from './AssignSessionDialog';
 import { Icon } from '../../ui/Icon';
+import { ProjectSelector } from '../../app/ProjectSelector';
 
 export interface EasyModeSidebarProps {
   sessions: AgentSessionRecord[];
@@ -21,6 +22,10 @@ export interface EasyModeSidebarProps {
   onAssignConversation?: (issueKey: string, projectId: string, ticketKey?: string) => Promise<void>;
   assignableProjects?: ProjectRecord[];
   projects: ProjectRecord[];
+  /** All projects in the workspace, while `projects` scopes the current feed. */
+  selectableProjects: ProjectRecord[];
+  activeProjectId?: string;
+  onSelectProject: (projectId: string) => void;
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   activeWorkflowRunId?: string;
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
@@ -56,6 +61,9 @@ export function EasyModeSidebar({
   onAssignConversation,
   assignableProjects,
   projects,
+  selectableProjects,
+  activeProjectId,
+  onSelectProject,
   runsByProjectId,
   activeWorkflowRunId,
   onSelectWorkflowRun,
@@ -108,10 +116,7 @@ export function EasyModeSidebar({
       {/* Horizon Bar: Workspace Anchor */}
       <div className="horizon-bar">
         <div className="horizon-row-main">
-          <div className="workspace-title-wrap" title={activeProject?.name || 'Workspace'}>
-            <Icon name="folder" size={14} className="workspace-folder-icon" />
-            <span>{activeProject?.name || 'Workspace'}</span>
-          </div>
+          <ProjectSelector projects={selectableProjects} activeProjectId={activeProjectId} onSelectProject={onSelectProject} />
           <button
             type="button"
             className="btn-new-session-compact"

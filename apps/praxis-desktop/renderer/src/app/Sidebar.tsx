@@ -25,6 +25,7 @@ import { IssuePeek } from '../issues/IssuePeek';
 import { projectColorValue } from '../projects/projectColors';
 import { useSettings } from '../settings/useSettings';
 import { useDialogs } from '../ui/dialogs';
+import { ProjectSelector } from './ProjectSelector';
 import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
@@ -78,7 +79,7 @@ export interface SidebarProps {
   projects: ProjectRecord[];
   /**
    * When set, the Projects tree shows only this project — classic mode shows one project at a time and
-   * the title chip's project picker switches between them.
+   * the sidebar's project picker switches between them.
    */
   focusedProjectId?: string;
   connections: Connection[];
@@ -1139,6 +1140,12 @@ export function Sidebar({
 
   return (
     <nav className="sidebar" aria-label="Workspace">
+      {workspaceScopedProjects.length > 0 && <div className="sidebar-project-header">
+        <ProjectSelector projects={workspaceScopedProjects} activeProjectId={focusedProjectId} onSelectProject={id => {
+          const project = workspaceScopedProjects.find(candidate => candidate.id === id);
+          if (project) onSelectProject(project);
+        }} />
+      </div>}
       {effectiveSearching && (
         <div style={{ padding: '4px 12px 8px' }}>
           <input

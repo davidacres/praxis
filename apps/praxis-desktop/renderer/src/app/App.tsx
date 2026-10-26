@@ -43,7 +43,7 @@ import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
-import { extractSubagents, isConversationSession, isSessionForProject, sessionTitle } from '../ai/sessionNav';
+import { extractSubagents, isAssistantToolSession, isConversationSession, isSessionForProject, sessionTitle } from '../ai/sessionNav';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
@@ -1060,7 +1060,7 @@ export function App() {
       .listSessions()
       .then(sessions => {
         if (!cancelled) {
-          setAgentSessions(sessions);
+          setAgentSessions(sessions.filter(session => !isAssistantToolSession(session)));
           setAgentSessionsLoaded(true);
         }
       })
@@ -1069,6 +1069,9 @@ export function App() {
         console.error('Failed to load AI sessions:', error);
       });
     const unsubscribeChanged = onSessionChanged(record => {
+      // The assistant subscribes separately for tool permissions and usage.
+      // Its per-persona runtime records must never become navigable chats.
+      if (isAssistantToolSession(record)) return;
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
         const targetKey = activeTargetSessionKeyRef.current;
@@ -2576,9 +2579,6 @@ export function App() {
         onModeChange={setMode}
         easyMode={Boolean(settings?.preview?.enableEasyMode)}
         onToggleEasyMode={() => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } })}
-        projects={workspaceProjects}
-        activeProjectId={easyModeProject?.id}
-        onSelectProject={projectId => navigate({ projectId })}
         onOpenFolder={openExistingFolder}
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
@@ -2695,6 +2695,9 @@ export function App() {
                 />
               ) : settings?.preview.enableEasyMode ? (
                 <EasyModeSidebar
+                  selectableProjects={workspaceProjects}
+                  activeProjectId={easyModeProject?.id}
+                  onSelectProject={projectId => navigate({ projectId })}
                   sessions={easyModeSessions}
                   allSessions={agentSessions}
                   activeSessionKey={(route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined}
