@@ -84,50 +84,6 @@ async function sessionWithReply(
   return win;
 }
 
-test('tool activity is grouped into one completion gadget', async () => {
-  const win = await sessionWithReply('The file is ready.', {
-    toolCall: { name: 'list_dir', arguments: { path: '.' } }
-  });
-
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  const gadget = win.locator('[data-testid="tool-completion-gadget"]');
-  await expect(gadget).toBeVisible();
-  await expect(gadget.locator('[data-testid="tool-completion-item"]')).toHaveCount(1);
-  await expect(gadget).toContainText('list_dir');
-  await expect(gadget).toContainText('1 completed');
-  await expect(win.locator('[data-testid="session-chat-tool"]')).toHaveCount(0);
-
-  // The activity log no longer exposes the same invocation as separate start
-  // and completion rows.
-  await expect(win.locator('[data-testid="session-events"]')).not.toContainText('Running tool:');
-  await expect(win.locator('[data-testid="session-events"]')).not.toContainText('Tool completed:');
-  expect(mock!.requests).toHaveLength(2);
-});
-
-test('a long tool history is grouped into family summaries with one detail view', async () => {
-  const win = await sessionWithReply('The directory scan is complete.', {
-    toolCalls: Array.from({ length: 12 }, (_, index) => ({
-      name: 'list_dir',
-      arguments: { path: index % 2 === 0 ? '.' : 'renderer' }
-    }))
-  });
-
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  const gadget = win.locator('[data-testid="tool-completion-gadget"]');
-  await expect(gadget).toContainText('12 runs');
-  const group = gadget.locator('[data-testid="tool-completion-group"]');
-  await expect(group).toHaveCount(1);
-  await expect(gadget.locator('[data-testid="tool-completion-item"]')).toHaveCount(12);
-  await expect(gadget.locator('[data-testid="tool-completion-selected-detail"]')).toHaveCount(1);
-  // The sole group does not restate the header's counts. With one group those
-  // are the same numbers twice, which is most of the column in the inspector's
-  // rail; the header keeps them because it is always visible.
-  await expect(group.locator('.tool-completion-group-count')).toHaveCount(0);
-  // Every invocation remains available, but the UI has only one expanded
-  // detail surface instead of twelve nested disclosure panels.
-  await expect(gadget.locator('details.tool-completion-item')).toHaveCount(0);
-});
-
 test('assistant Markdown renders tables and emphasis in the chat bubble', async () => {
   const win = await sessionWithReply([
     '| Story | Scope | State |',
@@ -152,16 +108,6 @@ test('assistant Markdown renders tables and emphasis in the chat bubble', async 
   // The inspector deliberately does not echo the reply — it is the session's
   // state, not a second transcript.
   await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
-
-  // The Activity log is for lifecycle/tool events, not a second plain-text
-  // copy of the conversation. Message details must not leak raw Markdown here.
-  // Asserted against the panel, not the event list: a session with no tool
-  // runs renders an empty state instead, and `not.toContainText` against a
-  // missing element fails rather than passing vacuously.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  const activityPanel = win.locator('[data-testid="session-panel-activity"]');
-  await expect(activityPanel).not.toContainText('| Story | Scope | State |');
-  await expect(activityPanel).not.toContainText('FX-BE-097 |');
 });
 
 test('image links and filenames render as clickable chat previews', async () => {

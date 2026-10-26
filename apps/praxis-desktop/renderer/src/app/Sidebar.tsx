@@ -113,15 +113,10 @@ export interface SidebarProps {
   /** Archives or restores a session; archived sessions leave the active tree. */
   onArchiveSession: (issueKey: string, archived: boolean) => Promise<void>;
   onAssignConversation: (issueKey: string, projectId: string, ticketKey?: string) => Promise<void>;
-  /** Saved workflows per project id, for the Workflows tree section. */
-  projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
-  activeWorkflowId?: string;
   /** Each project's runs, newest first — the children of its Runs node. */
   runsByProjectId: Record<string, WorkflowRunSummary[]>;
   /** The run open in the run workspace, highlighted in the tree. */
   activeWorkflowRunId?: string;
-  activeWorkflowPolicies?: boolean;
-  onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
   onSelectWorkflowRun: (project: ProjectRecord, runId: string) => void;
   onSelectWorkflowRuns?: (project: ProjectRecord) => void;
   /** Opens the start-run dialog for the selected workflow. */
@@ -129,7 +124,6 @@ export interface SidebarProps {
   onCancelWorkflowRun: (runId: string) => void | Promise<void>;
   onDeleteWorkflowRun: (project: ProjectRecord, run: WorkflowRunSummary) => void;
   onArchiveWorkflowRun?: (runId: string, archived: boolean) => Promise<void>;
-  onSelectWorkflowPolicies: (project: ProjectRecord) => void;
   /** Opens the project's Run profile editor (FX-BE-054). */
   onSelectRun: (project: ProjectRecord) => void;
   /** Opens the project's deployment profiles (FX-BE-059 / FX-BE-060). */
@@ -137,7 +131,6 @@ export interface SidebarProps {
   /** Whether the experimental Deployments feature is enabled in preview settings. */
   enableDeployments?: boolean;
   onNewWorkflow: (project: ProjectRecord) => void;
-  onDeleteWorkflow?: (project: ProjectRecord, workflowId: string) => void;
   onDeleteBoard: (board: Board) => void;
   /**
    * Removes a board from a project's own `linkedBoards` — distinct from
@@ -610,7 +603,7 @@ function AutomationRunSheet({
               <p>{project.name} · {formatElapsed(run.startedAt, run.endedAt) ?? 'Just started'}</p>
             </div>
           </div>
-          <button type="button" className="icon-btn" aria-label="Close automation details" autoFocus onClick={onClose}><Icon name="close" size={13} /></button>
+          <button type="button" className="icon-btn" aria-label="Close run details" autoFocus onClick={onClose}><Icon name="close" size={13} /></button>
         </header>
         <div className="automation-sheet-summary">
           <div><strong>{completed} of {run.stages.length}</strong><span> steps complete</span></div>
@@ -856,7 +849,7 @@ function AutomationRunRow({
             <input
               className="session-title-input automation-run-title-input"
               data-testid="automation-run-title-input"
-              aria-label={`Automation name for ${run.workflowName}`}
+              aria-label={`Run name for ${run.workflowName}`}
               value={draft}
               autoFocus
               onChange={event => setDraft(event.target.value)}
@@ -929,13 +922,13 @@ function AutomationRunRow({
           <span className={`ledger-dot ${ledgerTone(runDot)} automation-state-mark ${statusTone}`} data-testid="automation-run-status" role="img" aria-label={statusLabel} title={statusLabel} />
           {/* Hover actions sit over the second line, so the title line always stays clickable at any width. */}
           {!editing && <span className="automation-run-actions session-nav-actions">
-            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Rename automation ${run.workflowName}`} title="Rename automation" data-testid={`project-run-rename-${run.runId}`} disabled={renaming} onClick={() => { cancelRenameRef.current = false; setDraft(run.workflowName); setRenameError(undefined); setEditing(true); }}><Icon name="pencil" size={12} /></button>
+            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Rename run ${run.workflowName}`} title="Rename run" data-testid={`project-run-rename-${run.runId}`} disabled={renaming} onClick={() => { cancelRenameRef.current = false; setDraft(run.workflowName); setRenameError(undefined); setEditing(true); }}><Icon name="pencil" size={12} /></button>
             {live ? (
-              <button type="button" className="icon-btn icon-btn-sm" aria-label={`Cancel automation ${run.workflowName}`} title="Cancel run" data-testid={`project-run-cancel-${run.runId}`} onClick={() => void onCancelWorkflowRun(run.runId)}><Icon name="close" size={12} /></button>
+              <button type="button" className="icon-btn icon-btn-sm" aria-label={`Cancel run ${run.workflowName}`} title="Cancel run" data-testid={`project-run-cancel-${run.runId}`} onClick={() => void onCancelWorkflowRun(run.runId)}><Icon name="close" size={12} /></button>
             ) : onArchiveWorkflowRun && (
-              <button type="button" className="icon-btn icon-btn-sm" aria-label={`Archive automation ${run.workflowName}`} title="Archive automation" data-testid={`project-run-archive-${run.runId}`} onClick={() => void onArchiveWorkflowRun(run.runId, true)}><Icon name="archive" size={12} /></button>
+              <button type="button" className="icon-btn icon-btn-sm" aria-label={`Archive run ${run.workflowName}`} title="Archive run" data-testid={`project-run-archive-${run.runId}`} onClick={() => void onArchiveWorkflowRun(run.runId, true)}><Icon name="archive" size={12} /></button>
             )}
-            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Delete automation ${run.workflowName}`} title="Delete automation" data-testid={`project-run-delete-${run.runId}`} onClick={() => onDeleteWorkflowRun(project, run)}><Icon name="trash" size={12} /></button>
+            <button type="button" className="icon-btn icon-btn-sm" aria-label={`Delete run ${run.workflowName}`} title="Delete run" data-testid={`project-run-delete-${run.runId}`} onClick={() => onDeleteWorkflowRun(project, run)}><Icon name="trash" size={12} /></button>
           </span>}
         </div>
         {renameError && <span className="automation-run-error" role="alert">{renameError}</span>}
@@ -1002,24 +995,18 @@ export function Sidebar({
   onSelectProject,
   onOpenProjectDocument,
   onSelectGit,
-  projectWorkflows,
-  activeWorkflowId,
   runsByProjectId,
   activeWorkflowRunId,
-  activeWorkflowPolicies,
-  onSelectWorkflow,
   onSelectWorkflowRun,
   onSelectWorkflowRuns,
   onStartWorkflowRun,
   onCancelWorkflowRun,
   onDeleteWorkflowRun,
   onArchiveWorkflowRun,
-  onSelectWorkflowPolicies,
   onSelectRun,
   onSelectDeployments,
   enableDeployments,
   onNewWorkflow,
-  onDeleteWorkflow,
   onDeleteBoard,
   onUnlinkBoard,
   onConfigureBoard,
@@ -1230,8 +1217,6 @@ export function Sidebar({
                     const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
                     // The board is hidden until the project's header button reveals it.
                     const projectBoardsVisible = collapsed[`project:${project.id}:boards-visible`] ?? false;
-                    const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
-                    const projectWorkflowList = projectWorkflows[project.id] ?? [];
                     const projectRuns = runsByProjectId[project.id] ?? [];
                     const activeProjectRuns = projectRuns.filter(run => !run.archived);
                     const projectDocsVisible = collapsed[`project:${project.id}:docs-visible`] ?? false;
@@ -1415,95 +1400,7 @@ export function Sidebar({
                           </div>}
                         </>}
                         <div className="project-sidebar-section ledger-section">
-                        <div className="feature-section-header feature-section-toggle ledger-section-header project-workflows-header">
-                          <button
-                            type="button"
-                            className="feature-section-title"
-                            aria-expanded={!projectWorkflowsCollapsed}
-                            data-testid="project-workflows-nav-item"
-                            onClick={() => { setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed })); }}
-                          >
-                            <span className="ledger-section-label">Workflows</span><span className="ledger-section-count">{projectWorkflowList.length}</span>
-                          </button>
-                          <div className="feature-section-actions">
-                            <button
-                              type="button"
-                              className="feature-section-action"
-                              aria-label={`Add a workflow to ${project.name}`}
-                              onClick={() => onNewWorkflow(project)}
-                            ><Icon name="plus" size={12} /></button>
-                            <button
-                              type="button"
-                              className="feature-section-action"
-                              aria-label={projectWorkflowsCollapsed ? 'Expand workflows' : 'Collapse workflows'}
-                              title={projectWorkflowsCollapsed ? 'Expand workflows' : 'Collapse workflows'}
-                              onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
-                            ><span className={`tree-section-icon${projectWorkflowsCollapsed ? '' : ' open'}`}><Icon name={projectWorkflowsCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
-                          </div>
-                        </div>
-                        {!projectWorkflowsCollapsed && <>
-                          {projectWorkflowList.map(workflow => (
-                            <div
-                              key={workflow.id}
-                              className={`tree-row project-workflow-row${activeFeature === 'workflows' && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
-                            >
-                              <button
-                                type="button"
-                                className="board-tree-main"
-                                data-testid="project-workflow-nav-item"
-                                onClick={() => onSelectWorkflow(project, workflow.id)}
-                              >
-                                <span className="tree-icon"><Icon name="split-horizontal" size={14} /></span>
-                                <span className="tree-label">{workflow.name}</span>
-                                {(() => {
-                                  const runCount = projectRuns.filter(run => run.workflowId === workflow.id).length;
-                                  return runCount > 0 && <span className="ledger-row-count">{runCount} run{runCount === 1 ? '' : 's'}</span>;
-                                })()}
-                              </button>
-                              <button
-                                type="button"
-                                className="board-tree-configure project-workflow-run"
-                                data-testid={`project-workflow-run-${workflow.id}`}
-                                aria-label={`Start a run of ${workflow.name}`}
-                                title="Start a run of this workflow"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  onStartWorkflowRun(project, workflow.id);
-                                }}
-                              >
-                                <Icon name="play" size={12} />
-                              </button>
-                              {onDeleteWorkflow && (
-                                <button
-                                  type="button"
-                                  className="board-tree-delete project-workflow-delete"
-                                  data-testid={`project-workflow-delete-${workflow.id}`}
-                                  aria-label={`Delete workflow ${workflow.name}`}
-                                  title="Delete this workflow"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    onDeleteWorkflow(project, workflow.id);
-                                  }}
-                                >
-                                  <Icon name="trash" size={12} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                          {projectWorkflowList.length === 0 && (
-                            <button className="tree-row project-workflow-empty" data-testid="project-workflow-empty" onClick={() => onNewWorkflow(project)}>
-                              <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
-                            </button>
-                          )}
-                          <button
-                            className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowPolicies && selectedProjectId === project.id ? ' active' : ''}`}
-                            data-testid="project-workflow-policies-nav-item"
-                            onClick={() => onSelectWorkflowPolicies(project)}
-                          ><span className="tree-icon"><Icon name="shield" size={14} /></span><span className="tree-label">Policies</span></button>
-                        </>}
-                        </div>
-                        <div className="project-sidebar-section ledger-section">
-                        <div className="feature-section-header feature-section-toggle ledger-section-header project-automations-header">
+                        <div className="feature-section-header feature-section-toggle ledger-section-header project-runs-header">
                           <button
                             type="button"
                             className="feature-section-title"
@@ -1511,14 +1408,14 @@ export function Sidebar({
                             data-testid="project-workflow-runs-nav-item"
                             onClick={() => { if (onSelectWorkflowRuns) onSelectWorkflowRuns(project); else setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed })); }}
                           >
-                            <span className="ledger-section-label">Automations</span>{activeProjectRuns.length > 0 && <span className="ledger-section-count session-category-count">{activeProjectRuns.length}</span>}
+                            <span className="ledger-section-label">Runs</span>{activeProjectRuns.length > 0 && <span className="ledger-section-count session-category-count">{activeProjectRuns.length}</span>}
                           </button>
                           <div className="feature-section-actions">
                             <button
                               type="button"
                               className="feature-section-action"
-                              aria-label="New automation"
-                              title="Start a new automation"
+                              aria-label="New run"
+                              title="Start a new run"
                               data-testid="project-workflow-run-new"
                               onClick={event => {
                                 event.stopPropagation();
@@ -1528,8 +1425,8 @@ export function Sidebar({
                             <button
                               type="button"
                               className="feature-section-action"
-                              aria-label={projectRunsCollapsed ? 'Expand automations' : 'Collapse automations'}
-                              title={projectRunsCollapsed ? 'Expand automations' : 'Collapse automations'}
+                              aria-label={projectRunsCollapsed ? 'Expand runs' : 'Collapse runs'}
+                              title={projectRunsCollapsed ? 'Expand runs' : 'Collapse runs'}
                               onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:runs`]: !projectRunsCollapsed }))}
                             ><span className={`tree-section-icon${projectRunsCollapsed ? '' : ' open'}`}><Icon name={projectRunsCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
                           </div>
@@ -1550,7 +1447,7 @@ export function Sidebar({
                           />
                         ))}
                         {!projectRunsCollapsed && activeProjectRuns.length === 0 && (
-                          <span className="sidebar-empty-hint project-runs-empty">No automations yet</span>
+                          <span className="sidebar-empty-hint project-runs-empty">No runs yet</span>
                         )}
                         </div>
                         <ProjectRecencyFeed
@@ -1863,7 +1760,7 @@ function SessionsNav({
 
   // A run header stands for all of its stage sessions, so archiving or deleting it does exactly what
   // doing the same to a parent session does: it takes every session under it along (a stage's own
-  // children first, then the stage). The run itself is not touched — it stays under Workflows → Runs.
+  // children first, then the stage). The run itself is not touched — it stays under Runs.
   const runSessions = (members: AgentSessionRecord[]): AgentSessionRecord[] =>
     members.flatMap(member => [...descendantsOf(member)].reverse().concat(member));
 
@@ -1884,7 +1781,7 @@ function SessionsNav({
     const live = all.filter(session => !isTerminalAgentState(session.state)).length;
     const choice = await confirmChoice({
       title: 'Delete this run\u2019s sessions?',
-      message: `It deletes all ${all.length} session${all.length === 1 ? '' : 's'} of \u201c${label}\u201d${live > 0 ? `, ${live} of them still working` : ''}. The run itself stays under Workflows \u2192 Runs.`,
+      message: `It deletes all ${all.length} session${all.length === 1 ? '' : 's'} of \u201c${label}\u201d${live > 0 ? `, ${live} of them still working` : ''}. The run itself stays under Runs.`,
       confirmLabel: 'Delete',
       tertiaryLabel: 'Archive',
       danger: true

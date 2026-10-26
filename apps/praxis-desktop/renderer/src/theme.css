@@ -13198,29 +13198,14 @@ button.session-chat-attachment {
    project tree — without this it inherits .tree-row's flush-left padding. */
 .project-git-row,
 .project-git-child { padding-left: var(--tree-indent-2); }
-/* Workflows subsection — a toggle with an inline "+ new" like the Projects heading. */
+/* Runs is a project-level ledger group; graph-marked run rows live under it.
+   Saved workflow definitions are reached from the command palette or the
+   project header's "New workflow" action. */
 .tree-subsection-heading { display: flex; align-items: center; }
 .tree-subsection-heading .sidebar-subsection-toggle { flex: 1; min-width: 0; }
 .tree-subsection-heading .sidebar-section-add { flex-shrink: 0; margin-right: 8px; }
-.project-workflow-row,
-.project-workflow-child,
-.project-workflow-empty { padding-left: var(--tree-indent-2); }
-.project-workflow-row { display: flex; align-items: center; min-width: 0; }
-.project-workflow-row .board-tree-main { flex: 1; min-width: 0; gap: 6px; }
-.project-workflow-delete { opacity: 0; margin-right: 4px; flex-shrink: 0; }
-.project-workflow-row:hover .project-workflow-delete,
-.project-workflow-delete:focus-visible { opacity: 1; }
-.project-workflow-empty { color: var(--text-tertiary); }
-/* A workflow row's Run button reveals on hover/focus like its delete button. */
-.project-workflow-run { opacity: 0; flex-shrink: 0; }
-.project-workflow-row:hover .project-workflow-run,
-.project-workflow-run:focus-visible { opacity: 1; }
-/* Workflows and Automations are project-level peer groups. Saved workflow
-   definitions live under Workflows; graph-marked run rows live under Automations. */
-.project-workflows-header,
-.project-automations-header { display: flex; align-items: center; min-width: 0; }
-.project-workflows-header .feature-section-title,
-.project-automations-header .feature-section-title { flex: 1; min-width: 0; padding-left: 0; gap: 6px; }
+.project-runs-header { display: flex; align-items: center; min-width: 0; }
+.project-runs-header .feature-section-title { flex: 1; min-width: 0; padding-left: 0; gap: 6px; }
 .project-session-category-header { display: flex; align-items: center; min-width: 0; }
 .project-session-category-header .feature-section-title { flex: 1; min-width: 0; padding-left: calc(var(--tree-indent-2) - 10px); gap: 6px; }
 .project-session-entry { min-width: 0; padding-bottom: 0; }
@@ -21185,26 +21170,17 @@ button.session-chat-attachment {
 .ledger-dot--active { background: var(--lane-awaiting); }
 .ledger-dot--failed { background: var(--lane-failed); }
 
-/* One left geometry for every ledger row (workflows, runs, the run card, sessions, team chats):
+/* One left geometry for every ledger row (runs, the run card, sessions, team chats):
    flush to the sidebar's left edge with square left corners, icon at --tree-indent-1, a 14px icon
    column, an 8px gap, so every title starts at --tree-indent-1 + 22px. A selected row is marked by
    one straight 2px accent line on that left edge — never a bar bent round a rounded corner. */
-.ledger-section .project-workflow-row,
-.ledger-section .project-workflow-child,
-.ledger-section .project-workflow-empty { height: 28px; margin: 0; padding-left: calc(var(--tree-indent-1) - 2px); border-radius: 0; }
-.ledger-section .project-workflow-row::before,
-.ledger-section .project-workflow-child::before { display: none; }
-.ledger-section .project-workflow-row .board-tree-main { flex: 1; min-width: 0; gap: 8px; }
-.ledger-section .project-workflow-row .tree-icon,
-.ledger-section .project-workflow-child .tree-icon { color: var(--text-tertiary); }
 .ledger-row-count { flex-shrink: 0; margin-left: auto; padding-left: 8px; color: var(--text-tertiary); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ledger-section .project-workflow-row:hover .ledger-row-count { display: none; }
 
-/* Automations: collapsed, a two-line row — title and time, then stepper · n/total · stage · ticket · dot. */
+/* Runs: collapsed, a two-line row — title and time, then stepper · n/total · stage · ticket · dot. */
 .ledger-section .automation-run-item { min-height: 0; margin: 0 4px 2px 0; padding: 4px 0 6px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .ledger-section .automation-run-item::before { width: 2px; border-radius: 0; }
 .ledger-section .automation-run-title-row { height: 24px; gap: 8px; padding: 0 8px 0 var(--tree-indent-1); }
-/* A 14px lead, like a workflow row's icon, so a collapsed run's zap and title sit on the workflows' columns. */
+/* A 14px lead so a collapsed run's zap and title sit on the ledger's shared icon and title columns. */
 .ledger-section .automation-run-item .ledger-lead { flex-basis: 14px; width: 14px; }
 .ledger-section .automation-run-main { gap: 8px; }
 .ledger-section .automation-run-title { min-width: 0; color: var(--text); font-size: 13px; font-weight: 600; }
@@ -21279,7 +21255,6 @@ button.session-chat-attachment {
 .ledger-new-chat:hover { color: var(--text); background: var(--bg-hover); }
 /* With no Sessions header above them any more, a recency bucket's header sticks straight under the project row. */
 .project-session-bucket > .project-session-category-header { top: var(--sidebar-sticky-2); }
-.ledger-section .project-workflow-child { gap: 8px; }
 /* Sessions in the recency feed share the ledger's left geometry (see the ledger block above). */
 .project-session-bucket .session-nav-card:not(.session-nav-run) { margin: 0 4px 1px 0; padding: 5px 8px 5px var(--tree-indent-1); border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0; }
 .project-session-bucket .session-nav-card .easymode-session-card__head { gap: 8px; }

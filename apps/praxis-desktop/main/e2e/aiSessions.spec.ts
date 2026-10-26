@@ -289,10 +289,6 @@ test('composer selects a board and open ticket, names the session, and streams t
   expect(mock.requests[1].body).toContain('<terminal_context');
   expect(mock.requests[1].body).toContain('tracker_get_ticket');
   expect(JSON.parse(mock.requests[1].body).model).toBe(JSON.parse(mock.requests[0].body).model);
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  // Provider lifecycle/reasoning/completion events remain persisted, but the
-  // default Activity digest has nothing actionable to show for this turn.
-  await expect(win.locator('[data-testid="session-event-row"]')).toHaveCount(0);
   // Completed is terminal — no abort button.
   await expect(win.locator('[data-testid="session-abort-btn"]')).toHaveCount(0);
 
@@ -452,13 +448,8 @@ test('API session executes a tracker tool and shows the call and result inline',
     timeout: 15000
   });
   await expect.poll(() => mock!.requests.length).toBe(2);
-  // Tool diagnostics are represented by the grouped completion gadget in the
-  // Activity log, not by a raw transcript row.
   const toolCards = win.locator('[data-testid="session-chat-tool"]');
   await expect(toolCards).toHaveCount(0);
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await expect(win.locator('[data-testid="tool-completion-gadget"]')).toBeVisible();
-  await expect(win.locator('[data-testid="tool-completion-gadget"]')).toContainText('tracker_get_ticket');
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText(
     'I inspected APP-101 through the tracker tool.'
   );
@@ -513,15 +504,6 @@ test('a write_file tool call renders a red/green diff after the write is approve
   await win.locator('[data-testid="session-permission-allow-once"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 
-  // The grouped completion gadget is visible after the session restarts;
-  // individual tool output remains behind the single selected-run detail view.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  const gadget = win.locator('[data-testid="tool-completion-gadget"]');
-  await expect(gadget).toBeVisible();
-  await gadget.locator('[data-testid="tool-completion-item"]').first().click();
-  const diff = gadget.locator('[data-testid="session-tool-diff"]');
-  await expect(diff).toBeVisible();
-  await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');
   expect(fs.readFileSync(path.join(workDir, 'notes.md'), 'utf8')).toContain('second line added by the agent');
 
   fs.rmSync(workDir, { recursive: true, force: true });
@@ -558,27 +540,18 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
   const inspector = win.locator('[data-testid="session-inspector"]');
   await expect(inspector).not.toContainText('FX-BE-097');
   await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
-  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Summarise the plan.');
-  await expect(win.locator('[data-testid="session-handover-brief"]')).toBeVisible();
-  await expect(win.locator('[data-testid="session-brief-progress"]')).toContainText('Here is a table');
-  await expect(win.locator('[data-testid="session-summary-idle"]')).toHaveCount(0);
 
-  // Four tabs, with real tab semantics — Summary/Activity/Changes for the
-  // selected session, plus the Sessions browser that keeps archived sessions
-  // reachable.
+  // Changes is the default tab; with no subagents it is the only one. The
+  // Summary, Activity and Sessions tabs were removed.
   const tabs = inspector.getByRole('tab');
-  await expect(tabs).toHaveCount(4);
+  await expect(tabs).toHaveCount(1);
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
-
-  await win.locator('[data-testid="session-tab-changes"]').click();
-  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'false');
-  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+  await expect(win.locator('[data-testid="session-tab-summary"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-tab-activity"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-tab-sessions"]')).toHaveCount(0);
   // This session's folder is a scratch dir, not a repo — the tab explains that
   // instead of going blank.
   await expect(win.locator('[data-testid="session-panel-changes"]')).not.toBeEmpty();
-
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await expect(win.locator('[data-testid="session-panel-activity"]')).not.toBeEmpty();
 });
 
 test('the agent\'s reply uses the pane it has; yours stays a reply beside it', async () => {
@@ -726,7 +699,7 @@ test('the session composer model picker honours the curated enabled models', asy
   await expect(curated.locator('[data-testid="session-model-option-current"]')).toContainText('gpt-4o-mini');
 });
 
-test('a completed session can edit its brief, change model, and hand over', async () => {
+test('a completed session can change model and hand over', async () => {
   mock = await startMockGatewayServer({
     mode: 'complete',
     models: [{ id: 'mock/model' }, { id: 'mock/other' }]
@@ -749,17 +722,6 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   });
   await openSession(win);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
-  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Ship the living brief.');
-  await expect(win.locator('[data-testid="session-purpose-scope"]')).toContainText('Session inspector');
-  await expect.poll(async () => win.locator('[data-testid="session-brief-progress"]').textContent(), {
-    timeout: 15000
-  }).toContain('Mock gateway reply');
-
-  await win.locator('[data-testid="session-brief-edit"]').click();
-  await win.locator('[data-testid="session-brief-notes"]').fill('Keep the worktree.');
-  await win.locator('[data-testid="session-brief-save"]').click();
-  await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
-
   await win.locator('[data-testid="session-model"]').click();
   const modelMenu = win.locator('[data-testid="session-model-menu"]');
   await expect(modelMenu).toBeVisible();
@@ -777,7 +739,6 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await modelMenu.locator('[data-testid="session-model-option-mock/other"]').click();
   await expect(modelMenu).toHaveCount(0);
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/other');
-  await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(2);
   await win.evaluate(async () => {
     await window.praxis.settings.set({ ai: { defaultModel: 'mock/configured-default' } });
   });
@@ -810,8 +771,6 @@ test('a completed session can edit its brief, change model, and hand over', asyn
   await expect(win.locator('[data-testid="session-provider"]')).toContainText('OpenAI');
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/model');
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('taking over this Praxis session');
-  await expect(win.locator('[data-testid="session-brief-notes"]')).toHaveText('Keep the worktree.');
-  await expect(win.locator('[data-testid="session-runtime-epoch"]')).toHaveCount(4);
   await expect.poll(() => win.evaluate(() => localStorage.getItem('praxis-ai-handover-confirmation'))).toBe('always');
 });
 
@@ -1258,7 +1217,7 @@ test('a file dropped outside the composer never navigates the window', async () 
   await expect(win.locator('[data-testid="session-state-badge"]')).toBeVisible();
 });
 
-test('a session can be archived from its row and restored from the inspector browser', async () => {
+test('a session can be archived from its row and hidden from the tree', async () => {
   // 'complete' — archiving is refused while a task is still running, so the
   // sessions must settle before the row icon is exercised.
   mock = await startMockGatewayServer({ mode: 'complete' });
@@ -1288,13 +1247,6 @@ test('a session can be archived from its row and restored from the inspector bro
   await openSession(win);
   await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(2);
 
-  // The inspector's Sessions tab lists every session under Active.
-  await win.locator('[data-testid="session-tab-sessions"]').click();
-  const browser = win.locator('[data-testid="session-browser"]');
-  await expect(browser).toBeVisible();
-  await expect(browser.locator('[data-testid="session-browser-active"] [data-testid="session-browser-row"]')).toHaveCount(2);
-  await expect(browser.locator('[data-testid="session-browser-archived-toggle"]')).toContainText('0');
-
   // Archive the first session from the sidebar row icon.
   // Free-form sessions get synthesized keys the row deliberately hides, so
   // match on the goal-derived title instead.
@@ -1306,40 +1258,9 @@ test('a session can be archived from its row and restored from the inspector bro
   await win.screenshot({ path: 'output/playwright/session-archived-in-browser.png', fullPage: true });
   await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(1);
   await expect(win.locator('[data-testid="session-list-row"]', { hasText: first.issueKey })).toHaveCount(0);
-  await expect(browser.locator('[data-testid="session-browser-archived-toggle"]')).toContainText('1');
 
   // Archiving is persisted on the record and reversible.
   await expect.poll(() => win.evaluate(key =>
     window.praxis.ai.listSessions().then(records => records.find(record => record.issueKey === key)?.archived)
   , first.issueKey)).toBe(true);
-
-  // Expand Archived and restore it.
-  await browser.locator('[data-testid="session-browser-archived-toggle"]').click();
-  const archivedRow = browser.locator('[data-testid="session-browser-row"]', { hasText: first.issueKey });
-  await expect(archivedRow).toBeVisible();
-  await expect(archivedRow).toContainText('Archived');
-  await archivedRow.locator('[data-testid="session-restore-btn"]').click();
-
-  // Back in the tree, flag cleared.
-  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(2);
-  await expect.poll(() => win.evaluate(key =>
-    window.praxis.ai.listSessions().then(records => records.find(record => record.issueKey === key)?.archived)
-  , first.issueKey)).toBe(undefined);
-
-  // The other session was never touched.
-  await expect.poll(() => win.evaluate(key =>
-    window.praxis.ai.listSessions().then(records => records.find(record => record.issueKey === key)?.archived)
-  , second.issueKey)).toBe(undefined);
-
-  // Archiving every session must not orphan the restore path: with none left
-  // active, the inspector itself becomes the browser.
-  await win.evaluate(async keys => {
-    for (const key of keys) await window.praxis.ai.archiveSession(key, true);
-  }, [first.issueKey, second.issueKey]);
-  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(0);
-  await expect(win.locator('[data-testid="session-browser"]')).toBeVisible();
-  const restoreAll = win.locator('[data-testid="session-restore-btn"]');
-  await expect(restoreAll).toHaveCount(2);
-  await restoreAll.first().click();
-  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(1);
 });

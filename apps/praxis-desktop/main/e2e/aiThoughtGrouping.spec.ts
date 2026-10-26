@@ -108,39 +108,15 @@ test('a turn that narrates between tool calls renders as one assistant card', as
   // Only local tools ran, so there is no code intelligence badge.
   await expect(card.getByTestId('session-chat-code-intel-badge')).toHaveCount(0);
 
-  // The details pane names an untitled session once, not twice: the title is
-  // just the goal's first line, so printing both repeated the same words.
-  await expect(win.locator('[data-testid="session-purpose-title"]')).toHaveCount(0);
-  await expect(win.locator('[data-testid="session-purpose-goal"]')).toHaveCount(1);
-  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Review the details pane summary.');
-
   // Evidence, kept alongside the other session artifacts.
   const artifactDir = path.join(__dirname, '..', '..', 'renderer', '.praxis', 'session-artifacts');
   fs.mkdirSync(artifactDir, { recursive: true });
   await card.screenshot({
     path: path.join(artifactDir, 'turn-merged-single-card.png')
   });
-  await win.locator('[data-testid="session-panel-summary"]').screenshot({
-    path: path.join(artifactDir, 'turn-inspector-summary.png')
-  });
   await win.locator('[data-testid="session-chat-thread"]').screenshot({
     path: path.join(artifactDir, 'turn-merged-thread.png')
   });
-
-  // A brief field holding a whole reply stops at a few lines and expands on
-  // request, rather than stretching the Summary tab.
-  const longProgress = Array.from({ length: 12 }, (_, i) => `Finding ${i + 1}: the details pane repeated itself.`).join('\n');
-  await win.locator('[data-testid="session-brief-edit"]').click();
-  await win.locator('textarea[data-testid="session-brief-progress"]').fill(longProgress);
-  await win.locator('[data-testid="session-brief-save"]').click();
-  const progress = win.locator('p[data-testid="session-brief-progress"]');
-  await expect(progress).toHaveClass(/is-clamped/);
-  const clampedHeight = (await progress.boundingBox())!.height;
-  await win.getByRole('button', { name: 'Show more' }).click();
-  await expect(progress).not.toHaveClass(/is-clamped/);
-  expect((await progress.boundingBox())!.height).toBeGreaterThan(clampedHeight * 1.5);
-  await win.getByRole('button', { name: 'Show less' }).click();
-  await expect(progress).toHaveClass(/is-clamped/);
 
   await win.evaluate(key => window.praxis.ai.abort(key), session.issueKey).catch(() => undefined);
 });

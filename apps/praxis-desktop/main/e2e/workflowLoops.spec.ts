@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp as launchApp, type TestApp } from './launchTestApp';
+import { escapeRegExp } from './textPattern';
 
 /**
  * FX-BF-108 — loops, findings routing and run parameters, end to end.
@@ -59,6 +60,17 @@ const canvasOf = (page: Page) => page.getByRole('application', { name: 'Workflow
 const inspectorOf = (page: Page) => page.getByRole('region', { name: 'Stage inspector' });
 const runPanel = (page: Page) => page.getByTestId('wf-run-panel');
 
+/** Saved workflows no longer appear in the sidebar tree — open one from the command palette. */
+async function openWorkflowDesigner(page: Page, name: string): Promise<void> {
+  await page.keyboard.press('ControlOrMeta+k');
+  const palette = page.getByRole('dialog', { name: 'Go to' });
+  await expect(palette).toBeVisible();
+  await palette.getByRole('textbox').fill(name);
+  // Runs are indexed under the same name; the saved workflow's hint ends in "· workflow".
+  await palette.getByRole('option', { name: new RegExp(`${escapeRegExp(name)}.*· workflow$`) }).first().click();
+  await expect(palette).toBeHidden();
+}
+
 async function pickChip(page: Page, scope: Locator, label: string, option: string | RegExp): Promise<void> {
   await scope.getByRole('button', { name: label, exact: true }).click();
   const list = page.getByRole('listbox', { name: `${label} options` });
@@ -86,7 +98,7 @@ test('a loop edge is drawn distinctly, edited in the inspector, and survives sav
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await seedProject(page, ['governed-delivery']);
-  await page.getByTestId('project-workflow-nav-item').filter({ hasText: 'Governed delivery' }).first().click();
+  await openWorkflowDesigner(page, 'Governed delivery');
 
   const canvas = canvasOf(page);
   await expect(canvas.getByRole('button', { name: /^Review \(agent-task\)/ })).toBeVisible();
@@ -158,7 +170,7 @@ test('a review that keeps finding a high bug loops back, then waits for a decisi
   const page = app.window;
   await seedProject(page, ['governed-delivery']);
 
-  await page.getByRole('button', { name: /^Start a run of / }).first().click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Fix the pager');
   // The worst case is shown before anything starts; this machine has measured nothing yet.
@@ -224,7 +236,7 @@ test('improve until target asks for its goal and target and checks them before i
   const page = app.window;
   const projectId = await seedProject(page, ['improve-until-target']);
 
-  await page.getByRole('button', { name: /^Start a run of / }).first().click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Speed up the pager');
   const parameters = dialog.getByTestId('wf-runstart-parameters');
@@ -256,7 +268,7 @@ test('the loop views read in dark mode too', async () => {
   await page.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-dark', themeMode: 'dark' } }));
   await seedProject(page, ['governed-delivery']);
   await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
-  await page.getByRole('button', { name: /^Start a run of / }).first().click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Fix the pager');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
@@ -266,7 +278,7 @@ test('the loop views read in dark mode too', async () => {
   }
   await expect(runPanel(page).getByTestId('wf-loop-decision')).toBeVisible();
   await page.screenshot({ path: 'output/playwright/workflow-loops-decision-dark.png' });
-  await page.getByTestId('project-workflow-nav-item').filter({ hasText: 'Governed delivery' }).first().click();
+  await openWorkflowDesigner(page, 'Governed delivery');
   await expect(canvasOf(page).getByTestId('wf-edge-badge-e-review-fix')).toBeVisible();
   await page.screenshot({ path: 'output/playwright/workflow-loops-designer-dark.png' });
 });

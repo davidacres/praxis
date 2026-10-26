@@ -47,10 +47,20 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
-test('creating a project policy from the sidebar persists it and composes it into the effective policy', async () => {
+/** The Policies page no longer has a sidebar entry — open it from the command palette. */
+async function openPolicies(page: import('@playwright/test').Page): Promise<void> {
+  await page.keyboard.press('ControlOrMeta+k');
+  const palette = page.getByRole('dialog', { name: 'Go to' });
+  await expect(palette).toBeVisible();
+  await palette.getByRole('textbox').fill('policies');
+  await palette.getByRole('option', { name: /Delivery Project: Policies/ }).click();
+  await expect(palette).toBeHidden();
+}
+
+test('creating a project policy from the command palette persists it and composes it into the effective policy', async () => {
   const page = app.window;
 
-  await page.getByTestId('project-workflow-policies-nav-item').click();
+  await openPolicies(page);
   await expect(page.getByRole('heading', { name: 'Policies' })).toBeVisible();
 
   const projectCard = page.locator('.wf-policy-card').filter({ has: page.getByRole('heading', { name: 'Delivery Project policy', exact: true }) });
@@ -67,7 +77,7 @@ test('creating a project policy from the sidebar persists it and composes it int
 
   // Persisted server-side: a reload reflects the same profile, not a form default.
   await page.reload();
-  await page.getByTestId('project-workflow-policies-nav-item').click();
+  await openPolicies(page);
   const reloadedCard = page.locator('.wf-policy-card').filter({ has: page.getByRole('heading', { name: 'Delivery Project policy', exact: true }) });
   await expect(reloadedCard.getByRole('checkbox', { name: 'qa' })).toBeChecked();
   await expect(reloadedCard.getByRole('checkbox', { name: 'Require a human approval stage' })).toBeChecked();
@@ -82,7 +92,7 @@ test('a global policy composes strictest-wins with a project policy', async () =
     return projects.find(p => p.name === 'Delivery Project')?.id as string;
   });
 
-  await page.getByTestId('project-workflow-policies-nav-item').click();
+  await openPolicies(page);
   await expect(page.getByRole('heading', { name: 'Policies' })).toBeVisible();
 
   const globalCard = page.locator('.wf-policy-card').filter({ has: page.getByRole('heading', { name: 'Global policy', exact: true }) });

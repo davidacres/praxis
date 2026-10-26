@@ -72,21 +72,22 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
     }, iconSelector);
 
-  // Depth 2 (--tree-indent-2): a board. Workflows and Automations are E6 ledger sections, measured below.
+  // Depth 2 (--tree-indent-2): a board. Runs is an E6 ledger section, measured below.
   await showProjectBoard(page);
   const depth2 = {
     board: await measure('.project-board-row', '.tree-icon')
   };
-  // The E6 ledger: a workflow, Policies and a collapsed run share one icon column and one label column.
-  const ledger = {
-    workflow: await measure('.project-workflow-row', '.tree-icon'),
-    policies: await measure('.project-workflow-child', '.tree-icon'),
-    // A collapsed run (an expanded one is a card and drops its lead icon).
-    run: await page.locator('[data-testid="project-workflow-run-row"]:not(.is-expanded)').first().evaluate(row => {
+  // The E6 ledger: both collapsed runs share one icon column and one label column.
+  // (An expanded run is a card and drops its lead icon, so measure collapsed ones.)
+  const runColumns = (index: number) =>
+    page.locator('[data-testid="project-workflow-run-row"]:not(.is-expanded)').nth(index).evaluate(row => {
       const i = (row.querySelector('.ledger-lead') as HTMLElement).getBoundingClientRect();
       const l = (row.querySelector('.automation-run-title') as HTMLElement).getBoundingClientRect();
       return { icon: Math.round(i.left), label: Math.round(l.left), gap: Math.round(l.left - i.right) };
-    })
+    });
+  const ledger = {
+    firstRun: await runColumns(0),
+    secondRun: await runColumns(1)
   };
   // Depth 1 (--tree-indent-1): flat leaves with no children (deployments).
   const depth1 = {
@@ -103,20 +104,18 @@ test('rows at the same depth of the project tree share an icon column and a labe
       return Math.round(icon.getBoundingClientRect().left);
     })
   ];
-  const [workflowsHeader, automationsHeader] = await Promise.all([
-    page.getByTestId('project-workflows-nav-item').boundingBox(),
-    page.getByTestId('project-workflow-runs-nav-item').boundingBox()
-  ]);
-  await expect(page.locator('.project-workflows-header')).toBeVisible();
-  await expect(page.locator('.project-automations-header')).toBeVisible();
-  await expect(page.locator('.project-workflow-row')).toHaveCount(1);
-  expect(Math.abs(workflowsHeader!.x - automationsHeader!.x)).toBeLessThan(2);
+  const runsHeader = await page.getByTestId('project-workflow-runs-nav-item').boundingBox();
+  // The saved-workflow list is gone from the sidebar: Runs is the only ledger section left.
+  await expect(page.locator('.project-runs-header')).toBeVisible();
+  await expect(page.locator('.project-workflows-header')).toHaveCount(0);
+  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(2);
+  expect(runsHeader!.x).toBeGreaterThanOrEqual(0);
   await expect(page.getByTestId('project-workflow-run-row').first().locator('.automation-state-mark')).toBeVisible();
-  await expect(page.getByTestId('project-workflow-runs-nav-item')).toContainText('Automations');
-  // E6 order: what the project runs (Workflows, Automations) above the conversations about it.
-  const sectionTops = await Promise.all(['project-workflows-nav-item', 'project-workflow-runs-nav-item', 'project-session-new']
+  await expect(page.getByTestId('project-workflow-runs-nav-item')).toContainText('Runs');
+  // E6 order: what the project runs (Runs) above the conversations about it.
+  const sectionTops = await Promise.all(['project-workflow-runs-nav-item', 'project-session-new']
     .map(async id => (await page.getByTestId(id).boundingBox())!.y));
-  expect(sectionTops, 'Workflows → Automations → the recency feed and its New session bar').toEqual([...sectionTops].sort((a, b) => a - b));
+  expect(sectionTops, 'Runs → the recency feed and its New session bar').toEqual([...sectionTops].sort((a, b) => a - b));
 
   // Verify header action buttons (Graph, Changes, Run) are visible on the project node header
   await expect(page.getByTestId('project-git-nav-item')).toBeVisible();

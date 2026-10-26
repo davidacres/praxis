@@ -84,8 +84,9 @@ test('repository workflows require command review, preserve trust on restart, an
   await app.window.reload();
   const refused = await app.window.evaluate(async id => { try { await window.praxis.workflows.startRun(id, 'repository-check', 'Untrusted'); return 'unexpected grant'; } catch (error) { return String(error); } }, projectId);
   expect(refused).toContain('needs local workspace trust');
-  await app.window.getByTestId('project-workflow-nav-item').hover();
-  await app.window.getByTestId('project-workflow-run-repository-check').click();
+  // Saved workflows no longer render as sidebar rows; the Runs header's "+"
+  // opens the start-run dialog, which preselects the project's only workflow.
+  await app.window.getByTestId('project-workflow-run-new').first().click();
   const start = app.window.getByTestId('wf-runstart-dialog');
   await start.getByLabel('Run task').fill('Reviewed security check');
   await start.getByRole('button', { name: 'Start', exact: true }).click();

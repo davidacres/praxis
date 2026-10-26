@@ -12,8 +12,9 @@ const FAKE_ACP_AGENT = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
 /**
  * Runs as tree nodes, and the run workspace.
  *
- * - Each run is a direct child under its project's Automations group; saved
- *   workflow definitions live in the separate project-level Workflows group.
+ * - Each run is a direct child under its project's Runs group; saved workflow
+ *   definitions are no longer listed in the sidebar — they are opened from the
+ *   command palette, and new runs start from the Runs header's "+".
  * - Opening a run puts the session doing the work in the centre and the
  *   pipeline, top to bottom, in the right pane.
  * - A stage session records its controller and is opened through the run workspace.
@@ -218,8 +219,8 @@ test('a controller session starts a project run and its stage session fills the 
   await openSession(page, controller.key);
   await expect(page.getByTestId('session-list-row')).toHaveCount(0);
 
-  // Project tree: runs are direct children of Automations; saved definitions
-  // have their own project-level Workflows group. Opening a run fills workspace.
+  // Project tree: runs are direct children of the Runs group. Opening a run
+  // fills the workspace.
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
@@ -322,10 +323,10 @@ test('deleting a live run cancels it first, then removes it', async () => {
   await expect.poll(() => runStatus(page, run.runId)).toBeUndefined();
 });
 
-test('an automation run can be renamed and the name persists after reload', async () => {
+test('a run can be renamed from the sidebar and the name persists after reload', async () => {
   const { page, seeded } = await launch(true);
   const run = await page.evaluate(
-    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Rename this automation'),
+    async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Rename this run'),
     seeded
   );
   await page.reload();
@@ -371,16 +372,15 @@ test('an automation run can be renamed and the name persists after reload', asyn
   });
 });
 
-test('the start-run dialog opens from a workflow row with that workflow preselected, and lands on the new run', async () => {
-  const { page, seeded } = await launch(true);
+test('the start-run dialog opens from the Runs header with the only workflow preselected, and lands on the new run', async () => {
+  const { page } = await launch(true);
   await page.reload();
 
   await expect(page.getByTestId('project-workflow-run-new')).toBeVisible();
-  await page.getByTestId('project-workflow-nav-item').hover();
-  await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel('Run task').fill('From the workflow row');
+  await dialog.getByLabel('Run task').fill('From the Runs header');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
 
   await expect(page.getByTestId('wf-run-panel')).toBeVisible();
@@ -390,7 +390,7 @@ test('the start-run dialog opens from a workflow row with that workflow preselec
   await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
 });
 
-test('the Automations header opens a new workflow run', async () => {
+test('the Runs header opens a new workflow run', async () => {
   const { page } = await launch(true);
   await page.reload();
 
@@ -398,7 +398,7 @@ test('the Automations header opens a new workflow run', async () => {
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Start workflow run');
-  await dialog.getByLabel('Run task').fill('From the Automations header');
+  await dialog.getByLabel('Run task').fill('From the Runs header');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
 
   await expect(page.getByTestId('wf-run-panel')).toBeVisible();
@@ -417,15 +417,15 @@ test('the Automations header opens a new workflow run', async () => {
   const sheet = page.getByTestId('automation-sheet');
   await expect(sheet).toBeVisible();
   await expect(sheet.getByTestId('automation-sheet-stages').locator('.automation-sheet-stage')).toHaveCount(2);
-  await sheet.getByRole('button', { name: 'Close automation details' }).click();
+  await sheet.getByRole('button', { name: 'Close run details' }).click();
   await page.locator('[data-testid="project-tree"]').screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-timeline.png')
   });
-  await page.getByRole('button', { name: 'Collapse automations', exact: true }).click();
+  await page.getByRole('button', { name: 'Collapse runs', exact: true }).click();
   await expect(timeline).not.toBeVisible();
 });
 
-test('a long automation uses a bounded dot rail and exposes every step in the workflow sheet', async () => {
+test('a long run uses a bounded dot rail and exposes every step in the workflow sheet', async () => {
   const { page, seeded } = await launch(true);
   await page.evaluate(async projectId => {
     const now = new Date().toISOString();
@@ -444,7 +444,7 @@ test('a long automation uses a bounded dot rail and exposes every step in the wo
     await window.praxis.workflows.save(projectId, {
       schemaVersion: 1,
       id: workflowId,
-      name: 'Long automation',
+      name: 'Long run',
       scope: 'project',
       projectId,
       version: 1,
@@ -458,7 +458,7 @@ test('a long automation uses a bounded dot rail and exposes every step in the wo
   }, seeded.projectId);
   await page.reload();
 
-  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Long automation' });
+  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Long run' });
   await expect(row).toBeVisible();
   const toggle = row.getByRole('button').first();
   await toggle.click();
@@ -480,15 +480,14 @@ test('a long automation uses a bounded dot rail and exposes every step in the wo
 const gitOut = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' });
 
 async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'uncommitted-base-omit' | 'uncommitted-base-commit'): Promise<{ page: Page; repo: string; runId: string }> {
-  const { page, seeded } = await launch(true);
+  const { page } = await launch(true);
   const project = await page.evaluate(() => window.praxis.projects.list().then(list => list[0]));
   const repo = project.workspaceFolder as string;
   fs.writeFileSync(path.join(repo, 'unsaved.ts'), 'export const draft = 1;\n');
   fs.appendFileSync(path.join(repo, 'README.md'), 'local edit\n');
   await page.reload();
 
-  await page.getByTestId('project-workflow-nav-item').hover();
-  await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Start with local edits');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
@@ -544,15 +543,14 @@ test('a dirty checkout can commit its changes, then the run starts from that com
 });
 
 test('starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output', async () => {
-  const { page, seeded } = await launch();
+  const { page } = await launch();
   const project = await page.evaluate(() => window.praxis.projects.list().then(list => list[0]));
   const repo = project.workspaceFolder as string;
   // Simulate the folder having lost its Git repository (e.g. `.git` deleted outside the app).
   fs.rmSync(path.join(repo, '.git'), { recursive: true, force: true });
   await page.reload();
 
-  await page.getByTestId('project-workflow-nav-item').hover();
-  await page.getByTestId(`project-workflow-run-${seeded.workflowId}`).click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Start without a Git repo');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
@@ -826,7 +824,7 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
 
   await page.reload();
 
-  // Open the Sessions > Automations tree in the sidebar
+  // Open the project's Runs group in the sidebar
   const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
   if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
   const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
@@ -841,7 +839,7 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
   // It is now removed from the active runs tree
   await expect(runRow).toHaveCount(0);
 
-  // Clicking the Automations header opens the workflow runs browser
+  // Clicking the Runs header opens the workflow runs browser
   await runsGroup.click();
   await expect(page.getByTestId('wf-runs-browser')).toBeVisible();
   await expect(page.getByTestId('wf-runs-browser-new-run')).toHaveCount(0);

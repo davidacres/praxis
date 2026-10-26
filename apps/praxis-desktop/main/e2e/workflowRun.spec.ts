@@ -63,9 +63,10 @@ function runPanel(page: Page) {
   return page.getByTestId('wf-run-panel');
 }
 
-/** Starts a run from its workflow row and lands on its workspace. */
+/** Starts a run from the sidebar's Runs header and lands on its workspace. The
+ *  project has a single saved workflow, which the dialog preselects. */
 async function startRun(page: Page, task: string, options: { ticket?: string } = {}): Promise<void> {
-  await page.getByRole('button', { name: /^Start a run of / }).first().click();
+  await page.getByTestId('project-workflow-run-new').first().click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Run task').fill(task);

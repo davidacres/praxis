@@ -9,7 +9,7 @@ import { startMockGatewayServer, type MockGatewayServer } from './mockGatewaySer
 
 /**
  * A very long name must never push a row's action buttons out of reach. Every row that carries
- * archive / delete / cancel (a workflow, a run node, a session — in the sidebar tree and in the panes)
+ * archive / delete / cancel (a run node, a session — in the sidebar tree and in the panes)
  * truncates its name and keeps its buttons inside its container, at the narrowest the sidebar (180px) and
  * the right pane (280px) can be dragged to.
  */
@@ -49,7 +49,7 @@ async function expectButtonsInside(container: Locator, what: string): Promise<vo
   }
 }
 
-test('long workflow, run and session names leave their action buttons reachable at the narrowest widths', async () => {
+test('long run and session names leave their action buttons reachable at the narrowest widths', async () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-long-repo-'));
   tempDirs.push(repo);
   const git = (...args: string[]): void => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
@@ -96,10 +96,9 @@ test('long workflow, run and session names leave their action buttons reachable 
   await page.reload();
   await expect(page.getByTestId('startup-splash')).toHaveCount(0, { timeout: 15000 });
 
-  // The sidebar tree: a workflow row, a run node, and a session row (each revealed on hover).
-  const workflowRow = page.locator('.project-workflow-row').first();
-  await workflowRow.hover();
-  await expectButtonsInside(workflowRow, 'workflow row');
+  // The sidebar tree: a run node and a session row (each revealed on hover).
+  // Saved workflows no longer render as sidebar rows — they are opened from the
+  // command palette or the project header's New workflow action.
   const runRow = page.getByTestId('project-workflow-run-row').first();
   await runRow.hover();
   await expectButtonsInside(runRow, 'run node');
@@ -124,6 +123,4 @@ test('long workflow, run and session names leave their action buttons reachable 
 
   await openSession(page);
   await sessionRow.click();
-  await page.getByRole('tablist', { name: 'Session detail' }).getByRole('tab', { name: 'Sessions' }).click();
-  await expectButtonsInside(page.getByTestId('session-browser-row').first(), 'session browser row');
 });

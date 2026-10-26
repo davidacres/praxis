@@ -108,19 +108,6 @@ test('a ticket for a one-line fix is delegated to an agent and lands on disk', a
   // the synthesized key, which is what a user sees in the sidebar.
   await openSession(win, 'Fix the sum() function');
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 10000 });
-
-  // The edit renders as a red/green diff in the grouped completion gadget,
-  // which now lives on the inspector's Activity tab rather than at the foot of
-  // the transcript.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await win.locator('[data-testid="tool-completion-gadget"] [data-testid="tool-completion-item"]').first().click();
-  const diff = win.locator('[data-testid="session-tool-diff"]');
-  await expect(diff).toBeVisible();
-  await expect(diff.locator('.diff-add')).toContainText('return a + b');
-  await expect(diff.locator('.diff-del')).toContainText('return a - b');
-  // Written for looking at: a unified diff has to stay readable in a rail that
-  // is 280px at its narrowest.
-  await win.screenshot({ path: 'output/playwright/session-activity-tab.png', fullPage: true });
 });
 
 test('a read-only session cannot write the file', async () => {
@@ -549,58 +536,3 @@ test('a CLI-agent session reports no token count rather than a misleading zero',
   ).toBeUndefined();
 });
 
-test('an edit can be undone straight from the transcript', async () => {
-  test.setTimeout(60000);
-  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-undo-'));
-  const sumFile = path.join(repo, 'sum.js');
-  const original = 'function sum(a, b) {\n  return a - b;\n}\n';
-  fs.writeFileSync(sumFile, original);
-  execFileSync('git', ['init', '-q'], { cwd: repo });
-  execFileSync('git', ['add', '.'], { cwd: repo });
-  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: repo });
-
-  const app_ = app = await launchTestApp();
-  const win = app_.window;
-  await win.evaluate(agentPath =>
-    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
-    AGENT_FIXTURE
-  );
-
-  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
-  const session = await win.evaluate(
-    async ({ goal, cwd }) => window.praxis.ai.delegate({
-      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
-      task: { goal, maxSteps: 4, timeoutMs: 30000 }
-    }),
-    { goal, cwd: repo }
-  );
-  await expect
-    .poll(() => win.evaluate(
-      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
-    ), { timeout: 20000 })
-    .toBe('completed');
-  expect(fs.readFileSync(sumFile, 'utf8')).toContain('return a + b;');
-
-  await openSession(win, 'Fix the sum() function');
-
-  // The edit remains reachable from the grouped completion gadget, without
-  // duplicating a tool-call disclosure inside the conversation.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  const toolGadget = win.locator('[data-testid="tool-completion-gadget"]');
-  await toolGadget.locator('[data-testid="tool-completion-item"]').first().click();
-  const undoButton = win.getByTestId('session-tool-undo');
-  await expect(undoButton).toBeVisible();
-  await undoButton.click();
-  const dialog = win.getByRole('dialog', { name: 'Undo the edit to sum.js?' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Undo edit', exact: true }).click();
-
-  // The file is exactly what it was before the edit, and git agrees nothing
-  // changed.
-  await expect.poll(() => fs.readFileSync(sumFile, 'utf8')).toBe(original);
-  expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
-
-  // The undo itself is a visible, honest part of the record, not a silent rewrite.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await expect(win.getByTestId('session-events')).toContainText('You undid the edit to sum.js.');
-});

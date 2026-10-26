@@ -1605,6 +1605,7 @@ export function App() {
         entries.push({ id: `project-schedules:${project.id}`, label: `${project.name}: Scheduled runs`, hint: project.key, group: 'Projects', icon: 'clock', keywords: 'schedule scheduled run queue tickets overnight batch', run: () => navigate({ projectId: project.id, feature: 'schedules' }) });
       }
       entries.push({ id: `runs:${project.id}`, label: `${project.name} · Workflow runs`, hint: 'Browse runs and history', group: 'Workflows', icon: 'play', keywords: 'runs history list workflow archive', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined }) });
+      entries.push({ id: `policies:${project.id}`, label: `${project.name}: Policies`, hint: 'Workflow policy profiles', group: 'Workflows', icon: 'shield', keywords: 'policy policies gates approval trust', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'policies' }) });
       (runsByProjectId[project.id] ?? []).filter(run => !run.archived).forEach(run => {
         entries.push({ id: `run:${run.runId}`, label: run.workflowName, hint: `${project.name} · run · ${run.status}`, group: 'Workflows', icon: 'play', keywords: 'workflow run pipeline', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: run.runId }) });
       });
@@ -2132,7 +2133,7 @@ export function App() {
         <div className="view-scroll wf-page">
           <div className="empty-state">
             <Icon name="split-horizontal" size={28} />
-            <span>Pick a workflow from the sidebar, or start a new one.</span>
+            <span>Open a saved workflow from the command palette, or start a new one.</span>
             <button type="button" className="btn btn-primary" onClick={() => setNewWorkflowForProject(selectedProject.id)}>
               New workflow
             </button>
@@ -2858,12 +2859,8 @@ export function App() {
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
-                  projectWorkflows={workflowsByProject}
-                  activeWorkflowId={route.feature === 'workflows' && !route.workflowView ? route.workflowId : undefined}
                   runsByProjectId={runsByProjectId}
                   activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
-                  activeWorkflowPolicies={route.feature === 'workflows' && route.workflowView === 'policies'}
-                  onSelectWorkflow={(project, workflowId) => navigate({ projectId: project.id, feature: 'workflows', workflowId })}
                   onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined })}
                   onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
                   onStartWorkflowRun={(project, workflowId) => setStartRunDialog({ projectId: project.id, workflowId })}
@@ -2889,28 +2886,10 @@ export function App() {
                       navigate({ projectId: project.id, feature: 'workflows' });
                     }
                   }}
-                  onSelectWorkflowPolicies={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'policies' })}
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
                   enableDeployments={settings?.preview?.enableDeployments ?? false}
                   onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
                   onNewWorkflow={project => setNewWorkflowForProject(project.id)}
-                  onDeleteWorkflow={async (project, workflowId) => {
-                    if (
-                      !(await confirm({
-                        title: 'Delete this workflow?',
-                        message: 'Runs already started are kept.',
-                        confirmLabel: 'Delete workflow',
-                        danger: true
-                      }))
-                    ) {
-                      return;
-                    }
-                    await window.praxis.workflows.remove(project.id, workflowId);
-                    setWorkflowsNonce(n => n + 1);
-                    if (route.feature === 'workflows' && route.workflowId === workflowId) {
-                      navigate({ projectId: project.id, feature: 'workflows' });
-                    }
-                  }}
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
                     const connectionId = board.connectionId;

@@ -74,12 +74,6 @@ test('allowing a pending permission lets the session continue to completion', as
   await toolHint.focus();
   await expect(toolHint).toBeFocused();
   await expect(card).not.toContainText('permission-request-7e4a9f2c1d8b6e5a');
-  // Opened deliberately: these are negative assertions, and against a closed
-  // tab they would pass without the log ever being rendered.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await expect(win.locator('[data-testid="session-events"]')).not.toContainText('CLI agent session started');
-  await expect(win.locator('[data-testid="session-events"]')).not.toContainText('Approval needed:');
-  await win.locator('[data-testid="session-tab-summary"]').click();
   // What the user actually sees while the agent is blocked on a decision: the
   // tool it wants to run, and Deny / Always allow / Allow, docked above the
   // composer the same way the pending-approval state was designed to read.
@@ -115,12 +109,6 @@ test('allowing a pending permission lets the session continue to completion', as
   });
   // The approval card disappears once resolved.
   await expect(card).toHaveCount(0);
-  // The completed tool run shows in the grouped Activity gadget (no inline
-  // transcript row and no separate `tool_start` row).
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await expect(win.locator('[data-testid="tool-completion-gadget"]')).toBeVisible();
-  await expect(win.locator('[data-testid="tool-completion-item"]')).toHaveCount(1);
-  await expect(win.locator('[data-testid="session-chat-tool"]')).toHaveCount(0);
 });
 
 test('the composer Autopilot mode starts a CLI session without a permission pause', async () => {

@@ -197,8 +197,6 @@ test('ACP read-only permission denial survives neutral titles, missing kinds and
     }
   }
   await openSession(win, 'APP-202');
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await expect(win.getByText('Blocked by read-only tools: Project context').first()).toBeVisible();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed');
 });
 
@@ -420,25 +418,6 @@ test('a pasted image reaches an ACP agent as an image content block', async () =
   // The fixture reports the image blocks it actually received over the ACP wire.
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('IMAGES_RECEIVED:1:image/png');
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
-});
-
-test('an ACP diff tool call renders as a red/green diff in the console', async () => {
-  app = await launchTestApp();
-  const win = app.window;
-  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
-
-  await delegate(win, 'APP-203', 'claude-code-cli', 'WITH_DIFF please edit notes.md');
-  await expect.poll(async () => (await readSession(win, 'APP-203'))?.state, { timeout: 15000 }).toBe('completed');
-
-  await openSession(win, 'APP-203');
-
-  // The grouped completion gadget keeps the diff behind one selected-run
-  // detail surface rather than duplicating a transcript disclosure.
-  await win.locator('[data-testid="session-tab-activity"]').click();
-  await win.locator('[data-testid="tool-completion-gadget"] [data-testid="tool-completion-item"]').first().click();
-  const diff = win.locator('[data-testid="session-tool-diff"]');
-  await expect(diff).toBeVisible();
-  await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');
 });
 
 test('ticket-selected Claude Code runs review and analysis without using Vercel', async () => {

@@ -51,6 +51,16 @@ test('General and Ticket project sessions expose rename, archive, and delete act
       provider: 'vercel-gateway',
       task: { goal: 'Standalone sidebar action session' }
     });
+    // A workflow run, so the project tree has a collapsed ledger run row to
+    // compare the session rows' icon/label columns against.
+    const now = new Date().toISOString();
+    const workflowId = `actions-${project.id}`;
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1, id: workflowId, name: 'Actions workflow', scope: 'project', projectId: project.id, version: 1,
+      entryNodeId: 'approve', createdAt: now, updatedAt: now,
+      nodes: [{ type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [], prompt: 'Ship?', requiredGates: [], allowBypass: false }]
+    } as never);
+    await window.praxis.workflows.startRun(project.id, workflowId, 'Geometry reference run');
     return project.id;
   });
 
@@ -82,15 +92,17 @@ test('General and Ticket project sessions expose rename, archive, and delete act
   }
 
   // E6 ledger geometry: a session row's icon and title sit on the same two columns as the project's
-  // other ledger rows (here its Workflows › Policies row) — not one tree level deeper. Selected, it is
-  // marked by one straight accent line on a square left edge, not a bar bent round a rounded corner.
+  // other ledger rows (here a collapsed run row under Runs) — not one tree level deeper. Selected, it
+  // is marked by one straight accent line on a square left edge, not a bar bent round a rounded corner.
   const projectTree = page.getByTestId('project-tree').filter({ hasText: 'Session actions project' });
   const columns = (row: typeof general, icon: string, label: string) => row.evaluate((el, [i, l]) => ({
     icon: Math.round((el.querySelector(i) as HTMLElement).getBoundingClientRect().left),
     label: Math.round((el.querySelector(l) as HTMLElement).getBoundingClientRect().left)
   }), [icon, label] as const);
-  const policiesColumns = await columns(projectTree.locator('.project-workflow-child').first(), '.tree-icon', '.tree-label');
-  expect(await columns(general, '.tree-icon', '.tree-label'), 'session row shares the ledger columns').toEqual(policiesColumns);
+  const runRow = projectTree.locator('[data-testid="project-workflow-run-row"]:not(.is-expanded)').first();
+  await expect(runRow).toBeVisible();
+  const runColumns = await columns(runRow, '.ledger-lead', '.automation-run-title');
+  expect(await columns(general, '.tree-icon', '.tree-label'), 'session row shares the ledger columns').toEqual(runColumns);
   await general.click();
   await expect(general).toHaveClass(/is-selected/);
   const edge = await general.evaluate(el => {

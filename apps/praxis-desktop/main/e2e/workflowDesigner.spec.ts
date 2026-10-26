@@ -8,10 +8,10 @@ import { escapeRegExp } from './textPattern';
 /**
  * FX-BE-021 / FX-BF-014 — the visual workflow designer.
  *
- * Navigation lives in the project sidebar: Workflows is a project-level group
- * for saved definitions, separate from the project's Automations group of run
- * rows. `+` on Workflows opens the New Workflow dialog. The stage/connection
- * inspector renders in the shell's right pane.
+ * Saved definitions are no longer listed in the project sidebar — the project
+ * header's `+` opens the New Workflow dialog, and a saved workflow is opened
+ * from the command palette. The project sidebar keeps only its Runs group of
+ * run rows. The stage/connection inspector renders in the shell's right pane.
  */
 
 test.slow();
