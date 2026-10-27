@@ -10,6 +10,7 @@
 
 import type { KeyValueStore } from '../host/stateStore';
 import {
+  MAX_SCHEDULED_CONCURRENCY,
   SCHEDULED_RUN_SCHEMA_VERSION,
   isValidTimeZone,
   reconcileScheduledRunOnLaunch,
@@ -66,8 +67,20 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
     ...(spend ? { spend } : {}),
     ...(estimate ? { estimate } : {}),
     ...(artifacts.length ? { artifacts } : {}),
-    ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {})
+    ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {}),
+    ...(typeof raw.lane === 'number' && Number.isInteger(raw.lane) && raw.lane >= 1 ? { lane: raw.lane } : {}),
+    ...(text(raw.laneReason) ? { laneReason: text(raw.laneReason) } : {}),
+    ...(typeof raw.waitReason === 'string' && PAUSE_REASONS.has(raw.waitReason) ? { waitReason: raw.waitReason as ScheduledPauseReason } : {})
   };
+}
+
+/** A stored parallel policy with an impossible concurrency falls back to sequential rather than running wide. */
+function storedPolicy(raw: Record<string, unknown> | undefined, workflowId: string | undefined): ScheduledRun['policy'] {
+  const max = raw?.mode === 'parallel' ? raw.maxConcurrency : undefined;
+  if (typeof max === 'number' && Number.isInteger(max) && max >= 2 && max <= MAX_SCHEDULED_CONCURRENCY) {
+    return { mode: 'parallel', maxConcurrency: max, ...(workflowId ? { workflowId } : {}) };
+  }
+  return { mode: 'sequential', ...(workflowId ? { workflowId } : {}) };
 }
 
 function num(value: unknown): number | undefined {
@@ -136,6 +149,7 @@ function normalizeEntry(value: unknown, fallbackSequence: number): ScheduledQueu
     id,
     sequence: typeof raw.sequence === 'number' && Number.isFinite(raw.sequence) ? raw.sequence : fallbackSequence,
     ticket: { connectionId, issueKey, title: text(ticket?.title) ?? issueKey },
+    ...(raw.withPrevious === true ? { withPrevious: true as const } : {}),
     ...(outcome ? { outcome } : {})
   };
 }
@@ -202,7 +216,7 @@ export function normalizeScheduledRun(value: unknown): ScheduledRun | undefined 
     ...(text(raw.projectId) ? { projectId: text(raw.projectId) } : {}),
     scheduledStartAt: new Date(start).toISOString(),
     timezone: text(raw.timezone) && isValidTimeZone(raw.timezone as string) ? (raw.timezone as string) : 'UTC',
-    policy: { mode: 'sequential', ...(workflowId ? { workflowId } : {}) },
+    policy: storedPolicy(rawPolicy, workflowId),
     entries: renumberEntries(ordered),
     status,
     attempts: (Array.isArray(raw.attempts) ? raw.attempts : []).map(normalizeAttempt).filter((a): a is ScheduledRunAttempt => !!a),

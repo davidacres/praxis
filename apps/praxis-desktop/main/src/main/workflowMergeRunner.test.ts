@@ -238,3 +238,41 @@ test('an undeclared change is merged but flagged under the default escalate poli
     cleanup();
   }
 });
+
+test('Praxis metadata in the base checkout does not block a merge, but real uncommitted work still does', async () => {
+  const { repo, cleanup } = setupRepo();
+  try {
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+    const runId = 'feed1234ef567890';
+    git('checkout', '-b', 'WF-FEED1234');
+    fs.writeFileSync(path.join(repo, 'feature.txt'), 'work\n');
+    git('add', 'feature.txt');
+    git('commit', '-m', 'Add feature');
+    git('checkout', 'main');
+    const node: WorkflowMergeNode = { type: 'merge', id: 'merge', name: 'Merge', targetBranch: 'main', x: 0, y: 0, inputs: [], onConflict: 'fail' };
+    const now = new Date().toISOString();
+    const run = {
+      runId, projectId: 'p', workflowId: 'wf', workflowVersion: 1, status: 'running', schemaVersion: 1, startedAt: now, events: [], gateDecisions: [],
+      definition: { id: 'wf', name: 'W', scope: 'project', version: 1, schemaVersion: 1, entryNodeId: 'merge', createdAt: now, updatedAt: now, nodes: [node], edges: [] },
+      nodes: { merge: { nodeId: 'merge', outcome: 'running', artifacts: [], attempts: [{ attempt: 1, startedAt: now, outcome: 'running' }] } }
+    } as unknown as WorkflowRun;
+    const evidenceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-'));
+
+    // A tracked file with uncommitted edits is work the merge could lose: refused.
+    fs.writeFileSync(path.join(repo, 'README.md'), '# Edited\n');
+    const refused = await runWorkflowMerge(node, { run }, repo, evidenceRoot);
+    assert.equal(refused.status, 'failed');
+    assert.match(refused.error ?? '', /uncommitted changes/);
+    git('checkout', '--', 'README.md');
+
+    // Praxis's own files, uncommitted, are not: the merge goes ahead.
+    fs.mkdirSync(path.join(repo, '.praxis', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(repo, '.praxis', 'workflows', 'wf.json'), '{}');
+    fs.writeFileSync(path.join(repo, 'project.praxis.md'), '# Brief\n');
+    const merged = await runWorkflowMerge(node, { run }, repo, evidenceRoot);
+    assert.equal(merged.status, 'succeeded', merged.error);
+    assert.equal(fs.existsSync(path.join(repo, 'feature.txt')), true);
+  } finally {
+    cleanup();
+  }
+});

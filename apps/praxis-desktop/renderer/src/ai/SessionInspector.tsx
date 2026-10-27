@@ -186,6 +186,9 @@ export function SessionInspector({
         </div>
       </div>
 
+      {/* Who else is working here and what this session holds (FX-BE-092). Renders nothing unless the session is coordinated. */}
+      <SessionCoordination sessionKey={session.issueKey} />
+
       {session.parentSessionKey && (
         <div className="session-parent-banner" data-testid="session-parent-banner">
           <Icon name="robot" size={12} />

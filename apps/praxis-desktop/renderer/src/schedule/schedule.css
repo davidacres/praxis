@@ -119,48 +119,97 @@
 .schedule-hopper-status { color: var(--text-tertiary); font-size: var(--text-xs); }
 .schedule-hopper-title { grid-column: 1 / -1; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* The stage: a belt that feeds the processor */
+/* The stage: the run order as a flow graph (see ScheduleFlowGraph) */
 .schedule-stage { border: 1px solid var(--border); border-radius: var(--radius-xl); padding: var(--space-3) var(--space-4); background:
   radial-gradient(420px 220px at 92% 40%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%), var(--bg-elevated); }
-.schedule-stage-head { display: flex; align-items: center; justify-content: space-between; }
+.schedule-stage-head { display: flex; align-items: center; gap: var(--space-2); }
+.schedule-stage-head .schedule-panel-title { flex: 1; margin: 0; }
 .schedule-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-pill); color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; background: var(--bg-elevated); }
 .schedule-tag { display: inline-block; padding: 0 var(--space-1); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text-tertiary); font-size: var(--text-xs); }
-.schedule-stage-body { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
-.schedule-belt { list-style: none; margin: 0; padding: var(--space-4) var(--space-3); flex: 1; min-width: 0; min-height: 150px; display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; align-content: center; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-sunken); position: relative; }
-.schedule-belt::before { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--text) 6%, transparent) 22px 24px); animation: schedule-belt 1.6s linear infinite; pointer-events: none; }
-.schedule-belt > * { position: relative; flex: none; }
-.schedule-belt-card { width: 152px; display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-2); align-items: center; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: grab; box-shadow: 0 6px 16px color-mix(in srgb, #000 14%, transparent); }
-.schedule-belt-card.is-over { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-.schedule-belt-card.is-entering { animation: schedule-enter 0.55s ease-out; }
-.schedule-belt-seq { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-contrast, #fff); font-size: var(--text-xs); font-weight: 700; }
-.schedule-belt-key { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
-.schedule-belt-title { grid-column: 1 / -1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; font-size: var(--text-sm); }
-.schedule-belt-controls { grid-column: 1 / -1; display: flex; gap: 2px; margin-top: 2px; }
-.schedule-belt-btn { width: 24px; height: 22px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text-tertiary); cursor: pointer; }
-.schedule-belt-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+
+/*
+ * The flow graph. Steps sit in one row, vertically centred, so every arrow meets
+ * the next step at the same height without measuring anything. A shared step is
+ * a lane box: a split bar, one row per ticket with parallel rails either side,
+ * and a join bar. `--schedule-together` is the one hue for "same step".
+ */
+.schedule-composer, .schedule-monitor { --schedule-together: var(--project-color-violet, var(--accent)); --schedule-together-text: color-mix(in srgb, var(--schedule-together) 72%, var(--text)); }
+.schedule-flow-canvas { position: relative; margin-top: var(--space-3); min-height: 260px; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background-color: var(--bg); background-image: radial-gradient(circle, color-mix(in srgb, var(--text-secondary) 26%, transparent) 1px, transparent 1.5px); background-size: 20px 20px;
+  padding: calc(var(--space-6) + 6px) var(--space-4) 76px; display: flex; scrollbar-width: thin; }
+.schedule-flow-track { display: flex; align-items: center; min-width: max-content; margin: auto 0; }
+.schedule-flow { list-style: none; margin: 0; padding: 0; display: flex; align-items: stretch; }
+/* Every column is as tall as the tallest, content centred, so step labels share one line. */
+.schedule-flow > li { position: relative; flex: none; display: flex; align-items: center; }
+
+.schedule-flow-start { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 var(--space-3); border-radius: var(--radius-pill); background: var(--text); color: var(--bg-elevated); font-weight: 650; font-size: var(--text-sm); white-space: nowrap; flex: none; }
+.schedule-flow-start[data-armed='false'] { background: var(--bg-elevated); color: var(--text-secondary); border: 1.5px dashed var(--border-strong); }
+.schedule-flow-start-time { font-family: var(--font-mono); }
+.schedule-flow-start-day { font-weight: 500; font-size: var(--text-xs); opacity: 0.75; }
+
+/* Arrows and the gaps they live in; a gap is also where a new step drops. */
+.schedule-flow-gap { display: flex; align-items: center; min-height: 92px; padding: 0 2px; }
+.schedule-flow-arrow { position: relative; display: block; width: 30px; height: 0; border-top: 1.6px solid var(--text-tertiary); }
+.schedule-flow-arrow::after { content: ''; position: absolute; right: -2px; top: -5px; border: 4.5px solid transparent; border-left: 7px solid var(--text-tertiary); border-right: 0; }
+.schedule-flow-gap.is-target .schedule-flow-arrow { border-top-color: var(--accent); }
+.schedule-flow-gap.is-target .schedule-flow-arrow::after { border-left-color: var(--accent); }
+.schedule-flow-placeholder { display: grid; place-items: center; width: 168px; min-height: 76px; padding: var(--space-2); border: 1.5px dashed color-mix(in srgb, var(--accent) 70%, var(--border)); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); font-size: var(--text-sm); font-weight: 600; text-align: center; }
+.schedule-flow-gap--end .schedule-flow-placeholder { width: 132px; border-color: var(--border-strong); background: transparent; color: var(--text-tertiary); font-weight: 500; }
+.schedule-flow-gap--end.is-target .schedule-flow-placeholder { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--accent); }
+.schedule-flow-canvas[data-empty] .schedule-flow-placeholder { width: 300px; min-height: 92px; }
+
+/* A ticket node, on the Task Designer's node anatomy. */
+.schedule-flow-node { position: relative; width: 196px; display: flex; flex-direction: column; gap: 3px; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated); color: var(--text); box-shadow: 0 2px 8px color-mix(in srgb, #000 14%, transparent); cursor: grab; user-select: none; }
+.schedule-flow-node:active { cursor: grabbing; }
+.schedule-flow-node:hover { border-color: var(--border-strong); }
+.schedule-flow-node.is-entering { animation: schedule-enter 0.55s ease-out; }
+.schedule-flow-node-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.schedule-belt-seq { display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--text); color: var(--bg-elevated); font-size: var(--text-xs); font-weight: 700; flex: none; }
+.schedule-flow-node.is-together .schedule-belt-seq { background: var(--schedule-together); color: #fff; }
+.schedule-belt-key { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.schedule-belt-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: var(--text-sm); }
+.schedule-flow-node-foot { display: flex; align-items: center; gap: var(--space-2); min-height: 18px; min-width: 0; }
+.schedule-flow-type, .schedule-flow-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); color: var(--text-tertiary); }
+.schedule-flow-type { flex: none; max-width: 72px; padding: 0 5px; border-radius: var(--radius-sm); background: var(--bg-sunken); color: var(--text-secondary); font-weight: 600; }
+.schedule-belt-controls { display: flex; gap: 0; margin: -2px -6px -2px auto; flex: none; opacity: 0.5; transition: opacity 0.15s; }
+.schedule-flow-node:hover .schedule-belt-controls, .schedule-flow-node:focus-within .schedule-belt-controls { opacity: 1; }
+.schedule-belt-btn { width: 20px; height: 20px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.schedule-belt-btn:hover:not(:disabled) { border-color: var(--border); background: var(--bg-hover); color: var(--text); }
+.schedule-belt-btn[aria-pressed='true'] { color: var(--schedule-together-text); }
 .schedule-belt-btn:disabled { opacity: 0.35; cursor: default; }
-.schedule-belt-slot { width: 128px; min-height: 84px; display: grid; place-items: center; padding: var(--space-2); border: 1.5px dashed color-mix(in srgb, var(--accent) 50%, var(--border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 6%, transparent); color: var(--text-tertiary); font-size: var(--text-sm); text-align: center; }
-.schedule-belt-slot[aria-hidden='false']:only-child { width: 100%; }
+.schedule-flow-handle { position: absolute; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; border: 1.5px solid var(--border-strong); background: var(--bg-elevated); }
+.schedule-flow-handle--in { left: -5px; }
+.schedule-flow-handle--out { right: -5px; }
 
-.schedule-flow { display: flex; gap: 3px; flex: none; color: var(--accent); }
-.schedule-flow span { width: 7px; height: 7px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: rotate(45deg); opacity: 0.25; animation: schedule-flow 1.2s infinite; }
-.schedule-flow span:nth-child(2) { animation-delay: 0.2s; }
-.schedule-flow span:nth-child(3) { animation-delay: 0.4s; }
+/* Step labels float above their column so they never shift the arrows' line. */
+.schedule-flow-step-label { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); text-align: center; white-space: nowrap; font-size: var(--text-xs); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 650; color: var(--text-tertiary); }
+.schedule-flow-step.is-together > .schedule-flow-step-label { color: var(--schedule-together-text); }
+.schedule-flow-step.is-target > .schedule-flow-node, .schedule-flow-step.is-target .schedule-flow-lanes { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-.schedule-processor { flex: none; width: 176px; }
-.schedule-processor svg { width: 100%; height: auto; overflow: visible; }
-.schedule-proc-halo { fill: var(--accent); opacity: 0.16; filter: blur(10px); }
-.schedule-proc-track { fill: none; stroke: var(--border-strong); stroke-width: 9; }
-.schedule-proc-arc { fill: none; stroke: var(--accent); stroke-width: 9; stroke-linecap: round; transition: stroke-dasharray 0.4s ease; }
-.schedule-processor[data-armed='false'] .schedule-proc-arc { stroke: var(--text-tertiary); }
-.schedule-processor[data-armed='false'] .schedule-proc-halo { opacity: 0.05; }
-/* Spin about each ring's own centre: the default SVG reference box starts at the viewBox origin, which orbits these off-centre. */
-.schedule-proc-dots { fill: none; stroke: var(--accent); stroke-opacity: 0.5; stroke-width: 2; stroke-dasharray: 2 10; transform-box: fill-box; transform-origin: center; animation: schedule-spin 40s linear infinite; }
-.schedule-proc-gear { fill: none; stroke: var(--accent); stroke-opacity: 0.55; stroke-width: 6; stroke-dasharray: 14 8; transform-box: fill-box; transform-origin: center; animation: schedule-spin-back 26s linear infinite; }
-.schedule-proc-core { fill: var(--bg-sunken); stroke: var(--border-strong); }
-.schedule-proc-label { fill: var(--accent); font-size: 11px; letter-spacing: 1.6px; font-weight: 600; }
-.schedule-proc-time { fill: var(--text); font-size: 28px; font-weight: 600; }
-.schedule-proc-day { fill: var(--text-tertiary); font-size: 12px; }
+/* A shared step: split bar, parallel rails per ticket, join bar. */
+.schedule-flow-lanes { display: flex; align-items: stretch; gap: 0; padding: var(--space-3) var(--space-2); border: 1px dashed color-mix(in srgb, var(--schedule-together) 40%, transparent); border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--schedule-together) 6%, transparent); }
+.schedule-flow-step.is-target .schedule-flow-lanes { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); outline: none; }
+.schedule-flow-bar { width: 6px; flex: none; border-radius: 3px; background: var(--schedule-together); margin: 18px 0; }
+.schedule-flow-lane-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.schedule-flow-lane { display: flex; align-items: center; }
+.schedule-flow-rails { position: relative; display: block; width: 28px; height: 7px; border-top: 1.4px solid var(--schedule-together); border-bottom: 1.4px solid var(--schedule-together); }
+.schedule-flow-rails::after { content: ''; position: absolute; right: -1px; top: 50%; width: 7px; height: 7px; margin-top: -4.5px; border-top: 1.6px solid var(--schedule-together); border-right: 1.6px solid var(--schedule-together); transform: rotate(45deg); }
+.schedule-flow-rails.is-target { border-color: var(--accent); border-style: dashed; }
+.schedule-flow-rails.is-target::after { border-color: var(--accent); }
+.schedule-flow-join-preview { position: absolute; left: 50%; top: calc(50% + 48px); transform: translateX(-50%); display: flex; align-items: center; pointer-events: none; z-index: 2; }
+.schedule-flow-join-preview .schedule-flow-placeholder { width: 196px; min-height: 52px; background: color-mix(in srgb, var(--accent) 7%, var(--bg-elevated)); }
+
+.schedule-flow-step.is-together > .schedule-flow-join-preview { top: auto; bottom: -64px; }
+.schedule-flow-legend { margin-top: var(--space-2); display: flex; gap: var(--space-4); font-size: var(--text-xs); color: var(--text-tertiary); }
+.schedule-flow-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.schedule-flow-legend-arrow { width: 18px; border-top: 1.6px solid var(--text-tertiary); }
+.schedule-flow-legend-rails { width: 18px; height: 6px; border-top: 1.4px solid var(--schedule-together); border-bottom: 1.4px solid var(--schedule-together); }
+.schedule-flow-legend-bar { width: 4px; height: 14px; border-radius: 2px; background: var(--schedule-together); }
+
+
 
 /* Start, policy, readiness, summary */
 .schedule-panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); }
@@ -191,23 +240,15 @@
 .schedule-summary-zone { color: var(--text-tertiary); font-size: var(--text-sm); }
 .schedule-summary-action { height: calc(38px * var(--ui-scale)); padding: 0 var(--space-5); font-size: var(--text-md); }
 
-@keyframes schedule-spin { to { transform: rotate(360deg); } }
-@keyframes schedule-spin-back { to { transform: rotate(-360deg); } }
-@keyframes schedule-belt { to { background-position: 24px 0; } }
-@keyframes schedule-flow { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
 @keyframes schedule-enter { from { opacity: 0; transform: translateX(-40px) scale(0.95); } to { opacity: 1; transform: none; } }
 
 @media (max-width: 1000px) {
   .schedule-compose-grid, .schedule-panels { grid-template-columns: 1fr; }
-  .schedule-stage-body { flex-direction: column; align-items: stretch; }
-  .schedule-flow { display: none; }
-  .schedule-processor { width: 180px; align-self: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .schedule-proc-dots, .schedule-proc-gear, .schedule-belt::before, .schedule-belt-card.is-entering, .schedule-flow span { animation: none; }
-  .schedule-proc-arc, .hopper-card { transition: none; }
-  .schedule-flow span { opacity: 0.6; }
+  .schedule-flow-node.is-entering { animation: none; }
+  .schedule-hopper-card { transition: none; }
 }
 
 /* The shell supplies the existing resizable left pane. Each half scrolls independently. */
@@ -230,9 +271,6 @@
 /* Pane width changes independently of the window when the other sidebars are open. */
 .schedule-composer { container-type: inline-size; }
 @container (max-width: 720px) {
-  .schedule-stage-body { flex-direction: column; align-items: stretch; }
-  .schedule-flow { display: none; }
-  .schedule-processor { width: 160px; align-self: center; }
   .schedule-panels { grid-template-columns: minmax(0, 1fr); }
   .schedule-compose-title { flex-wrap: wrap; }
   .schedule-name { min-width: 0; max-width: 100%; box-sizing: border-box; }
@@ -316,3 +354,16 @@
 @media (prefers-reduced-motion: reduce) { .schedule-proc.is-working { animation: none; } }
 
 .schedule-failure-detail { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; color: var(--text); }
+
+/* Parallel lanes in the live view (FX-BE-149). */
+.schedule-lanes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.schedule-lane { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-left: 3px solid var(--schedule-together, var(--accent)); border-radius: var(--radius-md); background: var(--bg-elevated); }
+.schedule-lane--paused { border-left-color: var(--warning); }
+.schedule-lane--failed { border-left-color: var(--danger); }
+.schedule-lane-number { font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); white-space: nowrap; padding-top: 2px; }
+.schedule-lane-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.schedule-lane-reason { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.45; }
+.schedule-lane-meta { color: var(--text-tertiary); font-size: var(--text-xs); white-space: nowrap; }
+.schedule-lanes-sub { margin-top: var(--space-3); }
+.schedule-lanes-waiting { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--text-sm); color: var(--text-secondary); }
+.schedule-budget-left { color: var(--text-tertiary); font-size: var(--text-xs); }

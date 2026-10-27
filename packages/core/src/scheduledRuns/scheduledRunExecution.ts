@@ -8,9 +8,11 @@
  * that changes nothing returns the very same object, which is how the runner
  * knows not to save.
  *
- * Order is strict: only the first queued entry may launch, and only while no
- * other entry is running, paused or failed. A failure never lets the run move
- * past it by itself.
+ * Order is strict. A sequential run launches only the first queued entry, and
+ * only while no other entry is running, paused or failed. A parallel run
+ * (FX-BE-149) may overlap the entries of one step, up to its cap, and a step
+ * still waits for every entry before it. Either way a failure never lets the
+ * run move past it by itself.
  */
 
 import {
@@ -21,9 +23,10 @@ import {
   type ScheduledPauseReason,
   type ScheduledQueueEntry,
   type ScheduledRun,
+  type ScheduledRunEvent,
   type ScheduledRunTrigger
 } from './scheduledRun';
-import { newScheduledId } from './scheduledRun';
+import { newScheduledId, scheduledConcurrency, scheduledSteps } from './scheduledRun';
 
 /** What the workflow engine says about an entry's workflow run, reduced to what the schedule cares about. */
 /**
@@ -68,14 +71,72 @@ export function failedScheduledEntry(run: ScheduledRun): ScheduledQueueEntry | u
   return run.entries.find(entry => entry.outcome?.status === 'failed');
 }
 
+/** Every entry occupying a lane: running, or paused at a gate or a stall. */
+export function activeScheduledEntries(run: ScheduledRun): ScheduledQueueEntry[] {
+  return run.entries.filter(isActive);
+}
+
+const finished = (entry: ScheduledQueueEntry) => ['done', 'skipped'].includes(outcomeOf(entry).status);
+
 /**
- * The entry to launch next: the first queued one, in order — and only while the
- * run is running with nothing else active or failed.
+ * The entries that may launch now, in order, with no more than there are free
+ * lanes. Nothing launches unless the run is running and no entry has failed.
+ *
+ * Sequential: the first queued entry, and only when nothing else is active.
+ * Parallel: queued entries of the *current step* — the first step with anything
+ * unfinished — so a step waits for every entry before it (the join bar), and
+ * entries of one step overlap only up to `maxConcurrency`.
  */
+export function launchableEntries(run: ScheduledRun): ScheduledQueueEntry[] {
+  if (run.status !== 'running') return [];
+  if (run.entries.some(entry => entry.outcome?.status === 'failed')) return [];
+  const active = activeScheduledEntries(run).length;
+  const cap = scheduledConcurrency(run.policy);
+  if (cap === 1) {
+    const first = active ? undefined : run.entries.find(entry => outcomeOf(entry).status === 'queued');
+    return first ? [first] : [];
+  }
+  const current = scheduledSteps(run.entries).find(step => step.some(entry => !finished(entry)));
+  if (!current) return [];
+  return current.filter(entry => outcomeOf(entry).status === 'queued').slice(0, Math.max(0, cap - active));
+}
+
+/** The next entry to launch, or undefined when none may (see `launchableEntries`). */
 export function nextLaunchableEntry(run: ScheduledRun): ScheduledQueueEntry | undefined {
-  if (run.status !== 'running') return undefined;
-  if (run.entries.some(entry => isActive(entry) || entry.outcome?.status === 'failed')) return undefined;
-  return run.entries.find(entry => outcomeOf(entry).status === 'queued');
+  return launchableEntries(run)[0];
+}
+
+/** The lowest lane number no active entry holds. */
+export function freeScheduledLane(run: ScheduledRun): number {
+  const taken = new Set(activeScheduledEntries(run).map(entry => entry.outcome?.lane).filter((lane): lane is number => typeof lane === 'number'));
+  let lane = 1;
+  while (taken.has(lane)) lane += 1;
+  return lane;
+}
+
+/**
+ * The entry that still needs a person, if any, and why: a failure first, then a
+ * gate, then a stall. With several lanes more than one entry can be waiting, but
+ * a run holds one pause, so when one is settled the pause moves to the next.
+ */
+function waitingEntry(run: ScheduledRun): { entryId: string; reason: ScheduledPauseReason; message: string } | undefined {
+  const failed = run.entries.find(entry => entry.outcome?.status === 'failed');
+  if (failed) return { entryId: failed.id, reason: 'failure', message: `${failed.ticket.issueKey} failed: ${failed.outcome?.reason ?? 'it stopped.'}` };
+  const gated = run.entries.find(entry => entry.outcome?.status === 'paused' && entry.outcome.gate);
+  if (gated) return { entryId: gated.id, reason: 'approval', message: gated.outcome?.reason ?? `${gated.ticket.issueKey} is waiting for approval.` };
+  const stalled = run.entries.find(entry => entry.outcome?.status === 'paused');
+  if (stalled) return { entryId: stalled.id, reason: stalled.outcome?.waitReason ?? 'policy', message: stalled.outcome?.reason ?? `${stalled.ticket.issueKey} is waiting.` };
+  return undefined;
+}
+
+/** Takes the run off pause, unless another entry is still waiting for a person; then the pause moves to it. */
+function resumeUnlessWaiting(run: ScheduledRun, at: string, resumed?: Omit<ScheduledRunEvent, 'at'>): ScheduledRun {
+  const other = waitingEntry(run);
+  if (other) {
+    if (run.pause?.entryId === other.entryId && run.status === 'paused') return touch(run, at, resumed);
+    return touch(pausedRun(run, other.reason, other.message, at, other.entryId), at, { kind: 'paused', message: other.message, entryId: other.entryId });
+  }
+  return touch(runningAgain(run), at, resumed);
 }
 
 /** Starts an armed run. The trigger records an explicit Run now decision. */
@@ -95,7 +156,14 @@ export function startScheduledRunAttempt(run: ScheduledRun, at: string): Schedul
  * this first is what makes a crash between "decided to launch" and "launched"
  * recoverable without launching twice.
  */
-export function markEntryLaunching(run: ScheduledRun, entryId: string, launchToken: string, provider: string | undefined, at: string): ScheduledRun {
+export function markEntryLaunching(
+  run: ScheduledRun,
+  entryId: string,
+  launchToken: string,
+  provider: string | undefined,
+  at: string,
+  lane?: { lane: number; reason: string }
+): ScheduledRun {
   const entry = findEntry(run, entryId);
   if (outcomeOf(entry).status !== 'queued') throw new Error(`${entry.ticket.issueKey} is not waiting to run.`);
   const previous = outcomeOf(entry);
@@ -104,6 +172,7 @@ export function markEntryLaunching(run: ScheduledRun, entryId: string, launchTok
     launchToken,
     startedAt: at,
     ...(provider ? { provider } : {}),
+    ...(lane ? { lane: lane.lane, laneReason: lane.reason } : {}),
     ...(previous.estimate ? { estimate: previous.estimate } : {}),
     ...(previous.artifacts ? { artifacts: previous.artifacts } : {}),
     ...(previous.retries ? { retries: previous.retries } : {}),
@@ -112,7 +181,7 @@ export function markEntryLaunching(run: ScheduledRun, entryId: string, launchTok
   };
   return touch(withOutcome(run, entryId, next), at, {
     kind: 'entry-launching',
-    message: `Starting ${entry.ticket.issueKey}${provider ? ` on ${provider}` : ''}.`,
+    message: `Starting ${entry.ticket.issueKey}${provider ? ` on ${provider}` : ''}${lane ? ` in lane ${lane.lane}: ${lane.reason}` : '.'}`,
     entryId
   });
 }
@@ -192,7 +261,7 @@ function applyProgressState(run: ScheduledRun, entryId: string, progress: EntryP
   const key = entry.ticket.issueKey;
   if (outcome.status === 'done' || outcome.status === 'skipped') return run;
   const spend = progress.spend ?? outcome.spend;
-  const { gate: _gate, reason: _reason, ...withoutGate } = outcome;
+  const { gate: _gate, reason: _reason, waitReason: _waitReason, ...withoutGate } = outcome;
 
   switch (progress.kind) {
     case 'running': {
@@ -211,7 +280,7 @@ function applyProgressState(run: ScheduledRun, entryId: string, progress: EntryP
         ...(exhausted ? { exhausted } : {})
       });
       if (wasWaiting) {
-        next = touch(runningAgain(next), at, { kind: 'resumed', message: `${key} is running again.`, entryId });
+        next = resumeUnlessWaiting(next, at, { kind: 'resumed', message: `${key} is running again.`, entryId });
       } else {
         next = touch(next, at);
       }
@@ -229,17 +298,14 @@ function applyProgressState(run: ScheduledRun, entryId: string, progress: EntryP
     case 'stalled': {
       const exhausted = exhaustedAfter(outcome, progress.exhausted);
       if (outcome.status === 'paused' && outcome.reason === progress.reason && run.status === 'paused' && sameExhausted(outcome.exhausted, exhausted)) return run;
-      const next = withOutcome(run, entryId, { ...withoutGate, status: 'paused', reason: progress.reason, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
+      const next = withOutcome(run, entryId, { ...withoutGate, status: 'paused', reason: progress.reason, waitReason: progress.pauseReason, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
       return touch(pausedRun(next, progress.pauseReason, progress.reason, at, entryId), at, { kind: 'paused', message: progress.reason, entryId });
     }
     case 'succeeded': {
       const exhausted = exhaustedAfter(outcome, progress.exhausted);
       const next = withOutcome(run, entryId, { ...withoutGate, status: 'done', endedAt: at, ...(spend ? { spend } : {}), ...(exhausted ? { exhausted } : {}) });
-      const settled = touch(
-        run.status === 'paused' && run.pause?.entryId === entryId ? runningAgain(next) : next,
-        at,
-        { kind: 'entry-done', message: `${key} finished.`, entryId }
-      );
+      const done = { kind: 'entry-done' as const, message: `${key} finished.`, entryId };
+      const settled = run.status === 'paused' && run.pause?.entryId === entryId ? resumeUnlessWaiting(next, at, done) : touch(next, at, done);
       return completeIfDrained(settled, at);
     }
     case 'failed':
@@ -289,8 +355,8 @@ export function retryScheduledEntry(run: ScheduledRun, entryId: string, at: stri
     ...(outcome.handovers ? { handovers: outcome.handovers } : {}),
     ...(outcome.exhausted ? { exhausted: outcome.exhausted } : {})
   });
-  const resumed = run.status === 'paused' ? runningAgain(next) : next;
-  return touch(resumed, at, { kind: 'entry-retried', message: `Retrying ${entry.ticket.issueKey}.`, entryId });
+  const retried = { kind: 'entry-retried' as const, message: `Retrying ${entry.ticket.issueKey}.`, entryId };
+  return run.status === 'paused' ? resumeUnlessWaiting(next, at, retried) : touch(next, at, retried);
 }
 
 /** Leaves a ticket out of this run; the run carries on with the next one. */
@@ -298,13 +364,11 @@ export function skipScheduledEntry(run: ScheduledRun, entryId: string, at: strin
   const entry = findEntry(run, entryId);
   const outcome = outcomeOf(entry);
   if (outcome.status === 'done' || outcome.status === 'skipped') return run;
-  const { gate: _gate, ...rest } = outcome;
+  const { gate: _gate, waitReason: _waitReason, ...rest } = outcome;
   const next = withOutcome(run, entryId, { ...rest, status: 'skipped', endedAt: at, reason });
-  const resumed = run.status === 'paused' && run.pause?.entryId === entryId ? runningAgain(next) : next;
-  return completeIfDrained(
-    touch(resumed, at, { kind: 'entry-skipped', message: `Skipped ${entry.ticket.issueKey}: ${reason}`, entryId }),
-    at
-  );
+  const skipped = { kind: 'entry-skipped' as const, message: `Skipped ${entry.ticket.issueKey}: ${reason}`, entryId };
+  const settled = run.status === 'paused' && run.pause?.entryId === entryId ? resumeUnlessWaiting(next, at, skipped) : touch(next, at, skipped);
+  return completeIfDrained(settled, at);
 }
 
 /** A run whose every ticket is done or skipped is complete. */

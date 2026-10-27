@@ -352,3 +352,42 @@ test('Run now makes drafts and future schedules due without changing queue order
     assert.throws(() => startScheduledRunNow({ ...draft, status }, NOW), /cannot be started now/);
   }
 });
+
+import { scheduledSteps } from './scheduledRun';
+import { normalizeScheduledRun } from './scheduledRunStore';
+
+const key = (issueKey: string) => `c1\u0000${issueKey}`;
+const steps = (run: ScheduledRun) => scheduledSteps(run.entries).map(step => step.map(entry => entry.ticket.issueKey));
+
+test('tickets marked withPrevious share a step with the ticket before them', () => {
+  const run = composeScheduledRun(undefined, { ...FORM, tickets: [ref('PRX-1'), ref('PRX-2'), ref('PRX-3'), ref('PRX-4')], withPrevious: [key('PRX-3')] });
+  assert.deepEqual(steps(run), [['PRX-1'], ['PRX-2', 'PRX-3'], ['PRX-4']]);
+  assert.deepEqual(sequences(run), [1, 2, 3, 4]);
+});
+
+test('the first ticket never shares a step, even when asked or after the one before it is removed', () => {
+  const run = composeScheduledRun(undefined, { ...FORM, tickets: [ref('PRX-1'), ref('PRX-2')], withPrevious: [key('PRX-1'), key('PRX-2')] });
+  assert.equal(run.entries[0].withPrevious, undefined);
+  assert.deepEqual(steps(run), [['PRX-1', 'PRX-2']]);
+  const removed = removeEntryFromScheduledRun(run, run.entries[0].id, NOW);
+  assert.equal(removed.entries[0].withPrevious, undefined);
+  assert.deepEqual(steps(removed), [['PRX-2']]);
+});
+
+test('changing only which tickets run together is an edit that keeps entry ids and records an event', () => {
+  const first = composeScheduledRun(undefined, { ...FORM, tickets: [ref('PRX-1'), ref('PRX-2'), ref('PRX-3')] });
+  const grouped = composeScheduledRun(first, { ...FORM, at: '2026-10-20T11:00:00.000Z', tickets: [ref('PRX-1'), ref('PRX-2'), ref('PRX-3')], withPrevious: [key('PRX-3')] });
+  assert.notEqual(grouped, first);
+  assert.deepEqual(grouped.entries.map(entry => entry.id), first.entries.map(entry => entry.id));
+  assert.deepEqual(steps(grouped), [['PRX-1'], ['PRX-2', 'PRX-3']]);
+  assert.match(grouped.events.at(-1)?.message ?? '', /PRX-2 \+ PRX-3/);
+  const ungrouped = composeScheduledRun(grouped, { ...FORM, tickets: [ref('PRX-1'), ref('PRX-2'), ref('PRX-3')] });
+  assert.deepEqual(steps(ungrouped), [['PRX-1'], ['PRX-2'], ['PRX-3']]);
+  assert.equal(composeScheduledRun(ungrouped, { ...FORM, tickets: [ref('PRX-1'), ref('PRX-2'), ref('PRX-3')] }), ungrouped);
+});
+
+test('a stored run keeps its steps when read back', () => {
+  const run = composeScheduledRun(undefined, { ...FORM, tickets: [ref('PRX-1'), ref('PRX-2')], withPrevious: [key('PRX-2')] });
+  const reread = normalizeScheduledRun(JSON.parse(JSON.stringify(run)));
+  assert.deepEqual(reread && steps(reread), [['PRX-1', 'PRX-2']]);
+});

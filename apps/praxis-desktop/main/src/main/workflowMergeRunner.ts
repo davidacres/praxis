@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
+  PRAXIS_METADATA_EXCLUDES,
   assessChangeScope,
   captureEvidenceEntry,
   computeFindingFingerprint,
@@ -72,7 +73,9 @@ export async function runWorkflowMerge(
   }
 
   // Check status of target repo
-  const statusCheck = await git(root, ['status', '--porcelain']);
+  // Praxis's own metadata (a workflow file, the project brief) is not work the merge could lose,
+  // the same rule the start-of-run clean check uses.
+  const statusCheck = await git(root, ['status', '--porcelain', '--', '.', ...PRAXIS_METADATA_EXCLUDES]);
   if (statusCheck.stdout.trim().length > 0) {
     log += `Target checkout has uncommitted changes:\n${statusCheck.stdout}\nCannot safely merge into dirty checkout.\n`;
     await writeMergeEvidence(context, node, evidenceRoot, log);

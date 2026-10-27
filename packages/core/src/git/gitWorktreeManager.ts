@@ -45,7 +45,7 @@ async function readStdout(command: string, args: string[], cwd: string): Promise
  * workflow can legitimately write these before the first run; the run embeds its workflow definition
  * and does not need them copied into the delivery worktree.
  */
-const PRAXIS_METADATA_EXCLUDES = [
+export const PRAXIS_METADATA_EXCLUDES = [
   ':(exclude).praxis/**',
   ':(exclude)project.praxis.md',
   ':(exclude)board.praxis.json',
@@ -62,6 +62,26 @@ async function readOptionalStdout(command: string, args: string[], cwd: string):
 
 export function resolveRepoWorktreeRoot(repoRoot: string): string {
   return path.join(repoRoot, '.worktrees');
+}
+
+const WORKTREES_EXCLUDE = '/.worktrees/';
+
+/**
+ * Keeps Praxis's worktree folder out of `git status` in the base checkout. Each
+ * worktree under `.worktrees/` shows there as an untracked folder, so without
+ * this a repository whose `.gitignore` does not list it reads as dirty the
+ * moment one run has a worktree: the next run refuses to start and a merge
+ * stage refuses to merge. Written to the repository's shared `info/exclude`
+ * (never `.gitignore`), once, so the user's tracked files are untouched.
+ */
+export async function ensureWorktreesExcluded(repoRoot: string): Promise<void> {
+  const commonDir = await readStdout('git', ['rev-parse', '--git-common-dir'], repoRoot);
+  const excludePath = path.join(path.resolve(repoRoot, commonDir), 'info', 'exclude');
+  const current = await fs.readFile(excludePath, 'utf8').catch(() => '');
+  if (current.split(/\r?\n/).some(line => line.trim() === WORKTREES_EXCLUDE || line.trim() === '.worktrees/' || line.trim() === '.worktrees')) return;
+  await fs.mkdir(path.dirname(excludePath), { recursive: true });
+  const prefix = current && !current.endsWith('\n') ? '\n' : '';
+  await fs.appendFile(excludePath, `${prefix}# Praxis run worktrees\n${WORKTREES_EXCLUDE}\n`, 'utf8');
 }
 
 export class GitWorktreeManager {
@@ -141,6 +161,7 @@ export class GitWorktreeManager {
     const worktreePath = path.join(worktreeRoot, worktreeName);
 
     await fs.mkdir(worktreeRoot, { recursive: true });
+    await ensureWorktreesExcluded(repoRoot);
 
     let reused = false;
     try {

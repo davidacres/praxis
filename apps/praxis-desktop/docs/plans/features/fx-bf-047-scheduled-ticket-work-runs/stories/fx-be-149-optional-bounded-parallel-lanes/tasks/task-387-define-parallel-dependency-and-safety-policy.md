@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Done
 **Created:** 2026-09-29T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-387
 title: Define parallel dependency and safety policy
-status: Backlog
+status: Done
 story: FX-BE-149
-updated: 2026-09-29
+updated: 2026-10-27
 dependencies: [TASK-386]
 validation: [npm run test:core]
 ---
@@ -53,3 +53,4 @@ lanes than requested whenever safety or budget checks require it.
 
 ## Comments
 
+2026-10-27: Implemented in core. Policy `{ mode: 'parallel', maxConcurrency }` (`scheduledPolicyFor`, 1–4, default sequential; invalid values throw before dispatch; a tampered stored value falls back to sequential). Dependencies are steps (`withPrevious`): a step waits for every entry before it (`launchableEntries`). Any failed entry blocks every launch. Extra lanes need the provider's reported allowance to cover every ticket on it at `LANE_ALLOWANCE_RESERVE` (10%) each (`decideExtraLane`); unknown usage refuses. The base checkout is the exclusive resource, serialised per repository by `ExclusiveResources` around merges. Proof: `scheduledRunParallel.test.ts` (17 tests). The cap and step-barrier tests were shown to fail when those rules were removed.

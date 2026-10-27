@@ -117,3 +117,40 @@ export function decideProviderForEntry(input: ProviderBudgetInput): ProviderDeci
         : `No provider has an allowance below ${percent(threshold)}.`
   };
 }
+
+/**
+ * Allowance a ticket is assumed to need while it runs, as a share of a
+ * provider's allowance (FX-BE-149). Deliberately generous: it only decides
+ * whether an *extra* lane may start, and guessing low is how an overnight run
+ * empties a plan.
+ */
+export const LANE_ALLOWANCE_RESERVE = 0.1;
+
+export interface ExtraLaneInput {
+  /** The provider the extra ticket would start on. */
+  provider: string;
+  /** That provider's allowance used, 0-1; undefined when it does not report. */
+  used: number | undefined;
+  /** Tickets already running on that provider in this run. */
+  alongside: number;
+  threshold?: number;
+}
+
+/**
+ * Whether one more ticket may start while others are running. The first ticket
+ * of a run never asks: this is only for a second lane and beyond. Unknown usage
+ * refuses, because the run cannot tell whether there is room for two.
+ */
+export function decideExtraLane(input: ExtraLaneInput): { ok: boolean; reason: string } {
+  const threshold = input.threshold ?? DEFAULT_HANDOVER_THRESHOLD;
+  const tickets = input.alongside + 1;
+  if (!known(input.used)) {
+    return { ok: false, reason: `${input.provider} does not report its allowance, so no extra ticket starts alongside the ones running.` };
+  }
+  const room = threshold - input.used;
+  const needed = tickets * LANE_ALLOWANCE_RESERVE;
+  const head = `${input.provider} has used ${percent(input.used)}, leaving ${percent(Math.max(0, room))} before the ${percent(threshold)} hand-over point`;
+  return room + 1e-9 >= needed
+    ? { ok: true, reason: `${head}: room for ${tickets} ticket${tickets === 1 ? '' : 's'} at ${percent(LANE_ALLOWANCE_RESERVE)} each.` }
+    : { ok: false, reason: `${head}: not enough for ${tickets} tickets at ${percent(LANE_ALLOWANCE_RESERVE)} each, so the next one waits.` };
+}

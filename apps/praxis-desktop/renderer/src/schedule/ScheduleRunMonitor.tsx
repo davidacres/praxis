@@ -44,9 +44,12 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
   };
 
   const queued = run.entries.filter(entry => (entry.outcome?.status ?? 'queued') === 'queued');
-  const active = run.entries.find(entry => entry.outcome?.status === 'running' || entry.outcome?.status === 'paused' || entry.outcome?.status === 'failed');
+  const actives = run.entries.filter(entry => entry.outcome?.status === 'running' || entry.outcome?.status === 'paused' || entry.outcome?.status === 'failed');
   const done = run.entries.filter(entry => entry.outcome?.status === 'done' || entry.outcome?.status === 'skipped');
   const pause = run.status === 'paused' ? run.pause : undefined;
+  // With parallel lanes several tickets can be active; the processor shows the one the pause is about.
+  const active = actives.find(entry => entry.id === pause?.entryId) ?? actives[0];
+  const parallel = run.policy.mode === 'parallel';
   // A ticket that could not be launched is put back on the belt, so the pause names it rather than an active entry.
   const pausedOn = pause?.entryId ? run.entries.find(entry => entry.id === pause.entryId && !['done', 'skipped'].includes(entry.outcome?.status ?? 'queued')) : undefined;
   const atGate = !!active?.outcome?.gate;
@@ -164,6 +167,8 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
         </div>
       </section>
 
+      {parallel && <LanesPanel view={view} actives={actives} queued={queued} />}
+
       <section className="schedule-panel" aria-label="Provider allowance" data-testid="schedule-budget">
         <h3 className="schedule-panel-title">Provider allowance <span className="schedule-panel-note">work moves to another provider at {handoverPercent}%</span></h3>
         {headroom.length > 0 ? (
@@ -172,13 +177,14 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
               <li key={item.provider} data-provider={item.provider}>
                 <span className="schedule-budget-name">{item.provider}</span>
                 {item.usedFraction === undefined ? (
-                  <span className="schedule-budget-unknown">Not reported</span>
+                  <span className="schedule-budget-unknown">Not reported · remaining unknown</span>
                 ) : (
                   <>
                     <span className="schedule-progress schedule-progress--small" role="progressbar" aria-label={`${item.provider} allowance used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(item.usedFraction * 100)}>
                       <span className={item.usedFraction * 100 >= handoverPercent ? 'is-full' : undefined} style={{ width: `${Math.min(100, item.usedFraction * 100)}%` }} />
                     </span>
                     <span>{Math.round(item.usedFraction * 100)}% used</span>
+                    <span className="schedule-budget-left">{Math.max(0, handoverPercent - Math.round(item.usedFraction * 100))}% left before hand-over</span>
                   </>
                 )}
               </li>
@@ -196,6 +202,57 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
         </ol>
       </section>
     </div>
+  );
+}
+
+/**
+ * Parallel runs only (FX-BE-149): which ticket holds which lane and why it was
+ * allowed to run alongside the others, and why each waiting ticket is waiting.
+ * Everything here is what the runner recorded; nothing is inferred live.
+ */
+function LanesPanel({ view, actives, queued }: { view: ScheduledRunView; actives: ScheduledQueueEntry[]; queued: ScheduledQueueEntry[] }) {
+  const { run } = view;
+  const cap = run.policy.mode === 'parallel' ? run.policy.maxConcurrency : 1;
+  const stepOf = new Map<string, number>();
+  let step = 0;
+  run.entries.forEach((entry, index) => { if (index === 0 || !entry.withPrevious) step += 1; stepOf.set(entry.id, step); });
+  const current = run.entries.find(entry => !['done', 'skipped'].includes(entry.outcome?.status ?? 'queued'));
+  const currentStep = current ? stepOf.get(current.id) : undefined;
+  const why = (entry: ScheduledQueueEntry): string => {
+    const own = stepOf.get(entry.id);
+    if (currentStep !== undefined && own !== undefined && own > currentStep) return `Waits for step ${currentStep} to finish.`;
+    if (run.status === 'paused') return 'Waits until the run continues.';
+    const last = [...run.events].reverse().find(event => event.entryId === entry.id && event.kind === 'budget-checked');
+    if (last && /\bwaits\b/.test(last.message)) return last.message;
+    return actives.length >= cap ? `Waits for a free lane (${cap} in use).` : 'Next to start.';
+  };
+  const lanes = [...actives].sort((a, b) => (a.outcome?.lane ?? 99) - (b.outcome?.lane ?? 99));
+  return (
+    <section className="schedule-panel" aria-label="Lanes" data-testid="schedule-lanes-panel">
+      <h3 className="schedule-panel-title">Lanes <span className="schedule-panel-note">{actives.length} of up to {cap} in use</span></h3>
+      <ol className="schedule-lanes">
+        {lanes.map(entry => (
+          <li key={entry.id} className={`schedule-lane schedule-lane--${entry.outcome?.status}`} data-testid="schedule-lane" data-issue={entry.ticket.issueKey} data-lane={entry.outcome?.lane}>
+            <span className="schedule-lane-number">Lane {entry.outcome?.lane ?? '–'}</span>
+            <span className="schedule-lane-main">
+              <span className="schedule-chip-key">{entry.ticket.issueKey} · {ENTRY_STATUS_LABEL[entry.outcome?.status ?? 'queued']} · step {stepOf.get(entry.id)}</span>
+              <strong className="schedule-chip-title">{entry.ticket.title}</strong>
+              {entry.outcome?.laneReason && <span className="schedule-lane-reason" data-testid="schedule-lane-reason">Why now: {entry.outcome.laneReason}</span>}
+            </span>
+            <span className="schedule-lane-meta">{entry.outcome?.provider ?? 'Provider not reported'} · {formatSpend(entry.outcome?.spend)}</span>
+          </li>
+        ))}
+        {lanes.length === 0 && <li className="schedule-chip schedule-chip--empty">No ticket is running</li>}
+      </ol>
+      {queued.length > 0 && <>
+        <h4 className="schedule-panel-title schedule-lanes-sub">Waiting</h4>
+        <ul className="schedule-lanes-waiting" data-testid="schedule-lanes-waiting">
+          {queued.map(entry => (
+            <li key={entry.id} data-issue={entry.ticket.issueKey}><span className="schedule-chip-key">{entry.ticket.issueKey}</span> {why(entry)}</li>
+          ))}
+        </ul>
+      </>}
+    </section>
   );
 }
 

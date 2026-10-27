@@ -13,6 +13,8 @@
  */
 
 import type { ScheduledRun, ScheduledTicketRef } from './scheduledRun';
+import { scheduledConcurrency, scheduledSteps } from './scheduledRun';
+import { LANE_ALLOWANCE_RESERVE } from './scheduledBudget';
 
 export type ReadinessSeverity = 'blocker' | 'warning';
 
@@ -29,7 +31,8 @@ export type ScheduledReadinessCode =
   | 'base-dirty'
   | 'allowance-low'
   | 'no-acceptance-criteria'
-  | 'in-other-schedule';
+  | 'in-other-schedule'
+  | 'parallel-lanes';
 
 export interface ScheduledReadinessIssue {
   code: ScheduledReadinessCode;
@@ -101,6 +104,18 @@ export function assessScheduledRunReadiness(run: ScheduledRun, context: Schedule
       code: 'base-dirty',
       severity: 'warning',
       message: 'The project folder has uncommitted changes. The run will pause at the first ticket until they are committed or set aside.'
+    });
+  }
+  const lanes = scheduledConcurrency(run.policy);
+  if (lanes > 1) {
+    // The budget warning FX-BE-149 asks for before a parallel run is saved or started.
+    const shared = scheduledSteps(run.entries).some(step => step.length > 1);
+    issues.push({
+      code: 'parallel-lanes',
+      severity: 'warning',
+      message: shared
+        ? `Up to ${lanes} tickets of a shared step run at once, using allowance up to ${lanes} times as fast. Each extra ticket starts only while its provider reports ${Math.round(LANE_ALLOWANCE_RESERVE * 100)}% room per ticket.`
+        : `Tickets at once is ${lanes}, but no step is shared, so tickets still run one at a time.`
     });
   }
   if (context.lowAllowanceProvider) {

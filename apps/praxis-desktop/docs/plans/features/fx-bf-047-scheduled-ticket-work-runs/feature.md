@@ -387,7 +387,9 @@ Status rechecked against local main (`d2d9a4ad`) and the implementation on 2026-
 - TASK-386: persist spend estimates and artifact references in the run ledger.
 - TASK-464: complete session/provider handover with a durable brief; the current adapter changes the provider for future stages.
 - TASK-466: add direct session navigation, artifacts, approvals and per-stage timing to the report.
-- FX-BE-149: optional bounded parallel lanes remain Backlog.
+- FX-BE-149: bounded parallel lanes are done (2026-10-27): TASK-387 and TASK-388 closed. Overnight live-provider qualification has not been run.
+
+Run editor as a flow graph (2026-10-26): the composer's belt is now a Task Designer-style graph (`ScheduleFlowGraph.tsx`, `scheduleFlow.ts`). Steps run left to right, linked by arrows; dropping a ticket onto another makes them share a step, drawn as parallel lanes between a split and a join bar. Core stores this as `ScheduledQueueEntry.withPrevious` (`scheduledSteps` groups it). With "Tickets at once" left at one, the runner takes a step's tickets one at a time; with 2–4 it overlaps them (FX-BE-149). Verified with the scheduled-run core tests (102 passed), the scheduled Electron suite (25 passed, 1 opt-in skipped) and captures `.praxis/session-artifacts/scheduled-run-flow-graph.png` / `-drag.png`.
 
 Fresh verification for this status check: `npm run build:core` passed; all four scheduled-run core test files passed (69 tests, no failures or skips). The read-only plan parser confirmed FX-BF-047 resolves to In Progress and its 4 stories and 11 tasks remain visible. Whole-board counts are unchanged: 55 features, 170 stories, 380 tasks and 18 bugs. No runtime/UI changes were made, and desktop e2e, visual checks and overnight/live-provider qualification were not rerun during this status check. The merged implementation results below are historical evidence, not fresh full-suite results.
 

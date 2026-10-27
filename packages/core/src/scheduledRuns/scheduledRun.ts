@@ -103,6 +103,12 @@ export interface ScheduledEntryOutcome {
   artifacts?: WorkflowArtifactRef[];
   /** Times the user retried this ticket after it failed or stopped. */
   retries?: number;
+  /** Why a `paused` entry stopped (a stall's own reason), so the run can pause for it again after another entry is settled. */
+  waitReason?: ScheduledPauseReason;
+  /** Parallel mode only: the lane (1 to `maxConcurrency`) the ticket was started in. */
+  lane?: number;
+  /** Parallel mode only: why the runner allowed this ticket to run alongside others, for the ledger. */
+  laneReason?: string;
   /**
    * Providers that ran out of credits or hit their limit while this ticket was
    * being worked on. They are never started on again, on a retry or by a
@@ -118,6 +124,13 @@ export interface ScheduledQueueEntry {
   /** 1-based and contiguous. */
   sequence: number;
   ticket: ScheduledTicketRef;
+  /**
+   * True when this ticket shares a step with the entry before it: the editor draws
+   * them as one parallel step, meaning neither depends on the other. The runner
+   * still takes them one at a time until bounded parallel lanes (FX-BE-149) land.
+   * Never set on the first entry.
+   */
+  withPrevious?: true;
   outcome?: ScheduledEntryOutcome;
 }
 
@@ -167,14 +180,42 @@ export interface ScheduledRunEvent {
 }
 
 /**
- * `sequential` is the only mode until FX-BE-149 adds bounded parallel lanes.
+ * How a run's tickets are started (FX-BE-149).
+ *
+ * `sequential` (the default) runs one ticket at a time in order. `parallel` lets
+ * the tickets of one *step* (see `withPrevious`) overlap, never more than
+ * `maxConcurrency` at once; a step still waits for every ticket before it. It is
+ * a ceiling, not a promise: the runner uses fewer lanes whenever a safety or
+ * allowance check says so.
+ *
  * `workflowId` is the one governed workflow every ticket in the run is started
  * with; without it the run cannot start (readiness says so), because nothing
  * should silently pick a workflow for an unattended run.
  */
-export interface ScheduledRunPolicy {
-  mode: 'sequential';
-  workflowId?: string;
+export type ScheduledRunPolicy =
+  | { mode: 'sequential'; workflowId?: string }
+  | { mode: 'parallel'; maxConcurrency: number; workflowId?: string };
+
+/** The most tickets a parallel run may have going at once. Kept low on purpose: each lane spends allowance. */
+export const MAX_SCHEDULED_CONCURRENCY = 4;
+
+/** How many tickets may run at once: 1 for a sequential run. */
+export function scheduledConcurrency(policy: ScheduledRunPolicy): number {
+  return policy.mode === 'parallel' ? policy.maxConcurrency : 1;
+}
+
+/**
+ * The policy for a requested concurrency. Throws, with a message fit to show,
+ * for anything but a whole number from 1 to `MAX_SCHEDULED_CONCURRENCY`; 1 (or
+ * nothing) is sequential.
+ */
+export function scheduledPolicyFor(maxConcurrency: number | undefined, workflowId: string | undefined): ScheduledRunPolicy {
+  const id = workflowId?.trim() || undefined;
+  const value = maxConcurrency ?? 1;
+  if (!Number.isInteger(value) || value < 1 || value > MAX_SCHEDULED_CONCURRENCY) {
+    throw new Error(`Tickets at once must be a whole number from 1 to ${MAX_SCHEDULED_CONCURRENCY}.`);
+  }
+  return value === 1 ? { mode: 'sequential', ...(id ? { workflowId: id } : {}) } : { mode: 'parallel', maxConcurrency: value, ...(id ? { workflowId: id } : {}) };
 }
 
 /** Why a running schedule stopped and is waiting for the user. */
@@ -240,7 +281,23 @@ function isValidInstant(value: string): boolean {
 }
 
 function renumber(entries: readonly ScheduledQueueEntry[]): ScheduledQueueEntry[] {
-  return entries.map((entry, index) => (entry.sequence === index + 1 ? entry : { ...entry, sequence: index + 1 }));
+  return entries.map((entry, index) => {
+    if (index === 0 && entry.withPrevious) {
+      const { withPrevious: _dropped, ...first } = entry;
+      return { ...first, sequence: 1 };
+    }
+    return entry.sequence === index + 1 ? entry : { ...entry, sequence: index + 1 };
+  });
+}
+
+/** Groups a queue into steps: each step is one entry, or a run of entries that share it. */
+export function scheduledSteps<T extends Pick<ScheduledQueueEntry, 'withPrevious'>>(entries: readonly T[]): T[][] {
+  const steps: T[][] = [];
+  for (const entry of entries) {
+    if (entry.withPrevious && steps.length) steps[steps.length - 1].push(entry);
+    else steps.push([entry]);
+  }
+  return steps;
 }
 
 export function touch(run: ScheduledRun, at: string, event?: Omit<ScheduledRunEvent, 'at'>): ScheduledRun {
@@ -264,7 +321,11 @@ export interface CreateScheduledRunInput {
   scheduledStartAt: string;
   timezone: string;
   tickets?: readonly ScheduledTicketRef[];
+  /** `ticketRefKey`s of tickets that share a step with the ticket before them. */
+  withPrevious?: readonly string[];
   workflowId?: string;
+  /** Tickets allowed at once; 1 or absent is sequential. */
+  maxConcurrency?: number;
   at: string;
 }
 
@@ -276,13 +337,15 @@ export function createScheduledRun(input: CreateScheduledRunInput): ScheduledRun
   if (!isValidTimeZone(input.timezone)) throw new Error(`"${input.timezone}" is not a known timezone.`);
 
   const seen = new Set<string>();
-  const entries: ScheduledQueueEntry[] = [];
+  const together = new Set(input.withPrevious ?? []);
+  const collected: ScheduledQueueEntry[] = [];
   for (const ticket of input.tickets ?? []) {
     const key = ticketRefKey(ticket);
     if (seen.has(key)) continue;
     seen.add(key);
-    entries.push({ id: newScheduledId('entry'), sequence: entries.length + 1, ticket: { ...ticket } });
+    collected.push({ id: newScheduledId('entry'), sequence: collected.length + 1, ticket: { ...ticket }, ...(together.has(key) ? { withPrevious: true as const } : {}) });
   }
+  const entries = renumber(collected);
 
   return {
     schemaVersion: SCHEDULED_RUN_SCHEMA_VERSION,
@@ -291,7 +354,7 @@ export function createScheduledRun(input: CreateScheduledRunInput): ScheduledRun
     ...(input.projectId ? { projectId: input.projectId } : {}),
     scheduledStartAt: new Date(input.scheduledStartAt).toISOString(),
     timezone: input.timezone,
-    policy: { mode: 'sequential', ...(input.workflowId?.trim() ? { workflowId: input.workflowId.trim() } : {}) },
+    policy: scheduledPolicyFor(input.maxConcurrency, input.workflowId),
     entries,
     status: 'draft',
     attempts: [],
@@ -455,8 +518,12 @@ export interface ComposeScheduledRunInput {
   timezone: string;
   /** In run order; the position here becomes the sequence. */
   tickets: readonly ScheduledTicketRef[];
+  /** `ticketRefKey`s of tickets that share a step with the ticket before them (drawn as parallel). */
+  withPrevious?: readonly string[];
   /** The governed workflow each ticket is started with. */
   workflowId?: string;
+  /** Tickets allowed at once (FX-BE-149); 1 or absent keeps the run sequential. */
+  maxConcurrency?: number;
   /** True to schedule it, false to keep it as a draft. */
   arm: boolean;
   at: string;
@@ -483,13 +550,13 @@ export function composeScheduledRun(existing: ScheduledRun | undefined, input: C
 
   let run: ScheduledRun;
   if (!existing) {
-    run = createScheduledRun({ projectId: input.projectId, name: input.name, scheduledStartAt: startAt, timezone: input.timezone, tickets: input.tickets, workflowId: input.workflowId, at: input.at });
+    run = createScheduledRun({ projectId: input.projectId, name: input.name, scheduledStartAt: startAt, timezone: input.timezone, tickets: input.tickets, withPrevious: input.withPrevious, workflowId: input.workflowId, maxConcurrency: input.maxConcurrency, at: input.at });
   } else {
     assertEditable(existing);
     run = existing.name === input.name.trim() ? existing : renameScheduledRun(existing, input.name, input.at);
     run = rescheduleScheduledRun(run, startAt, input.timezone, input.at);
-    run = replaceQueue(run, input.tickets, input.at);
-    run = setWorkflow(run, input.workflowId, input.at);
+    run = replaceQueue(run, input.tickets, input.withPrevious ?? [], input.at);
+    run = setPolicy(run, scheduledPolicyFor(input.maxConcurrency, input.workflowId), input.at);
     if (run.status === 'scheduled' && !input.arm) run = holdScheduledRun(run, input.at);
   }
   if (input.arm && Date.parse(run.scheduledStartAt) <= Date.parse(input.at)) {
@@ -498,18 +565,24 @@ export function composeScheduledRun(existing: ScheduledRun | undefined, input: C
   return input.arm ? armScheduledRun(run, input.at) : run;
 }
 
-function setWorkflow(run: ScheduledRun, workflowId: string | undefined, at: string): ScheduledRun {
-  const next = workflowId?.trim() || undefined;
-  if (next === run.policy.workflowId) return run;
-  const { workflowId: _previous, ...rest } = run.policy;
-  return touch({ ...run, policy: { ...rest, ...(next ? { workflowId: next } : {}) } }, at, {
-    kind: 'workflow-changed',
-    message: next ? `Workflow set to ${next}.` : 'Workflow cleared.'
-  });
+function setPolicy(run: ScheduledRun, policy: ScheduledRunPolicy, at: string): ScheduledRun {
+  const workflowChanged = policy.workflowId !== run.policy.workflowId;
+  const lanesChanged = scheduledConcurrency(policy) !== scheduledConcurrency(run.policy);
+  if (!workflowChanged && !lanesChanged) return run;
+  let next = touch({ ...run, policy }, at);
+  if (workflowChanged) {
+    next = touch(next, at, { kind: 'workflow-changed', message: policy.workflowId ? `Workflow set to ${policy.workflowId}.` : 'Workflow cleared.' });
+  }
+  if (lanesChanged) {
+    const lanes = scheduledConcurrency(policy);
+    next = touch(next, at, { kind: 'workflow-changed', message: lanes > 1 ? `Up to ${lanes} tickets of a shared step may run at once.` : 'Tickets run one at a time.' });
+  }
+  return next;
 }
 
-function replaceQueue(run: ScheduledRun, tickets: readonly ScheduledTicketRef[], at: string): ScheduledRun {
+function replaceQueue(run: ScheduledRun, tickets: readonly ScheduledTicketRef[], withPrevious: readonly string[], at: string): ScheduledRun {
   const existingByKey = new Map(run.entries.map(entry => [ticketRefKey(entry.ticket), entry] as const));
+  const together = new Set(withPrevious);
   const seen = new Set<string>();
   const next: ScheduledQueueEntry[] = [];
   for (const ticket of tickets) {
@@ -517,9 +590,13 @@ function replaceQueue(run: ScheduledRun, tickets: readonly ScheduledTicketRef[],
     if (seen.has(key)) continue;
     seen.add(key);
     const kept = existingByKey.get(key);
-    next.push(kept ? { ...kept, ticket: { ...kept.ticket, title: ticket.title || kept.ticket.title } } : { id: newScheduledId('entry'), sequence: 0, ticket: { ...ticket } });
+    const base: ScheduledQueueEntry = kept ? { ...kept, ticket: { ...kept.ticket, title: ticket.title || kept.ticket.title } } : { id: newScheduledId('entry'), sequence: 0, ticket: { ...ticket } };
+    const { withPrevious: _previous, ...plain } = base;
+    next.push(together.has(key) ? { ...plain, withPrevious: true } : plain);
   }
   const entries = renumber(next);
+  const stepShape = (list: readonly ScheduledQueueEntry[]) => scheduledSteps(list).map(step => step.map(entry => ticketRefKey(entry.ticket)).join('+')).join(',');
+  const regrouped = stepShape(entries) !== stepShape(run.entries);
 
   const removed = run.entries.filter(entry => !seen.has(ticketRefKey(entry.ticket)));
   const added = entries.filter(entry => !existingByKey.has(ticketRefKey(entry.ticket)));
@@ -527,12 +604,15 @@ function replaceQueue(run: ScheduledRun, tickets: readonly ScheduledTicketRef[],
   const survivorsAfter = entries.filter(entry => existingByKey.has(ticketRefKey(entry.ticket))).map(entry => entry.id);
   const reordered = survivorsBefore.some((id, index) => id !== survivorsAfter[index]);
 
-  if (removed.length === 0 && added.length === 0 && !reordered) return run;
+  if (removed.length === 0 && added.length === 0 && !reordered && !regrouped) return run;
   let result: ScheduledRun = { ...run, entries };
   const events: Array<Omit<ScheduledRunEvent, 'at'>> = [];
   for (const entry of removed) events.push({ kind: 'ticket-removed', message: `Removed ${entry.ticket.issueKey}.`, entryId: entry.id });
   if (added.length > 0) events.push({ kind: 'tickets-added', message: `Added ${added.map(entry => entry.ticket.issueKey).join(', ')}.` });
-  if (reordered) events.push({ kind: 'reordered', message: `Run order is now ${entries.map(entry => entry.ticket.issueKey).join(', ')}.` });
+  if (reordered || regrouped) {
+    const order = scheduledSteps(entries).map(step => step.map(entry => entry.ticket.issueKey).join(' + ')).join(', ');
+    events.push({ kind: 'reordered', message: `Run order is now ${order}.` });
+  }
   result = touch(result, at);
   return { ...result, events: [...result.events, ...events.map(event => ({ at, ...event }))] };
 }

@@ -18,20 +18,27 @@
  *   instead of being ignored.
  * - **Never move past a failure by itself.** A failed ticket pauses the run;
  *   the user retries, skips or stops.
+ *
+ * A parallel run (FX-BE-149) fills free lanes one launch at a time, each with
+ * the same save-before-launch guarantee. A lane beyond the first starts only
+ * when the step allows it and the provider's reported allowance has room for
+ * every ticket on it; otherwise the run uses fewer lanes and says why.
  */
 
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
 import type { ScheduledPauseReason, ScheduledQueueEntry, ScheduledRun, ScheduledTicketRef } from './scheduledRun';
 import { dueScheduledRuns, startScheduledRunNow } from './scheduledRun';
-import { decideProviderForEntry, DEFAULT_HANDOVER_THRESHOLD } from './scheduledBudget';
+import { decideExtraLane, decideProviderForEntry, DEFAULT_HANDOVER_THRESHOLD } from './scheduledBudget';
+import { scheduledConcurrency, scheduledSteps } from './scheduledRun';
 import {
-  activeScheduledEntry,
+  activeScheduledEntries,
   applyEntryProgress,
   bindEntryWorkflow,
   cancelScheduledRun,
   completeIfDrained,
+  freeScheduledLane,
+  launchableEntries,
   markEntryLaunching,
-  nextLaunchableEntry,
   pauseScheduledRun,
   recordBudgetCheck,
   recordProviderHandover,
@@ -186,8 +193,10 @@ export class ScheduledRunRunner {
 
   public cancel(runId: string): Promise<ScheduledRun> {
     return this.command(runId, async run => {
-      const active = activeScheduledEntry(run)?.outcome?.workflowRunId;
-      if (active) await this.ports.cancelWorkflow(active, 'The scheduled run was stopped.');
+      for (const entry of activeScheduledEntries(run)) {
+        const workflowRunId = entry.outcome?.workflowRunId;
+        if (workflowRunId) await this.ports.cancelWorkflow(workflowRunId, 'The scheduled run was stopped.');
+      }
       return cancelScheduledRun(run, this.ports.now());
     });
   }
@@ -240,7 +249,7 @@ export class ScheduledRunRunner {
     if (run.status !== 'running' && run.status !== 'paused') return;
 
     run = await this.settleInterruptedLaunch(run);
-    run = await this.observeActive(run);
+    for (const entry of activeScheduledEntries(run)) run = await this.observeActive(run, entry.id);
     if (run.status === 'running') await this.launchNext(run);
   }
 
@@ -271,8 +280,9 @@ export class ScheduledRunRunner {
    * policy has already tried every provider it could, so what is left is a note
    * for the user and a provider the next ticket must not start on.
    */
-  private async observeActive(run: ScheduledRun): Promise<ScheduledRun> {
-    const entry = activeScheduledEntry(run);
+  private async observeActive(run: ScheduledRun, entryId: string): Promise<ScheduledRun> {
+    const entry = run.entries.find(candidate => candidate.id === entryId);
+    if (entry?.outcome?.status !== 'running' && entry?.outcome?.status !== 'paused') return run;
     const workflowRunId = entry?.outcome?.workflowRunId;
     if (!entry || !workflowRunId) return run;
 
@@ -331,12 +341,17 @@ export class ScheduledRunRunner {
     return run;
   }
 
-  /** Launches the next queued ticket, skipping any that can no longer run, until one starts or the queue ends. */
+  /**
+   * Launches queued tickets into free lanes, skipping any that can no longer run.
+   * A sequential run starts at most one. A parallel run keeps going while the
+   * current step has queued tickets, lanes are free and the allowance allows it.
+   */
   private async launchNext(start: ScheduledRun): Promise<void> {
     let run = start;
     for (let guard = 0; guard <= run.entries.length; guard += 1) {
       if (run.status !== 'running') return;
-      const entry = nextLaunchableEntry(run);
+      const entry = launchableEntries(run)[0];
+      const alongside = activeScheduledEntries(run);
       if (!entry) {
         const completed = completeIfDrained(run, this.ports.now());
         if (completed !== run) await this.save(completed);
@@ -369,13 +384,24 @@ export class ScheduledRunRunner {
         threshold: this.ports.threshold?.()
       });
       if (decision.kind === 'pause') {
+        // With other tickets still running, the run carries on with them; this one waits for a free allowance.
+        if (alongside.length) {
+          await this.recordOnce(run, entry.id, `${entry.ticket.issueKey} waits: ${decision.reason}`);
+          return;
+        }
         await this.save(pauseScheduledRun(run, decision.why === 'no-provider' ? 'no-provider' : 'budget', decision.reason, this.ports.now(), entry.id));
+        return;
+      }
+
+      const lane = scheduledConcurrency(run.policy) > 1 ? this.laneFor(run, entry.id, alongside, decision.provider, usage.used[decision.provider]) : undefined;
+      if (lane && !lane.ok) {
+        await this.recordOnce(run, entry.id, `${entry.ticket.issueKey} waits for a free lane: ${lane.reason}`);
         return;
       }
       run = await this.save(recordBudgetCheck(run, decision.reason, this.ports.now(), entry.id));
 
       const token = this.ports.newToken();
-      run = await this.save(markEntryLaunching(run, entry.id, token, decision.provider, this.ports.now()));
+      run = await this.save(markEntryLaunching(run, entry.id, token, decision.provider, this.ports.now(), lane ? { lane: lane.lane, reason: lane.reason } : undefined));
       this.launching.add(entry.id);
       try {
         const workflowRunId = await this.ports.launch({ run, entry, workflowId, token, provider: decision.provider });
@@ -396,8 +422,35 @@ export class ScheduledRunRunner {
       } finally {
         this.launching.delete(entry.id);
       }
-      return;
+      if (scheduledConcurrency(run.policy) === 1) return;
     }
+  }
+
+  /**
+   * The lane a parallel run starts this entry in, and why it may run now. The
+   * first ticket going needs only a free lane; every other one also needs the
+   * provider's reported allowance to have room for all the tickets on it.
+   */
+  private laneFor(run: ScheduledRun, entryId: string, alongside: readonly ScheduledQueueEntry[], provider: string, used: number | undefined): { ok: boolean; lane: number; reason: string } {
+    const lane = freeScheduledLane(run);
+    const steps = scheduledSteps(run.entries);
+    const stepIndex = steps.findIndex(step => step.some(candidate => candidate.id === entryId));
+    const stepName = `step ${stepIndex + 1}`;
+    if (!alongside.length) return { ok: true, lane, reason: `first ticket going in ${stepName}.` };
+    const extra = decideExtraLane({ provider, used, alongside: alongside.filter(candidate => candidate.outcome?.provider === provider).length, threshold: this.ports.threshold?.() });
+    const keys = alongside.map(candidate => candidate.ticket.issueKey).join(', ');
+    return {
+      ok: extra.ok,
+      lane,
+      reason: extra.ok ? `runs alongside ${keys}; tickets in ${stepName} do not depend on each other. ${extra.reason}` : extra.reason
+    };
+  }
+
+  /** Notes why a ticket is waiting, once: a tick every half-minute must not fill the ledger with the same line. */
+  private async recordOnce(run: ScheduledRun, entryId: string, message: string): Promise<void> {
+    const last = [...run.events].reverse().find(event => event.kind === 'budget-checked' && event.entryId === entryId);
+    if (last?.message === message) return;
+    await this.save(recordBudgetCheck(run, message, this.ports.now(), entryId));
   }
 
   /** Puts an entry whose launch never happened back to queued without counting it as a retry. */

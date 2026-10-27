@@ -8,6 +8,7 @@ import * as util from 'node:util';
 import {
   GitWorktreeManager,
   WorktreeConflictError,
+  ensureWorktreesExcluded,
   resolveRepoWorktreeRoot
 } from './gitWorktreeManager';
 
@@ -158,6 +159,55 @@ test('removeDeliveryWorktree with keepBranch removes the checkout but leaves the
     const branches = (await git(repo, ['branch', '--format=%(refname:short)'])).stdout.split('\n').filter(Boolean);
     assert.ok(branches.includes(prepared.branchName), 'the branch survives');
     assert.match((await git(repo, ['log', '-1', '--format=%s', prepared.branchName])).stdout, /feat: the work/);
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true });
+  }
+});
+
+test('a second run can start on a clean base while the first run still has its worktree, and the base stays clean', async t => {
+  let repo: string;
+  try {
+    repo = await initRepo();
+  } catch {
+    t.skip('git not available');
+    return;
+  }
+  try {
+    const manager = new GitWorktreeManager(silentLogger);
+    // No .gitignore entry for .worktrees: the folder must still not make the base read as dirty.
+    await manager.prepareDeliveryWorktree({ key: 'RUN-1', summary: 'first', branch: undefined }, 'main', repo, { requireCleanBase: true });
+    await manager.prepareDeliveryWorktree({ key: 'RUN-2', summary: 'second', branch: undefined }, 'main', repo, { requireCleanBase: true });
+    const status = (await execFile('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: repo })).stdout;
+    assert.equal(status, '', 'the base checkout shows no changes');
+    assert.equal(await fs.readFile(path.join(repo, '.gitignore'), 'utf8').catch(() => undefined), undefined, 'the tracked .gitignore is never written');
+    const exclude = await fs.readFile(path.join(repo, '.git', 'info', 'exclude'), 'utf8');
+    assert.equal(exclude.split('\n').filter(line => line === '/.worktrees/').length, 1, 'the exclude line is written once');
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true });
+  }
+});
+
+test('the exclude goes in the shared git directory and respects an entry the user already has', async t => {
+  let repo: string;
+  try {
+    repo = await initRepo();
+  } catch {
+    t.skip('git not available');
+    return;
+  }
+  try {
+    const excludePath = path.join(repo, '.git', 'info', 'exclude');
+    await fs.mkdir(path.dirname(excludePath), { recursive: true });
+    await fs.writeFile(excludePath, '*.log\n.worktrees/', 'utf8');
+    await ensureWorktreesExcluded(repo);
+    assert.equal(await fs.readFile(excludePath, 'utf8'), '*.log\n.worktrees/', 'an existing entry is left as it is');
+    // From inside a worktree the shared exclude file is still the one written.
+    await fs.writeFile(excludePath, '', 'utf8');
+    const manager = new GitWorktreeManager(silentLogger);
+    const prepared = await manager.prepareDeliveryWorktree({ key: 'RUN-3', summary: 'third', branch: undefined }, 'main', repo);
+    await fs.writeFile(excludePath, '', 'utf8');
+    await ensureWorktreesExcluded(prepared.worktreePath);
+    assert.match(await fs.readFile(excludePath, 'utf8'), /^# Praxis run worktrees\n\/\.worktrees\/\n$/);
   } finally {
     await fs.rm(repo, { recursive: true, force: true });
   }

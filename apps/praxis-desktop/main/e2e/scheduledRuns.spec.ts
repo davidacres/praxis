@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
+import { chooseOption } from './chipSelect';
 
 /**
  * FX-BF-047 / FX-BE-147, FX-BE-148, FX-BE-173: scheduled ticket runs. Covers the
@@ -313,7 +314,7 @@ test('without the preview the board toolbar has no schedule shortcut', async () 
   await expect(page.getByTestId('board-schedule-btn')).toHaveCount(0);
 });
 
-test('tickets can be dragged from the hopper onto the belt and reordered on it', async () => {
+test('tickets can be dragged from the hopper onto the flow graph and reordered on it', async () => {
   const { page } = await launch();
   await page.getByTestId('schedule-new').click();
   const hopper = (text: string) => page.getByTestId('schedule-hopper-card').filter({ hasText: text });
@@ -324,25 +325,94 @@ test('tickets can be dragged from the hopper onto the belt and reordered on it',
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(0);
 
 
-  // Dropping on the empty belt appends; dropping on a card inserts before it.
+  // Dropping on the end slot adds a step; dropping on the arrow before a step inserts a new step there.
   await hopper('Fix pager bug').dragTo(page.getByTestId('schedule-belt-slot'));
   await expect(page.getByTestId('schedule-belt-card')).toHaveCount(1);
   await hopper('Add export CSV').dragTo(page.getByTestId('schedule-belt-slot'));
-  await hopper('Log retention').dragTo(page.getByTestId('schedule-belt-card').first());
+  await hopper('Log retention').dragTo(page.locator('[data-flow-gap="0"]'));
   const order = await beltOrder(page) as string[];
   expect(order).toHaveLength(3);
   const titleOf = async (key: string) => page.getByTestId('schedule-belt-card').filter({ has: page.locator(`.schedule-belt-key:text-is("${key}")`) }).locator('.schedule-belt-title').textContent();
   expect(await titleOf(order[0])).toBe('Log retention');
   expect(await titleOf(order[1])).toBe('Fix pager bug');
   expect(await titleOf(order[2])).toBe('Add export CSV');
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(3);
 
-  // Reorder on the belt: drag the last card onto the first.
+  // Reorder on the graph: drag the last node onto the arrow before the first step.
   // Let the entry animation of the card just dropped finish, so its position is settled.
   await page.waitForTimeout(800);
-  await page.getByTestId('schedule-belt-card').nth(2).dragTo(page.getByTestId('schedule-belt-card').first());
+  await page.getByTestId('schedule-belt-card').nth(2).dragTo(page.locator('[data-flow-gap="0"]'));
   expect(await titleOf((await beltOrder(page) as string[])[0])).toBe('Add export CSV');
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(3);
   // A dragged-in ticket cannot be added twice.
   await expect(hopper('Add export CSV')).toBeDisabled();
+});
+
+test('a ticket dropped onto another shares its step, drawn as parallel lanes, and the steps are saved', async () => {
+  const { page } = await launch();
+  await page.getByTestId('schedule-new').click();
+  const hopper = (text: string) => page.getByTestId('schedule-hopper-card').filter({ hasText: text });
+  const node = (text: string) => page.getByTestId('schedule-belt-card').filter({ hasText: text });
+  const step = (index: number) => page.getByTestId('schedule-flow-step').nth(index);
+  await hopper('Fix pager bug').press('Enter');
+  await hopper('Add export CSV').press('Enter');
+  await hopper('Log retention').press('Enter');
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(3);
+  await page.waitForTimeout(800);
+
+  // Drag Log retention onto Add export CSV: they now share step 2, with a split and a join bar.
+  await node('Log retention').dragTo(node('Add export CSV'));
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
+  await expect(step(1)).toHaveClass(/is-together/);
+  await expect(step(1).getByTestId('schedule-belt-card')).toHaveCount(2);
+  await expect(step(1).locator('.schedule-flow-bar')).toHaveCount(2);
+  await expect(step(1).locator('.schedule-flow-rails')).toHaveCount(4);
+  await expect(step(1)).toContainText('Step 2 · together');
+  await expect(node('Add export CSV').locator('.schedule-belt-seq')).toHaveText('2a');
+  await expect(node('Log retention').locator('.schedule-belt-seq')).toHaveText('2b');
+  await expect(page.getByTestId('schedule-summary')).toContainText('3 tickets in 2 steps');
+
+  // The keyboard path does the same: Fix pager bug joins nothing (it is first), Log retention splits out again and back.
+  const logKey = await node('Log retention').getAttribute('data-issue');
+  await page.getByRole('button', { name: `Give ${logKey} its own step` }).click();
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(3);
+  await page.getByRole('button', { name: `Put ${logKey} in the step before` }).click();
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-flow-graph.png') });
+
+  // Mid-drag over a node: the step is ringed and a "Share step" preview floats below it, without moving anything.
+  const from = await node('Fix pager bug').locator('.schedule-belt-title').boundingBox();
+  const over = node('Log retention');
+  const before = await over.boundingBox();
+  await page.mouse.move(from!.x + 20, from!.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(before!.x + 60, before!.y + 30, { steps: 12 });
+  // Playwright's synthetic drag only reports hover on later moves, so settle with a few small ones.
+  await page.mouse.move(before!.x + 66, before!.y + 36, { steps: 4 });
+  await expect(page.locator('.schedule-flow-join-preview')).toContainText('Share step 2');
+  expect(await over.boundingBox()).toEqual(before);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-flow-graph-drag.png') });
+  await page.mouse.up();
+  await expect(page.locator('.schedule-flow-join-preview')).toHaveCount(0);
+  // Step 1 emptied, so the three tickets now make up the only step.
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(1);
+  await expect(step(0).getByTestId('schedule-belt-card')).toHaveCount(3);
+  await page.getByRole('button', { name: `Give ${await node('Fix pager bug').getAttribute('data-issue')} its own step` }).click();
+  await page.getByRole('button', { name: `Move ${await node('Fix pager bug').getAttribute('data-issue')} earlier` }).click();
+  await expect(step(0).getByTestId('schedule-belt-card')).toHaveText(/Fix pager bug/);
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
+
+  // Saved and reopened, the shared step is still there.
+  await page.getByTestId('schedule-name').fill('Flow graph run');
+  await page.getByTestId('schedule-save-draft').click();
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Flow graph run' });
+  await expect(card).toBeVisible();
+  const saved = await page.evaluate(async () => (await window.praxis.scheduledRuns.list()).find(view => view.run.name === 'Flow graph run')?.run.entries.map(entry => [entry.ticket.title, !!entry.withPrevious]));
+  expect(saved).toEqual([['Fix pager bug', false], ['Add export CSV', false], ['Log retention', true]]);
+  await card.getByTestId('schedule-edit').click();
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
+  await expect(step(1).getByTestId('schedule-belt-card')).toHaveCount(2);
 });
 
 test('dragging a group ticket from the scheduler sidebar adds its unfinished child tickets', async () => {
@@ -410,10 +480,6 @@ test('capture the composer and lineup for visual review (opt-in)', async () => {
   await expect(page.getByTestId('schedule-readiness').locator('[data-code="no-acceptance-criteria"]')).toContainText('4 tickets');
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(out, 'composer.png') });
-  // The processor close-up at two moments of its spin, to see that the rings stay centred.
-  await page.getByTestId('schedule-processor').screenshot({ path: path.join(out, 'processor-a.png') });
-  await page.waitForTimeout(3500);
-  await page.getByTestId('schedule-processor').screenshot({ path: path.join(out, 'processor-b.png') });
 
   // A realistic lineup: write the runs while the app is stopped, then relaunch.
   const keys = await page.getByTestId('schedule-hopper-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-issue') as string));
@@ -441,28 +507,6 @@ test('capture the composer and lineup for visual review (opt-in)', async () => {
   await expect(app.window.getByTestId('schedule-card')).toHaveCount(6, { timeout: 20000 });
   await app.window.waitForTimeout(800);
   await app.window.screenshot({ path: path.join(out, 'lineup.png') });
-});
-
-test('the armed processor rings stay concentric while they spin', async () => {
-  const { page } = await launch();
-  await page.getByTestId('schedule-new').click();
-  await page.getByTestId('schedule-hopper-card').first().press('Enter');
-  const centres = () => page.getByTestId('schedule-processor').evaluate(root => {
-    const centre = (selector: string) => {
-      const box = (root.querySelector(selector) as SVGGraphicsElement).getBoundingClientRect();
-      return [box.left + box.width / 2, box.top + box.height / 2];
-    };
-    return ['.schedule-proc-track', '.schedule-proc-arc', '.schedule-proc-dots', '.schedule-proc-gear', '.schedule-proc-core'].map(centre);
-  });
-  // The rings spin for ever, so sample at several moments: a ring that rotates about the wrong point drifts away.
-  for (let sample = 0; sample < 4; sample += 1) {
-    const all = await centres();
-    for (const [x, y] of all) {
-      expect(Math.abs(x - all[0][0])).toBeLessThan(1.5);
-      expect(Math.abs(y - all[0][1])).toBeLessThan(1.5);
-    }
-    await page.waitForTimeout(700);
-  }
 });
 
 test('scheduled runs have a grouped sidebar and project tickets stay outside the main pane', async () => {
@@ -1023,4 +1067,172 @@ test('an older schedule refresh cannot overwrite a newer failure status', async 
   // Wait for the old promise, its load handler, and React's paint to finish.
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect(card.getByTestId('schedule-status')).toHaveText('Paused');
+});
+
+// ── Bounded parallel lanes (FX-BE-149) ──────────────────────────────────
+
+/**
+ * Saves and starts a parallel run through the real IPC: `steps` lists ticket
+ * indexes per step, e.g. `[[0, 1, 2], [3]]`. Returns the run id and the keys.
+ */
+async function startParallelRun(page: Page, projectId: string, name: string, steps: number[][], maxConcurrency: number, workflowId: string): Promise<{ runId: string; keys: string[] }> {
+  return page.evaluate(async ({ id, name, steps, maxConcurrency, workflowId }) => {
+    const connectionId = `project:${id}`;
+    const issues = (await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 20, connectionId)).issues;
+    const picked = steps.flat().map(index => issues[index]);
+    const tickets = picked.map(issue => ({ connectionId, issueKey: issue.key, title: issue.summary }));
+    const withPrevious = steps.flatMap(step => step.slice(1).map(index => `${connectionId}\u0000${issues[index].key}`));
+    const view = await window.praxis.scheduledRuns.save({ projectId: id, name, timezone: 'UTC', date: '', time: '', tickets, withPrevious, maxConcurrency, workflowId, arm: false, startNow: true });
+    return { runId: view.run.id, keys: picked.map(issue => issue.key) };
+  }, { id: projectId, name, steps, maxConcurrency, workflowId });
+}
+
+const entriesOf = (page: Page, runId: string) => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.entries.map(entry => ({
+  key: entry.ticket.issueKey, status: entry.outcome?.status ?? 'queued', lane: entry.outcome?.lane, laneReason: entry.outcome?.laneReason, workflowRunId: entry.outcome?.workflowRunId
+})), runId);
+const eventsOf = (page: Page, runId: string) => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.events.map(event => event.message), runId);
+
+test('parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving', async () => {
+  const titles = ['Fix pager bug', 'Add export CSV', 'Log retention'];
+  const { page } = await launch({ titles });
+  await page.getByTestId('schedule-new').click();
+  for (const title of titles) await page.getByTestId('schedule-hopper-card').filter({ hasText: title }).press('Enter');
+  const node = (text: string) => page.getByTestId('schedule-belt-card').filter({ hasText: text });
+  await page.waitForTimeout(800);
+  await node('Log retention').dragTo(node('Add export CSV'));
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
+
+  // Sequential is the default, with no warning.
+  await expect(page.getByTestId('schedule-lanes')).toHaveAttribute('data-value', '1');
+  await expect(page.getByTestId('schedule-lanes-warning')).toHaveCount(0);
+  await chooseOption(page.getByTestId('schedule-lanes'), { label: 'Up to 2 at once' });
+  await expect(page.getByTestId('schedule-lanes-warning')).toContainText('uses provider allowance up to 2 times as fast');
+  await expect(page.getByTestId('schedule-readiness').locator('[data-code="parallel-lanes"]')).toContainText('Up to 2 tickets of a shared step run at once');
+  await expect(page.getByTestId('schedule-summary')).toContainText('up to 2 at once');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-parallel-editor.png') });
+
+  await page.getByTestId('schedule-name').fill('Parallel night');
+  await page.getByTestId('schedule-save-draft').click();
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Parallel night' });
+  await expect(card).toBeVisible();
+  const policy = await page.evaluate(async () => (await window.praxis.scheduledRuns.list()).find(view => view.run.name === 'Parallel night')?.run.policy);
+  expect(policy).toMatchObject({ mode: 'parallel', maxConcurrency: 2 });
+  await card.getByTestId('schedule-edit').click();
+  await expect(page.getByTestId('schedule-lanes')).toHaveAttribute('data-value', '2');
+  await expect(page.getByTestId('schedule-lanes-warning')).toBeVisible();
+});
+
+test('two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first', async () => {
+  const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
+  const { page, projectId } = await launch({ env, titles: ['Lane one', 'Lane two', 'Lane three', 'After the step'] });
+  const workflowId = await saveApprovalWorkflow(page, projectId);
+  const { runId, keys } = await startParallelRun(page, projectId, 'Two at once', [[0, 1, 2], [3]], 2, workflowId);
+
+  await expect.poll(async () => (await entriesOf(page, runId)).filter(entry => entry.workflowRunId).length, { timeout: 30000 }).toBe(2);
+  // Settle a few ticks: the cap must hold, and nothing from step 2 may start.
+  await page.waitForTimeout(2500);
+  const entries = await entriesOf(page, runId);
+  expect(entries.filter(entry => entry.workflowRunId).map(entry => entry.key)).toEqual([keys[0], keys[1]]);
+  expect(entries.map(entry => entry.lane)).toEqual([1, 2, undefined, undefined]);
+  expect(entries[1].laneReason).toMatch(new RegExp(`runs alongside ${keys[0]}; tickets in step 1 do not depend on each other`));
+  expect(entries[2].status).toBe('queued');
+  expect(entries[3].status).toBe('queued');
+  expect(await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).toHaveLength(2);
+  // The ledger records each concurrent launch with its lane and rationale.
+  const events = await eventsOf(page, runId);
+  expect(events.some(message => message.startsWith(`Starting ${keys[1]}`) && /in lane 2: runs alongside/.test(message))).toBe(true);
+
+  await openScheduleSidebar(page);
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Two at once' });
+  await card.getByTestId('schedule-open').click();
+  const lanes = page.getByTestId('schedule-lanes-panel');
+  await expect(lanes).toContainText('2 of up to 2 in use');
+  await expect(lanes.getByTestId('schedule-lane')).toHaveCount(2);
+  await expect(lanes.getByTestId('schedule-lane-reason').nth(1)).toContainText('runs alongside');
+  await expect(lanes.getByTestId('schedule-lanes-waiting').locator(`li[data-issue="${keys[3]}"]`)).toContainText('Waits for step 1 to finish.');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-parallel-monitor.png') });
+});
+
+for (const [label, usage, expected] of [
+  ['an allowance without room for two', { 'custom:mock': 0.8 }, /waits for a free lane: .*not enough for 2 tickets/],
+  ['an allowance the provider does not report', {}, /waits for a free lane: .*does not report its allowance/]
+] as const) {
+  test(`${label} keeps the run to one lane and says why`, async () => {
+    const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify(usage) };
+    const { page, projectId } = await launch({ env, titles: ['Lane one', 'Lane two'] });
+    const workflowId = await saveApprovalWorkflow(page, projectId);
+    const { runId, keys } = await startParallelRun(page, projectId, 'Held lane', [[0, 1]], 2, workflowId);
+    await expect.poll(async () => (await entriesOf(page, runId)).filter(entry => entry.workflowRunId).length, { timeout: 30000 }).toBe(1);
+    await page.waitForTimeout(2500);
+    const entries = await entriesOf(page, runId);
+    expect(entries.map(entry => entry.status)).toEqual([expect.stringMatching(/running|paused/), 'queued']);
+    const held = (await eventsOf(page, runId)).filter(message => message.startsWith(`${keys[1]} waits for a free lane`));
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatch(expected);
+    await openScheduleSidebar(page);
+    await page.getByTestId('schedule-card').filter({ hasText: 'Held lane' }).getByTestId('schedule-open').click();
+    await expect(page.getByTestId('schedule-activity')).toContainText(`${keys[1]} waits for a free lane`);
+  });
+}
+
+
+test('two parallel tickets that both merge into the base checkout take turns', async () => {
+  const HOLD = 3000;
+  const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }), PRAXIS_E2E_MERGE_HOLD_MS: String(HOLD) };
+  const { page, projectId, repo } = await launch({ env, titles: ['Merge one', 'Merge two'] });
+  const workflowId = await page.evaluate(async id => {
+    const now = new Date().toISOString();
+    const workflowId = 'schedule-merge-only';
+    await window.praxis.workflows.save(id, {
+      schemaVersion: 1, id: workflowId, name: 'Merge only', scope: 'project', projectId: id, version: 1,
+      entryNodeId: 'merge', createdAt: now, updatedAt: now, edges: [],
+      nodes: [{ type: 'merge', id: 'merge', name: 'Merge', x: 0, y: 0, inputs: [], onConflict: 'fail' }]
+    } as never);
+    // A merge re-checks workspace trust when it runs; trust this workflow as a person reviewing it would.
+    const trust = await window.praxis.workflows.projectTrust(id, workflowId);
+    if (!trust.trusted) await window.praxis.workflows.approveProjectTrust(id, workflowId, trust.fingerprint);
+    return workflowId;
+  }, projectId);
+  // Deliberately no .gitignore entry for .worktrees and nothing committed: Praxis's worktrees and its own
+  // metadata (the workflow file, the project brief) must not make the base read as dirty.
+  const { runId } = await startParallelRun(page, projectId, 'Two merges', [[0, 1]], 2, workflowId);
+  await expect.poll(async () => (await entriesOf(page, runId)).filter(entry => entry.workflowRunId).length, { timeout: 30000 }).toBe(2);
+  const runIds = (await entriesOf(page, runId)).map(entry => entry.workflowRunId!);
+
+  // Watch both merge stages finish. Taking turns, the second ends a full hold after the first;
+  // overlapping, they would end together.
+  const ended = new Map<string, number>();
+  await expect.poll(async () => {
+    for (const id of runIds) {
+      if (ended.has(id)) continue;
+      const summary = await page.evaluate(run => window.praxis.workflows.getRun(run), id);
+      const stage = summary?.stages.find(row => row.nodeId === 'merge');
+      if (stage?.lane === 'failed') throw new Error(`Merge failed: ${JSON.stringify(summary?.stages)}\n${execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: repo }).toString()}\n${execFileSync('git', ['log', '--oneline', '-5'], { cwd: repo }).toString()}`);
+      if (stage?.lane === 'done') ended.set(id, Date.now());
+    }
+    return ended.size;
+  }, { timeout: 60000, intervals: [100] }).toBe(2);
+  const [first, second] = [...ended.values()].sort((a, b) => a - b);
+  expect(second - first).toBeGreaterThanOrEqual(HOLD * 0.8);
+  await expect.poll(async () => (await entriesOf(page, runId)).map(entry => entry.status), { timeout: 30000 }).toEqual(['done', 'done']);
+  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.status, runId)).toBe('completed');
+});
+
+test('a parallel run whose readiness is blocked starts nothing in any lane and says why', async () => {
+  const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
+  const { page, projectId, repo } = await launch({ env, titles: ['Lane one', 'Lane two'] });
+  const workflowId = await saveApprovalWorkflow(page, projectId);
+  // An uncommitted file in the base checkout is the one thing an unattended start must not decide for itself.
+  fs.writeFileSync(path.join(repo, 'wip.txt'), 'uncommitted\n');
+  const { runId, keys } = await startParallelRun(page, projectId, 'Blocked lanes', [[0, 1]], 2, workflowId);
+  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.status, runId), { timeout: 30000 }).toBe('paused');
+  await page.waitForTimeout(2000);
+  expect(await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).toHaveLength(0);
+  expect((await entriesOf(page, runId)).map(entry => entry.status)).toEqual(['queued', 'queued']);
+  await openScheduleSidebar(page);
+  await page.getByTestId('schedule-card').filter({ hasText: 'Blocked lanes' }).getByTestId('schedule-open').click();
+  await expect(page.getByTestId('schedule-pause-banner')).toContainText(`${keys[0]} could not be started`);
+  await expect(page.getByTestId('schedule-lanes-panel')).toContainText('0 of up to 2 in use');
 });

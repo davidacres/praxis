@@ -4,7 +4,9 @@ import { runAsAgent } from './projectActivityInstance';
 import { cancelWorkflowMap, runWorkflowMap } from './workflowMapRunner';
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
 import { broadcastToAllWindows } from './windowBroadcast';
+import { resolve as resolvePath } from 'node:path';
 import {
+  ExclusiveResources,
   WorkflowOrchestrator,
   WorkflowRunStore,
   isCheckNode,
@@ -145,6 +147,10 @@ async function runTrustError(run: WorkflowRun): Promise<string | undefined> {
   return undefined;
 }
 
+/** Merges into one base checkout never overlap, whichever runs (or parallel schedule lanes) start them. */
+const baseCheckouts = new ExclusiveResources();
+const MERGE_HOLD_MS = Number(process.env.PRAXIS_E2E_MERGE_HOLD_MS) > 0 ? Number(process.env.PRAXIS_E2E_MERGE_HOLD_MS) : 0;
+
 const dispatcher: StageDispatcher = {
   canDispatch(node, run) {
     // Everything needs somewhere to run; agent stages additionally need a
@@ -166,7 +172,15 @@ const dispatcher: StageDispatcher = {
   async runMerge(node, context) {
     const error = await runTrustError(context.run);
     if (error) return { status: 'failed' as const, error };
-    return runWorkflowMerge(node, context, projectFolderFor(context.run), evidenceStorageRoot());
+    const folder = projectFolderFor(context.run);
+    // The base checkout is the one thing parallel runs share (FX-BE-149): merges into it take turns.
+    const merge = async () => {
+      const outcome = await runWorkflowMerge(node, context, folder, evidenceStorageRoot());
+      // E2E only: hold the checkout a little longer, so a spec can tell turns from overlap.
+      if (MERGE_HOLD_MS > 0) await new Promise(resolve => setTimeout(resolve, MERGE_HOLD_MS));
+      return outcome;
+    };
+    return folder ? baseCheckouts.with(resolvePath(folder), merge) : merge();
   },
   async runAgentStage(node, context, onSession) {
     const error = await runTrustError(context.run);

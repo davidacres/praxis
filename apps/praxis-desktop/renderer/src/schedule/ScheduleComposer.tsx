@@ -1,21 +1,23 @@
 import { createPortal } from 'react-dom';
 import { ScheduleTickets, expandScheduleTickets, type Candidate } from './ScheduleTickets';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef, ScheduledWorkflowChoice } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './scheduleFormat';
+import { ScheduleFlowGraph } from './ScheduleFlowGraph';
+import { flattenSteps, flowKey, moveEarlier, moveLater, placeTickets, removeTicket, stepsFromEntries, toggleTogether, type FlowSteps, type FlowTarget } from './scheduleFlow';
 
 /**
  * The scheduled-run composer (FX-BF-047 / FX-BE-147 / TASK-384).
  *
- * Tickets are picked from a hopper and dropped on a belt; the belt's left-to-right
- * order *is* the run order, kept on the schedule and never on the board. The
- * processor on the right is a preview of the armed run, not something that is
- * running. Dragging is an enhancement: every move has a button, so the order can
- * be built entirely from the keyboard.
+ * Tickets are picked from the sidebar and dropped on a flow graph drawn like the
+ * Task Designer: steps run left to right, linked by arrows, and tickets dropped
+ * onto another ticket share its step (drawn as parallel lanes). The order is kept
+ * on the schedule and never on the board. Dragging is an enhancement: every move
+ * has a button, so the order can be built entirely from the keyboard.
  *
  * All the rules — what a valid start time is, what arming needs, what is
  * blocking — are decided in main by core's `composeScheduledRun`; this component
@@ -48,14 +50,16 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   const [time, setTime] = useState(initial?.start.time || '22:00');
   const [timezone, setTimezone] = useState(initial?.run.timezone ?? localTimeZone());
   const [workflowId, setWorkflowId] = useState(initial?.run.policy.workflowId ?? '');
+  // FX-BE-149: one at a time unless the user deliberately picks more. Kept as a string for the chip.
+  const [lanes, setLanes] = useState(String(initial?.run.policy.mode === 'parallel' ? initial.run.policy.maxConcurrency : 1));
   const [workflowChoices, setWorkflowChoices] = useState<ScheduledWorkflowChoice[]>([]);
-  const [belt, setBelt] = useState<ScheduledTicketRef[]>(() => initial?.run.entries.map(entry => ({ ...entry.ticket })) ?? []);
+  const [steps, setSteps] = useState<FlowSteps>(() => stepsFromEntries(initial?.run.entries ?? []));
   const [preview, setPreview] = useState<{ readiness?: ScheduledRunReadiness; error?: string }>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [justAdded, setJustAdded] = useState<string>();
   const dragging = useRef<{ from: 'hopper' | 'belt'; key: string }>();
-  const [overIndex, setOverIndex] = useState<number>();
+  const [dropTarget, setDropTarget] = useState<FlowTarget>();
   const autoAddStarted = useRef(false);
   const ticketsSeeded = useRef(false);
 
@@ -104,16 +108,17 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
     }
     if (ticketsSeeded.current) return;
     ticketsSeeded.current = true;
-    setBelt(current => {
-      const next = [...current];
-      for (const ticket of selected) if (!next.some(existing => sameTicket(existing, ticket))) next.push(ticket);
-      return next;
+    setSteps(current => {
+      const queued = new Set(current.flat().map(flowKey));
+      const fresh = selected.filter(ticket => !queued.has(flowKey(ticket)));
+      return fresh.length ? placeTickets(current, fresh, { kind: 'gap', step: current.length }) : current;
     });
   }, [autoAddSelectedTickets, candidates, initial?.run.id, initial?.run.name, initial?.run.timezone, initial?.run.entries, initial?.start.date, initial?.start.time, initialTicketKeys.join('\0'), onSaved, project.id]);
 
+  const belt = useMemo(() => flattenSteps(steps), [steps]);
   const input: SaveScheduledRunInput = useMemo(
-    () => ({ id: initial?.run.id, projectId: project.id, name, date, time, timezone, tickets: belt, arm: false, ...(workflowId ? { workflowId } : {}) }),
-    [initial?.run.id, project.id, name, date, time, timezone, belt, workflowId]
+    () => ({ id: initial?.run.id, projectId: project.id, name, date, time, timezone, tickets: belt.tickets, withPrevious: belt.withPrevious, maxConcurrency: Number(lanes), arm: false, ...(workflowId ? { workflowId } : {}) }),
+    [initial?.run.id, project.id, name, date, time, timezone, belt, workflowId, lanes]
   );
 
   // Readiness is derived from the live board in main, so ask it as the form changes.
@@ -130,32 +135,23 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
     };
   }, [input]);
 
-  const onBelt = (candidate: Candidate) => belt.some(ticket => sameTicket(ticket, { connectionId: candidate.connectionId, issueKey: candidate.key }));
-  const addTicket = (ticket: ScheduledTicketRef, at?: number) => {
-    setBelt(current => {
-      if (current.some(existing => sameTicket(existing, ticket))) return current;
-      const next = [...current];
-      next.splice(at === undefined ? next.length : Math.max(0, Math.min(next.length, at)), 0, ticket);
-      return next;
-    });
-    setJustAdded(ticket.issueKey);
-    window.setTimeout(() => setJustAdded(current => (current === ticket.issueKey ? undefined : current)), 700);
+  const onBelt = (candidate: Candidate) => belt.tickets.some(ticket => sameTicket(ticket, { connectionId: candidate.connectionId, issueKey: candidate.key }));
+  const flash = (issueKey: string) => {
+    setJustAdded(issueKey);
+    window.setTimeout(() => setJustAdded(current => (current === issueKey ? undefined : current)), 700);
   };
-  const addCandidate = (candidate: Candidate, at?: number) => {
-    const tickets = expandScheduleTickets(candidates ?? [], [candidate]);
-    tickets.forEach((item, offset) => addTicket(refOf(item), at === undefined ? undefined : at + offset));
-  };
-  const removeAt = (index: number) => setBelt(current => current.filter((_, i) => i !== index));
-  const move = (from: number, to: number) =>
-    setBelt(current => {
-      if (to < 0 || to >= current.length || from === to) return current;
-      const next = [...current];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
+  /** Adds new tickets at a target (the end by default); tickets already in the run stay where they are. */
+  const addTickets = (tickets: ScheduledTicketRef[], target?: FlowTarget) => {
+    setSteps(current => {
+      const queued = new Set(current.flat().map(flowKey));
+      const fresh = tickets.filter(ticket => !queued.has(flowKey(ticket)));
+      return fresh.length ? placeTickets(current, fresh, target ?? { kind: 'gap', step: current.length }) : current;
     });
+    if (tickets[0]) flash(tickets[0].issueKey);
+  };
+  const addCandidate = (candidate: Candidate, target?: FlowTarget) => addTickets(expandScheduleTickets(candidates ?? [], [candidate]).map(refOf), target);
 
-  const dropAt = (index: number, dataTransfer?: DataTransfer) => {
+  const dropAt = (target: FlowTarget, dataTransfer?: DataTransfer) => {
     let drag = dragging.current;
     if (!drag && dataTransfer) {
       try {
@@ -164,29 +160,38 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
       } catch { /* Fall back to the in-memory drag state when custom data is unavailable. */ }
     }
     dragging.current = undefined;
-    setOverIndex(undefined);
+    setDropTarget(undefined);
     if (!drag) return;
     if (drag.from === 'belt') {
-      const from = belt.findIndex(ticket => `${ticket.connectionId}\u0000${ticket.issueKey}` === drag.key);
-      if (from >= 0) move(from, index > from ? index - 1 : index);
+      const ticket = belt.tickets.find(item => flowKey(item) === drag.key);
+      if (ticket) setSteps(current => placeTickets(current, [ticket], target));
       return;
     }
     const candidate = (candidates ?? []).find(item => `${item.connectionId}\u0000${item.key}` === drag.key);
-    if (candidate) addCandidate(candidate, index);
+    if (candidate) addCandidate(candidate, target);
   };
 
-  const pointerDropIndex = (point: { x: number; y: number }): number | undefined => {
-    const target = document.elementFromPoint(point.x, point.y);
-    if (!target?.closest('.schedule-stage')) return undefined;
-    const card = target.closest<HTMLElement>('.schedule-belt-card');
-    if (!card) return belt.length;
-    const index = belt.findIndex(ticket => ticket.issueKey === card.dataset.issue);
-    return index < 0 ? belt.length : index;
+  /**
+   * The target under a point: a ticket or step joins it, an arrow is a new step
+   * there, and anywhere else on the Run order panel adds a step at the end.
+   */
+  const targetAt = (point: { x: number; y: number }): FlowTarget | undefined => {
+    const element = document.elementFromPoint(point.x, point.y);
+    if (!element?.closest('.schedule-stage')) return undefined;
+    const gapAt = element.closest<HTMLElement>('[data-flow-gap]');
+    if (gapAt) return { kind: 'gap', step: Number(gapAt.dataset.flowGap) };
+    const joinAt = element.closest<HTMLElement>('[data-flow-join]');
+    if (joinAt) return { kind: 'join', step: Number(joinAt.dataset.flowJoin) };
+    return { kind: 'gap', step: steps.length };
   };
+  const sameTarget = (a?: FlowTarget, b?: FlowTarget) => a?.kind === b?.kind && a?.step === b?.step;
+  const hover = (next?: FlowTarget) => setDropTarget(current => (sameTarget(current, next) ? current : next));
+  const acceptsDrag = (event: DragEvent) => !!dragging.current || Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE);
 
   const readiness = preview.readiness;
   const blockers = readiness?.issues.filter(issue => issue.severity === 'blocker') ?? [];
-  const canSchedule = !!readiness && readiness.ready && belt.length > 0 && !preview.error;
+  const count = belt.tickets.length;
+  const canSchedule = !!readiness && readiness.ready && count > 0 && !preview.error;
   const armedLabel = (() => {
     const when = new Date(`${date}T00:00:00`);
     if (!date || !time || Number.isNaN(when.getTime())) return undefined;
@@ -209,7 +214,8 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
     }
   };
 
-  const count = belt.length;
+  const stepCount = steps.length;
+  const sharedSteps = steps.filter(step => step.length > 1).length;
   const startLabel = armedLabel ? `${armedLabel.day}, ${armedLabel.time}` : undefined;
   const [hh, mm] = time.split(':').map(Number);
   const dial = Number.isFinite(hh) && Number.isFinite(mm) ? { hour: ((hh % 12) + mm / 60) * 30, minute: mm * 6 } : undefined;
@@ -238,7 +244,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
         <div className="schedule-head-actions">
           <button type="button" className="btn" data-testid="schedule-cancel" onClick={onClose}>Cancel</button>
           <button type="button" className="btn" data-testid="schedule-save-draft" disabled={saving} onClick={() => void save(false)}>Save draft</button>
-          <button type="button" className="btn btn-primary" data-testid="schedule-run-now" disabled={saving || !name.trim() || !belt.length || !workflowId} onClick={() => void save(false, true)}>Run now</button>
+          <button type="button" className="btn btn-primary" data-testid="schedule-run-now" disabled={saving || !name.trim() || !count || !workflowId} onClick={() => void save(false, true)}>Run now</button>
         </div>
       </header>
 
@@ -246,118 +252,56 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
 
       <div className="schedule-compose-grid">
         {ticketHost && createPortal(<ScheduleTickets candidates={candidates} loadError={loadError} used={onBelt} onAdd={candidate => addCandidate(candidate)} onTicketDrag={point => {
-          setOverIndex(point ? pointerDropIndex(point) : undefined);
+          hover(point ? targetAt(point) : undefined);
         }} onTicketDrop={(candidate, point) => {
-          const index = pointerDropIndex(point);
-          setOverIndex(undefined);
-          if (index !== undefined) addCandidate(candidate, index);
+          const target = targetAt(point);
+          setDropTarget(undefined);
+          if (target) addCandidate(candidate, target);
         }} />, ticketHost)}
 
         <div className="schedule-main-col">
           <section className="schedule-stage" aria-label="Run order"
             onDragOver={event => {
-              if (!dragging.current && !Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE)) return;
+              if (!acceptsDrag(event)) return;
               event.preventDefault();
               event.dataTransfer.dropEffect = dragging.current?.from === 'belt' ? 'move' : 'copy';
-              setOverIndex(belt.length);
+              hover(targetAt({ x: event.clientX, y: event.clientY }));
             }}
             onDragLeave={event => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverIndex(undefined);
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(undefined);
             }}
             onDrop={event => {
               event.preventDefault();
               event.stopPropagation();
-              dropAt(belt.length, event.dataTransfer);
+              dropAt(targetAt({ x: event.clientX, y: event.clientY }) ?? { kind: 'gap', step: steps.length }, event.dataTransfer);
             }}
-            data-drag-over={overIndex !== undefined || undefined}>
+            data-drag-over={dropTarget !== undefined || undefined}>
             <div className="schedule-stage-head">
-              <h3 className="schedule-panel-title">Run order <span className="schedule-panel-note">one at a time, left to right</span></h3>
+              <h3 className="schedule-panel-title">Run order <span className="schedule-panel-note">left to right · drop onto a ticket to share its step</span></h3>
               <span className="schedule-pill" data-testid="schedule-count">{count} ticket{count === 1 ? '' : 's'}</span>
+              {stepCount > 0 && <span className="schedule-pill">{stepCount} step{stepCount === 1 ? '' : 's'}</span>}
             </div>
-            <div className="schedule-stage-body">
-              <ol
-                className="schedule-belt"
-                data-testid="schedule-belt"
-                onDragOver={event => {
-                  if (dragging.current || Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE)) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = dragging.current?.from === 'belt' ? 'move' : 'copy';
-                  }
-                }}
-                onDrop={event => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  dropAt(belt.length, event.dataTransfer);
-                }}
-              >
-                {belt.map((ticket, index) => (
-                  <li
-                    key={`${ticket.connectionId}:${ticket.issueKey}`}
-                    className={`schedule-belt-card${justAdded === ticket.issueKey ? ' is-entering' : ''}${overIndex === index ? ' is-over' : ''}`}
-                    data-testid="schedule-belt-card"
-                    data-issue={ticket.issueKey}
-                    draggable
-                    onDragStart={event => {
-                      dragging.current = { from: 'belt', key: `${ticket.connectionId}\u0000${ticket.issueKey}` };
-                      event.dataTransfer.effectAllowed = 'move';
-                      event.dataTransfer.setData(SCHEDULE_TICKET_DRAG_TYPE, JSON.stringify(dragging.current));
-                      event.dataTransfer.setData('text/plain', ticket.issueKey);
-                    }}
-                    onDragOver={event => {
-                      if (!dragging.current && !Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE)) return;
-                      event.preventDefault();
-                      event.stopPropagation();
-                      event.dataTransfer.dropEffect = dragging.current?.from === 'belt' ? 'move' : 'copy';
-                      setOverIndex(index);
-                    }}
-                    onDragLeave={() => setOverIndex(current => (current === index ? undefined : current))}
-                    onDrop={event => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      dropAt(index, event.dataTransfer);
-                    }}
-                    onDragEnd={() => {
-                      dragging.current = undefined;
-                      setOverIndex(undefined);
-                    }}
-                  >
-                    <span className="schedule-belt-seq" aria-label={`Position ${index + 1}`}>{index + 1}</span>
-                    <span className="schedule-belt-key">{ticket.issueKey}</span>
-                    <span className="schedule-belt-title" title={ticket.title}>{ticket.title}</span>
-                    <span className="schedule-belt-controls">
-                      <button type="button" className="schedule-belt-btn" aria-label={`Move ${ticket.issueKey} earlier`} disabled={index === 0} onClick={() => move(index, index - 1)}>
-                        <Icon name="arrow-left" size={12} />
-                      </button>
-                      <button type="button" className="schedule-belt-btn" aria-label={`Move ${ticket.issueKey} later`} disabled={index === belt.length - 1} onClick={() => move(index, index + 1)}>
-                        <Icon name="arrow-right" size={12} />
-                      </button>
-                      <button type="button" className="schedule-belt-btn" aria-label={`Remove ${ticket.issueKey} from the run`} onClick={() => removeAt(index)}>
-                        <Icon name="close" size={12} />
-                      </button>
-                    </span>
-                  </li>
-                ))}
-                <li className="schedule-belt-slot" data-testid="schedule-belt-slot" aria-hidden={belt.length > 0}>
-                  {belt.length === 0 ? 'Add tickets from the left, or drag them here' : 'Drop here'}
-                </li>
-              </ol>
-
-              <div className="schedule-flow" aria-hidden="true"><span /><span /><span /></div>
-
-              <aside className="schedule-processor" aria-label="Armed run preview" data-testid="schedule-processor" data-armed={canSchedule ? 'true' : 'false'}>
-                <svg viewBox="-120 -120 240 240" role="img" aria-label={canSchedule ? 'Run ready to schedule' : 'Run not ready'}>
-                  <circle r="100" className="schedule-proc-halo" />
-                  <circle r="96" className="schedule-proc-track" />
-                  <circle r="96" className="schedule-proc-arc" strokeDasharray={`${Math.min(1, belt.length / 6) * 603} 603`} transform="rotate(-90)" />
-                  <circle r="108" className="schedule-proc-dots" />
-                  <circle r="82" className="schedule-proc-gear" />
-                  <circle r="66" className="schedule-proc-core" />
-                  <text y="-14" textAnchor="middle" className="schedule-proc-label">{canSchedule ? 'ARMED FOR' : 'NOT READY'}</text>
-                  <text y="14" textAnchor="middle" className="schedule-proc-time">{armedLabel?.time ?? '--:--'}</text>
-                  <text y="34" textAnchor="middle" className="schedule-proc-day">{armedLabel?.day ?? ''}</text>
-                </svg>
-              </aside>
-            </div>
+            <ScheduleFlowGraph
+              steps={steps}
+              candidates={candidates}
+              target={dropTarget}
+              justAdded={justAdded}
+              start={{ time: armedLabel?.time, day: armedLabel?.day, armed: canSchedule }}
+              onCardDragStart={(ticket, event) => {
+                dragging.current = { from: 'belt', key: flowKey(ticket) };
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData(SCHEDULE_TICKET_DRAG_TYPE, JSON.stringify(dragging.current));
+                event.dataTransfer.setData('text/plain', ticket.issueKey);
+              }}
+              onCardDragEnd={() => {
+                dragging.current = undefined;
+                setDropTarget(undefined);
+              }}
+              onMoveEarlier={key => setSteps(current => moveEarlier(current, key))}
+              onMoveLater={key => setSteps(current => moveLater(current, key))}
+              onToggleTogether={key => setSteps(current => toggleTogether(current, key))}
+              onRemove={key => setSteps(current => removeTicket(current, key))}
+            />
             <p className="schedule-hint">This order belongs to the schedule. It never changes the board.</p>
           </section>
 
@@ -403,7 +347,33 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
                   {workflowChoices.map(choice => <option key={choice.workflowId} value={choice.workflowId}>{choice.name}</option>)}
                 </select>
               </label>
-              <p className="schedule-policy"><strong>Sequential.</strong> One ticket finishes, pauses or is skipped before the next starts.</p>
+              <label className="schedule-field">Tickets at once
+                <ChipSelect
+                  block
+                  ariaLabel="Tickets at once"
+                  data-testid="schedule-lanes"
+                  value={lanes}
+                  onChange={setLanes}
+                  icon="split-horizontal"
+                  options={[
+                    { value: '1', label: 'One at a time (recommended)' },
+                    { value: '2', label: 'Up to 2 at once' },
+                    { value: '3', label: 'Up to 3 at once' },
+                    { value: '4', label: 'Up to 4 at once' }
+                  ]}
+                />
+              </label>
+              {lanes === '1' ? (
+                <p className="schedule-policy"><strong>One ticket at a time.</strong> Each finishes, pauses or is skipped before the next starts. Tickets that share a step have no order between them, but still run one after another.</p>
+              ) : (
+                <div className="schedule-notice" role="note" data-testid="schedule-lanes-warning">
+                  <Icon name="warning" size={14} />
+                  <span>
+                    <strong>Up to {lanes} tickets of a shared step run at once.</strong> That uses provider allowance up to {lanes} times as fast. A step still waits
+                    for every ticket before it, and an extra ticket only starts while its provider reports room for it, so the run may use fewer lanes.
+                  </span>
+                </div>
+              )}
               <p className="schedule-policy"><strong>Approval gates always pause the run.</strong> Nothing is approved while you are away.</p>
               <p className="schedule-policy">
                 <strong>Provider allowance.</strong> At {handoverPercent}% of a provider&rsquo;s allowance the run records its status, commits a
@@ -419,7 +389,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
         <div className="schedule-chips">
           {preview.error && <span className="schedule-chip-pill schedule-chip-pill--blocker" data-testid="schedule-preview-error"><Icon name="warning" size={12} /> {preview.error}</span>}
           {!preview.error && !readiness && <span className="schedule-hint">Checking…</span>}
-          {!preview.error && readiness?.ready && belt.length > 0 && (
+          {!preview.error && readiness?.ready && count > 0 && (
             <span className="schedule-chip-pill schedule-chip-pill--ok" data-testid="schedule-ready"><Icon name="check" size={12} /> Ready to schedule</span>
           )}
           {!preview.error && condenseIssues(readiness?.issues ?? []).map((issue, index) => (
@@ -434,7 +404,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
         <div>
           <span className="schedule-panel-title">Summary</span>
           <p className="schedule-summary-text">
-            <strong>{count} ticket{count === 1 ? '' : 's'}</strong> will run one at a time
+            <strong>{count} ticket{count === 1 ? '' : 's'}</strong>{stepCount !== count ? <> in <strong>{stepCount} step{stepCount === 1 ? '' : 's'}</strong></> : null} will run {lanes === '1' || stepCount === count ? 'one at a time' : <>up to <strong>{lanes} at once</strong> within a step</>}
             {startLabel ? <> starting <strong>{startLabel}</strong> <span className="schedule-summary-zone">({timezone})</span></> : null}.
           </p>
           <p className="schedule-hint">Once only. Approval gates pause the run until you decide.</p>

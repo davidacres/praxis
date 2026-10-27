@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Done
 **Created:** 2026-09-29T11:22:33.343Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-149
 title: Optional bounded parallel lanes
-status: Backlog
+status: Done
 feature: FX-BF-047
-updated: 2026-09-29
+updated: 2026-10-27
 tasks: [TASK-387, TASK-388]
 dependencies: [FX-BE-148]
 validation: [npm run test:core, npm run test:desktop]
@@ -68,3 +68,6 @@ start dependent or under-budgeted work merely because there are idle lanes.
 
 ## Comments
 
+2026-10-27: Parallel lanes built behind the same preview flag. TASK-387 done; TASK-388 implemented, with a merge-lock e2e and live qualification still open. See the task comments.
+
+2026-10-27 (closed): Both tasks done. Parallel operation is opt-in, capped at 4, gated by steps, failures and reported allowance, and recorded with a lane and rationale for every concurrent launch. Overnight live-provider qualification has not been run.

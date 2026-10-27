@@ -107,6 +107,7 @@ export * from './projects/deploymentRunState';
 export * from './projects/deploymentRunStore';
 export * from './scheduledRuns/scheduledRun';
 export * from './scheduledRuns/scheduledBudget';
+export * from './scheduledRuns/exclusiveResource';
 export * from './scheduledRuns/scheduledRunExecution';
 export * from './scheduledRuns/scheduledRunReadiness';
 export * from './scheduledRuns/scheduledRunRunner';
