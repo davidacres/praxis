@@ -147,7 +147,7 @@ npm run test:praxis-contracts
 
 Register new core tests in `packages/core/package.json` (its list is explicit) and main tests in the existing appropriate unit runner. Extend assistant.spec.ts and existing scripted ACP/mock API fixtures. Map AC1/AC10 to repository/IPC suites; AC2/AC5/AC6 to adapter/context suites; AC3/AC4/AC9 to coordinator fault injection and Electron restart; AC7 to migration fixtures; AC8/AC11 to assistant/sidebar E2E; AC12 to the final evidence report. Add focused source tests as needed, but test actual file persistence and provider-wire paths too. Preserve failure attempts without harness retries masking flakiness. Catalog generation must retain unrelated concurrent changes and disclose pre-existing drift.
 
-Manually verify the built renderer in Classic and Easy Mode, floating/docked, second window, queue/cancel/retry, approval and uncertain-result recovery. Retain useful screenshots in `.praxis/session-artifacts/`; inspect actual and diff before any snapshot acceptance. Opt-in real API and CLI checks require configured credentials and may incur ordinary provider usage; do not call scripted fixtures real-AI proof. No runtime build or E2E pass is claimed by this plan.
+The implementing process must interact with and visually inspect the built renderer in Classic and Easy Mode, floating/docked, second window, queue/cancel/retry, approval and uncertain-result recovery. Retain useful screenshots in `.praxis/session-artifacts/`; inspect actual and diff before any snapshot acceptance. Opt-in real API and CLI checks require configured credentials and may incur ordinary provider usage; do not call scripted fixtures real-AI proof. No runtime build or E2E pass is claimed by this plan.
 
 ## Readiness and implementation order
 
@@ -192,3 +192,17 @@ None outstanding for TASK-476. Existing FX-BF-050 assistant and provider/session
 ## Plan validation evidence
 
 [Readiness report and complete file inventory](../../../planning-validation/fx-bf-111-durable-team-chat.md). This proves plan parsing and linkage only; implementation verification remains pending.
+
+## Scheduled execution contract (2026-10-26)
+
+User direction: queue TASK-476 through TASK-487 in ascending dependency order. The implementation process performs visual verification as it goes; human review happens once the whole delivery is complete. Visual inspection is an agent responsibility using a running built app and retained screenshots, not a request for the user to test intermediate tasks. Perform it for each task that changes visible behavior and repeat the integrated journey in TASK-487. Backend-only tasks record why no visual surface changed and supply their runtime evidence.
+
+Each queued task reads this feature design, its parent story and its task file from the run checkout. Implement only that task and its necessary integration, preserve prerequisite work, execute its acceptance checks, and persist a handoff containing task ID, base/result commit, tests and results, screenshot paths, remaining dependencies and blockers. Never mark a task complete from a prose claim or a missing report. TASK-487 assembles the cumulative evidence for final human review.
+
+The draft is a queue definition, not permission to start, merge, publish or bypass workflow policy. It contains the twelve task board keys PRX-T111-476 through PRX-T111-487 and uses the currently selected Full SDLC workflow provisionally. Its date/time is the application's draft placeholder and is not an agreed start time.
+
+### Activation blockers
+
+The current Full SDLC definition contains an approval stage per ticket, and the scheduler starts a separate workflow for each queued task. This does not yet satisfy final-only human review or prove that later task worktrees contain preceding commits. Before arming, configure and validate a task-delivery workflow/integration strategy that retains automated review/test/security gates, performs visual verification inside the process, carries every predecessor result into the next task, and reserves human review for the final combined result. Do not silently bypass existing approval stages, infer permission to merge to main, or claim that queue ordering alone integrates branches. If the current runner cannot express that strategy, leave this draft unarmed and resolve the workflow capability separately.
+
+Also resolve the app's workspace-trust blocker and dirty-base warning, commit the reviewed plan and intended prerequisite code, and verify the working-directory/sandbox boundary permits both packages/core and apps/praxis-desktop. Existing WIP is not authorized for blanket staging or cleanup. Select the actual start time only when arming is requested. The user need not review intermediate visual checks; unexpected tool outcomes and execution-policy failures remain genuine blockers rather than fabricated success.

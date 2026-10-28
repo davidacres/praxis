@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AgentSessionRecord, GitStatusSnapshot, WorkflowRunSummary, ProjectRecord } from '@praxis/core';
 import { SectionHeader } from './SectionHeader';
 import { EasyModeSessionsList } from './EasyModeSessionsList';
@@ -79,6 +79,22 @@ export function EasyModeSidebar({
 }: EasyModeSidebarProps) {
   const [gitStatus, setGitStatus] = useState<GitStatusSnapshot | null>(null);
   const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
+  const feedRef = useRef<HTMLDivElement>(null);
+  const runsRef = useRef<HTMLElement>(null);
+  const [runsFraction, setRunsFraction] = useState<number | undefined>(() => {
+    const stored = localStorage.getItem('praxis-easymode-runs-fraction');
+    const value = stored === null ? NaN : Number(stored);
+    return Number.isFinite(value) && value > 0 && value < 1 ? value : undefined;
+  });
+
+  const resizeRuns = (height: number) => {
+    const feedHeight = feedRef.current?.clientHeight ?? 0;
+    if (!feedHeight) return;
+    const maxHeight = Math.max(72, feedHeight - 164);
+    const fraction = Math.min(maxHeight, Math.max(72, height)) / feedHeight;
+    setRunsFraction(fraction);
+    localStorage.setItem('praxis-easymode-runs-fraction', String(fraction));
+  };
 
   const activeProject = projects[0];
   const workspaceFolder = activeProject?.workspaceFolder;
@@ -148,7 +164,7 @@ export function EasyModeSidebar({
       </div>
 
       {/* Sidebar Feed Container */}
-      <div className="easymode-sidebar-feed">
+      <div className="easymode-sidebar-feed" ref={feedRef}>
         {/* Sessions Section */}
         <section className="easymode-section easymode-section--sessions" aria-label="Sessions">
           <SectionHeader
@@ -162,6 +178,7 @@ export function EasyModeSidebar({
             {renderSessionsContent ? renderSessionsContent() : (
               <EasyModeSessionsList
                 sessions={sessions}
+                scope={`easy-mode:${activeProjectId ?? 'workspace'}:recency`}
                 allSessions={allSessions}
                 selectedSessionKey={activeSessionKey}
                 activeAgentId={activeAgentId}
@@ -178,8 +195,37 @@ export function EasyModeSidebar({
           </div>
         </section>
 
+        <div
+          className="easymode-feed-divider"
+          role="separator"
+          aria-label="Resize Sessions and Runs"
+          aria-orientation="horizontal"
+          tabIndex={0}
+          data-testid="easymode-runs-divider"
+          onPointerDown={event => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }}
+          onPointerMove={event => {
+            if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+            const feed = feedRef.current;
+            if (feed) resizeRuns(feed.getBoundingClientRect().bottom - event.clientY - 8);
+          }}
+          onPointerUp={event => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          }}
+          onKeyDown={event => {
+            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+            event.preventDefault();
+            const height = runsRef.current?.getBoundingClientRect().height ?? 72;
+            resizeRuns(height + (event.key === 'ArrowUp' ? 1 : -1) * (event.shiftKey ? 40 : 10));
+          }}
+        />
+
         {/* Runs Section (Structured Workflows) */}
-        <section className="easymode-section easymode-section--runs" aria-label="Runs">
+        <section ref={runsRef} className="easymode-section easymode-section--runs" aria-label="Runs"
+          style={runsFraction === undefined ? undefined : { flex: `0 0 ${runsFraction * 100}%`, maxHeight: 'max(72px, calc(100% - 164px))' }}>
           <SectionHeader
             title="Runs"
             count={allRuns.length}

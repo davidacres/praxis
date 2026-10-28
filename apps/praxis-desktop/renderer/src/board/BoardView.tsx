@@ -13,7 +13,6 @@ import { statusTone } from './boardMeta';
 import { PriorityIndicator } from './PriorityIndicator';
 import type { BoardFilterPresentation, BoardFilterValue } from './BoardFilterBar';
 import { BoardSettingsMenu } from './BoardSettingsMenu';
-import { useSettings } from '../settings/useSettings';
 import { useRegisterPageAssistantContext } from '../assistant/AssistantProvider';
 import {
   DEFAULT_BOARD_PREFS,
@@ -34,11 +33,7 @@ export interface BoardViewProps {
   onOpenIssue: (issueKey: string) => void;
   /** Opens the create-ticket form for this board. */
   onNewIssue: () => void;
-  /**
-   * Opens the create-ticket form pre-set to Idea. Rendered only when the
-   * `preview.enableCreateIdea` setting is on — mirrors the extension's
-   * preview-gated Create Idea command.
-   */
+  /** Opens the create-ticket form pre-set to Idea. */
   onNewIdea: () => void;
   /**
    * False when the board's backend cannot create tickets (e.g. a folder
@@ -289,8 +284,6 @@ export function BoardView({
 }: BoardViewProps) {
   const boardId = details.board.id;
   const { confirm } = useDialogs();
-  const { settings } = useSettings();
-  const showNewIdea = settings?.preview.enableCreateIdea === true;
   // Single dragged key per drag — the dataTransfer is the cross-process source
   // of truth, but we mirror it in state so we can paint the column under the
   // cursor without re-reading .dataTransfer in every dragover event.
@@ -1175,19 +1168,17 @@ export function BoardView({
   const toolbar = (
     <header className="view-header board-toolbar">
       <div className="board-toolbar-group board-toolbar-left">
-        {showNewIdea && (
-          <button
-            type="button"
-            className="icon-btn icon-btn-sm"
-            data-testid="board-new-idea-btn"
-            aria-label="New idea"
-            disabled={!canCreateIssue}
-            title={canCreateIssue ? 'Create a new idea ticket on this board' : createIssueHint}
-            onClick={onNewIdea}
-          >
-            <Icon name="lightbulb" size={14} />
-          </button>
-        )}
+        <button
+          type="button"
+          className="icon-btn icon-btn-sm"
+          data-testid="board-new-idea-btn"
+          aria-label="New idea"
+          disabled={!canCreateIssue}
+          title={canCreateIssue ? 'Create a new idea ticket on this board' : createIssueHint}
+          onClick={onNewIdea}
+        >
+          <Icon name="lightbulb" size={14} />
+        </button>
         <button
           type="button"
           className="icon-btn icon-btn-sm"

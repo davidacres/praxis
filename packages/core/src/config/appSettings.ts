@@ -23,7 +23,6 @@ import { normalizeMobileSubnet } from '../ai/tools/networkAddress';
  * `connections` array key.
  */
 
-export type BoardsSidebarMode = 'classic' | 'work';
 
 /** The six priority levels the appearance section customises. Order matters — UI renders top-down. */
 export const PRIORITY_NAMES: readonly string[] = [
@@ -289,18 +288,10 @@ const KNOWN_AI_PROVIDERS: readonly BuiltInAiProvider[] = [
 ];
 
 export interface PreviewSettings {
-  /** Enable the Create Idea command and button (preview). */
-  enableCreateIdea: boolean;
-  /** Enable the New Project wizard (preview). */
-  enableNewProject: boolean;
-  /** Boards sidebar layout — 'classic' (separate views) or 'work' (board-centric). */
-  boardsSidebarMode: BoardsSidebarMode;
-  /** Enable the experimental EasyMode sidebar view. */
+  /** Selected sidebar view, also controlled from the titlebar and keyboard shortcut. */
   enableEasyMode: boolean;
   /** Enable deployment profiles, targets, and delivery runs for projects. */
   enableDeployments: boolean;
-  /** Enable scheduled ticket runs: the schedule composer and the Scheduled runs page. The runner only starts and observes schedules while this is on; it stays a preview until it has been used on real overnight runs. */
-  enableScheduledRuns: boolean;
 }
 
 export interface StartupSettings {
@@ -670,12 +661,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     checkOnLaunch: true
   },
   preview: {
-    enableCreateIdea: false,
-    enableNewProject: true,
-    boardsSidebarMode: 'classic',
     enableEasyMode: false,
-    enableDeployments: false,
-    enableScheduledRuns: false
+    enableDeployments: false
   },
   appearance: {
     displayMode: 'compact',
@@ -806,13 +793,6 @@ function readString(value: unknown, fallback: string): string {
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
-}
-
-function readBoardsSidebarMode(value: unknown, fallback: BoardsSidebarMode): BoardsSidebarMode {
-  if (value === 'classic' || value === 'work') {
-    return value;
-  }
-  return fallback;
 }
 
 function readThemeMode(value: unknown, fallback: AppearanceSettings['themeMode']): AppearanceSettings['themeMode'] {
@@ -1357,15 +1337,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
 
   const preview: PreviewSettings = isRecord(raw) && isRecord(raw.preview)
     ? {
-        enableCreateIdea: readBoolean(raw.preview.enableCreateIdea, DEFAULT_APP_SETTINGS.preview.enableCreateIdea),
-        enableNewProject: readBoolean(raw.preview.enableNewProject, DEFAULT_APP_SETTINGS.preview.enableNewProject),
-        boardsSidebarMode: readBoardsSidebarMode(
-          raw.preview.boardsSidebarMode,
-          DEFAULT_APP_SETTINGS.preview.boardsSidebarMode
-        ),
         enableEasyMode: readBoolean(raw.preview.enableEasyMode, DEFAULT_APP_SETTINGS.preview.enableEasyMode),
-        enableDeployments: readBoolean(raw.preview.enableDeployments, DEFAULT_APP_SETTINGS.preview.enableDeployments),
-        enableScheduledRuns: readBoolean(raw.preview.enableScheduledRuns, DEFAULT_APP_SETTINGS.preview.enableScheduledRuns)
+        enableDeployments: readBoolean(raw.preview.enableDeployments, DEFAULT_APP_SETTINGS.preview.enableDeployments)
       }
     : { ...DEFAULT_APP_SETTINGS.preview };
 

@@ -59,7 +59,7 @@ function ports(): ScheduledRunnerPorts {
       save: run => getScheduledRunStore().save(run)
     },
     now: () => new Date().toISOString(),
-    isEnabled: () => getSettingsBackend().read().preview.enableScheduledRuns,
+    isEnabled: () => true,
     newToken: () => randomUUID(),
     observe: observeWorkflowRun,
     findByLaunchToken: token => runStore().list().find(run => run.scheduledLaunchToken === token)?.runId,

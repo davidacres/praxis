@@ -32,7 +32,6 @@ test('scheduled allowance handover checkpoints and continues the active stage in
   git('-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', 'commit', '-qm', 'initial');
   mock = await startMockGatewayServer({ mode: 'hang' });
   app = await launchTestApp({
-    preview: { enableScheduledRuns: true },
     ai: {
       activeProvider: 'vercel-gateway', workingDirectory: repo,
       providers: {

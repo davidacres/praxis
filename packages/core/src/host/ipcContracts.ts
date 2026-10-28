@@ -812,7 +812,7 @@ export interface AiSessionModelInput {
 export interface CodeIntelligenceRequest {
   action: 'list' | 'register' | 'index' | 'rebuild' | 'relocate' | 'pause' | 'resume' | 'unregister' | 'query' | 'connect' | 'revoke' | 'model-install' | 'model-activate'
     // The background owner process: status never starts it; start/stop/restart are explicit.
-    | 'owner-status' | 'owner-start' | 'owner-stop' | 'owner-restart';
+    | 'owner-status' | 'owner-start' | 'owner-stop' | 'owner-restart' | 'cleanup';
   repositoryId?: string;
   root?: string;
   manifest?: string;
@@ -1330,8 +1330,8 @@ export type SaveScheduledRunInput = Omit<ComposeScheduledRunInput, 'at'> & {
 /**
  * Scheduled ticket runs (FX-BF-047 / FX-BE-147, FX-BE-148). Saving a schedule arms
  * it; the runner in the main process starts it at its time, runs its tickets one
- * at a time in order, and pauses for gates, failures and provider budget. It only
- * runs while the `enableScheduledRuns` preview is on.
+ * at a time in order, and pauses for gates, failures and provider budget. It runs
+ * while Praxis is open.
  */
 export interface ScheduledRunsIpc {
   /** Every schedule, soonest start first. */

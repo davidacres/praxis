@@ -1285,6 +1285,7 @@ export class FolderService implements IssueTrackerService {
         created: f.planningDates.created ?? now,
         updated: f.planningDates.completed ?? now,
         description: f.description,
+        ...(f.planningId ? { planningId: f.planningId } : {}),
         sourcePath: f.featureMdPath,
         featureId: f.featureId,
         featureDirName: f.dirName
@@ -1326,6 +1327,7 @@ export class FolderService implements IssueTrackerService {
         updated: child.planningDates.completed ?? now,
         description: child.description,
         branch: child.branch,
+        ...(child.planningId ? { planningId: child.planningId } : {}),
         sourcePath: child.filePath,
         featureId: child.featureId,
         childSeq: child.sequence,

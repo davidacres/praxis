@@ -250,6 +250,8 @@ export interface IssueSummary {
   browseUrl?: string;
   description?: string;
   ideaTranscript?: string;
+  /** The plan file's own `id` (e.g. `TASK-476`) on folder-backed boards; differs from the board `key`. */
+  planningId?: string;
   /** Issue keys this ticket depends on (same plan); used for execution ordering and links. */
   dependsOn?: string[];
   /** Git branch name for this work item when known (e.g. from import or tooling). */

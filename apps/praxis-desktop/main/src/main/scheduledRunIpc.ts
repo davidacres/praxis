@@ -13,6 +13,7 @@ import {
 } from '@praxis/core';
 import { buildScheduledRunView, getScheduledRunStore, notifyScheduledRunsChanged } from './scheduledRunInstance';
 import { getScheduledRunRunner } from './scheduledRunRunnerInstance';
+import { checkScheduledRunRequests } from './scheduledRunRequestWatcher';
 import { listWorkflowChoices } from './workflowIpc';
 import { defaultScheduleWorkflow } from './scheduledWorkflow';
 
@@ -74,6 +75,8 @@ export function registerScheduledRunIpc(): void {
   });
 
   ipcMain.handle('scheduledRuns:list', async (): Promise<ScheduledRunView[]> => {
+    // Pick up any request file an agent has just written, so the list is current.
+    await checkScheduledRunRequests();
     const runs = getScheduledRunStore().list();
     return Promise.all(runs.map(run => buildScheduledRunView(run, runs)));
   });

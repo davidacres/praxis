@@ -10,7 +10,7 @@ import { chooseOption } from './chipSelect';
 /**
  * FX-BF-047 / FX-BE-147, FX-BE-148, FX-BE-173: scheduled ticket runs. Covers the
  * composer (hopper, belt, order), saving, surviving a restart, editing, arming and
- * holding, the missed-start decision, the preview gate — and the runner: starting at
+ * holding, the missed-start decision, normal feature availability — and the runner: starting at
  * the scheduled time, the provider-allowance pause, a failed launch, the live view's
  * decisions and the warning before quitting with a schedule pending.
  */
@@ -32,8 +32,8 @@ test.afterEach(async () => {
 
 interface Launched { page: Page; projectId: string; repo: string }
 
-async function launch(options: { preview?: boolean; provider?: boolean; titles?: string[]; env?: Record<string, string> } = {}): Promise<Launched> {
-  const { preview = true, provider = true, titles = ['Fix pager bug', 'Add export CSV', 'Log retention'], env } = options;
+async function launch(options: { legacyPreview?: boolean; provider?: boolean; titles?: string[]; env?: Record<string, string> } = {}): Promise<Launched> {
+  const { legacyPreview, provider = true, titles = ['Fix pager bug', 'Add export CSV', 'Log retention'], env } = options;
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-schedule-repo-'));
   tempDirs.push(repo);
   const git = (...args: string[]): void => execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=E2E', ...args], { cwd: repo, stdio: 'ignore' });
@@ -44,7 +44,7 @@ async function launch(options: { preview?: boolean; provider?: boolean; titles?:
 
   mock = provider ? await startMockOpenAiCompatibleServer({ reply: () => 'ok' }) : undefined;
   app = await launchTestApp({
-    preview: { enableScheduledRuns: preview },
+    ...(legacyPreview === undefined ? {} : { preview: { enableScheduledRuns: legacyPreview } }),
     ...(mock
       ? {
           ai: {
@@ -93,7 +93,7 @@ test('builds a schedule on the belt, saves it, and it survives a restart in the 
   const { page } = await launch();
 
   await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
-  await expect(page.getByTestId('schedule-preview-note')).toContainText('starts at its time while Praxis is open');
+  await expect(page.getByTestId('schedule-runtime-note')).toContainText('starts at its time while Praxis is open');
   await expect(page.getByTestId('schedule-empty')).toBeVisible();
 
   await page.getByTestId('schedule-new').click();
@@ -238,14 +238,14 @@ test('a run with no usable provider cannot be scheduled, and says why', async ()
   await expect(card.getByTestId('schedule-arm')).toBeDisabled();
 });
 
-test('the whole surface is hidden until the preview is switched on', async () => {
-  const { page } = await launch({ preview: false });
+test('scheduled runs stay available with a retired preview opt-out', async () => {
+  const { page } = await launch({ legacyPreview: false });
   await expect(page.getByTestId('project-schedules-nav-item')).toHaveCount(0);
-  await expect(page.getByTestId('schedules-disabled')).toBeVisible();
-  await expect(page.getByTestId('scheduled-runs-page')).toHaveCount(0);
+  await expect(page.getByTestId('schedules-disabled')).toHaveCount(0);
+  await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
 });
 
-test('the board toolbar offers a shortcut to the scheduled runs of its project, only while the preview is on', async () => {
+test('the board toolbar offers a shortcut to the scheduled runs of its project', async () => {
   const { page } = await launch();
   if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
   await showProjectBoard(page);
@@ -305,13 +305,13 @@ test('selected board tickets are appended directly to an existing schedule', asy
   await expect(saved.getByTestId('schedule-mini-belt').locator('li[data-issue]')).toHaveCount(2);
 });
 
-test('without the preview the board toolbar has no schedule shortcut', async () => {
-  const { page } = await launch({ preview: false });
+test('a retired preview opt-out does not hide the board schedule shortcut', async () => {
+  const { page } = await launch({ legacyPreview: false });
   if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
   await showProjectBoard(page);
   await page.locator('.project-board-row').first().click();
   await expect(page.getByTestId('board-view')).toBeVisible();
-  await expect(page.getByTestId('board-schedule-btn')).toHaveCount(0);
+  await expect(page.getByTestId('board-schedule-btn')).toBeVisible();
 });
 
 test('tickets can be dragged from the hopper onto the flow graph and reordered on it', async () => {
@@ -1068,6 +1068,51 @@ test('an older schedule refresh cannot overwrite a newer failure status', async 
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect(card.getByTestId('schedule-status')).toHaveText('Paused');
 });
+
+test('an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed', async () => {
+  const { page, repo } = await launch();
+  await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
+  await expect(page.getByTestId('schedule-empty')).toBeVisible();
+
+  // The built-in praxis-scheduled-runs skill is installed for every user.
+  const skillFile = path.join(app!.userDataDir, 'skills', 'praxis-scheduled-runs', 'SKILL.md');
+  await expect.poll(() => fs.existsSync(skillFile)).toBe(true);
+  expect(fs.readFileSync(skillFile, 'utf8')).toContain('praxis.scheduledRunRequest');
+
+  // Read the board keys the hopper offers, then queue them in reverse through a file.
+  await page.getByTestId('schedule-new').click();
+  const keys = await page.getByTestId('schedule-hopper-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-issue') as string));
+  await page.getByTestId('schedule-cancel').click();
+  const wanted = [...keys].reverse();
+  const dir = path.join(repo, '.praxis', 'scheduled-runs');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'overnight.json'), JSON.stringify({
+    schemaVersion: 1, kind: 'praxis.scheduledRunRequest', name: 'Overnight from a file',
+    date: '2099-01-02', time: '21:00', timezone: 'Europe/London', tickets: wanted
+  }));
+
+  const statusFile = path.join(dir, 'overnight.status.json');
+  await expect.poll(() => fs.existsSync(statusFile), { timeout: 20000 }).toBe(true);
+  const status = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+  expect(status.state, JSON.stringify(status.errors)).toBe('imported');
+  expect(status.runStatus).toBe('draft');
+  expect(status.entries.map((entry: { issueKey: string }) => entry.issueKey)).toEqual(wanted);
+
+  const card = page.getByTestId('schedule-card');
+  await expect(card).toHaveCount(1);
+  await expect(card.getByTestId('schedule-card-name')).toHaveText('Overnight from a file');
+  expect(await miniOrder(card)).toEqual(wanted);
+  fs.mkdirSync(shots, { recursive: true });
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-from-request-file.png') });
+
+  // A rejected request says why and saves nothing.
+  fs.writeFileSync(path.join(dir, 'broken.json'), JSON.stringify({ schemaVersion: 1, kind: 'praxis.scheduledRunRequest', name: 'Broken', date: '2099-01-02', time: '21:00', timezone: 'Europe/London', tickets: ['NOPE-1'] }));
+  const brokenStatus = path.join(dir, 'broken.status.json');
+  await expect.poll(() => fs.existsSync(brokenStatus), { timeout: 20000 }).toBe(true);
+  expect(JSON.parse(fs.readFileSync(brokenStatus, 'utf8')).errors.join(' ')).toContain('NOPE-1 was not found');
+  await expect(page.getByTestId('schedule-card')).toHaveCount(1);
+});
+
 
 // ── Bounded parallel lanes (FX-BE-149) ──────────────────────────────────
 

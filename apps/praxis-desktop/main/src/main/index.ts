@@ -1,6 +1,6 @@
 import { registerTaskNotifications } from './taskNotifications';
 import { registerProjectActivityIpc } from './projectActivityInstance';
-import { registerCodeIntelligenceIpc, replaceOutdatedOwner } from './codeIntelligenceIpc';
+import { registerCodeIntelligenceIpc, maintainCodeIntelligenceOnStartup } from './codeIntelligenceIpc';
 import { registerCoordinationIpc } from './coordinationIpc';
 import { disposeCoordination } from './coordinationInstance';
 import * as fs from 'node:fs';
@@ -44,6 +44,7 @@ import { registerDeploymentControlIpc } from './deploymentControlIpc';
 import { registerDeploymentProfileIpc } from './deploymentProfileIpc';
 import { reconcileScheduledRunsOnLaunch, registerScheduledRunIpc } from './scheduledRunIpc';
 import { startScheduledRunRunner, stopScheduledRunRunner } from './scheduledRunRunnerInstance';
+import { startScheduledRunRequestImports, stopScheduledRunRequestImports } from './scheduledRunRequestWatcher';
 import { getScheduledRunStore } from './scheduledRunInstance';
 import { registerDeploymentArtifactIpc } from './deploymentArtifactIpc';
 import { registerWorkspaceIpc } from './workspaceIpc';
@@ -371,8 +372,9 @@ void app.whenReady().then(async () => {
   registerAiIpc();
   registerCodeIntelligenceIpc();
   // A code intelligence owner outlives the app; one left by an earlier build is replaced so
-  // this session (and agents' MCP bridges) never talks to old code. Never blocks startup.
-  void replaceOutdatedOwner().catch(error => console.error('Could not replace an outdated code intelligence service:', error));
+  // this session (and agents' MCP bridges) never talks to old code. Then remove indexes for
+  // confirmed removed Praxis worktrees. Never blocks startup.
+  void maintainCodeIntelligenceOnStartup().catch(error => console.error('Code intelligence startup maintenance failed:', error));
   registerCoordinationIpc();
   registerTicketReviewIpc();
   registerAiUsageIpc();
@@ -391,7 +393,11 @@ void app.whenReady().then(async () => {
   registerScheduledRunIpc();
   // Missed runs are marked before the runner exists, so one that was due while Praxis was closed asks instead of starting.
   void reconcileScheduledRunsOnLaunch()
-    .then(() => startScheduledRunRunner())
+    .then(() => {
+      // Agents prepare drafts by writing request files (the praxis-scheduled-runs skill).
+      startScheduledRunRequestImports();
+      return startScheduledRunRunner();
+    })
     .catch(error => console.error('Scheduled run startup failed:', error));
   registerWorkspaceIpc();
   registerTerminalIpc();
@@ -446,10 +452,9 @@ void app.whenReady().then(async () => {
   app.quit();
 });
 
-/** The next armed schedule, which only starts while Praxis is open. Undefined when none is waiting or the preview is off. */
+/** The next armed schedule, which only starts while Praxis is open. Undefined when none is waiting. */
 function pendingSchedule() {
   try {
-    if (!getSettingsBackend().read().preview.enableScheduledRuns) return undefined;
     const next = nextScheduledRun(getScheduledRunStore().list());
     return next ? { name: next.name, scheduledStartAt: next.scheduledStartAt, timezone: next.timezone } : undefined;
   } catch {
@@ -471,6 +476,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', event => {
   if (event.defaultPrevented) return; // the quit guard is asking the user first
   stopScheduledRunRunner();
+  stopScheduledRunRequestImports();
   closeAllDetachedChats();
   disposeAllServices();
   // An ACP-hosted session's subprocess (Claude Code, Codex, or GitHub

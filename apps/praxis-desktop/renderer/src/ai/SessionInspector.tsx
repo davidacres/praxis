@@ -7,6 +7,8 @@ import { SessionChanges } from './SessionChanges';
 import { SessionTasks } from './SessionTasks';
 import { SessionCoordination } from './SessionCoordination';
 import { SessionActivity } from './SessionActivity';
+import { SessionSkillList } from './SessionSkillList';
+import { sessionSkillRows } from './sessionSkills';
 import { SessionSubagentsSummaryBlock, SessionSubagentsTab } from './SessionSubagents';
 import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, sessionMode, sessionTitle } from './sessionNav';
 import { agentStateLaneClass } from './aiSessionState';
@@ -50,6 +52,10 @@ export interface SessionInspectorProps {
   onArchiveSession?: (issueKey: string, archived: boolean) => Promise<void>;
   /** Open this session's durable workflow run in the detailed monitor. */
   onOpenWorkflowRun?: (runId: string) => void;
+  /** Open an agent profile's Agent Hub record. */
+  onOpenAgent?: (profileId: string) => void;
+  /** Open a skill's Agent Hub record. */
+  onOpenSkill?: (skillName: string) => void;
 }
 
 type InspectorTab = 'changes' | 'subagents';
@@ -59,7 +65,9 @@ export function SessionInspector({
   sessions = [],
   onSelectSession,
   onArchiveSession,
-  onOpenWorkflowRun
+  onOpenWorkflowRun,
+  onOpenAgent,
+  onOpenSkill
 }: SessionInspectorProps) {
   const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
@@ -186,6 +194,8 @@ export function SessionInspector({
         </div>
       </div>
 
+      <SessionAgentAndSkills session={session} onOpenAgent={onOpenAgent} onOpenSkill={onOpenSkill} />
+
       {/* Who else is working here and what this session holds (FX-BE-092). Renders nothing unless the session is coordinated. */}
       <SessionCoordination sessionKey={session.issueKey} />
 
@@ -263,6 +273,37 @@ export function SessionInspector({
       </div>
       {error && <p className="hint is-danger">{error}</p>}
     </section>
+  );
+}
+
+/** Which agent ran the session and which skills it used — attached by Praxis or loaded by the AI. */
+function SessionAgentAndSkills({
+  session,
+  onOpenAgent,
+  onOpenSkill
+}: {
+  session: AgentSessionRecord;
+  onOpenAgent?: (profileId: string) => void;
+  onOpenSkill?: (skillName: string) => void;
+}) {
+  const agent = session.profileId ?? session.agentId;
+  const rows = sessionSkillRows(session);
+  if (!agent && rows.length === 0) return null;
+  return (
+    <div className="agent-runtime-block session-agent-skills" data-testid="session-agent-skills">
+      <div className="agent-runtime-line">
+        <span className="rail-sub">Agent</span>
+        <span data-testid="session-agent">
+          {agent && onOpenAgent ? (
+            <button type="button" className="btn-compact session-skill-name" onClick={() => onOpenAgent(agent)}>{agent}</button>
+          ) : (agent ?? 'none')}
+        </span>
+      </div>
+      <div className="agent-runtime-line">
+        <span className="rail-sub">Skills</span>
+        <span><SessionSkillList rows={rows} {...(onOpenSkill ? { onOpenSkill } : {})} /></span>
+      </div>
+    </div>
   );
 }
 

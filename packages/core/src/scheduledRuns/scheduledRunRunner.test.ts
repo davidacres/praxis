@@ -253,7 +253,7 @@ test('a schedule with no workflow pauses instead of guessing one', async () => {
   assert.equal(h.launches.length, 0);
 });
 
-test('nothing runs while the preview is off', async () => {
+test('nothing runs while the host disables execution', async () => {
   const h = new Harness();
   h.enabled = false;
   await h.runner.tick();
@@ -416,10 +416,10 @@ test('Run now starts a future schedule immediately and serializes repeated click
   assert.equal(h.run.attempts.length, 1);
 });
 
-test('Run now obeys the preview switch and provider budget gate', async () => {
+test('Run now obeys host availability and the provider budget gate', async () => {
   const h = new Harness();
   h.enabled = false;
-  await assert.rejects(h.runner.startNow(h.run.id), /Enable scheduled runs/);
+  await assert.rejects(h.runner.startNow(h.run.id), /Scheduled run execution is unavailable/);
   assert.equal(h.run.status, 'scheduled');
   h.enabled = true;
   h.usage.used = { claude: 0.99, codex: 1 };

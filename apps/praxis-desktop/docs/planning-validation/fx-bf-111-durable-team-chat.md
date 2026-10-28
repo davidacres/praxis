@@ -71,3 +71,7 @@ No application build, unit suite, E2E, real-provider execution or visual verific
 ## Entry point
 
 Start TASK-476, then TASK-477. The remaining tasks form the explicit dependency chain through TASK-487. Read the feature's full data model, persistence, IPC, context, recovery and migration decisions before changing code. Review and preserve the existing uncommitted session-reuse/sidebar changes; this plan replaces their mechanisms only after equivalent tests pass.
+
+## Scheduled draft amendment
+
+On 2026-10-26 the user requested twelve ordered task entries, process-owned visual verification throughout, and human review after the entire delivery. The feature and all twelve task files now carry this contract. The app draft is not an execution-readiness claim: Full SDLC currently has per-ticket approval, dependent worktree integration needs configuration, and the app reports workspace trust and dirty-base prerequisites. No workflow approval was bypassed and no run was armed.

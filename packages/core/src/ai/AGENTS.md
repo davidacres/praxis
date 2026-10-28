@@ -301,3 +301,32 @@ to undo:
 - **Tests never join a real broker.** `launchTestApp` sets `PRAXIS_COORDINATION_ROOT` per
   profile; `PRAXIS_COORDINATION=off` disables gates entirely.
 
+
+## Built-in skills and scheduled-run request files
+
+`agentRuntime/bundledAgents.ts` holds the built-in skills. Most are installed only when a
+workflow needs them; those in `BUNDLED_SKILL_NAMES` (today `praxis-scheduled-runs`) are
+written to the user's skills folder at startup by `mirrorBundledSkills`. A skill at the same
+`version:` is left alone so user edits survive — **bump `version` when you change its text**,
+or existing users keep the old copy.
+
+The built-in **Praxis Scheduler** agent (`praxis-scheduler`) lists it as a preferred skill:
+a bundled agent's `skills` become `skills:` front matter in its mirrored `AGENT.md` and
+`preferredSkills` on its built-in profile.
+
+`praxis-scheduled-runs` tells an agent to write `<workspace>/.praxis/scheduled-runs/<name>.json`.
+Parsing, ticket resolution (board key or plan `id`, via `IssueSummary.planningId`) and ordering
+are in `scheduledRuns/scheduledRunRequest.ts`; the desktop main process imports requests as
+unarmed drafts (`scheduledRunRequests.ts`, polled every 5 s and on `scheduledRuns:list`) and
+writes `<name>.status.json` beside each one. Requests never arm a schedule or touch one that
+is no longer a draft. Change the request schema and the skill text together.
+
+## Which agent and skills a session used
+
+A session records its agent (`profileId`) and the skills Praxis attached (`activeSkills`).
+`skillUsage.ts` also detects skills the AI loaded **itself** — a `Skill` tool call, or reading a
+`.../skills/<name>/SKILL.md` path in a read or shell command — into `detectedSkills`, inside
+`appendAgentEvents`. Older sessions are scanned the first time their transcript loads. Detection
+is best-effort by design: searches, globs and writes to a `SKILL.md` are excluded, and a skill
+applied from memory leaves no trace. The renderer merges both lists (`ai/sessionSkills.ts`) for
+the session inspector and the Agent Hub's "Used by" list on skill pages.

@@ -92,7 +92,7 @@ export interface ScheduledRunnerPorts {
     save(run: ScheduledRun): Promise<ScheduledRun>;
   };
   now(): string;
-  /** False while the preview flag is off: the runner starts and observes nothing. */
+  /** Whether the host permits execution; false prevents starting or observing schedules. */
   isEnabled(): boolean;
   newToken(): string;
   /** `undefined` means the workflow run no longer exists. */
@@ -163,7 +163,7 @@ export class ScheduledRunRunner {
 
   public startNow(runId: string): Promise<ScheduledRun> {
     return this.command(runId, run => {
-      if (!this.ports.isEnabled()) throw new Error('Enable scheduled runs before starting this run.');
+      if (!this.ports.isEnabled()) throw new Error('Scheduled run execution is unavailable.');
       return startScheduledRunNow(run, this.ports.now());
     }, true);
   }

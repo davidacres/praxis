@@ -20,7 +20,6 @@ import type {
   InstalledAddon,
   MarketplaceStatus,
   SurfaceMotifSettings,
-  BoardsSidebarMode,
   Connection,
   UpdateStatus
 } from '@praxis/core';
@@ -1747,12 +1746,6 @@ function OverviewSection({
             <div className="list-row-meta">{settings.performance.defaultPageSize} issues per page</div>
           </div>
         </div>
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Boards sidebar mode</div>
-            <div className="list-row-meta">{settings.preview.boardsSidebarMode}</div>
-          </div>
-        </div>
       </div>
       <div className="section-divider">
         <strong>Reset to defaults</strong>
@@ -2341,6 +2334,18 @@ function DeliverySection({
           placeholder="e.g. main"
         />
       </FieldRow>
+      <FieldRow
+        label="Switch AI provider at"
+        description="Percent of a provider's allowance used before a scheduled run hands the ticket to another provider. Only providers that report usage can reach it; an outright limit error switches regardless."
+      >
+        <DebouncedNumberField
+          ariaLabel="Switch AI provider at this percent of allowance used"
+          value={settings.ai.providerHandoverPercent}
+          min={50}
+          max={100}
+          onCommit={value => update({ ai: { providerHandoverPercent: value } })}
+        />
+      </FieldRow>
       <Toggle
         label="Auto-merge sub tasks"
         description="When on (default), completed sub-task branches merge into the feature branch automatically."
@@ -2394,75 +2399,13 @@ function PreviewSection({
     <>
       <CategoryHeader category={category} />
       <Toggle
-        label="Enable Create Idea"
-        description="Show the Create Idea command and button."
-        checked={settings.preview.enableCreateIdea}
-        onChange={next => void update({ preview: { enableCreateIdea: next } })}
-      />
-      <Toggle
-        label="Enable New Project"
-        description="Show the New Project wizard."
-        checked={settings.preview.enableNewProject}
-        onChange={next => void update({ preview: { enableNewProject: next } })}
-      />
-      <SidebarModeToggle
-        mode={settings.preview.boardsSidebarMode}
-        onChange={next => void update({ preview: { boardsSidebarMode: next } })}
-      />
-      <Toggle
-        label="EasyMode sidebar (experimental)"
-        description="Replaces standard sidebar trees with a simplified Sessions and Automations workspace."
-        checked={settings.preview.enableEasyMode ?? false}
-        onChange={next => void update({ preview: { enableEasyMode: next } })}
-        testId="toggle-enable-easymode"
-      />
-      <Toggle
         label="Deployments (experimental)"
         description="Enable deployment profiles, targets, and delivery runs for projects."
         checked={settings.preview.enableDeployments ?? false}
         onChange={next => void update({ preview: { enableDeployments: next } })}
         testId="toggle-enable-deployments"
       />
-      <Toggle
-        label="Scheduled runs (experimental)"
-        description="Queue several board tickets in a fixed order for a one-off run at a set time. Praxis starts it at that time while the app is open, runs the tickets one at a time, and pauses to ask at approval gates, failures, or when a provider is nearly out of allowance."
-        checked={settings.preview.enableScheduledRuns ?? false}
-        onChange={next => void update({ preview: { enableScheduledRuns: next } })}
-        testId="toggle-enable-scheduled-runs"
-      />
-      {settings.preview.enableScheduledRuns && (
-        <FieldRow
-          label="Switch AI provider at"
-          description="Percent of a provider's allowance used before a scheduled run hands the ticket to another provider. Only providers that report usage can reach it; an outright limit error switches regardless."
-        >
-          <DebouncedNumberField
-            ariaLabel="Switch AI provider at this percent of allowance used"
-            value={settings.ai.providerHandoverPercent}
-            min={50}
-            max={100}
-            onCommit={value => update({ ai: { providerHandoverPercent: value } })}
-          />
-        </FieldRow>
-      )}
     </>
-  );
-}
-
-function SidebarModeToggle({
-  mode,
-  onChange
-}: {
-  mode: BoardsSidebarMode;
-  onChange: (next: BoardsSidebarMode) => void;
-}) {
-  const isWork = mode === 'work';
-  return (
-    <Toggle
-      label="Boards sidebar — Work Mode"
-      description="Off is Classic (separate views); on is Work Mode (board-centric cards with nested sessions)."
-      checked={isWork}
-      onChange={next => onChange(next ? 'work' : 'classic')}
-    />
   );
 }
 

@@ -149,17 +149,17 @@ test('live folder without allowIssueCreation shows a disabled create button with
   }
 });
 
-test('the New idea button is hidden unless the preview setting is enabled', async () => {
-  app = await launchTestApp();
+test('the New idea button is available even with a retired preview opt-out', async () => {
+  app = await launchTestApp({ preview: { enableCreateIdea: false } });
   window = app.window;
 
   await window.locator('[data-testid="board-nav-item"]').first().click();
   await expect(window.locator('[data-testid="board-new-issue-btn"]')).toBeVisible();
-  await expect(window.locator('[data-testid="board-new-idea-btn"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="board-new-idea-btn"]')).toBeVisible();
 });
 
 test('New idea opens the create form preset to Idea with the research transcript field', async () => {
-  app = await launchTestApp({ preview: { enableCreateIdea: true } });
+  app = await launchTestApp();
   window = app.window;
 
   await window.locator('[data-testid="board-nav-item"]').first().click();
@@ -190,7 +190,6 @@ test('creating a live folder idea writes the research transcript into the markdo
   try {
     writeFixturePlansFolder(plansDir);
     app = await launchTestApp({
-      preview: { enableCreateIdea: true },
       connections: [
         {
           id: 'e2e-live-idea',

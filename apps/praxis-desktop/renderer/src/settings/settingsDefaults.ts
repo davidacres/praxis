@@ -143,12 +143,8 @@ export const DEFAULT_APP_SETTINGS = {
     checkOnLaunch: true
   },
   preview: {
-    enableCreateIdea: false,
-    enableNewProject: true,
-    boardsSidebarMode: 'classic' as 'classic' | 'work',
     enableEasyMode: false,
-    enableDeployments: false,
-    enableScheduledRuns: false
+    enableDeployments: false
   },
   appearance: {
     displayMode: 'compact' as 'compact' | 'large',

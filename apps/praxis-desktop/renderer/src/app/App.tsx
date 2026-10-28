@@ -79,6 +79,7 @@ import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { ScheduledRunsPage } from '../schedule/ScheduledRunsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
+import { sessionSkillRows } from '../ai/sessionSkills';
 import { CreateAgentDialog, CreateAgentProfileDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
 import { isHostShimProfile, skillTitle } from '../agents/agentCatalog';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
@@ -401,7 +402,6 @@ export function App() {
   const { confirm } = useDialogs();
   const deleteRunFlow = useDeleteRun();
   const [appVersion, setAppVersion] = useState<string>();
-  const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   useEffect(() => {
     void window.praxis.app.getVersion().then(setAppVersion).catch(() => setAppVersion(undefined));
   }, []);
@@ -1575,7 +1575,6 @@ export function App() {
     entries.push({ id: 'assistant:toggle', label: 'Ask the virtual team', hint: '⌘J', group: 'Go to', icon: 'sparkles', keywords: 'assistant ai chat tech lead qa security', run: toggleAssistant });
     (Object.keys(FEATURE_TITLES) as FeatureId[]).forEach(feature => {
       if (feature === 'deployments' && !settings?.preview?.enableDeployments) return;
-      if (feature === 'schedules' && !settings?.preview?.enableScheduledRuns) return;
       entries.push({
         id: `feature:${feature}`,
         label: FEATURE_TITLES[feature],
@@ -1604,9 +1603,7 @@ export function App() {
       if (settings?.preview?.enableDeployments) {
         entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
       }
-      if (settings?.preview?.enableScheduledRuns) {
-        entries.push({ id: `project-schedules:${project.id}`, label: `${project.name}: Scheduled runs`, hint: project.key, group: 'Projects', icon: 'clock', keywords: 'schedule scheduled run queue tickets overnight batch', run: () => navigate({ projectId: project.id, feature: 'schedules' }) });
-      }
+      entries.push({ id: `project-schedules:${project.id}`, label: `${project.name}: Scheduled runs`, hint: project.key, group: 'Projects', icon: 'clock', keywords: 'schedule scheduled run queue tickets overnight batch', run: () => navigate({ projectId: project.id, feature: 'schedules' }) });
       entries.push({ id: `runs:${project.id}`, label: `${project.name} · Workflow runs`, hint: 'Browse runs and history', group: 'Workflows', icon: 'play', keywords: 'runs history list workflow archive', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined }) });
       entries.push({ id: `policies:${project.id}`, label: `${project.name}: Policies`, hint: 'Workflow policy profiles', group: 'Workflows', icon: 'shield', keywords: 'policy policies gates approval trust', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'policies' }) });
       (runsByProjectId[project.id] ?? []).filter(run => !run.archived).forEach(run => {
@@ -1864,7 +1861,7 @@ export function App() {
       projectCount={workspaceProjects.length}
       {...(composerProject
         ? { onNewWorkflow: () => setNewWorkflowForProject(composerProject.id) }
-        : { onNewProject: newProjectEnabled ? () => requestAddProject() : undefined })}
+        : { onNewProject: () => requestAddProject() })}
       toolModeForBoard={board => projectIdForConnection(board.connectionId, connections)
         ? projects.find(item => item.id === projectIdForConnection(board.connectionId, connections))?.defaultAiToolMode
         : undefined}
@@ -2003,6 +2000,8 @@ export function App() {
     <SessionInspector
       session={inspectedSession}
       sessions={agentSessions}
+      onOpenAgent={profileId => navigate({ feature: 'agents', agentProfileId: profileId })}
+      onOpenSkill={skillName => navigate({ feature: 'agents', skillName })}
       onSelectSession={issueKey => {
         const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
         navigate(session && isConversationSession(session)
@@ -2338,15 +2337,6 @@ export function App() {
       return <DeploymentsPage project={selectedProject} />;
     }
     if (route.feature === 'schedules') {
-      if (!settings?.preview?.enableScheduledRuns) {
-        return (
-          <div className="empty-state" data-testid="schedules-disabled">
-            <Icon name="clock" size={28} />
-            <span>Scheduled runs preview is disabled.</span>
-            <p>Enable Scheduled runs under Settings &gt; Preview to queue tickets for a run at a set time.</p>
-          </div>
-        );
-      }
       if (!selectedProject) {
         return (
           <div className="empty-state" data-testid="schedules-no-project">
@@ -2480,11 +2470,9 @@ export function App() {
     }
     // The project that owns this board, for the Scheduled runs shortcut: the one in view, else the one linking it.
     const boardOwnerId = projectIdForConnection(selectedBoard.connectionId, connections);
-    const scheduleProject = settings?.preview?.enableScheduledRuns
-      ? selectedProject
-        ?? workspaceProjects.find(project => project.id === boardOwnerId)
-        ?? workspaceProjects.find(project => project.linkedBoards.some(link => link.boardId === selectedBoard.id && link.connectionId === selectedBoard.connectionId))
-      : undefined;
+    const scheduleProject = selectedProject
+      ?? workspaceProjects.find(project => project.id === boardOwnerId)
+      ?? workspaceProjects.find(project => project.linkedBoards.some(link => link.boardId === selectedBoard.id && link.connectionId === selectedBoard.connectionId));
     // No scroll wrapper: the board's columns own the pane height themselves.
     // Keyed by board id so the filter bar and paging state reset on a board
     // switch instead of leaking the previous board's query into the new one.
@@ -2567,7 +2555,7 @@ export function App() {
         onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
         onQuickSession={openQuickSession}
         onQuickCapture={() => setQuickCaptureOpen(true)}
-        onOpenScheduledRuns={settings?.preview.enableScheduledRuns && reviewProject ? () => {
+        onOpenScheduledRuns={reviewProject ? () => {
           setSidebarVisible(true);
           navigate({ projectId: reviewProject.id, feature: 'schedules' });
         } : undefined}
@@ -2680,7 +2668,7 @@ export function App() {
         {sidebarVisible && (
           <>
             <div className="pane-sidebar" style={{ width: sidebar.size }}>
-              {route.feature === 'schedules' && selectedProject && settings?.preview.enableScheduledRuns ? (
+              {route.feature === 'schedules' && selectedProject ? (
                 <div className="schedule-sidebar-host" ref={setScheduleSidebarHost} />
               ) : route.view === 'designer' && selectedBoard && boardDetails ? (
                 <TaskDesignerSidebar
@@ -2988,6 +2976,8 @@ export function App() {
                         tokenUsage: session.tokenUsage,
                         cost: session.cost,
                         subagents: extractSubagents(session, agentSessions),
+                        skills: sessionSkillRows(session),
+                        startedAt: session.startedAt,
                         ...(session.agentId ? { agentId: session.agentId } : {}),
                         ...(session.profileId ? { profileId: session.profileId } : {}),
                         ...(session.hostId ? { hostId: session.hostId } : {})

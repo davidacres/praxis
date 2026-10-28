@@ -12,6 +12,8 @@ import type { ActivationMap, CatalogSelection, LifecycleAction } from './agentSe
 import { ChipSelect } from '../ui/ChipSelect';
 import { agentStateBadgeClass, agentStateLabel } from '../ai/aiSessionState';
 import { formatSubagentTokens, type SubagentItem } from '../ai/sessionNav';
+import { SessionSkillList } from '../ai/SessionSkillList';
+import type { SessionSkillRow } from '../ai/sessionSkills';
 
 /**
  * Agent Hub runtime panel — the shell's right pane for the `agents` route.
@@ -32,6 +34,9 @@ export interface AgentRuntimeSessionItem {
   tokenUsage?: AgentSessionRecord['tokenUsage'];
   cost?: AgentSessionRecord['cost'];
   subagents?: SubagentItem[];
+  /** Skills the session used: attached at launch or detected from the AI's tool calls. */
+  skills?: SessionSkillRow[];
+  startedAt?: string;
 }
 
 export interface AgentRuntimePanelProps {
@@ -96,7 +101,15 @@ export function AgentRuntimePanel({
           {...(onOpenSession ? { onOpenSession } : {})}
         />
       ) : skill ? (
-        <SkillRuntime skill={skill} snapshot={snapshot} busy={busy} activations={activations} onActivate={onActivate} />
+        <SkillRuntime
+          skill={skill}
+          snapshot={snapshot}
+          busy={busy}
+          activations={activations}
+          sessions={sessions.filter(session => session.skills?.some(row => row.name === skill.metadata.name || row.detected?.skillId === skill.metadata.name))}
+          onActivate={onActivate}
+          {...(onOpenSession ? { onOpenSession } : {})}
+        />
       ) : null}
     </section>
   );
@@ -307,16 +320,28 @@ function AgentRuntime({
 
 function AgentRuntimeSessionsList({
   sessions,
-  onOpenSession
+  onOpenSession,
+  label = 'Sessions',
+  emptyText
 }: {
   sessions: AgentRuntimeSessionItem[];
   onOpenSession?: (issueKey: string) => void;
+  label?: string;
+  /** Shown instead of hiding the block when there are no sessions. */
+  emptyText?: string;
 }) {
-  if (sessions.length === 0) return null;
+  if (sessions.length === 0) {
+    return emptyText ? (
+      <div className="agent-runtime-block" data-testid="agent-runtime-sessions-block">
+        <span className="rail-sub">{label} (0)</span>
+        <span className="rail-sub" data-testid="agent-runtime-sessions-empty">{emptyText}</span>
+      </div>
+    ) : null;
+  }
 
   return (
     <div className="agent-runtime-block" data-testid="agent-runtime-sessions-block">
-      <span className="rail-sub">Sessions ({sessions.length})</span>
+      <span className="rail-sub">{label} ({sessions.length})</span>
       <div className="agent-runtime-sessions-list" data-testid="agent-runtime-sessions-list">
         {sessions.map(session => (
           <div key={session.issueKey} className="agent-runtime-session-card" data-testid="agent-runtime-session-card">
@@ -343,6 +368,11 @@ function AgentRuntimeSessionsList({
                 <span className="rail-sub" data-testid="agent-session-tokens">{formatSubagentTokens(session.tokenUsage, session.cost)}</span>
               )}
             </div>
+            {session.skills && session.skills.length > 0 && (
+              <div className="agent-runtime-session-skills" data-testid="agent-session-skills">
+                <SessionSkillList rows={session.skills} />
+              </div>
+            )}
             {session.subagents && session.subagents.length > 0 && (
               <div className="agent-runtime-session-subagents" data-testid="agent-runtime-subagents">
                 <span className="rail-sub">Subagents ({session.subagents.length}):</span>
@@ -377,13 +407,17 @@ function SkillRuntime({
   snapshot,
   busy,
   activations,
-  onActivate
+  sessions,
+  onActivate,
+  onOpenSession
 }: {
   skill: NonNullable<AgentRuntimeSnapshot['skills'][number]>;
   snapshot: AgentRuntimeSnapshot;
   busy: boolean;
   activations: ActivationMap;
+  sessions: AgentRuntimeSessionItem[];
   onActivate: (agentId: string, skillName: string) => void;
+  onOpenSession?: (issueKey: string) => void;
 }) {
   const eligible = eligibleAgentsForSkill(skill, snapshot.agents);
   const blocked = skillActivateBlockedReason(skill, snapshot.agents);
@@ -424,6 +458,12 @@ function SkillRuntime({
         </button>
       </div>
       {blocked && <p className="hint is-warn">{blocked}</p>}
+      <AgentRuntimeSessionsList
+        sessions={sessions}
+        label="Used by"
+        emptyText="No session has used this skill yet. Opened sessions are checked for skills the AI loaded itself."
+        {...(onOpenSession ? { onOpenSession } : {})}
+      />
     </>
   );
 }

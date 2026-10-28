@@ -383,11 +383,12 @@ export function TitleBar({
           </button>
         )}
 
-        {onOpenScheduledRuns ? (
+        {onOpenScheduledRuns && (
           <button type="button" className="new-pill new-pill-icon" aria-label="Scheduled runs" title="Scheduled runs" data-testid="titlebar-scheduled-runs" onClick={onOpenScheduledRuns}>
             <Icon name="clock" size={13} />
           </button>
-        ) : !easyMode && onOpenWhatChanged && (
+        )}
+        {!easyMode && onOpenWhatChanged && (
           <button type="button" className="new-pill new-pill-icon" aria-label="What Changed" data-testid="titlebar-what-changed" onClick={onOpenWhatChanged}>
             <Icon name="clock" size={13} />
           </button>

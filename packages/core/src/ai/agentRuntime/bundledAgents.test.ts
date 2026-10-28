@@ -6,14 +6,19 @@ import * as path from 'node:path';
 import {
   getBundledAgentManifests,
   mirrorBundledAgents,
+  mirrorBundledSkills,
+  AVAILABLE_SKILL_DEFINITIONS,
+  BUNDLED_SKILL_NAMES,
   BUNDLED_AGENT_DEFINITIONS
 } from './bundledAgents';
 import { discoverAgents } from './discovery';
+import { discoverSkills } from './skillRegistry';
+import { discoverAgentProfiles } from './profileRegistry';
 import { parseReviewFindings } from '../aiReviewService';
 
 test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
   const bundled = getBundledAgentManifests();
-  assert.strictEqual(bundled.length, 8);
+  assert.strictEqual(bundled.length, 9);
 
   const ids = bundled.map(a => a.manifest.id).sort();
   assert.deepStrictEqual(ids, [
@@ -22,6 +27,7 @@ test('TASK-247: getBundledAgentManifests returns trusted global agents', () => {
     'praxis-implementer',
     'praxis-planner',
     'praxis-reviewer',
+    'praxis-scheduler',
     'praxis-security-analyst',
     'praxis-skeptic',
     'praxis-test-author'
@@ -140,4 +146,48 @@ test('FX-BE-164: the skeptic\'s verdicts parse onto the findings they judge, kee
   assert.equal(skeptic.findings.findings[0].verdictReason, 'Guarded on line 2.');
   assert.equal(review.findings.findings[0].verdict, undefined);
   assert.match(BUNDLED_AGENT_DEFINITIONS['praxis-skeptic'].brief, /Copy file, line, ruleId and message exactly/);
+});
+
+test('the scheduled-run skill is installed for everyone, updated by version, and keeps same-version edits', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-skill-mirror-'));
+  try {
+    assert.ok(BUNDLED_SKILL_NAMES.includes('praxis-scheduled-runs'));
+    assert.deepStrictEqual(await mirrorBundledSkills(tmp), [...BUNDLED_SKILL_NAMES]);
+    const file = path.join(tmp, 'praxis-scheduled-runs', 'SKILL.md');
+    const written = await fs.readFile(file, 'utf8');
+    assert.strictEqual(written, AVAILABLE_SKILL_DEFINITIONS['praxis-scheduled-runs'].instructions);
+    assert.match(written, /praxis\.scheduledRunRequest/);
+    assert.ok(!written.includes('\\`'), 'template escapes must not leak into the skill text');
+    const [discovered] = await discoverSkills([tmp]);
+    assert.strictEqual(discovered.metadata.name, 'praxis-scheduled-runs');
+    assert.strictEqual(discovered.metadata.title, 'Scheduled Run Authoring');
+
+    const edited = written.replace('# Scheduled Run Authoring', '# Scheduled Run Authoring (edited)');
+    await fs.writeFile(file, edited);
+    await mirrorBundledSkills(tmp);
+    assert.strictEqual(await fs.readFile(file, 'utf8'), edited);
+
+    await fs.writeFile(file, edited.replace('version: 1.0.0', 'version: 0.9.0'));
+    await mirrorBundledSkills(tmp);
+    assert.strictEqual(await fs.readFile(file, 'utf8'), written);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('the Praxis Scheduler agent uses the scheduled-run skill, in its mirrored profile and its built-in one', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-scheduler-agent-'));
+  try {
+    await mirrorBundledAgents(tmp);
+    const [mirrored] = (await discoverAgentProfiles([tmp])).filter(entry => entry.profile.id === 'praxis-scheduler');
+    assert.ok(mirrored, 'the scheduler profile is mirrored');
+    assert.strictEqual(mirrored.profile.name, 'Praxis Scheduler');
+    assert.deepStrictEqual(mirrored.profile.preferredSkills, ['praxis-scheduled-runs']);
+    assert.ok(AVAILABLE_SKILL_DEFINITIONS['praxis-scheduled-runs'], 'its skill ships with Praxis');
+
+    const builtIn = (await discoverAgentProfiles([], [], true)).find(entry => entry.profile.id === 'praxis-scheduler');
+    assert.deepStrictEqual(builtIn?.profile.preferredSkills, ['praxis-scheduled-runs']);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
 });

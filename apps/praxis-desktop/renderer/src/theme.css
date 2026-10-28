@@ -18348,6 +18348,13 @@ button.session-chat-attachment {
   gap: 4px;
 }
 
+.easymode-session-bucket__label {
+  padding: 8px 6px 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-xs, 11px);
+  font-weight: 600;
+}
+
 .easymode-session-card {
   display: flex;
   flex-direction: column;
@@ -21034,9 +21041,24 @@ button.session-chat-attachment {
   flex: 0 1 auto;
   max-height: 45%;
   min-height: 72px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-subtle);
 }
+.easymode-feed-divider {
+  flex: 0 0 8px;
+  position: relative;
+  cursor: row-resize;
+  touch-action: none;
+}
+.easymode-feed-divider::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-subtle);
+}
+.easymode-feed-divider:hover::after,
+.easymode-feed-divider:focus-visible::after { background: var(--accent); }
 .easymode-section--runs > .easymode-section__body {
   min-height: 0;
   overflow-y: auto;
@@ -21197,3 +21219,12 @@ button.session-chat-attachment {
 .ledger-section .project-runs-empty,
 .project-recency-empty,
 [data-testid="project-sessions-empty"] { padding-left: var(--tree-indent-1); }
+
+/* Skills a session used (session inspector, Agent Hub session cards). */
+.session-skill-list { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.session-skill { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-1); max-width: 100%; padding: 1px var(--space-2); border: 1px solid var(--border-subtle); border-radius: 999px; font-size: var(--text-sm); }
+.session-skill--detected { border-style: dashed; }
+.session-skill-name { min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); }
+button.session-skill-name { padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+button.session-skill-name:hover, button.session-skill-name:focus-visible { color: var(--accent); text-decoration: underline; }
+.session-skill-usage { flex: none; color: var(--text-tertiary); font-size: var(--text-xs); }

@@ -13,3 +13,107 @@
 
 .session-organizer-item[draggable="true"], .session-organizer-group[draggable="true"] { cursor: grab; }
 .session-organizer-item[draggable="true"]:active, .session-organizer-group[draggable="true"]:active { cursor: grabbing; }
+
+/* A live preview follows the pointer; the browser's static drag image is hidden.
+   Its tilt and scale are set each frame by SessionOrganizer. */
+.session-organizer-drag-preview {
+  position: fixed;
+  z-index: 2000;
+  pointer-events: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 22%, transparent), 0 2px 6px color-mix(in srgb, var(--text) 10%, transparent);
+}
+.session-organizer-drag-preview[data-drop-label]:not([data-drop-label=''])::after {
+  content: attr(data-drop-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* Easy Mode ("live") drag: the source leaves an empty slot, rows part to make room,
+   drop targets react, and the landed row flashes. */
+.session-organizer--live .session-organizer-item,
+.session-organizer--live .session-organizer-group { transition: padding 170ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 140ms ease, box-shadow 140ms ease; }
+/* A content-box group row keeps its 30px height and grows by its slot. */
+.session-organizer--live .session-organizer-group { box-sizing: content-box; }
+
+.session-organizer--live [data-dragging='true'] {
+  border-radius: var(--radius-sm, 6px);
+  outline: 1px dashed color-mix(in srgb, var(--text) 28%, transparent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+.session-organizer--live [data-dragging='true'] > * { visibility: hidden; }
+.session-organizer--live [data-dragging='true'] + .session-organizer-members { opacity: .4; }
+
+.session-organizer--live [data-drop-position='before'] { padding-top: var(--drop-gap, 30px); }
+.session-organizer--live [data-drop-position='after'] { padding-bottom: var(--drop-gap, 30px); }
+.session-organizer--live [data-drop-position='before']::before,
+.session-organizer--live [data-drop-position='after']::after {
+  left: 4px;
+  right: 4px;
+  height: calc(var(--drop-gap, 30px) - 6px);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  animation: session-slot-in 170ms ease-out;
+}
+.session-organizer--live [data-drop-position='before']::before { top: 3px; }
+.session-organizer--live [data-drop-position='after']::after { bottom: 3px; }
+@keyframes session-slot-in { from { opacity: 0; transform: scaleY(.6); } }
+
+.session-organizer--live [data-drop-position='group'],
+.session-organizer--live [data-drop-position='join'] {
+  outline: none;
+  border-radius: var(--radius-sm, 6px);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px var(--accent), 0 6px 14px color-mix(in srgb, var(--text) 14%, transparent);
+}
+.session-organizer-drag-preview[data-drop-intent='group']::before {
+  content: attr(data-drop-badge);
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 20px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--text) 25%, transparent);
+  animation: session-badge-in 200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes session-badge-in { from { opacity: 0; transform: scale(.4); } }
+.session-organizer-count-preview { color: var(--accent); font-weight: 600; animation: session-count-pulse 600ms ease-in-out infinite; }
+@keyframes session-count-pulse { 50% { transform: scale(1.25); } }
+
+.session-organizer--live [data-landed='true'] { border-radius: var(--radius-sm, 6px); animation: session-landed 700ms ease-out 260ms; }
+@keyframes session-landed {
+  0% { box-shadow: 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-organizer--live .session-organizer-item,
+  .session-organizer--live .session-organizer-group { transition: none; }
+  .session-organizer--live [data-drop-position] { transform: none; }
+  .session-organizer--live [data-drop-position]::before,
+  .session-organizer--live [data-drop-position]::after,
+  .session-organizer-drag-preview::before, .session-organizer-count-preview,
+  .session-organizer--live [data-landed='true'] { animation: none; }
+}

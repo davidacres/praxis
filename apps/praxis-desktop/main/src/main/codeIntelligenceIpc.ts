@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { codeIntelligenceDataDirectory, type CodeIntelligenceOwnerStatus, type CodeIntelligenceRequest, type CodeIntelligenceResponse, type McpServerConfig, type SemanticModelStatus } from '@praxis/core';
 import { sessionCodeIntelligenceServer } from './codeIntelligenceSession';
+import { cleanupRemovedWorktreeIndexes } from './codeIntelligenceCleanup';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain.js';
 import { getSettingsBackend, getSharedSettingsFilePath } from './settingsBackendInstance.js';
 import {
@@ -17,7 +18,7 @@ import {
   setCachedFingerprint
 } from './semanticModelManager.js';
 
-const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate', 'owner-status', 'owner-start', 'owner-stop', 'owner-restart']);
+const ACTIONS = new Set(['list', 'register', 'index', 'rebuild', 'relocate', 'pause', 'resume', 'unregister', 'query', 'connect', 'revoke', 'model-install', 'model-activate', 'owner-status', 'owner-start', 'owner-stop', 'owner-restart', 'cleanup']);
 const TOOLS = new Set(['search_code', 'find_symbol', 'get_symbol', 'get_source', 'explain_symbol', 'get_callers', 'get_callees', 'trace_flow', 'find_related', 'summarize_project', 'get_index_status', 'search_knowledge', 'get_knowledge_section', 'find_related_knowledge']);
 
 function dataDirectory(): string {
@@ -131,6 +132,14 @@ export async function replaceOutdatedOwner(): Promise<boolean> {
   return true;
 }
 
+/** Maintenance runs once after app readiness, against the current owner, without delaying startup. */
+export async function maintainCodeIntelligenceOnStartup(): Promise<void> {
+  await replaceOutdatedOwner();
+  if (!existsSync(path.join(dataDirectory(), 'index.db'))) return;
+  const removed = await cleanupRemovedWorktreeIndexes(invoke, (message, error) => console.warn(message, error));
+  if (removed.length) console.info(`Unregistered ${removed.length} removed worktree code intelligence indexes.`);
+}
+
 // Repositories registered before this fix, or whose activation was refused while their
 // index was failing, are caught up once per session.
 let modelActivationCaughtUp = false;
@@ -141,6 +150,14 @@ export function registerCodeIntelligenceIpc(): void {
       if (!request || !ACTIONS.has(request.action) || Buffer.byteLength(JSON.stringify(request)) > 1024 * 1024) throw new Error('Invalid code intelligence request.');
       switch (request.action) {
         case 'list': return invoke(['list']);
+        case 'cleanup': {
+          const warnings: Array<{ code: string; message: string }> = [];
+          const removed = await cleanupRemovedWorktreeIndexes(invoke, (message, error) => {
+            console.warn(message, error);
+            warnings.push({ code: 'CLEANUP_SKIPPED', message: `${message} ${error instanceof Error ? error.message : String(error)}` });
+          });
+          return { data: { removedCount: removed.length }, warnings };
+        }
         case 'register': {
           const args = ['register', text(request.root)];
           if (request.manifest) args.push('--manifest', text(request.manifest));

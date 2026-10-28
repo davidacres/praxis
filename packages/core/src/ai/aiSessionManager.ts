@@ -37,6 +37,7 @@ import {
 } from './sessionHandover';
 import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
 import { dedupeCumulativeReasoning } from './agentEventUtils';
+import { detectSkillUses, mergeDetectedSkillUses } from './skillUsage';
 import { estimateCostUsd } from './providers/modelPricing';
 import type { ReasoningEffort } from './providers/reasoningSupport';
 
@@ -420,6 +421,12 @@ export class AiSessionManager {
         }
         return event;
       });
+      // Sessions recorded before skill detection existed are scanned when first opened.
+      if (record.detectedSkills === undefined) {
+        record.detectedSkills = mergeDetectedSkillUses(undefined, detectSkillUses(record.events));
+        if (record.detectedSkills?.length) void this.persistAgentSessions();
+        else record.detectedSkills = undefined;
+      }
       record.conversationHistory = transcript.conversationHistory;
       if (transcript.planText !== undefined) record.planText = transcript.planText;
       if (transcript.reasoningText !== undefined) record.reasoningText = transcript.reasoningText;
@@ -715,6 +722,8 @@ export class AiSessionManager {
           }
         : event
     ));
+    const skillUses = detectSkillUses(events);
+    if (skillUses.length) record.detectedSkills = mergeDetectedSkillUses(record.detectedSkills, skillUses);
     if (incrementSteps) {
       record.stepCount += incrementSteps;
     }

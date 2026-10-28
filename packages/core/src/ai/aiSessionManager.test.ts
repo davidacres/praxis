@@ -579,3 +579,16 @@ test('lazy session metadata retains unnamed subagent completions and excludes or
   const manager = new AiSessionManager(storeWith({ 'SESSION-abc': { ...baseRecord('completed'), events } }), new InMemorySessionTranscriptStore());
   assert.deepEqual(manager.getAgentSession('SESSION-abc')?.events.map(event => [event.type, event.data?.callId]), [['tool_start', 'child'], ['tool_complete', 'child']]);
 });
+
+test('tool calls that load a skill are recorded on the session as detected skills', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', { kind: 'general', goal: 'do a thing', scope: '', definitionOfDone: '' });
+  mgr.appendAgentEvents('SESSION-abc', [
+    { timestamp: '2026-01-01T00:00:01.000Z', type: 'tool_start', summary: 'Running tool', data: { toolName: 'Skill', args: { skill: 'praxis-scheduled-runs' } } },
+    { timestamp: '2026-01-01T00:00:02.000Z', type: 'message', summary: 'Assistant', detail: 'Using the skill.' }
+  ]);
+  mgr.appendAgentEvents('SESSION-abc', [
+    { timestamp: '2026-01-01T00:00:03.000Z', type: 'tool_start', summary: 'Running tool', data: { toolName: 'cat .agents/skills/plan-authoring/SKILL.md', kind: 'shell' } }
+  ]);
+  assert.deepEqual(mgr.getAgentSession('SESSION-abc')?.detectedSkills?.map(use => use.skillId), ['praxis-scheduled-runs', 'plan-authoring']);
+});

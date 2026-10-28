@@ -125,7 +125,12 @@ export async function discoverAgentProfiles(
       if (seen.has(id)) continue;
       seen.add(id);
       result.push({
-        profile: { id, name: definition.manifest.name, instructions: definition.brief },
+        profile: {
+          id,
+          name: definition.manifest.name,
+          instructions: definition.brief,
+          ...(definition.skills?.length ? { preferredSkills: [...definition.skills] } : {})
+        },
         profilePath: path.join('/bundled', id, 'AGENT.md'),
         rootPath: path.join('/bundled', id),
         fingerprint: createHash('sha256').update(definition.brief).digest('hex'),

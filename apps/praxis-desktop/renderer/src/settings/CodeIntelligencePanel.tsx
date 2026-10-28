@@ -44,6 +44,8 @@ export function CodeIntelligencePanel({
   const [repositoryId, setRepositoryId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [cleanupResult, setCleanupResult] = useState('');
+  const [cleanupWarnings, setCleanupWarnings] = useState<string[]>([]);
   const [status, setStatus] = useState<CodeIntelligenceResponse>();
   const [owner, setOwner] = useState<CodeIntelligenceOwnerStatus>();
 
@@ -664,6 +666,51 @@ export function CodeIntelligencePanel({
           <p className="settings-hint" style={{ margin: 0 }}>
             No repositories indexed yet. Repositories are automatically indexed when opened in projects or sessions.
           </p>
+        )}
+      </div>
+
+      <div className="code-intelligence-card" data-testid="code-intel-cleanup-card">
+        <div className="code-intelligence-card-header">
+          <h5>
+            <Icon name="trash" size={15} />
+            <span>Worktree cleanup</span>
+          </h5>
+        </div>
+        <p className="settings-hint" style={{ margin: 0 }}>
+          Remove indexes for deleted Praxis worktrees. Existing folders and worktrees whose removal cannot be confirmed are kept. Cleanup also runs automatically when Praxis starts.
+        </p>
+        <div className="code-intelligence-actions">
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary"
+            data-testid="code-intel-cleanup-btn"
+            disabled={busy}
+            onClick={() => void work(async () => {
+              const ok = await confirm({
+                title: 'Clean up worktree indexes?',
+                message: 'This unregisters search indexes for confirmed deleted Praxis worktrees. Source files and indexes for existing folders are preserved.',
+                danger: true,
+                confirmLabel: 'Run cleanup'
+              });
+              if (!ok) return;
+              setCleanupResult('');
+              setCleanupWarnings([]);
+              const result = await call({ action: 'cleanup' });
+              const count = Number(record(result.data).removedCount);
+              setCleanupResult(count === 0 ? 'No obsolete worktree indexes found.' : `Removed ${count} obsolete worktree ${count === 1 ? 'index' : 'indexes'}.`);
+              setCleanupWarnings((result.warnings ?? []).map(warning => warning.message));
+              await refresh();
+            })}
+          >
+            Run cleanup
+          </button>
+        </div>
+        {cleanupResult && <p className="settings-hint" role="status" data-testid="code-intel-cleanup-result" style={{ margin: 0 }}>{cleanupResult}</p>}
+        {cleanupWarnings.length > 0 && (
+          <details className="code-intelligence-details">
+            <summary>Some indexes could not be checked or removed ({cleanupWarnings.length})</summary>
+            <ul>{cleanupWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+          </details>
         )}
       </div>
 

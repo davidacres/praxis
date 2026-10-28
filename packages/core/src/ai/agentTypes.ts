@@ -1,3 +1,4 @@
+import type { DetectedSkillUse } from './skillUsage';
 import type { AiProvider } from '../types';
 import type { ProviderCapabilityManifest } from './providers/providerPreflight';
 import type { ReasoningAvailability, ReasoningEffort } from './providers/reasoningSupport';
@@ -541,6 +542,8 @@ export interface AgentSessionRecord {
   hostId?: string;
   activeSkills?: string[];
   skillActivations?: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }>;
+  /** Skills the session's AI loaded itself, detected from its tool calls (best-effort; see `skillUsage.ts`). */
+  detectedSkills?: DetectedSkillUse[];
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   /** Ticket/plan purpose captured when the session started. Older records fall back to taskDefinition. */

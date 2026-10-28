@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, dismissSplash, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 let userDataDir: string | undefined;
@@ -36,36 +36,30 @@ test('default sidebar is standard when enableEasyMode is false', async () => {
   await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
 });
 
-test('toggling EasyMode in settings switches to EasyModeSidebar', async () => {
-  app = await launchTestApp({
-    preview: { enableEasyMode: false }
-  });
+test('Preview omits retired switches and EasyMode remains available from the titlebar', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: false, enableNewProject: false, boardsSidebarMode: 'work' } });
   const win = app.window;
-
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
-
-  // Open Settings
-  await win.locator('[data-testid="titlebar-settings"]').click();
+  await expect(win.getByRole('button', { name: 'Add project', exact: true })).toBeVisible();
+  await win.getByTestId('titlebar-settings').click();
   const settingsDialog = win.getByRole('dialog', { name: 'Settings' });
-  await expect(settingsDialog).toBeVisible();
-
-  // Navigate to Preview category
-  await win.locator('[data-testid="settings-nav-preview"]').click();
-
-  // Find the EasyMode toggle and toggle it on
-  const easyModeToggle = win.locator('[data-testid="toggle-enable-easymode"]');
-  await expect(easyModeToggle).toBeVisible();
-  await expect(easyModeToggle).toHaveAttribute('aria-checked', 'false');
-
-  await easyModeToggle.click();
-  await expect(easyModeToggle).toHaveAttribute('aria-checked', 'true');
-
-  // Close Settings dialog
+  await win.getByTestId('settings-nav-preview').click();
+  for (const label of ['Enable Create Idea', 'Enable New Project', 'Boards sidebar — Work Mode', 'EasyMode sidebar (experimental)', 'Scheduled runs (experimental)']) {
+    await expect(settingsDialog.getByText(label, { exact: true })).toHaveCount(0);
+  }
+  await expect(win.getByTestId('toggle-enable-deployments')).toBeVisible();
+  await expect(win.getByTestId('toggle-enable-scheduled-runs')).toHaveCount(0);
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await settingsDialog.screenshot({ path: path.join(artifacts, 'preview-settings.png') });
+  await win.getByTestId('settings-nav-delivery').click();
+  const handover = settingsDialog.getByRole('spinbutton', { name: 'Switch AI provider at this percent of allowance used', exact: true });
+  await expect(handover).toHaveValue('95');
+  await handover.fill('90');
+  await handover.blur();
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.settings.get()).ai.providerHandoverPercent)).toBe(90);
   await settingsDialog.getByRole('button', { name: 'Done' }).click();
-  await expect(settingsDialog).not.toBeVisible();
-
-  // EasyMode sidebar should now be active
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
+  await win.getByRole('button', { name: 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)', exact: true }).click();
+  await expect(win.getByTestId('easymode-sidebar')).toBeVisible();
 });
 
 test('EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation', async () => {
@@ -1629,8 +1623,10 @@ test('a long session list folds behind "Show more" and leaves the Runs section o
   await expect(cards).toHaveCount(6);
   await showMore.press('Space');
   await expect(cards).toHaveCount(15);
-  // Tab from the final Sessions control reaches the Runs add button.
+  // The divider is keyboard reachable between the Sessions and Runs controls.
   await showMore.press('Tab');
+  await expect(win.getByTestId('easymode-runs-divider')).toBeFocused();
+  await win.getByTestId('easymode-runs-divider').press('Tab');
   await expect(win.getByTestId('section-header-add-automations')).toBeFocused();
   await expect(win.getByTestId('section-header-add-automations')).toBeInViewport();
   const capture = path.resolve(__dirname, '../../../../.praxis/session-artifacts/easymode-short-window.png');
@@ -1641,6 +1637,41 @@ test('a long session list folds behind "Show more" and leaves the Runs section o
   fs.writeFileSync(capture, Buffer.from(pixels, 'base64'));
 
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-sessions-overflow.png') });
+});
+
+test('easy mode divider resizes Runs with pointer and keyboard and remembers the split', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  await app.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1100, 800));
+  const divider = win.getByTestId('easymode-runs-divider');
+  const runs = win.locator('.easymode-section--runs');
+  const sessions = win.locator('.easymode-section--sessions');
+  await expect(divider).toBeVisible();
+  const before = (await runs.boundingBox())!.height;
+  const box = (await divider.boundingBox())!;
+  await win.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(box.x + box.width / 2, box.y - 120, { steps: 8 });
+  await win.mouse.up();
+  await expect.poll(async () => (await runs.boundingBox())!.height).toBeGreaterThan(before + 80);
+  const dragged = (await runs.boundingBox())!.height;
+  await divider.focus();
+  await divider.press('ArrowDown');
+  await expect.poll(async () => (await runs.boundingBox())!.height).toBeLessThan(dragged - 5);
+  const saved = (await runs.boundingBox())!.height;
+  await win.reload();
+  await dismissSplash(win);
+  await expect(divider).toBeVisible();
+  await expect.poll(async () => Math.abs((await runs.boundingBox())!.height - saved)).toBeLessThan(3);
+  const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-runs-divider.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  await win.getByTestId('easymode-sidebar').screenshot({ path: capture });
+  await app.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(900, 480));
+  await win.evaluate(() => window.praxis.window.setZoomFactor(1.5));
+  await expect.poll(() => win.evaluate(() => window.innerHeight)).toBe(320);
+  await expect.poll(async () => (await sessions.boundingBox())!.height).toBeGreaterThanOrEqual(140);
+  await expect.poll(async () => (await runs.boundingBox())!.height).toBeGreaterThanOrEqual(72);
+  await expect(divider).toBeInViewport();
 });
 
 test('easy mode has no filter tabs and unfinished sessions beyond the first five stay visible', async () => {
@@ -1672,4 +1703,186 @@ test('easy mode has no filter tabs and unfinished sessions beyond the first five
   const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-sidebar-without-tabs.png');
   fs.mkdirSync(path.dirname(capture), { recursive: true });
   await sidebar.screenshot({ path: capture });
+});
+
+test('easy mode groups sessions by last activity like classic mode', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  await app.electronApp.evaluate(({ BrowserWindow }) => {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    for (const [key, timestamp] of [['old', midnight - 10 * 86400000], ['week', midnight - 2 * 86400000], ['today', now.getTime()]] as const) {
+      BrowserWindow.getAllWindows()[0].webContents.send('ai:sessionChanged', {
+        issueKey: `SESSION-GROUP-${key}`, sessionId: key, title: `Grouping ${key}`,
+        state: 'completed', startedAt: new Date(midnight - 20 * 86400000).toISOString(),
+        completedAt: new Date(timestamp).toISOString(), taskDefinition: { goal: 'Grouping' }, events: []
+      });
+    }
+  });
+  for (const [bucket, key, label] of [['today', 'today', 'Today'], ['this-week', 'week', 'This week'], ['last-week', 'old', 'Last week']]) {
+    const group = win.getByTestId(`easymode-session-bucket-${bucket}`);
+    await expect(group).toContainText(label);
+    await expect(group.getByTestId(`easymode-session-card-SESSION-GROUP-${key}`)).toBeVisible();
+  }
+  await win.getByTestId('easymode-sessions-filter').fill('Grouping week');
+  await expect(win.getByTestId('easymode-session-bucket-this-week')).toBeVisible();
+  await expect(win.getByTestId('easymode-session-bucket-today')).toHaveCount(0);
+  await expect(win.getByTestId('easymode-session-bucket-last-week')).toHaveCount(0);
+  await win.getByTestId('easymode-sessions-filter').clear();
+  const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-session-groups.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  await win.getByTestId('easymode-sidebar').screenshot({ path: capture });
+});
+
+test('easy mode sessions can be grouped, reordered and restored after filtering and restart', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, undefined, undefined, { openNewSession: false });
+  const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+  const now = new Date().toISOString();
+  const records = Object.fromEntries([1, 2, 3].map(index => {
+    const issueKey = `SESSION-EASY-GROUP-${index}`;
+    return [issueKey, { issueKey, sessionId: issueKey, title: `Organize ${index}`, state: 'completed', startedAt: now,
+      completedAt: now, taskDefinition: { goal: 'Organize sessions' }, events: [] }];
+  }));
+  fs.writeFileSync(path.join(profile.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': records }));
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, profile, undefined, { openNewSession: false });
+  let win = app.window;
+  let list = win.getByTestId('easymode-session-bucket-today').getByTestId('session-organizer');
+  const row = (index: number) => list.locator(`[data-session-order-id="SESSION-EASY-GROUP-${index}"]`);
+  await expect(row(1)).toBeVisible();
+  // Record the browser drag image. A detached canvas can't be drawn, so macOS showed a
+  // fallback icon that slid in from the window's top-left; it must be a loaded image.
+  await win.evaluate(() => {
+    const original = DataTransfer.prototype.setDragImage;
+    DataTransfer.prototype.setDragImage = function (image, x, y) {
+      (window as unknown as { dragImageUsed?: string }).dragImageUsed = image instanceof HTMLImageElement
+        ? `img:${image.complete && image.naturalWidth > 0}` : image.tagName.toLowerCase();
+      original.call(this, image, x, y);
+    };
+  });
+  const from = (await row(1).boundingBox())!;
+  const to = (await row(2).boundingBox())!;
+  await win.mouse.move(from.x + 25, from.y + from.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+  const preview = win.getByTestId('session-drag-preview');
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText('Organize 1');
+  await expect(preview).toHaveAttribute('data-drop-label', 'Create group');
+  expect(await win.evaluate(() => (window as unknown as { dragImageUsed?: string }).dragImageUsed)).toBe('img:true');
+  // The source leaves an empty dashed slot; the hovered session lifts and shows a group badge.
+  await expect(row(1)).toHaveAttribute('data-dragging', 'true');
+  await expect(row(1).locator(':scope > *').first()).toHaveCSS('visibility', 'hidden');
+  await expect(preview).toHaveAttribute('data-drop-intent', 'group');
+  expect(await preview.evaluate(element => getComputedStyle(element, '::before').content)).toBe('"+"');
+  await expect(row(2)).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, -1)');
+  // The card settles at a steady tilt once the pickup wobble ends, then leans while carried.
+  const tilt = () => preview.evaluate(element => {
+    const matrix = new DOMMatrix(getComputedStyle(element).transform);
+    return Math.atan2(matrix.b, matrix.a) * 180 / Math.PI;
+  });
+  await expect.poll(async () => Math.abs(await tilt() - 2), { timeout: 3000 }).toBeLessThan(0.3);
+  await win.mouse.move(to.x + to.width / 2 + 40, to.y + to.height / 2, { steps: 2 });
+  await expect.poll(tilt).toBeGreaterThan(3.5);
+  await expect.poll(async () => Math.abs(await tilt() - 2), { timeout: 3000 }).toBeLessThan(0.3);
+  // Hovering between rows opens one landing slot the size of the dragged row, and it stays
+  // under the pointer (it may belong to the row above or the row below).
+  const third = (await row(3).boundingBox())!;
+  // Chromium throttles dragover, so settle on each target the way a hand does.
+  const hoverAt = async (x: number, y: number) => {
+    await win.mouse.move(x, y, { steps: 4 });
+    for (const nudge of [1, 0, 1]) { await win.waitForTimeout(80); await win.mouse.move(x + nudge, y); }
+  };
+  await hoverAt(third.x + third.width / 2, third.y + 3);
+  const slot = list.locator('[data-drop-position="before"], [data-drop-position="after"]');
+  await expect(slot).toHaveCount(1);
+  await expect.poll(() => slot.evaluate(element => {
+    const style = getComputedStyle(element);
+    return parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  })).toBeCloseTo(from.height, 0);
+  await hoverAt(third.x + third.width / 2, third.y + 5);
+  await expect(slot).toHaveCount(1);
+  await win.waitForTimeout(250);
+  await win.getByTestId('easymode-sidebar').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-drag-slot.png') });
+  await hoverAt(to.x + to.width / 2, to.y + to.height / 2);
+  await expect(row(2)).toHaveAttribute('data-drop-position', 'group');
+  await expect(slot).toHaveCount(0);
+  await expect.poll(() => list.locator('.session-organizer-item').evaluateAll(rows => rows.every(element =>
+    parseFloat(getComputedStyle(element).paddingTop) + parseFloat(getComputedStyle(element).paddingBottom) === 0))).toBe(true);
+  await expect.poll(async () => Math.abs(await tilt() - 2), { timeout: 3000 }).toBeLessThan(0.3);
+  // The grab point stays under the pointer; the preview does not jump beside it.
+  expect(Math.abs(await preview.evaluate(element => parseFloat((element as HTMLElement).style.left))
+    - (to.x + to.width / 2 - 25))).toBeLessThan(2);
+  expect(Math.abs(await preview.evaluate(element => parseFloat((element as HTMLElement).style.top))
+    - (to.y + to.height / 2 - from.height / 2))).toBeLessThan(2);
+  const dragCapture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-session-drag.png');
+  fs.mkdirSync(path.dirname(dragCapture), { recursive: true });
+  await win.screenshot({ path: dragCapture });
+  const droppedPreview = (await preview.elementHandle())!;
+  await win.mouse.up();
+  await expect.poll(() => droppedPreview.evaluate(element => element.getAttribute('data-phase'))).toBe('settling');
+  await expect(preview).toHaveCount(0);
+  let input = list.getByTestId('session-group-name-input');
+  await expect(input).toBeVisible();
+  await input.fill('Research');
+  await input.press('Enter');
+  let group = list.getByTestId('session-custom-group');
+  await expect(group).toContainText('Research');
+  await expect(group).toHaveAttribute('data-landed', 'true');
+  await expect(list.locator('.session-organizer-members > .session-organizer-item')).toHaveCount(2);
+  await win.emulateMedia({ reducedMotion: 'reduce' });
+  const groupBox = (await group.boundingBox())!;
+  const thirdBox = (await row(3).boundingBox())!;
+  await win.mouse.move(groupBox.x + 60, groupBox.y + groupBox.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(thirdBox.x + 20, thirdBox.y + 2, { steps: 8 });
+  await expect(preview).toContainText('Research');
+  await expect(preview).toHaveCSS('transform', 'none');
+  await win.mouse.up();
+  await expect(preview).toHaveCount(0);
+  await win.emulateMedia({ reducedMotion: 'no-preference' });
+  // Cancelling a native drag must also remove the live overlay and restore the source.
+  const cancelFrom = (await row(3).boundingBox())!;
+  await win.mouse.move(cancelFrom.x + 25, cancelFrom.y + cancelFrom.height / 2);
+  await win.mouse.down();
+  await win.mouse.move(cancelFrom.x + 80, cancelFrom.y + cancelFrom.height / 2, { steps: 8 });
+  await expect(preview).toBeVisible();
+  const cancelledPreview = (await preview.elementHandle())!;
+  await win.keyboard.press('Escape');
+  await win.mouse.up();
+  await expect.poll(() => cancelledPreview.evaluate(element => element.getAttribute('data-phase'))).toBe('returning');
+  await expect(preview).toHaveCount(0);
+  await expect(row(3)).not.toHaveAttribute('data-dragging', 'true');
+  // Hovering a group previews its new size before the drop.
+  const joinFrom = (await row(3).boundingBox())!;
+  const joinTo = (await group.boundingBox())!;
+  await win.mouse.move(joinFrom.x + 25, joinFrom.y + joinFrom.height / 2);
+  await win.mouse.down();
+  await hoverAt(joinTo.x + joinTo.width / 2, joinTo.y + joinTo.height / 2);
+  await expect(group.getByTestId('session-group-count-preview')).toHaveText('3');
+  await expect(preview).toHaveAttribute('data-drop-badge', '3');
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-drag-join.png'), clip: { x: 0, y: 40, width: 420, height: 300 } });
+  await win.mouse.up();
+  await expect(list.locator('.session-organizer-members > .session-organizer-item')).toHaveCount(3);
+  await expect(group.getByTestId('session-group-count-preview')).toHaveCount(0);
+  await win.getByTestId('easymode-sessions-filter').fill('Organize 1');
+  await list.getByRole('button', { name: 'Collapse group Research' }).click();
+  await win.getByTestId('easymode-sessions-filter').clear();
+  await list.getByRole('button', { name: 'Expand group Research' }).click();
+  await expect(list.locator('.session-organizer-members > .session-organizer-item')).toHaveCount(3);
+  await app.electronApp.close();
+  app = await launchTestApp({ preview: { enableEasyMode: true } }, profile, undefined, { openNewSession: false });
+  win = app.window;
+  list = win.getByTestId('easymode-session-bucket-today').getByTestId('session-organizer');
+  group = list.getByTestId('session-custom-group');
+  await expect(group).toContainText('Research');
+  await expect(list.locator('.session-organizer-members > .session-organizer-item')).toHaveCount(3);
+  const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-drag-groups.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  await win.getByTestId('easymode-sidebar').screenshot({ path: capture });
+  await win.getByTestId('easymode-sessions-filter').fill('Organize 1');
+  await group.getByRole('button', { name: 'Ungroup Research' }).click();
+  await win.getByTestId('easymode-sessions-filter').clear();
+  await expect(list.getByTestId('session-custom-group')).toHaveCount(0);
+  await expect(list.locator(':scope > .session-organizer-item')).toHaveCount(3);
 });

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -7,9 +9,9 @@ test.afterEach(async () => {
   app = undefined;
 });
 
-async function openPanel({ updateAvailable = false }: { updateAvailable?: boolean } = {}) {
+async function openPanel({ updateAvailable = false, cleanupError = false }: { updateAvailable?: boolean; cleanupError?: boolean } = {}) {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }, updateAvailable) => {
+  await app.electronApp.evaluate(({ ipcMain }, { updateAvailable, cleanupError }) => {
     let root = '/fixture/original';
     let generation = 1;
     let modelInstalled = false;
@@ -21,6 +23,12 @@ async function openPanel({ updateAvailable = false }: { updateAvailable?: boolea
         return { data: [{ id: 'pci:repo:fixture', root, state: 'ready', generation }] };
       }
       if (request.action === 'rebuild') { generation++; return { data: { queued: true } }; }
+      if (request.action === 'cleanup') {
+        if (cleanupError) return { error: { code: 'OFFLINE', message: 'Cleanup service unavailable' } };
+        const removedCount = generation === 0 ? 0 : 1;
+        generation = 0;
+        return { data: { removedCount }, warnings: [{ code: 'CLEANUP_SKIPPED', message: 'Unavailable repository was retained.' }] };
+      }
       if (request.action === 'relocate') { root = String(request.root); generation++; return { data: { relocated: true } }; }
       if (request.action === 'query') {
         return {
@@ -71,7 +79,7 @@ async function openPanel({ updateAvailable = false }: { updateAvailable?: boolea
       generation = 0;
       root = '';
     });
-  }, updateAvailable);
+  }, { updateAvailable, cleanupError });
 
   const win = app.window;
   await win.getByTestId('titlebar-settings').click();
@@ -80,6 +88,37 @@ async function openPanel({ updateAvailable = false }: { updateAvailable?: boolea
   await expect(panel).toContainText('Generation 1');
   return { win, panel };
 }
+
+test('worktree cleanup confirms removal, refreshes repositories and reports results', async () => {
+  const { win, panel } = await openPanel();
+  const button = panel.getByTestId('code-intel-cleanup-btn');
+  await button.click();
+  const dialog = win.getByRole('dialog', { name: 'Clean up worktree indexes?', exact: true });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(panel).toContainText('Generation 1');
+  await expect(panel.getByTestId('code-intel-cleanup-result')).toHaveCount(0);
+  await button.click();
+  await dialog.getByRole('button', { name: 'Run cleanup', exact: true }).click();
+  await expect(panel.getByTestId('code-intel-cleanup-result')).toHaveText('Removed 1 obsolete worktree index.');
+  await expect(panel).toContainText('No repositories indexed yet.');
+  await panel.getByText('Some indexes could not be checked or removed (1)', { exact: true }).click();
+  await expect(panel).toContainText('Unavailable repository was retained.');
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await panel.getByTestId('code-intel-cleanup-card').screenshot({ path: path.join(artifacts, 'code-intelligence-cleanup.png') });
+  await button.click();
+  await dialog.getByRole('button', { name: 'Run cleanup', exact: true }).click();
+  await expect(panel.getByTestId('code-intel-cleanup-result')).toHaveText('No obsolete worktree indexes found.');
+});
+
+test('worktree cleanup reports service errors and keeps repositories visible', async () => {
+  const { win, panel } = await openPanel({ cleanupError: true });
+  await panel.getByTestId('code-intel-cleanup-btn').click();
+  await win.getByRole('dialog', { name: 'Clean up worktree indexes?', exact: true }).getByRole('button', { name: 'Run cleanup', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('Cleanup service unavailable');
+  await expect(panel).toContainText('Generation 1');
+  await expect(panel.getByTestId('code-intel-cleanup-btn')).toBeEnabled();
+});
 
 test('rebuild and relocation use the themed recovery flow and refresh status', async ({}, testInfo) => {
   const { win, panel } = await openPanel();

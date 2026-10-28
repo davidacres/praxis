@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { EasyModeSessionCard } from './EasyModeSessionCard';
 import { Icon } from '../../ui/Icon';
+import { RECENCY_BUCKETS, RECENCY_BUCKET_LABEL, recencyBucket, sessionLastActivityAt } from '../../app/sessionRecency';
+import { SessionOrganizer } from '../../app/SessionOrganizer';
 
 export interface EasyModeSessionsListProps {
   sessions: AgentSessionRecord[];
+  scope: string;
   allSessions?: AgentSessionRecord[];
   selectedSessionKey?: string;
   activeAgentId?: string;
@@ -28,6 +31,7 @@ export function isAttentionState(state: AgentSessionRecord['state']): boolean {
 
 export function EasyModeSessionsList({
   sessions,
+  scope,
   allSessions,
   selectedSessionKey,
   activeAgentId,
@@ -42,11 +46,17 @@ export function EasyModeSessionsList({
 }: EasyModeSessionsListProps) {
   const [filterQuery, setFilterQuery] = useState('');
   const [expanded, setExpanded] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Only display user root sessions at top level; subagents appear inside their parent session's card,
   // and automation stage sessions appear under their respective automation.
   const rootSessions = useMemo(() => {
-    return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
+    return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId)
+      .sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)));
   }, [sessions]);
 
   const filteredSessions = useMemo(() => {
@@ -122,8 +132,12 @@ export function EasyModeSessionsList({
         </div>
       )}
 
-      {visibleSessions.map(session => (
-        <EasyModeSessionCard
+      {RECENCY_BUCKETS.map(bucket => {
+        const group = visibleSessions.filter(session => recencyBucket(sessionLastActivityAt(session), now) === bucket);
+        if (!group.length) return null;
+        return <section className="easymode-session-bucket" key={bucket} data-testid={`easymode-session-bucket-${bucket}`}>
+          <div className="easymode-session-bucket__label">{RECENCY_BUCKET_LABEL[bucket]}</div>
+          <SessionOrganizer key={`${scope}:${bucket}`} scope={`${scope}:${bucket}`} preserveMissing dragPreview items={group.map(session => ({ id: session.issueKey, node: <EasyModeSessionCard
           key={session.issueKey}
           session={session}
           allSessions={allSessions || sessions}
@@ -136,8 +150,9 @@ export function EasyModeSessionsList({
           onRenameSession={onRenameSession}
           onArchiveSession={onArchiveSession}
           onAssignSession={onAssignSession}
-        />
-      ))}
+        /> }))} />
+        </section>;
+      })}
 
       {(hiddenCount > 0 || (expanded && filteredSessions.length > COLLAPSED_SESSION_LIMIT && !filterQuery.trim())) && (
         <button

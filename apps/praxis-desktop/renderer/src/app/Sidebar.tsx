@@ -1042,7 +1042,6 @@ export function Sidebar({
   const setEffectiveQuery = onQueryChange ?? setLocalQuery;
   const toggleEffectiveSearch = onToggleSearch ?? (() => { setLocalSearching(s => !s); setLocalQuery(''); });
   const { settings } = useSettings();
-  const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   // Brand artwork vs generic board-type glyphs — Appearance setting, applied
   // live through the settings push channel.
   const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
@@ -1175,7 +1174,7 @@ export function Sidebar({
           />
         ) : (
           <>
-            {newProjectEnabled && <>
+            <>
               <div className="feature-section-header feature-section-toggle projects-section-header">
                 <button
                   type="button"
@@ -1482,7 +1481,7 @@ export function Sidebar({
                       </div>
                     </div>;
                   }))}
-            </>}
+            </>
             {!hideBoardsForActiveProject && <><div className="sidebar-section-heading">
               <button className="sidebar-section-label sidebar-section-button sidebar-section-toggle" aria-expanded={!boardsCollapsed} data-testid="toggle-boards" onClick={() => setBoardsCollapsed(value => !value)}>
                 <span className={`tree-section-icon${boardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={14} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>

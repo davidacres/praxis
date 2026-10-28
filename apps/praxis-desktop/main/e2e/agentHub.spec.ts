@@ -148,6 +148,22 @@ test('Agent Runtime lists profiles and skills and opens their Agent Hub records'
   await expect(runtime(page).getByRole('button', { name: /^Activate(?! with)/ })).toBeEnabled();
 });
 
+test('the built-in Praxis Scheduler agent ships with its Scheduled Run Authoring skill', async () => {
+  const page = app.window;
+  await refreshAgentCatalog(page);
+  await openAgentRuntimeSettings(page);
+  const panel = page.getByTestId('settings-agent-runtime');
+  await panel.getByTestId('agent-runtime-profile-praxis-scheduler').getByRole('button', { name: 'Open' }).click();
+  await expect(record(page).getByRole('heading', { name: 'Praxis Scheduler', level: 1 })).toBeVisible();
+  await expect(page.getByText('praxis-scheduled-runs').first()).toBeVisible();
+  fs.mkdirSync(path.resolve(__dirname, '../../.praxis/session-artifacts'), { recursive: true });
+  await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/praxis-scheduler-agent.png') });
+
+  await openAgentRuntimeSettings(page, 'skills');
+  await panel.getByTestId('agent-runtime-skill-praxis-scheduled-runs').getByRole('button', { name: 'Open' }).click();
+  await expect(record(page).getByRole('heading', { name: 'Scheduled Run Authoring', level: 1 })).toBeVisible();
+});
+
 test('Agent Runtime settings separate AI runtimes from agent profiles, and manage standalone launch bindings', async () => {
   const page = app.window;
   // Refresh the shell catalog before Settings opens records from it; Settings'

@@ -220,10 +220,10 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
         </div>
       </header>
 
-      <div className="schedule-notice" role="note" data-testid="schedule-preview-note">
+      <div className="schedule-notice" role="note" data-testid="schedule-runtime-note">
         <Icon name="info" size={14} />
         <span>
-          <strong>Preview.</strong> A schedule starts at its time while Praxis is open, runs its tickets one at a time in order, and
+          A schedule starts at its time while Praxis is open, runs its tickets one at a time in order, and
           pauses to ask you at an approval gate, a failure, or when a provider is nearly out of allowance.
         </span>
       </div>

@@ -43,3 +43,23 @@ All criteria pass with linked evidence, relevant feature commands pass, and the 
 
 
 ## Comments
+
+
+**PRX-T111-476** — 2026-10-26T16:47:02.849Z
+**Workflow run cancelled: Governed delivery — TASK-476: Define typed conversation, turn, attempt, and binding contracts**
+
+Status: Cancelled · Duration: 1h 8m
+
+- ✅ Plan: succeeded
+- ⏭️ Implement: cancelled
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+cancelled from the run view
+## Scheduled delivery and verification ownership
+
+Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.

@@ -6,6 +6,7 @@
  * - praxis-planner
  * - praxis-implementer
  * - praxis-reviewer
+ * - praxis-scheduler
  * - praxis-security-analyst
  * - praxis-skeptic
  * - praxis-test-author
@@ -110,6 +111,8 @@ export interface BundledAgentDefinition {
   description: string;
   /** Provider-neutral agent-profile instructions. */
   brief: string;
+  /** Built-in skills attached when a session or workflow stage uses this agent. */
+  skills?: string[];
 }
 
 function bundledProfileDoc(definition: BundledAgentDefinition): string {
@@ -118,6 +121,7 @@ function bundledProfileDoc(definition: BundledAgentDefinition): string {
     `id: ${definition.manifest.id}`,
     `name: ${definition.manifest.name}`,
     `description: ${definition.description}`,
+    ...(definition.skills?.length ? [`skills: ${definition.skills.join(', ')}`] : []),
     'version: 1.0.0',
     '---',
     '',
@@ -192,6 +196,27 @@ Output clean git commit changesets with descriptive commit messages.`
     },
     description: 'Reviews an implemented change for correctness and quality and reports structured findings.',
     brief: STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT
+  },
+
+  'praxis-scheduler': {
+    manifest: {
+      schemaVersion: 1,
+      id: 'praxis-scheduler',
+      name: 'Praxis Scheduler',
+      type: 'gateway',
+      entry: 'gateway'
+    },
+    description: 'Turns plan tasks into a scheduled-run draft, ordered by their dependencies, for a person to review and arm.',
+    skills: ['praxis-scheduled-runs'],
+    brief: `# Praxis Scheduler
+
+You are the Praxis scheduling agent.
+Prepare scheduled runs: ordered queues of plan tickets that Praxis runs one after another through a workflow.
+Follow the praxis-scheduled-runs skill exactly. Read the plan items and their dependencies, choose the deliverable
+leaf tickets, order them so every dependency runs first, and write a scheduled-run request file. Confirm the result
+from the status file Praxis writes back, and fix and rewrite the request if it is rejected.
+You only prepare drafts. Never arm, start or edit a schedule in Praxis's own data files, and never change plans or
+workflows to make a schedule fit. Report what still blocks an unattended run instead of working around it.`
   },
 
   'praxis-security-analyst': {
@@ -365,6 +390,104 @@ Rules:
 5. Report stale links, duplicate ids, missing tests, and ambiguous assertions as findings.
 
 The catalog is an index of the complete automated suite. Curated contracts may add richer context, but generated inventory entries must remain deterministic so QA can report the exact count and result set.`
+  },
+  'praxis-scheduled-runs': {
+    name: 'praxis-scheduled-runs',
+    title: 'Scheduled Run Authoring',
+    description: 'Prepare a Praxis scheduled run as an unarmed draft, with plan tasks ordered for execution, by writing a request file Praxis imports.',
+    triggers: ['scheduled run', 'schedule tasks', 'overnight run', 'run queue', 'ordered tasks', 'schedule the plan'],
+    version: '1.0.0',
+    instructions: `---
+name: praxis-scheduled-runs
+title: Scheduled Run Authoring
+description: "Prepare a Praxis scheduled run as an unarmed draft, with plan tasks ordered for execution, by writing a request file Praxis imports."
+triggers: scheduled run, schedule tasks, overnight run, run queue, ordered tasks, schedule the plan
+version: 1.0.0
+---
+
+# Scheduled Run Authoring
+
+Use this when asked to schedule plan work: an ordered queue of tickets that Praxis runs one after
+another, each through a workflow. You prepare the schedule as a **draft** by writing one request file.
+You never drive the app, never edit Praxis's own data files, and never arm or start a schedule: a person
+does that in Praxis after reviewing the draft.
+
+## 1. Choose the tickets
+
+1. Read the plan items (normally under \`docs/plans\`). Each has an \`id\` such as \`TASK-476\` and a
+   \`## Dependencies\` section.
+2. Queue the deliverable leaf items (tasks, bugs, or stories without tasks). Do not also queue their parent
+   story or feature: the parent is context, and queuing it would run the same work twice.
+3. Put each ticket after everything it depends on. Every dependency must be queued earlier, already done
+   on the board, or listed in \`satisfiedDependencies\` because you confirmed it is finished. If unsure,
+   set \`"order": "dependencies"\` and Praxis sorts the queue, keeping your order wherever it is free.
+4. Refer to tickets by plan ID (\`TASK-476\`) or board key. Praxis resolves both; a plan ID that matches
+   two items is rejected, so use the board key then.
+
+## 2. Choose the workflow and start time
+
+- Workflow: use the one the user names. Project workflows are \`.praxis/workflows/<id>.json\`; the file's
+  \`id\` is the value to use. Omit \`workflowId\` to take the project's default. Praxis rejects an id the
+  project cannot run and lists the valid ones.
+- Each queued ticket starts its own workflow run. Check that the workflow suits unattended running: how
+  approval gates pause it, and how a later ticket receives earlier tickets' code. Report what you find;
+  do not edit the workflow to remove gates unless asked.
+- Start time: use the date, time and IANA timezone the user gives. If none was given, pick a future time,
+  and say plainly that it is a placeholder. The draft will not start at that time until someone arms it.
+
+## 3. Write the request
+
+Write \`.praxis/scheduled-runs/<short-name>.json\` in the project's workspace folder (the folder that holds
+its \`.praxis\` directory and plans):
+
+\`\`\`json
+{
+  "schemaVersion": 1,
+  "kind": "praxis.scheduledRunRequest",
+  "name": "Durable team chat - ordered tasks",
+  "workflowId": "full-sdlc",
+  "date": "2026-11-02",
+  "time": "21:00",
+  "timezone": "Europe/London",
+  "order": "as-listed",
+  "tickets": ["TASK-476", "TASK-477", "TASK-478"],
+  "satisfiedDependencies": []
+}
+\`\`\`
+
+- Required: \`schemaVersion\`, \`kind\`, \`name\`, \`date\` (YYYY-MM-DD), \`time\` (HH:mm, 24-hour),
+  \`timezone\`, \`tickets\`.
+- \`order\`: \`as-listed\` (default) keeps your order and rejects one that breaks a dependency;
+  \`dependencies\` sorts it.
+- \`projectId\`: only needed when several Praxis projects share the folder; the status file names them.
+- Do not put request files under \`docs/plans\`, where they would be read as plan items.
+
+## 4. Confirm the result
+
+While Praxis is running it checks the folder every few seconds (and on its next launch otherwise), then
+writes \`<short-name>.status.json\` beside the request:
+
+- \`"state": "imported"\`: the draft exists. Check \`entries\` is the order you intended, and read
+  \`warnings\` (for example a ticket already done, or a start time in the past).
+- \`"state": "rejected"\`: nothing was saved. Fix every item in \`errors\` and rewrite the request.
+
+The status describes the request only when its \`requestHash\` equals the SHA-256 of the request file
+(\`shasum -a 256 <file>\`); otherwise Praxis has not read your latest version yet. If no status appears,
+Praxis is probably closed: say the request will be imported when it next starts.
+
+## 5. Change or replace a draft
+
+Rewrite the same file to update its draft: entries you keep retain their identity. A request can only
+change its schedule while it is still a draft; once it is armed or has run, use a new file name for a new
+draft. Deleting the request file does not delete the draft; deleting the draft in Praxis does not bring it
+back unless the request changes.
+
+## 6. Hand over
+
+Report: the draft name and \`runId\`, the ordered tickets (plan ID, board key, title), the workflow, the
+start time and whether it is a placeholder, any warnings, and what still blocks an unattended run (approval
+gates, how code carries between tickets, workspace trust, uncommitted changes, providers). Tell the user to
+review and arm it in Praxis's Scheduled runs view.`
   },
   'dotnet-solid-dry': {
     name: 'dotnet-solid-dry',
@@ -583,6 +706,41 @@ export async function installAvailableSkill(skillName: string, targetSkillsDir: 
   await mkdir(skillDir, { recursive: true });
   await writeFile(path.join(skillDir, 'SKILL.md'), def.instructions, 'utf8');
   return true;
+}
+
+/** Skills Praxis installs for every user, not only when a workflow asks for them. */
+export const BUNDLED_SKILL_NAMES: readonly string[] = ['praxis-scheduled-runs'];
+
+function skillVersion(doc: string): string | undefined {
+  return /^version:\s*(\S+)/m.exec(doc)?.[1];
+}
+
+/**
+ * Installs the always-on bundled skills into the user's skills root. A missing
+ * skill is written; one from an older bundled version is replaced; one at the
+ * current version is left alone, so a user's edits survive until Praxis ships
+ * a new version of it.
+ */
+export async function mirrorBundledSkills(targetSkillsDir: string): Promise<string[]> {
+  const mirrored: string[] = [];
+  for (const name of BUNDLED_SKILL_NAMES) {
+    const def = AVAILABLE_SKILL_DEFINITIONS[name];
+    if (!def) continue;
+    const file = path.join(targetSkillsDir, name, 'SKILL.md');
+    try {
+      const existing = await readFile(file, 'utf8').catch(() => undefined);
+      if (existing !== undefined && skillVersion(existing) === skillVersion(def.instructions)) {
+        mirrored.push(name);
+        continue;
+      }
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, def.instructions, 'utf8');
+      mirrored.push(name);
+    } catch {
+      // Best-effort mirror
+    }
+  }
+  return mirrored;
 }
 
 /** Returns synthetic DiscoveredAgent instances for all bundled agents. */
