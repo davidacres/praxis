@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { AgentSessionRecord, ProjectRecord, WorkflowRunSummary } from '@praxis/core';
-import { formatStarted } from '../../ai/sessionNav';
+import { relativeTime } from '../../app/sessionRecency';
 import { Icon } from '../../ui/Icon';
+import { runHistoryBucket, RUN_BUCKETS, RUN_BUCKET_LABEL } from './runRecency';
 import { StatusGlyph } from '../../ui/StatusGlyph';
 
 export interface EasyModeAutomationsListProps {
@@ -155,6 +156,12 @@ export function EasyModeAutomationsList({
   runnableWorkflows,
   onStartWorkflow
 }: EasyModeAutomationsListProps) {
+  const [now, setNow] = useState(() => new Date());
+  const [collapsedBuckets, setCollapsedBuckets] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [expandedRuns, setExpandedRuns] = useState<Record<string, boolean>>({});
   const [editingRunId, setEditingRunId] = useState<string>();
   const [draft, setDraft] = useState('');
@@ -197,10 +204,10 @@ export function EasyModeAutomationsList({
         }
       }
     }
-    // Sort descending by startedAt
+    // Finished history follows completion time; older records fall back to start time.
     return list.sort((a, b) => {
-      const timeA = new Date(a.run.startedAt).getTime() || 0;
-      const timeB = new Date(b.run.startedAt).getTime() || 0;
+      const timeA = new Date(a.run.endedAt ?? a.run.startedAt).getTime() || 0;
+      const timeB = new Date(b.run.endedAt ?? b.run.startedAt).getTime() || 0;
       return timeB - timeA;
     });
   }, [projects, runsByProjectId]);
@@ -236,271 +243,286 @@ export function EasyModeAutomationsList({
 
   return (
     <div className="easymode-automations-list" data-testid="easymode-automations-list">
-      {allRuns.map(({ project, run }) => {
-        const isSelected = activeWorkflowRunId === run.runId;
-        const statusClass = resolveRunStatusClass(run.status);
-        const statusLabel = resolveRunStatusLabel(run.status);
-        const timeFormatted = run.startedAt ? formatStarted(run.startedAt) : '';
+      {RUN_BUCKETS.map(bucket => {
+        const group = allRuns.filter(({ run }) => runHistoryBucket(run, now) === bucket);
+        if (!group.length) return null;
+        const collapsed = bucket !== 'active' && (collapsedBuckets[bucket]
+          ?? (bucket === 'older' && !group.some(({ run }) => run.runId === activeWorkflowRunId)));
+        return <section className="easymode-session-bucket" key={bucket} data-testid={`easymode-run-bucket-${bucket}`}>
+          {bucket === 'active' ? <div className="easymode-session-bucket__label">Active</div> : (
+            <button type="button" className="easymode-run-bucket-toggle easymode-session-bucket__label"
+              aria-expanded={!collapsed} onClick={() => setCollapsedBuckets(current => ({ ...current, [bucket]: !collapsed }))}>
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={11} />
+              {RUN_BUCKET_LABEL[bucket]} <span>{group.length}</span>
+            </button>
+          )}
+          {!collapsed && group.map(({ project, run }) => {
+            const isSelected = activeWorkflowRunId === run.runId;
+            const statusClass = resolveRunStatusClass(run.status);
+            const statusLabel = resolveRunStatusLabel(run.status);
+            const timeFormatted = relativeTime(run.endedAt ?? run.startedAt, now);
 
-        const activeStage = run.stages?.find(s => s.lane === 'running' || s.lane === 'awaiting');
-        const showStageBadge = run.status === 'running' || run.status === 'awaiting-approval';
-        const hasStages = Array.isArray(run.stages) && run.stages.length > 0;
-        const isExpanded = expandedRuns[run.runId] ?? (run.status === 'running' || run.status === 'awaiting-approval' || isSelected);
+            const activeStage = run.stages?.find(s => s.lane === 'running' || s.lane === 'awaiting');
+            const showStageBadge = run.status === 'running' || run.status === 'awaiting-approval';
+            const hasStages = Array.isArray(run.stages) && run.stages.length > 0;
+            const isExpanded = expandedRuns[run.runId] ?? (run.status === 'running' || run.status === 'awaiting-approval' || isSelected);
 
-        return (
-          <div
-            key={run.runId}
-            className={`easymode-automation-card ${isSelected ? 'is-selected' : ''}`}
-            data-testid={`easymode-run-${run.runId}`}
-          >
-            <div
-              className={`easymode-automation-row ${isSelected ? 'is-selected' : ''}`}
-              onClick={() => onSelectWorkflowRun(project, run.runId)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelectWorkflowRun(project, run.runId);
-                }
-              }}
-            >
-              <Icon name="play" size={13} className="easymode-automation-row__type-icon" />
-              <div className="easymode-automation-row__details">
-                <div className="easymode-automation-row__head-row">
-                  {editingRunId === run.runId ? (
-                    <input
-                      className="session-title-input"
-                      data-testid={`easymode-run-title-input-${run.runId}`}
-                      aria-label={`Run name for ${run.workflowName}`}
-                      value={draft}
-                      maxLength={120}
-                      disabled={busyRunId === run.runId}
-                      autoFocus
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => setDraft(e.target.value)}
-                      onBlur={() => void commitRename(run)}
-                      onKeyDown={e => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          e.currentTarget.blur();
-                        } else if (e.key === 'Escape') {
-                          e.preventDefault();
-                          setEditingRunId(undefined);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <span className="easymode-automation-row__title" title={run.workflowName}>
-                      {run.workflowName}
-                    </span>
-                  )}
-                  {showStageBadge && (
-                    <span
-                      className="easymode-stage-badge"
-                      data-testid={`easymode-stage-badge-${run.runId}`}
-                      title={`Current stage: ${activeStage?.name || run.status}`}
-                    >
-                      {activeStage?.name || (run.status === 'awaiting-approval' ? 'Approval' : 'In progress')}
-                    </span>
-                  )}
-                </div>
-                <div className="easymode-automation-row__sub-row">
-                  <span className="easymode-automation-row__project" title={project.name}>
-                    {project.name}
-                  </span>
-                  {activeStage?.chosenModel && (
-                    <span className="easymode-automation-row__model">
-                      {activeStage.chosenModel}
-                    </span>
-                  )}
-                </div>
-              </div>
-              {timeFormatted && (
-                <span className="easymode-automation-row__time">
-                  {timeFormatted}
-                </span>
-              )}
-              <div className="easymode-automation-row__status-col">
-                <StatusGlyph
-                  status={run.status}
-                  size="sm"
-                  className={statusClass}
-                  ariaLabel={`Status: ${statusLabel}`}
-                  title={statusLabel}
-                />
-              </div>
-              {hasStages && (
-                <button
-                  type="button"
-                  className="easymode-automation-expand-btn"
-                  aria-label={isExpanded ? 'Hide stages' : 'Show stages'}
-                  title={isExpanded ? 'Hide stages' : 'Show stages'}
-                  data-testid={`easymode-run-expand-${run.runId}`}
-                  onClick={e => {
-                    e.stopPropagation();
-                    toggleExpand(run.runId, isExpanded);
-                  }}
-                >
-                  <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={11} />
-                </button>
-              )}
-              <div className={`easymode-automation-row__actions${hasStages ? ' has-expand' : ''}`}>
-                {onRenameWorkflowRun && (
-                  <button
-                    type="button"
-                    className="easymode-automation-action-btn"
-                    title="Rename run"
-                    aria-label="Rename run"
-                    data-testid={`easymode-run-rename-${run.runId}`}
-                    disabled={busyRunId === run.runId}
-                    onClick={e => {
-                      e.stopPropagation();
-                      setDraft(run.workflowName);
-                      setEditingRunId(run.runId);
-                    }}
-                  >
-                    <Icon name="pencil" size={11} />
-                  </button>
-                )}
-                {onArchiveWorkflowRun && (
-                  <button
-                    type="button"
-                    className="easymode-automation-action-btn"
-                    title="Archive run"
-                    aria-label="Archive run"
-                    data-testid={`easymode-run-archive-${run.runId}`}
-                    disabled={busyRunId === run.runId}
-                    onClick={e => {
-                      e.stopPropagation();
-                      void withBusy(run.runId, () => onArchiveWorkflowRun(run, true));
-                    }}
-                  >
-                    <Icon name="archive" size={11} />
-                  </button>
-                )}
-                {onDeleteWorkflowRun && (
-                  <button
-                    type="button"
-                    className="easymode-automation-action-btn easymode-automation-action-btn--delete"
-                    title="Delete run"
-                    aria-label="Delete run"
-                    data-testid={`easymode-run-delete-${run.runId}`}
-                    disabled={busyRunId === run.runId}
-                    onClick={e => {
-                      e.stopPropagation();
-                      void withBusy(run.runId, () => onDeleteWorkflowRun(run));
-                    }}
-                  >
-                    <Icon name="trash" size={11} />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="easymode-automation-action-btn"
-                  title={run.status === 'running' ? 'View active run' : 'Rerun'}
-                  aria-label={run.status === 'running' ? 'View active run' : 'Rerun'}
-                  data-testid={`easymode-run-action-${run.runId}`}
-                  onClick={e => {
-                    e.stopPropagation();
-                    if (onRerunWorkflowRun) {
-                      onRerunWorkflowRun(project, run);
-                    } else {
+            return (
+              <div
+                key={run.runId}
+                className={`easymode-automation-card ${isSelected ? 'is-selected' : ''}`}
+                data-testid={`easymode-run-${run.runId}`}
+              >
+                <div
+                  className={`easymode-automation-row ${isSelected ? 'is-selected' : ''}`}
+                  onClick={() => onSelectWorkflowRun(project, run.runId)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
                       onSelectWorkflowRun(project, run.runId);
                     }
                   }}
                 >
-                  <Icon name={run.status === 'running' ? 'focus' : 'play'} size={11} />
-                </button>
-              </div>
-            </div>
-
-            {/* Segmented Pipeline Gauge Rail */}
-            {hasStages && (
-              <div className="pipeline-gauge-container" data-testid={`easymode-gauge-${run.runId}`}>
-                <div
-                  className={`gauge-track${run.stages.length <= MAX_LABELLED_STAGES ? ' is-labelled' : ''}`}
-                  style={{ gridTemplateColumns: `repeat(${run.stages.length}, minmax(0, 1fr))` }}
-                >
-                  {run.stages.map((stage, idx) => {
-                    const segClass = gaugeSegmentClass(stage.lane);
-                    return (
-                      <span
-                        key={stage.nodeId || idx}
-                        className={`gauge-step ${segClass}`}
-                        title={`${stage.name} · ${stageLaneLabel(stage.lane)}`}
-                        data-testid={`easymode-gauge-step-${stage.nodeId || idx}`}
-                      >
-                        <span className={`gauge-segment ${segClass}`} />
-                        {run.stages.length <= MAX_LABELLED_STAGES && (
-                          <span className="gauge-step__label">
-                            <span className="gauge-step__glyph" aria-hidden="true">{gaugeGlyph(stage.lane)}</span>
-                            <span className="gauge-step__name">{stage.name}</span>
-                          </span>
-                        )}
+                  <Icon name="play" size={13} className="easymode-automation-row__type-icon" />
+                  <div className="easymode-automation-row__details">
+                    <div className="easymode-automation-row__head-row">
+                      {editingRunId === run.runId ? (
+                        <input
+                          className="session-title-input"
+                          data-testid={`easymode-run-title-input-${run.runId}`}
+                          aria-label={`Run name for ${run.workflowName}`}
+                          value={draft}
+                          maxLength={120}
+                          disabled={busyRunId === run.runId}
+                          autoFocus
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => setDraft(e.target.value)}
+                          onBlur={() => void commitRename(run)}
+                          onKeyDown={e => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setEditingRunId(undefined);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="easymode-automation-row__title" title={run.workflowName}>
+                          {run.workflowName}
+                        </span>
+                      )}
+                      {showStageBadge && (
+                        <span
+                          className="easymode-stage-badge"
+                          data-testid={`easymode-stage-badge-${run.runId}`}
+                          title={`Current stage: ${activeStage?.name || run.status}`}
+                        >
+                          {activeStage?.name || (run.status === 'awaiting-approval' ? 'Approval' : 'In progress')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="easymode-automation-row__sub-row">
+                      <span className="easymode-automation-row__project" title={project.name}>
+                        {project.name}
                       </span>
-                    );
-                  })}
-                </div>
-                <div className="gauge-meta-row">
-                  <span className="gauge-stage-current">
-                    {activeStage ? (
-                      <>
-                        <span className="gauge-indicator-dot" />
-                        <span>{run.stages.indexOf(activeStage) + 1}/{run.stages.length} {activeStage.name}{activeStage.chosenModel ? ` · ${activeStage.chosenModel}` : ''}</span>
-                      </>
-                    ) : run.status === 'succeeded' ? (
-                      <>
-                        <Icon name="check" size={10} className="completed-glyph" />
-                        <span>All {run.stages.length} stages completed</span>
-                      </>
-                    ) : (
-                      <span>{run.stages.length} stages · {resolveRunStatusLabel(run.status)}</span>
-                    )}
-                  </span>
-                  <span className="gauge-ratio">
-                    {run.stages.filter(s => s.lane === 'done').length}/{run.stages.length}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Nested Stage Sessions under the Automation */}
-            {hasStages && isExpanded && (
-              <div className="easymode-automation-stages" data-testid={`easymode-stages-${run.runId}`}>
-                {run.stages.map(stage => {
-                  const isStageLive = stage.lane === 'running' || stage.lane === 'awaiting';
-                  return (
-                    <div
-                      key={stage.nodeId}
-                      className={`easymode-stage-session-row${isStageLive ? ' is-live' : ''}`}
-                      data-testid={`easymode-stage-${stage.nodeId}`}
+                      {activeStage?.chosenModel && (
+                        <span className="easymode-automation-row__model">
+                          {activeStage.chosenModel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {timeFormatted && (
+                    <span className="easymode-automation-row__time">
+                      {timeFormatted}
+                    </span>
+                  )}
+                  <div className="easymode-automation-row__status-col">
+                    <StatusGlyph
+                      status={run.status}
+                      size="sm"
+                      className={statusClass}
+                      ariaLabel={`Status: ${statusLabel}`}
+                      title={statusLabel}
+                    />
+                  </div>
+                  {hasStages && (
+                    <button
+                      type="button"
+                      className="easymode-automation-expand-btn"
+                      aria-label={isExpanded ? 'Hide stages' : 'Show stages'}
+                      title={isExpanded ? 'Hide stages' : 'Show stages'}
+                      data-testid={`easymode-run-expand-${run.runId}`}
                       onClick={e => {
                         e.stopPropagation();
-                        if (stage.sessionKey && onSelectSession) {
-                          onSelectSession(stage.sessionKey);
+                        toggleExpand(run.runId, isExpanded);
+                      }}
+                    >
+                      <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={11} />
+                    </button>
+                  )}
+                  <div className={`easymode-automation-row__actions${hasStages ? ' has-expand' : ''}`}>
+                    {onRenameWorkflowRun && (
+                      <button
+                        type="button"
+                        className="easymode-automation-action-btn"
+                        title="Rename run"
+                        aria-label="Rename run"
+                        data-testid={`easymode-run-rename-${run.runId}`}
+                        disabled={busyRunId === run.runId}
+                        onClick={e => {
+                          e.stopPropagation();
+                          setDraft(run.workflowName);
+                          setEditingRunId(run.runId);
+                        }}
+                      >
+                        <Icon name="pencil" size={11} />
+                      </button>
+                    )}
+                    {onArchiveWorkflowRun && (
+                      <button
+                        type="button"
+                        className="easymode-automation-action-btn"
+                        title="Archive run"
+                        aria-label="Archive run"
+                        data-testid={`easymode-run-archive-${run.runId}`}
+                        disabled={busyRunId === run.runId}
+                        onClick={e => {
+                          e.stopPropagation();
+                          void withBusy(run.runId, () => onArchiveWorkflowRun(run, true));
+                        }}
+                      >
+                        <Icon name="archive" size={11} />
+                      </button>
+                    )}
+                    {onDeleteWorkflowRun && (
+                      <button
+                        type="button"
+                        className="easymode-automation-action-btn easymode-automation-action-btn--delete"
+                        title="Delete run"
+                        aria-label="Delete run"
+                        data-testid={`easymode-run-delete-${run.runId}`}
+                        disabled={busyRunId === run.runId}
+                        onClick={e => {
+                          e.stopPropagation();
+                          void withBusy(run.runId, () => onDeleteWorkflowRun(run));
+                        }}
+                      >
+                        <Icon name="trash" size={11} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="easymode-automation-action-btn"
+                      title={run.status === 'running' ? 'View active run' : 'Rerun'}
+                      aria-label={run.status === 'running' ? 'View active run' : 'Rerun'}
+                      data-testid={`easymode-run-action-${run.runId}`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (onRerunWorkflowRun) {
+                          onRerunWorkflowRun(project, run);
                         } else {
                           onSelectWorkflowRun(project, run.runId);
                         }
                       }}
-                      role="button"
-                      tabIndex={0}
-                      title={`Stage: ${stage.name} (${stageLaneLabel(stage.lane)})`}
                     >
-                      <StatusGlyph status={stage.lane} size="sm" className={`easymode-stage-dot--${stage.lane}`} />
-                      <span className="easymode-stage-name">{stage.name}</span>
-                      {stage.chosenModel && (
-                        <span className="easymode-stage-model">{stage.chosenModel}</span>
-                      )}
-                      <span className="easymode-stage-status">{stageLaneLabel(stage.lane)}</span>
+                      <Icon name={run.status === 'running' ? 'focus' : 'play'} size={11} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Segmented Pipeline Gauge Rail */}
+                {hasStages && (
+                  <div className="pipeline-gauge-container" data-testid={`easymode-gauge-${run.runId}`}>
+                    <div
+                      className={`gauge-track${run.stages.length <= MAX_LABELLED_STAGES ? ' is-labelled' : ''}`}
+                      style={{ gridTemplateColumns: `repeat(${run.stages.length}, minmax(0, 1fr))` }}
+                    >
+                      {run.stages.map((stage, idx) => {
+                        const segClass = gaugeSegmentClass(stage.lane);
+                        return (
+                          <span
+                            key={stage.nodeId || idx}
+                            className={`gauge-step ${segClass}`}
+                            title={`${stage.name} · ${stageLaneLabel(stage.lane)}`}
+                            data-testid={`easymode-gauge-step-${stage.nodeId || idx}`}
+                          >
+                            <span className={`gauge-segment ${segClass}`} />
+                            {run.stages.length <= MAX_LABELLED_STAGES && (
+                              <span className="gauge-step__label">
+                                <span className="gauge-step__glyph" aria-hidden="true">{gaugeGlyph(stage.lane)}</span>
+                                <span className="gauge-step__name">{stage.name}</span>
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                    <div className="gauge-meta-row">
+                      <span className="gauge-stage-current">
+                        {activeStage ? (
+                          <>
+                            <span className="gauge-indicator-dot" />
+                            <span>{run.stages.indexOf(activeStage) + 1}/{run.stages.length} {activeStage.name}{activeStage.chosenModel ? ` · ${activeStage.chosenModel}` : ''}</span>
+                          </>
+                        ) : run.status === 'succeeded' ? (
+                          <>
+                            <Icon name="check" size={10} className="completed-glyph" />
+                            <span>All {run.stages.length} stages completed</span>
+                          </>
+                        ) : (
+                          <span>{run.stages.length} stages · {resolveRunStatusLabel(run.status)}</span>
+                        )}
+                      </span>
+                      <span className="gauge-ratio">
+                        {run.stages.filter(s => s.lane === 'done').length}/{run.stages.length}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Nested Stage Sessions under the Automation */}
+                {hasStages && isExpanded && (
+                  <div className="easymode-automation-stages" data-testid={`easymode-stages-${run.runId}`}>
+                    {run.stages.map(stage => {
+                      const isStageLive = stage.lane === 'running' || stage.lane === 'awaiting';
+                      return (
+                        <div
+                          key={stage.nodeId}
+                          className={`easymode-stage-session-row${isStageLive ? ' is-live' : ''}`}
+                          data-testid={`easymode-stage-${stage.nodeId}`}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (stage.sessionKey && onSelectSession) {
+                              onSelectSession(stage.sessionKey);
+                            } else {
+                              onSelectWorkflowRun(project, run.runId);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title={`Stage: ${stage.name} (${stageLaneLabel(stage.lane)})`}
+                        >
+                          <StatusGlyph status={stage.lane} size="sm" className={`easymode-stage-dot--${stage.lane}`} />
+                          <span className="easymode-stage-name">{stage.name}</span>
+                          {stage.chosenModel && (
+                            <span className="easymode-stage-model">{stage.chosenModel}</span>
+                          )}
+                          <span className="easymode-stage-status">{stageLaneLabel(stage.lane)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
+            );
+          })}
+        </section>;
       })}
       {launchpad}
     </div>

@@ -339,6 +339,8 @@ export interface AppearanceSettings {
   themeId: string;
   /** Whether the selected theme follows an explicit or system appearance mode. */
   themeMode: 'light' | 'dark' | 'system';
+  /** Global accent override for every theme; empty uses each theme's own accent. */
+  accentColor: string;
   /** Marketplace themes explicitly installed into this profile. */
   installedThemeIds: string[];
   /** User-created themes stored in the shared settings document. */
@@ -411,8 +413,9 @@ export interface AppearanceSettings {
    * theme, mode, surface pack, dials/motif, priority colours, brand-artwork
    * toggle — so the user can switch the entire look in one click. The live
    * `appearance` fields above stay the source of truth for rendering; the active
-   * Look is kept mirrored to them on every appearance write (see
-   * `mirrorActiveLook`). Ships four built-ins; users add their own.
+   * Look is kept mirrored to its bundled fields on appearance writes (see
+   * `mirrorActiveLook`); the global accent stays independent. Ships four built-ins;
+   * users add their own.
    */
   looks: AppearanceLook[];
   /**
@@ -669,6 +672,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     showBrandArtwork: true,
     themeId: 'praxis-light',
     themeMode: 'light',
+    accentColor: '',
     installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'simple'],
     customThemes: [],
     surfacePackId: 'parchment',
@@ -742,6 +746,7 @@ export interface AppSettingsPatch {
     priorityColors?: Record<string, string>;
     themeId?: string;
     themeMode?: 'light' | 'dark' | 'system';
+    accentColor?: string;
     installedThemeIds?: string[];
     customThemes?: AppearanceSettings['customThemes'];
     surfacePackId?: string;
@@ -793,6 +798,10 @@ function readString(value: unknown, fallback: string): string {
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
+}
+
+function readAccentColor(value: unknown): string {
+  return typeof value === 'string' && value.length === 7 && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : '';
 }
 
 function readThemeMode(value: unknown, fallback: AppearanceSettings['themeMode']): AppearanceSettings['themeMode'] {
@@ -1375,6 +1384,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         priorityColors: readPriorityColors(raw.appearance.priorityColors)
         ,themeId: readString(raw.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId)
         ,themeMode: readThemeMode(raw.appearance.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode)
+        ,accentColor: readAccentColor(raw.appearance.accentColor)
         ,installedThemeIds: readThemeIds(raw.appearance.installedThemeIds, DEFAULT_APP_SETTINGS.appearance.installedThemeIds)
         ,customThemes: readCustomThemes(raw.appearance.customThemes)
         ,surfacePackId: readSurfacePackId(raw.appearance.surfacePackId, raw.appearance)
@@ -1391,6 +1401,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         priorityColors: { ...DEFAULT_APP_SETTINGS.appearance.priorityColors }
         ,themeId: DEFAULT_APP_SETTINGS.appearance.themeId
         ,themeMode: DEFAULT_APP_SETTINGS.appearance.themeMode
+        ,accentColor: DEFAULT_APP_SETTINGS.appearance.accentColor
         ,installedThemeIds: [...DEFAULT_APP_SETTINGS.appearance.installedThemeIds]
         ,customThemes: []
         ,surfacePackId: DEFAULT_APP_SETTINGS.appearance.surfacePackId
@@ -1500,6 +1511,8 @@ function mergeAiProviderConfigs(
  */
 function mirrorActiveLook(appearance: AppearanceSettings, patch: AppSettingsPatch): void {
   if (!patch.appearance) return;
+  // The global accent travels across Looks rather than modifying one preset.
+  if (Object.keys(patch.appearance).every(key => key === 'accentColor')) return;
   if (patch.appearance.activeLookId !== undefined || patch.appearance.looks !== undefined) return;
   const id = appearance.activeLookId;
   if (!id) return;
@@ -1641,6 +1654,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     showBrandArtwork: patch.appearance?.showBrandArtwork ?? base.appearance.showBrandArtwork,
     themeId: patch.appearance?.themeId ?? base.appearance.themeId,
     themeMode: patch.appearance?.themeMode ?? base.appearance.themeMode,
+    accentColor: readAccentColor(patch.appearance?.accentColor ?? base.appearance.accentColor),
     installedThemeIds: patch.appearance?.installedThemeIds ? [...new Set(patch.appearance.installedThemeIds)] : [...base.appearance.installedThemeIds],
     customThemes: patch.appearance?.customThemes ? [...patch.appearance.customThemes] : [...base.appearance.customThemes],
     surfacePackId: patch.appearance?.surfacePackId ?? base.appearance.surfacePackId,

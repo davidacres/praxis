@@ -293,6 +293,7 @@ function readLastWorkspaceRoute(workspaceId: string): Route {
       ? stored.gitView
       : undefined;
     return {
+      ...(stored.newConversation === true ? { newConversation: true } : {}),
       ...(stored.newSession === true ? { newSession: true } : {}),
       ...(typeof stored.projectId === 'string' ? { projectId: stored.projectId } : {}),
       ...(feature ? { feature } : {}),
@@ -316,7 +317,7 @@ function readLastWorkspaceRoute(workspaceId: string): Route {
 
 function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
   const durableRoute: Route = {
-    ...(!route.projectId && !route.feature && !route.boardId ? { newSession: true } : {}),
+    ...(route.newConversation ? { newConversation: true } : !route.projectId && !route.feature && !route.boardId ? { newSession: true } : {}),
     ...(route.projectId ? { projectId: route.projectId } : {}),
     ...(route.feature ? { feature: route.feature } : {}),
     ...(route.boardId ? { boardId: route.boardId } : {}),
@@ -374,6 +375,7 @@ function restoredRouteForWorkspace(
   if (stored.projectId && !project) return routeForOpenedWorkspace(workspace, projects);
   if (stored.boardId && !board) return routeForOpenedWorkspace(workspace, projects);
   if (stored.feature === 'git' && !project) return routeForOpenedWorkspace(workspace, projects);
+  if (stored.newConversation) return { newConversation: true };
   if (stored.newSession) return { newSession: true };
   if (project || board || stored.feature) {
     return {
@@ -1278,7 +1280,8 @@ export function App() {
   const boardProjectId = selectedBoard?.connectionId
     ? projectIdForConnection(selectedBoard.connectionId, connections)
     : undefined;
-  const easyModeProject = selectedProject
+  const generalConversations = route.feature === 'conversations' || Boolean(route.newConversation);
+  const easyModeProject = generalConversations ? undefined : selectedProject
     ?? sessionProject
     ?? workspaceProjects.find(project => project.id === boardProjectId)
     ?? workspaceProjects.find(project => project.id === lastProjectIdRef.current)
@@ -1290,9 +1293,10 @@ export function App() {
   // Exclude internal automation stage sessions so SESSIONS only lists user-initiated sessions.
   const easyModeSessions = useMemo(() => {
     const standalone = activeSessions.filter(session => !session.workflowRunId);
+    if (generalConversations) return standalone.filter(isConversationSession);
     if (!easyModeProject) return standalone;
     return standalone.filter(session => isSessionForProject(session, easyModeProject, agentSessions));
-  }, [easyModeProject, activeSessions, agentSessions]);
+  }, [generalConversations, easyModeProject, activeSessions, agentSessions]);
 
   // The sessions view selects its newest session when no explicit selection was
   // routed to it. Make that implicit selection durable too, so a restart opens
@@ -2685,13 +2689,19 @@ export function App() {
                 <EasyModeSidebar
                   selectableProjects={workspaceProjects}
                   activeProjectId={easyModeProject?.id}
-                  onSelectProject={projectId => navigate({ projectId })}
+                  onSelectProject={projectId => navigate(projectId === 'conversations' ? { feature: 'conversations' } : { projectId })}
+                  generalConversations={generalConversations}
+                  onNewConversation={() => navigate({ newConversation: true })}
                   sessions={easyModeSessions}
                   allSessions={agentSessions}
                   activeSessionKey={(route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined}
                   activeAgentId={route.view === 'agent-details' ? (route.subagentId || route.sessionKey) : undefined}
                   onSelectSession={issueKey => {
                     const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
+                    if (generalConversations && session && isConversationSession(session)) {
+                      navigate({ feature: 'conversations', sessionKey: issueKey });
+                      return;
+                    }
                     const sessionProjectId = session?.projectId ?? easyModeProject?.id;
                     navigate({
                       feature: 'sessions',
@@ -2703,10 +2713,10 @@ export function App() {
                   }}
                   onSelectAgent={(sessionKey, agentId) => {
                     const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
-                    const sessionProjectId = session?.projectId ?? easyModeProject?.id;
-                    navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: agentId, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
+                    const sessionProjectId = session && isConversationSession(session) ? undefined : session?.projectId ?? easyModeProject?.id;
+                    navigate({ feature: session && isConversationSession(session) ? 'conversations' : 'sessions', sessionKey, view: 'agent-details', subagentId: agentId, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
                   }}
-                  onNewSession={() => navigate({ newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
+                  onNewSession={() => navigate(generalConversations ? { newConversation: true } : { newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
                   projects={easyModeProject ? [easyModeProject] : workspaceProjects}
                   runsByProjectId={runsByProjectId}
                   activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
@@ -2758,19 +2768,20 @@ export function App() {
                   onArchiveSession={async (issueKey, archived) => {
                     await window.praxis.ai.archiveSession(issueKey, archived);
                     if (archived && (route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
-                      navigate(settings?.preview?.enableEasyMode ? { feature: 'overview' } : { feature: route.feature });
+                      navigate(generalConversations ? { feature: 'conversations' } : { feature: 'overview' });
                     }
                   }}
                   onDeleteSession={async issueKey => {
                     await window.praxis.ai.deleteSession(issueKey).catch(() => undefined);
                     if ((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
-                      navigate(settings?.preview?.enableEasyMode ? { feature: 'overview' } : { feature: route.feature });
+                      navigate(generalConversations ? { feature: 'conversations' } : { feature: 'overview' });
                     }
                   }}
                   onAssignConversation={async (issueKey, projectId, ticketKey) => {
                     const project = workspaceProjects.find(candidate => candidate.id === projectId);
                     if (!project) throw new Error('That project is no longer available in this workspace.');
                     await window.praxis.ai.assignSessionToProject(issueKey, projectId, ticketKey, project.workspaceFolder);
+                    navigate({ projectId, feature: 'sessions', sessionKey: issueKey });
                   }}
                   assignableProjects={workspaceProjects}
                 />

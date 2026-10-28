@@ -8,6 +8,7 @@ import { installIconButtonTooltips } from './ui/iconButtonTooltips';
 import {
   applySurfacePack,
   applyThemePreference,
+  applyAccentColor,
   getInitialSurfaceId,
   getInitialSurfaceOpts,
   getInitialThemeId,
@@ -104,6 +105,7 @@ void window.praxis.settings.get().then(async settings => {
   registerCustomThemes(settings.appearance.customThemes);
   registerCustomSurfacePacks(settings.appearance.customSurfacePacks);
   await applyMarketplaceAppearance();
+  applyAccentColor(settings.appearance.accentColor);
   applyThemePreference(settings.appearance.themeId, settings.appearance.themeMode);
   applySurfacePack(settings.appearance.surfacePackId, {
     intensity: settings.appearance.surface.intensity,
@@ -118,6 +120,7 @@ void window.praxis.settings.get().then(async settings => {
 });
 
 window.praxis.settings.onChanged(settings => {
+  applyAccentColor(settings.appearance.accentColor);
   setCustomProviderCatalog(settings.ai.customProviders);
   applyDisplayMode(settings.appearance.displayMode);
 });

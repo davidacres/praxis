@@ -1,4 +1,5 @@
 import type { DetectedSkillUse } from './skillUsage';
+import type { SessionFeedbackSummary } from './feedback/feedbackTypes';
 import type { AiProvider } from '../types';
 import type { ProviderCapabilityManifest } from './providers/providerPreflight';
 import type { ReasoningAvailability, ReasoningEffort } from './providers/reasoningSupport';
@@ -663,6 +664,8 @@ export interface AgentSessionRecord {
   autoApprovePermissions?: boolean;
   /** The selected session permission policy, retained for runtime behavior and session audit. */
   permissionMode?: AgentPermissionMode;
+  /** Latest deterministic feedback & score summary badge (FX-BF-112). */
+  feedbackSummary?: SessionFeedbackSummary;
 }
 
 /** One slash command the agent advertised via `available_commands_update`. */

@@ -58,6 +58,13 @@ import type {
   GadgetLedgerEvent,
   RawChatBlockInput
 } from '../ai/gadgets';
+import type {
+  DeterministicFeedbackReport,
+  PromptEvaluationRequest,
+  RewritePromptFromFeedbackRequest,
+  SessionEvaluationRequest,
+  SubmitSessionFeedbackRequest
+} from '../ai/feedback';
 import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { ProposedRunService } from '../projects/runProfileDiscovery';
@@ -1121,6 +1128,18 @@ export interface AiIpc {
     issueKey: string,
     connectionId: string
   ): Promise<{ started: boolean; noteCount: number }>;
+
+  // ── Prompt & Session Feedback Scoring (FX-BF-112) ─────────────────────────
+  /** Deterministically scores a draft or standalone prompt before sending. */
+  evaluatePrompt(input: PromptEvaluationRequest): Promise<DeterministicFeedbackReport>;
+  /** Deterministically scores a completed or historical session (or specific turn). */
+  evaluateSession(input: SessionEvaluationRequest | string, turnIndex?: number): Promise<DeterministicFeedbackReport>;
+  /** Retrieves the latest persisted feedback report for a session or turn, evaluating if needed. */
+  getSessionFeedback(issueKey: string, turnIndex?: number): Promise<DeterministicFeedbackReport | undefined>;
+  /** Records human feedback (`verdict`, `frictionTags`, `notes`) and recomputes the deterministic report. */
+  submitSessionFeedback(input: SubmitSessionFeedbackRequest): Promise<DeterministicFeedbackReport>;
+  /** Generates a copy-ready improved prompt grounded in the deterministic findings without mutating the score. */
+  rewritePromptFromFeedback(input: RewritePromptFromFeedbackRequest): Promise<DeterministicFeedbackReport>;
 }
 
 /**

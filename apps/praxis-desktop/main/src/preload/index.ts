@@ -381,7 +381,13 @@ const praxis: PraxisIpc = {
     createMergeRequest: (issueKey: string, connectionId: string) =>
       ipcRenderer.invoke('ai:createMergeRequest', issueKey, connectionId),
     checkMergeRequestFeedback: (issueKey: string, connectionId: string) =>
-      ipcRenderer.invoke('ai:checkMergeRequestFeedback', issueKey, connectionId)
+      ipcRenderer.invoke('ai:checkMergeRequestFeedback', issueKey, connectionId),
+    evaluatePrompt: input => ipcRenderer.invoke('ai:evaluatePrompt', input),
+    evaluateSession: (input, turnIndex) => ipcRenderer.invoke('ai:evaluateSession', input, turnIndex),
+    getSessionFeedback: (issueKey: string, turnIndex?: number) =>
+      ipcRenderer.invoke('ai:getSessionFeedback', issueKey, turnIndex),
+    submitSessionFeedback: input => ipcRenderer.invoke('ai:submitSessionFeedback', input),
+    rewritePromptFromFeedback: input => ipcRenderer.invoke('ai:rewritePromptFromFeedback', input)
   },
   aiUsage: {
     series: (granularity: UsageGranularity, periodsBack: number, provider?: AiProvider, model?: string) =>

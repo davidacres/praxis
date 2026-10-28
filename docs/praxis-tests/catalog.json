@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 724,
+  "testCount": 727,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -2763,7 +2763,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 70,
+        "line": 71,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2779,7 +2779,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 83,
+        "line": 84,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2795,7 +2795,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 153,
+        "line": 154,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2811,7 +2811,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 242,
+        "line": 243,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2827,7 +2827,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 257,
+        "line": 258,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2843,7 +2843,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 270,
+        "line": 271,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2859,7 +2859,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 289,
+        "line": 290,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -5115,7 +5115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 29,
+        "line": 30,
         "project": "functional"
       },
       "area": "easymode",
@@ -5131,7 +5131,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 39,
+        "line": 40,
         "project": "functional"
       },
       "area": "easymode",
@@ -5147,7 +5147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 65,
+        "line": 66,
         "project": "functional"
       },
       "area": "easymode",
@@ -5163,7 +5163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 340,
+        "line": 341,
         "project": "functional"
       },
       "area": "easymode",
@@ -5179,7 +5179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 369,
+        "line": 370,
         "project": "functional"
       },
       "area": "easymode",
@@ -5195,7 +5195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 401,
+        "line": 402,
         "project": "functional"
       },
       "area": "easymode",
@@ -5211,7 +5211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 430,
+        "line": 431,
         "project": "functional"
       },
       "area": "easymode",
@@ -5227,7 +5227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 451,
+        "line": 452,
         "project": "functional"
       },
       "area": "easymode",
@@ -5243,7 +5243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 491,
+        "line": 492,
         "project": "functional"
       },
       "area": "easymode",
@@ -5259,7 +5259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 515,
+        "line": 516,
         "project": "functional"
       },
       "area": "easymode",
@@ -5275,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 636,
+        "line": 637,
         "project": "functional"
       },
       "area": "easymode",
@@ -5291,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 733,
+        "line": 734,
         "project": "functional"
       },
       "area": "easymode",
@@ -5307,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 868,
+        "line": 869,
         "project": "functional"
       },
       "area": "easymode",
@@ -5323,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 969,
+        "line": 970,
         "project": "functional"
       },
       "area": "easymode",
@@ -5339,7 +5339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1099,
+        "line": 1100,
         "project": "functional"
       },
       "area": "easymode",
@@ -5355,7 +5355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1272,
+        "line": 1273,
         "project": "functional"
       },
       "area": "easymode",
@@ -5371,7 +5371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1494,
+        "line": 1495,
         "project": "functional"
       },
       "area": "easymode",
@@ -5387,7 +5387,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1642,
+        "line": 1643,
         "project": "functional"
       },
       "area": "easymode",
@@ -5403,7 +5403,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1677,
+        "line": 1678,
         "project": "functional"
       },
       "area": "easymode",
@@ -5419,7 +5419,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1708,
+        "line": 1709,
         "project": "functional"
       },
       "area": "easymode",
@@ -5435,7 +5435,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1737,
+        "line": 1738,
         "project": "functional"
       },
       "area": "easymode",
@@ -5443,6 +5443,38 @@
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "easy mode sessions can be grouped, reordered and restored after filtering and restart",
         "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-1EA437CC5C",
+      "title": "EasyMode run history groups by completion date and keeps old active work visible",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
+        "line": 1893,
+        "project": "functional"
+      },
+      "area": "easymode",
+      "flow": {
+        "given": "Easy Mode has active and archived runs plus finished runs spanning several completion dates",
+        "when": "the user browses and collapses run history",
+        "then": "active runs stay first, finished runs use completion-date groups, Older starts folded, and archived runs stay hidden"
+      }
+    },
+    {
+      "id": "PT-F16E9F210F",
+      "title": "EasyMode general conversations create without a project and retain history through project and ticket assignment",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
+        "line": 1949,
+        "project": "functional"
+      },
+      "area": "easymode",
+      "flow": {
+        "given": "Easy Mode has no project and a configured fake ACP provider",
+        "when": "the user creates a general conversation, switches project scope, then assigns it to a project and a ticket",
+        "then": "the conversation starts without project ownership, appears in its correct scope, and preserves its session identity and transcript through assignment and reload"
       }
     },
     {
@@ -9794,6 +9826,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "vetoed Electron shutdown is bounded and remains a failure",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D87DE05908",
+      "title": "one accent overrides every theme, survives Looks and reload, and restores custom and installed palette defaults",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/themeAccent.spec.ts",
+        "line": 33,
+        "project": "functional"
+      },
+      "area": "theme Accent",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "one accent overrides every theme, survives Looks and reload, and restores custom and installed palette defaults",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

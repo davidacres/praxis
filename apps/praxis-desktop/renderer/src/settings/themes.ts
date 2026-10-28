@@ -109,6 +109,38 @@ export function getInitialThemeId(): string {
   return DEFAULT_THEME_ID;
 }
 
+const ACCENT_COLOR_KEY = 'tm-accent-color';
+const isAccentColor = (value: string): boolean => value.length === 7 && /^#[0-9a-f]{6}$/i.test(value);
+let accentColor = localStorage.getItem(ACCENT_COLOR_KEY) ?? '';
+if (!isAccentColor(accentColor)) accentColor = '';
+
+function applyAccentTokens(): void {
+  if (!accentColor) return;
+  const root = document.documentElement;
+  const channels = [1, 3, 5].map(offset => {
+    const channel = parseInt(accentColor.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+  // Pick the text color with greater contrast against the selected button fill.
+  const contrast = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff';
+  root.style.setProperty('--accent', accentColor);
+  root.style.setProperty('--accent-contrast', contrast);
+  root.style.setProperty('--accent-hover', `color-mix(in srgb, ${accentColor} 88%, ${root.dataset.mode === 'light' ? 'black' : 'white'})`);
+  root.style.setProperty('--accent-soft', `color-mix(in srgb, ${accentColor} 16%, transparent)`);
+  root.style.setProperty('--accent-border', `color-mix(in srgb, ${accentColor} 45%, transparent)`);
+}
+
+/** One profile-wide accent; clearing it restores the current palette's tokens. */
+export function applyAccentColor(color: string): void {
+  const next = isAccentColor(color) ? color.toLowerCase() : '';
+  if (next === accentColor) return;
+  accentColor = next;
+  localStorage.setItem(ACCENT_COLOR_KEY, accentColor);
+  applyTheme(document.documentElement.dataset.theme ?? DEFAULT_THEME_ID,
+    document.documentElement.dataset.mode === 'light' ? 'light' : 'dark');
+}
+
 export function applyTheme(themeId: string, modeOverride?: ThemeMode): ThemeDefinition {
   const theme = findTheme(themeId) ?? findTheme(DEFAULT_THEME_ID)!;
   document.documentElement.setAttribute('data-theme', theme.id);
@@ -117,7 +149,7 @@ export function applyTheme(themeId: string, modeOverride?: ThemeMode): ThemeDefi
   for (const token of customTokens) document.documentElement.style.removeProperty(token);
   localStorage.setItem('tm-theme-id', theme.id);
   localStorage.setItem('tm-theme-mode', modeOverride ?? theme.mode);
-  if (theme.source === 'custom') {
+  if (theme.source === 'custom' || theme.source === 'marketplace') {
     const colors = theme.preview;
     const root = document.documentElement;
     root.style.setProperty('--bg', colors.canvas);
@@ -136,6 +168,7 @@ export function applyTheme(themeId: string, modeOverride?: ThemeMode): ThemeDefi
     root.style.setProperty('--accent-contrast', modeOverride === 'light' ? '#111111' : '#ffffff');
     root.style.setProperty('--danger', colors.danger);
   }
+  applyAccentTokens();
   window.dispatchEvent(new CustomEvent('tm-theme-changed', { detail: theme.id }));
   return theme;
 }

@@ -332,6 +332,19 @@ export class AiSessionManager {
     return this.agentSessions.get(issueKey);
   }
 
+  /** Stamp the latest deterministic feedback summary badge onto an agent session record. */
+  public setAgentSessionFeedbackSummary(
+    issueKey: string,
+    summary: AgentSessionRecord['feedbackSummary']
+  ): AgentSessionRecord | undefined {
+    const record = this.agentSessions.get(issueKey) ?? this.findAgentSessionBySessionId(issueKey);
+    if (!record) return undefined;
+    record.feedbackSummary = summary;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
+  }
+
   /** Change the active phase for a persisted conversation before continuing it. */
   public setAgentSessionMode(issueKey: string, mode: AgentSessionRecord['mode']): AgentSessionRecord {
     const record = this.agentSessions.get(issueKey);

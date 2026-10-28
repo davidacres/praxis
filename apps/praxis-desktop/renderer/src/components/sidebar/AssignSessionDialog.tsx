@@ -11,13 +11,16 @@ export interface AssignSessionDialogProps {
   onAssign: (sessionKey: string, projectId: string, ticketKey?: string) => Promise<void>;
 }
 
-export function AssignSessionDialog({
+export function AssignSessionDialog(props: AssignSessionDialogProps) {
+  return props.session ? <AssignSessionForm {...props} session={props.session} /> : null;
+}
+
+function AssignSessionForm({
   session,
   assignableProjects,
   onClose,
   onAssign
-}: AssignSessionDialogProps) {
-  if (!session) return null;
+}: AssignSessionDialogProps & { session: AgentSessionRecord }) {
 
   const [assignProjectId, setAssignProjectId] = useState(() => session.projectId || assignableProjects[0]?.id || '');
   const [assignTicketKey, setAssignTicketKey] = useState(() => session.linkedIssueKey || '');

@@ -8,6 +8,7 @@ import { SessionOrganizer } from '../../app/SessionOrganizer';
 export interface EasyModeSessionsListProps {
   sessions: AgentSessionRecord[];
   scope: string;
+  conversational?: boolean;
   allSessions?: AgentSessionRecord[];
   selectedSessionKey?: string;
   activeAgentId?: string;
@@ -32,6 +33,7 @@ export function isAttentionState(state: AgentSessionRecord['state']): boolean {
 export function EasyModeSessionsList({
   sessions,
   scope,
+  conversational = false,
   allSessions,
   selectedSessionKey,
   activeAgentId,
@@ -86,8 +88,8 @@ export function EasyModeSessionsList({
           <Icon name="feather" size={20} />
         </div>
         <div className="easymode-empty-card__content">
-          <span className="easymode-empty-card__title">No active sessions</span>
-          <p className="easymode-empty-card__desc">Launch an AI agent to investigate, code, or debug in this folder.</p>
+          <span className="easymode-empty-card__title">{conversational ? 'No conversations yet' : 'No active sessions'}</span>
+          <p className="easymode-empty-card__desc">{conversational ? 'Explore an idea or ask a question. Assign the conversation to a project or ticket whenever you are ready.' : 'Launch an AI agent to investigate, code, or debug in this folder.'}</p>
         </div>
         {onNewSession && (
           <button
@@ -97,7 +99,7 @@ export function EasyModeSessionsList({
             data-testid="easymode-empty-new-session"
           >
             <Icon name="plus" size={13} />
-            Start a session
+            {conversational ? 'Start a conversation' : 'Start a session'}
           </button>
         )}
       </div>

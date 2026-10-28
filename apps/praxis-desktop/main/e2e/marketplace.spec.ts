@@ -348,7 +348,7 @@ test('Themes marketplace filter toggle shows All and Installed views with screen
   await marketplace.scrollIntoViewIfNeeded();
   await expect(marketplace.locator('[data-testid="theme-marketplace-filter-all"]')).toBeVisible();
   await expect(marketplace.locator('[data-testid="theme-marketplace-filter-installed"]')).toBeVisible();
-  await expect(window).toHaveScreenshot('marketplace-filter-all-view.png');
+  await expect(marketplace).toHaveScreenshot('marketplace-filter-all-view-content.png');
 
   // Install the theme
   await marketplace.locator('[data-testid="theme-card-nord-aurora"]').click();
@@ -364,12 +364,12 @@ test('Themes marketplace filter toggle shows All and Installed views with screen
   // the scroll position so this remains a screenshot of the Installed view,
   // not whichever lower viewport Chromium happened to preserve.
   await window.locator('.settings-content').evaluate(element => { element.scrollTop = 0; });
-  await expect(window).toHaveScreenshot('marketplace-filter-installed-view.png');
+  await expect(marketplace).toHaveScreenshot('marketplace-filter-installed-view-content.png');
 
   // Screenshot 3: Switch back to "All" view
   await marketplace.locator('[data-testid="theme-marketplace-filter-all"]').click();
   await window.locator('.settings-content').evaluate(element => { element.scrollTop = 0; });
-  await expect(window).toHaveScreenshot('marketplace-filter-back-to-all-view.png');
+  await expect(marketplace).toHaveScreenshot('marketplace-filter-back-to-all-view-content.png');
 });
 
 test('Marketplace loads real GitHub packages with token configured', async () => {

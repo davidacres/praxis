@@ -207,3 +207,5 @@ export * from './projects/projectActivity';
 export * from './codeIntelligence/runtimePaths';
 
 export * from './ai/backgroundTasks';
+export * from './ai/feedback';
+

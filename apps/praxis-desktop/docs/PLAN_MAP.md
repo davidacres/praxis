@@ -648,3 +648,21 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [TASK-485](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-183-renderer-and-migration/tasks/task-485-legacy-migration.md) | Task | Migrate existing chats and stage the durable-writer cutover | To Do | TASK-484 |
 | [TASK-486](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-184-release-proof/tasks/task-486-failure-matrix-tests.md) | Task | Complete deterministic crash and provider contract coverage | To Do | TASK-485 |
 | [TASK-487](plans/features/fx-bf-111-durable-team-chat/stories/fx-be-184-release-proof/tasks/task-487-desktop-release-verification.md) | Task | Verify built desktop UI and record release evidence | To Do | TASK-486 |
+
+## Prompt and session feedback, telemetry analysis, and deterministic scoring
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| [FX-BF-112](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/feature.md) | Feature | Prompt and session feedback, telemetry analysis, and deterministic scoring | To Do | None |
+| [FX-BE-185](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-185-deterministic-scoring-engine/story.md) | Story | Deterministic prompt, tool, skill, agent, and MCP evaluation engine | To Do | None |
+| [FX-BE-186](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-186-feedback-persistence-and-ipc/story.md) | Story | Feedback persistence, IPC commands, and optional AI prompt rewrite | To Do | FX-BE-185 |
+| [FX-BE-187](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-187-composer-and-session-feedback-ui/story.md) | Story | Composer prompt check and session feedback scorecard UI | To Do | FX-BE-186 |
+| [FX-BE-188](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-188-feedback-scoring-verification/story.md) | Story | End-to-end verification and deterministic scoring corpus proof | To Do | FX-BE-187 |
+| [TASK-488](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-185-deterministic-scoring-engine/tasks/task-488-feedback-and-rubric-contracts.md) | Task | Define feedback, signal extraction, and deterministic rubric contracts | To Do | None |
+| [TASK-489](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-185-deterministic-scoring-engine/tasks/task-489-deterministic-signal-analyzers.md) | Task | Implement deterministic prompt, tool, skill, agent, and MCP analyzers | To Do | TASK-488 |
+| [TASK-490](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-186-feedback-persistence-and-ipc/tasks/task-490-feedback-store-and-ipc.md) | Task | Persist session and prompt feedback evaluations and expose typed IPC | To Do | TASK-489 |
+| [TASK-491](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-186-feedback-persistence-and-ipc/tasks/task-491-remediation-prompt-rewriter.md) | Task | Add optional remediation prompt rewriter grounded in deterministic findings | To Do | TASK-490 |
+| [TASK-492](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-187-composer-and-session-feedback-ui/tasks/task-492-composer-prompt-feedback-ui.md) | Task | Add pre-send prompt analyzer and score preview to the session composer | To Do | TASK-490, TASK-491 |
+| [TASK-493](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-187-composer-and-session-feedback-ui/tasks/task-493-session-inspector-scorecard-ui.md) | Task | Add post-session feedback form, deterministic scorecard, and one-click remediations | To Do | TASK-492 |
+| [TASK-494](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-188-feedback-scoring-verification/tasks/task-494-golden-scoring-corpus-tests.md) | Task | Add golden deterministic scoring corpus and IPC unit suites | To Do | TASK-489, TASK-490, TASK-491 |
+| [TASK-495](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-188-feedback-scoring-verification/tasks/task-495-feedback-ui-e2e-verification.md) | Task | Verify composer and session feedback journeys in Playwright E2E | To Do | TASK-492, TASK-493, TASK-494 |

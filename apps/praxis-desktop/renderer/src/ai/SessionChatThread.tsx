@@ -467,16 +467,30 @@ export function SessionChatThread({
                   </span>
                 )}
                 {isAssistant && (
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn-sm session-chat-action-btn session-chat-branch-btn"
-                    aria-label="Branch session from this turn"
-                    title="Branch session from this turn"
-                    data-testid="session-chat-branch-btn"
-                    onClick={() => void handleBranch(runText)}
-                  >
-                    <Icon name="git-branch" size={12} />
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-sm session-chat-action-btn session-chat-score-btn"
+                      aria-label="Score and provide feedback for this turn"
+                      title="Score & provide feedback for this turn"
+                      data-testid="session-chat-score-turn-btn"
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'scorecard', turnIndex: 0 } }));
+                      }}
+                    >
+                      <Icon name="graph" size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-sm session-chat-action-btn session-chat-branch-btn"
+                      aria-label="Branch session from this turn"
+                      title="Branch session from this turn"
+                      data-testid="session-chat-branch-btn"
+                      onClick={() => void handleBranch(runText)}
+                    >
+                      <Icon name="git-branch" size={12} />
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"

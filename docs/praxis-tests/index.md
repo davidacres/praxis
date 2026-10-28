@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **724 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **727 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -176,13 +176,13 @@ This catalogue describes **724 Playwright tests** under `apps/praxis-desktop/mai
 | PT-BBA9C83046 | app | a returning user gets the brief splash, not the full crawl | `apps/praxis-desktop/main/e2e/app.spec.ts:239` |
 | PT-0C494CCBEC | appearance Settings | opens Settings from the title bar as a dismissible popover dialog | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:33` |
 | PT-554DF61623 | appearance Settings | theme gallery previews and persists the selected complete palette | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:44` |
-| PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:70` |
-| PT-7FCBAD6580 | appearance Settings | startup splash inherits the saved app theme | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:83` |
-| PT-77C9928C26 | appearance Settings | installs a marketplace theme and makes it available on reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:153` |
-| PT-33995E247F | appearance Settings | creates a custom theme with editable colors and persists it | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:242` |
-| PT-D0CA7FE649 | appearance Settings | gradient priorities expose a picker per stop plus a direction control | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:257` |
-| PT-AD98619129 | appearance Settings | terminal settings expose detected profiles and persist appearance preferences | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:270` |
-| PT-AC8A2AC5A6 | appearance Settings | solid and gradient round trip through the mode toggle and survive a reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:289` |
+| PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:71` |
+| PT-7FCBAD6580 | appearance Settings | startup splash inherits the saved app theme | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:84` |
+| PT-77C9928C26 | appearance Settings | installs a marketplace theme and makes it available on reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:154` |
+| PT-33995E247F | appearance Settings | creates a custom theme with editable colors and persists it | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:243` |
+| PT-D0CA7FE649 | appearance Settings | gradient priorities expose a picker per stop plus a direction control | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:258` |
+| PT-AD98619129 | appearance Settings | terminal settings expose detected profiles and persist appearance preferences | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:271` |
+| PT-AC8A2AC5A6 | appearance Settings | solid and gradient round trip through the mode toggle and survive a reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:290` |
 | PT-FC37B447BF | app Shell | agent records and the Workflow designer sit inside the normal app shell | `apps/praxis-desktop/main/e2e/appShell.spec.ts:59` |
 | PT-F380FCD2FD | app Zoom | whole-window zoom scales the Praxis shell and supports VS Code shortcuts | `apps/praxis-desktop/main/e2e/appZoom.spec.ts:14` |
 | PT-002739DAF5 | app Zoom | zoom setting is preserved across app restart | `apps/praxis-desktop/main/e2e/appZoom.spec.ts:33` |
@@ -323,27 +323,29 @@ This catalogue describes **724 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:147` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:30` |
-| PT-842B523925 | easymode | default sidebar is standard when enableEasyMode is false | `apps/praxis-desktop/main/e2e/easymode.spec.ts:29` |
-| PT-1AC8637BBB | easymode | Preview omits retired switches and EasyMode remains available from the titlebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:39` |
-| PT-3403539E7A | easymode | EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation | `apps/praxis-desktop/main/e2e/easymode.spec.ts:65` |
-| PT-78A9780217 | easymode | toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:340` |
-| PT-594C7ED7EF | easymode | opening a folder from Getting Started enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:369` |
-| PT-3B8F38ED21 | easymode | opening a folder from TitleBar workspace menu enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:401` |
-| PT-E864C7EB0E | easymode | global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:430` |
-| PT-F2FE06D85F | easymode | EasyMode canvas renders on project root with prompt hero, starter chips, and theme switch | `apps/praxis-desktop/main/e2e/easymode.spec.ts:451` |
-| PT-3960246515 | easymode | EasyMode sidebar displays onboarding empty cards when lists are empty | `apps/praxis-desktop/main/e2e/easymode.spec.ts:491` |
-| PT-8B7CA7EEE6 | easymode | EasyMode session card displays live ticker, hover actions, and automations show stage badge | `apps/praxis-desktop/main/e2e/easymode.spec.ts:515` |
-| PT-797C06EBE5 | easymode | opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions | `apps/praxis-desktop/main/e2e/easymode.spec.ts:636` |
-| PT-8C982E7F97 | easymode | automation stage sessions appear nested under automation and are excluded from sessions list | `apps/praxis-desktop/main/e2e/easymode.spec.ts:733` |
-| PT-ED816D0823 | easymode | automation rows have rename, archive, delete and run actions like a session row | `apps/praxis-desktop/main/e2e/easymode.spec.ts:868` |
-| PT-C7547B818D | easymode | classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree | `apps/praxis-desktop/main/e2e/easymode.spec.ts:969` |
-| PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1099` |
-| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1272` |
-| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1494` |
-| PT-519130BC3E | easymode | easy mode divider resizes Runs with pointer and keyboard and remembers the split | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1642` |
-| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1677` |
-| PT-938AF7A1AB | easymode | easy mode groups sessions by last activity like classic mode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1708` |
-| PT-A5B22DE4DB | easymode | easy mode sessions can be grouped, reordered and restored after filtering and restart | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1737` |
+| PT-842B523925 | easymode | default sidebar is standard when enableEasyMode is false | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
+| PT-1AC8637BBB | easymode | Preview omits retired switches and EasyMode remains available from the titlebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:40` |
+| PT-3403539E7A | easymode | EasyMode sidebar renders Sessions and Automations with + buttons and handles selection and navigation | `apps/praxis-desktop/main/e2e/easymode.spec.ts:66` |
+| PT-78A9780217 | easymode | toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:341` |
+| PT-594C7ED7EF | easymode | opening a folder from Getting Started enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:370` |
+| PT-3B8F38ED21 | easymode | opening a folder from TitleBar workspace menu enables EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:402` |
+| PT-E864C7EB0E | easymode | global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:431` |
+| PT-F2FE06D85F | easymode | EasyMode canvas renders on project root with prompt hero, starter chips, and theme switch | `apps/praxis-desktop/main/e2e/easymode.spec.ts:452` |
+| PT-3960246515 | easymode | EasyMode sidebar displays onboarding empty cards when lists are empty | `apps/praxis-desktop/main/e2e/easymode.spec.ts:492` |
+| PT-8B7CA7EEE6 | easymode | EasyMode session card displays live ticker, hover actions, and automations show stage badge | `apps/praxis-desktop/main/e2e/easymode.spec.ts:516` |
+| PT-797C06EBE5 | easymode | opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions | `apps/praxis-desktop/main/e2e/easymode.spec.ts:637` |
+| PT-8C982E7F97 | easymode | automation stage sessions appear nested under automation and are excluded from sessions list | `apps/praxis-desktop/main/e2e/easymode.spec.ts:734` |
+| PT-ED816D0823 | easymode | automation rows have rename, archive, delete and run actions like a session row | `apps/praxis-desktop/main/e2e/easymode.spec.ts:869` |
+| PT-C7547B818D | easymode | classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree | `apps/praxis-desktop/main/e2e/easymode.spec.ts:970` |
+| PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1100` |
+| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1273` |
+| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1495` |
+| PT-519130BC3E | easymode | easy mode divider resizes Runs with pointer and keyboard and remembers the split | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1643` |
+| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1678` |
+| PT-938AF7A1AB | easymode | easy mode groups sessions by last activity like classic mode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1709` |
+| PT-A5B22DE4DB | easymode | easy mode sessions can be grouped, reordered and restored after filtering and restart | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1738` |
+| PT-1EA437CC5C | easymode | EasyMode run history groups by completion date and keeps old active work visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1893` |
+| PT-F16E9F210F | easymode | EasyMode general conversations create without a project and retain history through project and ticket assignment | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1949` |
 | PT-60D8BF1214 | edit Issue | editing a live folder issue writes the priority back to markdown | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:108` |
 | PT-B5CC8CC324 | edit Issue | changing a folder ticket parent moves it to the selected feature | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:143` |
 | PT-AB88717169 | folder | folder board lists the fixture feature task | `apps/praxis-desktop/main/e2e/folder.spec.ts:64` |
@@ -616,6 +618,7 @@ This catalogue describes **724 Playwright tests** under `apps/praxis-desktop/mai
 | PT-A78EE346F5 | test App Cleanup | normal teardown exits Electron and removes its isolated profile | `apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts:5` |
 | PT-95EBB52521 | test App Cleanup | stalled renderer cleanup is bounded and reported after terminating its app | `apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts:15` |
 | PT-CEBD73E498 | test App Cleanup | vetoed Electron shutdown is bounded and remains a failure | `apps/praxis-desktop/main/e2e/testAppCleanup.spec.ts:31` |
+| PT-D87DE05908 | theme Accent | one accent overrides every theme, survives Looks and reload, and restores custom and installed palette defaults | `apps/praxis-desktop/main/e2e/themeAccent.spec.ts:33` |
 | PT-12759B4DF5 | theme Looks | ships the four built-in Looks with Parchment active | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:49` |
 | PT-E667F1ABE8 | theme Looks | selecting a Look swaps theme + surface together and persists | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:57` |
 | PT-3A65DBB9C9 | theme Looks | editing a dial while a Look is active is folded into that Look | `apps/praxis-desktop/main/e2e/themeLooks.spec.ts:69` |

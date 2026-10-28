@@ -41,7 +41,8 @@ import { AI_PROVIDERS } from './aiProviders/providerMeta';
 import { useKindAddons } from './marketplaceAddons';
 import { isHostShimProfile, NATIVE_TOOL_LABELS, nativeReaders, nativeSourceLabel, skillTitle } from '../agents/agentCatalog';
 import { BUILT_IN_GADGET_CATALOG } from '../ai/gadgets';
-import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
+import { AccentColorControl } from './AccentColorControl';
+import { applyAccentColor, allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
 import {
   DEFAULT_MOTIF_FADE, DEFAULT_MOTIF_SPREAD, findSurfacePattern, isRevealAnimation,
@@ -309,6 +310,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
 
   const resetAppearanceToFactory = async () => {
     const appearance = DEFAULT_APP_SETTINGS.appearance;
+    applyAccentColor(appearance.accentColor);
     applyThemePreference(appearance.themeId, appearance.themeMode);
     applySurfacePack(appearance.surfacePackId, appearance.surface);
     await update({
@@ -317,6 +319,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         showBrandArtwork: appearance.showBrandArtwork,
         themeId: appearance.themeId,
         themeMode: appearance.themeMode,
+        accentColor: appearance.accentColor,
         installedThemeIds: [...appearance.installedThemeIds],
         customThemes: [],
         surfacePackId: appearance.surfacePackId,
@@ -3242,8 +3245,9 @@ function LookPreviewCard({
  * The Looks gallery — switchable presets that bundle the whole appearance stack
  * (theme, mode, surface pack, dials/motif, priority colours, brand artwork),
  * grouped into Built in / Custom exactly like the theme gallery. Selecting a
- * Look applies it in one shot; while a Look is selected every edit anywhere in
- * Appearance is folded back into it by core's `mirrorActiveLook`, so this only
+ * Look applies it in one shot; while a Look is selected its appearance edits
+ * are folded back into it by core's `mirrorActiveLook`. The global accent stays
+ * independent of Looks. This only
  * handles select / save / rename / duplicate / delete / export / import.
  */
 function LooksStrip({
@@ -3579,6 +3583,7 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
             }}>{mode === 'system' ? 'System' : mode[0]!.toUpperCase() + mode.slice(1)}</button>
         ))}
       </div>
+      <AccentColorControl settings={settings} update={update} />
       <div className="theme-gallery-toolbar">
         <label className="theme-gallery-search">
           <Icon name="search" size={13} />

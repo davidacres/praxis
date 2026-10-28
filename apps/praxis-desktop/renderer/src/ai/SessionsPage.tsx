@@ -6,6 +6,7 @@ import type {
   AgentEventSummary,
   AgentSessionRecord,
   AgentPermissionMode,
+  AgentToolMode,
   AiAnalysisState,
   AiProvider,
   AiProviderStatus,
@@ -29,6 +30,7 @@ import { ReasoningEffortSlider } from './ReasoningEffortSlider';
 import { workflowPreview } from './workflowPreview';
 import { SessionUsageSummary } from './SessionUsageSummary';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
+import { PromptFeedbackPopover } from './PromptFeedbackPopover';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionTeamControl } from './SessionTeamControl';
@@ -554,6 +556,7 @@ export function SessionsPage({
   const [inflightComposerExpanded, setInflightComposerExpanded] = useState(false);
   /** Queued follow-up messages per session, automatically dispatched when the session's active turn finishes. */
   const [queuedFollowUpsBySession, setQueuedFollowUpsBySession] = useState<Record<string, { message: string; images?: WireImageAttachment[] }>>({});
+  const [extraSkillsBySession, setExtraSkillsBySession] = useState<Record<string, string[]>>({});
   const hadTypedInInflightComposerRef = useRef(false);
   const [abortingSession, setAbortingSession] = useState(false);
   const [usageHidden, setUsageHidden] = useState<boolean>(() => {
@@ -709,6 +712,37 @@ export function SessionsPage({
     setConversationTargetId(undefined);
     setContextPopoverPosition(undefined);
   }, [selected?.issueKey]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<{
+        issueKey?: string;
+        promptText?: string;
+        skillsToAttach?: string[];
+        toolMode?: AgentToolMode;
+      }>;
+      const detail = custom.detail;
+      if (!detail || (detail.issueKey && selected?.issueKey && detail.issueKey !== selected.issueKey)) {
+        return;
+      }
+      if (detail.promptText) {
+        setFollowUp(detail.promptText);
+      }
+      if (detail.skillsToAttach?.length && selected?.issueKey) {
+        setExtraSkillsBySession(prev => {
+          const existing = prev[selected.issueKey] ?? [];
+          const merged = [...new Set([...existing, ...detail.skillsToAttach!])];
+          return { ...prev, [selected.issueKey]: merged };
+        });
+      }
+      if (detail.toolMode && selected?.issueKey && detail.toolMode !== selected.toolMode) {
+        void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { toolMode: detail.toolMode });
+      }
+      window.setTimeout(() => followUpTextareaRef.current?.focus(), 30);
+    };
+    window.addEventListener('praxis:apply-feedback-followup', handler);
+    return () => window.removeEventListener('praxis:apply-feedback-followup', handler);
+  }, [selected?.issueKey, selected?.toolMode]);
   useEffect(() => {
     if (selected?.conversation?.state === 'running') {
       setConversationTargetId(current => current && selected.conversation?.participants.some(participant => participant.id === current)
@@ -2137,6 +2171,33 @@ export function SessionsPage({
                       onError={setFollowUpError}
                     />}
                     <SessionTeamControl session={selected} onDraftAsk={draftTeamAsk} />
+                    <PromptFeedbackPopover
+                      promptText={followUp}
+                      toolMode={selected.toolMode ?? 'full'}
+                      sessionMode={selected.mode ?? 'chat'}
+                      profileId={selected.profileId ?? selected.agentId}
+                      activeSkills={[
+                        ...(selected.activeSkills ?? []),
+                        ...(extraSkillsBySession[selected.issueKey] ?? [])
+                      ]}
+                      workingDirectory={selected.worktreePath || selected.workingDirectory}
+                      issueKey={selected.issueKey}
+                      contextTokens={context?.used}
+                      contextLimit={context?.limit}
+                      onChangePrompt={setFollowUp}
+                      onChangeToolMode={nextMode => {
+                        void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { toolMode: nextMode });
+                      }}
+                      onAttachSkill={skillName => {
+                        setExtraSkillsBySession(prev => {
+                          const existing = prev[selected.issueKey] ?? [];
+                          return existing.includes(skillName)
+                            ? prev
+                            : { ...prev, [selected.issueKey]: [...existing, skillName] };
+                        });
+                      }}
+                      disabled={sendingFollowUp}
+                    />
                     {context && (
                       <button
                         ref={contextChipRef}

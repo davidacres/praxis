@@ -631,3 +631,20 @@ test('retired preview flags are discarded while the EasyMode preference is prese
   } });
   assert.deepEqual(settings.preview, { enableEasyMode: true, enableDeployments: true });
 });
+
+
+test('global accent accepts only hex colors, persists through theme changes, and clears to theme defaults', () => {
+  const base = sanitizeAppSettings({ appearance: { activeLookId: 'look-blueprint' } });
+  assert.equal(base.appearance.activeLookId, 'look-blueprint');
+  assert.equal(base.appearance.accentColor, '');
+  assert.equal(sanitizeAppSettings({ appearance: { accentColor: '#12ABcd' } }).appearance.accentColor, '#12abcd');
+  for (const accentColor of ['red', '#abc', '#12345678', '#123456\n', 'url(https://example.com)', '#123456; color:red', 42, null]) {
+    assert.equal(sanitizeAppSettings({ appearance: { accentColor } }).appearance.accentColor, '');
+  }
+  const accented = mergeAppSettings(base, { appearance: { accentColor: '#ffcc00' } });
+  assert.equal(accented.appearance.activeLookId, base.appearance.activeLookId);
+  assert.deepEqual(accented.appearance.looks, base.appearance.looks);
+  const switched = mergeAppSettings(accented, { appearance: { themeId: 'praxis-dark', themeMode: 'dark' } });
+  assert.equal(switched.appearance.accentColor, '#ffcc00');
+  assert.equal(mergeAppSettings(switched, { appearance: { accentColor: '' } }).appearance.accentColor, '');
+});

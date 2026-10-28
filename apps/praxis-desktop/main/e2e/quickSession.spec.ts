@@ -222,7 +222,9 @@ for (const easyMode of [false, true]) {
     await expect(picker).toContainText('First project');
     await expect(page.locator('.titlebar').getByRole('button', { name: 'Select project', exact: true })).toHaveCount(0);
     await picker.click();
-    await expect(page.getByRole('listbox', { name: 'Select project options' }).getByRole('option')).toHaveCount(2);
+    const options = page.getByRole('listbox', { name: 'Select project options' }).getByRole('option');
+    await expect(options).toHaveCount(easyMode ? 3 : 2);
+    await expect(options.filter({ hasText: 'General conversations' })).toHaveCount(easyMode ? 1 : 0);
     await page.keyboard.press('Escape');
     await expect(picker).toBeFocused();
     await chooseOption(picker, { label: 'Target project' });

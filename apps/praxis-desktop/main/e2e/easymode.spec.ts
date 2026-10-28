@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
+import { chooseOption } from './chipSelect';
 import { launchTestApp, closeTestApp, dismissSplash, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
@@ -1885,4 +1886,129 @@ test('easy mode sessions can be grouped, reordered and restored after filtering 
   await win.getByTestId('easymode-sessions-filter').clear();
   await expect(list.getByTestId('session-custom-group')).toHaveCount(0);
   await expect(list.locator(':scope > .session-organizer-item')).toHaveCount(3);
+});
+
+
+// Regression proof: this fails on the original flat run list (missing Active group).
+test('EasyMode run history groups by completion date and keeps old active work visible', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } });
+  const win = app.window;
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return (await window.praxis.projects.create({
+      name: 'Run history', key: 'HIST', type: 'product', purpose: '', brief: {}, startingPoint: 'app-storage',
+      workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }],
+      starterTickets: [{ summary: 'History fixture', description: '', issueType: 'Task', status: 'Todo' }], defaultAiToolMode: 'read-only'
+    }, workspace.id)).id;
+  });
+  await app.electronApp.evaluate(({ ipcMain }, projectId) => {
+    const ago = (days: number) => {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      date.setHours(12, 0, 0, 0);
+      return date.toISOString();
+    };
+    const run = (runId: string, status: string, start: number, end?: number) => ({
+      runId, projectId, workflowName: runId, status, explanation: '', stages: [], startedAt: ago(start),
+      ...(end === undefined ? {} : { endedAt: ago(end) })
+    });
+    ipcMain.removeHandler('workflows:cancelRun');
+    ipcMain.handle('workflows:cancelRun', () => undefined);
+    ipcMain.removeHandler('workflows:listRuns');
+    ipcMain.handle('workflows:listRuns', () => [
+      run('Finished today', 'succeeded', 20, 0), run('Finished yesterday', 'failed', 3, 1),
+      run('Finished this week', 'cancelled', 5, 3), run('Older result', 'succeeded', 21, 20),
+      run('Old active run', 'running', 30), run('Old approval', 'awaiting-approval', 29),
+      { ...run('Archived result', 'succeeded', 0, 0), archived: true }
+    ]);
+  }, projectId);
+  await win.reload();
+  const bucket = (name: string) => win.getByTestId(`easymode-run-bucket-${name}`);
+  await expect(bucket('active')).toContainText('Old active run');
+  await expect(bucket('active')).toContainText('Old approval');
+  await expect(bucket('today')).toContainText('Finished today');
+  await expect(bucket('yesterday')).toContainText('Finished yesterday');
+  await expect(bucket('this-week')).toContainText('Finished this week');
+  await expect(win.getByTestId('easymode-run-Archived result')).toHaveCount(0);
+  await expect(win.getByTestId('easymode-run-Older result')).toHaveCount(0);
+  await bucket('older').getByRole('button').click();
+  await expect(bucket('older')).toContainText('Older result');
+  await bucket('today').getByRole('button', { name: /Today/ }).click();
+  await expect(win.getByTestId('easymode-run-Finished today')).toHaveCount(0);
+  await expect(bucket('active')).toContainText('Old active run');
+  await bucket('today').getByRole('button', { name: /Today/ }).click();
+  const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-run-history.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  await win.getByTestId('easymode-runs-divider').focus();
+  for (let step = 0; step < 6; step++) await win.keyboard.press('Shift+ArrowUp');
+  await win.locator('.easymode-section--runs .easymode-section__body').evaluate(element => { element.scrollTop = 0; });
+  await win.getByTestId('easymode-sidebar').screenshot({ path: capture });
+});
+
+// Regression proof: this fails when the global entry opens the project session composer.
+test('EasyMode general conversations create without a project and retain history through project and ticket assignment', async () => {
+  test.setTimeout(60000);
+  app = await launchTestApp({ preview: { enableEasyMode: true }, ai: {
+    activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } }
+  } });
+  const win = app.window;
+  await win.getByTestId('easymode-new-conversation').click();
+  await expect(win.getByTestId('new-conversation-heading')).toBeVisible();
+  await expect(win.getByTestId('new-session-board-select')).toHaveCount(0);
+  await win.reload();
+  await expect(win.getByTestId('new-conversation-heading')).toBeVisible();
+  await win.getByPlaceholder('Ask anything, brainstorm, or get something done…').fill('Explore general conversation support');
+  await win.getByTestId('new-session-submit').click();
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.state)).toBe('completed');
+  const original = (await win.evaluate(async () => {
+    const summary = (await window.praxis.ai.listSessions())[0];
+    return window.praxis.ai.getSession(summary.issueKey);
+  }))!;
+  expect(original.projectId).toBeUndefined();
+  await expect(win.getByTestId('session-chat-thread')).toContainText('Hello from the fake ACP agent');
+  const card = win.getByTestId(`easymode-session-card-${original.issueKey}`);
+  await expect(card).toBeVisible();
+  const project = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return window.praxis.projects.create({
+      name: 'Conversation destination', key: 'CHAT', type: 'product', purpose: '', brief: {}, startingPoint: 'app-storage',
+      workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }],
+      starterTickets: [{ summary: 'Explore conversation assignment', description: '', issueType: 'Task', status: 'Todo' }],
+      defaultAiToolMode: 'read-only'
+    }, workspace.id);
+  });
+  await win.reload();
+  await chooseOption(win.getByTestId('sidebar-project-select'), project.id);
+  await expect(card).toHaveCount(0);
+  // The global entry point remains available from a project.
+  await win.getByTestId('easymode-new-conversation').click();
+  await expect(win.getByTestId('new-conversation-heading')).toBeVisible();
+  await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
+  await card.click();
+  await expect(win.getByTestId('session-chat-thread')).toContainText('Hello from the fake ACP agent');
+  const capture = path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-general-conversations.png');
+  fs.mkdirSync(path.dirname(capture), { recursive: true });
+  await win.screenshot({ path: capture });
+  await card.hover();
+  await card.getByTestId(`easymode-session-assign-${original.issueKey}`).click();
+  await expect(win.getByTestId('assign-chat-dialog')).toBeVisible();
+  await win.getByTestId('assign-chat-confirm').click();
+  await expect(win.getByTestId('assign-chat-dialog')).toHaveCount(0);
+  await expect(win.getByTestId('sidebar-project-select')).toHaveAttribute('data-value', project.id);
+  await expect(card).toBeVisible();
+  await card.hover();
+  await card.getByTestId(`easymode-session-assign-${original.issueKey}`).click();
+  await chooseOption(win.getByTestId('assign-chat-ticket-select'), project.workItems[0].key);
+  await win.getByTestId('assign-chat-confirm').click();
+  await expect(win.getByTestId('assign-chat-dialog')).toHaveCount(0);
+  const assigned = await win.evaluate(key => window.praxis.ai.getSession(key), original.issueKey);
+  expect(assigned?.sessionId).toBe(original.sessionId);
+  expect(assigned?.projectId).toBe(project.id);
+  expect(assigned?.linkedIssueKey).toBe(project.workItems[0].key);
+  expect(assigned?.events).toEqual(original.events);
+  await win.reload();
+  await expect(card).toBeVisible();
+  await expect(win.getByTestId('session-chat-thread')).toContainText('Hello from the fake ACP agent');
+  await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
+  await expect(card).toHaveCount(0);
 });

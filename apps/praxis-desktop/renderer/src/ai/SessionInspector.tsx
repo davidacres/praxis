@@ -10,6 +10,7 @@ import { SessionActivity } from './SessionActivity';
 import { SessionSkillList } from './SessionSkillList';
 import { sessionSkillRows } from './sessionSkills';
 import { SessionSubagentsSummaryBlock, SessionSubagentsTab } from './SessionSubagents';
+import { SessionFeedbackPanel } from './SessionFeedbackPanel';
 import { extractSubagents, failedToolCount, formatCost, formatElapsed, formatStarted, formatTokens, liveActivity, sessionMode, sessionTitle } from './sessionNav';
 import { agentStateLaneClass } from './aiSessionState';
 
@@ -58,7 +59,7 @@ export interface SessionInspectorProps {
   onOpenSkill?: (skillName: string) => void;
 }
 
-type InspectorTab = 'changes' | 'subagents';
+type InspectorTab = 'changes' | 'subagents' | 'scorecard';
 
 export function SessionInspector({
   session,
@@ -73,18 +74,23 @@ export function SessionInspector({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<InspectorTab>('changes');
+  const [feedbackTurnIndex, setFeedbackTurnIndex] = useState<number | undefined>();
   const [workflowRun, setWorkflowRun] = useState<WorkflowRunSummary>();
 
   // Switching session resets to Changes. Keeping the previous tab would land
   // you on another session's Subagents with no idea why you are looking at it.
   const sessionId = session?.sessionId;
-  useEffect(() => setTab('changes'), [sessionId]);
+  useEffect(() => {
+    setTab('changes');
+    setFeedbackTurnIndex(undefined);
+  }, [sessionId]);
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const custom = e as CustomEvent<{ tab: InspectorTab }>;
-      if (custom.detail?.tab === 'changes' || custom.detail?.tab === 'subagents') {
+      const custom = e as CustomEvent<{ tab: InspectorTab; turnIndex?: number }>;
+      if (custom.detail?.tab === 'changes' || custom.detail?.tab === 'subagents' || custom.detail?.tab === 'scorecard') {
         setTab(custom.detail.tab);
+        setFeedbackTurnIndex(custom.detail.tab === 'scorecard' ? custom.detail.turnIndex : undefined);
       }
     };
     window.addEventListener('praxis:session-tab', handler);
@@ -176,6 +182,7 @@ export function SessionInspector({
   if (subagents.length > 0 || tab === 'subagents') {
     visibleTabs.push({ id: 'subagents', label: 'Subagents' });
   }
+  visibleTabs.push({ id: 'scorecard', label: 'Scorecard' });
 
   return (
     <section className="inspector inspector--tabbed session-inspector" aria-label="Session context" data-testid="session-inspector">
@@ -184,7 +191,20 @@ export function SessionInspector({
           {sessionStatusLabel(session)}
         </span>
         <div>
-          <strong data-testid="session-mode-badge">{sessionMode(session)}</strong>
+          <div className="session-inspector-status-row">
+            <strong data-testid="session-mode-badge">{sessionMode(session)}</strong>
+            {session.feedbackSummary && (
+              <button
+                type="button"
+                className={`feedback-score-pill is-${session.feedbackSummary.overallScore >= 85 ? 'ok' : session.feedbackSummary.overallScore >= 70 ? 'warn' : 'danger'}`}
+                data-testid="session-feedback-badge"
+                title={`Session score: ${session.feedbackSummary.overallScore}/100 (${session.feedbackSummary.grade}) — click to open Scorecard`}
+                onClick={() => setTab('scorecard')}
+              >
+                {session.feedbackSummary.overallScore} · {session.feedbackSummary.grade}
+              </button>
+            )}
+          </div>
           <p className="rail-sub" data-testid="session-meta">
             {formatStarted(session.startedAt)} · {session.stepCount} {session.stepCount === 1 ? 'step' : 'steps'}
             {elapsed && <> · {elapsed}</>}
@@ -230,6 +250,11 @@ export function SessionInspector({
             {entry.id === 'subagents' && subagents.length > 0 && (
               <span className="inspector-tab-badge" data-testid="session-tab-subagents-count">{subagents.length}</span>
             )}
+            {entry.id === 'scorecard' && session.feedbackSummary && (
+              <span className="inspector-tab-badge" data-testid="session-tab-scorecard-badge">
+                {session.feedbackSummary.overallScore} {session.feedbackSummary.grade}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -246,6 +271,16 @@ export function SessionInspector({
             Renders its own empty state when the folder is not a repository or
             is clean. */}
         {tab === 'changes' && <SessionChanges session={session} />}
+
+        {tab === 'scorecard' && (
+          <SessionFeedbackPanel
+            session={session}
+            turnIndex={feedbackTurnIndex}
+            onClearTurnScope={() => setFeedbackTurnIndex(undefined)}
+            onOpenAgent={onOpenAgent}
+            onOpenSkill={onOpenSkill}
+          />
+        )}
       </div>
 
       <div className="inspector-actions">
@@ -514,6 +549,11 @@ function SessionBrowserRow({
         <span className="session-browser-title">{title}</span>
         <span className="session-browser-meta">{session.issueKey}</span>
       </span>
+      {session.feedbackSummary && (
+        <span className="tree-badge" data-testid="session-browser-row-score">
+          {session.feedbackSummary.overallScore} {session.feedbackSummary.grade}
+        </span>
+      )}
       {!session.archived && (
         <span
           className={agentStateLaneClass(sessionVisualState(session))}

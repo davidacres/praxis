@@ -61,6 +61,7 @@ export function registerSettingsIpc(): void {
     await Promise.all([
       removeUserDataFile('ai-sessions.json'),
       removeUserDataFile('ai-analysis.json'),
+      removeUserDataFile('session-feedback.json'),
       removeUserDataFile('ai-transcripts')
     ]);
     resetAiStores();

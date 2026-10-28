@@ -56,7 +56,16 @@ import {
   extractProviderLimitMessage,
   reasoningAvailability,
   resolveTicketContext,
-  mcpServerSlug
+  mcpServerSlug,
+  evaluateSessionOrPrompt,
+  rewritePromptFromFeedback,
+  SessionFeedbackStore,
+  type DeterministicFeedbackReport,
+  type PromptEvaluationRequest,
+  type RewritePromptFromFeedbackRequest,
+  type SessionEvaluationRequest,
+  type SubmitSessionFeedbackRequest,
+  type UserFeedbackInput
 } from '@praxis/core';
 import { getSessionCodeIntelligenceServer } from './codeIntelligenceIpc';
 import { buildReadOnlyModeTask } from './sessionModeTask';
@@ -66,6 +75,7 @@ import {
   getAiAnalysisStore,
   getAiProviderStatus,
   getAiSessionManager,
+  getSessionFeedbackStore,
   getVercelAgentService,
   hasActiveTask,
   listAiProviderStatuses,
@@ -1592,6 +1602,218 @@ export function registerAiIpc(): void {
         userPrompt: followUp,
         systemPrompt: 'You are continuing a local peer review conversation. Answer the user\'s follow-up directly and concisely. Keep the discussion grounded in the reviewed local project and do not modify files.'
       });
+    }
+  );
+
+  // ── Prompt & Session Feedback Scoring (FX-BF-112) ─────────────────────────
+
+  const gatherFeedbackCatalog = async () => {
+    const runtimeManager = getAgentRuntimeManager();
+    let snapshot = await runtimeManager.list();
+    if (!snapshot.refreshedAt) {
+      snapshot = await runtimeManager.refresh();
+    }
+    const availableSkills = (snapshot.skills ?? []).map(skill => ({
+      name: skill.metadata.name,
+      title: skill.metadata.title,
+      description: skill.metadata.description,
+      triggers: skill.metadata.triggers ?? []
+    }));
+    const availableAgents = (snapshot.profiles ?? []).map(entry => ({
+      id: entry.profile.id,
+      name: entry.profile.name,
+      description: entry.profile.description,
+      preferredSkills: entry.profile.preferredSkills ?? []
+    }));
+    const settings = getSettingsBackend().read();
+    const configuredMcpServers = (settings.ai.mcpServers ?? [])
+      .filter(server => server.enabled)
+      .map(server => server.name);
+    return {
+      availableSkills,
+      availableAgents,
+      configuredMcpServers
+    };
+  };
+
+  ipcMain.handle(
+    'ai:evaluatePrompt',
+    async (_event: Electron.IpcMainInvokeEvent, input: PromptEvaluationRequest): Promise<DeterministicFeedbackReport> => {
+      const catalog = await gatherFeedbackCatalog();
+      return evaluateSessionOrPrompt({
+        kind: 'prompt-readiness',
+        promptText: input?.promptText ?? '',
+        toolMode: input?.toolMode,
+        sessionMode: input?.sessionMode,
+        profileId: input?.profileId,
+        activeSkills: input?.activeSkills,
+        workingDirectory: input?.workingDirectory,
+        issueKey: input?.issueKey,
+        contextTokens: input?.contextTokens,
+        contextLimit: input?.contextLimit,
+        availableSkills: catalog.availableSkills,
+        availableAgents: catalog.availableAgents,
+        configuredMcpServers: catalog.configuredMcpServers,
+        codeIntelligenceAvailable: true,
+        trackerToolsAvailable: Boolean(input?.issueKey),
+        browserToolsAvailable: true,
+        evaluatedAt: new Date().toISOString()
+      });
+    }
+  );
+
+  const runSessionEvaluation = async (
+    issueKey: string,
+    turnIndex?: number,
+    overrideFeedback?: UserFeedbackInput
+  ): Promise<DeterministicFeedbackReport> => {
+    const record = await sessionManager.ensureSessionTranscript(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    const store = getSessionFeedbackStore();
+    const userFeedback = overrideFeedback ?? store.getUserFeedback(record.issueKey, turnIndex);
+    const catalog = await gatherFeedbackCatalog();
+    const report = evaluateSessionOrPrompt({
+      kind: 'session-execution',
+      promptText: record.taskDefinition?.goal ?? '',
+      session: record,
+      issueKey: record.issueKey,
+      sessionId: record.sessionId,
+      turnIndex,
+      availableSkills: catalog.availableSkills,
+      availableAgents: catalog.availableAgents,
+      configuredMcpServers: catalog.configuredMcpServers,
+      codeIntelligenceAvailable: true,
+      trackerToolsAvailable: Boolean(record.connectionId),
+      browserToolsAvailable: true,
+      userFeedback,
+      evaluatedAt: new Date().toISOString()
+    });
+    await store.saveReport(record.issueKey, report, turnIndex);
+    if (turnIndex === undefined) {
+      sessionManager.setAgentSessionFeedbackSummary(
+        record.issueKey,
+        SessionFeedbackStore.toSessionSummary(report)
+      );
+    }
+    return report;
+  };
+
+  ipcMain.handle(
+    'ai:evaluateSession',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      input: SessionEvaluationRequest | string,
+      maybeTurnIndex?: number
+    ): Promise<DeterministicFeedbackReport> => {
+      const issueKey = typeof input === 'string' ? input : input.issueKey;
+      const turnIndex = typeof input === 'string' ? maybeTurnIndex : input.turnIndex;
+      return runSessionEvaluation(issueKey, turnIndex);
+    }
+  );
+
+  ipcMain.handle(
+    'ai:getSessionFeedback',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      turnIndex?: number
+    ): Promise<DeterministicFeedbackReport | undefined> => {
+      const store = getSessionFeedbackStore();
+      const existing = store.getReport(issueKey, turnIndex);
+      if (existing) return existing;
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) return undefined;
+      return runSessionEvaluation(issueKey, turnIndex);
+    }
+  );
+
+  ipcMain.handle(
+    'ai:submitSessionFeedback',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      input: SubmitSessionFeedbackRequest
+    ): Promise<DeterministicFeedbackReport> => {
+      const store = getSessionFeedbackStore();
+      const issueKey = input.issueKey?.trim() || input.sessionId?.trim();
+      const now = new Date().toISOString();
+      if (issueKey) {
+        const record = await sessionManager.ensureSessionTranscript(issueKey);
+        const promptText = input.promptText?.trim() || record?.taskDefinition?.goal || '';
+        const feedback: UserFeedbackInput = {
+          targetKind: input.turnIndex !== undefined ? 'turn' : 'session',
+          issueKey: record?.issueKey ?? issueKey,
+          sessionId: record?.sessionId ?? input.sessionId,
+          ...(input.turnIndex !== undefined ? { turnIndex: input.turnIndex } : {}),
+          promptText,
+          verdict: input.verdict,
+          ...(input.frictionTags?.length ? { frictionTags: [...input.frictionTags] } : {}),
+          ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+          createdAt: now
+        };
+        await store.saveUserFeedback(record?.issueKey ?? issueKey, feedback, input.turnIndex);
+        if (record) {
+          return runSessionEvaluation(record.issueKey, input.turnIndex, feedback);
+        }
+      }
+
+      const catalog = await gatherFeedbackCatalog();
+      const feedback: UserFeedbackInput = {
+        targetKind: 'prompt',
+        promptText: input.promptText ?? '',
+        verdict: input.verdict,
+        ...(input.frictionTags?.length ? { frictionTags: [...input.frictionTags] } : {}),
+        ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+        createdAt: now
+      };
+      const report = evaluateSessionOrPrompt({
+        kind: 'prompt-readiness',
+        promptText: input.promptText ?? '',
+        availableSkills: catalog.availableSkills,
+        availableAgents: catalog.availableAgents,
+        configuredMcpServers: catalog.configuredMcpServers,
+        codeIntelligenceAvailable: true,
+        browserToolsAvailable: true,
+        userFeedback: feedback,
+        evaluatedAt: now
+      });
+      await store.saveReport(report.reportId, report);
+      return report;
+    }
+  );
+
+  ipcMain.handle(
+    'ai:rewritePromptFromFeedback',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      input: RewritePromptFromFeedbackRequest
+    ): Promise<DeterministicFeedbackReport> => {
+      let baseReport: DeterministicFeedbackReport;
+      if (input.issueKey) {
+        baseReport = await runSessionEvaluation(input.issueKey, input.turnIndex);
+      } else {
+        const catalog = await gatherFeedbackCatalog();
+        baseReport = evaluateSessionOrPrompt({
+          kind: 'prompt-readiness',
+          promptText: input.promptText ?? '',
+          toolMode: input.toolMode,
+          sessionMode: input.sessionMode,
+          profileId: input.profileId,
+          activeSkills: input.activeSkills,
+          availableSkills: catalog.availableSkills,
+          availableAgents: catalog.availableAgents,
+          configuredMcpServers: catalog.configuredMcpServers,
+          codeIntelligenceAvailable: true,
+          browserToolsAvailable: true,
+          evaluatedAt: new Date().toISOString()
+        });
+      }
+      const rewritten = await rewritePromptFromFeedback(baseReport);
+      if (input.issueKey) {
+        await getSessionFeedbackStore().saveReport(input.issueKey, rewritten, input.turnIndex);
+      }
+      return rewritten;
     }
   );
 

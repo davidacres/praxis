@@ -152,6 +152,7 @@ export const DEFAULT_APP_SETTINGS = {
     showBrandArtwork: true,
     themeId: 'praxis-light',
     themeMode: 'light' as 'light' | 'dark' | 'system',
+    accentColor: '',
     installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'simple'] as string[],
     customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
     surfacePackId: 'parchment',

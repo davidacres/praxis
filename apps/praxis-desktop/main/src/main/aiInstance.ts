@@ -7,6 +7,7 @@ import {
   AcpAgentHost,
   AiSessionManager,
   FileSessionTranscriptStore,
+  SessionFeedbackStore,
   listCatalogModels,
   readCodexContextLengths,
   readNativeCliModelMetadata,
@@ -71,6 +72,7 @@ let sessionManager: AiSessionManager | undefined;
 let agentService: VercelAgentService | undefined;
 let acpAgentHost: AcpAgentHost | undefined;
 let analysisStore: JsonKeyValueStore | undefined;
+let feedbackStore: SessionFeedbackStore | undefined;
 
 /**
  * Shared AiSessionManager singleton — the same class the VS Code extension
@@ -102,10 +104,24 @@ export function getAiAnalysisStore(): JsonKeyValueStore {
   return analysisStore;
 }
 
+/**
+ * Profile-local store holding deterministic prompt/session feedback reports
+ * and human verdicts (`userData/session-feedback.json`, FX-BF-112).
+ */
+export function getSessionFeedbackStore(): SessionFeedbackStore {
+  if (!feedbackStore) {
+    feedbackStore = new SessionFeedbackStore(
+      new JsonKeyValueStore(path.join(app.getPath('userData'), 'session-feedback.json'))
+    );
+  }
+  return feedbackStore;
+}
+
 /** Drops file-backed AI singletons after their files are cleared by a reset. */
 export function resetAiStores(): void {
   sessionManager = undefined;
   analysisStore = undefined;
+  feedbackStore = undefined;
   agentService = undefined;
   acpAgentHost = undefined;
 }

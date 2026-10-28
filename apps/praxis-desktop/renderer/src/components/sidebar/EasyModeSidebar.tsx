@@ -15,6 +15,8 @@ export interface EasyModeSidebarProps {
   onSelectSession: (issueKey: string) => void;
   onSelectAgent?: (sessionKey: string, agentId: string) => void;
   onNewSession: () => void;
+  onNewConversation: () => void;
+  generalConversations?: boolean;
   onAbortSession?: (sessionKey: string) => void;
   onDeleteSession?: (sessionKey: string) => void;
   onRenameSession?: (sessionKey: string, title: string) => Promise<void>;
@@ -54,6 +56,8 @@ export function EasyModeSidebar({
   onSelectSession,
   onSelectAgent,
   onNewSession,
+  onNewConversation,
+  generalConversations = false,
   onAbortSession,
   onDeleteSession,
   onRenameSession,
@@ -96,7 +100,7 @@ export function EasyModeSidebar({
     localStorage.setItem('praxis-easymode-runs-fraction', String(fraction));
   };
 
-  const activeProject = projects[0];
+  const activeProject = projects.find(project => project.id === activeProjectId);
   const workspaceFolder = activeProject?.workspaceFolder;
 
   // Real repository state for the Horizon badge. No repo → no badge, never a guess.
@@ -132,17 +136,17 @@ export function EasyModeSidebar({
       {/* Horizon Bar: Workspace Anchor */}
       <div className="horizon-bar">
         <div className="horizon-row-main">
-          <ProjectSelector projects={selectableProjects} activeProjectId={activeProjectId} onSelectProject={onSelectProject} />
+          <ProjectSelector includeConversations projects={selectableProjects} activeProjectId={generalConversations ? 'conversations' : activeProjectId} onSelectProject={onSelectProject} />
           <button
             type="button"
             className="btn-new-session-compact"
             onClick={onNewSession}
-            title="Create new session (⌘N)"
-            aria-label="Create new session"
+            title={generalConversations ? "Create new conversation" : "Create new session (⌘N)"}
+            aria-label={generalConversations ? "Create new conversation" : "Create new session"}
           >
             <Icon name="plus" size={11} />
             <span>New</span>
-            <kbd>⌘N</kbd>
+            {!generalConversations && <kbd>⌘N</kbd>}
           </button>
         </div>
         {gitStatus && (
@@ -163,22 +167,28 @@ export function EasyModeSidebar({
         )}
       </div>
 
+      <button type="button" className="easymode-new-conversation" onClick={onNewConversation}
+        data-testid="easymode-new-conversation">
+        <Icon name="chats" size={13} /> New conversation
+      </button>
+
       {/* Sidebar Feed Container */}
       <div className="easymode-sidebar-feed" ref={feedRef}>
         {/* Sessions Section */}
-        <section className="easymode-section easymode-section--sessions" aria-label="Sessions">
+        <section className="easymode-section easymode-section--sessions" aria-label={generalConversations ? "General conversations" : "Sessions"}>
           <SectionHeader
-            title="Sessions"
+            title={generalConversations ? "General conversations" : "Sessions"}
             count={rootSessions.length}
             onAdd={onNewSession}
-            addAriaLabel="Create new session"
+            addAriaLabel={generalConversations ? "Create new conversation" : "Create new session"}
             testId="section-header-add-sessions"
           />
           <div className="easymode-section__body">
             {renderSessionsContent ? renderSessionsContent() : (
               <EasyModeSessionsList
                 sessions={sessions}
-                scope={`easy-mode:${activeProjectId ?? 'workspace'}:recency`}
+                scope={`easy-mode:${generalConversations ? 'conversations' : activeProjectId ?? 'workspace'}:recency`}
+                conversational={generalConversations}
                 allSessions={allSessions}
                 selectedSessionKey={activeSessionKey}
                 activeAgentId={activeAgentId}
