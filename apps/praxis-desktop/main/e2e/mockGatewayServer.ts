@@ -55,6 +55,8 @@ export async function startMockGatewayServer(options: {
   reply?: string;
   /** Per-request reply chosen from the raw request body (e.g. by workflow stage); falls back to `reply`. */
   replyFor?: (body: string) => string | undefined;
+  /** Delay completion for one request, for stale-response race tests. */
+  responseDelayFor?: (body: string) => number;
   /** `/v1/models` response — defaults to a single `mock/model` entry.
    *  `context_length` is what the app reads to size the context indicator. */
   models?: Array<{ id: string; name?: string; context_length?: number }>;
@@ -228,7 +230,7 @@ export async function startMockGatewayServer(options: {
               heldCompletions.delete(res);
               openResponses.delete(res);
             });
-          } else if (options.responseDelayMs) setTimeout(finish, options.responseDelayMs);
+          } else if (options.responseDelayFor?.(body) || options.responseDelayMs) setTimeout(finish, options.responseDelayFor?.(body) || options.responseDelayMs);
           else finish();
         } else {
           // 'hang': keep the stream open so the session stays in-flight.

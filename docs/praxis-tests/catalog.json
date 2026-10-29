@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 727,
+  "testCount": 731,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -1547,7 +1547,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 557,
+        "line": 558,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1563,7 +1563,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 608,
+        "line": 609,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1579,7 +1579,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 636,
+        "line": 637,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1595,7 +1595,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 702,
+        "line": 703,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1611,7 +1611,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 777,
+        "line": 778,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1627,7 +1627,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 817,
+        "line": 818,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1643,7 +1643,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 877,
+        "line": 878,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1659,7 +1659,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 939,
+        "line": 940,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1675,7 +1675,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 997,
+        "line": 998,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1691,7 +1691,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1064,
+        "line": 1065,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1707,7 +1707,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1137,
+        "line": 1138,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1723,7 +1723,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1183,
+        "line": 1184,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -1739,7 +1739,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessions.spec.ts",
-        "line": 1220,
+        "line": 1221,
         "project": "functional"
       },
       "area": "ai Sessions",
@@ -8242,6 +8242,70 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "session list displays single and multiple pixel-perfect AI brand icons beside each session",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-0FBFC2BB99",
+      "title": "composer coach grounds fixes in the workspace, previews text, and steps aside when ready",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
+        "line": 103,
+        "project": "functional"
+      },
+      "area": "session Feedback",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "composer coach grounds fixes in the workspace, previews text, and steps aside when ready",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-0783427DD3",
+      "title": "post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
+        "line": 248,
+        "project": "functional"
+      },
+      "area": "session Feedback",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-DC84821CF0",
+      "title": "checklist caches validated answers and falls back without a score when the provider fails",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
+        "line": 511,
+        "project": "functional"
+      },
+      "area": "session Feedback",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "checklist caches validated answers and falls back without a score when the provider fails",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-22D6A42305",
+      "title": "a slow check for an old draft cannot replace the latest suggestions",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
+        "line": 559,
+        "project": "functional"
+      },
+      "area": "session Feedback",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a slow check for an old draft cannot replace the latest suggestions",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

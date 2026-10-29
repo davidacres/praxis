@@ -383,6 +383,8 @@ const praxis: PraxisIpc = {
     checkMergeRequestFeedback: (issueKey: string, connectionId: string) =>
       ipcRenderer.invoke('ai:checkMergeRequestFeedback', issueKey, connectionId),
     evaluatePrompt: input => ipcRenderer.invoke('ai:evaluatePrompt', input),
+    getFindingFeedback: digest => ipcRenderer.invoke('ai:getFindingFeedback', digest),
+    reviewFinding: input => ipcRenderer.invoke('ai:reviewFinding', input),
     evaluateSession: (input, turnIndex) => ipcRenderer.invoke('ai:evaluateSession', input, turnIndex),
     getSessionFeedback: (issueKey: string, turnIndex?: number) =>
       ipcRenderer.invoke('ai:getSessionFeedback', issueKey, turnIndex),

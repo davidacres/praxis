@@ -29,7 +29,7 @@ import { ModelConfigurationDialog } from './ModelConfigurationDialog';
 import { ReasoningEffortSlider } from './ReasoningEffortSlider';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
-import { PromptFeedbackPopover } from './PromptFeedbackPopover';
+import { SessionPromptScoreBar } from './SessionPromptScoreBar';
 import { SessionUsageSummary } from './SessionUsageSummary';
 import { workflowPreview } from './workflowPreview';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
@@ -831,6 +831,20 @@ export function NewSession({
           />
         </div>
         <SessionComposerCard>
+          <SessionPromptScoreBar
+            promptText={goal}
+            toolMode={toolMode}
+            sessionMode={mode}
+            profileId={selectedProfileId}
+            activeSkills={attachedSkills}
+            workingDirectory={workingDirectory}
+            issueKey={selectedIssueKey || undefined}
+            disabled={submitting}
+            onChangePrompt={setGoal}
+            onChangeToolMode={setToolMode}
+            onAttachSkill={skillName => setAttachedSkills(prev => (prev.includes(skillName) ? prev : [...prev, skillName]))}
+            onSelectAgent={setSelectedProfileId}
+          />
           {uncommittedFiles && (
             <UncommittedBaseNotice
               files={uncommittedFiles.files}
@@ -1169,19 +1183,6 @@ export function NewSession({
                 )}
               </>
             )}
-            <PromptFeedbackPopover
-              promptText={goal}
-              toolMode={toolMode}
-              sessionMode={mode}
-              profileId={selectedProfileId}
-              activeSkills={attachedSkills}
-              workingDirectory={workingDirectory}
-              issueKey={selectedIssueKey || undefined}
-              onChangePrompt={setGoal}
-              onChangeToolMode={setToolMode}
-              onAttachSkill={skillName => setAttachedSkills(prev => (prev.includes(skillName) ? prev : [...prev, skillName]))}
-              onSelectAgent={setSelectedProfileId}
-            />
             <span
               className="session-context-chip is-ok"
               data-testid="new-session-context-indicator"

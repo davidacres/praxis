@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import { createPortal } from 'react-dom';
 import type {
@@ -12,6 +12,8 @@ import type {
 import { SessionTeamMessages } from './SessionTeamMessages';
 import { useSessionTeam } from './sessionTeamStore';
 import { Icon } from '../ui/Icon';
+import { renderInlineCode } from './inlineCode';
+import type { FeedbackJumpDetail } from './SessionFeedbackPanel';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
 import { Markdown } from '../ui/Markdown';
 import { ThoughtBlock } from '../ui/ThoughtBlock';
@@ -178,6 +180,23 @@ export function SessionChatThread({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [branchError, setBranchError] = useState<string>();
 
+  // Which turn each event belongs to, numbered exactly as the scorer splits turns
+  // (`selectTurnEvents`): every user prompt after the first event starts the next turn.
+  const turnIndexByEvent = useMemo(() => {
+    const turns = new Map<string, number>();
+    let turn = 0;
+    (session.events ?? []).forEach((candidate, index) => {
+      if (candidate.type === 'user_input_completed' && index > 0) turn += 1;
+      const key = feedbackEventKey(candidate);
+      if (!turns.has(key)) turns.set(key, turn);
+    });
+    return turns;
+  }, [session.events]);
+
+  // Scorecard "Jump to steps": show the cited tool steps on the reply they led to
+  const [feedbackFocus, setFeedbackFocus] = useState<FeedbackJumpDetail & { anchorKey: string }>();
+  const feedbackFocusRef = useRef<HTMLDivElement | null>(null);
+
   // Filter raw events by subagent if scoped
   const rawEvents = useMemo(() => {
     const list = session.events ?? [];
@@ -200,6 +219,30 @@ export function SessionChatThread({
     () => conversationEvents.some(event => event.type === 'user_input_completed'),
     [conversationEvents]
   );
+
+  useEffect(() => {
+    setFeedbackFocus(undefined);
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<FeedbackJumpDetail>).detail;
+      if (!detail || detail.issueKey !== session.issueKey || detail.steps.length === 0) return;
+      const last = detail.steps[detail.steps.length - 1];
+      const toolIndex = rawEvents.findIndex(candidate =>
+        last.callId
+          ? candidate.data?.callId === last.callId
+          : candidate.timestamp === last.timestamp && candidate.data?.toolName === last.toolName
+      );
+      const reply =
+        (toolIndex >= 0 ? rawEvents.slice(toolIndex).find(candidate => candidate.type === 'message') : undefined) ??
+        [...conversationEvents].reverse().find(candidate => candidate.type === 'message');
+      if (reply) setFeedbackFocus({ ...detail, anchorKey: feedbackEventKey(reply) });
+    };
+    window.addEventListener('praxis:feedback-jump-to-steps', handler);
+    return () => window.removeEventListener('praxis:feedback-jump-to-steps', handler);
+  }, [session.issueKey, rawEvents, conversationEvents]);
+
+  useEffect(() => {
+    if (feedbackFocus) feedbackFocusRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [feedbackFocus]);
 
   const showOpeningGoal = showOpeningGoalProp ?? (testIdVariant === 'classic' ? true : !hasAnyPrompt);
 
@@ -475,7 +518,8 @@ export function SessionChatThread({
                       title="Score & provide feedback for this turn"
                       data-testid="session-chat-score-turn-btn"
                       onClick={() => {
-                        window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'scorecard', turnIndex: 0 } }));
+                        const turnIndex = turnIndexByEvent.get(feedbackEventKey(lastMember ?? event)) ?? 0;
+                        window.dispatchEvent(new CustomEvent('praxis:session-tab', { detail: { tab: 'scorecard', turnIndex } }));
                       }}
                     >
                       <Icon name="graph" size={12} />
@@ -513,6 +557,15 @@ export function SessionChatThread({
                 </button>
               </div>
             </div>
+
+            {feedbackFocus && (messageRun ? messageRun.memberIndices.map(member => conversationEvents[member]) : [event])
+              .some(member => feedbackEventKey(member) === feedbackFocus.anchorKey) && (
+              <FeedbackStepFocus
+                focus={feedbackFocus}
+                focusRef={feedbackFocusRef}
+                onDismiss={() => setFeedbackFocus(undefined)}
+              />
+            )}
 
             {terminalContext && (
               <details className="session-chat-terminal-context">
@@ -752,6 +805,46 @@ export function SessionChatThread({
       {!isExecuting && !visibleResponseText && conversationEvents.length === 0 && !isSelectedFailed && team.messages.length === 0 && (
         <span className="placeholder-text">Waiting for the agent to respond…</span>
       )}
+    </div>
+  );
+}
+
+function feedbackEventKey(event: AgentEventSummary): string {
+  return `${event.type}|${event.timestamp}|${event.summary}`;
+}
+
+/** The tool steps a scorecard finding cites, shown on the reply they led to. */
+function FeedbackStepFocus({
+  focus,
+  focusRef,
+  onDismiss
+}: {
+  focus: FeedbackJumpDetail;
+  focusRef: Ref<HTMLDivElement>;
+  onDismiss: () => void;
+}) {
+  const first = focus.steps[0].step;
+  const last = focus.steps[focus.steps.length - 1].step;
+  return (
+    <div ref={focusRef} className="session-chat-feedback-focus" data-testid="session-chat-feedback-focus">
+      <div className="session-chat-feedback-focus-head">
+        <span className="session-chat-feedback-focus-range">{first === last ? `#${first}` : `#${first}–#${last}`}</span>
+        <span className="session-chat-feedback-focus-title">{renderInlineCode(focus.title)}</span>
+        <span className="session-chat-feedback-focus-badge">← From scorecard</span>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Dismiss scorecard highlight" onClick={onDismiss}>
+          <Icon name="close" size={11} />
+        </button>
+      </div>
+      <ul className="session-chat-feedback-focus-steps">
+        {focus.steps.map(step => (
+          <li key={`${step.step}-${step.callId ?? ''}`} className={step.ok === false ? 'is-failed' : undefined}>
+            <span className="session-chat-feedback-focus-step">#{step.step}</span>
+            <code>{step.toolName}{step.detail ? `(${step.detail})` : ''}</code>
+            {step.ok === false && <span className="session-chat-feedback-focus-status">failed</span>}
+            {step.error && <div className="session-chat-feedback-focus-error">{step.error}</div>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

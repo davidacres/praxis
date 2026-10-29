@@ -21970,4 +21970,1115 @@ button.feedback-score-pill {
   flex-wrap: wrap;
 }
 
+/* ── Real-Time Docked Prompt Score Cap (inside Composer) ───────────────── */
 
+.session-prompt-score-wrapper {
+  interpolate-size: allow-keywords;
+}
+
+.composer:has(.session-prompt-score-wrapper[data-state='ready']) {
+  border-color: color-mix(in srgb, var(--success) 55%, var(--border-strong));
+}
+
+@supports not selector(:has(*)) {
+  .composer.has-prompt-ready {
+    border-color: color-mix(in srgb, var(--success) 55%, var(--border-strong));
+  }
+}
+
+.session-prompt-score-wrapper {
+  overflow: hidden;
+  block-size: auto;
+  block-size: calc-size(auto, size);
+  max-height: 520px;
+  opacity: 1;
+  transform-origin: top center;
+  transform: translateY(0) scaleY(1);
+  clip-path: inset(0 0 0 0);
+  transition:
+    block-size 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    max-height 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 200ms ease,
+    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    clip-path 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.session-prompt-score-wrapper.is-closing {
+  block-size: 0;
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-6px) scaleY(0.92);
+  clip-path: inset(0 0 100% 0);
+  pointer-events: none;
+}
+
+.session-prompt-score-wrapper:not(.is-closing) {
+  animation: session-usage-enter 240ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.session-prompt-score-panel {
+  border-bottom: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, var(--bg-input));
+  overflow: hidden;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.session-prompt-score-panel.is-ready {
+  background: color-mix(in srgb, var(--success) 12%, var(--bg-elevated));
+  border-bottom-color: color-mix(in srgb, var(--success) 38%, var(--border-strong));
+}
+
+.session-prompt-score-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  min-height: calc(34px * var(--ui-scale, 1));
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.session-prompt-score-summary.is-ready-celebration {
+  cursor: default;
+}
+
+.session-prompt-score-summary:not(.is-ready-celebration):hover {
+  background: color-mix(in srgb, var(--bg-hover) 45%, transparent);
+}
+
+.session-prompt-score-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.feedback-score-pill.is-compact {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 10.5px;
+  gap: 3px;
+}
+
+.feedback-score-pill.is-compact .feedback-score-spark {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.feedback-score-pill.is-compact .feedback-score-num {
+  font-size: 11.5px;
+}
+
+.feedback-score-pill.is-compact .feedback-grade-letter {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+.feedback-ready-pill-suffix {
+  margin-left: 2px;
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.session-prompt-score-headline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.session-prompt-score-headline-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.session-prompt-score-headline-lead {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-inline-code-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.session-prompt-score-more {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.session-prompt-inline-dims-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.session-prompt-inline-dim-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.session-prompt-dim-sep {
+  color: var(--text-tertiary);
+  margin-right: 2px;
+}
+
+.session-prompt-dim-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.session-prompt-dim-dot.is-good {
+  background: var(--success);
+}
+
+.session-prompt-dim-dot.is-warn {
+  background: var(--warning);
+}
+
+.session-prompt-dim-dot.is-bad {
+  background: var(--danger);
+}
+
+.session-prompt-dim-name {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.session-prompt-dim-score {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.session-prompt-inline-dim-item.is-good .session-prompt-dim-score {
+  color: var(--success);
+}
+
+.session-prompt-score-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.session-prompt-score-actions .btn-compact {
+  height: 23px;
+  padding: 0 7px;
+  font-size: 10.5px;
+}
+
+.session-prompt-config-chip {
+  font-family: var(--font-sans, inherit);
+  font-weight: 600;
+}
+
+.session-prompt-improve-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+}
+
+.session-prompt-ready-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--success);
+  font-size: 11.5px;
+}
+
+.session-prompt-ready-sub {
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-prompt-score-details {
+  overflow: hidden;
+  block-size: 0;
+  transition: block-size 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease;
+  opacity: 0;
+}
+
+.session-prompt-score-details.is-open {
+  block-size: auto;
+  block-size: calc-size(auto, size);
+  opacity: 1;
+}
+
+.session-prompt-score-details-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-sunken) 35%, var(--bg-elevated));
+}
+
+.session-prompt-findings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.session-prompt-findings-grid .feedback-finding-row {
+  align-items: center;
+  padding: 6px 9px;
+  border-left-width: 3px;
+  background: var(--bg-input, var(--bg-elevated));
+}
+
+.session-prompt-findings-grid .feedback-finding-title {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.session-prompt-findings-grid .feedback-finding-evidence {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-sans, inherit);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.session-prompt-findings-grid .feedback-remediation-btn {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+@media (max-width: 680px) {
+  .session-prompt-findings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feedback-finding-row.is-applied {
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+  border-left-color: var(--success);
+  background: color-mix(in srgb, var(--success) 7%, var(--bg-input, var(--bg-elevated)));
+}
+
+.feedback-delta-badge.is-applied {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+
+.session-prompt-applied-check {
+  flex-shrink: 0;
+  align-self: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--success);
+}
+
+.prompt-feedback-rewrite-box.is-inline-split {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-input, var(--bg-elevated)));
+}
+
+.prompt-feedback-rewrite-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.prompt-feedback-refresh-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prompt-feedback-refresh-link:hover {
+  color: var(--text);
+}
+
+.prompt-feedback-rewrite-cta-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.prompt-feedback-rewrite-cta-stack .btn-compact {
+  height: 23px;
+  padding: 0 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  justify-content: center;
+}
+
+.prompt-feedback-rewrite-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.prompt-feedback-diff-base {
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.prompt-feedback-diff-added {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--success) 32%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-prompt-score-wrapper,
+  .session-prompt-score-wrapper:not(.is-closing),
+  .session-prompt-score-details {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ── Composer Coach v2 (FX-BF-112): intent pill, workspace fix chips, ghost preview ── */
+
+.session-prompt-score-summary {
+  cursor: default;
+}
+
+.session-prompt-score-summary:not(.is-ready-celebration):hover {
+  background: transparent;
+}
+
+.feedback-score-projection {
+  margin-left: 2px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.session-prompt-intent-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.prompt-inline-code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  font-weight: 500;
+}
+
+.session-prompt-snooze-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.session-prompt-snooze-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.session-prompt-fix-label {
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* ── Session Scorecard v2 (FX-BF-112) ── */
+
+.session-feedback-panel.is-v2 {
+  gap: 0;
+  padding: 6px 0 0;
+}
+
+.feedback-v2-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.feedback-exec-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+}
+
+.feedback-exec-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.feedback-score-ring {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border: 3px solid currentColor;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+}
+
+.feedback-score-ring.is-good { color: var(--success); }
+.feedback-score-ring.is-warn { color: var(--warning); }
+.feedback-score-ring.is-bad { color: var(--danger); }
+
+.feedback-score-ring-num {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.feedback-score-ring-sub {
+  margin-top: 2px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.feedback-exec-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.feedback-exec-headline {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.feedback-exec-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.feedback-verdict-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.feedback-verdict-label {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.feedback-v2-scroll .feedback-verdict-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.feedback-v2-scroll .feedback-verdict-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.feedback-friction-chip.is-add-note {
+  border-style: dashed;
+}
+
+.feedback-friction-chip:disabled,
+.feedback-verdict-btn:disabled {
+  cursor: progress;
+}
+
+.feedback-note-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.feedback-saved-hint {
+  margin: 0;
+  color: var(--success);
+}
+
+.feedback-v2-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.feedback-v2-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.feedback-v2-section-head > span:first-child {
+  white-space: nowrap;
+}
+
+.feedback-v2-section-aside {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-align: right;
+  text-transform: none;
+}
+
+.feedback-v2-scroll .feedback-finding-card-top {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.feedback-v2-scroll .feedback-finding-evidence {
+  margin: 0;
+}
+
+.feedback-jump-btn,
+.feedback-stage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.feedback-jump-btn:hover,
+.feedback-stage-btn:hover {
+  border-color: var(--border-strong, var(--border));
+  background: var(--bg-hover);
+}
+
+.feedback-jump-btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.feedback-stage-btn.is-staged {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.feedback-dim-card {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+}
+
+.feedback-dim-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.feedback-dim-row + .feedback-dim-row {
+  border-top: 1px solid var(--border);
+}
+
+.feedback-dim-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.feedback-dim-head .feedback-dimension-label {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-dim-head .feedback-dimension-pts {
+  min-width: 42px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.feedback-progress-track.is-inline {
+  display: block;
+  height: 5px;
+}
+
+.feedback-progress-track.is-inline .feedback-progress-fill {
+  display: block;
+  height: 100%;
+}
+
+.feedback-dim-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.feedback-signal-pill {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.feedback-signal-pill.is-good {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: var(--success);
+}
+
+.feedback-signal-pill.is-warn {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+  color: var(--warning);
+}
+
+.feedback-signal-pill.is-bad {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger);
+}
+
+.feedback-signal-pill.is-clickable {
+  cursor: pointer;
+}
+
+.feedback-followup-drawer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 -2px;
+  padding: 10px 2px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.feedback-staged-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.feedback-staged-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.feedback-staged-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedback-staged-chip:hover {
+  border-color: var(--border-strong, var(--border));
+  background: var(--bg-hover);
+}
+
+.feedback-populate-btn {
+  justify-content: center;
+  width: 100%;
+}
+
+/* Scorecard "Jump to steps" callout on the reply the cited steps led to */
+.session-chat-feedback-focus {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--danger) 6%, var(--bg-elevated));
+  animation: session-chat-feedback-focus-pulse 1.4s ease-out 1;
+}
+
+.session-chat-feedback-focus-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.session-chat-feedback-focus-range {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.session-chat-feedback-focus-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.session-chat-feedback-focus-badge {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--bg);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.session-chat-feedback-focus-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session-chat-feedback-focus-steps li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.session-chat-feedback-focus-step {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.session-chat-feedback-focus-steps code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.session-chat-feedback-focus-status {
+  color: var(--danger);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.session-chat-feedback-focus-error {
+  flex-basis: 100%;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+@keyframes session-chat-feedback-focus-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-chat-feedback-focus {
+    animation: none;
+  }
+}
+
+/* Prompt coaching: interpretation, deliberate repairs and non-executing proposals. */
+.prompt-coach-details { display: grid; gap: var(--space-2); padding: var(--space-2) var(--space-3); max-height: min(350px, 40vh); overflow: auto; font-size: var(--text-xs); border-top: 1px solid var(--border); }
+.prompt-understanding-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.prompt-understanding-head > strong { color: var(--text-secondary); font-size: var(--text-xs); }
+.prompt-understanding-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-1); }
+.prompt-understanding-slots > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-inline-start: var(--space-2); border-inline-start: 2px solid var(--border); overflow-wrap: anywhere; }
+.prompt-understanding-slots span, .prompt-understanding-slots small { color: var(--text-secondary); }
+.prompt-understanding-slots .is-unresolved { border-color: var(--warning); }
+.prompt-question-phrase { margin-inline-end: 6px; color: var(--text); font-weight: 600; text-decoration: underline wavy var(--warning); text-underline-offset: 3px; }
+
+/* Uncertain phrases are underlined in the composer's own text. The textarea stays on top
+   (transparent background) and keeps every keystroke and the caret; a layer behind it
+   repeats the draft with transparent ink so only the marks show. SessionComposerInput
+   copies the textarea's font, padding and line-height onto the layer so the wraps match. */
+.composer-input-shell { position: relative; }
+.composer-input-highlights {
+  position: absolute;
+  inset: 0;
+  /* The input has little or no bottom padding, so the last line's underline would be
+     clipped; room below the box keeps it visible (the layer takes no pointer events). */
+  bottom: -6px;
+  overflow: hidden;
+  margin: 0;
+  border-style: solid;
+  border-color: transparent;
+  color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  animation: composer-phrase-in 260ms ease-out;
+}
+.composer-input-shell.has-highlights > .composer-input { position: relative; }
+.composer-input-phrase {
+  border-radius: 3px;
+  color: transparent;
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  text-decoration: underline wavy var(--warning);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+@keyframes composer-phrase-in { from { opacity: 0; } to { opacity: 1; } }
+/* The suggestion in focus is drawn strongest; the rest wait as faint dotted lines. */
+.composer-input-phrase.is-active {
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--warning) 45%, transparent);
+  text-decoration-thickness: 2px;
+}
+.composer-input-phrase.is-dim {
+  background: none;
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, var(--warning) 60%, transparent);
+}
+/* Text the coach would insert: shown in place, faint, until Tab accepts it. */
+.composer-input-ghost { color: var(--text-tertiary); }
+.composer-input-ghost-hint {
+  margin-inline-start: 8px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+/* One suggestion at a time, in a single row at the top of the composer. */
+.session-prompt-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-height: calc(36px * var(--ui-scale, 1));
+  padding: 5px 8px 5px 10px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+.session-prompt-strip.is-ready { color: var(--success); font-weight: 600; }
+.prompt-strip-nav {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  white-space: nowrap;
+}
+.prompt-strip-nav > span { padding: 1px 6px; border-inline: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.prompt-strip-nav button { padding: 1px 6px; border: 0; background: none; color: var(--text-secondary); font: inherit; cursor: pointer; }
+.prompt-strip-nav button:hover:not(:disabled) { color: var(--text); background: var(--bg-hover); }
+.prompt-strip-nav button:disabled { opacity: 0.4; cursor: default; }
+.prompt-strip-dots { display: inline-flex; flex-shrink: 0; gap: 4px; }
+.prompt-strip-dots i { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--warning) 25%, var(--border)); transition: background 200ms ease; }
+.prompt-strip-dots i.is-on { background: var(--warning); }
+.prompt-strip-dots i.is-done { background: var(--success); }
+.prompt-strip-text {
+  /* The question is the point of the strip: at its natural width, the controls wrap to a
+     second row before it is cut short; it only truncates when it alone overflows the row */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prompt-strip-text .prompt-question-phrase { margin-inline-end: 6px; }
+.prompt-strip-actions { display: flex; flex: 0 1 auto; align-items: center; gap: 6px; margin-inline-start: auto; }
+.prompt-strip-answer { flex: 0 1 200px; min-width: 120px; height: calc(24px * var(--ui-scale, 1)); font-size: var(--text-xs); }
+.session-prompt-strip .btn { flex-shrink: 0; height: calc(24px * var(--ui-scale, 1)); min-height: 0; padding-block: 0; white-space: nowrap; }
+.prompt-strip-nav { height: calc(24px * var(--ui-scale, 1)); }
+.session-prompt-strip kbd {
+  margin-inline-start: 5px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 3px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  opacity: 0.85;
+}
+.prompt-strip-points { margin-inline-start: 5px; font-weight: 700; opacity: 0.85; }
+.session-prompt-strip .prompt-strip-quiet { border-color: transparent; background: none; color: var(--text-secondary); }
+.session-prompt-strip .prompt-strip-quiet:hover { color: var(--text); background: var(--bg-hover); }
+.prompt-coach-detail-actions { display: flex; gap: var(--space-1); }
+
+/* A clarity check of this exact draft found nothing to suggest: the frame settles to green.
+   Repeated with :focus-within so it wins over both composers' focus border while typing. */
+.composer[data-prompt-analysis] { transition: border-color 160ms ease, box-shadow 160ms ease; }
+.composer[data-prompt-analysis='ok'],
+.composer[data-prompt-analysis='ok']:focus-within {
+  border-color: color-mix(in srgb, var(--success) 70%, var(--border-strong));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--success) 22%, transparent), 0 0 12px color-mix(in srgb, var(--success) 14%, transparent);
+  transition: border-color 600ms ease, box-shadow 600ms ease;
+}
+/* Still a full-strength ring while focused, only green instead of the focus colour. */
+.composer[data-prompt-analysis='ok']:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success) 55%, transparent), 0 0 12px color-mix(in srgb, var(--success) 16%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer[data-prompt-analysis], .composer[data-prompt-analysis='ok'] { transition: none; }
+  .composer-input-highlights { animation: none; }
+}
+.prompt-rehearsal, .feedback-turning-point { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); background: var(--bg-elevated); }
+.prompt-rehearsal ol, .feedback-turning-point ol { margin: var(--space-2) 0; padding-inline-start: var(--space-4); }
+.prompt-rehearsal li, .feedback-turning-point li { margin-block: var(--space-1); }
+.prompt-rehearsal small, .feedback-turning-point small { color: var(--text-secondary); }
+.feedback-turning-point { margin-bottom: var(--space-3); }
+.feedback-autopsy-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); overflow-wrap: anywhere; }
+.finding-review { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; font-size: var(--text-xs); padding-block: var(--space-1); }
+.finding-review > span { color: var(--text-secondary); }
+.finding-review button[aria-pressed='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.prompt-review-quality { padding-block: var(--space-1); font-size: var(--text-xs); }
+.prompt-review-quality summary { cursor: pointer; color: var(--text-secondary); }
+.prompt-review-item { padding-block: var(--space-2); border-top: 1px solid var(--border); }
+@media (max-width: 900px) { .feedback-autopsy-columns, .prompt-understanding-slots { grid-template-columns: 1fr; } }
+
+.prompt-coach-details > button { justify-self: start; }
+.feedback-turning-point summary { cursor: pointer; }
+.prompt-coach-open { margin: var(--space-1) var(--space-3); align-self: flex-start; width: fit-content; }

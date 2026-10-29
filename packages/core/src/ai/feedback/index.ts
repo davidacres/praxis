@@ -5,3 +5,6 @@ export * from './capabilityAlignment';
 export * from './sessionFeedbackScorer';
 export * from './sessionFeedbackStore';
 export * from './promptRewriteHelper';
+export * from './workspaceGrounding';
+export * from './promptClarity';
+export * from './feedbackCoaching';

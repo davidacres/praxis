@@ -106,6 +106,17 @@ None
 
 Provides deterministic scoring (`0–100`) and actionable retrospective/pre-send feedback for prompts and AI sessions by analyzing prompt quality, tool call efficiency, Agent Hub profile selection, attached vs detected vs missed skills, and MCP server utilization.
 
+## Rubric v2 — workspace-grounded coach and root-cause scorecard
+
+`SCORING_RUBRIC_VERSION = 2`. Reports scored under v1 are re-evaluated on read.
+
+- **Intent first.** Prompts are classified (`question`, `follow-up`, `bugfix`, `feature`, `plan`, `review`) before grading; questions and plans are never charged for a missing file anchor or test command.
+- **Follow-up context.** A follow-up turn inherits the running session's touched files and ticket (`derivePriorContext`), so "commit all changes" scores as ready instead of terse.
+- **Workspace grounding.** The host gathers git-changed files, test files, and npm scripts (`feedbackWorkspaceHints.ts`); core ranks them against the prompt (`workspaceGrounding.ts`) so fixes pin a real file or name a real test command — no boilerplate is pasted into the prompt.
+- **Checked against the code.** Prompt words are matched against every tracked file and folder name (with one-edit spelling suggestions), and identifiers the prompt names are looked up by exact name in the folder's code index — read-only, no registration or grant. A found symbol anchors the prompt; an unknown one is flagged unless the prompt introduces it ("rename X to Y"). Code intelligence counts as available only where a session would actually get it.
+- **Root causes, not counts.** Session findings name blind-edit loops, edits made without reading, thrashing on one file, unresolved test failures, and serial read sprawl, each citing the transcript steps (`FeedbackStepRef`) the scorecard can jump to.
+- **UI.** The composer coach waits for a 1.2s typing pause (immediate for the read-only blocker), offers one-click workspace fix chips with a hover/focus preview, and steps aside with a "Context ready" note on follow-ups. The scorecard leads with a diagnosis and an auto-saving verdict, merges capability facts into the five dimension rows, and stages concrete fixes into the follow-up.
+
 ## Items
 
 | Ref | Type | Name | Status |

@@ -126,6 +126,37 @@ async function apiCredentials(secrets: SecretsStore, provider: AiProvider): Prom
 }
 
 /**
+ * The provider for the composer's prompt clarity check, which runs on every
+ * typing pause and so needs a direct API call, not a CLI agent launch. It is the
+ * first enabled API provider that has a key (the active provider first), and
+ * only falls back to the recommendation provider — possibly a slower CLI host —
+ * when no API provider is set up. Undefined when nothing can run it.
+ */
+export async function resolvePromptCheckProvider(
+  secrets: SecretsStore,
+  ai: AiSettings
+): Promise<RecommendationProviderChoice | undefined> {
+  if (ai.recommendationProvider) {
+    try { return await resolveRecommendationProvider(secrets, ai); } catch { return undefined; }
+  }
+  const candidates = [...RECOMMENDATION_CANDIDATE_PROVIDERS, ...listCustomProviderIds()];
+  const ordered = [...new Set([ai.activeProvider, ...candidates])].filter(
+    provider => candidates.includes(provider) && ai.providers[provider]?.enabled !== false
+  );
+  for (const provider of ordered) {
+    if (getProviderDescriptor(provider).kind !== 'api') continue;
+    // A real key, not just "no key needed": a local runtime that is not running would only time out
+    const apiKey = await resolveProviderApiKey(secrets, provider);
+    if (apiKey) return { provider, apiKey, ...recommendationProviderConfig(provider, ai) };
+  }
+  try {
+    return await resolveRecommendationProvider(secrets, ai);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Picks which provider a one-shot AI "recommendation" completion
  * (workflow template pick, workflow agent-for-stage pick) should use, and
  * resolves its credentials/config in one step. API providers use their direct

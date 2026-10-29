@@ -270,6 +270,85 @@ export function registerCodeIntelligenceIpc(): void {
   });
 }
 
+/**
+ * Whether a session in this folder would get code intelligence tools — the same
+ * settings rule `sessionCodeIntelligenceServer` applies, but read-only: it never
+ * registers a folder or grants a client, so prompt feedback can ask on every keystroke.
+ */
+export function isCodeIntelligenceEnabledFor(workingDirectory: string | undefined): boolean {
+  const config = getSettingsBackend().read().ai.codeIntelligence;
+  const normalized = workingDirectory ? path.resolve(workingDirectory) : undefined;
+  const override = normalized && workingDirectory
+    ? config?.projectOverrides?.[normalized] ?? config?.projectOverrides?.[workingDirectory]
+    : undefined;
+  if (!(override ?? config?.enabled ?? true)) return false;
+  try {
+    return existsSync(service().contracts);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Looks up identifiers by exact name in the folder's existing code index, for prompt
+ * feedback. Read-only (no registration, no grant): an unindexed folder or a stopped
+ * service yields `undefined`, and the caller treats the names as unchecked.
+ */
+export async function lookupIndexedSymbols(
+  workingDirectory: string | undefined,
+  names: readonly string[]
+): Promise<Array<{ name: string; found: boolean; location?: string }> | undefined> {
+  if (!workingDirectory || names.length === 0 || !isCodeIntelligenceEnabledFor(workingDirectory)) return undefined;
+  const repositoryId = await indexedRepositoryId(workingDirectory);
+  if (!repositoryId) return undefined;
+  const results: Array<{ name: string; found: boolean; location?: string }> = [];
+  for (const name of names.slice(0, 5)) {
+    const key = `${repositoryId}\u0000${name}`;
+    const cached = symbolLookupCache.get(key);
+    if (cached && Date.now() - cached.at < SYMBOL_CACHE_TTL_MS) {
+      results.push(cached.result);
+      continue;
+    }
+    try {
+      const response = await invoke(['local-rpc'], {
+        tool: 'find_symbol',
+        arguments: { repositoryId, name, limit: 1, freshness: 'allow_stale' }
+      });
+      if (response.error) return undefined;
+      const item = ((response.data as { items?: Array<Record<string, unknown>> } | undefined)?.items ?? [])[0];
+      const location = typeof item?.qualifiedName === 'string' ? item.qualifiedName : undefined;
+      const result = { name, found: Boolean(item), ...(location ? { location } : {}) };
+      symbolLookupCache.set(key, { at: Date.now(), result });
+      results.push(result);
+    } catch {
+      return undefined;
+    }
+  }
+  return results;
+}
+
+const SYMBOL_CACHE_TTL_MS = 60_000;
+const symbolLookupCache = new Map<string, { at: number; result: { name: string; found: boolean; location?: string } }>();
+let repositoryListCache: { at: number; list: Array<Record<string, unknown>> } | undefined;
+
+async function indexedRepositoryId(workingDirectory: string): Promise<string | undefined> {
+  if (!repositoryListCache || Date.now() - repositoryListCache.at > SYMBOL_CACHE_TTL_MS) {
+    try {
+      const response = await invoke(['list']);
+      repositoryListCache = { at: Date.now(), list: Array.isArray(response.data) ? (response.data as Array<Record<string, unknown>>) : [] };
+    } catch {
+      return undefined;
+    }
+  }
+  const normalized = path.resolve(workingDirectory);
+  // The folder itself, or the nearest indexed folder that contains it
+  const match = repositoryListCache.list
+    .filter(repo => typeof repo.root === 'string' && typeof repo.id === 'string')
+    .filter(repo => normalized === path.resolve(repo.root as string) || normalized.startsWith(path.resolve(repo.root as string) + path.sep))
+    .sort((a, b) => (b.root as string).length - (a.root as string).length)[0];
+  return match?.id as string | undefined;
+}
+
 /** Code and knowledge tools for both folder-backed and folderless agent sessions. */
 export async function getSessionCodeIntelligenceServer(
   workingDirectory: string | undefined,

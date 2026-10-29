@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **727 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **731 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -100,19 +100,19 @@ This catalogue describes **727 Playwright tests** under `apps/praxis-desktop/mai
 | PT-3CC04EDF51 | ai Sessions | composer surfaces the provider-not-configured error when no API key exists | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:459` |
 | PT-4BA1F5064F | ai Sessions | a write_file tool call renders a red/green diff after the write is approved | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:475` |
 | PT-5084A64AC6 | ai Sessions | the inspector is tabbed state, not a second copy of the conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:512` |
-| PT-58DC72B588 | ai Sessions | the agent's reply uses the pane it has; yours stays a reply beside it | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:557` |
-| PT-CEBA29D1BE | ai Sessions | change model and handover stay unreachable while a turn is running | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:608` |
-| PT-C862FEE311 | ai Sessions | the session composer model picker honours the curated enabled models | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:636` |
-| PT-03F7F35647 | ai Sessions | a completed session can change model and hand over | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:702` |
-| PT-E8718CE61D | ai Sessions | an opt-in conversation alternates attributed AI turns and stops at its cap | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:777` |
-| PT-C4D6CE19FD | ai Sessions | a human can direct a message to either participant during an AI conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:817` |
-| PT-0002CA30E9 | ai Sessions | an image pasted during a conversation rides with the directed message | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:877` |
-| PT-3FBB5F9EAE | ai Sessions | focus mode presents sessions as tabs and keeps them available while starting a new session | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:939` |
-| PT-3849E1CAB4 | ai Sessions | session failure displays unified error banner above the chat panel and not scattered in chat | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:997` |
-| PT-E4F45D8F5D | ai Sessions | composer paste and drop carries an image to the agent and the transcript | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1064` |
-| PT-6FD9400441 | ai Sessions | a transcript attachment enlarges in a lightbox and closes on click | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1137` |
-| PT-CC6C44E927 | ai Sessions | a file dropped outside the composer never navigates the window | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1183` |
-| PT-24978699DA | ai Sessions | a session can be archived from its row and hidden from the tree | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1220` |
+| PT-58DC72B588 | ai Sessions | the agent's reply uses the pane it has; yours stays a reply beside it | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:558` |
+| PT-CEBA29D1BE | ai Sessions | change model and handover stay unreachable while a turn is running | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:609` |
+| PT-C862FEE311 | ai Sessions | the session composer model picker honours the curated enabled models | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:637` |
+| PT-03F7F35647 | ai Sessions | a completed session can change model and hand over | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:703` |
+| PT-E8718CE61D | ai Sessions | an opt-in conversation alternates attributed AI turns and stops at its cap | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:778` |
+| PT-C4D6CE19FD | ai Sessions | a human can direct a message to either participant during an AI conversation | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:818` |
+| PT-0002CA30E9 | ai Sessions | an image pasted during a conversation rides with the directed message | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:878` |
+| PT-3FBB5F9EAE | ai Sessions | focus mode presents sessions as tabs and keeps them available while starting a new session | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:940` |
+| PT-3849E1CAB4 | ai Sessions | session failure displays unified error banner above the chat panel and not scattered in chat | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:998` |
+| PT-E4F45D8F5D | ai Sessions | composer paste and drop carries an image to the agent and the transcript | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1065` |
+| PT-6FD9400441 | ai Sessions | a transcript attachment enlarges in a lightbox and closes on click | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1138` |
+| PT-CC6C44E927 | ai Sessions | a file dropped outside the composer never navigates the window | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1184` |
+| PT-24978699DA | ai Sessions | a session can be archived from its row and hidden from the tree | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:1221` |
 | PT-3B9205BF7B | ai Session Tasks | the task list updates live as the agent works through it, then settles once the turn ends | `apps/praxis-desktop/main/e2e/aiSessionTasks.spec.ts:38` |
 | PT-7F852938F4 | ai Session Tasks | a fully completed plan shows all three done | `apps/praxis-desktop/main/e2e/aiSessionTasks.spec.ts:74` |
 | PT-48E536B7E9 | ai Session Tasks | a session that never reports a plan shows no Tasks block at all | `apps/praxis-desktop/main/e2e/aiSessionTasks.spec.ts:91` |
@@ -519,6 +519,10 @@ This catalogue describes **727 Playwright tests** under `apps/praxis-desktop/mai
 | PT-A0C7008A04 | semantic Search Notification | offers an update instead of enable when an earlier model is installed | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:162` |
 | PT-4874B92CC2 | semantic Search Notification | the real main process reports a previously downloaded MiniLM bundle as an update | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:197` |
 | PT-E9A2A4583D | session Ai Icons | session list displays single and multiple pixel-perfect AI brand icons beside each session | `apps/praxis-desktop/main/e2e/sessionAiIcons.spec.ts:15` |
+| PT-0FBFC2BB99 | session Feedback | composer coach grounds fixes in the workspace, previews text, and steps aside when ready | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:103` |
+| PT-0783427DD3 | session Feedback | post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:248` |
+| PT-DC84821CF0 | session Feedback | checklist caches validated answers and falls back without a score when the provider fails | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:511` |
+| PT-22D6A42305 | session Feedback | a slow check for an old draft cannot replace the latest suggestions | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:559` |
 | PT-71A99A13A6 | session Groups | chat and project session groups reorder, rename inline, and persist | `apps/praxis-desktop/main/e2e/sessionGroups.spec.ts:19` |
 | PT-228E76C299 | session Provider Limit | a session whose AI ran out can switch to another AI and carry on | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:47` |
 | PT-E181B9FAF4 | session Provider Limit | a session whose AI ran out can be stopped instead | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:64` |

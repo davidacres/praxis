@@ -209,3 +209,5 @@ export * from './codeIntelligence/runtimePaths';
 export * from './ai/backgroundTasks';
 export * from './ai/feedback';
 
+
+export { runProviderPrompt } from './ai/providerPrompt';

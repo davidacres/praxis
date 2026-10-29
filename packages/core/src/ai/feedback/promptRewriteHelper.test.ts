@@ -15,8 +15,9 @@ describe('promptRewriteHelper (TASK-491)', () => {
     const rewritten = await rewritePromptFromFeedback(report);
     assert.ok(rewritten.aiRewrite);
     assert.equal(rewritten.aiRewrite.deterministicFallback, true);
-    assert.match(rewritten.aiRewrite.rewrittenPrompt, /plan-authoring/);
-    assert.match(rewritten.aiRewrite.rewrittenPrompt, /Requirements & Verification:/);
+    // Skills and tool access are applied as composer settings, never pasted into the text
+    assert.doesNotMatch(rewritten.aiRewrite.rewrittenPrompt, /Requirements & Verification:|skill guidelines/);
+    assert.ok(rewritten.inventory.skillsRecommended.includes('plan-authoring'));
     // Score, grade, and dimensions must remain strictly unchanged
     assert.equal(rewritten.overallScore, report.overallScore);
     assert.equal(rewritten.grade, report.grade);

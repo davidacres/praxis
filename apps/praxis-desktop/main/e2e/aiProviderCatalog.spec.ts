@@ -289,9 +289,9 @@ test('an endpoint without tool calling is listed as chat only, kept out of sessi
   await expect(win.getByTestId(`ai-provider-row-${id}`)).toContainText(/chat only/i);
   await expect(win.getByTestId(`ai-provider-caps-${id}`).locator('[data-capability="tools"]')).toHaveAttribute('data-ok', 'false');
 
-  // Still a recommendations provider — that is a one-shot prompt, no tools.
+  // Quick recommendations offers exactly the providers new sessions do, so a chat-only endpoint is not listed.
   await win.getByTestId('ai-tab-routing').click();
-  expect(await chipOptionValues(win.getByTestId('ai-recommendation-provider-select'))).toContain(id);
+  expect(await chipOptionValues(win.getByTestId('ai-recommendation-provider-select'))).not.toContain(id);
   await win.getByTestId('ai-tab-providers').click();
 
   // Main refuses an agent session on it, with the reason.

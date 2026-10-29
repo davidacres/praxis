@@ -30,7 +30,7 @@ import { ReasoningEffortSlider } from './ReasoningEffortSlider';
 import { workflowPreview } from './workflowPreview';
 import { SessionUsageSummary } from './SessionUsageSummary';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
-import { PromptFeedbackPopover } from './PromptFeedbackPopover';
+import { SessionPromptScoreBar } from './SessionPromptScoreBar';
 import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionTeamControl } from './SessionTeamControl';
@@ -1582,6 +1582,34 @@ export function SessionsPage({
                 }}
                 onDrop={handleComposerDrop}
               >
+                <SessionPromptScoreBar
+                  promptText={followUp}
+                  toolMode={selected.toolMode ?? 'full'}
+                  sessionMode={selected.mode ?? 'chat'}
+                  profileId={selected.profileId ?? selected.agentId}
+                  activeSkills={[
+                    ...(selected.activeSkills ?? []),
+                    ...(extraSkillsBySession[selected.issueKey] ?? [])
+                  ]}
+                  workingDirectory={selected.worktreePath || selected.workingDirectory}
+                  issueKey={selected.issueKey}
+                  followUpOfIssueKey={selected.issueKey}
+                  contextTokens={context?.used}
+                  contextLimit={context?.limit}
+                  disabled={followUpCollapsed || sendingFollowUp}
+                  onChangePrompt={setFollowUp}
+                  onChangeToolMode={nextMode => {
+                    void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { toolMode: nextMode });
+                  }}
+                  onAttachSkill={skillName => {
+                    setExtraSkillsBySession(prev => {
+                      const existing = prev[selected.issueKey] ?? [];
+                      return existing.includes(skillName)
+                        ? prev
+                        : { ...prev, [selected.issueKey]: [...existing, skillName] };
+                    });
+                  }}
+                />
                 {followUpCollapsed && isTurnActive && (
                   <svg
                     className="session-composer-activity-orbit"
@@ -2171,33 +2199,6 @@ export function SessionsPage({
                       onError={setFollowUpError}
                     />}
                     <SessionTeamControl session={selected} onDraftAsk={draftTeamAsk} />
-                    <PromptFeedbackPopover
-                      promptText={followUp}
-                      toolMode={selected.toolMode ?? 'full'}
-                      sessionMode={selected.mode ?? 'chat'}
-                      profileId={selected.profileId ?? selected.agentId}
-                      activeSkills={[
-                        ...(selected.activeSkills ?? []),
-                        ...(extraSkillsBySession[selected.issueKey] ?? [])
-                      ]}
-                      workingDirectory={selected.worktreePath || selected.workingDirectory}
-                      issueKey={selected.issueKey}
-                      contextTokens={context?.used}
-                      contextLimit={context?.limit}
-                      onChangePrompt={setFollowUp}
-                      onChangeToolMode={nextMode => {
-                        void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { toolMode: nextMode });
-                      }}
-                      onAttachSkill={skillName => {
-                        setExtraSkillsBySession(prev => {
-                          const existing = prev[selected.issueKey] ?? [];
-                          return existing.includes(skillName)
-                            ? prev
-                            : { ...prev, [selected.issueKey]: [...existing, skillName] };
-                        });
-                      }}
-                      disabled={sendingFollowUp}
-                    />
                     {context && (
                       <button
                         ref={contextChipRef}

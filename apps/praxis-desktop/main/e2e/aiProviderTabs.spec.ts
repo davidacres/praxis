@@ -225,6 +225,9 @@ test('the Recommendations provider list leaves out providers that are turned off
 
   await win.getByTestId('ai-tab-routing').click();
   expect(await optionValues()).toContain('anthropic');
+  // Exactly the providers new sessions offer, after "Auto"
+  const sessionChoices = await chipOptionValues(win.getByTestId('ai-routing-default-select'));
+  expect((await optionValues()).filter(value => value !== '')).toEqual(sessionChoices);
 
   // Off: no longer offered.
   await win.getByTestId('ai-tab-providers').click();

@@ -9,8 +9,8 @@ import {
 } from './feedbackTypes';
 
 describe('feedbackTypes & canonical digest (TASK-488)', () => {
-  it('exposes rubric and schema version 1', () => {
-    assert.equal(SCORING_RUBRIC_VERSION, 1);
+  it('exposes rubric version 3 and schema version 1', () => {
+    assert.equal(SCORING_RUBRIC_VERSION, 3);
     assert.equal(FEEDBACK_SCHEMA_VERSION, 1);
   });
 

@@ -1,4 +1,5 @@
 import { describe, it } from 'node:test';
+import { checkedClarity } from './promptClarityFixtures';
 import * as assert from 'node:assert/strict';
 import type { AgentSessionRecord } from '../agentTypes';
 import type { FeedbackEvaluationInput } from './feedbackTypes';
@@ -92,19 +93,17 @@ describe('Golden Deterministic Scoring Corpus (TASK-494)', () => {
         codeIntelligenceAvailable: true,
         evaluatedAt: '2026-10-28T12:00:00Z'
       },
-      // Prompt Clarity: 20 - 3 (low-specificity) - 4 (no anchor) - 4 (no verify) - 6 (toolMode conflict) = 3/20
+      // Intent is `plan`, so no file anchor or test command is required (rubric v2).
+      // Prompt Clarity: 20 - 6 (toolMode conflict: "create" while read-only) = 14/20
       // Skill Alignment: 20 - 6 (missed plan-authoring) = 14/20
       // MCP Readiness: 15/15
-      // Normalized pre-send: round((3 + 14 + 15) / 55 * 100) = round(32 / 55 * 100) = 58 F
-      expectedScore: 58,
-      expectedGrade: 'F',
-      expectedDimensions: [3, 25, 14, 15, 20],
+      // Weighted pre-send (clarity 60 / skills 25 / MCP 15): 14/20*60 + 14/20*25 + 15 = 74.5 -> 75 C
+      expectedScore: 75,
+      expectedGrade: 'C',
+      expectedDimensions: [14, 25, 14, 15, 20],
       expectedFindingIds: [
         'prompt-tool-mode-conflict',
-        'skill-missed-plan-authoring',
-        'prompt-missing-scope-anchor',
-        'prompt-missing-verification',
-        'prompt-low-specificity'
+        'skill-missed-plan-authoring'
       ]
     },
     {
@@ -112,6 +111,7 @@ describe('Golden Deterministic Scoring Corpus (TASK-494)', () => {
       input: {
         kind: 'prompt-readiness',
         promptText: 'fix bug',
+        clarity: checkedClarity({ target: 'no', outcome: 'no', done: 'no' }),
         toolMode: 'full',
         sessionMode: 'chat',
         availableSkills: CANONICAL_SKILLS,
@@ -119,15 +119,15 @@ describe('Golden Deterministic Scoring Corpus (TASK-494)', () => {
         codeIntelligenceAvailable: true,
         evaluatedAt: '2026-10-28T12:00:00Z'
       },
-      // Prompt Clarity: 20 - 6 (too terse) - 4 (missing anchor) - 4 (missing verification) = 6/20
-      // Skill: 20/20, MCP: 15/15 -> round(41/55*100) = 75 C
-      expectedScore: 75,
-      expectedGrade: 'C',
-      expectedDimensions: [6, 25, 20, 15, 20],
+      // Fixed model answers: target -7, outcome -5, done -4 = 4/20.
+      // Code weighting: 4/20*60 + 25 + 15 = 52 F.
+      expectedScore: 52,
+      expectedGrade: 'F',
+      expectedDimensions: [4, 25, 20, 15, 20],
       expectedFindingIds: [
-        'prompt-too-terse',
-        'prompt-missing-scope-anchor',
-        'prompt-missing-verification'
+        'clarity-target',
+        'clarity-outcome',
+        'clarity-done'
       ]
     },
     {
@@ -271,12 +271,13 @@ describe('Golden Deterministic Scoring Corpus (TASK-494)', () => {
         })
       },
       // Prompt: 20
-      // Tool: 3/4 failed (75% * 15 = 11 + 2 = 13 capped at 10) -> -10; retryLoopCount=2 -> -(3 + 4) = -7 => 25 - 17 = 8
-      // Skill: 20, MCP: 15, Outcome: 20 - 6 (unverified write) = 14 -> total = 77 C
-      expectedScore: 77,
-      expectedGrade: 'C',
-      expectedDimensions: [20, 8, 20, 15, 14],
-      expectedFindingIds: ['tool-failed-calls', 'tool-retry-loop', 'outcome-unverified-writes']
+      // Tool: one root cause — 3 failed in-place edits on index.ts before any read (blind edit loop),
+      //   resolved by step #4: -(min(8, 2 + 3 * 2)) = -8 => 17
+      // Skill: 20, MCP: 15, Outcome: 20 - 6 (unverified write) = 14 -> total = 86 B
+      expectedScore: 86,
+      expectedGrade: 'B',
+      expectedDimensions: [20, 17, 20, 15, 14],
+      expectedFindingIds: ['tool-blind-edit-loop:index.ts', 'outcome-unverified-writes']
     },
     {
       name: '7. Session with Agent Hub profile mismatch (praxis-implementer in review mode) and high context occupancy',

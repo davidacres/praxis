@@ -97,11 +97,13 @@ describe('sessionFeedbackScorer (TASK-489)', () => {
     });
 
     assert.equal(report.kind, 'prompt-readiness');
-    assert.ok(report.overallScore < 75, `Expected < 75, got ${report.overallScore}`);
+    assert.equal(report.intent, 'plan');
+    assert.ok(report.overallScore < 80, `Expected < 80, got ${report.overallScore}`);
     const findingIds = report.findings.map(f => f.id);
     assert.ok(findingIds.includes('prompt-tool-mode-conflict'));
     assert.ok(findingIds.includes('skill-missed-plan-authoring'));
-    assert.ok(findingIds.includes('prompt-missing-verification'));
+    // A planning prompt is not asked for a test command
+    assert.ok(!findingIds.includes('prompt-missing-verification'));
     assert.ok(report.inventory.skillsRecommended.includes('plan-authoring'));
   });
 
@@ -155,9 +157,17 @@ describe('sessionFeedbackScorer (TASK-489)', () => {
     });
 
     const findingIds = report.findings.map(f => f.id);
-    assert.ok(findingIds.includes('tool-failed-calls'));
-    assert.ok(findingIds.includes('tool-retry-loop'));
+    // Two failed in-place edits before any read are one root cause, not generic failures
+    assert.ok(findingIds.includes('tool-blind-edit-loop:feature.md'));
+    assert.ok(!findingIds.includes('tool-failed-calls'));
     assert.ok(findingIds.includes('mcp-shell-grep-workaround'));
+    const blind = report.findings.find(f => f.id === 'tool-blind-edit-loop:feature.md')!;
+    assert.deepEqual(blind.stepIndices, [3, 4]);
+    assert.equal(blind.steps?.[0].timestamp, '2026-10-28T10:00:03Z');
+    assert.match(blind.evidence, /only succeeded|finally applied/);
+    // The path-matched skill miss cites the step that wrote the plan file
+    assert.deepEqual(report.findings.find(f => f.id === 'skill-missed-plan-authoring')?.stepIndices, [5]);
+    assert.match(report.diagnosis?.headline ?? '', /^Completed with .*avoidable tool thrashing/);
     assert.ok(findingIds.includes('skill-missed-plan-authoring'));
     assert.ok(findingIds.includes('outcome-unverified-writes'));
     assert.equal(report.inventory.retryLoopCount, 1);

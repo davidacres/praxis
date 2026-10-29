@@ -1,3 +1,4 @@
+import { registerFindingFeedbackIpc, rememberFeedbackReport } from './findingFeedbackIpc';
 import { taskNotificationPolicy, deliverTaskNotice } from './taskNotifications';
 import { runAsAgent } from './projectActivityInstance';
 import { takeContextSnapshot } from './contextSnapshotHost';
@@ -58,7 +59,10 @@ import {
   resolveTicketContext,
   mcpServerSlug,
   evaluateSessionOrPrompt,
+  derivePriorContext,
+  selectTurnEvents,
   rewritePromptFromFeedback,
+  SCORING_RUBRIC_VERSION,
   SessionFeedbackStore,
   type DeterministicFeedbackReport,
   type PromptEvaluationRequest,
@@ -67,7 +71,9 @@ import {
   type SubmitSessionFeedbackRequest,
   type UserFeedbackInput
 } from '@praxis/core';
-import { getSessionCodeIntelligenceServer } from './codeIntelligenceIpc';
+import { getSessionCodeIntelligenceServer, isCodeIntelligenceEnabledFor } from './codeIntelligenceIpc';
+import { getFeedbackWorkspaceHints } from './feedbackWorkspaceHints';
+import { assessPromptClarity } from './promptClarityReader';
 import { buildReadOnlyModeTask } from './sessionModeTask';
 import {
   abortActiveTask,
@@ -503,6 +509,7 @@ export function switchSessionMode(issueKey: string, mode: SessionMode): AgentSes
  * live window — the desktop equivalent of the extension's EventEmitter wiring.
  */
 export function registerAiIpc(): void {
+  registerFindingFeedbackIpc();
   const sessionManager = getAiSessionManager();
   const agentService = getVercelAgentService();
 
@@ -1639,8 +1646,18 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:evaluatePrompt',
     async (_event: Electron.IpcMainInvokeEvent, input: PromptEvaluationRequest): Promise<DeterministicFeedbackReport> => {
-      const catalog = await gatherFeedbackCatalog();
-      return evaluateSessionOrPrompt({
+      // A follow-up turn inherits the running session's scope; its earlier turns make a short prompt clear
+      const followUpSession = input?.followUpOfIssueKey
+        ? await sessionManager.ensureSessionTranscript(input.followUpOfIssueKey)
+        : undefined;
+      const priorContext = followUpSession ? derivePriorContext(followUpSession) : undefined;
+      const [catalog, workspaceHints, clarity] = await Promise.all([
+        gatherFeedbackCatalog(),
+        getFeedbackWorkspaceHints(input?.workingDirectory, input?.promptText),
+        // While typing the composer asks for cached answers only; it asks for a read once typing settles
+        assessPromptClarity(input?.promptText ?? '', priorContext, { call: Boolean(input?.checkClarity) })
+      ]);
+      return rememberFeedbackReport(evaluateSessionOrPrompt({
         kind: 'prompt-readiness',
         promptText: input?.promptText ?? '',
         toolMode: input?.toolMode,
@@ -1654,11 +1671,14 @@ export function registerAiIpc(): void {
         availableSkills: catalog.availableSkills,
         availableAgents: catalog.availableAgents,
         configuredMcpServers: catalog.configuredMcpServers,
-        codeIntelligenceAvailable: true,
+        codeIntelligenceAvailable: isCodeIntelligenceEnabledFor(input?.workingDirectory),
         trackerToolsAvailable: Boolean(input?.issueKey),
         browserToolsAvailable: true,
+        ...(priorContext ? { priorContext } : {}),
+        ...(workspaceHints ? { workspaceHints } : {}),
+        clarity,
         evaluatedAt: new Date().toISOString()
-      });
+      }));
     }
   );
 
@@ -1673,10 +1693,23 @@ export function registerAiIpc(): void {
     }
     const store = getSessionFeedbackStore();
     const userFeedback = overrideFeedback ?? store.getUserFeedback(record.issueKey, turnIndex);
-    const catalog = await gatherFeedbackCatalog();
-    const report = evaluateSessionOrPrompt({
+    const scopedEvents = selectTurnEvents(record.events ?? [], turnIndex);
+    const turnPrompt = turnIndex === undefined ? undefined : scopedEvents.find(event => event.type === 'user_input_completed');
+    const goalPrompt = turnPrompt?.detail?.trim() || turnPrompt?.summary?.trim() || record.taskDefinition?.goal || '';
+    const startIndex = turnIndex === undefined ? -1 : (record.events ?? []).indexOf(scopedEvents[0]);
+    // An earlier turn must never inherit messages from that turn or its future.
+    const priorContext = startIndex > 0
+      ? derivePriorContext({ ...record, events: (record.events ?? []).slice(0, startIndex) })
+      : undefined;
+    const [catalog, workspaceHints, clarity] = await Promise.all([
+      gatherFeedbackCatalog(),
+      getFeedbackWorkspaceHints(record.worktreePath || record.workingDirectory, goalPrompt),
+      assessPromptClarity(goalPrompt, priorContext, { call: true })
+    ]);
+    const report = rememberFeedbackReport(evaluateSessionOrPrompt({
       kind: 'session-execution',
-      promptText: record.taskDefinition?.goal ?? '',
+      promptText: goalPrompt,
+      priorContext,
       session: record,
       issueKey: record.issueKey,
       sessionId: record.sessionId,
@@ -1684,12 +1717,17 @@ export function registerAiIpc(): void {
       availableSkills: catalog.availableSkills,
       availableAgents: catalog.availableAgents,
       configuredMcpServers: catalog.configuredMcpServers,
-      codeIntelligenceAvailable: true,
+      // Available if this folder gets code intelligence, or the session demonstrably used it
+      codeIntelligenceAvailable:
+        isCodeIntelligenceEnabledFor(record.worktreePath || record.workingDirectory) ||
+        (record.events ?? []).some(event => /code[_-]?intelligence|find_symbol|search_code/i.test(event.data?.toolName ?? '')),
       trackerToolsAvailable: Boolean(record.connectionId),
       browserToolsAvailable: true,
       userFeedback,
+      ...(workspaceHints ? { workspaceHints } : {}),
+      clarity,
       evaluatedAt: new Date().toISOString()
-    });
+    }));
     await store.saveReport(record.issueKey, report, turnIndex);
     if (turnIndex === undefined) {
       sessionManager.setAgentSessionFeedbackSummary(
@@ -1722,9 +1760,10 @@ export function registerAiIpc(): void {
     ): Promise<DeterministicFeedbackReport | undefined> => {
       const store = getSessionFeedbackStore();
       const existing = store.getReport(issueKey, turnIndex);
-      if (existing) return existing;
+      // A report scored under an older rubric is re-evaluated rather than shown stale
+      if (existing && existing.rubricVersion === SCORING_RUBRIC_VERSION && existing.rehearsal) return rememberFeedbackReport(existing);
       const record = sessionManager.getAgentSession(issueKey);
-      if (!record) return undefined;
+      if (!record) return existing;
       return runSessionEvaluation(issueKey, turnIndex);
     }
   );
@@ -1767,17 +1806,17 @@ export function registerAiIpc(): void {
         ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
         createdAt: now
       };
-      const report = evaluateSessionOrPrompt({
+      const report = rememberFeedbackReport(evaluateSessionOrPrompt({
         kind: 'prompt-readiness',
         promptText: input.promptText ?? '',
         availableSkills: catalog.availableSkills,
         availableAgents: catalog.availableAgents,
         configuredMcpServers: catalog.configuredMcpServers,
-        codeIntelligenceAvailable: true,
+        codeIntelligenceAvailable: isCodeIntelligenceEnabledFor(undefined),
         browserToolsAvailable: true,
         userFeedback: feedback,
         evaluatedAt: now
-      });
+      }));
       await store.saveReport(report.reportId, report);
       return report;
     }
@@ -1794,7 +1833,7 @@ export function registerAiIpc(): void {
         baseReport = await runSessionEvaluation(input.issueKey, input.turnIndex);
       } else {
         const catalog = await gatherFeedbackCatalog();
-        baseReport = evaluateSessionOrPrompt({
+        baseReport = rememberFeedbackReport(evaluateSessionOrPrompt({
           kind: 'prompt-readiness',
           promptText: input.promptText ?? '',
           toolMode: input.toolMode,
@@ -1804,10 +1843,10 @@ export function registerAiIpc(): void {
           availableSkills: catalog.availableSkills,
           availableAgents: catalog.availableAgents,
           configuredMcpServers: catalog.configuredMcpServers,
-          codeIntelligenceAvailable: true,
+          codeIntelligenceAvailable: isCodeIntelligenceEnabledFor(undefined),
           browserToolsAvailable: true,
           evaluatedAt: new Date().toISOString()
-        });
+        }));
       }
       const rewritten = await rewritePromptFromFeedback(baseReport);
       if (input.issueKey) {

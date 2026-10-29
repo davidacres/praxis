@@ -1,11 +1,13 @@
+import type { FeedbackRehearsal, FeedbackTurningPoint } from './feedbackCoaching';
 import { createHash } from 'node:crypto';
+import { boundedFeedbackMessages, type ClarityAssessment } from './promptClarity';
 import type {
   AgentSessionRecord,
   AgentToolMode,
   SessionMode
 } from '../agentTypes';
 
-export const SCORING_RUBRIC_VERSION = 1 as const;
+export const SCORING_RUBRIC_VERSION = 3 as const;
 export const FEEDBACK_SCHEMA_VERSION = 1 as const;
 
 export type FeedbackEvaluationKind = 'prompt-readiness' | 'session-execution';
@@ -39,7 +41,42 @@ export type FeedbackRemediationKind =
   | 'change-tool-mode'
   | 'refine-prompt'
   | 'add-verification'
-  | 'avoid-tool-pattern';
+  | 'avoid-tool-pattern'
+  | 'pin-file'
+  | 'add-test-command';
+
+/**
+ * What a prompt is trying to do. Classified first so a question or a short
+ * follow-up turn is not graded like a brand-new implementation ticket.
+ */
+export type PromptIntent =
+  | 'question'
+  | 'follow-up'
+  | 'bugfix'
+  | 'feature'
+  | 'plan'
+  | 'review'
+  | 'general';
+
+export type FeedbackSignalTone = 'good' | 'warn' | 'bad' | 'neutral';
+
+/** A compact fact shown under a dimension row (`✓ Agent: praxis-implementer`, `4 shell grep`). */
+export interface FeedbackSignal {
+  label: string;
+  tone: FeedbackSignalTone;
+}
+
+/** One transcript tool step a finding points at, so the UI can jump to it. */
+export interface FeedbackStepRef {
+  /** 1-based index into the evaluated event list. */
+  step: number;
+  toolName: string;
+  detail?: string;
+  ok?: boolean;
+  callId?: string;
+  timestamp?: string;
+  error?: string;
+}
 
 export interface UserFeedbackInput {
   targetKind: 'prompt' | 'session' | 'turn';
@@ -60,6 +97,7 @@ export interface FeedbackDimensionScore {
   maxPoints: number;
   normalizedScore: number;
   summary: string;
+  signals?: FeedbackSignal[];
 }
 
 export interface FeedbackRemediation {
@@ -68,6 +106,8 @@ export interface FeedbackRemediation {
   description: string;
   targetId?: string;
   suggestedPromptSnippet?: string;
+  /** Other concrete candidates for the same fix (e.g. a second matching file). */
+  alternatives?: FeedbackRemediation[];
 }
 
 export interface FeedbackFinding {
@@ -76,9 +116,12 @@ export interface FeedbackFinding {
   severity: FeedbackFindingSeverity;
   /** Negative integer for point deductions (e.g. -6), or 0 for informational notes. */
   deltaPoints: number;
+  /** How many points of the 0-100 overall score this finding costs (pre-send scores are weighted). */
+  scoreImpact?: number;
   title: string;
   evidence: string;
   stepIndices?: number[];
+  steps?: FeedbackStepRef[];
   remediation: FeedbackRemediation;
 }
 
@@ -97,6 +140,41 @@ export interface FeedbackCapabilityInventory {
   skillsAttached: string[];
   skillsDetected: string[];
   skillsRecommended: string[];
+}
+
+/** Context a follow-up turn inherits from earlier turns of the same session. */
+export interface FeedbackPriorContext {
+  /** Visible conversation only: at most six excerpts, 1,200 characters each. */
+  recentMessages?: Array<{ role: 'user' | 'assistant'; text: string }>;
+  turnCount: number;
+  touchedPaths: string[];
+  issueKey?: string;
+}
+
+/**
+ * Raw workspace facts gathered by the host (git status, test files, package
+ * scripts). Ranking them against the prompt happens in core so it stays pure.
+ */
+export interface FeedbackWorkspaceHints {
+  changedFiles: string[];
+  testFiles: string[];
+  packageScripts: string[];
+  /** Every tracked file (`git ls-files`), the vocabulary a prompt's target is checked against. */
+  trackedFiles?: string[];
+  /** Exact-name lookups in the folder's code index for identifiers the prompt names. */
+  symbols?: FeedbackSymbolLookup[];
+}
+
+export interface FeedbackSymbolLookup {
+  name: string;
+  found: boolean;
+  /** Qualified name of the match, when found. */
+  location?: string;
+}
+
+export interface FeedbackDiagnosis {
+  headline: string;
+  detail: string;
 }
 
 export interface FeedbackAiRewrite {
@@ -126,8 +204,18 @@ export interface DeterministicFeedbackReport {
   findings: FeedbackFinding[];
   inventory: FeedbackCapabilityInventory;
   suggestedPrompt: string;
+  intent?: PromptIntent;
+  diagnosis?: FeedbackDiagnosis;
+  /** Set when a follow-up prompt is clear because of earlier turns. */
+  contextInheritance?: FeedbackPriorContext;
+  /** How prompt clarity was judged: a model-read checklist, or not at all (facts only). */
+  clarity?: ClarityAssessment;
   userFeedback?: UserFeedbackInput;
   aiRewrite?: FeedbackAiRewrite;
+  /** Bounded inputs retained with human labels for later calibration review. */
+  reviewContext?: FeedbackPriorContext;
+  rehearsal?: FeedbackRehearsal;
+  turningPoint?: FeedbackTurningPoint;
 }
 
 /** Lightweight badge summary stamped onto `AgentSessionRecord` for list/header pills. */
@@ -167,6 +255,13 @@ export interface PromptEvaluationRequest {
   projectId?: string;
   contextTokens?: number;
   contextLimit?: number;
+  /** Issue key of the running session this prompt is a follow-up turn for. */
+  followUpOfIssueKey?: string;
+  /**
+   * Ask the model to read the prompt now. Without it only cached checklist answers
+   * are used (status `pending` otherwise), so typing never waits on a model call.
+   */
+  checkClarity?: boolean;
 }
 
 /** Request payload for session/turn evaluation (`ai:evaluateSession`). */
@@ -195,7 +290,6 @@ export interface RewritePromptFromFeedbackRequest {
   sessionMode?: SessionMode;
   profileId?: string;
   activeSkills?: string[];
-  useAiModel?: boolean;
 }
 
 /** Complete canonical input to the pure `evaluateSessionOrPrompt` engine. */
@@ -220,6 +314,10 @@ export interface FeedbackEvaluationInput {
   trackerToolsAvailable?: boolean;
   browserToolsAvailable?: boolean;
   userFeedback?: UserFeedbackInput;
+  priorContext?: FeedbackPriorContext;
+  workspaceHints?: FeedbackWorkspaceHints;
+  /** Checklist answers for the prompt, when a model has read it (see `promptClarity.ts`). */
+  clarity?: ClarityAssessment;
   evaluatedAt?: string;
 }
 
@@ -340,6 +438,33 @@ export function computeFeedbackInputDigest(input: FeedbackEvaluationInput): stri
     availableSkills: normalizedSkills,
     availableAgents: normalizedAgents,
     session: sessionSnapshot,
+    priorContext: input.priorContext
+      ? {
+          turnCount: input.priorContext.turnCount,
+          recentMessages: boundedFeedbackMessages(input.priorContext),
+          touchedPaths: [...input.priorContext.touchedPaths].sort(),
+          issueKey: input.priorContext.issueKey ?? ''
+        }
+      : null,
+    clarity: input.clarity
+      ? {
+          status: input.clarity.status,
+          checklistVersion: input.clarity.checklistVersion,
+          model: input.clarity.model ?? '',
+          answers: input.clarity.answers ?? null
+        }
+      : null,
+    workspaceHints: input.workspaceHints
+      ? {
+          changedFiles: [...new Set(input.workspaceHints.changedFiles)].sort(),
+          testFiles: [...new Set(input.workspaceHints.testFiles)].sort(),
+          packageScripts: [...new Set(input.workspaceHints.packageScripts)].sort(),
+          trackedFiles: [...new Set(input.workspaceHints.trackedFiles ?? [])].sort(),
+          symbols: [...(input.workspaceHints.symbols ?? [])]
+            .map(symbol => ({ name: symbol.name, found: symbol.found, location: symbol.location ?? '' }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        }
+      : null,
     userFeedback: input.userFeedback
       ? {
           targetKind: input.userFeedback.targetKind,

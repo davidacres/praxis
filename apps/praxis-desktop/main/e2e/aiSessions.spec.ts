@@ -541,11 +541,12 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
   await expect(inspector).not.toContainText('FX-BE-097');
   await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
 
-  // Changes is the default tab; with no subagents it is the only one. The
-  // Summary, Activity and Sessions tabs were removed.
+  // Changes is the default tab; with no subagents the only other one is the
+  // Scorecard (FX-BF-112). The Summary, Activity and Sessions tabs were removed.
   const tabs = inspector.getByRole('tab');
-  await expect(tabs).toHaveCount(1);
+  await expect(tabs).toHaveCount(2);
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(win.locator('[data-testid="session-tab-scorecard"]')).toHaveCount(1);
   await expect(win.locator('[data-testid="session-tab-summary"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="session-tab-activity"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="session-tab-sessions"]')).toHaveCount(0);

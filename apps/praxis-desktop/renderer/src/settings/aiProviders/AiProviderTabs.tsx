@@ -3,7 +3,7 @@ import type { AiProvider, AiProviderStatus, AppSettings, AppSettingsPatch } from
 import { ChipSelect } from '../../ui/ChipSelect';
 import { Icon } from '../../ui/Icon';
 import { ProviderBrandLogo } from '../../ui/ProviderBrandLogo';
-import { fetchModelOptions, hasModelCatalog, providerIconName } from '../../ai/modelProviders';
+import { fetchModelOptions, hasModelCatalog } from '../../ai/modelProviders';
 import { isProviderUsableForSessions } from '../../ai/providerAvailability';
 import { DebouncedTextArea, DebouncedTextField, Toggle } from '../settingsFields';
 import { McpServersPanel } from '../McpServersPanel';
@@ -48,6 +48,12 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
     return status ? isProviderUsableForSessions(status) : false;
   });
   const defaultChoices = metas.filter(meta => meta.id === settings.ai.activeProvider || sessionReady.includes(meta));
+  // Same list as new sessions; a stored choice that no longer qualifies stays listed (marked) so the
+  // picker never shows a blank for a value that is really stored.
+  const storedRecommendation = settings.ai.recommendationProvider
+    ? allMetas.find(meta => meta.id === settings.ai.recommendationProvider && !defaultChoices.includes(meta))
+    : undefined;
+  const recommendationChoices = storedRecommendation ? [...defaultChoices, storedRecommendation] : defaultChoices;
   const chatOnly = metas.filter(meta => {
     const status = statusOf(meta.id);
     return status?.configured && status.capabilities && !status.capabilities.tools;
@@ -84,7 +90,7 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
         </SettingLine>
         <SettingLine
           label="Quick recommendations"
-          help="Workflow template pick and agent-for-stage pick. Auto uses the default when it is ready, else the first ready API provider or local agent."
+          help="Workflow template pick, agent-for-stage pick and the composer's prompt check. Offers the same providers as new sessions. Auto uses the default when it is ready, else the first ready API provider or local agent."
         >
           <ChipSelect
             block
@@ -94,16 +100,13 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
             onChange={value => void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } })}
             options={[
               { value: '', label: 'Auto (first configured provider)' },
-              // A provider that is off is not offered; one that is already chosen stays listed (marked) so the
-              // picker never shows a blank for a value that is really stored.
-              ...allMetas
-                .filter(meta => settings.ai.providers[meta.id]?.enabled !== false || settings.ai.recommendationProvider === meta.id)
-                .map(meta => ({
-                  value: meta.id,
-                  label: meta.label,
-                  icon: providerIconName(meta.id),
-                  meta: settings.ai.providers[meta.id]?.enabled === false ? 'turned off' : undefined
-                }))
+              ...recommendationChoices.map(meta => ({
+                value: meta.id,
+                label: shortLabel(meta),
+                icon: <ProviderBrandLogo provider={meta.id} size={14} decorative />,
+                meta: settings.ai.providers[meta.id]?.enabled === false ? 'turned off'
+                  : defaultChoices.includes(meta) ? undefined : 'not ready'
+              }))
             ]}
           />
         </SettingLine>

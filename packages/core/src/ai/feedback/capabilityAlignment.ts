@@ -4,7 +4,9 @@ import type {
   FeedbackAgentCandidate,
   FeedbackDimensionScore,
   FeedbackFinding,
+  FeedbackSignal,
   FeedbackSkillCandidate,
+  FeedbackStepRef,
   UserFeedbackInput
 } from './feedbackTypes';
 
@@ -107,6 +109,8 @@ export function analyzeCapabilityAlignment(input: {
   activeSkills?: readonly string[];
   session?: AgentSessionRecord;
   touchedPaths?: readonly string[];
+  /** First write step per touched path, so a path-matched miss can cite its step. */
+  pathWriteSteps?: Readonly<Record<string, FeedbackStepRef>>;
   availableSkills?: readonly FeedbackSkillCandidate[];
   availableAgents?: readonly FeedbackAgentCandidate[];
   userFeedback?: UserFeedbackInput;
@@ -138,7 +142,7 @@ export function analyzeCapabilityAlignment(input: {
   const promptText = input.promptText.trim();
   const catalogSkills = input.availableSkills ?? [];
 
-  const recommendedMap = new Map<string, { reason: string; matchedByPath: boolean }>();
+  const recommendedMap = new Map<string, { reason: string; matchedByPath: boolean; matchingPath?: string }>();
 
   // 1. Check built-in domain skill heuristics (only if present in catalog or no catalog filter restricts it)
   const catalogNames = new Set(catalogSkills.map(s => s.name));
@@ -154,8 +158,9 @@ export function analyzeCapabilityAlignment(input: {
     if (matchedByPath) {
       const matchingPath = touchedPaths.find(p => heuristic.pathPattern!.test(p))!;
       recommendedMap.set(heuristic.name, {
-        reason: `Session touched \`${matchingPath}\`, which matches the \`${heuristic.name}\` skill.`,
-        matchedByPath: true
+        reason: `Touched \`${matchingPath}\` without loading the \`${heuristic.name}\` skill, so its rules for these files were never applied.`,
+        matchedByPath: true,
+        matchingPath
       });
     } else if (matchedByPrompt) {
       recommendedMap.set(heuristic.name, {
@@ -188,13 +193,17 @@ export function analyzeCapabilityAlignment(input: {
   for (const [skillName, info] of recommendedMap.entries()) {
     const deduction = info.matchedByPath ? 8 : 6;
     earnedPoints -= deduction;
+    const step = info.matchingPath ? input.pathWriteSteps?.[info.matchingPath] : undefined;
     findings.push({
       id: `skill-missed-${skillName}`,
       dimension: 'skill-agent-alignment',
       severity: info.matchedByPath ? 'critical' : 'warning',
       deltaPoints: -deduction,
-      title: `Missed trigger-matched skill: \`${skillName}\``,
+      title: info.matchingPath
+        ? `Edited \`${info.matchingPath}\` without the \`${skillName}\` skill`
+        : `Prompt matches the \`${skillName}\` skill, which isn't attached`,
       evidence: info.reason,
+      ...(step ? { stepIndices: [step.step], steps: [step] } : {}),
       remediation: {
         kind: 'attach-skill',
         label: `+ Attach ${skillName}`,
@@ -282,6 +291,13 @@ export function analyzeCapabilityAlignment(input: {
   const skillsDetected = [...detectedSet].sort();
   const skillsRecommended = [...recommendedMap.keys()].sort();
 
+  const signals: FeedbackSignal[] = [];
+  if (currentProfileId) {
+    signals.push({ label: `${agentCheck.recommendedId ? '!' : '✓'} Agent: ${currentProfileId}`, tone: agentCheck.recommendedId ? 'warn' : 'good' });
+  }
+  for (const skill of [...usedSkills].sort()) signals.push({ label: `✓ ${skill}`, tone: 'good' });
+  for (const skill of [...recommendedMap.keys()].sort()) signals.push({ label: `! Missed skill: ${skill}`, tone: 'bad' });
+
   const summary =
     earnedPoints === maxPoints
       ? usedSkills.size > 0
@@ -296,7 +312,8 @@ export function analyzeCapabilityAlignment(input: {
       earnedPoints,
       maxPoints,
       normalizedScore,
-      summary
+      summary,
+      signals
     },
     findings,
     skillsAttached,

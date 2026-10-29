@@ -61,6 +61,8 @@ import type {
 import type {
   DeterministicFeedbackReport,
   PromptEvaluationRequest,
+  FindingFeedbackState,
+  ReviewFindingRequest,
   RewritePromptFromFeedbackRequest,
   SessionEvaluationRequest,
   SubmitSessionFeedbackRequest
@@ -1132,6 +1134,8 @@ export interface AiIpc {
   // ── Prompt & Session Feedback Scoring (FX-BF-112) ─────────────────────────
   /** Deterministically scores a draft or standalone prompt before sending. */
   evaluatePrompt(input: PromptEvaluationRequest): Promise<DeterministicFeedbackReport>;
+  getFindingFeedback(inputDigest: string): Promise<FindingFeedbackState>;
+  reviewFinding(input: ReviewFindingRequest): Promise<FindingFeedbackState>;
   /** Deterministically scores a completed or historical session (or specific turn). */
   evaluateSession(input: SessionEvaluationRequest | string, turnIndex?: number): Promise<DeterministicFeedbackReport>;
   /** Retrieves the latest persisted feedback report for a session or turn, evaluating if needed. */
