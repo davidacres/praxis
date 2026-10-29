@@ -20,7 +20,13 @@ import { randomUUID } from 'node:crypto';
 import type { KeyValueStore } from '../host/stateStore';
 import type { AiProvider } from '../types';
 
-export type AiUsageSource = 'session' | 'workflow-recommendation' | 'workflow-template-recommendation' | 'workflow-model-recommendation';
+export type AiUsageSource =
+  | 'session'
+  | 'workflow-recommendation'
+  | 'workflow-template-recommendation'
+  | 'workflow-model-recommendation'
+  | 'prompt-analysis'
+  | 'prompt-calibration';
 
 export interface AiUsageEvent {
   id: string;

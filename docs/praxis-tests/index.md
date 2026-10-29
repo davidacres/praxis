@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **731 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **732 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -123,8 +123,8 @@ This catalogue describes **731 Playwright tests** under `apps/praxis-desktop/mai
 | PT-CB699F4EDD | ai Spend Limit | approaching the limit warns, and totals across sessions rather than per session | `apps/praxis-desktop/main/e2e/aiSpendLimit.spec.ts:60` |
 | PT-642D967396 | ai Spend Limit | over the limit says so, and is honest that nothing is blocked | `apps/praxis-desktop/main/e2e/aiSpendLimit.spec.ts:80` |
 | PT-F98EAD7F26 | ai Spend Limit | mixed currencies show no total rather than a meaningless one | `apps/praxis-desktop/main/e2e/aiSpendLimit.spec.ts:95` |
-| PT-17F2E7A63C | ai Spend Report | totals real ACP cost and real gateway tokens, never blended, grouped by provider and connection | `apps/praxis-desktop/main/e2e/aiSpendReport.spec.ts:54` |
-| PT-F4FF17FF93 | ai Spend Report | a range with no sessions shows the empty state, not an empty report | `apps/praxis-desktop/main/e2e/aiSpendReport.spec.ts:126` |
+| PT-C0EBD5A2BF | ai Spend Report | totals real ACP cost and real gateway tokens, never blended, grouped by connection | `apps/praxis-desktop/main/e2e/aiSpendReport.spec.ts:54` |
+| PT-F4FF17FF93 | ai Spend Report | a range with no sessions shows the empty state, not an empty report | `apps/praxis-desktop/main/e2e/aiSpendReport.spec.ts:116` |
 | PT-2271218D9A | ai Subagents | parent session displays subagents with status, tokens, and model across inspector, header, and agent runtime | `apps/praxis-desktop/main/e2e/aiSubagents.spec.ts:28` |
 | PT-324EB0D27C | ai Thought Display Verification | reasoning streams open and settles into the same widget | `apps/praxis-desktop/main/e2e/aiThoughtDisplayVerification.spec.ts:111` |
 | PT-0F440DC449 | ai Thought Display Verification | a route that cannot return reasoning says so instead of blanking | `apps/praxis-desktop/main/e2e/aiThoughtDisplayVerification.spec.ts:198` |
@@ -421,9 +421,10 @@ This catalogue describes **731 Playwright tests** under `apps/praxis-desktop/mai
 | PT-201D18C39C | new Issue | creating a live folder idea writes the research transcript into the markdown | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:188` |
 | PT-55715AB01F | new Issue | the demo board offers Subtask with a required story/task/bug parent | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:244` |
 | PT-5870B4F60C | overview | renders the workspace overview dashboard | `apps/praxis-desktop/main/e2e/overview.spec.ts:9` |
-| PT-D0D129AB73 | overview Ai Usage | shows exact period totals, peaks, cost and ranked models from a seeded ledger | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:59` |
-| PT-41BEE977CD | overview Ai Usage | says cost comes from ACP agents only when no cost is reported | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:115` |
-| PT-461248FADB | overview Ai Usage | invites a first conversation when the ledger is empty | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:125` |
+| PT-D0D129AB73 | overview Ai Usage | shows exact period totals, peaks, cost and ranked models from a seeded ledger | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:60` |
+| PT-41BEE977CD | overview Ai Usage | says cost comes from ACP agents only when no cost is reported | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:116` |
+| PT-461248FADB | overview Ai Usage | invites a first conversation when the ledger is empty | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:126` |
+| PT-58DDC70836 | overview Ai Usage | AI usage page shows costs for prompt analysis and calibration | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:134` |
 | PT-BFCB003F53 | overview Provider Budgets | a provider with no usage API is shown as no data, with the reason | `apps/praxis-desktop/main/e2e/overviewProviderBudgets.spec.ts:30` |
 | PT-79318F44E0 | overview Provider Budgets | a disabled provider gets no card | `apps/praxis-desktop/main/e2e/overviewProviderBudgets.spec.ts:52` |
 | PT-BEDB697014 | overview Provider Budgets | every enabled provider gets its own card, whatever each one reports | `apps/praxis-desktop/main/e2e/overviewProviderBudgets.spec.ts:63` |
@@ -519,10 +520,10 @@ This catalogue describes **731 Playwright tests** under `apps/praxis-desktop/mai
 | PT-A0C7008A04 | semantic Search Notification | offers an update instead of enable when an earlier model is installed | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:162` |
 | PT-4874B92CC2 | semantic Search Notification | the real main process reports a previously downloaded MiniLM bundle as an update | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:197` |
 | PT-E9A2A4583D | session Ai Icons | session list displays single and multiple pixel-perfect AI brand icons beside each session | `apps/praxis-desktop/main/e2e/sessionAiIcons.spec.ts:15` |
-| PT-0FBFC2BB99 | session Feedback | composer coach grounds fixes in the workspace, previews text, and steps aside when ready | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:103` |
-| PT-0783427DD3 | session Feedback | post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:248` |
-| PT-DC84821CF0 | session Feedback | checklist caches validated answers and falls back without a score when the provider fails | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:511` |
-| PT-22D6A42305 | session Feedback | a slow check for an old draft cannot replace the latest suggestions | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:559` |
+| PT-0FBFC2BB99 | session Feedback | composer coach grounds fixes in the workspace, previews text, and steps aside when ready | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:115` |
+| PT-0783427DD3 | session Feedback | post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:316` |
+| PT-DC84821CF0 | session Feedback | checklist caches validated answers and falls back without a score when the provider fails | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:579` |
+| PT-22D6A42305 | session Feedback | a slow check for an old draft cannot replace the latest suggestions | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:627` |
 | PT-71A99A13A6 | session Groups | chat and project session groups reorder, rename inline, and persist | `apps/praxis-desktop/main/e2e/sessionGroups.spec.ts:19` |
 | PT-228E76C299 | session Provider Limit | a session whose AI ran out can switch to another AI and carry on | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:47` |
 | PT-E181B9FAF4 | session Provider Limit | a session whose AI ran out can be stopped instead | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:64` |

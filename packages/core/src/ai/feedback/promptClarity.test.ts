@@ -13,6 +13,20 @@ describe('model checklist validation and deterministic score', () => {
     assert.deepEqual(scoreClarityAnswers(answers), scored);
     assert.equal(scored.findings.length, 3);
   });
+  it('suppresses minor deductions and findings when below the coach threshold', () => {
+    // Only ambiguity: 'partial' fails (points.partial = 2 < CLARITY_COACH_THRESHOLD)
+    const answers = checkedClarity({ ambiguity: 'partial' }).answers!;
+    const scored = scoreClarityAnswers(answers);
+    assert.equal(scored.rawDeduction, 2);
+    assert.equal(scored.deduction, 0);
+    assert.equal(scored.findings.length, 0);
+    assert.equal(scored.allFindings.length, 1);
+
+    // Explicit threshold override
+    const strictScored = scoreClarityAnswers(answers, {}, { threshold: 2 });
+    assert.equal(strictScored.deduction, 2);
+    assert.equal(strictScored.findings.length, 1);
+  });
   it('rejects incomplete JSON, invalid enums, invented quotes and empty fixes', () => {
     assert.throws(() => parseClarityAnswers('not json', 'fix it'));
     const answers = checkedClarity({ target: 'no' }).answers!;

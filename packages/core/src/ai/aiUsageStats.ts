@@ -220,6 +220,34 @@ export interface ModelUsage {
   costByCurrency: UsageCost;
 }
 
+export interface SourceUsage {
+  source: AiUsageSource;
+  label: string;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  tokenShare: number;
+  eventCount: number;
+  costByCurrency: UsageCost;
+}
+
+export function usageSourceLabel(source: AiUsageSource): string {
+  switch (source) {
+    case 'session':
+      return 'Sessions';
+    case 'prompt-analysis':
+      return 'Prompt analysis';
+    case 'prompt-calibration':
+      return 'Prompt calibration';
+    case 'workflow-recommendation':
+      return 'Workflow agent recommendations';
+    case 'workflow-template-recommendation':
+      return 'Workflow template recommendations';
+    case 'workflow-model-recommendation':
+      return 'Workflow model recommendations';
+  }
+}
+
 export interface UsagePeak {
   /** ISO 8601 UTC start of the busiest sub-period. */
   periodStart: string;
@@ -235,6 +263,8 @@ export interface UsageWindowSummary {
   costByCurrency: UsageCost;
   /** Ranked by tokens, highest first. */
   models: ModelUsage[];
+  /** Breakdown by activity / feature source. */
+  sources: SourceUsage[];
   /** Busiest sub-period inside this window: hour for today, day for week/month, month for all time. */
   peak?: UsagePeak;
 }
@@ -262,10 +292,11 @@ interface WindowAccumulator {
   eventCount: number;
   cost: Map<string, number>;
   models: Map<string, { model: string; provider?: AiProvider; totalTokens: number; eventCount: number; cost: Map<string, number> }>;
+  sources: Map<AiUsageSource, { totalTokens: number; inputTokens: number; outputTokens: number; eventCount: number; cost: Map<string, number> }>;
 }
 
 function newAccumulator(): WindowAccumulator {
-  return { totalTokens: 0, inputTokens: 0, outputTokens: 0, eventCount: 0, cost: new Map(), models: new Map() };
+  return { totalTokens: 0, inputTokens: 0, outputTokens: 0, eventCount: 0, cost: new Map(), models: new Map(), sources: new Map() };
 }
 
 function costList(cost: Map<string, number>): UsageCost {
@@ -291,6 +322,17 @@ function accumulate(acc: WindowAccumulator, event: AiUsageEvent): void {
   entry.eventCount += 1;
   entry.totalTokens += tokens;
   if (reportsCost) entry.cost.set(event.cost!.currency, (entry.cost.get(event.cost!.currency) ?? 0) + event.cost!.amount);
+
+  let srcEntry = acc.sources.get(event.source);
+  if (!srcEntry) {
+    srcEntry = { totalTokens: 0, inputTokens: 0, outputTokens: 0, eventCount: 0, cost: new Map() };
+    acc.sources.set(event.source, srcEntry);
+  }
+  srcEntry.eventCount += 1;
+  srcEntry.totalTokens += tokens;
+  if (typeof event.inputTokens === 'number') srcEntry.inputTokens += event.inputTokens;
+  if (typeof event.outputTokens === 'number') srcEntry.outputTokens += event.outputTokens;
+  if (reportsCost) srcEntry.cost.set(event.cost!.currency, (srcEntry.cost.get(event.cost!.currency) ?? 0) + event.cost!.amount);
 }
 
 type PeakMap = Map<number, number>;
@@ -320,6 +362,20 @@ function finalize(acc: WindowAccumulator, peak: UsagePeak | undefined): UsageWin
       costByCurrency: costList(entry.cost)
     }))
     .sort((left, right) => right.totalTokens - left.totalTokens || left.model.localeCompare(right.model));
+
+  const sources = [...acc.sources.entries()]
+    .map<SourceUsage>(([source, entry]) => ({
+      source,
+      label: usageSourceLabel(source),
+      totalTokens: entry.totalTokens,
+      inputTokens: entry.inputTokens,
+      outputTokens: entry.outputTokens,
+      tokenShare: acc.totalTokens > 0 ? entry.totalTokens / acc.totalTokens : 0,
+      eventCount: entry.eventCount,
+      costByCurrency: costList(entry.cost)
+    }))
+    .sort((left, right) => right.totalTokens - left.totalTokens || left.label.localeCompare(right.label));
+
   return {
     totalTokens: acc.totalTokens,
     inputTokens: acc.inputTokens,
@@ -327,6 +383,7 @@ function finalize(acc: WindowAccumulator, peak: UsagePeak | undefined): UsageWin
     eventCount: acc.eventCount,
     costByCurrency: costList(acc.cost),
     models,
+    sources,
     peak
   };
 }

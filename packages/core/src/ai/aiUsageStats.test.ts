@@ -122,11 +122,37 @@ test('usageSeries: source totals split correctly', () => {
   const reference = new Date('2026-09-16T10:00:00.000Z');
   const events: AiUsageEvent[] = [
     event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 100, source: 'session' }),
-    event({ timestamp: '2026-09-16T09:30:00.000Z', totalTokens: 40, source: 'workflow-recommendation' })
+    event({ timestamp: '2026-09-16T09:30:00.000Z', totalTokens: 40, source: 'workflow-recommendation' }),
+    event({ timestamp: '2026-09-16T09:35:00.000Z', totalTokens: 30, source: 'prompt-analysis' }),
+    event({ timestamp: '2026-09-16T09:40:00.000Z', totalTokens: 80, source: 'prompt-calibration' })
   ];
   const [today] = usageSeries(events, 'day', 1, reference);
   assert.equal(today.bySource.session, 100);
   assert.equal(today.bySource['workflow-recommendation'], 40);
+  assert.equal(today.bySource['prompt-analysis'], 30);
+  assert.equal(today.bySource['prompt-calibration'], 80);
+});
+
+test('dashboardUsageSummary: tracks prompt-analysis and prompt-calibration sources with costs', () => {
+  const reference = new Date('2026-09-16T10:00:00.000Z');
+  const events: AiUsageEvent[] = [
+    event({ timestamp: '2026-09-16T09:00:00.000Z', totalTokens: 100, source: 'session', cost: { amount: 0.1, currency: 'USD' } }),
+    event({ timestamp: '2026-09-16T09:10:00.000Z', totalTokens: 50, source: 'prompt-analysis', cost: { amount: 0.02, currency: 'USD' } }),
+    event({ timestamp: '2026-09-16T09:20:00.000Z', totalTokens: 200, source: 'prompt-calibration', cost: { amount: 0.08, currency: 'USD' } })
+  ];
+  const summary = dashboardUsageSummary(events, reference);
+  assert.equal(summary.today.totalTokens, 350);
+  const promptAnalysis = summary.today.sources.find(s => s.source === 'prompt-analysis');
+  assert.ok(promptAnalysis);
+  assert.equal(promptAnalysis!.label, 'Prompt analysis');
+  assert.equal(promptAnalysis!.totalTokens, 50);
+  assert.deepEqual(promptAnalysis!.costByCurrency, [{ currency: 'USD', amount: 0.02 }]);
+
+  const promptCalibration = summary.today.sources.find(s => s.source === 'prompt-calibration');
+  assert.ok(promptCalibration);
+  assert.equal(promptCalibration!.label, 'Prompt calibration');
+  assert.equal(promptCalibration!.totalTokens, 200);
+  assert.deepEqual(promptCalibration!.costByCurrency, [{ currency: 'USD', amount: 0.08 }]);
 });
 
 test('compareLatestPeriod: reports a positive delta when this period used more', () => {

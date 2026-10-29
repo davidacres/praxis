@@ -26,10 +26,9 @@ import {
   spendPressure,
   summariseSpend,
   summariseSpendByConnection,
-  summariseSpendByProviderModel,
   type SpendGroupRow
 } from '../ai/sessionNav';
-import { UsageModelBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
+import { UsageModelBreakdown, UsageSourceBreakdown, formatUsageCost } from '../ai/UsageModelBreakdown';
 import { onSessionChanged } from '../ai/sessionChangeStream';
 
 /** Smaller chart/table counts stay exact; large usage totals carry Mtok/Btok/Ttok units. */
@@ -365,7 +364,6 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
 
   const spendRangeSessions = useMemo(() => sessionsWithinDays(spendSessions, spendRangeDays), [spendSessions, spendRangeDays]);
   const spendTotals = useMemo(() => summariseSpend(spendRangeSessions), [spendRangeSessions]);
-  const spendByProviderModel = useMemo(() => summariseSpendByProviderModel(spendRangeSessions), [spendRangeSessions]);
   const spendByConnection = useMemo(() => summariseSpendByConnection(spendRangeSessions, connections), [spendRangeSessions, connections]);
   const spendReportingCount = useMemo(() => spendRangeSessions.filter(
     session => (session.cost && session.cost.amount > 0) || (session.tokenUsage?.totalTokens ?? 0) > 0
@@ -995,6 +993,7 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
               </div>
               {showTable && <UsageTable buckets={buckets} granularity={granularity} />}
               {summary && <UsageModelBreakdown summary={summary} testIdPrefix="ai-usage" />}
+              {summary && <UsageSourceBreakdown summary={summary} testIdPrefix="ai-usage" />}
             </>
           ) : (
             <div className="empty-state" data-testid="ai-usage-empty">
@@ -1047,18 +1046,6 @@ export function AiUsageStatsSection({ settings, update, connections = [] }: AiUs
                       {spendReportingCount} of {spendRangeSessions.length}
                     </div>
                   </div>
-                </div>
-
-                <div className="settings-section-subhead"><span>By provider &amp; model</span></div>
-                <div className="ai-spend-breakdown-list">
-                  {spendByProviderModel.map(row => (
-                    <div className="list-row is-static" key={row.label} data-testid="ai-spend-provider-row">
-                      <div>
-                        <div className="list-row-title">{row.label}</div>
-                        <div className="list-row-meta">{spendGroupMeta(row)}</div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
 
                 <div className="settings-section-subhead"><span>By connection</span></div>

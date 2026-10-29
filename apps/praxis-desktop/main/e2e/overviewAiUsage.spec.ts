@@ -20,6 +20,7 @@ interface SeedEvent {
   todayOffsetSeconds?: number;
   model: string;
   provider: string;
+  source?: string;
   totalTokens: number;
   cost?: { amount: number; currency: string };
 }
@@ -33,7 +34,7 @@ function launchWithLedger(events: SeedEvent[]): Promise<TestApp> {
   const ledger = events.map((event, index) => ({
     id: `seed-${index}`,
     timestamp: new Date(event.todayOffsetSeconds !== undefined ? todayStart + event.todayOffsetSeconds * 1000 : Date.now() - event.secondsAgo * 1000).toISOString(),
-    source: 'session',
+    source: event.source ?? 'session',
     provider: event.provider,
     model: event.model,
     totalTokens: event.totalTokens,
@@ -128,4 +129,46 @@ test('invites a first conversation when the ledger is empty', async () => {
   await page.getByTestId('nav-overview').click();
   await expect(page.getByTestId('overview-usage-empty')).toBeVisible();
   await expect(page.getByTestId('overview-usage-tile-today')).toHaveCount(0);
+});
+
+test('AI usage page shows costs for prompt analysis and calibration', async () => {
+  const events: SeedEvent[] = [
+    { secondsAgo: 0, todayOffsetSeconds: 1, model: 'opus', provider: 'claude-code-cli', source: 'session', totalTokens: 1000, cost: { amount: 0.5, currency: 'USD' } },
+    { secondsAgo: 0, todayOffsetSeconds: 2, model: 'claude-3-5-haiku', provider: 'anthropic', source: 'prompt-analysis', totalTokens: 500, cost: { amount: 0.02, currency: 'USD' } },
+    { secondsAgo: 0, todayOffsetSeconds: 3, model: 'minimax-m3.1-flash-preview', provider: 'minimax', source: 'prompt-calibration', totalTokens: 2500, cost: { amount: 0.1, currency: 'USD' } }
+  ];
+  app = await launchWithLedger(events);
+  const page = app.window;
+
+  // Navigate to Settings -> AI Usage
+  await page.locator('[data-testid="titlebar-settings"]').click();
+  await page.getByTestId('settings-nav-ai-usage').click();
+
+  // The Top Models list includes prompt analysis and calibration models with costs
+  const modelsSection = page.getByTestId('ai-usage-models');
+  await expect(modelsSection).toBeVisible();
+  await expect(modelsSection).toContainText('minimax-m3.1-flash-preview');
+  await expect(modelsSection).toContainText('$0.10');
+  await expect(modelsSection).toContainText('claude-3-5-haiku');
+  await expect(modelsSection).toContainText('$0.02');
+
+  // Activity by feature breakdown shows prompt analysis and calibration costs
+  const sourcesSection = page.getByTestId('ai-usage-sources');
+  await expect(sourcesSection).toBeVisible();
+  await expect(sourcesSection).toContainText('Prompt analysis');
+  await expect(sourcesSection).toContainText('$0.02');
+  await expect(sourcesSection).toContainText('Prompt calibration');
+  await expect(sourcesSection).toContainText('$0.10');
+  await expect(sourcesSection).toContainText('Sessions');
+  await expect(sourcesSection).toContainText('$0.50');
+
+  // Capture visual verification screenshot to .praxis/session-artifacts
+  await sourcesSection.scrollIntoViewIfNeeded();
+  const repoArtifactDir = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
+  const desktopArtifactDir = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(repoArtifactDir, { recursive: true });
+  fs.mkdirSync(desktopArtifactDir, { recursive: true });
+  const shot = await page.screenshot();
+  fs.writeFileSync(path.join(repoArtifactDir, 'ai-usage-prompt-analysis-costs.png'), shot);
+  fs.writeFileSync(path.join(desktopArtifactDir, 'ai-usage-prompt-analysis-costs.png'), shot);
 });

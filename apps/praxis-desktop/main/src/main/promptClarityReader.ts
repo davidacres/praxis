@@ -5,17 +5,21 @@ import {
   CLARITY_SYSTEM_PROMPT,
   buildClarityPrompt,
   clarityCacheKey,
+  estimateTurnCost,
   getProviderDescriptor,
+  hasReportableUsage,
   parseClarityAnswers,
   resolvePromptCheckProvider,
   runProviderPrompt,
   type ClarityAssessment,
   type ClarityChecklistAnswers,
   type FeedbackPriorContext,
-  type RecommendationProviderChoice
+  type RecommendationProviderChoice,
+  type TokenUsage
 } from '@praxis/core';
 import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
 import { getAcpAgentHost, resolveAcpStartOptions } from './aiInstance';
+import { getAiUsageLog } from './aiUsageLogInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 
@@ -52,7 +56,11 @@ function modelLabel(choice: RecommendationProviderChoice): string {
   return `${choice.provider}/${choice.model?.trim() || (descriptor.kind === 'api' ? descriptor.defaultModel : 'cli-default')}`;
 }
 
-async function askModel(choice: RecommendationProviderChoice, prompt: string): Promise<string> {
+async function askModel(
+  choice: RecommendationProviderChoice,
+  prompt: string,
+  onUsage?: (usage: TokenUsage) => void
+): Promise<string> {
   const signal = AbortSignal.timeout(CALL_TIMEOUT_MS);
   if (getProviderDescriptor(choice.provider).kind === 'cli-agent') {
     const settings = getSettingsBackend().read();
@@ -69,7 +77,8 @@ async function askModel(choice: RecommendationProviderChoice, prompt: string): P
     model: choice.model,
     systemPrompt: CLARITY_SYSTEM_PROMPT,
     timeoutMs: CALL_TIMEOUT_MS,
-    signal
+    signal,
+    onUsage
   });
   return text;
 }
@@ -116,9 +125,34 @@ export async function assessPromptClarity(
   if (running) return running;
   const request = (async (): Promise<ClarityAssessment> => {
     try {
-      const reply = await askModel(choice, buildClarityPrompt(text, priorContext));
+      let reportedUsage: TokenUsage | undefined;
+      const clarityPrompt = buildClarityPrompt(text, priorContext);
+      const reply = await askModel(choice, clarityPrompt, usage => {
+        reportedUsage = usage;
+      });
       const answers = parseClarityAnswers(reply, text, priorContext);
       await remember(key, model, answers);
+
+      const descriptor = getProviderDescriptor(choice.provider);
+      const rawModel = choice.model?.trim() || (descriptor.kind === 'api' ? descriptor.defaultModel : 'cli-default');
+      const inputTokens = reportedUsage?.inputTokens ?? Math.max(1, Math.round((CLARITY_SYSTEM_PROMPT.length + clarityPrompt.length) / 4));
+      const outputTokens = reportedUsage?.outputTokens ?? Math.max(1, Math.round(reply.length / 4));
+      const totalTokens = reportedUsage?.totalTokens || (inputTokens + outputTokens);
+      const usage: TokenUsage = { inputTokens, outputTokens, totalTokens };
+      const cost = estimateTurnCost(choice.provider, rawModel, usage);
+      const usageEvent = {
+        source: 'prompt-analysis' as const,
+        provider: choice.provider,
+        model: rawModel,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        cost
+      };
+      if (hasReportableUsage(usageEvent)) {
+        void getAiUsageLog().record(usageEvent);
+      }
+
       return { ...base, status: 'checked', model, cached: false, answers };
     } catch (error) {
       return { ...base, status: 'unavailable', model, reason: error instanceof Error ? error.message : String(error) };

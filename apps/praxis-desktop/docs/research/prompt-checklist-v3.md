@@ -54,6 +54,23 @@ a held-out set. The proposed minimum 85% agreement is a target, not an achieved
 result. Correlation with later outcomes requires a separate reviewed evaluation;
 automatically detected corrections alone are not ground truth.
 
+### Running a calibration
+
+1. `node scripts/build-prompt-calibration-set.mjs` samples the user's own session
+   history into `<profile>/prompt-calibration/` (never the repository): every turn
+   whose next message reads as a correction, plus first turns and follow-ups spread
+   across short, medium and long prompts. Sampling is seeded, so a rebuild keeps
+   item ids and labels. Known secret formats are masked before anything is written.
+2. Review `labels.csv` (kind, the five checks, and "should the coach speak"), and
+   mark rows as reviewed.
+3. `node scripts/score-prompt-calibration.mjs --run --endpoint <OpenAI-compatible URL>
+   --model <id>` asks the checklist through the same prompt, parser and scoring as
+   the app, caches answers, and writes `report.md`. Without `--run` nothing is sent.
+
+Plain agreement is not the gate: about one prompt in ten needs coaching, so a coach
+that never speaks agrees roughly 90% of the time. The gate is precision and recall
+on "should the coach speak" (70% each by default).
+
 ## Validation recorded in this handover
 
 - Shared core suite: 1,788 passed, 2 skipped, 0 failed (1,790 total).
@@ -155,5 +172,23 @@ replacing newer UI state.
 Final focused rerun after restoring the delayed-save guard: all four Electron
 feedback journeys passed (48.5 seconds). The retained composer and turning-point
 screenshots were reopened for visual inspection. Visibility restoration on another
-assessment preserves existing labels without creating a new vote. All changes
-remain uncommitted.
+assessment preserves existing labels without creating a new vote.
+
+### Calibration and Coach Deduction Threshold (v4)
+
+176 real user prompts (including 26 turns drawing corrections) were calibrated against `MiniMax-M3.1-Flash-Preview`:
+- Operational commands (`git commit`, `pull remote main and merge`, test runs, version bumps, inspections) and natural multi-turn follow-ups are recognized as unambiguous developer tasks.
+- Trailing commentary and context-resolved quotes are cleanly grounded in evidence.
+- A deterministic coach deduction threshold (`CLARITY_COACH_THRESHOLD = 5`) suppresses minor partial-check nitpicks (-2 to -4 pts), keeping the composer quiet and clean on normal prompts.
+- Substantive issues (missing target, missing outcome, or missing context/unattached screenshots) or multiple accumulated flaws meet the threshold and trigger the coach strip.
+- Benchmark false alarms dropped from 73 to 5 (at threshold 5) and to 2 (at threshold 6), with precision reaching 71.4% at deduction ≥ 6.
+
+### Recording API Costs for Prompt Analysis and Calibration
+
+API tokens and monetary costs are tracked across live composer prompt checks and batch calibration runs:
+- **Live prompt checks (`promptClarityReader.ts`):** `askModel` captures completion tokens via `runProviderPrompt`'s `onUsage` callback (or character fallback), estimates USD turn cost with `estimateTurnCost`, and appends an entry to the durable `AiUsageLog` ledger tagged `source: 'prompt-analysis'`.
+- **Calibration benchmark runs (`score-prompt-calibration.mjs`):** Batch runs extract token usage from `/chat/completions` responses (`body.usage`), estimate turn costs with `estimateTurnCost`, and record events directly to `<userData>/ai-usage-log.json` tagged `source: 'prompt-calibration'`.
+- **AI Usage Page Visibility (`AiUsageStatsSection.tsx` & `UsageModelBreakdown.tsx`):**
+  - Evaluated models (e.g. `MiniMax-M3.1-Flash-Preview`, `claude-3-5-haiku`) appear in the **Top models** breakdown with their token counts, share %, and USD costs.
+  - The new **Activity by feature** card breaks down token consumption and reported costs across `Prompt analysis`, `Prompt calibration`, `Sessions`, and `Workflow recommendations`.
+  - Aggregations persist across UTC time-series windows (`today`, `week`, `month`, `allTime`) and feed the overall usage ledger charts.

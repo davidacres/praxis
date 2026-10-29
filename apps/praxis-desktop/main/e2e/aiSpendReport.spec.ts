@@ -51,7 +51,7 @@ async function openAiSpendSettings(win: TestApp['window']): Promise<void> {
   await expect(win.getByTestId('ai-spend-report')).toBeVisible();
 }
 
-test('totals real ACP cost and real gateway tokens, never blended, grouped by provider and connection', async () => {
+test('totals real ACP cost and real gateway tokens, never blended, grouped by connection', async () => {
   mock = await startMockGatewayServer({
     mode: 'complete',
     models: [MODEL],
@@ -100,19 +100,9 @@ test('totals real ACP cost and real gateway tokens, never blended, grouped by pr
   // contributed no cost, and nothing here invents one from its tokens.
   await expect(win.getByTestId('ai-spend-total-cost')).toContainText('0.42');
 
-  const providerRows = win.getByTestId('ai-spend-provider-row');
-  const claudeRow = providerRows.filter({ hasText: 'Claude Code' });
-  await expect(claudeRow).toContainText('1 session');
-  await expect(claudeRow).toContainText('0.42');
-  await expect(claudeRow).not.toContainText('tokens');
-
-  const gatewayRow = providerRows.filter({ hasText: 'Vercel AI Gateway' });
-  await expect(gatewayRow).toContainText('1 session');
-  await expect(gatewayRow).toContainText('6.2k tokens');
-  // Loosely: Intl renders currency differently by locale ("$0.42" vs
-  // "US$0.42"), so assert the absence of the currency symbol pattern instead
-  // of a literal string — the point is no cost line at all on this row.
-  await expect(gatewayRow).not.toContainText('$0.42');
+  // Spend report displays connection breakdown without individual provider/model rows.
+  await expect(win.getByTestId('ai-spend-provider-row')).toHaveCount(0);
+  await expect(win.getByText('By provider & model')).toHaveCount(0);
 
   // Neither delegate call passed a connectionId (both are free-form New
   // Session runs), so both fall into the demo bucket together.

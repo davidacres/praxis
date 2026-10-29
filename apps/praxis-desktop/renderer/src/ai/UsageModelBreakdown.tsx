@@ -80,3 +80,56 @@ export function UsageModelBreakdown({ summary, limit, testIdPrefix }: UsageModel
     </div>
   );
 }
+
+interface UsageSourceBreakdownProps {
+  summary: UsageDashboardSummary;
+  testIdPrefix: string;
+}
+
+export function UsageSourceBreakdown({ summary, testIdPrefix }: UsageSourceBreakdownProps) {
+  const [period, setPeriod] = useState<BreakdownPeriod>('week');
+  const sources = summary[period].sources ?? [];
+
+  return (
+    <div className="usage-models usage-sources" data-testid={`${testIdPrefix}-sources`}>
+      <div className="usage-models-heading">
+        <h4>Activity by feature</h4>
+        <div className="session-mode-toggle" role="group" aria-label="Feature activity period">
+          {PERIODS.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              className={period === option.value ? 'active' : ''}
+              data-testid={`${testIdPrefix}-sources-period-${option.value}`}
+              onClick={() => setPeriod(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {sources.length === 0 ? (
+        <p className="usage-models-empty" data-testid={`${testIdPrefix}-sources-empty`}>No activity logged in this period.</p>
+      ) : (
+        <ol className="usage-models-list">
+          {sources.map((entry, index) => (
+            <li key={entry.source} className="usage-model-row" data-testid={`${testIdPrefix}-source-row`}>
+              <span className="usage-model-rank">{index + 1}</span>
+              <span className="usage-model-name" title={entry.label} data-testid={`${testIdPrefix}-source-name`}>
+                {entry.label}
+              </span>
+              <span className="usage-model-bar" aria-hidden="true"><i style={{ width: `${Math.max(entry.tokenShare * 100, entry.totalTokens > 0 ? 2 : 0)}%` }} /></span>
+              <span className="usage-model-tokens" data-testid={`${testIdPrefix}-source-tokens`}>
+                {formatLargeTokenCount(entry.totalTokens) ?? formatTokenCount(entry.totalTokens)}
+              </span>
+              <span className="usage-model-share">{Math.round(entry.tokenShare * 100)}%</span>
+              <span className={`usage-model-cost${entry.costByCurrency.length === 0 ? ' usage-model-cost-absent' : ''}`} data-testid={`${testIdPrefix}-source-cost`}>
+                {formatUsageCost(entry.costByCurrency)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}

@@ -607,7 +607,7 @@ test('checklist caches validated answers and falls back without a score when the
   expect(restarted.clarity?.answers).toEqual(first.clarity?.answers);
   const reloadedLabels = await app.window.evaluate(digest => window.praxis.ai.getFindingFeedback(digest), first.inputDigest);
   expect(reloadedLabels.reviews[0].verdict).toBe('context-clear');
-  expect(reloadedLabels.reviews[0].assessment?.checklistVersion).toBe(2);
+  expect(reloadedLabels.reviews[0].assessment?.checklistVersion).toBe(4);
   expect(restarted.overallScore).toBe(first.overallScore);
   mock.setMode('error');
   const input = app.window.locator('.composer-input');

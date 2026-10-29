@@ -110,6 +110,12 @@ const GEMINI_MODEL_PRICING: Record<string, ModelPriceRates> = {
   'gemini-1.5-flash-8b-latest': { inputPerMillionUsd: 0.0375, outputPerMillionUsd: 0.15 }
 };
 
+const MINIMAX_MODEL_PRICING: Record<string, ModelPriceRates> = {
+  'minimax-m3.1-flash-preview': { inputPerMillionUsd: 0.1, outputPerMillionUsd: 0.1 },
+  'minimax-text-01': { inputPerMillionUsd: 0.2, outputPerMillionUsd: 1.1 },
+  'minimax-abab6.5s': { inputPerMillionUsd: 0.1, outputPerMillionUsd: 0.1 }
+};
+
 const PRICING_BY_PROVIDER: Partial<Record<AiProvider, Record<string, ModelPriceRates>>> = {
   'z-ai': ZAI_MODEL_PRICING,
   openai: OPENAI_MODEL_PRICING,
@@ -295,6 +301,12 @@ export function getModelPricing(
     if (normalized.startsWith('glm-5')) return ZAI_MODEL_PRICING['glm-5'];
     if (normalized.startsWith('glm-4.7-flash')) return ZAI_MODEL_PRICING['glm-4.7-flash'];
     if (normalized.startsWith('glm-4')) return ZAI_MODEL_PRICING['glm-4.5'];
+  }
+  if (normalized.includes('minimax') || raw.includes('minimax')) {
+    if (MINIMAX_MODEL_PRICING[raw]) return MINIMAX_MODEL_PRICING[raw];
+    if (MINIMAX_MODEL_PRICING[normalized]) return MINIMAX_MODEL_PRICING[normalized];
+    if (normalized.includes('flash')) return MINIMAX_MODEL_PRICING['minimax-m3.1-flash-preview'];
+    return MINIMAX_MODEL_PRICING['minimax-text-01'];
   }
 
   return undefined;
