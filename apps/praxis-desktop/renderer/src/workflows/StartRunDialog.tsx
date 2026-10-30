@@ -68,6 +68,7 @@ export function StartRunDialog({
   onStarted
 }: StartRunDialogProps) {
   const { confirm } = useDialogs();
+  const [activeTab, setActiveTab] = useState<'details' | 'runtime'>('details');
   const [taskTitle, setTaskTitle] = useState('');
   const [uncommittedFiles, setUncommittedFiles] = useState<UncommittedBaseError | undefined>();
   const [startWorkflowId, setStartWorkflowId] = useState(initialWorkflowId ?? '');
@@ -367,6 +368,32 @@ export function StartRunDialog({
               <Icon name="close" size={13} />
             </button>
           </div>
+          <div className="wf-runstart-tabs" role="tablist" aria-label="Run setup">
+            {(['details', 'runtime'] as const).map(tab => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                id={`wf-runstart-tab-${tab}`}
+                aria-controls={`wf-runstart-panel-${tab}`}
+                aria-selected={activeTab === tab}
+                tabIndex={activeTab === tab ? 0 : -1}
+                className={`btn${activeTab === tab ? ' btn-primary' : ''}`}
+                onClick={() => setActiveTab(tab)}
+                onKeyDown={event => {
+                  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const next = event.key === 'Home' ? 'details' : event.key === 'End' ? 'runtime' : activeTab === 'details' ? 'runtime' : 'details';
+                  setActiveTab(next);
+                  document.getElementById(`wf-runstart-tab-${next}`)?.focus();
+                }}
+              >
+                {tab === 'details' ? 'Run details' : 'AI & permissions'}
+              </button>
+            ))}
+          </div>
+          <div className="wf-runstart-body">
+          <div className="wf-runstart-panel" role="tabpanel" id="wf-runstart-panel-details" aria-labelledby="wf-runstart-tab-details" hidden={activeTab !== 'details'}>
           {(planInput || !project.workspaceFolder || runnableWorkflows.length === 0) && (
             <div className="wf-runstart-notices">
               {planInput && (
@@ -490,6 +517,8 @@ export function StartRunDialog({
             </section>
           )}
           {prepared && <RunEstimatePanel estimate={prepared.estimate} confirmed={confirmLarge} onConfirm={setConfirmLarge} />}
+          </div>
+          <div className="wf-runstart-panel" role="tabpanel" id="wf-runstart-panel-runtime" aria-labelledby="wf-runstart-tab-runtime" hidden={activeTab !== 'runtime'}>
           {availableProviderOptions.length > 0 && (
             <section className="wf-runstart-section">
               <div className="wf-runstart-section-head">
@@ -618,6 +647,7 @@ export function StartRunDialog({
             </p>
           </fieldset>
           </div>
+          </div>
           {uncommittedFiles && (
             <UncommittedBaseNotice
               files={uncommittedFiles.files}
@@ -633,6 +663,7 @@ export function StartRunDialog({
               {error}
             </p>
           )}
+          </div>
           <div className="wf-runstart-actions">
             <button type="button" className="btn" onClick={onClose}>
               Cancel

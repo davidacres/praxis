@@ -3,6 +3,7 @@ import type { AgentSessionRecord, ProjectRecord, WorkflowRunSummary } from '@pra
 import { relativeTime } from '../../app/sessionRecency';
 import { Icon } from '../../ui/Icon';
 import { runHistoryBucket, RUN_BUCKETS, RUN_BUCKET_LABEL } from './runRecency';
+import { AutomationRunSheet } from '../../workflows/AutomationRunSheet';
 import { StatusGlyph } from '../../ui/StatusGlyph';
 
 export interface EasyModeAutomationsListProps {
@@ -156,6 +157,7 @@ export function EasyModeAutomationsList({
   runnableWorkflows,
   onStartWorkflow
 }: EasyModeAutomationsListProps) {
+  const [sheetRunId, setSheetRunId] = useState<string>();
   const [now, setNow] = useState(() => new Date());
   const [collapsedBuckets, setCollapsedBuckets] = useState<Record<string, boolean>>({});
   useEffect(() => {
@@ -484,6 +486,22 @@ export function EasyModeAutomationsList({
                       </span>
                     </div>
                   </div>
+                )}
+
+                <div className="automation-run-detail-actions">
+                  <button type="button" data-testid="easymode-view-workflow" onClick={() => setSheetRunId(run.runId)}>View workflow</button>
+                  <button type="button" data-testid="easymode-open-run" onClick={() => onSelectWorkflowRun(project, run.runId)}>Open full run</button>
+                </div>
+                {sheetRunId === run.runId && (
+                  <AutomationRunSheet
+                    project={project}
+                    run={run}
+                    sessions={allSessions ?? []}
+                    onClose={() => setSheetRunId(undefined)}
+                    onOpenRun={() => { setSheetRunId(undefined); onSelectWorkflowRun(project, run.runId); }}
+                    onArchive={onArchiveWorkflowRun ? () => onArchiveWorkflowRun(run, true) : undefined}
+                    onDelete={onDeleteWorkflowRun ? () => { setSheetRunId(undefined); void onDeleteWorkflowRun(run); } : undefined}
+                  />
                 )}
 
                 {/* Nested Stage Sessions under the Automation */}

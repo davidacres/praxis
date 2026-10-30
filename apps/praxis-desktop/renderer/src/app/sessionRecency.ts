@@ -4,23 +4,24 @@ import type { AgentSessionRecord } from '@praxis/core';
  * Recency grouping for the sidebar's session ledger (E6 design).
  *
  * Sessions and team chats share one flat feed per project, ordered by last
- * activity and split into three buckets the way the design mockup reads:
- * Today, This week (the last seven days), and Last week (everything older).
+ * activity and split into Today, This week (the last seven days),
+ * Last week (the preceding seven days), and Older.
  * The buckets are labels, not folders — rows keep their own order inside a
  * bucket, and the feed stays one continuous list the SessionOrganizer can
  * reorder.
  */
 
-export type RecencyBucket = 'today' | 'this-week' | 'last-week';
+export type RecencyBucket = 'today' | 'this-week' | 'last-week' | 'older';
 
 export const RECENCY_BUCKET_LABEL: Record<RecencyBucket, string> = {
   today: 'Today',
   'this-week': 'This week',
-  'last-week': 'Last week'
+  'last-week': 'Last week',
+  older: 'Older'
 };
 
 /** The recency buckets in feed order. */
-export const RECENCY_BUCKETS: RecencyBucket[] = ['today', 'this-week', 'last-week'];
+export const RECENCY_BUCKETS: RecencyBucket[] = ['today', 'this-week', 'last-week', 'older'];
 
 /**
  * When a session was last touched: its completion time when it has one, then
@@ -35,12 +36,13 @@ export function sessionLastActivityAt(session: AgentSessionRecord): string {
 
 export function recencyBucket(isoTimestamp: string, now: Date = new Date()): RecencyBucket {
   const when = new Date(isoTimestamp);
-  if (Number.isNaN(when.getTime())) return 'last-week';
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (Number.isNaN(when.getTime())) return 'older';
+  const day = (daysAgo: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo).getTime();
   const time = when.getTime();
-  if (time >= startOfToday) return 'today';
-  if (time >= startOfToday - 6 * 86_400_000) return 'this-week';
-  return 'last-week';
+  if (time >= day(0)) return 'today';
+  if (time >= day(6)) return 'this-week';
+  if (time >= day(13)) return 'last-week';
+  return 'older';
 }
 
 /**

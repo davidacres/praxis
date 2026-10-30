@@ -48,6 +48,8 @@ export interface ChipSelectProps {
   block?: boolean;
   /** `plain` drops the frame — for a chip sitting in a composer-style toolbar. */
   variant?: 'field' | 'plain';
+  /** Align a trailing split-button menu to its right edge. */
+  menuAlign?: 'start' | 'end';
   id?: string;
   'aria-describedby'?: string;
 }
@@ -84,6 +86,7 @@ export function ChipSelect({
   searchAction,
   block = false,
   variant = 'field',
+  menuAlign = 'start',
   id,
   'aria-describedby': describedBy
 }: ChipSelectProps) {
@@ -144,7 +147,7 @@ export function ChipSelect({
       const menuWidth = Math.max(menuRef.current?.offsetWidth ?? 220, rect.width);
       const below = window.innerHeight - rect.bottom - MENU_GAP;
       const top = below >= menuHeight || below >= rect.top ? rect.bottom + MENU_GAP : Math.max(MENU_GAP, rect.top - MENU_GAP - menuHeight);
-      const left = Math.max(MENU_GAP, Math.min(rect.left, window.innerWidth - menuWidth - MENU_GAP));
+      const left = Math.max(MENU_GAP, Math.min(menuAlign === 'end' ? rect.right - menuWidth : rect.left, window.innerWidth - menuWidth - MENU_GAP));
       setPos({ top, left, minWidth: rect.width });
     };
     place();
@@ -159,7 +162,7 @@ export function ChipSelect({
       window.removeEventListener('scroll', onScroll, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, rows.length]);
+  }, [menuAlign, open, rows.length]);
 
   useEffect(() => {
     if (!open) return;

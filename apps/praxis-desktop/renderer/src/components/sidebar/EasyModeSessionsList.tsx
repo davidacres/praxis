@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { AgentSessionRecord } from '@praxis/core';
+import type { AgentSessionRecord, TeamChatSummary } from '@praxis/core';
+import { TeamChatRow } from '../../assistant/TeamChatRow';
+import { relativeTime } from '../../app/sessionRecency';
 import { EasyModeSessionCard } from './EasyModeSessionCard';
 import { Icon } from '../../ui/Icon';
 import { RECENCY_BUCKETS, RECENCY_BUCKET_LABEL, recencyBucket, sessionLastActivityAt } from '../../app/sessionRecency';
@@ -7,6 +9,7 @@ import { SessionOrganizer } from '../../app/SessionOrganizer';
 
 export interface EasyModeSessionsListProps {
   sessions: AgentSessionRecord[];
+  teamChats?: TeamChatSummary[];
   scope: string;
   conversational?: boolean;
   allSessions?: AgentSessionRecord[];
@@ -33,6 +36,7 @@ export function isAttentionState(state: AgentSessionRecord['state']): boolean {
 export function EasyModeSessionsList({
   sessions,
   scope,
+  teamChats = [],
   conversational = false,
   allSessions,
   selectedSessionKey,
@@ -81,7 +85,9 @@ export function EasyModeSessionsList({
   }, [filteredSessions, expanded, filterQuery, selectedSessionKey]);
   const hiddenCount = filteredSessions.length - visibleSessions.length;
 
-  if (rootSessions.length === 0) {
+  const matchingChats = teamChats.filter(chat => !filterQuery.trim() || chat.title.toLowerCase().includes(filterQuery.toLowerCase().trim()));
+
+  if (rootSessions.length === 0 && teamChats.length === 0) {
     return (
       <div className="easymode-empty-card" data-testid="easymode-sessions-empty-card">
         <div className="easymode-empty-card__icon">
@@ -108,7 +114,7 @@ export function EasyModeSessionsList({
 
   return (
     <div className="easymode-sessions-list" data-testid="easymode-sessions-list">
-      {rootSessions.length >= 3 && (
+      {rootSessions.length + teamChats.length >= 3 && (
         <div className="easymode-search-bar">
           <Icon name="search" size={12} />
           <input
@@ -136,10 +142,11 @@ export function EasyModeSessionsList({
 
       {RECENCY_BUCKETS.map(bucket => {
         const group = visibleSessions.filter(session => recencyBucket(sessionLastActivityAt(session), now) === bucket);
-        if (!group.length) return null;
+        const chats = matchingChats.filter(chat => recencyBucket(chat.updatedAt, now) === bucket);
+        if (!group.length && !chats.length) return null;
         return <section className="easymode-session-bucket" key={bucket} data-testid={`easymode-session-bucket-${bucket}`}>
           <div className="easymode-session-bucket__label">{RECENCY_BUCKET_LABEL[bucket]}</div>
-          <SessionOrganizer key={`${scope}:${bucket}`} scope={`${scope}:${bucket}`} preserveMissing dragPreview items={group.map(session => ({ id: session.issueKey, node: <EasyModeSessionCard
+          <SessionOrganizer key={`${scope}:${bucket}`} scope={`${scope}:${bucket}`} preserveMissing dragPreview items={[...group.map(session => ({ id: session.issueKey, at: sessionLastActivityAt(session), node: <EasyModeSessionCard
           key={session.issueKey}
           session={session}
           allSessions={allSessions || sessions}
@@ -152,7 +159,9 @@ export function EasyModeSessionsList({
           onRenameSession={onRenameSession}
           onArchiveSession={onArchiveSession}
           onAssignSession={onAssignSession}
-        /> }))} />
+        /> })), ...chats.map(chat => ({ id: `team-chat:${chat.id}`, at: chat.updatedAt,
+          node: <TeamChatRow projectId={chat.projectId} chat={chat} ago={relativeTime(chat.updatedAt, now)} />
+        }))].sort((a, b) => b.at.localeCompare(a.at))} />
         </section>;
       })}
 
@@ -168,7 +177,7 @@ export function EasyModeSessionsList({
         </button>
       )}
 
-      {filteredSessions.length === 0 && filterQuery && (
+      {filteredSessions.length === 0 && matchingChats.length === 0 && filterQuery && (
         <div className="easymode-empty-hint">No sessions match &quot;{filterQuery}&quot;</div>
       )}
     </div>

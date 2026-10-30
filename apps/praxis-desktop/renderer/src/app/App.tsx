@@ -18,7 +18,7 @@ import { SettingsPage, type SettingsCategory } from '../settings/SettingsPage';
 import { TitleBar } from './TitleBar';
 import { useAssistant } from '../assistant/AssistantProvider';
 import { AssistantDock, AssistantFloating } from '../assistant/AssistantShell';
-import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
+import type { FeatureId } from './Sidebar';
 import { SessionRecoveryDialog } from '../ai/SessionRecoveryDialog';
 import { NewSession, type SessionWorkflowOption } from '../ai/NewSession';
 import { NewIssuePage } from '../issues/NewIssuePage';
@@ -32,6 +32,7 @@ import { LocalPeerReviewPage } from '../ai/LocalPeerReviewPage';
 import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
 import { TaskDesignerItemDetail } from '../taskDesigner/TaskDesignerItemDetail';
 import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
+import { SessionShelf } from './SessionShelf';
 import { EasyModeSidebar } from '../components/sidebar/EasyModeSidebar';
 import { AgentDetailsPage } from '../components/agent-details/AgentDetailsPage';
 import { BottomPanel } from './BottomPanel';
@@ -177,7 +178,7 @@ interface Route {
   /** Last navigated URL in the in-app browser. */
   browserUrl?: string;
   /** Centre-pane AI tooling view for `issueKey` (review / peer review / designer / agent-details). */
-  view?: 'review' | 'lpr' | 'designer' | 'agent-details';
+  view?: 'review' | 'lpr' | 'designer' | 'agent-details' | 'overview';
   /** Subagent call ID or agent ID when inspecting agent details. */
   subagentId?: string;
   /** Per-ticket runtime selected before opening an AI tool. */
@@ -446,14 +447,10 @@ export function App() {
     };
   }, []);
   const [boardDetails, setBoardDetails] = useState<BoardDetails | undefined>();
-  const [detailsByBoardId, setDetailsByBoardId] = useState<Record<string, BoardDetails | undefined>>({});
   /** Latest health-check per connection id — feeds the sidebar status dots. */
   const [connectionChecks, setConnectionChecks] = useState<
     Record<string, ConnectionCheck | undefined>
   >({});
-  const [mode, setMode] = useState<SidebarMode>(
-    () => (localStorage.getItem('tm-sidebar-mode') as SidebarMode | null) ?? 'classic'
-  );
   const [scheduleSidebarHost, setScheduleSidebarHost] = useState<HTMLDivElement | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState(() => readPaneVisible('tm-pane-sidebar-visible', true));
   const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
@@ -485,8 +482,6 @@ export function App() {
     }
   }, [sidebarVisible, auxVisible, panelVisible]);
   const [detailExpanded, setDetailExpanded] = useState(false);
-  const [sidebarSearching, setSidebarSearching] = useState(false);
-  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
   /** The right-pane element a feature portals its inspector into (Workflows, Git Graph). */
   const [auxSlotEl, setAuxSlotEl] = useState<HTMLElement | null>(null);
   const requireAux = useCallback(() => setAuxVisible(true), []);
@@ -948,7 +943,6 @@ export function App() {
     refreshBoards();
     refreshConnections();
     navigate({ projectId: project.id });
-    void updateSettings({ preview: { enableEasyMode: true } });
     return true;
   }, [createFileOnlyProjectInWorkspace, navigate, refreshBoards, refreshConnections, touchWorkspace, updateSettings]);
 
@@ -1126,9 +1120,6 @@ export function App() {
     }
   }, [activeTargetSessionKey, agentSessions]);
 
-  useEffect(() => {
-    localStorage.setItem('tm-sidebar-mode', mode);
-  }, [mode]);
 
   useEffect(() => {
     if (!route.issueKey) {
@@ -1304,7 +1295,7 @@ export function App() {
   // scope this auto-selection to the active folder/project's sessions so an
   // unrelated conversation does not pop open on folder open or sessions navigation.
   useEffect(() => {
-    const list = settings?.preview.enableEasyMode ? easyModeSessions : activeSessions;
+    const list = easyModeSessions;
     if (!startupResolved || route.feature !== 'sessions' || route.sessionKey || !list[0]) return;
     setNav(current => {
       const currentRoute = current.entries[current.index];
@@ -1313,7 +1304,7 @@ export function App() {
       entries[current.index] = { ...currentRoute, sessionKey: list[0].issueKey };
       return { ...current, entries };
     });
-  }, [agentSessions, easyModeSessions, route.feature, route.sessionKey, settings?.preview.enableEasyMode, startupResolved]);
+  }, [agentSessions, easyModeSessions, route.feature, route.sessionKey, startupResolved]);
   /** The workflow a quick session starts under: the project's quick-change
    *  template (already instantiated or not), only when it is actually ready. */
   const quickSessionWorkflowId = composerProject
@@ -1408,24 +1399,6 @@ export function App() {
     void window.praxis.board.get(selectedBoard).then(setBoardDetails);
   }, [selectedBoard]);
 
-  /** Work mode needs every board's issues at once, not just the selected one. */
-  useEffect(() => {
-    if (mode !== 'work' || boards.length === 0) {
-      return;
-    }
-    let cancelled = false;
-    void Promise.all(
-      boards.map(async board => [board.id, await window.praxis.board.get(board)] as const)
-    ).then(pairs => {
-      if (!cancelled) {
-        setDetailsByBoardId(Object.fromEntries(pairs));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, boards]);
-
   const assistant = useAssistant();
   const { setProjectId: setAssistantProject, setSessionDelegate: setAssistantDelegate, toggle: toggleAssistant } = assistant;
   useEffect(() => setAssistantProject(activeProjectId), [activeProjectId, setAssistantProject]);
@@ -1488,23 +1461,11 @@ export function App() {
         event.preventDefault();
         toggleAssistant();
       }
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'e') {
-        event.preventDefault();
-        void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } });
-      }
+
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [aiSetupNeeded, navigate, openQuickSession, toggleAssistant, settings?.preview?.enableEasyMode, updateSettings]);
-
-  const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
-    () => ({
-      sessions: agentSessions.filter(session => !isTerminalAgentState(session.state) && !isConversationSession(session)).length,
-      conversations: agentSessions.filter(session => !isTerminalAgentState(session.state) && isConversationSession(session)).length,
-      connections: connections.length
-    }),
-    [connections, agentSessions]
-  );
+  }, [aiSetupNeeded, navigate, openQuickSession, toggleAssistant, updateSettings]);
 
   /**
    * ⌘K issue search. Issues aren't held in App state (each board pages its own
@@ -1593,8 +1554,6 @@ export function App() {
     entries.push({ id: 'action:add-project', label: 'Add project', group: 'Go to', icon: 'plus', keywords: 'new existing folder import', run: () => requestAddProject() });
     entries.push({ id: 'action:open-folder', label: 'Open folder', group: 'Go to', icon: 'folder', keywords: 'open folder directory existing project easy mode', run: () => void openExistingFolder() });
     entries.push({ id: 'action:search-code', label: 'Search code & symbols', hint: '⌘⇧F', group: 'Actions', icon: 'search', keywords: 'code symbol find usages search callers callees index semantic', run: () => setCodeSearchOpen(true) });
-    entries.push({ id: 'action:toggle-easymode', label: 'Toggle EasyMode', hint: '⌘⇧E', group: 'Go to', icon: 'feather', keywords: 'toggle easy mode advance mode simple sidebar shortcut', run: () => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } }) });
-    entries.push({ id: 'action:toggle-work-mode', label: 'Toggle work mode', group: 'Go to', icon: 'columns', keywords: 'work mode boards classic', run: () => setMode(m => m === 'classic' ? 'work' : 'classic') });
     if (inSession) {
       entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });
     }
@@ -1628,9 +1587,7 @@ export function App() {
         hint: session.issueKey,
         group: 'Sessions',
         icon: 'robot',
-        run: () => navigate(settings?.preview?.enableEasyMode
-          ? { feature: 'sessions', sessionKey: session.issueKey, view: 'agent-details', subagentId: session.issueKey }
-          : { feature: 'sessions', sessionKey: session.issueKey })
+        run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey, view: 'agent-details', subagentId: session.issueKey })
       });
     });
     agentSessions.filter(isConversationSession).forEach(session => {
@@ -1641,9 +1598,7 @@ export function App() {
         hint: 'Conversation',
         group: 'Conversations',
         icon: 'chats',
-        run: () => navigate(settings?.preview?.enableEasyMode
-          ? { feature: 'sessions', sessionKey: session.issueKey, view: 'agent-details', subagentId: session.issueKey }
-          : { feature: 'conversations', sessionKey: session.issueKey })
+        run: () => navigate({ feature: 'conversations', sessionKey: session.issueKey, view: 'agent-details', subagentId: session.issueKey })
       });
     });
     (agentSnapshot?.profiles ?? []).filter(profile => !isHostShimProfile(profile)).forEach(profile => {
@@ -1673,7 +1628,7 @@ export function App() {
       entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
     });
     return entries;
-  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, openExistingFolder, updateSettings, settings?.preview?.enableEasyMode, toggleFocusMode, inSession, toggleAssistant, openProjectReview]);
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, runsByProjectId, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestAddProject, openExistingFolder, updateSettings, toggleFocusMode, inSession, toggleAssistant, openProjectReview]);
 
   /** Three stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
@@ -2160,7 +2115,7 @@ export function App() {
       );
     }
     const activeProject = easyModeProject;
-    if (settings?.preview.enableEasyMode && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && (!route.feature || route.feature === 'overview')) {
+    if ((!route.feature || route.feature === 'overview') && !route.boardId && !route.issueKey && !route.view) {
       return (
         <EasyModeCanvas
           project={activeProject}
@@ -2199,7 +2154,7 @@ export function App() {
         />
       );
     }
-    if (route.view === 'agent-details' || (settings?.preview.enableEasyMode && route.feature === 'sessions' && route.sessionKey && !route.view)) {
+    if (route.view === 'agent-details' || (route.feature === 'sessions' && route.sessionKey && !route.view)) {
       return (
         <AgentDetailsPage
           sessionKey={route.sessionKey}
@@ -2211,24 +2166,16 @@ export function App() {
           onBrowserUrlChange={handleBrowserUrlChange}
           browserSuspended={nativeOverlayOpen}
           onClose={() => {
-            if (settings?.preview.enableEasyMode) {
-              navigate({
+            navigate({
                 projectId: easyModeProject?.id,
                 feature: 'overview',
                 view: undefined,
                 subagentId: undefined,
                 sessionKey: undefined
-              });
-            } else {
-              navigate({ ...route, view: undefined, subagentId: undefined });
-            }
+            });
           }}
           onSelectSession={sessionKey => {
-            if (settings?.preview.enableEasyMode) {
-              navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: sessionKey });
-            } else {
-              navigate({ feature: 'sessions', sessionKey });
-            }
+            navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: sessionKey });
           }}
           onSelectAgent={(sessionKey, subId) => navigate({ feature: 'sessions', sessionKey, view: 'agent-details', subagentId: subId })}
         />
@@ -2448,9 +2395,6 @@ export function App() {
         </div>
       );
     }
-    // Work mode renders the board cards in the sidebar; the centre pane just
-    // shows whatever is currently routed (New Session when nothing's picked,
-    // BoardView for the selected board).
     if (!selectedBoard) {
       return renderNewSession();
     }
@@ -2544,6 +2488,7 @@ export function App() {
     <div className="window-root">
       <WindowCloseGuard />
       <TitleBar
+        onOpenOverview={() => navigate({ feature: 'overview', view: 'overview' })}
         appVersion={appVersion}
         codeIntelFolder={composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder}
         contextLabel={contextLabel}
@@ -2566,11 +2511,6 @@ export function App() {
         onOpenWhatChanged={reviewProject ? () => openProjectReview(reviewProject.id, 'changes') : undefined}
         onNewProject={() => requestAddProject()}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
-        mode={mode}
-        onToggleMode={() => setMode(m => m === 'classic' ? 'work' : 'classic')}
-        onModeChange={setMode}
-        easyMode={Boolean(settings?.preview?.enableEasyMode)}
-        onToggleEasyMode={() => void updateSettings({ preview: { enableEasyMode: !settings?.preview?.enableEasyMode } })}
         onOpenFolder={openExistingFolder}
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
@@ -2669,6 +2609,14 @@ export function App() {
         />
       ) : (
       <div className="shell">
+        {!sidebarVisible && <SessionShelf sessions={easyModeSessions} activeSessionKey={route.sessionKey}
+          onSelectSession={key => {
+            const session = agentSessions.find(candidate => candidate.issueKey === key);
+            navigate(generalConversations && session && isConversationSession(session)
+              ? { feature: 'conversations', sessionKey: key }
+              : { feature: 'sessions', sessionKey: key, view: 'agent-details', subagentId: key,
+                  ...(session?.projectId ? { projectId: session.projectId } : {}) });
+          }} />}
         {sidebarVisible && (
           <>
             <div className="pane-sidebar" style={{ width: sidebar.size }}>
@@ -2685,7 +2633,7 @@ export function App() {
                   }
                   onSelectIssue={handleDesignerBoardTicketSelect}
                 />
-              ) : settings?.preview.enableEasyMode ? (
+              ) : (
                 <EasyModeSidebar
                   selectableProjects={workspaceProjects}
                   activeProjectId={easyModeProject?.id}
@@ -2716,7 +2664,7 @@ export function App() {
                     const sessionProjectId = session && isConversationSession(session) ? undefined : session?.projectId ?? easyModeProject?.id;
                     navigate({ feature: session && isConversationSession(session) ? 'conversations' : 'sessions', sessionKey, view: 'agent-details', subagentId: agentId, ...(sessionProjectId ? { projectId: sessionProjectId } : {}) });
                   }}
-                  onNewSession={() => navigate(generalConversations ? { newConversation: true } : { newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
+                  onNewSession={() => navigate({ newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
                   projects={easyModeProject ? [easyModeProject] : workspaceProjects}
                   runsByProjectId={runsByProjectId}
                   activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
@@ -2785,145 +2733,7 @@ export function App() {
                   }}
                   assignableProjects={workspaceProjects}
                 />
-              ) : (
-                <Sidebar
-                  boards={workspaceBoards}
-                  projects={workspaceProjects}
-                  focusedProjectId={easyModeProject?.id}
-                  assignableProjects={workspaceProjects}
-                  workspaces={workspaces}
-                  activeWorkspaceId={activeWorkspaceId}
-                  searching={sidebarSearching}
-                  query={sidebarSearchQuery}
-                  onQueryChange={setSidebarSearchQuery}
-                  onToggleSearch={() => {
-                    setSidebarSearching(open => !open);
-                    setSidebarSearchQuery('');
-                  }}
-                  connections={connections}
-                  connectionChecks={connectionChecks}
-                  selectedBoardId={route.boardId}
-                  detailsByBoardId={detailsByBoardId}
-                  onSelectBoard={board => openBoard(board.id)}
-                  onSelectIssue={(board, issueKey) => navigate({ boardId: board.id, issueKey })}
-                  mode={mode}
-                  onModeChange={setMode}
-                  activeFeature={route.feature}
-                  sessions={activeSessions}
-                  activeSessionKey={(route.feature === 'sessions' || route.feature === 'conversations') ? route.sessionKey : undefined}
-                  onSelectSession={issueKey => {
-                    const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
-                    navigate(session && isConversationSession(session)
-                      ? { feature: 'conversations', sessionKey: issueKey }
-                      : { feature: 'sessions', sessionKey: issueKey });
-                  }}
-                  onRenameSession={async (issueKey, title) => {
-                    await window.praxis.ai.renameSession(issueKey, title);
-                  }}
-                  onArchiveSession={async (issueKey, archived) => {
-                    await window.praxis.ai.archiveSession(issueKey, archived);
-                    if (archived && (route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
-                      navigate({ feature: route.feature });
-                    }
-                  }}
-                  onAssignConversation={async (issueKey, projectId, ticketKey) => {
-                    const project = workspaceProjects.find(candidate => candidate.id === projectId);
-                    if (!project) throw new Error('That project is no longer available in this workspace.');
-                    await window.praxis.ai.assignSessionToProject(issueKey, projectId, ticketKey, project.workspaceFolder);
-                  }}
-                  onDeleteSession={async issueKey => {
-                    await window.praxis.ai.deleteSession(issueKey);
-                    if ((route.feature === 'sessions' || route.feature === 'conversations') && route.sessionKey === issueKey) {
-                      navigate({ feature: route.feature });
-                    }
-                  }}
-                  onSelectFeature={feature => {
-                    if (feature === 'connections') {
-                      refreshConnections();
-                    }
-                    navigate(feature === 'git' && selectedProject ? { projectId: selectedProject.id, feature } : { feature });
-                  }}
-                  featureCounts={featureCounts}
-                  onNewSession={project => navigate({
-                    newSession: true,
-                    ...((project ?? composerProject) ? { projectId: (project ?? composerProject)!.id } : {})
-                  })}
-                  onNewConversation={() => navigate({ newConversation: true })}
-                  onNewProject={() => requestAddProject()}
-                  onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
-                  onSelectProject={project => navigate({ projectId: project.id })}
-                  onOpenProjectDocument={(project, document) => {
-                    void window.praxis.projects.readDocument(project.id, document.relativePath)
-                      .then(setProjectDocument)
-                      .catch(error => console.error('Failed to open project document:', error));
-                  }}
-                  selectedProjectId={route.projectId}
-                  selectedIssueKey={route.issueKey}
-                  selectedIssueConnectionId={selectedBoard?.connectionId}
-                  onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
-                  runsByProjectId={runsByProjectId}
-                  activeWorkflowRunId={route.feature === 'workflows' && route.workflowView === 'runs' ? route.workflowRunId : undefined}
-                  onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined })}
-                  onSelectWorkflowRun={(project, runId) => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: runId })}
-                  onStartWorkflowRun={(project, workflowId) => setStartRunDialog({ projectId: project.id, workflowId })}
-                  onArchiveWorkflowRun={async (runId, archived) => {
-                    try {
-                      await window.praxis.workflows.archiveRun(runId, archived);
-                    } catch (cause) {
-                      console.error('Failed to archive workflow run:', cause);
-                    }
-                  }}
-                  onCancelWorkflowRun={async runId => {
-                    try {
-                      await window.praxis.workflows.cancelRun(runId, 'cancelled from the sidebar');
-                    } catch (cause) {
-                      console.error('Failed to cancel workflow run:', cause);
-                    }
-                  }}
-                  onDeleteWorkflowRun={async (project, run) => {
-                    const result = await deleteRunFlow(run);
-                    if (result.error) {
-                      await confirm({ title: 'Could not delete the run', message: result.error, confirmLabel: 'OK' });
-                    } else if (result.deleted && route.feature === 'workflows' && route.workflowRunId === run.runId) {
-                      navigate({ projectId: project.id, feature: 'workflows' });
-                    }
-                  }}
-                  onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
-                  enableDeployments={settings?.preview?.enableDeployments ?? false}
-                  onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
-                  onNewWorkflow={project => setNewWorkflowForProject(project.id)}
-                  onDeleteBoard={board => {
-                    if (!board.connectionId) return;
-                    const connectionId = board.connectionId;
-                    // A project's board is intrinsic to the project — there is
-                    // nothing to untrack, and deleting it would mean deleting
-                    // the project. Delete the project itself instead.
-                    if (projectIdForConnection(connectionId, connections)) return;
-                    // "Delete" means different things per backend: a folder
-                    // connection *is* its board, so removing the board removes
-                    // the connection; a Jira/GitLab board is only tracked from a
-                    // shared remote connection (untrack it, delete nothing remote).
-                    const mode = connections.find(item => item.id === connectionId)?.mode;
-                    const removed = mode === 'folder'
-                      ? window.praxis.connection.remove(connectionId)
-                      : window.praxis.connection.removeTrackedBoard(connectionId, board.id);
-                    void removed.then(() => {
-                      if (route.boardId === board.id) navigate({});
-                      refreshBoards();
-                      refreshConnections();
-                    });
-                  }}
-                  onUnlinkBoard={(project, connectionId, boardId) => {
-                    void window.praxis.projects.unlinkBoard(project.id, connectionId, boardId).then(updated => {
-                      setProjects(current => current.map(item => item.id === updated.id ? updated : item));
-                      if (route.boardId === boardId) navigate({});
-                    });
-                  }}
-                  onConfigureBoard={board => {
-                    setBoardSettingsOpenFor(board.id);
-                    openBoard(board.id);
-                  }}
-                />
+
               )}
             </div>
             <div

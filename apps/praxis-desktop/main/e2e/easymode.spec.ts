@@ -27,20 +27,58 @@ test.afterEach(async () => {
 const opacityOf = (locator: import('@playwright/test').Locator) =>
   locator.evaluate(element => getComputedStyle(element).opacity);
 
-test('default sidebar is standard when enableEasyMode is false', async () => {
+test('EasyMode exposes the shared sidebar material through its feed and header', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: true } });
+  const win = app.window;
+  const sidebar = win.getByTestId('easymode-sidebar');
+  await expect(sidebar).toBeVisible();
+  // Recreate the old fills to prove this check detects the regression.
+  const oldFills = await win.addStyleTag({ content: '.easymode-sidebar, .horizon-bar { background: var(--bg-elevated) !important; }' });
+  await expect(sidebar).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(sidebar.locator('.horizon-bar')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await oldFills.evaluate(el => el.remove());
+  // Proven against the old opaque fills: both containers must let the parent
+  // pane's texture, motif and translucent palette fill paint through.
+  for (const container of [sidebar, sidebar.locator('.horizon-bar')]) {
+    await expect(container).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(container).toHaveCSS('background-image', 'none');
+  }
+  const pane = win.locator('.pane-sidebar');
+  await expect.poll(() => pane.evaluate(el => getComputedStyle(el, '::after').backgroundImage)).not.toBe('none');
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await pane.screenshot({ path: path.join(artifacts, 'easymode-themed-sidebar.png') });
+  for (const surfacePackId of ['graphite', 'aurora-glass', 'flat']) {
+    await win.getByTestId('titlebar-settings').click();
+    await win.getByTestId('settings-nav-appearance-themes').click();
+    await win.getByTestId('theme-card-praxis-dark').click();
+    await win.getByTestId('settings-nav-appearance-surfaces').click();
+    await win.getByTestId(`surface-card-${surfacePackId}`).click();
+    await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
+    await expect(win.locator('html')).toHaveAttribute('data-surface', surfacePackId);
+    await expect(win.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
+    await expect(sidebar).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(sidebar.locator('.horizon-bar')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    if (surfacePackId !== 'flat') {
+      await pane.screenshot({ path: path.join(artifacts, `easymode-${surfacePackId}-sidebar.png`) });
+    }
+  }
+  await expect(win.getByTestId('mode-classic')).toHaveCount(0);
+});
+
+test('legacy enableEasyMode false still uses the sole sidebar', async () => {
   app = await launchTestApp({
     preview: { enableEasyMode: false }
   });
   const win = app.window;
 
-  // The EasyMode sidebar should not be rendered
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
+  // Saved opt-out preferences no longer select a retired sidebar.
+  await expect(win.getByTestId('easymode-sidebar')).toBeVisible();
 });
 
-test('Preview omits retired switches and EasyMode remains available from the titlebar', async () => {
+test('Preview omits retired switches and the sole sidebar stays active', async () => {
   app = await launchTestApp({ preview: { enableEasyMode: false, enableNewProject: false, boardsSidebarMode: 'work' } });
   const win = app.window;
-  await expect(win.getByRole('button', { name: 'Add project', exact: true })).toBeVisible();
   await win.getByTestId('titlebar-settings').click();
   const settingsDialog = win.getByRole('dialog', { name: 'Settings' });
   await win.getByTestId('settings-nav-preview').click();
@@ -59,7 +97,6 @@ test('Preview omits retired switches and EasyMode remains available from the tit
   await handover.blur();
   await expect.poll(() => win.evaluate(async () => (await window.praxis.settings.get()).ai.providerHandoverPercent)).toBe(90);
   await settingsDialog.getByRole('button', { name: 'Done' }).click();
-  await win.getByRole('button', { name: 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)', exact: true }).click();
   await expect(win.getByTestId('easymode-sidebar')).toBeVisible();
 });
 
@@ -338,33 +375,23 @@ test('EasyMode sidebar renders Sessions and Automations with + buttons and handl
   await expect(win.getByRole('textbox', { name: /What's the goal/i })).toBeVisible();
 });
 
-test('toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar', async () => {
-  app = await launchTestApp({
-    preview: { enableEasyMode: false }
-  });
-  const win = app.window;
-
-  // EasyMode sidebar is not rendered initially
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
-  const toggleBtn = win.locator('[data-testid="mode-easymode"]');
-  await expect(toggleBtn).toBeVisible();
-  await expect(toggleBtn).toHaveAttribute('aria-label', /Switch to EasyMode/);
-  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-titlebar-classic.png') });
-
-  // Click titlebar button to enable EasyMode
-  await toggleBtn.click();
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
-
-  // Button now indicates advance switch and has active styling
-  const classicBtn = win.locator('[data-testid="mode-classic"]');
-  await expect(classicBtn).toBeVisible();
-  await expect(classicBtn).toHaveAttribute('aria-label', /Switch to (Advance|Classic) mode/);
-  await expect(classicBtn).toHaveClass(/active/);
-  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-titlebar-active.png') });
-
-  // Click again to switch back
-  await classicBtn.click();
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
+test('legacy sidebar preferences cannot restore Classic after restart', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: false } });
+  await app.window.evaluate(() => localStorage.setItem('tm-sidebar-mode', 'classic'));
+  await app.window.reload();
+  await expect(app.window.getByTestId('easymode-sidebar')).toBeVisible();
+  await expect(app.window.getByTestId('mode-classic')).toHaveCount(0);
+  await expect(app.window.getByTestId('mode-easymode')).toHaveCount(0);
+  await app.window.keyboard.press('ControlOrMeta+k');
+  const palette = app.window.getByRole('dialog', { name: 'Go to' });
+  await palette.getByRole('textbox').fill('Toggle EasyMode');
+  await expect(palette.getByRole('option', { name: /Toggle EasyMode/ })).toHaveCount(0);
+  await app.window.keyboard.press('Escape');
+  await app.window.getByTestId('titlebar-home').click();
+  await expect(app.window.getByTestId('overview-page')).toBeVisible();
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await app.window.screenshot({ path: path.join(artifacts, 'sole-sidebar-overview.png') });
 });
 
 test('opening a folder from Getting Started enables EasyMode', async () => {
@@ -379,7 +406,7 @@ test('opening a folder from Getting Started enables EasyMode', async () => {
     const win = app.window;
 
     await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
-    await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
+    await expect(win.getByTestId('easymode-sidebar')).toHaveCount(0);
 
     // Mock dialog:pickFolder to select our folder
     await app.electronApp.evaluate(({ ipcMain }, targetFolder) => {
@@ -392,7 +419,7 @@ test('opening a folder from Getting Started enables EasyMode', async () => {
 
     // Verify EasyMode sidebar is enabled and displayed
     await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
-    await expect(win.locator('[data-testid="mode-classic"]')).toBeVisible();
+    await expect(win.getByTestId('mode-classic')).toHaveCount(0);
     await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/easymode-opened-folder.png') });
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
@@ -407,7 +434,7 @@ test('opening a folder from TitleBar workspace menu enables EasyMode', async () 
     });
     const win = app.window;
 
-    await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
+    await expect(win.getByTestId('easymode-sidebar')).toBeVisible();
 
     // Mock dialog:pickFolder to select our folder
     await app.electronApp.evaluate(({ ipcMain }, targetFolder) => {
@@ -422,31 +449,16 @@ test('opening a folder from TitleBar workspace menu enables EasyMode', async () 
 
     // Verify EasyMode is now enabled
     await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
-    await expect(win.locator('[data-testid="mode-classic"]')).toBeVisible();
+    await expect(win.getByTestId('mode-classic')).toHaveCount(0);
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
 
-test('global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode', async () => {
-  app = await launchTestApp({
-    preview: { enableEasyMode: false }
-  });
-  const win = app.window;
-
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
-
-  // Press Ctrl+Shift+E / Meta+Shift+E
-  const isMac = process.platform === 'darwin';
-  await win.keyboard.press(isMac ? 'Meta+Shift+E' : 'Control+Shift+E');
-
-  // Verify EasyMode is now active
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toBeVisible();
-  await expect(win.locator('[data-testid="mode-classic"]')).toBeVisible();
-
-  // Press again to toggle off
-  await win.keyboard.press(isMac ? 'Meta+Shift+E' : 'Control+Shift+E');
-  await expect(win.locator('[data-testid="easymode-sidebar"]')).toHaveCount(0);
+test('retired mode shortcut leaves the sole sidebar active', async () => {
+  app = await launchTestApp({ preview: { enableEasyMode: false } });
+  await app.window.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+E' : 'Control+Shift+E');
+  await expect(app.window.getByTestId('easymode-sidebar')).toBeVisible();
 });
 
 test('EasyMode canvas renders on project root with prompt hero, starter chips, and theme switch', async () => {
@@ -622,16 +634,14 @@ test('EasyMode session card displays live ticker, hover actions, and automations
   await win.getByRole('button', { name: 'Cancel' }).click();
   await expect(win.getByTestId('assign-chat-dialog')).toHaveCount(0);
 
-  await win.getByRole('button', { name: /Switch to.*mode/i }).click();
-  const standardRunningCard = win.getByTestId('session-list-row').filter({ hasText: 'Active Code Analysis' });
-  await expect(standardRunningCard.locator('.easymode-ticker-text')).toHaveText('Indexing project files…');
-  await expect(standardRunningCard.locator('.status-glyph')).toBeVisible();
+  await expect(runningCard.locator('.easymode-ticker-text')).toHaveText('Indexing project files…');
+  await expect(runningCard.locator('.status-glyph')).toBeVisible();
   await app.electronApp.evaluate(({ BrowserWindow }, record) => {
     for (const electronWin of BrowserWindow.getAllWindows()) electronWin.webContents.send('ai:sessionChanged', record);
   }, { ...seededSessions['SESSION-RUNNING'] as object, state: 'awaiting_input' });
-  await expect(standardRunningCard.locator('.action-gate-callout')).toContainText('Input required');
+  await expect(runningCard.locator('.action-gate-callout')).toContainText('Input required');
   await win.mouse.move(900, 120);
-  await win.locator('nav.sidebar').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-cards-live.png') });
+  await win.getByTestId('easymode-sidebar').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-cards-live.png') });
 });
 
 test('opening a folder in EasyMode scopes sessions to that folder and excludes unrelated sessions', async () => {
@@ -967,136 +977,6 @@ test('automation rows have rename, archive, delete and run actions like a sessio
   await expect.poll(recordedCalls).toContainEqual({ name: 'deleteRun', args: ['run-actions', { deleteWork: false }] });
 });
 
-test('classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree', async () => {
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-classic-stages-test-'));
-  const settingsPath = path.join(userDataDir, 'test-settings.json');
-
-  const now = new Date().toISOString();
-  const seededSessions: Record<string, unknown> = {
-    'SESSION-CLASSIC-USER': {
-      issueKey: 'SESSION-CLASSIC-USER',
-      sessionId: 'sess-classic-user',
-      title: 'API Authentication Spec',
-      state: 'idle',
-      startedAt: now,
-      model: 'claude-3-5-sonnet',
-      taskDefinition: { goal: 'Design OAuth endpoints.' },
-      events: []
-    },
-    'WF-run-classic-stage-lint': {
-      issueKey: 'WF-run-classic-stage-lint',
-      sessionId: 'sess-classic-lint',
-      title: 'Lint Codebase Stage',
-      workflowRunId: 'run-888',
-      workflowNodeId: 'node-lint',
-      state: 'completed',
-      startedAt: now,
-      completedAt: now,
-      model: 'claude-3-5-sonnet',
-      taskDefinition: { goal: 'Run ESLint across packages.' },
-      events: []
-    }
-  };
-
-  fs.writeFileSync(
-    path.join(userDataDir, 'ai-sessions.json'),
-    JSON.stringify({ 'praxis.agentSessions': seededSessions }, null, 2)
-  );
-
-  app = await launchTestApp(
-    { preview: { enableEasyMode: false } },
-    { userDataDir, settingsPath },
-    undefined,
-    { openNewSession: false }
-  );
-  const win = app.window;
-
-  // Create project and assign sessions
-  const projectId = await win.evaluate(async () => {
-    const workspace = (await window.praxis.workspaces.list())[0];
-    const project = await window.praxis.projects.create(
-      {
-        name: 'Backend API Project',
-        key: 'BACK',
-        type: 'product',
-        purpose: '',
-        brief: {},
-        startingPoint: 'app-storage',
-        workflowStages: [
-          { id: 'todo', name: 'Todo' },
-          { id: 'done', name: 'Done' }
-        ],
-        starterTickets: [{ summary: 'Backend setup', description: '', issueType: 'Task', status: 'Todo' }],
-        defaultAiToolMode: 'read-only'
-      },
-      workspace.id
-    );
-    await window.praxis.ai.assignSessionToProject('SESSION-CLASSIC-USER', project.id);
-    await window.praxis.ai.assignSessionToProject('WF-run-classic-stage-lint', project.id);
-    return project.id;
-  });
-
-  // Mock listRuns on ipcMain
-  await app.electronApp.evaluate(({ ipcMain }, projId) => {
-    ipcMain.removeHandler('workflows:listRuns');
-    ipcMain.handle('workflows:listRuns', () => [
-      {
-        runId: 'run-888',
-        projectId: projId,
-        workflowName: 'Nightly CI Pipeline',
-        status: 'completed',
-        explanation: 'Nightly verification run',
-        stages: [
-          {
-            nodeId: 'node-lint',
-            name: 'Lint Codebase',
-            type: 'agent',
-            lane: 'done',
-            attempts: 1,
-            sessionKey: 'WF-run-classic-stage-lint',
-            chosenModel: 'claude-3-5-sonnet'
-          }
-        ],
-        startedAt: new Date().toISOString()
-      }
-    ]);
-    ipcMain.removeHandler('workflows:cancelRun');
-    ipcMain.handle('workflows:cancelRun', () => undefined);
-  }, projectId);
-
-  await win.reload();
-
-  // 1. Verify standard Classic sidebar is visible
-  const standardSidebar = win.locator('.sidebar');
-  await expect(standardSidebar).toBeVisible();
-
-  // 2. Standalone user session appears in the project's sessions tree
-  const userSessionNode = win.locator('.session-nav-row', { hasText: 'API Authentication Spec' });
-  await expect(userSessionNode).toBeVisible();
-
-  // 3. Stage session does NOT appear as a standalone session in the sessions tree
-  const stageSessionStandalone = win.locator('.session-nav-row', { hasText: 'Lint Codebase Stage' });
-  await expect(stageSessionStandalone).toHaveCount(0);
-
-  // 4. In Automations, Nightly CI Pipeline run is visible
-  const runRow = win.locator('[data-testid="project-workflow-run-row"]', { hasText: 'Nightly CI Pipeline' });
-  await expect(runRow).toBeVisible();
-
-  // Expand run stages by clicking the automation run
-  const runOpenBtn = runRow.locator('[data-testid="automation-run-open"]');
-  await expect(runOpenBtn).toBeVisible();
-  await runOpenBtn.click();
-
-  // 5. Nested stage session is visible under the automation run
-  const stageRow = runRow.locator('.automation-run-stage-row', { hasText: 'Lint Codebase' });
-  await expect(stageRow).toBeVisible();
-
-  // Take screenshot of classic mode nested stages
-  await win.screenshot({ path: path.resolve(__dirname, '../.praxis/session-artifacts/classic-automation-nested-stages.png') });
-});
-
-// Loads a session, quotes from it, and measures thread/composer geometry, so it
-// needs more than the default budget on a loaded machine.
 test('in EasyMode selecting a session opens details in the center', async () => {
   test.slow();
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-easymode-select-details-'));
@@ -1712,7 +1592,7 @@ test('easy mode groups sessions by last activity like classic mode', async () =>
   await app.electronApp.evaluate(({ BrowserWindow }) => {
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    for (const [key, timestamp] of [['old', midnight - 10 * 86400000], ['week', midnight - 2 * 86400000], ['today', now.getTime()]] as const) {
+    for (const [key, timestamp] of [['older', midnight - 20 * 86400000], ['old', midnight - 10 * 86400000], ['week', midnight - 2 * 86400000], ['today', now.getTime()]] as const) {
       BrowserWindow.getAllWindows()[0].webContents.send('ai:sessionChanged', {
         issueKey: `SESSION-GROUP-${key}`, sessionId: key, title: `Grouping ${key}`,
         state: 'completed', startedAt: new Date(midnight - 20 * 86400000).toISOString(),
@@ -1720,7 +1600,7 @@ test('easy mode groups sessions by last activity like classic mode', async () =>
       });
     }
   });
-  for (const [bucket, key, label] of [['today', 'today', 'Today'], ['this-week', 'week', 'This week'], ['last-week', 'old', 'Last week']]) {
+  for (const [bucket, key, label] of [['today', 'today', 'Today'], ['this-week', 'week', 'This week'], ['last-week', 'old', 'Last week'], ['older', 'older', 'Older']]) {
     const group = win.getByTestId(`easymode-session-bucket-${bucket}`);
     await expect(group).toContainText(label);
     await expect(group.getByTestId(`easymode-session-card-SESSION-GROUP-${key}`)).toBeVisible();
@@ -1917,7 +1797,7 @@ test('EasyMode run history groups by completion date and keeps old active work v
     ipcMain.removeHandler('workflows:listRuns');
     ipcMain.handle('workflows:listRuns', () => [
       run('Finished today', 'succeeded', 20, 0), run('Finished yesterday', 'failed', 3, 1),
-      run('Finished this week', 'cancelled', 5, 3), run('Older result', 'succeeded', 21, 20),
+      run('Finished this week', 'cancelled', 5, 3), run('Finished last week', 'succeeded', 12, 10), run('Older result', 'succeeded', 21, 20),
       run('Old active run', 'running', 30), run('Old approval', 'awaiting-approval', 29),
       { ...run('Archived result', 'succeeded', 0, 0), archived: true }
     ]);
@@ -1929,6 +1809,7 @@ test('EasyMode run history groups by completion date and keeps old active work v
   await expect(bucket('today')).toContainText('Finished today');
   await expect(bucket('yesterday')).toContainText('Finished yesterday');
   await expect(bucket('this-week')).toContainText('Finished this week');
+  await expect(bucket('last-week')).toContainText('Finished last week');
   await expect(win.getByTestId('easymode-run-Archived result')).toHaveCount(0);
   await expect(win.getByTestId('easymode-run-Older result')).toHaveCount(0);
   await bucket('older').getByRole('button').click();
@@ -1952,7 +1833,7 @@ test('EasyMode general conversations create without a project and retain history
     activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } }
   } });
   const win = app.window;
-  await win.getByTestId('easymode-new-conversation').click();
+  await chooseOption(win.getByTestId('easymode-new-options'), 'conversation');
   await expect(win.getByTestId('new-conversation-heading')).toBeVisible();
   await expect(win.getByTestId('new-session-board-select')).toHaveCount(0);
   await win.reload();
@@ -1981,7 +1862,7 @@ test('EasyMode general conversations create without a project and retain history
   await chooseOption(win.getByTestId('sidebar-project-select'), project.id);
   await expect(card).toHaveCount(0);
   // The global entry point remains available from a project.
-  await win.getByTestId('easymode-new-conversation').click();
+  await chooseOption(win.getByTestId('easymode-new-options'), 'conversation');
   await expect(win.getByTestId('new-conversation-heading')).toBeVisible();
   await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
   await card.click();
@@ -2011,4 +1892,46 @@ test('EasyMode general conversations create without a project and retain history
   await expect(win.getByTestId('session-chat-thread')).toContainText('Hello from the fake ACP agent');
   await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
   await expect(card).toHaveCount(0);
+});
+
+
+test('sidebar split button offers all creation paths without a separate conversation button', async () => {
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  const projectId = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return (await window.praxis.projects.create({ name: 'Creation project', key: 'CREATE', type: 'product',
+      purpose: '', brief: {}, startingPoint: 'app-storage', starterTickets: [{ summary: 'Creation fixture', description: '', issueType: 'Task', status: 'Todo' }], defaultAiToolMode: 'read-only',
+      workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }]
+    }, workspace.id)).id;
+  });
+  await win.reload();
+  await chooseOption(win.getByTestId('sidebar-project-select'), projectId);
+  await expect(win.getByTestId('easymode-new-conversation')).toHaveCount(0);
+  const split = await win.locator('.easymode-new-split').boundingBox();
+  const picker = await win.getByTestId('sidebar-project-select').boundingBox();
+  expect(split!.width).toBeLessThan(105);
+  expect(split!.height).toBeLessThanOrEqual(picker!.height + 2);
+  expect(Math.abs((split!.y + split!.height / 2) - (picker!.y + picker!.height / 2))).toBeLessThan(2);
+
+  await win.getByTestId('easymode-new-session').click();
+  await expect(win.getByTestId('new-session-view')).toBeVisible();
+  await chooseOption(win.getByTestId('easymode-new-options'), 'session');
+  await expect(win.getByTestId('new-session-view')).toBeVisible();
+  await chooseOption(win.getByTestId('easymode-new-options'), 'conversation');
+  await expect(win.getByTestId('new-conversation-heading')).toBeVisible();
+  await chooseOption(win.getByTestId('easymode-new-options'), 'team-chat');
+  await expect(win.getByTestId('assistant-panel')).toBeVisible();
+  await win.getByTestId('titlebar-assistant').click();
+  await chooseOption(win.getByTestId('easymode-new-options'), 'run');
+  await expect(win.getByRole('dialog')).toContainText('Start workflow run');
+  await win.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await win.getByTestId('easymode-new-options').click();
+  const menu = await win.getByRole('listbox', { name: 'Create new options' }).boundingBox();
+  const sidebar = await win.getByTestId('easymode-sidebar').boundingBox();
+  expect(menu!.x).toBeGreaterThanOrEqual(0);
+  expect(menu!.x + menu!.width).toBeLessThanOrEqual(sidebar!.x + sidebar!.width + 8);
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await win.screenshot({ path: path.join(artifacts, 'sidebar-creation-split-button.png') });
 });

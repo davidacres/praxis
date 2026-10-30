@@ -5,8 +5,8 @@ import type { PhraseMarker } from './PromptCoachDetails';
  * One thing the coach wants changed, in the form it is accepted:
  * - `setting` changes a session setting, never the text;
  * - `insert` adds text at the end of the draft (shown as ghost text first);
- * - `phrase` replaces an unclear phrase with the user's answer;
- * - `question` appends the user's answer as a labelled line;
+ * - `phrase` identifies unclear text for direct editing in the composer;
+ * - `question` asks for missing detail without offering an automatic edit;
  * - `advice` has no one-step fix and can only be read and skipped.
  */
 export type CoachSuggestionKind = 'setting' | 'insert' | 'phrase' | 'question' | 'advice';

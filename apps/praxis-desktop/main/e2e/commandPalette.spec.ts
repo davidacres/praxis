@@ -20,7 +20,7 @@ test.afterEach(async () => {
 
 test('opens with the shortcut, filters, and navigates on Enter', async () => {
   const page = app.window;
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(page.getByTestId('easymode-sidebar')).toBeVisible();
 
   await page.keyboard.press('ControlOrMeta+k');
   const palette = page.getByRole('dialog', { name: 'Go to' });
@@ -38,7 +38,7 @@ test('opens with the shortcut, filters, and navigates on Enter', async () => {
 
 test('closes on Escape without navigating', async () => {
   const page = app.window;
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(page.getByTestId('easymode-sidebar')).toBeVisible();
 
   await page.keyboard.press('ControlOrMeta+k');
   const palette = page.getByRole('dialog', { name: 'Go to' });
@@ -49,7 +49,7 @@ test('closes on Escape without navigating', async () => {
 
 test('finds a demo issue by summary text and navigates to it on Enter', async () => {
   const page = app.window;
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(page.getByTestId('easymode-sidebar')).toBeVisible();
 
   await page.keyboard.press('ControlOrMeta+k');
   const palette = page.getByRole('dialog', { name: 'Go to' });
@@ -68,7 +68,7 @@ test('finds a demo issue by summary text and navigates to it on Enter', async ()
 
 test('surfaces a settings page and opens the settings dialog', async () => {
   const page = app.window;
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(page.getByTestId('easymode-sidebar')).toBeVisible();
 
   await page.keyboard.press('ControlOrMeta+k');
   const palette = page.getByRole('dialog', { name: 'Go to' });

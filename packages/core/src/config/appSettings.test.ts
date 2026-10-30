@@ -1,3 +1,4 @@
+import { resolvePromptCheckProvider, resolveRecommendationProvider } from '../ai/providerSecrets';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { DEFAULT_APP_SETTINGS, mergeAppSettings, sanitizeAppSettings } from './appSettings';
@@ -647,4 +648,27 @@ test('global accent accepts only hex colors, persists through theme changes, and
   const switched = mergeAppSettings(accented, { appearance: { themeId: 'praxis-dark', themeMode: 'dark' } });
   assert.equal(switched.appearance.accentColor, '#ffcc00');
   assert.equal(mergeAppSettings(switched, { appearance: { accentColor: '' } }).appearance.accentColor, '');
+});
+
+test('prompt analysis routing is sanitized, independent and clearable', () => {
+  const settings = sanitizeAppSettings({ ai: { recommendationProvider: 'openai', promptAnalysisProvider: 'anthropic', promptAnalysisModel: '  clarity-model  ' } });
+  assert.equal(settings.ai.promptAnalysisProvider, 'anthropic');
+  assert.equal(settings.ai.promptAnalysisModel, 'clarity-model');
+  const cleared = mergeAppSettings(settings, { ai: { promptAnalysisProvider: undefined, promptAnalysisModel: undefined } });
+  assert.equal(cleared.ai.promptAnalysisProvider, undefined);
+  assert.equal(cleared.ai.promptAnalysisModel, undefined);
+  assert.equal(cleared.ai.recommendationProvider, 'openai');
+});
+
+test('prompt checks use their own provider and model without changing recommendations', async () => {
+  const secrets = { get: async () => 'test-key', store: async () => {}, delete: async () => {} };
+  const settings = sanitizeAppSettings({ ai: { recommendationProvider: 'openai', promptAnalysisProvider: 'anthropic', promptAnalysisModel: 'clarity-model' } });
+  assert.equal((await resolvePromptCheckProvider(secrets, settings.ai))?.provider, 'anthropic');
+  assert.equal((await resolvePromptCheckProvider(secrets, settings.ai))?.model, 'clarity-model');
+  assert.equal((await resolveRecommendationProvider(secrets, settings.ai)).provider, 'openai');
+  settings.ai.providers.anthropic = { ...settings.ai.providers.anthropic, enabled: false };
+  assert.equal(await resolvePromptCheckProvider(secrets, settings.ai), undefined);
+  settings.ai.promptAnalysisProvider = undefined;
+  settings.ai.promptAnalysisModel = undefined;
+  assert.equal((await resolvePromptCheckProvider(secrets, settings.ai))?.provider, 'openai');
 });

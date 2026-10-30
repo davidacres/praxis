@@ -152,6 +152,7 @@ export function AiProvidersSection({ settings, update, category, onOpenUsage }: 
       await update({ ai: {
         ...(isDefault ? { activeProvider: replacement } : {}),
         ...(settings.ai.recommendationProvider === id ? { recommendationProvider: undefined } : {}),
+        ...(settings.ai.promptAnalysisProvider === id ? { promptAnalysisProvider: undefined, promptAnalysisModel: undefined } : {}),
         providers: {
           [id]: { ...(settings.ai.providers[id] ?? {}), added: false, enabled: false },
           ...(isDefault && replacement ? { [replacement]: { ...(settings.ai.providers[replacement] ?? {}), enabled: true } } : {})

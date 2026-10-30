@@ -126,13 +126,26 @@ async function apiCredentials(secrets: SecretsStore, provider: AiProvider): Prom
 }
 
 /**
- * The provider for the composer's prompt clarity check, which runs on every
- * typing pause and so needs a direct API call, not a CLI agent launch. It is the
- * first enabled API provider that has a key (the active provider first), and
- * only falls back to the recommendation provider — possibly a slower CLI host —
- * when no API provider is set up. Undefined when nothing can run it.
+ * Dedicated prompt-analysis routing wins when configured. Auto preserves the
+ * recommendation route and otherwise discovers an available API provider before
+ * falling back to the recommendation resolver. The model override applies only
+ * to prompt checks and never mutates provider defaults.
  */
 export async function resolvePromptCheckProvider(
+  secrets: SecretsStore,
+  ai: AiSettings
+): Promise<RecommendationProviderChoice | undefined> {
+  try {
+    const choice = ai.promptAnalysisProvider
+      ? await resolveRecommendationProvider(secrets, { ...ai, recommendationProvider: ai.promptAnalysisProvider })
+      : await resolveAutoPromptCheckProvider(secrets, ai);
+    return choice ? { ...choice, ...(ai.promptAnalysisModel?.trim() ? { model: ai.promptAnalysisModel.trim() } : {}) } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveAutoPromptCheckProvider(
   secrets: SecretsStore,
   ai: AiSettings
 ): Promise<RecommendationProviderChoice | undefined> {

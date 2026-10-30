@@ -59,6 +59,26 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
     return status?.configured && status.capabilities && !status.capabilities.tools;
   });
 
+  const promptProvider = settings.ai.promptAnalysisProvider;
+  const promptChoices = metas.filter(meta => {
+    const status = statusOf(meta.id);
+    return status?.configured && status.enabled !== false;
+  });
+  const storedPrompt = allMetas.find(meta => meta.id === promptProvider && !promptChoices.some(choice => choice.id === meta.id));
+  if (storedPrompt) promptChoices.push(storedPrompt);
+  const [promptModels, setPromptModels] = useState<{ provider: string; options: Array<{ value: string; label: string }> }>();
+  useEffect(() => {
+    let current = true;
+    if (promptProvider) void fetchModelOptions(promptProvider, false).then(result => {
+      if (current) setPromptModels({ provider: promptProvider, options: result?.options.map(option => ({ value: option.value, label: option.name })) ?? [] });
+    }).catch(() => { if (current) setPromptModels({ provider: promptProvider, options: [] }); });
+    return () => { current = false; };
+  }, [promptProvider]);
+  const promptModelChoices = promptModels && promptModels.provider === promptProvider ? [...promptModels.options] : [];
+  for (const value of [settings.ai.promptAnalysisModel, promptProvider && settings.ai.providers[promptProvider]?.defaultModel]) {
+    if (value && !promptModelChoices.some(option => option.value === value)) promptModelChoices.push({ value, label: value });
+  }
+
   // Model display names for the tier table: the composer's cached catalog, fetched once per provider.
   const [names, setNames] = useState<Record<string, Record<string, string>>>({});
   const readyKey = sessionReady.map(meta => meta.id).join(',');
@@ -90,7 +110,7 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
         </SettingLine>
         <SettingLine
           label="Quick recommendations"
-          help="Workflow template pick, agent-for-stage pick and the composer's prompt check. Offers the same providers as new sessions. Auto uses the default when it is ready, else the first ready API provider or local agent."
+          help="Workflow template pick and agent-for-stage pick. Offers the same providers as new sessions. Auto uses the default when it is ready, else the first ready API provider or local agent."
         >
           <ChipSelect
             block
@@ -108,6 +128,26 @@ export function RoutingTab({ settings, update, metas, statuses, allMetas, onMake
                   : defaultChoices.includes(meta) ? undefined : 'not ready'
               }))
             ]}
+          />
+        </SettingLine>
+      </TabCard>
+
+      <TabCard title="Prompt analysis" testId="ai-routing-prompt-analysis">
+        <SettingLine label="Provider" help="Checks prompt clarity before you send. Auto keeps the existing recommendation routing; this selection does not change sessions or recommendations.">
+          <ChipSelect block ariaLabel="Prompt analysis provider" data-testid="ai-prompt-analysis-provider"
+            value={promptProvider ?? ''}
+            options={[{ value: '', label: 'Auto (recommendation routing)' }, ...promptChoices.map(meta => ({
+              value: meta.id, label: shortLabel(meta), icon: <ProviderBrandLogo provider={meta.id} size={14} decorative />,
+              meta: statusOf(meta.id)?.configured && statusOf(meta.id)?.enabled !== false ? undefined : 'unavailable'
+            }))]}
+            onChange={value => void update({ ai: { promptAnalysisProvider: value ? value as AiProvider : undefined, promptAnalysisModel: undefined } })}
+          />
+        </SettingLine>
+        <SettingLine label="Model" help="Choose a model or enter its ID. Provider default uses that provider's configured model. Prompt checks have a 20-second timeout.">
+          <ChipSelect block allowCustom ariaLabel="Prompt analysis model" data-testid="ai-prompt-analysis-model"
+            disabled={!promptProvider} value={settings.ai.promptAnalysisModel ?? ''}
+            options={[{ value: '', label: 'Provider default' }, ...promptModelChoices]}
+            onChange={value => void update({ ai: { promptAnalysisModel: value || undefined } })}
           />
         </SettingLine>
       </TabCard>

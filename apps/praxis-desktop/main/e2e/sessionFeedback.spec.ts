@@ -168,6 +168,26 @@ test('composer coach grounds fixes in the workspace, previews text, and steps as
   const coachBox = await coachCard.boundingBox();
   await win.screenshot({ path: path.join(ARTIFACT_DIR, 'composer-coach-v2-live.png'), clip: coachBox! });
 
+  await expect(win.getByTestId('prompt-coach-open')).toHaveCount(0);
+  await expect(win.getByTestId('prompt-caret-apply')).toBeEnabled();
+  // The icon controls share the caret's text line rather than adding a row below it.
+  const caretControls = (await win.getByTestId('prompt-caret-toolbar').boundingBox())!;
+  const caretInputBox = (await composerInput.boundingBox())!;
+  expect(caretControls.height).toBeLessThanOrEqual(20);
+  expect(caretControls.width).toBeLessThanOrEqual(40);
+  expect(caretControls.y).toBeLessThan(caretInputBox.y + 24);
+  await expect(win.getByTestId('prompt-caret-apply')).toHaveAccessibleName('Apply prompt suggestion');
+  expect(await win.getByTestId('prompt-caret-apply').innerText()).toBe('');
+
+  await win.getByTestId('prompt-caret-preview').click();
+  await expect(win.getByTestId('prompt-caret-preview-content')).toContainText('Suggested prompt');
+  await expect(win.getByTestId('prompt-caret-preview-content')).toContainText('in @src/PromptScoreBar.tsx.');
+  await expect(win.getByTestId('prompt-coach-details')).toHaveCount(0);
+  const inlineArtifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(inlineArtifacts, { recursive: true });
+  await win.screenshot({ path: path.join(inlineArtifacts, 'prompt-caret-inline-icons.png') });
+  await win.getByTestId('prompt-caret-preview').click();
+
   // The rest of the coach lives behind "details"
   await expect(win.getByTestId('prompt-coach-details')).toHaveCount(0);
   await win.getByTestId('prompt-strip-details-toggle').click();
@@ -182,7 +202,9 @@ test('composer coach grounds fixes in the workspace, previews text, and steps as
 
   // Tab accepts the suggestion in focus and moves straight on; the caret stays in the draft
   await composerInput.focus();
-  await composerInput.press('Tab');
+  const sessionsBeforeApply = await win.evaluate(() => window.praxis.ai.listSessions());
+  await win.getByTestId('prompt-caret-apply').click();
+  expect((await win.evaluate(() => window.praxis.ai.listSessions())).length).toBe(sessionsBeforeApply.length);
   await expect(composerInput).toHaveValue('fix the truncated headline in the prompt score bar in @src/PromptScoreBar.tsx.');
   await expect(composerInput).toBeFocused();
   await expect(coach).toHaveAttribute('data-state', 'open');
@@ -200,10 +222,10 @@ test('composer coach grounds fixes in the workspace, previews text, and steps as
   // With nothing left, it says so briefly and steps aside
   await expect(win.getByTestId('session-prompt-ready-banner')).toContainText('All 3 handled', { timeout: 5000 });
   await expect(coach).toHaveCount(0, { timeout: 5000 });
-  await win.getByTestId('prompt-coach-open').click();
-  await expect(win.getByTestId('prompt-rehearsal')).toContainText('npx playwright test e2e/promptScoreBar.spec.ts');
+  await win.getByTestId('prompt-caret-preview').click();
+  await expect(win.getByTestId('prompt-caret-preview-content')).toContainText('Proposed approach');
   await expect(composerInput).toHaveValue(/verify with/);
-  await win.getByTestId('session-prompt-dismiss-btn').click();
+  await win.getByTestId('prompt-caret-preview').click();
   await expect(coach).toHaveCount(0);
 
   // A question is never graded on files or tests — and once the check passes, the
@@ -261,19 +283,24 @@ test('composer coach grounds fixes in the workspace, previews text, and steps as
   await expect(win.getByTestId('session-prompt-score-headline')).toContainText('Which object should be moved?');
   await expect(win.getByTestId('prompt-phrase-target')).toHaveClass(/is-active/);
   await expect(composerInput).toBeFocused();
-  // A phrase needs the user's own words: Tab moves to the answer, Enter replaces the phrase
-  await composerInput.press('Tab');
-  const answer = win.getByTestId('prompt-strip-answer');
-  await expect(answer).toBeFocused();
-  await answer.fill('the settings toggle');
-  await expect(composerInput).toHaveValue('put the thing in the box');
-  await answer.press('Enter');
+  // Clarifications stay beside the phrase; users edit the prompt itself.
+  await expect(win.getByTestId('prompt-strip-answer')).toHaveCount(0);
+  await expect(win.getByPlaceholder('Replace with…')).toHaveCount(0);
+  await expect(win.getByTestId('prompt-caret-apply')).toHaveCount(0);
+  await expect(win.getByTestId('prompt-strip-accept')).toHaveCount(0);
+  await expect(win.getByTestId('prompt-caret-clarification')).toContainText('Which object should be moved?');
+  await expect(win.getByTestId('prompt-caret-clarification')).toContainText('Edit the highlighted text directly.');
+  const clarificationArtifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(clarificationArtifacts, { recursive: true });
+  await win.screenshot({ path: path.join(clarificationArtifacts, 'prompt-direct-clarification.png') });
+  const sessionsBeforeTyping = await win.evaluate(() => window.praxis.ai.listSessions());
+  await composerInput.evaluate(field => field.setSelectionRange(4, 13));
+  await composerInput.pressSequentially('the settings toggle');
   await expect(composerInput).toHaveValue('put the settings toggle in the box');
   await expect(composerInput).toBeFocused();
-  await expect(coach).toHaveAttribute('data-state', 'open');
-  await expect(win.getByTestId('session-prompt-undo-btn')).toBeVisible();
-  await win.getByTestId('session-prompt-undo-btn').click();
-  await expect(composerInput).toHaveValue('put the thing in the box');
+  expect((await win.evaluate(() => window.praxis.ai.listSessions())).length).toBe(sessionsBeforeTyping.length);
+  await expect(win.getByTestId('session-prompt-undo-btn')).toHaveCount(0);
+  await composerInput.fill('put the thing in the box');
   await expect(win.getByTestId('session-prompt-score-value')).toHaveText('40', { timeout: 5000 });
 
   await win.getByTestId('prompt-strip-details-toggle').click();
@@ -612,9 +639,20 @@ test('checklist caches validated answers and falls back without a score when the
   mock.setMode('error');
   const input = app.window.locator('.composer-input');
   await input.fill('change an unrelated screen');
-  await expect(app.window.getByTestId('session-prompt-check-status')).toContainText('Clarity unavailable', { timeout: 10000 });
+  await expect(app.window.getByTestId('session-prompt-check-status')).toContainText('Prompt analysis', { timeout: 10000 });
   await expect(app.window.getByTestId('session-prompt-score-value')).toHaveCount(0);
-  await expect(app.window.getByTestId('session-prompt-check-unavailable')).toBeVisible();
+  await expect(app.window.getByTestId('prompt-analysis-error-heading')).toHaveText('Rate limit reached');
+  await expect(app.window.getByTestId('session-prompt-check-unavailable')).toContainText('You can still send your prompt.');
+  const notice = app.window.getByTestId('session-prompt-check-unavailable');
+  const copyBox = await notice.locator('.prompt-analysis-notice-copy').boundingBox();
+  const retryBox = await app.window.getByTestId('session-prompt-retry').boundingBox();
+  expect(retryBox!.x).toBeGreaterThanOrEqual(copyBox!.x + copyBox!.width);
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await app.window.screenshot({ path: path.join(artifacts, 'prompt-analysis-notice.png') });
+  const failures = await app.window.evaluate(async () => (await window.praxis.log.getRecent()).filter(line => line.startsWith('[prompt-analysis]') && line.includes('"event":"failed"')));
+  expect(failures.some(line => line.includes('"stage":"provider-request"') && line.includes('"status":"429"'))).toBe(true);
+  expect(failures.join('\n')).not.toContain('change an unrelated screen');
   mock.setMode('complete');
   await app.window.getByTestId('session-prompt-retry').click();
   await expect(app.window.getByTestId('session-prompt-score-value')).toBeVisible();
@@ -638,4 +676,48 @@ test('a slow check for an old draft cannot replace the latest suggestions', asyn
   await app.window.waitForTimeout(4300);
   await expect(app.window.getByTestId('session-prompt-score-value')).toHaveText('40');
   await expect(app.window.getByTestId('prompt-phrase-target')).toHaveText('the thing');
+});
+
+
+test('malformed prompt analysis is reported as a model response failure with correlated logs', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete', replyFor: () => 'not a checklist' });
+  app = await launchTestApp({ ai: { gatewayUrl: mock.baseUrl, defaultModel: 'mock/model' } }, undefined, {
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_OIDC_TOKEN: undefined
+  });
+  const report = await app.window.evaluate(() => window.praxis.ai.evaluatePrompt({
+    promptText: 'private prompt for diagnostics', toolMode: 'full', checkClarity: true
+  }));
+  expect(report.clarity?.status).toBe('unavailable');
+  expect(report.clarity?.reason).toBe('Analysis unavailable. Please retry.');
+  const logs = await app.window.evaluate(() => window.praxis.log.getRecent());
+  const failed = logs.filter(line => line.startsWith('[prompt-analysis]') && line.includes('"event":"failed"')).at(-1)!;
+  expect(failed).toContain('"stage":"response-validation"');
+  const diagnostic = JSON.parse(failed.slice('[prompt-analysis] '.length));
+  expect(diagnostic.checkId).toBeTruthy();
+  expect(diagnostic.detail).toContain('invalid clarity assessment');
+  expect(failed).not.toContain('private prompt');
+  expect(failed).not.toContain('not a checklist');
+});
+
+test('authentication recovery is readable inside the analysis notice at a narrow width', async () => {
+  mock = await startMockGatewayServer({ mode: 'error', errorStatus: 401 });
+  app = await launchTestApp({ ai: { gatewayUrl: mock.baseUrl, defaultModel: 'mock/model' } }, undefined, {
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_OIDC_TOKEN: undefined
+  });
+  const win = app.window;
+  await win.setViewportSize({ width: 1000, height: 760 });
+  await win.locator('.composer-input').fill('Check this prompt for clarity');
+  const notice = win.getByTestId('session-prompt-check-unavailable');
+  await expect(win.getByTestId('prompt-analysis-error-heading')).toHaveText('Authentication required', { timeout: 10000 });
+  await expect(notice).toContainText('Update its API key in Settings');
+  const panel = (await notice.boundingBox())!;
+  for (const item of [notice.locator('.prompt-analysis-notice-copy'), win.getByTestId('session-prompt-retry')]) {
+    const box = (await item.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(panel.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(panel.x + panel.width);
+    expect(box.y + box.height).toBeLessThanOrEqual(panel.y + panel.height);
+  }
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await win.screenshot({ path: path.join(artifacts, 'prompt-analysis-authentication-notice.png') });
 });

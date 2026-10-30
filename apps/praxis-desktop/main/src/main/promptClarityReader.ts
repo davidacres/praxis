@@ -1,4 +1,7 @@
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { getLogBus } from './logBusInstance';
+import { promptCheckDiagnostic, promptCheckFailure, type PromptCheckStage } from './promptClarityDiagnostics';
 import { app } from 'electron';
 import {
   CLARITY_CHECKLIST_VERSION,
@@ -124,13 +127,24 @@ export async function assessPromptClarity(
   const running = inFlight.get(key);
   if (running) return running;
   const request = (async (): Promise<ClarityAssessment> => {
+    const checkId = randomUUID();
+    const startedAt = Date.now();
+    let stage: PromptCheckStage = 'provider-request';
+    let replyChars = 0;
+    const log = (event: string, extra: Record<string, unknown> = {}) => getLogBus().appendLine(
+      `[prompt-analysis] ${JSON.stringify({ event, checkId, model, stage, elapsedMs: Date.now() - startedAt, promptChars: text.length, replyChars, ...extra })}`
+    );
+    log('started');
     try {
       let reportedUsage: TokenUsage | undefined;
       const clarityPrompt = buildClarityPrompt(text, priorContext);
       const reply = await askModel(choice, clarityPrompt, usage => {
         reportedUsage = usage;
       });
+      replyChars = reply.length;
+      stage = 'response-validation';
       const answers = parseClarityAnswers(reply, text, priorContext);
+      stage = 'cache-write';
       await remember(key, model, answers);
 
       const descriptor = getProviderDescriptor(choice.provider);
@@ -153,9 +167,13 @@ export async function assessPromptClarity(
         void getAiUsageLog().record(usageEvent);
       }
 
+      log('completed');
       return { ...base, status: 'checked', model, cached: false, answers };
     } catch (error) {
-      return { ...base, status: 'unavailable', model, reason: error instanceof Error ? error.message : String(error) };
+      const reason = promptCheckFailure(stage, error, getProviderDescriptor(choice.provider).kind === 'cli-agent');
+      log('failed', { reason, detail: promptCheckDiagnostic(stage, error), errorName: error instanceof Error ? error.name : 'Unknown',
+        status: String(error instanceof Error ? error.message : error).match(/\b[45]\d{2}\b/)?.[0] });
+      return { ...base, status: 'unavailable', model, reason };
     } finally {
       inFlight.delete(key);
     }

@@ -423,6 +423,20 @@ test('the Runs header opens a new workflow run', async () => {
   });
   await page.getByRole('button', { name: 'Collapse runs', exact: true }).click();
   await expect(timeline).not.toBeVisible();
+  await page.getByRole('button', { name: 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)', exact: true }).click();
+  const easyRun = page.locator('.easymode-automation-card').first();
+  await easyRun.getByRole('button', { name: 'View workflow', exact: true }).click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByTestId('automation-sheet-stages').locator('.automation-sheet-stage')).toHaveCount(2);
+  await sheet.getByRole('button', { name: 'Open full run', exact: true }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByTestId('wf-run-panel')).toBeVisible();
+  await easyRun.getByRole('button', { name: 'Open full run', exact: true }).click();
+  await expect(page.getByTestId('wf-run-panel')).toBeVisible();
+  await page.getByTestId('easymode-sidebar').screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-run-navigation.png')
+  });
+
 });
 
 test('a long run uses a bounded dot rail and exposes every step in the workflow sheet', async () => {

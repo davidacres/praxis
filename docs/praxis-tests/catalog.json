@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 732,
+  "testCount": 738,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -1414,6 +1414,22 @@
       }
     },
     {
+      "id": "PT-0E64457F3C",
+      "title": "prompt analysis provider and model persist independently of other routing",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiProviderTabs.spec.ts",
+        "line": 255,
+        "project": "functional"
+      },
+      "area": "ai Provider Tabs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "prompt analysis provider and model persist independently of other routing",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-16A529CAF6",
       "title": "switching a finished session to Review sends the mode transition and resumes it",
       "source": {
@@ -2491,7 +2507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 19,
+        "line": 20,
         "project": "functional"
       },
       "area": "app",
@@ -2507,7 +2523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 36,
+        "line": 37,
         "project": "functional"
       },
       "area": "app",
@@ -2523,7 +2539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 69,
+        "line": 70,
         "project": "functional"
       },
       "area": "app",
@@ -2539,7 +2555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 93,
+        "line": 94,
         "project": "functional"
       },
       "area": "app",
@@ -2555,7 +2571,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 110,
+        "line": 111,
         "project": "functional"
       },
       "area": "app",
@@ -2571,7 +2587,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 116,
+        "line": 117,
         "project": "functional"
       },
       "area": "app",
@@ -2587,7 +2603,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 123,
+        "line": 124,
         "project": "functional"
       },
       "area": "app",
@@ -2603,7 +2619,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 134,
+        "line": 135,
         "project": "functional"
       },
       "area": "app",
@@ -2619,7 +2635,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 153,
+        "line": 154,
         "project": "functional"
       },
       "area": "app",
@@ -2635,7 +2651,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 176,
+        "line": 177,
         "project": "functional"
       },
       "area": "app",
@@ -2651,7 +2667,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 185,
+        "line": 186,
         "project": "functional"
       },
       "area": "app",
@@ -2667,7 +2683,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 197,
+        "line": 198,
         "project": "functional"
       },
       "area": "app",
@@ -2683,7 +2699,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 205,
+        "line": 206,
         "project": "functional"
       },
       "area": "app",
@@ -2699,7 +2715,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 214,
+        "line": 215,
         "project": "functional"
       },
       "area": "app",
@@ -2715,13 +2731,29 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
-        "line": 239,
+        "line": 240,
         "project": "functional"
       },
       "area": "app",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a returning user gets the brief splash, not the full crawl",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-2304961F00",
+      "title": "titlebar Home opens Overview and preserves navigation history",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
+        "line": 255,
+        "project": "functional"
+      },
+      "area": "app",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "titlebar Home opens Overview and preserves navigation history",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -3115,7 +3147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 524,
+        "line": 543,
         "project": "functional"
       },
       "area": "assistant",
@@ -3131,7 +3163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 541,
+        "line": 560,
         "project": "functional"
       },
       "area": "assistant",
@@ -3147,7 +3179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 555,
+        "line": 574,
         "project": "functional"
       },
       "area": "assistant",
@@ -3163,7 +3195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 594,
+        "line": 613,
         "project": "functional"
       },
       "area": "assistant",
@@ -3179,7 +3211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 613,
+        "line": 632,
         "project": "functional"
       },
       "area": "assistant",
@@ -3195,7 +3227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 652,
+        "line": 671,
         "project": "functional"
       },
       "area": "assistant",
@@ -3211,7 +3243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 671,
+        "line": 690,
         "project": "functional"
       },
       "area": "assistant",
@@ -3227,7 +3259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 688,
+        "line": 707,
         "project": "functional"
       },
       "area": "assistant",
@@ -3243,7 +3275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 752,
+        "line": 771,
         "project": "functional"
       },
       "area": "assistant",
@@ -3259,7 +3291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 843,
+        "line": 862,
         "project": "functional"
       },
       "area": "assistant",
@@ -5110,8 +5142,8 @@
       }
     },
     {
-      "id": "PT-842B523925",
-      "title": "default sidebar is standard when enableEasyMode is false",
+      "id": "PT-5D69F1868B",
+      "title": "EasyMode exposes the shared sidebar material through its feed and header",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
@@ -5121,23 +5153,39 @@
       "area": "easymode",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "default sidebar is standard when enableEasyMode is false",
+        "when": "EasyMode exposes the shared sidebar material through its feed and header",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
     {
-      "id": "PT-1AC8637BBB",
-      "title": "Preview omits retired switches and EasyMode remains available from the titlebar",
+      "id": "PT-E4A060174B",
+      "title": "legacy enableEasyMode false still uses the sole sidebar",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 40,
+        "line": 69,
         "project": "functional"
       },
       "area": "easymode",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "Preview omits retired switches and EasyMode remains available from the titlebar",
+        "when": "legacy enableEasyMode false still uses the sole sidebar",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D7A1079D36",
+      "title": "Preview omits retired switches and the sole sidebar stays active",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
+        "line": 79,
+        "project": "functional"
+      },
+      "area": "easymode",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Preview omits retired switches and the sole sidebar stays active",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -5147,7 +5195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 66,
+        "line": 103,
         "project": "functional"
       },
       "area": "easymode",
@@ -5158,18 +5206,18 @@
       }
     },
     {
-      "id": "PT-78A9780217",
-      "title": "toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar",
+      "id": "PT-C362815656",
+      "title": "legacy sidebar preferences cannot restore Classic after restart",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 341,
+        "line": 378,
         "project": "functional"
       },
       "area": "easymode",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "toggling EasyMode via titlebar button switches between standard sidebar and EasyModeSidebar",
+        "when": "legacy sidebar preferences cannot restore Classic after restart",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -5179,7 +5227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 370,
+        "line": 397,
         "project": "functional"
       },
       "area": "easymode",
@@ -5195,7 +5243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 402,
+        "line": 429,
         "project": "functional"
       },
       "area": "easymode",
@@ -5206,18 +5254,18 @@
       }
     },
     {
-      "id": "PT-E864C7EB0E",
-      "title": "global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode",
+      "id": "PT-488111FBFF",
+      "title": "retired mode shortcut leaves the sole sidebar active",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 431,
+        "line": 458,
         "project": "functional"
       },
       "area": "easymode",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "global keyboard shortcut Cmd+Shift+E / Ctrl+Shift+E toggles EasyMode",
+        "when": "retired mode shortcut leaves the sole sidebar active",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -5227,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 452,
+        "line": 464,
         "project": "functional"
       },
       "area": "easymode",
@@ -5243,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 492,
+        "line": 504,
         "project": "functional"
       },
       "area": "easymode",
@@ -5259,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 516,
+        "line": 528,
         "project": "functional"
       },
       "area": "easymode",
@@ -5275,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 637,
+        "line": 647,
         "project": "functional"
       },
       "area": "easymode",
@@ -5291,7 +5339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 734,
+        "line": 744,
         "project": "functional"
       },
       "area": "easymode",
@@ -5307,7 +5355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 869,
+        "line": 879,
         "project": "functional"
       },
       "area": "easymode",
@@ -5318,28 +5366,12 @@
       }
     },
     {
-      "id": "PT-C7547B818D",
-      "title": "classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree",
-      "source": {
-        "runner": "playwright",
-        "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 970,
-        "project": "functional"
-      },
-      "area": "easymode",
-      "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "classic mode: automation stage sessions appear nested under automation run and are excluded from sessions tree",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
-      }
-    },
-    {
       "id": "PT-D6E1059F2C",
       "title": "in EasyMode selecting a session opens details in the center",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1100,
+        "line": 980,
         "project": "functional"
       },
       "area": "easymode",
@@ -5355,7 +5387,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1273,
+        "line": 1153,
         "project": "functional"
       },
       "area": "easymode",
@@ -5371,7 +5403,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1495,
+        "line": 1375,
         "project": "functional"
       },
       "area": "easymode",
@@ -5387,7 +5419,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1643,
+        "line": 1523,
         "project": "functional"
       },
       "area": "easymode",
@@ -5403,7 +5435,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1678,
+        "line": 1558,
         "project": "functional"
       },
       "area": "easymode",
@@ -5419,7 +5451,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1709,
+        "line": 1589,
         "project": "functional"
       },
       "area": "easymode",
@@ -5435,7 +5467,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1738,
+        "line": 1618,
         "project": "functional"
       },
       "area": "easymode",
@@ -5451,7 +5483,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1893,
+        "line": 1773,
         "project": "functional"
       },
       "area": "easymode",
@@ -5467,7 +5499,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1949,
+        "line": 1830,
         "project": "functional"
       },
       "area": "easymode",
@@ -5475,6 +5507,22 @@
         "given": "Easy Mode has no project and a configured fake ACP provider",
         "when": "the user creates a general conversation, switches project scope, then assigns it to a project and a ticket",
         "then": "the conversation starts without project ownership, appears in its correct scope, and preserves its session identity and transcript through assignment and reload"
+      }
+    },
+    {
+      "id": "PT-EFA42D0996",
+      "title": "sidebar split button offers all creation paths without a separate conversation button",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
+        "line": 1898,
+        "project": "functional"
+      },
+      "area": "easymode",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "sidebar split button offers all creation paths without a separate conversation button",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
     {
@@ -8315,13 +8363,45 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
-        "line": 627,
+        "line": 638,
         "project": "functional"
       },
       "area": "session Feedback",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a slow check for an old draft cannot replace the latest suggestions",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-52361DF248",
+      "title": "malformed prompt analysis is reported as a model response failure with correlated logs",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
+        "line": 655,
+        "project": "functional"
+      },
+      "area": "session Feedback",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "malformed prompt analysis is reported as a model response failure with correlated logs",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-1D75A10A96",
+      "title": "authentication recovery is readable inside the analysis notice at a narrow width",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
+        "line": 675,
+        "project": "functional"
+      },
+      "area": "session Feedback",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "authentication recovery is readable inside the analysis notice at a narrow width",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -10827,7 +10907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 97,
+        "line": 98,
         "project": "functional"
       },
       "area": "workflow Loops",
@@ -10843,7 +10923,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 143,
+        "line": 144,
         "project": "functional"
       },
       "area": "workflow Loops",
@@ -10859,7 +10939,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 168,
+        "line": 169,
         "project": "functional"
       },
       "area": "workflow Loops",
@@ -10875,7 +10955,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 234,
+        "line": 235,
         "project": "functional"
       },
       "area": "workflow Loops",
@@ -10891,13 +10971,29 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 265,
+        "line": 266,
         "project": "functional"
       },
       "area": "workflow Loops",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "the loop views read in dark mode too",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-21DED7008C",
+      "title": "run setup keeps its shell fixed across workflows, tabs and viewport sizes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
+        "line": 288,
+        "project": "functional"
+      },
+      "area": "workflow Loops",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "run setup keeps its shell fixed across workflows, tabs and viewport sizes",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -11387,7 +11483,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 428,
+        "line": 442,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11403,7 +11499,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 514,
+        "line": 528,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11419,7 +11515,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 527,
+        "line": 541,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11435,7 +11531,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 535,
+        "line": 549,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11451,7 +11547,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 545,
+        "line": 559,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11467,7 +11563,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 572,
+        "line": 586,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11483,7 +11579,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 639,
+        "line": 653,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11499,7 +11595,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 679,
+        "line": 693,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11515,7 +11611,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 693,
+        "line": 707,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11531,7 +11627,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 719,
+        "line": 733,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11547,7 +11643,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 789,
+        "line": 803,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -11563,7 +11659,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 812,
+        "line": 826,
         "project": "functional"
       },
       "area": "workflow Run Workspace",

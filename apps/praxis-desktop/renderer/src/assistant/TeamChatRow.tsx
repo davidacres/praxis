@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { TeamChatSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
@@ -7,15 +7,27 @@ import { personaMeta } from './personaMeta';
 
 /** A project's persisted team chats, kept current as chats are created, renamed or removed. */
 export function useProjectTeamChats(projectId: string): TeamChatSummary[] {
-  const [chats, setChats] = useState<TeamChatSummary[]>([]);
-  const refresh = useCallback(() => {
-    void window.praxis.assistant.listChats(projectId).then(setChats).catch(() => setChats([]));
-  }, [projectId]);
+  return useProjectsTeamChats([projectId]);
+}
+
+/** Workspace-scoped counterpart, also used by Easy Mode's combined feed. */
+export function useProjectsTeamChats(projectIds: string[]): TeamChatSummary[] {
+  const key = JSON.stringify([...new Set(projectIds)].sort());
+  const [result, setResult] = useState<{ key: string; chats: TeamChatSummary[] }>({ key, chats: [] });
   useEffect(() => {
-    refresh();
-    return window.praxis.assistant.onChatsChanged(refresh);
-  }, [refresh]);
-  return chats;
+    let disposed = false;
+    let revision = 0;
+    const refresh = async () => {
+      const current = ++revision;
+      const ids = JSON.parse(key) as string[];
+      const groups = await Promise.all(ids.map(id => window.praxis.assistant.listChats(id).catch(() => [])));
+      if (!disposed && current === revision) setResult({ key, chats: groups.flat() });
+    };
+    void refresh();
+    const unsubscribe = window.praxis.assistant.onChatsChanged(() => { void refresh(); });
+    return () => { disposed = true; unsubscribe(); };
+  }, [key]);
+  return result.key === key ? result.chats : [];
 }
 
 /** Opens a fresh team chat for the project in the assistant. */

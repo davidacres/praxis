@@ -2,6 +2,8 @@ import {
   createContext, forwardRef, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState,
   type HTMLAttributes, type KeyboardEvent, type MutableRefObject, type ReactNode, type TextareaHTMLAttributes
 } from 'react';
+import { createPortal } from 'react-dom';
+import { Icon } from '../ui/Icon';
 
 /** A phrase in the draft the prompt coach is unsure about, as a range of the input's value. */
 export interface PromptHighlight { id: string; start: number; end: number; question: string; active?: boolean }
@@ -12,7 +14,12 @@ export type PromptAnalysisStatus = 'idle' | 'issues' | 'ok';
 /** Returns true when the coach used the key, so the composer's own handler (Enter sends) never sees it. */
 export type PromptKeyHandler = (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
 
+interface PromptInlineControls { visible: boolean; canApply: boolean; key: string; question?: string }
+interface PromptInlineActions { apply: () => void; preview: () => ReactNode }
 interface PromptAnalysisContextValue {
+  inlineControls: PromptInlineControls;
+  setInlineControls: (controls: PromptInlineControls) => void;
+  inlineActions: MutableRefObject<PromptInlineActions | undefined>;
   highlights: readonly PromptHighlight[];
   setHighlights: (highlights: readonly PromptHighlight[]) => void;
   ghost?: PromptGhost;
@@ -27,6 +34,7 @@ interface PromptAnalysisContextValue {
 
 const noop = () => {};
 const PromptAnalysisContext = createContext<PromptAnalysisContextValue>({
+  inlineControls: { visible: false, canApply: false, key: '' }, setInlineControls: noop, inlineActions: { current: undefined },
   highlights: [], setHighlights: noop, setGhost: noop, setStatus: noop, requestPhrase: noop,
   keyHandler: { current: undefined }, inputRef: { current: null }
 });
@@ -36,6 +44,10 @@ export const usePromptAnalysis = () => useContext(PromptAnalysisContext);
 
 /** Shared visual frame for a draft, an active session and an embedded review. */
 export function SessionComposerCard({ className = '', children, ...props }: HTMLAttributes<HTMLDivElement>) {
+  const inlineActions = useRef<PromptInlineActions | undefined>(undefined);
+  const [inlineControls, setInlineControlsState] = useState<PromptInlineControls>({ visible: false, canApply: false, key: '' });
+  const setInlineControls = useCallback((next: PromptInlineControls) => setInlineControlsState(previous =>
+    previous.visible === next.visible && previous.canApply === next.canApply && previous.key === next.key && previous.question === next.question ? previous : next), []);
   const [highlights, setHighlightsState] = useState<readonly PromptHighlight[]>([]);
   const [ghost, setGhostState] = useState<PromptGhost>();
   const [status, setStatus] = useState<PromptAnalysisStatus>('idle');
@@ -49,8 +61,8 @@ export function SessionComposerCard({ className = '', children, ...props }: HTML
     setGhostState(previous => previous?.text === next?.text && previous?.hint === next?.hint ? previous : next);
   }, []);
   const requestPhrase = useCallback((id: string) => setRequested(previous => ({ id, nonce: (previous?.nonce ?? 0) + 1 })), []);
-  const value = useMemo(() => ({ highlights, setHighlights, ghost, setGhost, setStatus, requested, requestPhrase, keyHandler, inputRef }),
-    [highlights, setHighlights, ghost, setGhost, requested, requestPhrase]);
+  const value = useMemo(() => ({ inlineActions, inlineControls, setInlineControls, highlights, setHighlights, ghost, setGhost, setStatus, requested, requestPhrase, keyHandler, inputRef }),
+    [inlineControls, setInlineControls, highlights, setHighlights, ghost, setGhost, requested, requestPhrase]);
   return <PromptAnalysisContext.Provider value={value}>
     <div {...props} data-prompt-analysis={status} className={`composer session-follow-up-composer ${className}`.trim()}>{children}</div>
   </PromptAnalysisContext.Provider>;
@@ -74,10 +86,42 @@ const MIRRORED_STYLES = [
 
 /** One-line input that grows and shrinks with its content on every surface. */
 export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { collapsed?: boolean }>(
-  function SessionComposerInput({ collapsed = false, className = '', value, onClick, onScroll, onKeyDown, ...props }, forwardedRef) {
+  function SessionComposerInput({ collapsed = false, className = '', value, onClick, onScroll, onKeyDown, onSelect, ...props }, forwardedRef) {
     const input = useRef<HTMLTextAreaElement | null>(null);
     const backdrop = useRef<HTMLDivElement | null>(null);
-    const { highlights, ghost, requestPhrase, keyHandler, inputRef } = usePromptAnalysis();
+    const { highlights, ghost, requestPhrase, keyHandler, inputRef, inlineControls, inlineActions } = usePromptAnalysis();
+    const [caret, setCaret] = useState(0);
+    const [position, setPosition] = useState({ left: 0, top: 0 });
+    const [previewOpen, setPreviewOpen] = useState(false);
+    useLayoutEffect(() => setPreviewOpen(false), [inlineControls.key]);
+    useLayoutEffect(() => {
+      if (!previewOpen) return;
+      const dismiss = (event: PointerEvent) => {
+        if (!(event.target as Element).closest('.prompt-caret-actions, .prompt-caret-preview')) setPreviewOpen(false);
+      };
+      window.addEventListener('pointerdown', dismiss);
+      return () => window.removeEventListener('pointerdown', dismiss);
+    }, [previewOpen]);
+    useLayoutEffect(() => {
+      const field = input.current;
+      if (!field || !inlineControls.visible || collapsed) return;
+      const place = () => {
+        const mirror = document.createElement('div');
+        const computed = getComputedStyle(field);
+        for (const key of MIRRORED_STYLES) mirror.style[key] = computed[key];
+        Object.assign(mirror.style, { position: 'fixed', visibility: 'hidden', width: `${field.clientWidth}px`, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', top: '0', left: '0' });
+        mirror.textContent = field.value.slice(0, field.selectionEnd);
+        const marker = document.createElement('span'); marker.textContent = '\u200b'; mirror.appendChild(marker);
+        document.body.appendChild(mirror);
+        setPosition({ left: Math.max(4, Math.min(marker.offsetLeft + 8 - field.scrollLeft, field.clientWidth - 44)),
+          top: marker.offsetTop - field.scrollTop + Math.max(0, ((parseFloat(computed.lineHeight) || 20) - 18) / 2) });
+        mirror.remove();
+      };
+      place();
+      const observer = new ResizeObserver(place); observer.observe(field);
+      field.addEventListener('scroll', place);
+      return () => { observer.disconnect(); field.removeEventListener('scroll', place); };
+    }, [value, caret, inlineControls.visible, collapsed]);
     const text = typeof value === 'string' ? value : '';
     // Only marks that still sit on the same words: a stale report must not underline the wrong text
     const marks = highlights.filter(h => h.start >= 0 && h.end <= text.length && h.end > h.start);
@@ -121,18 +165,20 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
         // The draft's own trailing space already separates the ghost from the last word
         const ghostText = /\s$/.test(rest || text) ? shownGhost.text.replace(/^ +/, '') : shownGhost.text;
         pieces.push(<span key="ghost" className="composer-input-ghost" data-testid="prompt-ghost-text">{ghostText}</span>);
-        pieces.push(<span key="ghost-hint" className="composer-input-ghost-hint">{shownGhost.hint}</span>);
+        if (!inlineControls.visible) pieces.push(<span key="ghost-hint" className="composer-input-ghost-hint">{shownGhost.hint}</span>);
       } else {
         // A trailing newline collapses in the layer unless something follows it
         pieces.push('\u200b');
       }
     }
-    return <div className={`composer-input-shell${marks.length ? ' has-highlights' : ''}${shownGhost ? ' has-ghost' : ''}`}>
+    return <div className={`composer-input-shell${inlineControls.visible && !collapsed ? ' has-inline-actions' : ''}${marks.length ? ' has-highlights' : ''}${shownGhost ? ' has-ghost' : ''}`}>
       {pieces && <div ref={backdrop} className="composer-input-highlights" aria-hidden="true">{pieces}</div>}
       <textarea {...props} value={value} rows={1}
         className={`composer-input session-follow-up-input${collapsed ? ' is-collapsed' : ''} ${className}`.trim()}
+        onSelect={event => { onSelect?.(event); setCaret(event.currentTarget.selectionEnd); }}
         onClick={event => { onClick?.(event); selectPhraseAtCaret(); }}
         onKeyDown={event => {
+          if (previewOpen && event.key === 'Escape') { event.preventDefault(); setPreviewOpen(false); return; }
           if (!event.nativeEvent.isComposing && keyHandler.current?.(event)) { event.preventDefault(); return; }
           onKeyDown?.(event);
         }}
@@ -143,6 +189,24 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
           if (typeof forwardedRef === 'function') forwardedRef(node);
           else if (forwardedRef) forwardedRef.current = node;
         }} />
+      {inlineControls.visible && !collapsed && <div className="prompt-caret-actions" style={position}
+        onMouseDown={event => event.preventDefault()} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setPreviewOpen(false); input.current?.focus(); } }}>
+        {!inlineControls.question && <div className="prompt-caret-toolbar" data-testid="prompt-caret-toolbar">
+          {inlineControls.canApply && <button type="button" data-testid="prompt-caret-apply" aria-label="Apply prompt suggestion" title="Apply prompt suggestion (Tab)"
+            onClick={() => { inlineActions.current?.apply(); input.current?.focus(); }}><Icon name="check" size={12} /></button>}
+          <button type="button" aria-label="Preview prompt changes" title="Preview prompt changes" aria-expanded={previewOpen}
+            data-testid="prompt-caret-preview" onClick={() => setPreviewOpen(open => !open)}><Icon name="eye" size={12} /></button>
+        </div>}
+        {inlineControls.question && !previewOpen && createPortal(<div className="prompt-caret-clarification" role="note" data-testid="prompt-caret-clarification"
+          style={{ left: Math.max(8, Math.min((input.current?.getBoundingClientRect().left ?? 0) + position.left, window.innerWidth - 304)),
+            top: Math.max(8, (input.current?.getBoundingClientRect().top ?? 0) + position.top - 48) }}>
+          {inlineControls.question}<small>Edit the highlighted text directly.</small>
+        </div>, document.body)}
+        {previewOpen && createPortal(<div className="prompt-caret-preview" role="region" aria-label="Prompt preview" data-testid="prompt-caret-preview-content"
+          style={{ position: 'fixed', left: Math.max(8, Math.min((input.current?.getBoundingClientRect().left ?? 0) + position.left, window.innerWidth - 336)),
+            top: Math.max(8, Math.min((input.current?.getBoundingClientRect().top ?? 0) + position.top + 28, window.innerHeight - 248)) }}
+          onMouseDown={event => event.preventDefault()}>{inlineActions.current?.preview()}</div>, document.body)}
+      </div>}
     </div>;
   }
 );

@@ -2,6 +2,7 @@ import { openConnections } from './connectionNavigation';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp;
@@ -248,4 +249,23 @@ test('a returning user gets the brief splash, not the full crawl', async () => {
   await window.reload();
   await window.locator('[data-testid="startup-splash"]').waitFor({ state: 'detached', timeout: 5000 });
   expect(Date.now() - startedAt).toBeLessThan(4000);
+});
+
+
+test('titlebar Home opens Overview and preserves navigation history', async () => {
+  await window.getByTestId('session-focus-new').click();
+  await window.getByTestId('titlebar-home').click();
+  await expect(window.getByTestId('overview-page')).toBeVisible();
+  await window.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(window.getByTestId('overview-page')).toHaveCount(0);
+  await window.getByRole('button', { name: 'Forward', exact: true }).click();
+  await expect(window.getByTestId('overview-page')).toBeVisible();
+  await window.getByTestId('session-focus-new').click();
+  await expect(window.getByTestId('overview-page')).toHaveCount(0);
+  await window.getByTestId('titlebar-home').click();
+  await expect(window.getByTestId('overview-page')).toBeVisible();
+  await expect(window.getByTestId('easymode-sidebar')).toBeVisible();
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await window.screenshot({ path: path.join(artifacts, 'titlebar-home-overview.png') });
 });

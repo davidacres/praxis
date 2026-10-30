@@ -503,12 +503,31 @@ test('page context follows navigation, can be detached, and chats persist in the
   await row.locator('.team-chat-main').click();
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
 
+  // The same durable Virtual Team chat appears in Easy Mode's session feed.
+  await win.getByRole('button', { name: 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)', exact: true }).click();
+  const sidebar = win.getByTestId('easymode-sidebar');
+  await expect(sidebar.getByTestId('team-chat-row')).toHaveCount(1);
+  await expect(sidebar.getByTestId('easymode-sessions-empty-card')).toHaveCount(0);
+  const projectId = await sidebar.getByTestId('sidebar-project-select').getAttribute('data-value');
+  await chooseOption(sidebar.getByTestId('sidebar-project-select'), 'conversations');
+  await expect(sidebar.getByTestId('team-chat-row')).toHaveCount(0);
+  await chooseOption(sidebar.getByTestId('sidebar-project-select'), projectId!);
+  await expect(sidebar.getByTestId('team-chat-row')).toContainText('general question');
+  await win.getByTestId('assistant-new-chat').click();
+  await row.locator('.team-chat-main').click();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
+  await sidebar.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/easymode-virtual-team-chat.png') });
+
   // Deleting it removes the record and resets the open transcript.
   await row.hover();
   await row.getByRole('button', { name: /Delete team chat/ }).click();
   await win.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(win.getByTestId('team-chat-row')).toHaveCount(0);
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
+  await win.getByTestId('assistant-input').fill('New Easy Mode team chat');
+  await win.getByTestId('assistant-send').click();
+  await expect(sidebar.getByTestId('team-chat-row')).toHaveCount(1);
+  await expect(sidebar.getByTestId('team-chat-row')).toContainText('New Easy Mode team chat');
 });
 
 async function openIssue(win: Page): Promise<void> {

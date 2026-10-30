@@ -176,6 +176,10 @@ export interface AiSettings {
    * or available ACP host — see `resolveRecommendationProvider`.
    */
   recommendationProvider?: AiProvider;
+  /** Dedicated prompt clarity routing; unset retains automatic recommendation routing. */
+  promptAnalysisProvider?: AiProvider;
+  /** Model override for prompt checks only; never changes session or recommendation defaults. */
+  promptAnalysisModel?: string;
   /**
    * What each model tier (`fast` / `standard` / `strong`) means per provider, as model ids. A workflow
    * stage names a tier, not a model, so the same workflow runs on whichever provider is active. A tier
@@ -1247,6 +1251,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ),
         activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider, knownProviders),
         recommendationProvider: readOptionalAiProvider(raw.ai.recommendationProvider, knownProviders),
+        promptAnalysisProvider: readOptionalAiProvider(raw.ai.promptAnalysisProvider, knownProviders),
+        promptAnalysisModel: readString(raw.ai.promptAnalysisModel, '').trim() || undefined,
         modelTiers: readModelTiers(raw.ai.modelTiers),
         providers: readAiProviderConfigs(raw.ai.providers, knownProviders),
         ...(customProviders.length > 0 ? { customProviders } : {}),
@@ -1606,6 +1612,10 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
       delete providers[id];
       if (ai.activeProvider === id) ai.activeProvider = DEFAULT_APP_SETTINGS.ai.activeProvider;
       if (ai.recommendationProvider === id) ai.recommendationProvider = undefined;
+      if (ai.promptAnalysisProvider === id) {
+        ai.promptAnalysisProvider = undefined;
+        ai.promptAnalysisModel = undefined;
+      }
       if (ai.modelTiers?.[id]) {
         const { [id]: _dropped, ...rest } = ai.modelTiers;
         ai.modelTiers = rest;

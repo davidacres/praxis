@@ -13,7 +13,7 @@ import { useFindingReviews } from './FindingReviewControls';
 import { Icon } from '../ui/Icon';
 import { renderInlineCode } from './inlineCode';
 import {
-  answerSuggestion, buildCoachSuggestions, ghostTextFor, insertPromptClause, optionLabel, type CoachSuggestion
+  buildCoachSuggestions, ghostTextFor, insertPromptClause, optionLabel, type CoachSuggestion
 } from './promptCoachSuggestions';
 
 export interface SessionPromptScoreBarProps {
@@ -63,7 +63,6 @@ function isHardBlocker(finding: FeedbackFinding): boolean {
   return finding.id === 'prompt-tool-mode-conflict';
 }
 
-const ACCEPT_LABELS: Partial<Record<CoachSuggestion['kind'], string>> = { phrase: 'Replace', question: 'Add' };
 
 export function SessionPromptScoreBar({
   promptText,
@@ -96,7 +95,6 @@ export function SessionPromptScoreBar({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [focusKey, setFocusKey] = useState<string>();
   const [option, setOption] = useState<{ key: string; index: number }>();
-  const [answer, setAnswer] = useState<{ key: string; text: string }>();
   // While the coach's own edit is re-checked, keep stepping through what is left of the last check
   const [carryReport, setCarryReport] = useState<DeterministicFeedbackReport>();
   const [acceptedKeys, setAcceptedKeys] = useState<readonly string[]>([]);
@@ -106,9 +104,8 @@ export function SessionPromptScoreBar({
   const hadOpenFindingsRef = useRef(false);
   const insertedPromptRef = useRef<string | undefined>(undefined);
   const coachChangeRef = useRef(false);
-  const answerRef = useRef<HTMLInputElement | null>(null);
   const handledRequest = useRef<number | undefined>(undefined);
-  const { setHighlights, setGhost, setStatus, requested, keyHandler, inputRef } = usePromptAnalysis();
+  const { setHighlights, setGhost, setStatus, requested, keyHandler, inputRef, setInlineControls, inlineActions } = usePromptAnalysis();
   const activeSkillsKey = activeSkills.join(',');
   const trimmedPrompt = promptText.trim();
 
@@ -252,7 +249,6 @@ export function SessionPromptScoreBar({
   const current = suggestions[focusIndex] as CoachSuggestion | undefined;
   const optionIndex = current && option?.key === current.key ? option.index : 0;
   const currentOption = current?.options[optionIndex];
-  const answerText = current && answer?.key === current.key ? answer.text : '';
 
   // A phrase clicked in the composer's own text becomes the suggestion in focus
   useEffect(() => {
@@ -300,9 +296,8 @@ export function SessionPromptScoreBar({
 
   const accept = () => {
     if (!current) return;
-    const typed = answerText.trim();
-    if ((current.kind === 'phrase' || current.kind === 'question') && !typed) {
-      answerRef.current?.focus();
+    if (current.kind === 'phrase' || current.kind === 'question') {
+      inputRef.current?.focus();
       return;
     }
     if (current.kind === 'advice') {
@@ -314,7 +309,6 @@ export function SessionPromptScoreBar({
     setCarryReport(sourceReport);
     setAcceptedKeys(keys => [...keys, current.key]);
     setAcceptedCount(count => count + 1);
-    setAnswer(undefined);
     if (current.kind === 'setting' && currentOption) {
       coachChangeRef.current = true;
       if (currentOption.kind === 'change-tool-mode') onChangeToolMode?.((currentOption.targetId as AgentToolMode) || 'full');
@@ -322,18 +316,16 @@ export function SessionPromptScoreBar({
       else if (currentOption.kind === 'select-agent' && currentOption.targetId) onSelectAgent?.(currentOption.targetId);
     } else if (current.kind === 'insert' && currentOption?.suggestedPromptSnippet) {
       updatePrompt(insertPromptClause(promptText, currentOption.suggestedPromptSnippet));
-    } else {
-      updatePrompt(answerSuggestion(promptText, current, typed));
-      inputRef.current?.focus();
     }
+    inputRef.current?.focus();
   };
 
   // Keys in the composer act on the suggestion in focus. Enter is never taken: it still sends.
   keyHandler.current = stripVisible && current ? event => {
     const plain = !event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
     if (event.key === 'Tab' && plain) {
-      if (current.kind === 'phrase' || current.kind === 'question') answerRef.current?.focus();
-      else accept();
+      if (current.kind === 'phrase' || current.kind === 'question' || current.kind === 'advice') return false;
+      accept();
       return true;
     }
     if (event.altKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -352,13 +344,27 @@ export function SessionPromptScoreBar({
   } : undefined;
   useEffect(() => () => { keyHandler.current = undefined; }, [keyHandler]);
 
-  if (!mounted || !activeReport) {
-    if (trimmedPrompt && !disabled && report?.clarity?.status === 'checked' && report.findings.length === 0) {
-      return <button type="button" className="btn btn-compact prompt-coach-open" data-testid="prompt-coach-open"
-        onMouseDown={event => event.preventDefault()} onClick={() => { setSnoozedKey(undefined); setManualReview(true); setDetailsOpen(true); }}>Preview approach</button>;
-    }
-    return null;
-  }
+  const previewReport = sourceReport ?? report;
+  const proposedPrompt = current?.kind === 'insert' && currentOption?.suggestedPromptSnippet
+    ? insertPromptClause(promptText, currentOption.suggestedPromptSnippet)
+    : undefined;
+  inlineActions.current = {
+    apply: accept,
+    preview: () => <>
+      <strong>{proposedPrompt ? 'Suggested prompt' : 'Proposed approach'}</strong>
+      {proposedPrompt ? <p className="prompt-caret-draft">{proposedPrompt}</p> : <ol>{previewReport?.rehearsal?.steps.map((step, index) => <li key={index}>{step}</li>)}</ol>}
+      <small>{proposedPrompt ? 'Apply updates your draft. It does not send it.' : 'Informational preview. Nothing has been executed.'}</small>
+    </>
+  };
+  useEffect(() => setInlineControls({
+    visible: Boolean(trimmedPrompt && !disabled && previewReport?.clarity?.status === 'checked'),
+    canApply: Boolean(proposedPrompt && proposedPrompt !== promptText),
+    question: current && (current.kind === 'phrase' || current.kind === 'question') ? current.text : undefined,
+    key: `${previewReport?.inputDigest ?? ''}:${current?.key ?? ''}:${proposedPrompt ?? ''}`
+  }));
+  useEffect(() => () => { setInlineControls({ visible: false, canApply: false, key: '' }); inlineActions.current = undefined; }, [setInlineControls, inlineActions]);
+
+  if (!mounted || !activeReport) return null;
 
   const handleUndoTextEdit = () => {
     if (undoPromptSnapshot === undefined) return;
@@ -371,6 +377,14 @@ export function SessionPromptScoreBar({
   };
 
   const checked = activeReport.clarity?.status === 'checked';
+  const failureReason = activeReport.clarity?.reason || 'Analysis unavailable. Please retry.';
+  const rateLimited = failureReason === 'Rate limit reached.';
+  const requiresAuth = failureReason.startsWith('AI provider requires authentication.');
+  const failureTitle = rateLimited ? 'Rate limit reached' : requiresAuth ? 'Authentication required' : 'Analysis unavailable';
+  const failureHelp = requiresAuth
+    ? failureReason.replace(/^AI provider requires authentication\.\s*/, '')
+    : rateLimited ? 'You can still send your prompt.'
+      : failureReason.replace(/^Analysis unavailable\.\s*/, '') + ' You can still send your prompt.';
   const wrapperState = closing ? 'closing' : readyCelebration ? 'ready' : 'open';
   const intentPill = activeReport.intent && activeReport.intent !== 'general'
     ? <span className="session-prompt-intent-pill" data-testid="session-prompt-intent"><Icon name="target" size={11} />Intent: {INTENT_LABELS[activeReport.intent]}</span>
@@ -427,7 +441,7 @@ export function SessionPromptScoreBar({
                 </span>
               ) : (
                 <span className="session-prompt-intent-pill" data-testid="session-prompt-check-status" role="status">
-                  {activeReport.clarity?.status === 'pending' ? 'Checking clarity…' : 'Clarity unavailable · facts only'}
+                  {activeReport.clarity?.status === 'pending' ? 'Checking clarity…' : 'Prompt analysis'}
                 </span>
               )}
               {suggestions.length > 0 && (
@@ -453,32 +467,14 @@ export function SessionPromptScoreBar({
                 ) : checked ? 'No suggestions for this draft' : null}
               </span>
               <span className="prompt-strip-actions">
-              {current && (current.kind === 'phrase' || current.kind === 'question') && (
-                <input
-                  ref={answerRef}
-                  className="input prompt-strip-answer"
-                  data-testid="prompt-strip-answer"
-                  aria-label={current.text}
-                  placeholder={current.kind === 'phrase' ? 'Replace with…' : 'Your answer…'}
-                  value={answerText}
-                  maxLength={1200}
-                  onChange={event => setAnswer({ key: current.key, text: event.target.value })}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') { event.preventDefault(); accept(); }
-                    else if (event.key === 'Escape') { event.preventDefault(); inputRef.current?.focus(); }
-                    else if (event.altKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) { event.preventDefault(); move(event.key === 'ArrowDown' ? 1 : -1); }
-                  }}
-                />
-              )}
               {current && current.options.length > 1 && (
                 <button type="button" className="btn btn-compact prompt-strip-cycle prompt-strip-quiet" data-testid="prompt-strip-cycle"
                   title="Next option (⌥])" onClick={() => cycleOption(1)}>{optionIndex + 1}/{current.options.length} <kbd>⌥]</kbd></button>
               )}
-              {current && current.kind !== 'advice' && (
+              {current && (current.kind === 'setting' || current.kind === 'insert') && (
                 <button type="button" className="btn btn-compact btn-primary prompt-strip-accept" data-testid="prompt-strip-accept"
-                  disabled={(current.kind === 'phrase' || current.kind === 'question') && !answerText.trim()}
                   title={currentOption?.description} onClick={accept}>
-                  {ACCEPT_LABELS[current.kind] ?? renderInlineCode(optionLabel(currentOption!))}
+                  {renderInlineCode(optionLabel(currentOption!))}
                   {checked && current.points !== undefined && current.points > 0 && <span className="prompt-strip-points">+{current.points}</span>}
                   <kbd>⇥</kbd>
                 </button>
@@ -506,10 +502,17 @@ export function SessionPromptScoreBar({
             </div>
 
             {activeReport.clarity?.status === 'unavailable' && (
-              <p className="session-prompt-fix-label" data-testid="session-prompt-check-unavailable">
-                Could not check clarity. Your prompt can still be sent. Check your AI provider connection.
-                {' '}<button type="button" className="btn btn-compact" data-testid="session-prompt-retry" onClick={() => setRetryVersion(value => value + 1)}>Retry clarity check</button>
-              </p>
+              <div className="prompt-analysis-notice" data-testid="session-prompt-check-unavailable" role="status">
+                <Icon name={requiresAuth ? 'shield' : 'info'} size={18} className="prompt-analysis-notice-icon" />
+                <div className="prompt-analysis-notice-copy">
+                  <strong data-testid="prompt-analysis-error-heading">{failureTitle}</strong>
+                  <p>{failureHelp}</p>
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm prompt-analysis-notice-retry"
+                  data-testid="session-prompt-retry" onClick={() => setRetryVersion(value => value + 1)}>
+                  Retry
+                </button>
+              </div>
             )}
             {detailsOpen && (
               <PromptCoachDetails initialPreview={manualReview} manageMuted={manageMuted} report={sourceReport ?? activeReport} reviews={reviews} intent={intentPill} />

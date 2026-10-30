@@ -250,3 +250,32 @@ test('the Recommendations provider list leaves out providers that are turned off
   await expect(win.locator('[role="option"][data-value="anthropic"]')).toHaveText(/Anthropic.*turned off/);
   await win.keyboard.press('Escape');
 });
+
+
+test('prompt analysis provider and model persist independently of other routing', async () => {
+  const win = await launchWithTwoProviders();
+  await openAiSettings(win);
+  await win.getByTestId('ai-tab-routing').click();
+  const before = await win.evaluate(() => window.praxis.settings.get());
+  await chooseOption(win.getByTestId('ai-prompt-analysis-provider'), 'anthropic');
+  await win.getByTestId('ai-prompt-analysis-model').click();
+  const list = win.getByRole('listbox', { name: 'Prompt analysis model options' });
+  await list.getByRole('textbox').fill('dedicated-clarity-model');
+  await list.getByRole('option', { name: /Use “dedicated-clarity-model”/ }).click();
+  const saved = await win.evaluate(() => window.praxis.settings.get());
+  expect(saved.ai.promptAnalysisProvider).toBe('anthropic');
+  expect(saved.ai.promptAnalysisModel).toBe('dedicated-clarity-model');
+  expect(saved.ai.activeProvider).toBe(before.ai.activeProvider);
+  expect(saved.ai.recommendationProvider).toBe(before.ai.recommendationProvider);
+  await win.reload();
+  await openAiSettings(win);
+  await win.getByTestId('ai-tab-routing').click();
+  await expect(win.getByTestId('ai-prompt-analysis-provider')).toHaveAttribute('data-value', 'anthropic');
+  await expect(win.getByTestId('ai-prompt-analysis-model')).toHaveAttribute('data-value', 'dedicated-clarity-model');
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await win.getByRole('dialog', { name: 'Settings' }).screenshot({ path: path.join(artifacts, 'prompt-analysis-routing.png') });
+  await chooseOption(win.getByTestId('ai-prompt-analysis-provider'), '');
+  await expect(win.getByTestId('ai-prompt-analysis-model')).toBeDisabled();
+  expect((await win.evaluate(() => window.praxis.settings.get())).ai.promptAnalysisModel).toBeUndefined();
+});

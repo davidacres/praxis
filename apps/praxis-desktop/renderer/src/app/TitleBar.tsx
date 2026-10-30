@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AiProvider, WorkspaceRecord, UpdateStatus } from '@praxis/core';
-import type { SidebarMode } from './Sidebar';
 import { CodeIntelTitlebarChip } from './CodeIntelTitlebarChip';
 import { Icon, type IconName } from '../ui/Icon';
 import { PraxisWordmark } from './StartupSplash';
@@ -30,6 +29,7 @@ export interface TitleBarProps {
   onSaveWorkspace?: () => void;
   onOpenWorkspace?: () => void;
   onCloseWorkspace?: () => void;
+  onOpenOverview?: () => void;
   onNewSession?: () => void;
   /** Opens a session composer pre-set for a quick, workflow-driven session. */
   onQuickSession?: () => void;
@@ -39,11 +39,6 @@ export interface TitleBarProps {
   onOpenScheduledRuns?: () => void;
   onNewProject?: () => void;
   onImportProjects?: () => void;
-  mode?: SidebarMode;
-  onToggleMode?: () => void;
-  onModeChange?: (mode: SidebarMode) => void;
-  easyMode?: boolean;
-  onToggleEasyMode?: () => void;
   onOpenFolder?: () => void;
   sidebarVisible: boolean;
   onToggleSidebar: () => void;
@@ -91,6 +86,7 @@ export function TitleBar({
   onSaveWorkspace,
   onOpenWorkspace,
   onCloseWorkspace,
+  onOpenOverview,
   onNewSession,
   onQuickSession,
   onQuickCapture,
@@ -98,11 +94,6 @@ export function TitleBar({
   onOpenScheduledRuns,
   onNewProject,
   onImportProjects,
-  mode = 'classic',
-  onToggleMode,
-  onModeChange,
-  easyMode = false,
-  onToggleEasyMode,
   onOpenFolder,
   sidebarVisible,
   onToggleSidebar,
@@ -377,7 +368,7 @@ export function TitleBar({
           </button>
         )}
 
-        {!easyMode && onQuickCapture && (
+        {onQuickCapture && (
           <button type="button" className="new-pill new-pill-icon" aria-label="Quick Capture" title="Quick Capture (⌘⇧C / Ctrl+Shift+C)" data-testid="quick-capture" onClick={onQuickCapture}>
             <Icon name="ticket" size={13} />
           </button>
@@ -388,7 +379,7 @@ export function TitleBar({
             <Icon name="clock" size={13} />
           </button>
         )}
-        {!easyMode && onOpenWhatChanged && (
+        {onOpenWhatChanged && (
           <button type="button" className="new-pill new-pill-icon" aria-label="What Changed" data-testid="titlebar-what-changed" onClick={onOpenWhatChanged}>
             <Icon name="clock" size={13} />
           </button>
@@ -406,25 +397,7 @@ export function TitleBar({
           </button>
         )}
 
-        <button
-          className={`icon-btn icon-btn-sm${easyMode ? ' active' : ''}`}
-          aria-label={easyMode ? 'Switch to Advance mode (⌘⇧E / Ctrl+Shift+E)' : 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)'}
-          title={easyMode ? 'EasyMode (⌘⇧E / Ctrl+Shift+E to switch to Advance mode)' : 'Advance mode (⌘⇧E / Ctrl+Shift+E to switch to EasyMode)'}
-          aria-pressed={easyMode}
-          data-toggle="easymode"
-          onClick={() => {
-            if (onToggleEasyMode) {
-              onToggleEasyMode();
-            } else if (onToggleMode) {
-              onToggleMode();
-            } else if (onModeChange) {
-              onModeChange(mode === 'classic' ? 'work' : 'classic');
-            }
-          }}
-          data-testid={easyMode ? 'mode-classic' : 'mode-easymode'}
-        >
-          <Icon name={easyMode ? 'feather' : 'layers'} size={14} />
-        </button>
+
       </div>
 
       <div className="titlebar-spacer" />
@@ -432,6 +405,11 @@ export function TitleBar({
       {/* Back / forward sit against the context pill, and the whole block is
           centred on the window rather than between the two side groups. */}
       <div className="titlebar-group titlebar-center">
+        {onOpenOverview && (
+          <button type="button" className="icon-btn" aria-label="Home" title="Home" data-testid="titlebar-home" onClick={onOpenOverview}>
+            <Icon name="home" />
+          </button>
+        )}
         <button className="icon-btn" aria-label="Back" disabled={!canGoBack} onClick={onBack}>
           <Icon name="arrow-left" />
         </button>

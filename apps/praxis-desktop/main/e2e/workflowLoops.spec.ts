@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp as launchApp, type TestApp } from './launchTestApp';
+import { chooseOption, chipOptionValues } from './chipSelect';
 import { escapeRegExp } from './textPattern';
 
 /**
@@ -281,4 +282,35 @@ test('the loop views read in dark mode too', async () => {
   await openWorkflowDesigner(page, 'Governed delivery');
   await expect(canvasOf(page).getByTestId('wf-edge-badge-e-review-fix')).toBeVisible();
   await page.screenshot({ path: 'output/playwright/workflow-loops-designer-dark.png' });
+});
+
+
+test('run setup keeps its shell fixed across workflows, tabs and viewport sizes', async () => {
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  await seedProject(page, ['improve-until-target', 'governed-delivery']);
+  await page.getByRole('button', { name: 'Create new run', exact: true }).click();
+  const dialog = page.getByTestId('wf-runstart-dialog');
+  const initial = await dialog.boundingBox();
+  const picker = dialog.getByLabel('Run workflow', { exact: true });
+  const values = (await chipOptionValues(picker)).filter(Boolean);
+  for (const value of values) {
+    await chooseOption(picker, value);
+    await expect(dialog.getByTestId('wf-runstart-estimate')).toBeVisible();
+    expect(await dialog.boundingBox()).toEqual(initial);
+  }
+  await dialog.getByRole('tab', { name: 'AI & permissions' }).click();
+  await expect(dialog.getByTestId('wf-runstart-mode')).toBeVisible();
+  expect(await dialog.boundingBox()).toEqual(initial);
+  await dialog.getByRole('tab', { name: 'AI & permissions' }).press('ArrowLeft');
+  await expect(dialog.getByRole('tab', { name: 'Run details', exact: true })).toBeFocused();
+  await page.screenshot({ path: '../.praxis/session-artifacts/run-dialog-details.png' });
+  await page.setViewportSize({ width: 800, height: 600 });
+  const small = await dialog.boundingBox();
+  expect(small!.height).toBeLessThanOrEqual(568);
+  await expect(dialog.getByRole('button', { name: 'Start', exact: true })).toBeInViewport();
+  await dialog.getByRole('tab', { name: 'AI & permissions' }).click();
+  // Prove the geometry guard detects content-sized shells on the shorter tab.
+  await page.addStyleTag({ content: '.wf-runstart-card { height: auto !important; } .wf-runstart { height: auto !important; }' });
+  expect(await dialog.boundingBox()).not.toEqual(small);
 });
