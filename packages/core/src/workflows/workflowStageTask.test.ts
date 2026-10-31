@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStageTaskDefinition, formatUpstreamReports, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
+import { buildStageTaskDefinition, formatUpstreamReports, readPlanStatus, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
 import type { WorkflowStageContext } from './workflowStageSession';
 import type { WorkflowAgentTaskNode } from './workflowTypes';
 
@@ -189,6 +189,81 @@ test('a diff with no commit behind it is not claimed', () => {
   });
   const outcome = stageOutcomeFromSession(node, { state: 'completed', responseText: 'I thought about it.' });
   assert.deepEqual(outcome.artifacts, [], 'prose cannot stand in for a commit');
+});
+
+test('an implementer that committed nothing fails, rather than passing the unchanged branch on', () => {
+  const node = reviewNode({
+    id: 'implement',
+    name: 'Implement',
+    outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
+    mutatesWorktree: true
+  });
+  // The shape of a real run: the stage gave up, and the frozen "change" was the commit it started on.
+  const outcome = stageOutcomeFromSession(node, {
+    state: 'completed',
+    startRef: '56bab2a61ecc064858d7ceca5610941cae465543',
+    snapshotRef: '56bab2a61ecc064858d7ceca5610941cae465543',
+    responseText: 'I will inspect the artifacts first.\n\nI made no changes, produced no TASK-496 change-diff, and did not commit.'
+  });
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error ?? '', /^Implement made no changes: the branch is still at 56bab2a6/);
+  assert.match(outcome.error ?? '', /It said: I made no changes/);
+  assert.equal(outcome.artifacts, undefined);
+
+  const changed = stageOutcomeFromSession(node, { state: 'completed', startRef: 'sha-before', snapshotRef: 'sha-after' });
+  assert.equal(changed.status, 'succeeded');
+  assert.deepEqual(changed.artifacts, [{ contractId: 'change-diff', kind: 'diff', path: 'sha-after' }]);
+});
+
+function planNode(): WorkflowAgentTaskNode {
+  return reviewNode({ id: 'plan', name: 'Plan', inputs: [], outputs: [{ id: 'plan-doc', kind: 'plan', required: true }] });
+}
+
+test('a planner that says it is blocked has not produced a plan', () => {
+  // A real planner's reply when it had no file tools: non-empty, so it used to count as the plan.
+  const outcome = stageOutcomeFromSession(planNode(), {
+    state: 'completed',
+    responseText: 'Blocked before repository analysis. The available tools provide no local read_file.\n\nPlan status: blocked: no file tools to read the repository'
+  });
+  assert.equal(outcome.status, 'failed');
+  assert.equal(outcome.error, 'Plan did not produce a plan: it reported itself blocked: no file tools to read the repository.');
+});
+
+test('a plan must confirm it is ready; prose without the status line is not a plan', () => {
+  const missing = stageOutcomeFromSession(planNode(), {
+    state: 'completed',
+    responseText: 'Blocked before repository analysis. The required plan-doc artifact remains unproduced.'
+  });
+  assert.equal(missing.status, 'failed');
+  assert.match(missing.error ?? '', /no "Plan status: ready" line/);
+
+  const ready = stageOutcomeFromSession(planNode(), {
+    state: 'completed',
+    responseText: '# Plan\n\n1. Add the contract.\n\n**Plan status: ready**\n\n```praxis-plan\n{}\n```'
+  });
+  assert.equal(ready.status, 'succeeded');
+  assert.deepEqual(ready.artifacts, [{ contractId: 'plan-doc', kind: 'plan' }]);
+});
+
+test('readPlanStatus takes the last status line and tolerates markdown around it', () => {
+  assert.deepEqual(readPlanStatus('Plan status: blocked: x\n\nNow done.\n`Plan status: ready`'), { ready: true });
+  assert.deepEqual(readPlanStatus('Plan status: blocked'), { ready: false, reason: 'it reported itself blocked' });
+  assert.deepEqual(readPlanStatus('plan status: Blocked \u2014 no access'), { ready: false, reason: 'it reported itself blocked: no access' });
+});
+
+test('a plan stage is told how to confirm its plan', () => {
+  const task = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'plan-doc', kind: 'plan', required: true }] }));
+  assert.match(task.definitionOfDone, /Plan status: ready/);
+  assert.match(task.definitionOfDone, /Plan status: blocked: <why>/);
+  assert.doesNotMatch(buildStageTaskDefinition(context()).definitionOfDone, /Plan status/);
+});
+
+test('a board-published plan is proven by its praxis-plan block, not the status line', () => {
+  const node = reviewNode({ id: 'plan', name: 'Plan', inputs: [], outputs: [{ id: 'plan-doc', kind: 'plan', required: true, publishTo: 'board' }] });
+  const outcome = stageOutcomeFromSession(node, { state: 'completed', responseText: 'Two items.\n```praxis-plan\n{}\n```' });
+  assert.equal(outcome.status, 'succeeded');
+  const task = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'plan-doc', kind: 'plan', required: true, publishTo: 'board' }] }));
+  assert.doesNotMatch(task.definitionOfDone, /Plan status/);
 });
 
 test('a written file wins over the narrative fallback', () => {

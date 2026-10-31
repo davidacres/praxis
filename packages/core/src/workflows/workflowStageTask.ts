@@ -70,6 +70,7 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
     definitionOfDone: [
       `Produce every required artifact before finishing:\n${outputs}`,
       context.expectedOutputs.some(output => output.kind === 'findings') ? FINDINGS_BLOCK_INSTRUCTIONS : undefined,
+      context.expectedOutputs.some(output => output.kind === 'plan' && output.publishTo !== 'board') ? PLAN_STATUS_INSTRUCTIONS : undefined,
       context.expectedOutputs.some(output => output.publishTo === 'board') ? PUBLISHABLE_PLAN_INSTRUCTIONS : undefined
     ]
       .filter((line): line is string => Boolean(line))
@@ -97,6 +98,26 @@ export const FINDINGS_BLOCK_INSTRUCTIONS = [
   'Use an empty "findings" array when there are none. Prose alone does not count.'
 ].join('\n');
 
+/**
+ * How a stage confirms its plan is a plan. Without it any reply counted, so a planner that could
+ * not read the repository and said so was recorded as having planned, and implementation began.
+ */
+export const PLAN_STATUS_INSTRUCTIONS = [
+  'Confirm a plan output with this line on its own, after the plan itself (and before any fenced block the response must end with): `Plan status: ready`.',
+  'If you could not produce the plan, do not present a partial one as finished: write `Plan status: blocked: <why>` in its place.'
+].join('\n');
+
+/** The plan's own verdict on itself: its last `Plan status:` line. */
+export function readPlanStatus(responseText: string | undefined): { ready: true } | { ready: false; reason: string } {
+  const lines = (responseText ?? '').split('\n').map(line => line.trim().replace(/^[`*_]+|[`*_]+$/g, ''));
+  const line = [...lines].reverse().find(candidate => /^plan status\s*:/i.test(candidate));
+  if (!line) return { ready: false, reason: 'it did not confirm the plan was complete (no "Plan status: ready" line)' };
+  const verdict = line.replace(/^plan status\s*:\s*/i, '');
+  if (/^ready\b/i.test(verdict)) return { ready: true };
+  const why = verdict.replace(/^blocked\b\s*[:\-\u2014\u2013]?\s*/i, '').trim();
+  return { ready: false, reason: why ? `it reported itself blocked: ${why}` : 'it reported itself blocked' };
+}
+
 /** What the desktop app reports about a session that has stopped. */
 export interface FinishedStageSession {
   /** Terminal agent state. */
@@ -105,6 +126,8 @@ export interface FinishedStageSession {
   responseText?: string;
   /** Commit the worktree was frozen at, for a mutating stage. */
   snapshotRef?: string;
+  /** Where the worktree stood when the stage started, so a stage that changed nothing is seen. */
+  startRef?: string;
   /** Files the host wrote that map onto declared artifacts, by contract id. */
   artifactPaths?: Record<string, string>;
   /** Failure or limit reason recorded when the stage session ended. */
@@ -157,6 +180,28 @@ export function stageOutcomeFromSession(
     };
   }
 
+  // A diff that is the commit the stage started on is not a change. Recording it as one let an
+  // implementer that gave up hand every later stage the unchanged branch to pass.
+  const diffContract = nodeOutputs(node).find(contract => contract.kind === 'diff' && contract.required);
+  if (diffContract && session.startRef && session.snapshotRef === session.startRef) {
+    return {
+      status: 'failed',
+      error: `${node.name} made no changes: the branch is still at ${session.startRef.slice(0, 8)}, so there is no "${diffContract.id}" to verify.${
+        session.responseText?.trim() ? ` It said: ${firstLine(lastParagraph(session.responseText))}` : ''
+      }`
+    };
+  }
+
+  // A board-published plan proves itself with its parsed `praxis-plan` block instead (publishing
+  // fails the stage when that block is missing or invalid), so it is not asked for a second marker.
+  const planContract = nodeOutputs(node).find(contract => contract.kind === 'plan' && contract.required && contract.publishTo !== 'board');
+  if (planContract && session.responseText?.trim()) {
+    const status = readPlanStatus(session.responseText);
+    if (!status.ready) {
+      return { status: 'failed', error: `${node.name} did not produce a plan: ${status.reason}.` };
+    }
+  }
+
   const artifacts: NonNullable<StageOutcome['artifacts']> = [];
   for (const contract of nodeOutputs(node)) {
     const filePath = session.artifactPaths?.[contract.id];
@@ -201,6 +246,11 @@ export function stageOutcomeFromSession(
 /** Kinds a session's own prose can stand behind. */
 function isNarrative(kind: WorkflowArtifactKind): boolean {
   return kind === 'plan' || kind === 'report' || kind === 'note' || kind === 'log';
+}
+
+function lastParagraph(text: string): string {
+  const paragraphs = text.trim().split(/\n\s*\n/);
+  return paragraphs[paragraphs.length - 1] ?? text;
 }
 
 function firstLine(text: string): string {

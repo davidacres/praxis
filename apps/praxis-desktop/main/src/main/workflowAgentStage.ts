@@ -386,7 +386,9 @@ export async function runWorkflowAgentStage(
   } as IssueDetails;
 
   // Where the tree stood before this stage, so a test-guarded stage's change can be read whole.
-  const baseRef = node.guardTests && node.mutatesWorktree ? await headOf(worktreePath) : undefined;
+  // Also how a stage that committed nothing is told apart from one that delivered a change.
+  const startRef = node.mutatesWorktree ? await headOf(worktreePath) : undefined;
+  const baseRef = node.guardTests ? startRef : undefined;
   const settled = waitForSession(issueKey);
   let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
 
@@ -401,12 +403,22 @@ export async function runWorkflowAgentStage(
     if (prepared.binding) taskDefinition.goal += `\n\n${await getAgentRuntimeManager().bindingContext(prepared.binding)}`;
 
     dispatch.signal?.throwIfAborted();
+    const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
+    if (needsReviewFileTools) {
+      taskDefinition.scope += '\n\nUse the praxis-review-files MCP read_file and list_dir tools to inspect this working folder and .praxis-run artifacts. These tools are read-only; do not execute commands.';
+    }
     await launchAgentTask(prepared, {
       issue,
       taskDefinition,
       provider,
       ...(modelChoice.model ? { model: modelChoice.model } : {}),
       workingDirectory: worktreePath,
+      ...(needsReviewFileTools ? { mcpServers: [{
+        name: 'praxis-review-files',
+        command: process.execPath,
+        args: [require.resolve('@praxis/core/out/ai/readOnlyFilesMcp.js'), worktreePath],
+        env: { ELECTRON_RUN_AS_NODE: '1' }
+      }] } : {}),
       toolMode,
       ...(stagePermissionMode(workflowRun) === 'autopilot' ? { permissionMode: 'autopilot' as const } : {}),
       autoApprovePermissions: workflowRun.permissionMode === 'auto'
@@ -464,7 +476,8 @@ export async function runWorkflowAgentStage(
 
   let outcome = stageOutcomeFromSession(node, {
     ...finished,
-    ...(snapshotRef ? { snapshotRef } : {})
+    ...(snapshotRef ? { snapshotRef } : {}),
+    ...(startRef ? { startRef } : {})
   });
 
   // A stage held to its tests may not reach its goal by weakening them: read what it changed,
