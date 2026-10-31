@@ -274,6 +274,16 @@
           }
         ]
       }
+    },
+    {
+      "id": "merge",
+      "name": "Merge to main",
+      "x": 159,
+      "y": 1498,
+      "inputs": [],
+      "type": "merge",
+      "targetBranch": "main",
+      "onConflict": "fail"
     }
   ],
   "edges": [
@@ -379,6 +389,13 @@
       "loop": {
         "maxIterations": 2
       }
+    },
+    {
+      "id": "e-approve-merge",
+      "from": "approve",
+      "to": "merge",
+      "on": "success",
+      "required": true
     }
   ],
   "entryNodeId": "plan",
