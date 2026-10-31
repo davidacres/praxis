@@ -109,7 +109,7 @@
         "scope": "global",
         "toolMode": "read-only"
       },
-      "instructions": "Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands. Deliver actionable correctness and quality issues in the required structured findings output, with severity, file, line, and a concrete suggested fix. Use info only for non-actionable observations. On re-review, verify whether the earlier findings are fixed and report any that remain.",
+      "instructions": "Review the implementation snapshot for correctness and quality using the change-diff input artifact and read-only file access. Do not run shell commands. Deliver actionable correctness and quality issues in the required structured findings output, with severity, file, line, and a concrete suggested fix. Use info only for non-actionable observations. Review against this ticket's scope: work the ticket mentions that another ticket in the same plan explicitly covers (for example a later task that depends on this one) is not a defect in this change; report it as info and name that ticket. On re-review, verify whether the earlier findings are fixed and report any that remain.",
       "outputs": [
         {
           "id": "review-report",
