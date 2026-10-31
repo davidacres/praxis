@@ -31,3 +31,22 @@ Implementation verification initially caught three test-fixture mistakes: assign
 | `git diff --check` | Passed. |
 
 No UI code changed; manual UI checks, screenshots and desktop e2e are outside this task's supplied verification plan. No workflow stages were advanced and no tracker updates were made.
+
+## Review recovery — TASK-496 contracts-only scope
+
+Recovery base: `dac4f38a`. This section records current-revision evidence; the earlier verification table describes the initial implementation only.
+
+1. **Empty update patches (bug): addressed.** Shared input validation now rejects empty objects with `VALIDATION_ERROR` and a safe root field issue. Both note and group update validators are covered. Title-only updates, body-only updates and explicit empty-body clearing remain valid; unknown/immutable-field rejection is preserved.
+2. **Missing operational integration (quality): scope clarified, integration deferred.** Acceptance for TASK-496 is limited to shared types, pure validators/schema initialisation, detached snapshots and the future IPC declaration, as required by the supplied plan. Schema initialisation means `parseNotesDocument(undefined)` returns an independent empty version-one document without writes. IPC proof covers serialisable discriminated contracts and pure helper errors, not running handlers or failed disk writes. TASK-497 explicitly owns persistence, main/preload handlers, atomic saves, notifications and restart restoration; those application-path guarantees remain unverified here and are not claimed complete. No ticket acceptance or workflow gates were weakened or changed.
+
+Current checks:
+- `npm run build:core`: passed.
+- Both compiled notes contract files: 9 passed, 0 failed.
+- `npm run check-types`: passed across all workspaces.
+- `npm run build:renderer`: passed; existing chunk-size warning remains.
+- `npm run test:praxis-contracts`: passed, 732 Playwright tests catalogued.
+- Initial full core run failed with sandbox localhost `EPERM` and watcher `EMFILE`; an approved run outside the sandbox was requested to execute these environment-dependent tests.
+
+No UI change or visual verification was performed. Only validator implementation, its contract tests, and this required artifact changed. Persistence, handlers, preload, board/workspace data, scheduled runs and workflow definitions remain unchanged.
+- Approved full `npm run test:core`: passed, 1,811 tests total; 1,809 passed, 2 skipped, 0 failed. This supersedes the sandbox run (1,782 passed, 27 failed, 2 skipped).
+- `git diff --check`: passed before commit.

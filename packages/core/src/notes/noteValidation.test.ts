@@ -52,10 +52,15 @@ test('title and body boundaries use UTF-16 units; whitespace bodies are retained
   code(validateCreateNoteInput({ title: 'ok', body: 'x'.repeat(NOTE_BODY_MAX_LENGTH + 1) }), 'VALIDATION_ERROR');
   code(validateCreateNoteInput({ title: '🙂'.repeat(101), body: null }), 'VALIDATION_ERROR');
   assert.deepEqual(validateUpdateNoteInput({ body: '' }), { ok: true, value: { body: '' } });
-  assert.deepEqual(validateUpdateNoteInput({}), { ok: true, value: {} });
   assert.deepEqual(validateUpdateNoteInput({ body: ' \n🙂 ' }), { ok: true, value: { body: ' \n🙂 ' } });
 });
 test('patches reject immutable or unknown fields and explicit undefined; group edits remain narrow', () => {
+  for (const validate of [validateUpdateNoteInput, validateUpdateNoteGroupInput]) {
+    const result = validate({});
+    code(result, 'VALIDATION_ERROR');
+    if (!result.ok) assert.deepEqual(result.error.issues, [{ path: '$', message: 'At least one editable field is required.' }]);
+  }
+  assert.deepEqual(validateUpdateNoteInput({ title: ' renamed ' }), { ok: true, value: { title: 'renamed' } });
   for (const field of ['id', 'projectId', 'createdAt', 'updatedAt', '/private/content']) {
     const result = validateUpdateNoteInput({ [field]: 'secret-body' });
     code(result, 'VALIDATION_ERROR');

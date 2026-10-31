@@ -87,6 +87,7 @@ export function validateNoteMemberships(document: NotesDocument, projectId: stri
 function editable(value: unknown, fields: readonly string[], required: readonly string[]): NotesResult<Record<string, unknown>> {
   if (!object(value)) return notesFailure('VALIDATION_ERROR', '$', 'Expected an input object.');
   const issues: NotesValidationIssue[] = [];
+  if (Object.keys(value).length === 0) issues.push({ path: '$', message: 'At least one editable field is required.' });
   // Never echo unknown keys: even a field name can contain note content or a local path.
   if (Object.keys(value).some(key => !fields.includes(key))) issues.push({ path: '$', message: 'Unexpected or immutable field.' });
   for (const field of fields) {
@@ -104,6 +105,7 @@ export function validateCreateNoteInput(value: unknown): NotesResult<CreateNoteI
   if (!title(v.title) || !body(v.body)) return notesFailure('VALIDATION_ERROR', '$', 'Invalid notes input.');
   return { ok: true, value: { title: v.title.trim(), body: v.body } };
 }
+/** A patch must supply at least one editable field; an empty body explicitly clears it. */
 export function validateUpdateNoteInput(value: unknown): NotesResult<UpdateNoteInput> {
   const result = editable(value, ['title', 'body'], []);
   if (!result.ok) return result;
