@@ -1,6 +1,6 @@
 # TASK-496 supplemental Praxis Test contracts
 
-Frozen source: `16da886dd5c9be57305d450837a120045786ca2e`. Runner: **node:test**. Nine tests registered in [core package.json](../../packages/core/package.json). These supplement the Playwright-only generated inventory; they are not counted by its validator. IDs use the existing SHA1(file + newline + title) convention. No existing IDs are renumbered.
+Frozen source: `880dc9a6ebef73cf4a96a73148d8fe1b352ce72b`. Runner: **node:test**. Nine tests registered in [core package.json](../../packages/core/package.json). These supplement the Playwright-only generated inventory; they are not counted by its validator. IDs use the existing SHA1(file + newline + title) convention. No existing IDs are renumbered.
 
 ## PT-212D8FD0B1
 

@@ -1,7 +1,7 @@
 # test-contracts
 
 Ticket: PRX-T113-496 — TASK-496: Define note and group contracts.
-Frozen implementation: `16da886dd5c9be57305d450837a120045786ca2e`.
+Frozen implementation: `880dc9a6ebef73cf4a96a73148d8fe1b352ce72b`.
 
 ## Outcome
 
@@ -30,7 +30,7 @@ Each ID above resolves to runner, exact title, file and line in the [supplement]
 
 ## Findings: stale and ambiguous evidence
 
-1. The inherited report and supplement referenced e6d04ce7. The supplement incorrectly claimed empty patches were accepted and had stale patch/scope test locations. Updated the snapshot, corrected prose and refreshed links to lines 57 and 77, preserving all nine IDs. No generated Playwright identity or line drift was reported.
+1. The inherited report and supplement referenced snapshot 16da886d. Updated both to the required frozen snapshot 880dc9a6, preserving all nine IDs, titles and exact source lines. Their existing empty-patch prose already matches the assertions. No generated Playwright identity or line drift was reported.
 2. The generated inventory remains incomplete for the complete automated suite: Node tests and other runners are excluded; dynamic titles/non-direct test calls may be omitted; every generated project says functional regardless of runtime routing. No generator expansion is made in this ticket stage.
 3. 724 of 732 generated entries retain generic Then prose. Validator success checks identity and populated flow fields, not assertion adequacy or prose truth. No unrelated contracts were rewritten.
 4. Test title “initializes independently” has only one undefined-storage parse: independent repeated initialization is not explicitly asserted. The round-trip test parses JSON before mutation, so its non-aliasing check does not isolate direct-input copying. The Unicode boundary rejection also supplies body null, so that assertion alone does not isolate the astral-title limit. Supplemental prose records only what the assertions establish.
@@ -40,14 +40,14 @@ Each ID above resolves to runner, exact title, file and line in the [supplement]
 ## Disposition of supplied review findings
 
 - **Empty update patches — addressed in the frozen implementation.** The shared editable-input guard rejects `{}`. PT-75D8223A74 explicitly invokes both update validators and asserts VALIDATION_ERROR and the exact sanitized root issue. The same test retains title-only updates; PT-8E6A92402A retains body-only updates and explicit empty-body clearing. Both pass in this stage. The supplement now describes this behavior accurately.
-- **Missing persistence and operational IPC — deferred, not operationally fixed.** The frozen change-diff clarifies TASK-496 as contracts-only. [TASK-497](../../apps/praxis-desktop/docs/plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-497.md) explicitly owns persistence, main/preload wiring, atomic saves, notifications and restoration. This is consistent with the separate task, but does not prove the active ticket acceptance was formally narrowed. Application-path schema initialization and PERSISTENCE_FAILURE mapping remain uncovered acceptance ambiguities. No running handler or disk-failure guarantee is claimed; no ticket, implementation or workflow was changed in this stage.
+- **Missing persistence and operational IPC — addressed through the requested contracts-only acceptance alternative.** The frozen revision adds an explicit Contracts-only acceptance section to [TASK-496](../../apps/praxis-desktop/docs/plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-496.md), rather than relying only on the change-diff narrative. [TASK-497](../../apps/praxis-desktop/docs/plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-497.md) explicitly owns persistence, main/preload wiring, atomic saves, notifications and restoration. The checked-in acceptance now explicitly limits initialization to pure parsing and IPC evidence to typed JSON-compatible results; PERSISTENCE_FAILURE is a future handler obligation. Operational integration remains deferred and unverified, rather than fixed by this revision. This confirms the repository acceptance boundary, not a tracker update. No running handler or disk-failure guarantee is claimed; no ticket, implementation or workflow was changed in this stage.
 
 ## Verification
 
 | Check performed in this stage | Result |
 | --- | --- |
 | npm run test:praxis-contracts | Passed, exit 0: 732 catalogued and linked; no line warnings. |
-| Independent catalog inventory | 732 entries, 161 files, zero duplicate IDs or file/title pairs. |
+| Independent catalog inventory | 732 entries, 161 files, zero duplicate IDs or file/title pairs; all nine supplemental IDs, titles and source lines match. A raw-title line check flagged 15 escaped apostrophes; inspection confirmed source escaping, not stale links. |
 | npm run build:core | Passed, exit 0. |
 | node --test packages/core/out/notes/noteValidation.test.js packages/core/out/notes/noteSnapshot.test.js | Passed, exit 0: 9 tests, 9 passed, 0 failed/skipped. |
 
