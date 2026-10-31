@@ -13,7 +13,7 @@
  * risk building on a half-finished change.
  */
 
-import { isAgentTaskNode, isApprovalNode, isCheckNode, isDeploymentNode, isMergeNode, isTerminalOutcome } from './workflowTypes';
+import { isAgentTaskNode, isApprovalNode, isCheckNode, isDeploymentNode, isMergeNode, isTerminalOutcome, nodeOutputs } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
   attemptsSpent,
@@ -156,11 +156,23 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
     return result;
   };
 
+  // A failure further on can come from a plan that was never sound — the stage that
+  // failed was only following it. Retrying that stage reuses the plan, so offer to
+  // plan again, as a new revision that reruns everything after it.
+  const replanActions = (existing: WorkflowNextAction[]): WorkflowNextAction[] => {
+    const entry = run.definition.nodes.find(node => node.id === run.definition.entryNodeId);
+    if (!entry || !isAgentTaskNode(entry) || !nodeOutputs(entry).some(output => output.kind === 'plan')) return [];
+    if (run.nodes[entry.id]?.outcome !== 'succeeded') return [];
+    if (existing.some(action => 'nodeId' in action && action.nodeId === entry.id)) return [];
+    return [{ kind: 'rework-stage', nodeId: entry.id, label: `Start a new revision from ${entry.name}` }];
+  };
+
   if (isRunSettled(run)) {
+    const recover = run.status === 'failed' ? [...retryActions(), ...reworkActions()] : [];
     return [
       { kind: 'none', label: `Run ${run.status}${run.endedReason ? `: ${run.endedReason}` : '.'}` },
-      ...(run.status === 'failed' ? retryActions() : []),
-      ...(run.status === 'failed' ? reworkActions() : [])
+      ...recover,
+      ...(run.status === 'failed' ? replanActions(recover) : [])
     ];
   }
 

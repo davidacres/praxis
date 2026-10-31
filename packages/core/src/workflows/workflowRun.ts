@@ -95,6 +95,8 @@ export type WorkflowRunEventKind =
   | 'node-cancelled'
   | 'node-retried'
   | 'node-reworked'
+  /** A person set the current delivery revision aside and started a new one. */
+  | 'revision-started'
   | 'node-interrupted'
   | 'node-progress'
   | 'node-provider-switched'
@@ -564,7 +566,16 @@ export function reworkWorkflowRun(
   run: WorkflowRun,
   nodeId: string,
   at: string,
-  options: { rerunSource?: boolean; resetNodeIds?: string[] } = {}
+  options: {
+    rerunSource?: boolean;
+    resetNodeIds?: string[];
+    /**
+     * A person chose to start over from this stage, as opposed to a loop or a recovery
+     * reopening it. What the set-aside revision's loops reported is then history, not
+     * instructions for the new one.
+     */
+    byPerson?: boolean;
+  } = {}
 ): WorkflowReworkResult {
   const source = findNode(run, nodeId);
   if (!source) return { run, requeued: [], reason: `Stage "${nodeId}" was not found.` };
@@ -587,7 +598,11 @@ export function reworkWorkflowRun(
       outcome: 'pending',
       attempts: state.attempts,
       artifacts: [],
-      ...(state.revisionBase !== undefined ? { revisionBase: state.revisionBase } : {})
+      // A person's new revision also gets a fresh attempt budget, and is not told its
+      // predecessor's failures as if they were its own.
+      ...(options.byPerson
+        ? { revisionBase: state.attempts.length }
+        : state.revisionBase !== undefined ? { revisionBase: state.revisionBase } : {})
     };
   }
 
@@ -606,13 +621,16 @@ export function reworkWorkflowRun(
     gateDecisions: run.gateDecisions.filter(decision => !affected.has(decision.nodeId) && !affectedGates.has(decision.gate))
   };
   const requeued = [...affected];
+  const reworked = append(next, {
+    at,
+    kind: 'node-reworked',
+    nodeId,
+    message: `${label(run, nodeId)} opened a new delivery revision; requeued ${requeued.map(id => label(run, id)).join(', ')}.`
+  });
   return {
-    run: append(next, {
-      at,
-      kind: 'node-reworked',
-      nodeId,
-      message: `${label(run, nodeId)} opened a new delivery revision; requeued ${requeued.map(id => label(run, id)).join(', ')}.`
-    }),
+    run: options.byPerson
+      ? append(reworked, { at, kind: 'revision-started', nodeId, message: `A new revision was started from ${label(run, nodeId)}.` })
+      : reworked,
     requeued
   };
 }

@@ -70,6 +70,14 @@ function firstLine(text: string): string {
   return line.length > 200 ? `${line.slice(0, 200)}…` : line;
 }
 
+/** When a person last started a new revision that reran `nodeId`, if one did. */
+function lastReworkAt(run: WorkflowRun, nodeId: string): string | undefined {
+  const reworks = (run.events ?? []).filter(
+    event => event.kind === 'revision-started' && !!event.nodeId && downstreamNodeIds(run, event.nodeId).has(nodeId)
+  );
+  return reworks[reworks.length - 1]?.at;
+}
+
 /**
  * The section a stage is handed when it runs again: on a later loop iteration,
  * or after a failed attempt in this revision. Undefined on a first, clean run —
@@ -83,8 +91,15 @@ export function formatIterationContext(run: WorkflowRun, nodeId: string, maxChar
   const fixes = !!stageNode && nodeMutatesWorktree(stageNode);
   const waivers = definitionWaivers(run.definition);
 
+  // A new revision starts over. What earlier loops reported was about the revision that was set
+  // aside, so it is history, not this pass's instructions: handed on as "fix these first", it
+  // told an implementer to repair evidence it could not find, and it gave up instead of building.
+  const revisionStartedAt = lastReworkAt(run, nodeId);
+
   for (const status of loopsContaining(run, nodeId)) {
-    const history = (run.loopHistory ?? []).filter(entry => entry.edgeId === status.edge.id);
+    const history = (run.loopHistory ?? []).filter(
+      entry => entry.edgeId === status.edge.id && (!revisionStartedAt || entry.at > revisionStartedAt)
+    );
     const latest = history[history.length - 1];
     if (!latest) continue;
     const pass = history.length + 1;

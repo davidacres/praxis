@@ -13,6 +13,7 @@ import {
   canRetry,
   createWorkflowRun,
   normalizeWorkflowRun,
+  reworkWorkflowRun,
   type WorkflowRun
 } from './workflowRun';
 import { scheduleWorkflowRun } from './workflowScheduler';
@@ -557,6 +558,28 @@ test('a loop pass is handed the findings that sent it round, with repeats called
   assert.doesNotMatch(reviewBrief, /Fix these first/);
   // A stage outside the loop is untouched.
   assert.equal(formatIterationContext(r, 'plan'), undefined);
+});
+
+test('a new revision is not handed the findings of the revision it replaced', () => {
+  let r = run(start(loopDefinition({ loop: { maxIterations: 3 } })), 'plan', 'succeeded');
+  r = run(r, 'implement', 'succeeded', { snapshotRef: 'sha-1' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  r = applyWorkflowRunCommand(r, { kind: 'loop-taken', edgeId: 'e-fix', at: now() });
+  assert.match(formatIterationContext(r, 'implement') ?? '', /Fix these first/);
+
+  // A person starts over from Plan: the old loop's findings are history, not this pass's work.
+  r = reworkWorkflowRun(r, 'plan', now(), { byPerson: true }).run;
+  assert.equal(formatIterationContext(r, 'implement'), undefined);
+  assert.equal(formatIterationContext(r, 'review'), undefined);
+  // A loop or recovery reopening a stage is not a new revision: its findings still travel.
+  assert.equal(reworkWorkflowRun(r, 'plan', now()).run.events.at(-1)?.kind, 'node-reworked');
+
+  // A loop taken in the new revision is reported as before.
+  r = run(r, 'plan', 'succeeded');
+  r = run(r, 'implement', 'succeeded', { snapshotRef: 'sha-2' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  r = applyWorkflowRunCommand(r, { kind: 'loop-taken', edgeId: 'e-fix', at: now() });
+  assert.match(formatIterationContext(r, 'implement') ?? '', /Fix these first/);
 });
 
 test('findings a person waived are named as such and do not send the loop round', () => {

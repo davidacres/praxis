@@ -1158,7 +1158,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
 
   ipcMain.handle('workflows:reworkStage', async (_event, runId: string, nodeId: string): Promise<WorkflowRunSummary> => {
     const summary = await withRun(runId, run => {
-      const result = reworkWorkflowRun(run, nodeId, new Date().toISOString());
+      const result = reworkWorkflowRun(run, nodeId, new Date().toISOString(), { byPerson: true });
       if (result.reason) throw new Error(result.reason);
       return result.run;
     });

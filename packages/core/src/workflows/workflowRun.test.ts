@@ -381,9 +381,43 @@ test('a failed gate offers rework from the implementation stage that fed it, eve
 
   assert.equal(run.status, 'failed');
   const rework = nextActions(run).filter(action => action.kind === 'rework-stage');
-  assert.equal(rework.length, 1);
-  assert.equal(rework[0].nodeId, 'implement');
+  assert.deepEqual(rework.map(action => action.nodeId), ['implement', 'plan']);
   assert.match(rework[0].label, /qa failed/);
+});
+
+test('a failed run offers to plan again, since a retry further on would reuse the same plan', () => {
+  // The shape of a real run: Plan "succeeded" with a reply saying it was blocked, and every
+  // implementation attempt then followed that non-plan and failed.
+  let run = succeed(newRun(), 'plan', 1);
+  for (const minute of [3, 6]) {
+    run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(minute) });
+    run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'implement', at: T(minute + 1), error: 'Implement made no changes' });
+    if (minute === 3) run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(minute + 2) });
+  }
+  assert.equal(run.status, 'failed');
+  const actions = nextActions(run);
+  assert.ok(actions.some(action => action.kind === 'retry-stage' && action.nodeId === 'implement'));
+  const replan = actions.find(action => action.kind === 'rework-stage' && action.nodeId === 'plan');
+  assert.equal(replan?.label, 'Start a new revision from Plan');
+
+  // Taking it reruns Plan and everything after it, and keeps the history.
+  const result = reworkWorkflowRun(run, 'plan', T(9));
+  assert.equal(result.reason, undefined);
+  assert.equal(result.run.status, 'running');
+  assert.deepEqual(scheduleWorkflowRun(result.run).ready, ['plan']);
+  assert.equal(result.run.nodes.implement.attempts.length, 2);
+  // A person's new revision is not held to the old one's spent attempts.
+  const replanned = reworkWorkflowRun(run, 'plan', T(9), { byPerson: true }).run;
+  assert.equal(replanned.nodes.implement.revisionBase, 2);
+  assert.ok(replanned.events.some(event => event.kind === 'revision-started' && event.nodeId === 'plan'));
+
+  // A run whose plan stage itself failed is retried there, not offered a second way to the same place.
+  let planFailed = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  planFailed = applyWorkflowRunCommand(planFailed, { kind: 'node-failed', nodeId: 'plan', at: T(2), error: 'blocked' });
+  planFailed = applyWorkflowRunCommand(planFailed, { kind: 'node-retry', nodeId: 'plan', at: T(3) });
+  planFailed = applyWorkflowRunCommand(planFailed, { kind: 'node-started', nodeId: 'plan', at: T(4) });
+  planFailed = applyWorkflowRunCommand(planFailed, { kind: 'node-failed', nodeId: 'plan', at: T(5), error: 'blocked' });
+  assert.equal(nextActions(planFailed).some(action => action.kind === 'rework-stage' && action.nodeId === 'plan'), false);
 });
 
 // ── Retry ────────────────────────────────────────────────────────────────
