@@ -411,7 +411,7 @@ test('approval is refused while a gate is unmet, whoever asks', () => {
   const r = succeed(run(), 'implement', 1, 'sha-abc');
   const result = approveStage(r, 'approve', { actor: 'dave', at: T(9) });
   assert.equal(result.ok, false);
-  assert.match(result.reason ?? '', /review \(pending\)/);
+  assert.match(result.reason ?? '', /review pending — Review has not finished\./);
   assert.equal(result.run, r, 'a refused approval changes nothing');
 });
 

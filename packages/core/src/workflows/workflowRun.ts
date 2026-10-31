@@ -116,6 +116,14 @@ export interface WorkflowRunEvent {
   message: string;
 }
 
+export interface WorkflowRevisionFindings {
+  /** When the revision was started; matches its `revision-started` event. */
+  at: string;
+  /** The stage the revision was started from. */
+  nodeId: string;
+  items: Array<{ stage: string; finding: CheckFinding }>;
+}
+
 export interface WorkflowNodeAttempt {
   /** 1-based. */
   attempt: number;
@@ -289,6 +297,12 @@ export interface WorkflowRun {
   loopDecisions?: WorkflowLoopDecision[];
   /** A keep-best restore the host has yet to apply to the worktree. */
   pendingRestore?: WorkflowPendingRestore;
+  /**
+   * What a person started the current revision to fix: the findings that were failing a gate
+   * when they did. A new revision is otherwise told nothing of the one it replaced, so without
+   * these "start again from Implement because review failed" would rework blind.
+   */
+  revisionFindings?: WorkflowRevisionFindings;
   /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
@@ -575,6 +589,8 @@ export function reworkWorkflowRun(
      * instructions for the new one.
      */
     byPerson?: boolean;
+    /** With `byPerson`: the gate-failing findings this revision is meant to fix. */
+    carryFindings?: WorkflowRevisionFindings['items'];
   } = {}
 ): WorkflowReworkResult {
   const source = findNode(run, nodeId);
@@ -629,7 +645,22 @@ export function reworkWorkflowRun(
   });
   return {
     run: options.byPerson
-      ? append(reworked, { at, kind: 'revision-started', nodeId, message: `A new revision was started from ${label(run, nodeId)}.` })
+      ? append(
+          {
+            ...reworked,
+            revisionFindings: options.carryFindings?.length ? { at, nodeId, items: options.carryFindings } : undefined
+          },
+          {
+            at,
+            kind: 'revision-started',
+            nodeId,
+            message: `A new revision was started from ${label(run, nodeId)}${
+              options.carryFindings?.length
+                ? ` to fix ${options.carryFindings.length} finding${options.carryFindings.length === 1 ? '' : 's'} from ${[...new Set(options.carryFindings.map(item => item.stage))].join(', ')}`
+                : ''
+            }.`
+          }
+        )
       : reworked,
     requeued
   };
@@ -1304,6 +1335,21 @@ function restoredLoop(run: WorkflowRun, at: string, ok: boolean, detail?: string
 }
 
 /** Loop state read back from disk; anything unreadable is dropped rather than guessed. */
+function normalizeRevisionFindings(value: unknown): Pick<WorkflowRun, 'revisionFindings'> {
+  if (!value || typeof value !== 'object') return {};
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.at !== 'string' || typeof raw.nodeId !== 'string' || !Array.isArray(raw.items)) return {};
+  const items = raw.items.filter(
+    (item): item is { stage: string; finding: CheckFinding } =>
+      !!item && typeof item === 'object' &&
+      typeof (item as { stage?: unknown }).stage === 'string' &&
+      !!(item as { finding?: unknown }).finding &&
+      typeof (item as { finding: { message?: unknown } }).finding.message === 'string' &&
+      typeof (item as { finding: { severity?: unknown } }).finding.severity === 'string'
+  );
+  return items.length > 0 ? { revisionFindings: { at: raw.at, nodeId: raw.nodeId, items } } : {};
+}
+
 function normalizeLoopState(raw: Record<string, unknown>): Pick<WorkflowRun, 'parameters' | 'loopHistory' | 'loopDecisions' | 'pendingRestore'> {
   const out: Pick<WorkflowRun, 'parameters' | 'loopHistory' | 'loopDecisions' | 'pendingRestore'> = {};
   if (raw.parameters && typeof raw.parameters === 'object' && !Array.isArray(raw.parameters)) {
@@ -1571,6 +1617,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
     ...(typeof raw.scheduledLaunchToken === 'string' ? { scheduledLaunchToken: raw.scheduledLaunchToken } : {}),
+    ...normalizeRevisionFindings(raw.revisionFindings),
     ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {}),
     ...(raw.archived === true ? { archived: true } : {}),
     ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})

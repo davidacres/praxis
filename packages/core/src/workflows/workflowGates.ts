@@ -24,6 +24,7 @@
 import {
   isApprovalNode,
   nodeGate,
+  type CheckFinding,
   type CheckFindings,
   type GateThresholdCondition,
   type WorkflowApprovalNode,
@@ -405,6 +406,35 @@ export function evaluateGates(
 }
 
 /**
+ * The findings currently failing a gate, by the stage that reported them — what a person
+ * starting a new revision is asking it to fix. Waived and refuted findings are left out,
+ * as they are when the gate is evaluated, and so are info notes, which ask for nothing.
+ */
+export function failingGateFindings(run: WorkflowRun, policy?: WorkflowPolicyProfile): Array<{ stage: string; finding: CheckFinding }> {
+  const waivers = (approval: WorkflowApprovalNode) => [...(policy?.waivers ?? []), ...(approval.waivers ?? [])];
+  const seen = new Set<string>();
+  const out: Array<{ stage: string; finding: CheckFinding }> = [];
+  for (const approval of run.definition.nodes.filter(isApprovalNode)) {
+    for (const gate of evaluateGates(run, approval.id, policy)) {
+      if (gate.state !== 'failed') continue;
+      const owners = run.definition.nodes.filter(node => nodeGate(node) === gate.gate);
+      for (const owner of owners) {
+        const findings = run.nodes[owner.id]?.findings?.findings ?? [];
+        const { activeFindings } = filterUnwaivedFindings(countableFindings(findings), waivers(approval), new Date());
+        for (const finding of activeFindings) {
+          if (finding.severity === 'info') continue;
+          const key = `${owner.id}:${finding.fingerprint ?? finding.message}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ stage: owner.name, finding });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Resolves which approval node an approve/bypass action targets.
  *
  * An explicit `nodeId` always wins. Otherwise this falls back to the
@@ -536,7 +566,7 @@ export function approveStage(
     return {
       run,
       ok: false,
-      reason: `Blocked on ${readiness.blocking.map(gate => `${gate.gate} (${gate.state})`).join(', ')}.`
+      reason: `Approval is blocked: ${readiness.blocking.map(gate => `${gate.gate} ${gate.state} — ${gate.detail}`).join(' ')}`
     };
   }
 

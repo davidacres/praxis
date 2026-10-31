@@ -20,7 +20,7 @@ import { scheduleWorkflowRun } from './workflowScheduler';
 import { findingsPredicateHolds, loopBudget, pendingLoop } from './workflowEdges';
 import { normalizeWorkflow, resolveRunParameters, validateWorkflow } from './workflowValidation';
 import { summarizeWorkflowRun } from './workflowRunSummary';
-import { evaluateGates } from './workflowGates';
+import { approveStage, evaluateGates, failingGateFindings } from './workflowGates';
 import {
   WORKFLOW_MAX_LOOP_ITERATIONS,
   WORKFLOW_SCHEMA_VERSION,
@@ -558,6 +558,49 @@ test('a loop pass is handed the findings that sent it round, with repeats called
   assert.doesNotMatch(reviewBrief, /Fix these first/);
   // A stage outside the loop is untouched.
   assert.equal(formatIterationContext(r, 'plan'), undefined);
+});
+
+test('a revision started because a gate failed is handed exactly the findings failing it', () => {
+  // A real dead end: the loop back to Implement fires only on high findings, but approval allows
+  // nothing at low or above, so two medium findings could neither be repaired nor approved.
+  const definition = loopDefinition({ loop: { maxIterations: 2 } });
+  definition.nodes = definition.nodes.map(node =>
+    node.type === 'approval' ? { ...node, gateThresholds: { review: [{ type: 'severity', maxCount: 0, severityLevel: 'low' }] } } : node
+  );
+  const MEDIUM: CheckFindings = {
+    findings: [
+      { fingerprint: 'fp-m1', severity: 'medium', category: 'bug', message: 'Update validators accept an empty patch', file: 'src/notes/noteValidation.ts', line: 115, suggestion: 'Reject an empty patch.' },
+      { fingerprint: 'fp-i1', severity: 'info', category: 'note', message: 'Nice naming' }
+    ],
+    metrics: {}
+  };
+  let r = run(start(definition), 'plan', 'succeeded');
+  r = run(r, 'implement', 'succeeded', { snapshotRef: 'sha-1' });
+  r = run(r, 'review', 'succeeded', { findings: MEDIUM });
+  assert.equal(pendingLoop(r), undefined, 'a medium finding does not take the high-severity loop');
+  assert.deepEqual(scheduleWorkflowRun(r).awaitingApproval, ['approve']);
+
+  const refused = approveStage(r, 'approve', { actor: 'dave', at: now() });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.reason, 'Approval is blocked: review failed — Found 1 finding(s) with severity >= low (max allowed: 0).');
+
+  const carried = failingGateFindings(r);
+  // An info note is an observation, not something to fix.
+  assert.deepEqual(carried.map(item => [item.stage, item.finding.fingerprint]), [['Review', 'fp-m1']]);
+
+  r = reworkWorkflowRun(r, 'implement', now(), { byPerson: true, carryFindings: carried }).run;
+  assert.equal(r.events.at(-1)?.message, 'A new revision was started from Implement to fix 1 finding from Review.');
+  const brief = formatIterationContext(r, 'implement') ?? '';
+  assert.match(brief, /### This revision was started to fix what Review reported\nFix these/);
+  assert.match(brief, /\[medium\] bug: Update validators accept an empty patch \(src\/notes\/noteValidation\.ts:115\)\n  Suggested fix: Reject an empty patch\./);
+  assert.match(formatIterationContext(r, 'review') ?? '', /check whether each is now fixed/);
+  assert.equal(formatIterationContext(r, 'plan'), undefined, 'a stage before the revision is not told');
+
+  // It survives a reload, and a later revision with nothing to carry clears it.
+  assert.deepEqual(normalizeWorkflowRun(JSON.parse(JSON.stringify(r)))?.revisionFindings, r.revisionFindings);
+  r = reworkWorkflowRun(r, 'plan', now(), { byPerson: true }).run;
+  assert.equal(r.revisionFindings, undefined);
+  assert.doesNotMatch(formatIterationContext(r, 'implement') ?? '', /This revision was started to fix/);
 });
 
 test('a new revision is not handed the findings of the revision it replaced', () => {

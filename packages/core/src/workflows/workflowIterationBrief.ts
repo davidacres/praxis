@@ -142,6 +142,23 @@ export function formatIterationContext(run: WorkflowRun, nodeId: string, maxChar
     sections.push(lines.join('\n'));
   }
 
+  // What a person started this revision to fix — the findings failing a gate when they did.
+  const carried = run.revisionFindings;
+  if (carried && carried.at === revisionStartedAt && downstreamNodeIds(run, carried.nodeId).has(nodeId)) {
+    const { activeFindings } = filterUnwaivedFindings(countableFindings(carried.items.map(item => item.finding)), waivers);
+    const active = new Set(activeFindings);
+    const items = carried.items.filter(item => active.has(item.finding)).sort((left, right) => bySeverity(left.finding, right.finding));
+    if (items.length > 0) {
+      sections.push([
+        `### This revision was started to fix what ${[...new Set(items.map(item => item.stage))].join(', ')} reported`,
+        fixes ? 'Fix these — they are why this revision exists:' : 'The previous revision was held back for these; check whether each is now fixed:',
+        ...items.slice(0, FINDINGS_LISTED).map(item => findingLine(item.finding)),
+        ...(items.length > FINDINGS_LISTED ? [`- …and ${items.length - FINDINGS_LISTED} more of lower severity.`] : []),
+        fixes ? 'Say in your reply how each finding above was addressed, or why it was not.' : 'Say for each finding above whether it is fixed, and report it again if it is not.'
+      ].join('\n'));
+    }
+  }
+
   // An ordinary retry in this revision: tell the stage why its last attempt failed.
   if (state) {
     const thisRevision = state.attempts.slice(state.revisionBase ?? 0);

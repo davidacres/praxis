@@ -222,13 +222,23 @@ test('a review that keeps finding a high bug loops back, then waits for a decisi
 
   // The review gate still holds on the high finding: accepting the loop does not sign off delivery.
   await advance(page, [['install', 'succeeded'], ['build', 'succeeded'], ['qa', 'succeeded'], ['security', 'succeeded', { findings: [], metrics: {} }]]);
-  await page.getByRole('button', { name: 'Approve', exact: true }).click();
-  await expect(runPanel(page).getByRole('alert').filter({ hasText: 'Blocked on review (failed)' })).toBeVisible();
+  // Approve is not offered while a gate fails, and the run says which gate and why — rather
+  // than enabling the button and refusing after the click with "Blocked on review (failed)".
+  await expect(runPanel(page).getByTestId('wf-approve-disabled')).toBeDisabled();
+  const blocked = runPanel(page).getByTestId('wf-approval-blocked');
+  await expect(blocked).toContainText('Review failed: Found 1 finding(s) with severity >= high (max allowed: 0).');
+  const refusal = await page.evaluate(async () => {
+    const project = (await window.praxis.projects.list())[0];
+    const run = (await window.praxis.workflows.listRuns(project.id))[0];
+    return window.praxis.workflows.approveRun(run.runId, 'desktop-user').then(() => 'approved', (error: Error) => error.message);
+  });
+  expect(refusal).toContain('Approval is blocked: review failed — Found 1 finding(s)');
   const status = await page.evaluate(async () => {
     const project = (await window.praxis.projects.list())[0];
     return (await window.praxis.workflows.listRuns(project.id))[0].status;
   });
   expect(status).not.toBe('succeeded');
+  await expect(runPanel(page).getByRole('status').first()).toContainText('cannot be approved: review failed');
 });
 
 test('improve until target asks for its goal and target and checks them before it starts', async () => {

@@ -414,7 +414,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     workflowId: run.workflowId,
     workflowName: run.displayName ?? run.definition.name,
     status,
-    explanation: explainRun(run, status, schedule.blocked),
+    explanation: explainRun(run, status, schedule.blocked, gates),
     stages,
     graph: {
       nodes: run.definition.nodes.map(node => ({ id: node.id, x: node.x, y: node.y, type: node.type })),
@@ -481,7 +481,7 @@ export function branchGroups(run: WorkflowRun): BranchGroup[] {
   });
 }
 
-function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: string | undefined): string {
+function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: string | undefined, gates: GateStatus[] = []): string {
   if (status === 'succeeded') {
     // A loop that ended without meeting its condition did not reach its goal, whatever the run did after.
     const short = summarizeLoops(run).find(loop => loop.stoppedBecause === 'accepted' || loop.stoppedBecause === 'no-improvement');
@@ -503,7 +503,10 @@ function explainRun(run: WorkflowRun, status: WorkflowRun['status'], blocked: st
   }
 
   if (status === 'awaiting-approval') {
-    return 'Every required gate has resolved; the run is waiting for a human approval.';
+    const failing = gates.filter(gate => gate.state !== 'passed' && gate.state !== 'bypassed');
+    return failing.length > 0
+      ? `The run reached approval, but it cannot be approved: ${failing.map(gate => `${gate.gate} ${gate.state}`).join(', ')}.`
+      : 'Every required gate has resolved; the run is waiting for a human approval.';
   }
 
   // A pending loop explains the run better than the failure that fired it.

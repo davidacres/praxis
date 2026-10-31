@@ -278,6 +278,11 @@ export function WorkflowRunPage({
   const canCancel = run?.actions.some(a => a.kind === 'cancel-run') ?? false;
   const reworkActions = run?.actions.filter(action => action.kind === 'rework-stage') ?? [];
   const approveActions = run?.actions.filter(action => action.kind === 'approve') ?? [];
+  // The approval step being reached does not make it approvable: a gate can still be failing.
+  // Offering the button anyway only produced a refusal after the click.
+  const blockingGates = (run?.gates ?? []).filter(gate => gate.state !== 'passed' && gate.state !== 'bypassed');
+  const approvalBlocked = approveActions.length > 0 && blockingGates.length > 0;
+  const approvalBlockedReason = blockingGates.map(gate => `${gate.gate[0].toUpperCase()}${gate.gate.slice(1)} ${gate.state}: ${gate.detail}`).join('\n');
   const skipActions = run?.actions.filter(action => action.kind === 'skip-approval') ?? [];
   /** Retry actions for the steps stopped by the AI provider's limit. */
   const pausedRetries = (run?.actions ?? []).filter(
@@ -538,6 +543,12 @@ export function WorkflowRunPage({
                   </p>
                 )}
 
+                {approvalBlocked && (
+                  <p className="wf-stage-error" data-testid="wf-approval-blocked">
+                    {approvalBlockedReason}
+                    {reworkActions.length > 0 ? '\nStart a new revision to fix it; the findings go to the stage that reruns.' : ''}
+                  </p>
+                )}
                 <div className="wf-board-actions">
                   {run.controllerSessionKey && onOpenSession && (
                     <button
@@ -560,8 +571,14 @@ export function WorkflowRunPage({
                       {action.label}
                     </button>
                   ))}
-                  {approveActions.length === 0 ? (
-                    <button type="button" className="btn btn-primary" disabled title="Every required gate must pass first">
+                  {approveActions.length === 0 || approvalBlocked ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      data-testid="wf-approve-disabled"
+                      disabled
+                      title={approvalBlocked ? approvalBlockedReason : 'Every required gate must pass first'}
+                    >
                       Approve
                     </button>
                   ) : (
