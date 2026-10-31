@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { openBoard } from './navigation';
+import { openBoard, openProject } from './navigation';
 import * as fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
@@ -59,10 +59,12 @@ test('ticket reviews retain project ownership and recover older records into the
   fs.writeFileSync(sessionPath, JSON.stringify(legacy));
   app = await launchTestApp(undefined, reuse);
   win = app.window;
-  const row = win.getByTestId('project-session-nav-item').filter({ hasText: 'Review this ticket' });
+  // The recovered review is listed in its project's session feed.
+  await openProject(win, 'Review ownership');
+  const row = win.getByTestId(`easymode-session-card-${review.issueKey}`);
   await expect(row).toBeVisible();
   await row.click();
-  await expect(win.getByTestId('session-console-title')).toContainText('Review');
+  await expect(win.getByTestId('agent-details-title')).toContainText('Review');
   const recovered = await win.evaluate(async key => (await window.praxis.ai.listSessions()).find(s => s.issueKey === key), review.issueKey);
   expect(recovered?.projectId).toBe(project.id);
   expect(recovered?.sessionId).toBe(review.sessionId);

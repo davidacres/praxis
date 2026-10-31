@@ -1560,6 +1560,8 @@ export function App() {
     entries.push({ id: 'action:quick-session', label: 'Quick session', group: 'Go to', icon: 'zap', keywords: 'quick change workflow fast immediate', run: openQuickSession });
     entries.push({ id: 'action:add-project', label: 'Add project', group: 'Go to', icon: 'plus', keywords: 'new existing folder import', run: () => requestAddProject() });
     entries.push({ id: 'action:open-folder', label: 'Open folder', group: 'Go to', icon: 'folder', keywords: 'open folder directory existing project easy mode', run: () => void openExistingFolder() });
+    entries.push({ id: 'action:take-tour', label: 'Take a tour', group: 'Go to', icon: 'lightbulb', keywords: 'walkthrough guide help onboarding', run: () => setWalkthroughOpen(true) });
+    entries.push({ id: 'action:whats-new', label: "What's new", group: 'Go to', icon: 'sparkles', keywords: 'release notes changelog version history', run: () => setWhatsNewOpen(true) });
     entries.push({ id: 'action:search-code', label: 'Search code & symbols', hint: '⌘⇧F', group: 'Actions', icon: 'search', keywords: 'code symbol find usages search callers callees index semantic', run: () => setCodeSearchOpen(true) });
     if (inSession) {
       entries.push({ id: 'action:toggle-focus-mode', label: 'Toggle focus mode', group: 'Go to', icon: 'layout-focus', keywords: 'zen hide panels sidebars focus', run: toggleFocusMode });
@@ -1640,22 +1642,22 @@ export function App() {
   /** Three stops over controls the shell already renders — see Walkthrough. */
   const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
     {
-      id: 'project',
-      selector: '[data-testid="project-nav-item"]',
-      title: 'Your project lives here',
-      body: 'Its board, repository, workflows and documents all hang off this row in the sidebar.'
+      id: 'sessions',
+      selector: '[data-testid="section-header-sessions"]',
+      title: 'Your sessions live here',
+      body: 'Every AI session for the project in view is listed here. Pick one to follow its work, or press + to start another.'
     },
     {
-      id: 'board',
-      selector: '[data-testid="board-nav-item"]',
-      title: 'Work sits on the board',
-      body: 'Your starter tickets are here. Open one to see its detail, comments, and AI actions.'
+      id: 'runs',
+      selector: '[data-testid="section-header-automations"]',
+      title: 'Runs take work through a workflow',
+      body: 'A run carries a task through your workflow’s stages and pauses at review gates. Press + to start one.'
     },
     {
-      id: 'session',
-      selector: '[data-testid="project-getstarted-start"]',
-      title: 'Hand a ticket to an agent',
-      body: 'A session turns a ticket into visible progress: the agent plans, asks before it uses a tool, and reports what it changed.'
+      id: 'composer',
+      selector: '[data-testid="easymode-prompt-input"]',
+      title: 'Hand work to an agent',
+      body: 'Describe what you want done: the agent plans, asks before it uses a tool, and reports what it changed. Boards, Git and settings are a ⌘K away.'
     }
   ], []);
 
@@ -1970,9 +1972,14 @@ export function App() {
       onOpenSkill={skillName => navigate({ feature: 'agents', skillName })}
       onSelectSession={issueKey => {
         const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
-        navigate(session && isConversationSession(session)
-          ? { feature: 'conversations', sessionKey: issueKey }
-          : { feature: 'sessions', sessionKey: issueKey });
+        // Same destination as the sidebar: the session page, never the legacy console. A
+        // subagent's session opens under its parent so the agents bar can lead back.
+        navigate({
+          feature: session && isConversationSession(session) ? 'conversations' : 'sessions',
+          sessionKey: session?.parentSessionKey ?? issueKey,
+          view: 'agent-details',
+          subagentId: issueKey
+        });
       }}
       onArchiveSession={async (issueKey, archived) => {
         await window.praxis.ai.archiveSession(issueKey, archived);
@@ -2614,9 +2621,9 @@ export function App() {
               try {
                 // Ticking "Advanced setup" is someone saying they already know
                 // the model. Offering them a tour reads as not listening — the
-                // project home still carries "Take a tour" if they want it.
+                // command palette still offers "Take a tour" if they want it.
                 if (localStorage.getItem(WALKTHROUGH_KEY) !== '1' && !options?.advanced) {
-                  // After the shell has painted the new project's dashboard.
+                  // After the shell has painted the new project's canvas.
                   window.setTimeout(() => setWalkthroughOpen(true), 400);
                 }
               } catch { /* private mode — just skip the offer */ }

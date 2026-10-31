@@ -75,7 +75,6 @@ export default defineConfig({
       // run focused on product behavior and persistence.
       testIgnore: [
         '**/appearanceSettings.spec.ts',
-        '**/brandIcons.spec.ts',
         '**/overview.spec.ts',
         '**/surfacePacks.spec.ts',
         '**/themeLooks.spec.ts',
@@ -97,7 +96,6 @@ export default defineConfig({
       name: 'themes',
       testMatch: [
         '**/appearanceSettings.spec.ts',
-        '**/brandIcons.spec.ts',
         '**/overview.spec.ts',
         '**/surfacePacks.spec.ts',
         '**/themeLooks.spec.ts'

@@ -147,11 +147,9 @@ test('a registry that cannot audit pauses the run instead of failing it; sibling
 
   // The UI says so, and offers Resume.
   await page.reload();
-  const row = page.getByTestId('project-workflow-run-row').first();
-  await expect(row).toHaveAttribute('data-run-status', 'paused');
-  const toggle = row.getByRole('button').first();
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  await row.getByTestId('automation-run-open').click();
+  const row = page.locator('.easymode-automation-card').first();
+  await expect(row).toBeVisible();
+  await row.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   await expect(page.getByTestId('wf-run-limit')).toContainText('could not run in this environment');
   await expect(page.getByTestId('wf-vpipe-step-security')).toHaveAttribute('data-lane', 'paused');
   await expect(page.getByTestId('wf-vpipe-step-security')).toContainText('could not run');

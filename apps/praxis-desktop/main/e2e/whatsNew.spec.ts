@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openFromPalette } from './navigation';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
@@ -15,7 +16,7 @@ test("What's new opens over the workspace and provides version history", async (
   const win = app.window;
 
   await expect(win.locator('[data-testid="whats-new-dialog"]')).toHaveCount(0);
-  await win.getByRole('button', { name: "What's new" }).click();
+  await openFromPalette(win, "What's new");
 
   const dialog = win.locator('[data-testid="whats-new-dialog"]');
   await expect(dialog).toBeVisible();

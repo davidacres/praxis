@@ -252,7 +252,7 @@ test('designer sidebar shows board tickets, supports drag to canvas, and restore
   await win.getByRole('button', { name: 'Exit Designer' }).click();
   await expect(win.locator('[data-testid="designer-page"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="designer-sidebar"]')).toHaveCount(0);
-  await expect(win.getByTestId('nav-conversations')).toBeVisible();
+  await expect(win.getByTestId('easymode-sidebar')).toBeVisible();
   await expect(win.locator('[data-testid="board-view"]')).toBeVisible();
 });
 

@@ -1,9 +1,10 @@
 import * as fs from 'node:fs';
+import { openBoard, openProjectPage } from './navigation';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { closeTestApp, expandAllIssueStacks, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
+import { closeTestApp, expandAllIssueStacks, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
 import { chooseOption } from './chipSelect';
 
@@ -71,7 +72,7 @@ async function launch(responseDelayMs = 0, withToolFolder = false, toolCall?: { 
   }, plansDir);
   await win.reload();
   await expect(win.getByTestId('startup-splash')).toHaveCount(0, { timeout: 15000 });
-  await expect(win.getByTestId('project-nav-item').first()).toBeVisible();
+  await expect(win.getByTestId('sidebar-project-select')).toContainText('Team Project');
   return win;
 }
 
@@ -310,7 +311,7 @@ test('assistant full tools uses the selected working folder through an agent ses
   await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
   // Exercise the initial list as well as live pushes: existing records remain hidden after reload.
   await win.reload();
-  await expect(win.getByTestId('project-nav-item').first()).toBeVisible();
+  await expect(win.getByTestId('sidebar-project-select')).toContainText('Team Project');
   await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
   expect((await win.evaluate(() => window.praxis.ai.listSessions())).some(session => session.issueKey === toolTurn!.issueKey)).toBe(true);
   await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
@@ -465,8 +466,7 @@ test('page context follows navigation, can be detached, and chats persist in the
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-pin').click();
 
-  await showProjectBoard(win);
-  await win.locator('.project-board-row').first().click();
+  await openBoard(win, 'Team Board');
   await expandAllIssueStacks(win);
   await expect(win.getByTestId('assistant-context-pill')).toContainText('Board');
   await expect(win.getByTestId('assistant-suggestions')).toContainText('Summarize blocked tickets');
@@ -503,8 +503,7 @@ test('page context follows navigation, can be detached, and chats persist in the
   await row.locator('.team-chat-main').click();
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
 
-  // The same durable Virtual Team chat appears in Easy Mode's session feed.
-  await win.getByRole('button', { name: 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)', exact: true }).click();
+  // The same durable Virtual Team chat follows the project selection in the session feed.
   const sidebar = win.getByTestId('easymode-sidebar');
   await expect(sidebar.getByTestId('team-chat-row')).toHaveCount(1);
   await expect(sidebar.getByTestId('easymode-sessions-empty-card')).toHaveCount(0);
@@ -531,8 +530,7 @@ test('page context follows navigation, can be detached, and chats persist in the
 });
 
 async function openIssue(win: Page): Promise<void> {
-  await showProjectBoard(win);
-  await win.locator('.project-board-row').first().click();
+  await openBoard(win, 'Team Board');
   await expandAllIssueStacks(win);
   await win.locator('[data-testid="issue-card"]', { hasText: 'Fix login bug' }).click();
   await expect(win.getByTestId('assistant-context-pill')).toContainText('Issue ');
@@ -614,7 +612,8 @@ test('Git changes context carries the file list and the diff hunks', async () =>
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-pin').click();
-  await win.getByRole('button', { name: 'Git changes for Team Project' }).click();
+  await openProjectPage(win, 'Team Project', 'Git graph');
+  await win.getByTestId('git-changes').click();
   await expect(win.getByTestId('assistant-context-pill')).toContainText('Git changes');
   await expect(win.getByTestId('assistant-suggestions')).toContainText('Draft conventional commit message');
   // Hunks arrive asynchronously after the file list.

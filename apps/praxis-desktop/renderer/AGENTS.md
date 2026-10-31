@@ -193,6 +193,13 @@ navigable surface → add an entry to that `useMemo`.
 
 ## Sidebar tree indentation (`theme.css`, `app/Sidebar.tsx`)
 
+> **The project tree is no longer rendered.** Since `f977690f` the shell shows only the
+> EasyMode sidebar (Sessions and Runs) and the collapsed-sidebar session shelf; boards,
+> projects, a project's Git graph and workflows are reached through the command palette
+> (`e2e/navigation.ts` is how specs get there). This section records how the old tree was
+> laid out, for as long as `Sidebar.tsx` and its CSS remain in the tree; its spec
+> (`sidebarTreeAlignment.spec.ts`) was removed with it.
+
 The sidebar has grown several independent trees (a project's own tree, the
 external Boards list, the Agent Hub nav under "Agents") the same way, one row
 class at a time, over several sessions — and `padding-left` on a new row class
@@ -275,8 +282,8 @@ exercise the wizard (`e2e/aiSetupWizard.spec.ts`). CLI agents resolve through th
 so a spec needing one "missing" must pin its `cliPath` to a nonexistent path.
 
 First run is: Getting Started's "Create your first project" (a default workspace is created
-behind the scenes) → a three-panel wizard → the project dashboard, which carries a Get
-Started strip while the project has no sessions. `praxis-onboarded` marks the profile past
+behind the scenes) → a three-panel wizard → the project's EasyMode canvas, where the
+walkthrough starts (it can be replayed from the command palette's "Take a tour"). `praxis-onboarded` marks the profile past
 Getting Started and shortens the splash; `praxis-walkthrough-seen` marks the project tour done;
 `praxis-workflow-tutorial-seen` marks the workflow designer tutorial done.
 
@@ -285,10 +292,13 @@ renders — it annotates the user's real project rather than seeding a demo one.
 by `WorkflowDesignerPage` to guide users through the workflow graph, toolbar, agents/skills,
 stage inspector, and validation (portaled to `document.body` so it is not trapped inside `.pane-main`'s
 isolated stacking context). Stops are declared as CSS selectors over existing `data-testid`s; a stop
-whose target is absent is skipped, not shown empty. Two invariants, both covered by
+whose target is absent is skipped, not shown empty. The project tour's three stops are the
+sidebar's Sessions header, its Runs header and the canvas composer. Three invariants, all covered by
 `e2e/walkthrough.spec.ts`: **the ring never takes pointer events** (the highlighted control
-stays clickable), and **the ring must enclose the control the callout describes** — do not
-add a CSS transition to the ring's geometry, which left it lagging a stop behind.
+stays clickable), **the ring must enclose the control the callout describes** — do not
+add a CSS transition to the ring's geometry, which left it lagging a stop behind — and **a
+callout flipped above its ring must not cover it** (it is anchored by its bottom edge, not a
+guessed height).
 
 The ring is `3px dashed var(--tone-tour)`, a magenta used nowhere else in the chrome. Do not
 put it back on the accent: that was a fourth meaning for a token already carrying brand and

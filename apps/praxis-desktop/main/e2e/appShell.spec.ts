@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openNewWorkflowDialog } from './navigation';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
@@ -76,7 +77,7 @@ test('agent records and the Workflow designer sit inside the normal app shell', 
 
   // Workflow designer — created from the project's Workflows tree section, with
   // the stage inspector filling the shell's right pane.
-  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  await openNewWorkflowDialog(page, 'Delivery Project');
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   // The dialog's footer carries one "Use" button naming the selected template
   // (it spans the whole footer now, not one per list item — see

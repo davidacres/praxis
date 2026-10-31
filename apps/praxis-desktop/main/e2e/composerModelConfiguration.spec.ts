@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { openFromPalette } from './navigation';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
@@ -26,7 +27,7 @@ test('composer model settings curate provider chips and preserve the conversatio
     providers: { openai: { enabledModelIds: ['other-provider-model'] } }
   } }, undefined, { AI_GATEWAY_API_KEY: 'model-settings-test', AI_GATEWAY_URL: mock.baseUrl }, { demoMode: false });
   const page = app.window;
-  await page.getByTestId('conversations-new-btn').click();
+  await openFromPalette(page, 'New conversation');
   const draft = page.getByTestId('new-session-view').locator('textarea');
   await draft.fill('Keep this conversation draft.');
   const modelChip = page.getByTestId('new-session-model-chip');
@@ -82,7 +83,7 @@ test('composer model settings curate provider chips and preserve the conversatio
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await page.reload();
-  await page.getByTestId('conversations-new-btn').click();
+  await openFromPalette(page, 'New conversation');
   await page.getByTestId('new-session-model-chip').click();
   await expect(page.getByTestId('new-session-model-option-mock/nimbus-4-pro')).toBeVisible();
 });
@@ -137,7 +138,7 @@ test('model search stays fixed when scrolling models in the model menu and manag
     AI_GATEWAY_URL: mock.baseUrl
   });
   const page = app.window;
-  await page.getByTestId('conversations-new-btn').click();
+  await openFromPalette(page, 'New conversation');
   await page.getByTestId('new-session-model-chip').click();
 
   const menu = page.getByRole('listbox', { name: 'Model', exact: true });

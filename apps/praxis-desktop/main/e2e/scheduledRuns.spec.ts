@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
+import { openBoard } from './navigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
 import { chooseOption } from './chipSelect';
 
@@ -248,8 +249,7 @@ test('scheduled runs stay available with a retired preview opt-out', async () =>
 test('the board toolbar offers a shortcut to the scheduled runs of its project', async () => {
   const { page } = await launch();
   if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
-  await showProjectBoard(page);
-  await page.locator('.project-board-row').first().click();
+  await openBoard(page, 'Schedule Project');
   await expect(page.getByTestId('board-view')).toBeVisible();
   await page.getByTestId('board-schedule-btn').click();
   await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
@@ -258,8 +258,7 @@ test('the board toolbar offers a shortcut to the scheduled runs of its project',
 test('selected board tickets are saved in a new schedule', async () => {
   const { page } = await launch();
   if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
-  await showProjectBoard(page);
-  await page.locator('.project-board-row').first().click();
+  await openBoard(page, 'Schedule Project');
   await expect(page.getByTestId('board-view')).toBeVisible();
   const cards = page.getByTestId('issue-card');
   await expect(cards).toHaveCount(3);
@@ -292,8 +291,7 @@ test('selected board tickets are appended directly to an existing schedule', asy
     });
   }, projectId);
   if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
-  await showProjectBoard(page);
-  await page.locator('.project-board-row').first().click();
+  await openBoard(page, 'Schedule Project');
   const card = page.locator('[data-testid="issue-card"][data-issue-key="SCH-1"]');
   await card.click({ modifiers: ['Meta'] });
   await card.click({ button: 'right' });
@@ -308,8 +306,7 @@ test('selected board tickets are appended directly to an existing schedule', asy
 test('a retired preview opt-out does not hide the board schedule shortcut', async () => {
   const { page } = await launch({ legacyPreview: false });
   if (await page.getByTestId('schedule-sidebar').isVisible()) await page.getByRole('button', { name: 'Back to project', exact: true }).click();
-  await showProjectBoard(page);
-  await page.locator('.project-board-row').first().click();
+  await openBoard(page, 'Schedule Project');
   await expect(page.getByTestId('board-view')).toBeVisible();
   await expect(page.getByTestId('board-schedule-btn')).toBeVisible();
 });
@@ -614,7 +611,6 @@ test('scheduled runs have a grouped sidebar and project tickets stay outside the
   await page.getByRole('button', { name: 'Back to project', exact: true }).click();
   await expect(page.getByTestId('schedule-sidebar')).toHaveCount(0);
   await expect(page.getByTestId('project-schedules-nav-item')).toHaveCount(0);
-  await expect(page.getByTestId('titlebar-what-changed')).toHaveCount(0);
   await expect(page.getByTestId('titlebar-scheduled-runs')).toHaveCount(1);
   await page.getByTestId('titlebar-scheduled-runs').click();
   await expect(page.getByTestId('schedule-nav-run')).toHaveCount(3);

@@ -11,7 +11,8 @@ import {
 } from '../../ai/sessionNav';
 import { providerLabel } from '../../ai/modelProviders';
 import { useSettings } from '../../settings/useSettings';
-import { BrowserPane } from '../../browser/BrowserPane';
+import { BrowserPane, type BrowserLinkRequest } from '../../browser/BrowserPane';
+import { MarkdownLinkContext } from '../../ui/markdownLinks';
 import { AgentActivityFeed } from './AgentActivityFeed';
 import { SessionTicketCard } from './SessionTicketCard';
 import { SessionComposer } from '../../ai/SessionComposer';
@@ -49,6 +50,16 @@ export function AgentDetailsPage({
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const browserDismissed = useRef(initialBrowserOpen === false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
+  const [browserLink, setBrowserLink] = useState<BrowserLinkRequest>();
+  // A link clicked in the transcript opens in this page's browser instead of leaving the app.
+  const chatLinkHandler = useMemo(() => ({
+    openLink: (url: string) => {
+      browserDismissed.current = false;
+      setBrowserOpen(true);
+      onBrowserOpenChange?.(true);
+      setBrowserLink(previous => ({ url, token: (previous?.token ?? 0) + 1 }));
+    }
+  }), [onBrowserOpenChange]);
   const [stopping, setStopping] = useState(false);
   const [isCompact, setIsCompact] = useState<boolean>(() => {
     try {
@@ -248,6 +259,7 @@ export function AgentDetailsPage({
   };
 
   return (
+    <MarkdownLinkContext.Provider value={chatLinkHandler}>
     <div
       className={`agent-details-page ${isCompact ? 'is-compact-width' : 'is-full-width'}${browserOpen ? ' browser-open' : ''}${browserOpen && browserMaximized ? ' browser-maximized' : ''}`}
       data-testid="agent-details-page"
@@ -426,6 +438,7 @@ export function AgentDetailsPage({
         >
           <BrowserPane
             initialUrl={initialBrowserUrl}
+            linkRequest={browserLink}
             onNavigate={onBrowserUrlChange}
             suspended={browserSuspended}
             maximized={browserMaximized}
@@ -433,11 +446,13 @@ export function AgentDetailsPage({
             onClose={() => {
               browserDismissed.current = true;
               setBrowserOpen(false);
+              setBrowserLink(undefined);
               onBrowserOpenChange?.(false);
             }}
           />
         </div>
       )}
     </div>
+    </MarkdownLinkContext.Provider>
   );
 }

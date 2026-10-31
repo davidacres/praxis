@@ -1,4 +1,5 @@
 import { openSession } from './sessionNavigation';
+import { openFromPalette, openStartRunDialog } from './navigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -217,18 +218,11 @@ test('a controller session starts a project run and its stage session fills the 
 
   // Workflow stage sessions belong to the run, not the standalone Conversations tree.
   await openSession(page, controller.key);
-  await expect(page.getByTestId('session-list-row')).toHaveCount(0);
 
-  // Project tree: runs are direct children of the Runs group. Opening a run
-  // fills the workspace.
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
+  // The sidebar's Runs list: opening a run fills the workspace.
+  const runRow = page.locator('.easymode-automation-card').filter({ hasText: /Workspace review/ });
   await expect(runRow).toHaveCount(1);
-  await expect(runRow).toHaveAttribute('data-run-status', 'awaiting-approval');
-  const runToggle = runRow.getByRole('button').first();
-  if ((await runToggle.getAttribute('aria-expanded')) === 'false') await runToggle.click();
-  await runRow.getByTestId('automation-run-open').click();
+  await runRow.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
 
   // Centre: the session doing the work. Right pane: the pipeline, vertically.
   await expect(page.getByTestId('wf-run-session')).toBeVisible();
@@ -269,18 +263,16 @@ test('a controller session starts a project run and its stage session fills the 
   await page.getByTestId('wf-run-follow').click();
   await expect(page.getByTestId('wf-run-session')).toBeVisible();
 
-  // Cancel from the tree node.
-  await runRow.hover();
-  await page.getByTestId(`project-run-cancel-${run.runId}`).click();
+  // Cancel from the run view.
+  await page.getByTestId('wf-cancel-run').click();
   await expect.poll(() => runStatus(page, run.runId)).toBe('cancelled');
-  await expect(runRow).toHaveAttribute('data-run-status', 'cancelled');
   // A settled run offers no cancel.
-  await expect(page.getByTestId(`project-run-cancel-${run.runId}`)).toHaveCount(0);
+  await expect(page.getByTestId('wf-cancel-run')).toBeDisabled();
 
-  // Delete from the tree node: a themed confirm, then the run, its stage
+  // Delete from the sidebar card: a themed confirm, then the run, its stage
   // session and its link on the controller are all gone; the controller stays.
-  await runRow.hover();
-  await page.getByTestId(`project-run-delete-${run.runId}`).click();
+  await runRow.locator('.easymode-automation-row').hover();
+  await page.getByTestId(`easymode-run-delete-${run.runId}`).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
   await expect(runRow).toHaveCount(0);
   await expect.poll(() => runStatus(page, run.runId)).toBeUndefined();
@@ -307,14 +299,11 @@ test('deleting a live run cancels it first, then removes it', async () => {
   await expect.poll(() => runStatus(page, run.runId), { timeout: 20000 }).toBe('running');
 
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
-  await expect(runRow).toHaveAttribute('data-run-status', 'running');
-  await expect(runsGroup).toContainText('1');
+  const runRow = page.locator('.easymode-automation-card').filter({ hasText: /Workspace review/ });
+  await expect(runRow).toHaveCount(1);
 
-  await runRow.hover();
-  await page.getByTestId(`project-run-delete-${run.runId}`).click();
+  await runRow.locator('.easymode-automation-row').hover();
+  await page.getByTestId(`easymode-run-delete-${run.runId}`).click();
   // The confirm says the run is live and will be cancelled first.
   await expect(page.getByRole('dialog')).toContainText(/cancelled first/i);
   await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
@@ -330,41 +319,36 @@ test('a run can be renamed from the sidebar and the name persists after reload',
     seeded
   );
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Workspace review' });
+  const runRow = page.locator('.easymode-automation-card').filter({ hasText: 'Workspace review' });
   await expect(runRow).toBeVisible();
-  await runRow.hover();
-  await page.getByTestId(`project-run-rename-${run.runId}`).click();
-  const nameInput = page.getByTestId('automation-run-title-input');
+  await runRow.locator('.easymode-automation-row').hover();
+  await page.getByTestId(`easymode-run-rename-${run.runId}`).click();
+  const nameInput = page.getByTestId(`easymode-run-title-input-${run.runId}`);
   await expect(nameInput).toBeFocused();
   await nameInput.fill('Discard this name');
   await nameInput.press('Escape');
   await expect(nameInput).toHaveCount(0);
   await expect(runRow).toContainText('Workspace review');
-  await runRow.hover();
-  await page.getByTestId(`project-run-rename-${run.runId}`).click();
+  await runRow.locator('.easymode-automation-row').hover();
+  await page.getByTestId(`easymode-run-rename-${run.runId}`).click();
   await nameInput.fill('Nightly verification');
-  await page.locator('[data-testid="project-tree"]').screenshot({
+  await page.getByTestId('easymode-sidebar').screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-inline-rename.png')
   });
   await nameInput.press('Enter');
-  await expect(page.getByTestId('project-workflow-run-row').filter({ hasText: 'Nightly verification' })).toBeVisible();
-  await page.getByTestId('project-workflow-run-row').filter({ hasText: 'Nightly verification' }).hover();
-  await page.locator('[data-testid="project-tree"]').screenshot({
+  await expect(page.locator('.easymode-automation-card').filter({ hasText: 'Nightly verification' })).toBeVisible();
+  await page.locator('.easymode-automation-card').filter({ hasText: 'Nightly verification' }).hover();
+  await page.getByTestId('easymode-sidebar').screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-hover-actions.png')
   });
-  await page.locator('[data-testid="project-tree"]').screenshot({
+  await page.getByTestId('easymode-sidebar').screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-rename.png')
   });
 
   await page.reload();
-  const reopenedRuns = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await reopenedRuns.getAttribute('aria-expanded')) === 'false') await reopenedRuns.click();
-  const reopenedRun = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Nightly verification' });
+  const reopenedRun = page.locator('.easymode-automation-card').filter({ hasText: 'Nightly verification' });
   await expect(reopenedRun).toBeVisible();
-  await reopenedRun.getByTestId('automation-run-open').click();
-  await expect(reopenedRun.getByTestId('automation-run-stage-summary')).toBeVisible();
+  await reopenedRun.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   await expect(page.getByTestId('wf-run-panel')).toBeVisible();
   await expect(page.getByTestId('wf-run-bar')).toContainText('Nightly verification');
   await page.screenshot({
@@ -376,8 +360,7 @@ test('the start-run dialog opens from the Runs header with the only workflow pre
   const { page } = await launch(true);
   await page.reload();
 
-  await expect(page.getByTestId('project-workflow-run-new')).toBeVisible();
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await openStartRunDialog(page);
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Run task').fill('From the Runs header');
@@ -387,14 +370,14 @@ test('the start-run dialog opens from the Runs header with the only workflow pre
   await expect(page.getByTestId('wf-run-bar')).toContainText('Workspace review');
   // A check stage has no conversation: the centre says so rather than staying blank.
   await expect(page.getByTestId('wf-run-nosession')).toBeVisible();
-  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
+  await expect(page.locator('.easymode-automation-card')).toHaveCount(1);
 });
 
 test('the Runs header opens a new workflow run', async () => {
   const { page } = await launch(true);
   await page.reload();
 
-  await page.getByTestId('project-workflow-run-new').click();
+  await openStartRunDialog(page);
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Start workflow run');
@@ -402,30 +385,13 @@ test('the Runs header opens a new workflow run', async () => {
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
 
   await expect(page.getByTestId('wf-run-panel')).toBeVisible();
-  const runRow = page.getByTestId('project-workflow-run-row').first();
-  await expect(runRow).toHaveCount(1);
-  await expect(runRow.getByTestId('automation-run-status')).toHaveAttribute('aria-label', /Running|Awaiting approval|Succeeded|Failed|Cancelled|Paused/);
-  await expect(runRow.getByTestId('automation-run-status')).toHaveAttribute('title', /Running|Awaiting approval|Succeeded|Failed|Cancelled|Paused/);
-  const toggle = runRow.getByRole('button').first();
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  expect((await runRow.boundingBox())!.height).toBeGreaterThanOrEqual(82);
-  const timeline = page.getByTestId('automation-timeline');
-  await expect(timeline).toBeVisible();
-  await expect(timeline.locator('[data-testid^="automation-stage-"]')).toHaveCount(2);
-  await expect(runRow.getByTestId('automation-run-stage-summary')).toBeVisible();
-  await runRow.getByTestId('automation-inline-view-workflow').click();
-  const sheet = page.getByTestId('automation-sheet');
-  await expect(sheet).toBeVisible();
-  await expect(sheet.getByTestId('automation-sheet-stages').locator('.automation-sheet-stage')).toHaveCount(2);
-  await sheet.getByRole('button', { name: 'Close run details' }).click();
-  await page.locator('[data-testid="project-tree"]').screenshot({
-    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'automation-timeline.png')
-  });
-  await page.getByRole('button', { name: 'Collapse runs', exact: true }).click();
-  await expect(timeline).not.toBeVisible();
-  await page.getByRole('button', { name: 'Switch to EasyMode (⌘⇧E / Ctrl+Shift+E)', exact: true }).click();
   const easyRun = page.locator('.easymode-automation-card').first();
+  await expect(easyRun).toHaveCount(1);
+  // Two stages: the card's gauge labels each one.
+  await expect(easyRun.locator('.gauge-step')).toHaveCount(2);
+  await expect(easyRun.locator('.gauge-step__name')).toHaveCount(2);
   await easyRun.getByRole('button', { name: 'View workflow', exact: true }).click();
+  const sheet = page.getByTestId('automation-sheet');
   await expect(sheet).toBeVisible();
   await expect(sheet.getByTestId('automation-sheet-stages').locator('.automation-sheet-stage')).toHaveCount(2);
   await sheet.getByRole('button', { name: 'Open full run', exact: true }).click();
@@ -439,7 +405,7 @@ test('the Runs header opens a new workflow run', async () => {
 
 });
 
-test('a long run uses a bounded dot rail and exposes every step in the workflow sheet', async () => {
+test('a long run uses a bounded gauge and exposes every step in the workflow sheet', async () => {
   const { page, seeded } = await launch(true);
   await page.evaluate(async projectId => {
     const now = new Date().toISOString();
@@ -472,15 +438,16 @@ test('a long run uses a bounded dot rail and exposes every step in the workflow 
   }, seeded.projectId);
   await page.reload();
 
-  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Long run' });
+  const row = page.locator('.easymode-automation-card').filter({ hasText: 'Long run' });
   await expect(row).toBeVisible();
-  const toggle = row.getByRole('button').first();
-  await toggle.click();
-  const rail = row.getByTestId('automation-timeline');
-  const visiblePositions = rail.locator('.automation-rail-step, .automation-rail-overflow');
-  expect(await visiblePositions.count()).toBeLessThanOrEqual(12);
-  await expect(rail.locator('.automation-rail-overflow').first()).toBeVisible();
-  await rail.locator('.automation-rail-overflow').first().click();
+  // Sixteen stages share one bounded gauge: a segment each, too many to label.
+  await expect(row.locator('.gauge-step')).toHaveCount(16);
+  await expect(row.locator('.gauge-step__name')).toHaveCount(0);
+  await expect(row.locator('.gauge-ratio')).toHaveText('0/16');
+  const gauge = (await row.getByTestId(/^easymode-gauge-/).first().boundingBox())!;
+  const card = (await row.boundingBox())!;
+  expect(gauge.x + gauge.width).toBeLessThanOrEqual(card.x + card.width + 0.5);
+  await row.getByRole('button', { name: 'View workflow', exact: true }).click();
 
   const sheet = page.getByTestId('automation-sheet');
   await expect(sheet).toBeVisible();
@@ -501,7 +468,7 @@ async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'unco
   fs.appendFileSync(path.join(repo, 'README.md'), 'local edit\n');
   await page.reload();
 
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await openStartRunDialog(page);
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Start with local edits');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
@@ -509,11 +476,11 @@ async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'unco
   const notice = dialog.getByTestId('uncommitted-base-notice');
   await expect(notice).toContainText('2 uncommitted files in this checkout');
   await expect(notice).toContainText('unsaved.ts');
-  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(0);
+  await expect(page.locator('.easymode-automation-card')).toHaveCount(0);
 
   await dialog.getByTestId(choice).click();
   await expect(page.getByTestId('wf-run-panel')).toBeVisible();
-  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(1);
+  await expect(page.locator('.easymode-automation-card')).toHaveCount(1);
   const run = await page.evaluate(id => window.praxis.workflows.listRuns(id).then(runs => runs[0]), project.id);
   return { page, repo, runId: (run as { runId: string }).runId };
 }
@@ -564,7 +531,7 @@ test('starting a run against a workspace folder that is no longer a Git reposito
   fs.rmSync(path.join(repo, '.git'), { recursive: true, force: true });
   await page.reload();
 
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await openStartRunDialog(page);
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Start without a Git repo');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();
@@ -576,7 +543,7 @@ test('starting a run against a workspace folder that is no longer a Git reposito
   await expect(error).not.toContainText('rev-parse');
   await expect(error).not.toContainText('fatal:');
   await expect(page.getByTestId('uncommitted-base-notice')).toHaveCount(0);
-  await expect(page.getByTestId('project-workflow-run-row')).toHaveCount(0);
+  await expect(page.locator('.easymode-automation-card')).toHaveCount(0);
   await page.waitForTimeout(150);
   await dialog.screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'workflow-run-not-a-git-repo.png'),
@@ -628,13 +595,8 @@ test('an out-of-credits provider pauses the run instead of failing it, and resum
 
   // The UI says paused, not failed, and offers one way forward.
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
-  await expect(runRow).toHaveAttribute('data-run-status', 'paused');
-  const toggle = runRow.getByRole('button').first();
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  await runRow.getByTestId('automation-run-open').click();
+  const runRow = page.locator('.easymode-automation-card').filter({ hasText: /Workspace review/ });
+  await runRow.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   await expect(page.getByTestId('wf-run-limit')).toBeVisible();
   await expect(page.getByTestId('wf-vpipe-step-review')).toHaveAttribute('data-lane', 'paused');
   await expect(page.getByTestId('wf-run-bar')).toContainText('paused');
@@ -658,12 +620,8 @@ test('a stage whose AI ran out can be switched to another AI and carries on', as
     .toBe('provider-limit');
 
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const switchRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Switch AI/ });
-  const switchToggle = switchRow.getByRole('button').first();
-  if ((await switchToggle.getAttribute('aria-expanded')) === 'false') await switchToggle.click();
-  await switchRow.getByTestId('automation-run-open').click();
+  const switchRow = page.locator('.easymode-automation-card').filter({ hasText: /Switch AI/ });
+  await switchRow.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('Vercel AI Gateway ran out of budget');
   await expect(notice.getByTestId('wf-limit-switch-to')).toHaveAttribute('data-value', 'codex-cli');
@@ -715,12 +673,8 @@ test('with "Stop the run" the run ends saying which AI ran out, and can still ca
   expect(summary?.events.at(-1)?.message).toMatch(/The run could not be completed: Vercel AI Gateway ran out of credits or hit its usage limit at /);
 
   await page.reload();
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const stopRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Stop on limit/ });
-  const stopToggle = stopRow.getByRole('button').first();
-  if ((await stopToggle.getAttribute('aria-expanded')) === 'false') await stopToggle.click();
-  await stopRow.getByTestId('automation-run-open').click();
+  const stopRow = page.locator('.easymode-automation-card').filter({ hasText: /Stop on limit/ });
+  await stopRow.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   const notice = page.getByTestId('wf-run-limit');
   await expect(notice).toContainText('The run could not be completed');
   await expect(notice.getByTestId('wf-limit-stop')).toHaveCount(0);
@@ -754,12 +708,8 @@ test('a run in Ask mode stops the stage for a tool permission; the same run in A
 
   // The run panel says which mode it is in.
   await asked.page.reload();
-  const runsGroup = asked.page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const askedRow = asked.page.getByTestId('project-workflow-run-row').first();
-  const askedToggle = askedRow.getByRole('button').first();
-  if ((await askedToggle.getAttribute('aria-expanded')) === 'false') await askedToggle.click();
-  await askedRow.getByTestId('automation-run-open').click();
+  const askedRow = asked.page.locator('.easymode-automation-card').first();
+  await askedRow.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   await expect(asked.page.getByTestId('wf-run-mode')).toHaveAttribute('data-mode', 'ask');
 
   // Allowing it lets the stage finish and the run reach approval.
@@ -839,22 +789,20 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
   await page.reload();
 
   // Open the project's Runs group in the sidebar
-  const runsGroup = page.getByTestId('project-workflow-runs-nav-item');
-  if ((await runsGroup.getAttribute('aria-expanded')) === 'false') await runsGroup.click();
-  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ });
+  const runRow = page.locator('.easymode-automation-card').filter({ hasText: /Workspace review/ });
   await expect(runRow).toHaveCount(1);
 
   // Archive button on the sidebar run row
-  await runRow.hover();
-  const archiveBtn = page.getByTestId(`project-run-archive-${run.runId}`);
+  await runRow.locator('.easymode-automation-row').hover();
+  const archiveBtn = page.getByTestId(`easymode-run-archive-${run.runId}`);
   await expect(archiveBtn).toBeVisible();
   await archiveBtn.click();
 
   // It is now removed from the active runs tree
   await expect(runRow).toHaveCount(0);
 
-  // Clicking the Runs header opens the workflow runs browser
-  await runsGroup.click();
+  // The project's workflow runs browser lists it under Archived
+  await openFromPalette(page, 'Workspace Delivery · Workflow runs');
   await expect(page.getByTestId('wf-runs-browser')).toBeVisible();
   await expect(page.getByTestId('wf-runs-browser-new-run')).toHaveCount(0);
 
@@ -872,5 +820,5 @@ test('a terminal run can be archived, removing it from the sidebar and listing i
   await restoreBtn.click();
 
   // The run appears back in the active list and sidebar tree
-  await expect(page.getByTestId('project-workflow-run-row').filter({ hasText: /Workspace review/ })).toHaveCount(1);
+  await expect(page.locator('.easymode-automation-card').filter({ hasText: /Workspace review/ })).toHaveCount(1);
 });

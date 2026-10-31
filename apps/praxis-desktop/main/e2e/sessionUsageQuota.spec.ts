@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openFromPalette, openProject } from './navigation';
 import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
@@ -35,7 +36,8 @@ async function openDraftComposer(page: Page): Promise<void> {
     }, workspace.id);
   });
   await page.reload();
-  await page.getByTestId('project-session-new').first().click();
+  await openProject(page, 'Usage project');
+  await page.getByTestId('easymode-new-session').click();
 }
 
 // The earlier renderer fails the zero-cost guard: account usage and zero credits must remain visible.
@@ -200,6 +202,9 @@ test('collapsed usage animates both bars while account limits load', async () =>
     return [style.animationName, style.animationDirection, style.animationIterationCount, style.animationDelay];
   }))).toEqual([['composer-usage-sweep', 'alternate', 'infinite', '0s'], ['composer-usage-sweep', 'alternate', 'infinite', '0.15s']]);
   await expect(chart.locator('strong:visible')).toHaveCount(0);
+  // Measure once the panel's entrance animation (a scaleY on the wrapper) has settled,
+  // or the "loading" size is a mid-animation frame rather than the chart's own size.
+  await chart.evaluate(element => Promise.all(element.closest('.session-usage-wrapper')!.getAnimations().map(animation => animation.finished)));
   const loadingBox = (await chart.boundingBox())!;
   const xs = async () => (await segments.first().boundingBox())!.x;
   const first = await xs();
@@ -274,7 +279,7 @@ test('a session that ran without token reports shows a dash, never Not reported'
   const fixture = path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs');
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: fixture } } } });
   const page = app.window;
-  await page.getByTestId('conversations-new-btn').click();
+  await openFromPalette(page, 'New conversation');
   await page.getByPlaceholder('Ask anything, brainstorm, or get something done…').fill('Unreported tokens');
   await page.getByTestId('new-session-submit').click();
   await expect.poll(() => page.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.state)).toBe('completed');
@@ -310,7 +315,7 @@ test('draft usage follows the selected model and keeps unfiltered dashboard tota
     { userDataDir, settingsPath: path.join(userDataDir, 'settings.json') },
     { AI_GATEWAY_API_KEY: 'usage-model-test', AI_GATEWAY_URL: mock.baseUrl });
   const page = app.window;
-  await page.getByTestId('conversations-new-btn').click();
+  await openFromPalette(page, 'New conversation');
   const summary = page.getByTestId('new-session-view').getByTestId('session-usage-summary');
   await summary.locator(':scope > summary').click();
   await expect(summary.getByTestId('session-usage-current')).toContainText('mock/first');
@@ -334,7 +339,7 @@ test('session usage follows the active conversation speaker and its runtime toke
   const fixture = path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs');
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: fixture } } } });
   const page = app.window;
-  await page.getByTestId('conversations-new-btn').click();
+  await openFromPalette(page, 'New conversation');
   await page.getByPlaceholder('Ask anything, brainstorm, or get something done…').fill('Current speaker usage');
   await page.getByTestId('new-session-submit').click();
   await expect.poll(() => page.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.state)).toBe('completed');

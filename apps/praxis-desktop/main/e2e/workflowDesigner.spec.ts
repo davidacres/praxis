@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openNewWorkflowDialog } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
@@ -73,7 +74,7 @@ test.afterEach(async () => {
 });
 /** Create a project workflow from a template via the sidebar `+` and its dialog. */
 async function newWorkflow(page: Page, template: string, project = 'Delivery Project'): Promise<void> {
-  await page.getByRole('button', { name: `New workflow in ${project}` }).click();
+  await openNewWorkflowDialog(page, project);
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await dialog.getByRole('listitem').filter({ hasText: template }).click();
   await dialog.getByRole('button', { name: /^Use/ }).click();
@@ -377,7 +378,7 @@ test('a folder-backed project commits its workflow to .praxis/workflows and relo
 test('instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically', async () => {
   const page = app.window;
 
-  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  await openNewWorkflowDialog(page, 'Delivery Project');
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await expect(dialog).toBeVisible();
 

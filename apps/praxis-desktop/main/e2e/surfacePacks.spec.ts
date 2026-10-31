@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openFromPalette } from './navigation';
 import type { Page } from 'playwright';
 import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
@@ -622,7 +623,7 @@ test('Aurora Glass frosts the sidebar and the translucency dial collapses it', a
   // `.pane-main`'s themed surface shows straight through. The session list is
   // the shell's sidebar now, whose translucency is asserted above.
   await window.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
-  await window.locator('[data-testid="nav-conversations"]').click();
+  await openFromPalette(window, 'Conversations');
   await expect(window.locator('[data-testid="sessions-view"]')).toBeVisible();
   const consoleFill = await window.locator('[data-testid="sessions-view"]').evaluate(
     view => getComputedStyle(view.querySelector('.session-console')!).backgroundColor

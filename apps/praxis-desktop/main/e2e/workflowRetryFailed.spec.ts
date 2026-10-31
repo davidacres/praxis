@@ -112,7 +112,7 @@ test('a failed step on a failed run has a retry icon button that reopens the run
   await expect.poll(status, { timeout: 60000 }).toBe('failed');
 
   await page.reload();
-  await page.getByTestId(`easymode-run-${run.runId}`).locator('.easymode-automation-row').click();
+  await page.getByTestId(`easymode-run-${run.runId}`).locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
 
   const step = page.getByTestId('wf-vpipe-step-verify');
   await expect(step).toHaveAttribute('data-lane', 'failed');

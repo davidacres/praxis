@@ -1,4 +1,5 @@
 import { openConnections } from './connectionNavigation';
+import { listedBoards } from './navigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -113,10 +114,8 @@ test('saving a live folder connection auto-tracks its board', async () => {
     await expect(trackedRow).toBeVisible();
     await expect(trackedRow).toContainText('folder-e2el');
 
-    // …and the board itself is listed in the sidebar.
-    await expect(
-      window.locator('[data-testid="board-nav-item"]', { hasText: 'E2E Live' })
-    ).toBeVisible();
+    // …and the board itself is listed.
+    expect((await listedBoards(window)).some(name => name.includes('E2E Live'))).toBe(true);
   } finally {
     // Stop the live folder watcher before deleting the tree it watches.
     await closeApp();

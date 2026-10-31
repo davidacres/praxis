@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openFromPalette } from './navigation';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
@@ -112,7 +113,7 @@ test('existing session follow-up composer shows code intelligence chip and statu
     });
   });
 
-  await win.getByTestId('conversations-new-btn').click();
+  await openFromPalette(win, 'New conversation');
   await win.getByPlaceholder('Ask anything, brainstorm, or get something done…').fill('Test code intel follow-up');
   await win.getByTestId('new-session-submit').click();
   await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.state)).toBe('completed');

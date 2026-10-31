@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { openFromPalette } from './navigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -162,14 +163,14 @@ test('two stage sessions are reached through their project run rather than Conve
   await expect.poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId), { timeout: 60000 })
     .toBe('awaiting-approval');
   await page.reload();
-  const runRow = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Tiered review' });
+  const runRow = page.locator('.easymode-automation-card').filter({ hasText: 'Tiered review' });
   await expect(runRow).toHaveCount(1);
-  await runRow.getByTestId('automation-run-open').click();
+  await runRow.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   for (const node of ['first', 'second']) {
     await page.getByTestId(`wf-vpipe-step-${node}`).click();
     await expect(page.getByTestId('wf-run-session')).toContainText('Looks fine.');
   }
-  await page.getByTestId('nav-conversations').click();
+  await openFromPalette(page, 'Conversations');
   await expect(page.getByTestId('session-list-row')).toHaveCount(0);
   const sessions = await page.evaluate(async id => (await window.praxis.ai.listSessions()).filter(s => s.workflowRunId === id), run.runId);
   expect(sessions).toHaveLength(2);
@@ -253,7 +254,7 @@ test('a provider row maps tiers by picking its models, and the designer sets a s
     { projectId }
   );
   await page.reload();
-  await page.getByRole('button', { name: 'Tiered review' }).first().click();
+  await openFromPalette(page, 'Tiered review', 'workflow');
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });
   await canvas.getByRole('button', { name: /^First look \(agent-task\)/ }).click();
   const select = page.getByTestId('wf-node-model-tier');
@@ -288,21 +289,21 @@ test('archiving a completed project run retains its sessions and deleting the ru
   await page.evaluate(id => window.praxis.workflows.approveRun(id, 'e2e'), run.runId);
   await expect.poll(() => page.evaluate(id => window.praxis.workflows.getRun(id).then(r => r?.status), run.runId)).toBe('succeeded');
   await page.reload();
-  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: 'Tiered review' });
+  const row = page.locator('.easymode-automation-card').filter({ hasText: 'Tiered review' });
   await expect(row).toBeVisible();
-  await row.hover();
-  await row.getByTestId(`project-run-archive-${run.runId}`).click();
+  await row.locator('.easymode-automation-row').hover();
+  await row.getByTestId(`easymode-run-archive-${run.runId}`).click();
   await expect(row).toHaveCount(0);
   expect(await stageSessions()).toHaveLength(2);
   await page.evaluate(id => window.praxis.workflows.archiveRun(id, false), run.runId);
   await expect(row).toBeVisible();
-  await row.hover();
-  await row.getByTestId(`project-run-delete-${run.runId}`).click();
+  await row.locator('.easymode-automation-row').hover();
+  await row.getByTestId(`easymode-run-delete-${run.runId}`).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   expect(await stageSessions()).toHaveLength(2);
-  await row.hover();
-  await row.getByTestId(`project-run-delete-${run.runId}`).click();
+  await row.locator('.easymode-automation-row').hover();
+  await row.getByTestId(`easymode-run-delete-${run.runId}`).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete run' }).click();
   await expect(row).toHaveCount(0);
   await expect.poll(stageSessions).toHaveLength(0);

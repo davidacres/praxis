@@ -73,3 +73,29 @@ export async function listedBoards(page: Page): Promise<string[]> {
   await expect(page.locator('.command-palette')).toHaveCount(0);
   return names;
 }
+
+/**
+ * Open a project's New workflow dialog. The project tree's per-project `+` is
+ * gone; a project's Workflows page offers New workflow when no workflow is open.
+ */
+export async function openNewWorkflowDialog(page: Page, projectName: string): Promise<void> {
+  await openProject(page, projectName);
+  await openFromPalette(page, 'Workflows');
+  await page.locator('.wf-page').getByRole('button', { name: 'New workflow' }).click();
+  await expect(page.getByRole('dialog', { name: 'New workflow' })).toBeVisible();
+}
+
+/** Open the start-run dialog from the sidebar's Runs header. */
+export async function openStartRunDialog(page: Page): Promise<void> {
+  await page.getByTestId('section-header-add-automations').click();
+  await expect(page.getByTestId('wf-runstart-dialog')).toBeVisible();
+}
+
+/**
+ * Open a run from its card in the sidebar's Runs list. Clicks near the row's
+ * left edge: hovering reveals the row's action buttons over its middle (further
+ * left when the card has stages), so a centred click would press one of them.
+ */
+export async function openRunFromSidebar(page: Page, runId: string): Promise<void> {
+  await page.getByTestId(`easymode-run-${runId}`).locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
+}

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { openFromPalette } from './navigation';
 
 /**
  * The first-run walkthrough. It annotates the user's real project rather than
@@ -67,22 +68,30 @@ test.afterEach(async () => {
 
 test('walks the shell, rings each control, and remembers it was seen', async () => {
   const page = app.window;
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
 
-  await page.getByTestId('project-getstarted-tour').click();
+  await openFromPalette(page, 'Take a tour');
   const callout = page.getByTestId('walkthrough-callout');
   await expect(callout).toBeVisible();
-  await expect(callout).toContainText('Your project lives here');
+  await expect(callout).toContainText('Your sessions live here');
   // One ring, over the control being described.
   await expect(page.locator('.walkthrough-ring')).toHaveCount(1);
-  await expectRingWraps(page, '[data-testid="project-nav-item"]');
+  await expectRingWraps(page, '[data-testid="section-header-sessions"]');
 
   await page.getByTestId('walkthrough-next').click();
-  await expect(callout).toContainText('Work sits on the board');
-  await expectRingWraps(page, '[data-testid="board-nav-item"]');
+  await expect(callout).toContainText('Runs take work through a workflow');
+  await expectRingWraps(page, '[data-testid="section-header-automations"]');
+  // Near the bottom of the window the callout flips above the ring, and must not
+  // cover it. Proven against the old fixed-150px placement, whose three-line
+  // callout overlapped this ring by ~13px and hid the "Runs" label.
+  const [calloutBottom, ringTop] = await page.evaluate(() => [
+    document.querySelector('.walkthrough-callout')!.getBoundingClientRect().bottom,
+    document.querySelector('.walkthrough-ring')!.getBoundingClientRect().top
+  ]);
+  expect(calloutBottom).toBeLessThanOrEqual(ringTop);
   await page.getByTestId('walkthrough-next').click();
-  await expect(callout).toContainText('Hand a ticket to an agent');
-  await expectRingWraps(page, '[data-testid="project-getstarted-start"]');
+  await expect(callout).toContainText('Hand work to an agent');
+  await expectRingWraps(page, '[data-testid="easymode-prompt-input"]');
 
   // Last stop offers a close, not another Next.
   await expect(page.getByTestId('walkthrough-next')).toHaveCount(0);
@@ -98,8 +107,8 @@ test('walks the shell, rings each control, and remembers it was seen', async () 
  */
 test('the ring is visibly not a control, and not the focus ring', async () => {
   const page = app.window;
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
-  await page.getByTestId('project-getstarted-tour').click();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
+  await openFromPalette(page, 'Take a tour');
   await expect(page.getByTestId('walkthrough-callout')).toBeVisible();
 
   const style = await page.evaluate(() => {
@@ -141,22 +150,22 @@ test('the ring is visibly not a control, and not the focus ring', async () => {
 
 test('the ring never blocks the control it highlights', async () => {
   const page = app.window;
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
-  await page.getByTestId('project-getstarted-tour').click();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
+  await openFromPalette(page, 'Take a tour');
   await expect(page.getByTestId('walkthrough-callout')).toBeVisible();
 
-  // Stop 1 rings the sidebar project row — which must still be clickable while
+  // Stop 1 rings the Sessions header — whose + must still be clickable while
   // the tour is open, so the highlight cannot be an interaction trap.
   const ring = page.locator('.walkthrough-ring');
   await expect(ring).toHaveCSS('pointer-events', 'none');
-  await page.getByTestId('project-nav-item').first().click();
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
+  await page.getByTestId('section-header-add-sessions').click();
+  await expect(page.getByTestId('new-session-view')).toBeVisible();
 });
 
 test('Escape dismisses the tour, and that counts as seen', async () => {
   const page = app.window;
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
-  await page.getByTestId('project-getstarted-tour').click();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
+  await openFromPalette(page, 'Take a tour');
   await expect(page.getByTestId('walkthrough-callout')).toBeVisible();
 
   await page.keyboard.press('Escape');
@@ -167,18 +176,18 @@ test('Escape dismisses the tour, and that counts as seen', async () => {
 
 test('a stop whose target disappears mid-tour is skipped, not shown empty', async () => {
   const page = app.window;
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
-  await page.getByTestId('project-getstarted-tour').click();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
+  await openFromPalette(page, 'Take a tour');
 
   const callout = page.getByTestId('walkthrough-callout');
-  await expect(callout).toContainText('Your project lives here');
+  await expect(callout).toContainText('Your sessions live here');
   await page.getByTestId('walkthrough-next').click();
-  await expect(callout).toContainText('Work sits on the board');
+  await expect(callout).toContainText('Runs take work through a workflow');
 
-  // Remove stop 3's target while the tour is open: the strip carries the
-  // "Start a session" button the third stop rings.
-  await page.getByTestId('project-getstarted').getByRole('button', { name: 'Dismiss' }).click();
-  await expect(page.getByTestId('project-getstarted')).toHaveCount(0);
+  // Remove stop 3's target while the tour is open: starting a new session
+  // replaces the canvas, and with it the composer the third stop rings.
+  await page.getByTestId('section-header-add-sessions').click();
+  await expect(page.getByTestId('easymode-prompt-input')).toHaveCount(0);
 
   // With the final target gone, Next finishes the tour without an empty stop.
   await page.getByTestId('walkthrough-next').click();

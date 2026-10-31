@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { openStartRunDialog } from './navigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -66,7 +67,7 @@ function runPanel(page: Page) {
 /** Starts a run from the sidebar's Runs header and lands on its workspace. The
  *  project has a single saved workflow, which the dialog preselects. */
 async function startRun(page: Page, task: string, options: { ticket?: string } = {}): Promise<void> {
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await openStartRunDialog(page);
   const dialog = page.getByTestId('wf-runstart-dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Run task').fill(task);
@@ -81,10 +82,8 @@ async function startRun(page: Page, task: string, options: { ticket?: string } =
 
 /** Opens an existing workflow run from the project's Sessions group. */
 async function openRun(page: Page, name: RegExp = /./): Promise<void> {
-  const row = page.getByTestId('project-workflow-run-row').filter({ hasText: name }).first();
-  const toggle = row.getByRole('button').first();
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-  await row.getByTestId('automation-run-open').click();
+  const row = page.locator('.easymode-automation-card').filter({ hasText: name }).first();
+  await row.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
   await expect(runPanel(page)).toBeVisible();
 }
 

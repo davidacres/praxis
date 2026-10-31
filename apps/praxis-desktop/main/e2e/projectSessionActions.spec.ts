@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { openProject } from './navigation';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
@@ -51,16 +52,6 @@ test('General and Ticket project sessions expose rename, archive, and delete act
       provider: 'vercel-gateway',
       task: { goal: 'Standalone sidebar action session' }
     });
-    // A workflow run, so the project tree has a collapsed ledger run row to
-    // compare the session rows' icon/label columns against.
-    const now = new Date().toISOString();
-    const workflowId = `actions-${project.id}`;
-    await window.praxis.workflows.save(project.id, {
-      schemaVersion: 1, id: workflowId, name: 'Actions workflow', scope: 'project', projectId: project.id, version: 1,
-      entryNodeId: 'approve', createdAt: now, updatedAt: now,
-      nodes: [{ type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [], prompt: 'Ship?', requiredGates: [], allowBypass: false }]
-    } as never);
-    await window.praxis.workflows.startRun(project.id, workflowId, 'Geometry reference run');
     return project.id;
   });
 
@@ -69,100 +60,47 @@ test('General and Ticket project sessions expose rename, archive, and delete act
     return sessions.filter(session => session.projectId === id).length;
   }, projectId), { timeout: 30000 }).toBe(2);
   await page.reload();
-  await expect(page.getByTestId('project-nav-item')).toContainText('Session actions project');
+  await openProject(page, 'Session actions project');
+  await expect(page.getByTestId('sidebar-project-select')).toContainText('Session actions project');
 
-  const general = page.getByTestId('project-session-nav-item').filter({ hasText: 'General sidebar action session' });
-  const ticket = page.getByTestId('project-session-nav-item').filter({ hasText: 'Ticket sidebar action session' });
-  await expect(ticket.locator('.session-nav-card-meta')).toContainText('APP-101');
-  for (const row of [general, ticket]) {
-    await expect(row).toBeVisible();
-    await expect(row.locator('.tree-icon')).toHaveAttribute('title', /session/);
-    await expect(row.locator('.session-nav-card-title-row')).toBeVisible();
-    await expect(row.locator('.session-nav-card-status')).toBeVisible();
-    await expect(row.getByTestId('project-session-agent-summary')).toBeVisible();
-    await expect(row.locator('.session-nav-card-meta')).not.toBeEmpty();
-    // A two-line ledger row (title + meta), not a single-line tree row.
-    expect(await row.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(40);
-    await expect(row.locator('.session-nav-actions')).toHaveCSS('opacity', '0');
-    await row.hover();
-    await expect(row.locator('.session-nav-actions')).toHaveCSS('opacity', '1');
-    await expect(row.getByTestId('session-rename-btn')).toBeVisible();
-    await expect(row.getByTestId('session-archive-btn')).toBeVisible();
-    await expect(row.getByTestId('session-delete-btn')).toBeVisible();
+  const sessions = await page.evaluate(() => window.praxis.ai.listSessions());
+  const keyFor = (goal: string) => sessions.find(session => session.taskDefinition.goal === goal)!.issueKey;
+  const generalKey = keyFor('General sidebar action session');
+  const ticketKey = keyFor('Ticket sidebar action session');
+  const standaloneKey = keyFor('Standalone sidebar action session');
+  const list = page.getByTestId('easymode-sessions-list');
+  const card = (key: string) => list.getByTestId(`easymode-session-card-${key}`);
+
+  // The project's feed holds its own sessions only; the standalone chat lives under General conversations.
+  await expect(card(generalKey)).toBeVisible();
+  await expect(card(ticketKey)).toBeVisible();
+  await expect(card(standaloneKey)).toHaveCount(0);
+  for (const key of [generalKey, ticketKey]) {
+    await card(key).hover();
+    await expect(page.getByTestId(`easymode-session-rename-${key}`)).toBeVisible();
+    await expect(page.getByTestId(`easymode-session-archive-${key}`)).toBeVisible();
+    await expect(page.getByTestId(`easymode-session-delete-${key}`)).toBeVisible();
   }
+  await page.screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-actions.png') });
 
-  // E6 ledger geometry: a session row's icon and title sit on the same two columns as the project's
-  // other ledger rows (here a collapsed run row under Runs) — not one tree level deeper. Selected, it
-  // is marked by one straight accent line on a square left edge, not a bar bent round a rounded corner.
-  const projectTree = page.getByTestId('project-tree').filter({ hasText: 'Session actions project' });
-  const columns = (row: typeof general, icon: string, label: string) => row.evaluate((el, [i, l]) => ({
-    icon: Math.round((el.querySelector(i) as HTMLElement).getBoundingClientRect().left),
-    label: Math.round((el.querySelector(l) as HTMLElement).getBoundingClientRect().left)
-  }), [icon, label] as const);
-  const runRow = projectTree.locator('[data-testid="project-workflow-run-row"]:not(.is-expanded)').first();
-  await expect(runRow).toBeVisible();
-  const runColumns = await columns(runRow, '.ledger-lead', '.automation-run-title');
-  expect(await columns(general, '.tree-icon', '.tree-label'), 'session row shares the ledger columns').toEqual(runColumns);
-  await general.click();
-  await expect(general).toHaveClass(/is-selected/);
-  const edge = await general.evaluate(el => {
-    const style = getComputedStyle(el);
-    return { topLeft: style.borderTopLeftRadius, bottomLeft: style.borderBottomLeftRadius, shadow: style.boxShadow };
-  });
-  expect(edge.topLeft, 'selected row has a square left edge').toBe('0px');
-  expect(edge.bottomLeft, 'selected row has a square left edge').toBe('0px');
-  expect(edge.shadow, 'selected row carries a straight 2px accent line on its left edge').toMatch(/2px 0px 0px 0px inset/);
-
-  const standalone = page.getByTestId('session-list-row').filter({ hasText: 'Standalone sidebar action session' });
-  await expect(standalone).toBeVisible();
-  await expect(standalone.locator('.session-nav-card-title-row')).toBeVisible();
-  await expect(standalone.locator('.session-nav-card-status')).toBeVisible();
-  await expect(standalone.locator('.session-nav-card-meta')).toContainText(/Vercel|Model not reported/);
-  expect(await standalone.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(40);
-
-  await page.mouse.move(900, 120);
-  await page.waitForTimeout(180);
-  await page.locator('nav.sidebar').screenshot({
-    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-actions.png'),
-  });
-  await general.screenshot({
-    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'project-session-action-row.png')
-  });
-
-  await standalone.hover();
-  await page.waitForTimeout(180);
-  await standalone.screenshot({
-    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'real-classic-standalone-row-hover.png')
-  });
-  await general.hover();
-  await page.waitForTimeout(180);
-  await page.locator('nav.sidebar').screenshot({
-    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'real-classic-session-hover.png'),
-  });
-  await general.screenshot({
-    path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'real-classic-session-row-hover.png')
-  });
-  await general.getByTestId('session-rename-btn').click();
-  const titleInput = page.getByTestId('session-title-input');
+  await card(generalKey).hover();
+  await page.getByTestId(`easymode-session-rename-${generalKey}`).click();
+  const titleInput = page.getByTestId(`easymode-session-title-input-${generalKey}`);
   await titleInput.fill('Renamed general session');
   await titleInput.press('Enter');
-  await expect(page.getByTestId('project-session-nav-item').filter({ hasText: 'Renamed general session' })).toBeVisible();
+  await expect(card(generalKey)).toContainText('Renamed general session');
 
-  await ticket.hover();
-  await ticket.getByTestId('session-archive-btn').click();
-  await expect(ticket).toHaveCount(0);
+  await card(ticketKey).hover();
+  await page.getByTestId(`easymode-session-archive-${ticketKey}`).click();
+  await expect(card(ticketKey)).toHaveCount(0);
 
-  const renamedGeneral = page.getByTestId('project-session-nav-item').filter({ hasText: 'Renamed general session' });
-  await renamedGeneral.hover();
-  await renamedGeneral.getByTestId('session-delete-btn').click();
+  await card(generalKey).hover();
+  await page.getByTestId(`easymode-session-delete-${generalKey}`).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Delete this session?');
-  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
-  await expect(dialog.locator('.modal-footer')).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Archive', exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
   await dialog.screenshot({ path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'session-delete-dialog.png') });
   await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(page.getByTestId('project-session-nav-item')).toHaveCount(0);
+  await expect(card(generalKey)).toHaveCount(0);
 });

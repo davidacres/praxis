@@ -91,9 +91,9 @@ const runBranches = (repo: string): string[] =>
 
 async function openDeleteDialog(page: Page, runId: string): Promise<void> {
   await page.reload();
-  const row = page.getByTestId('project-workflow-run-row').first();
-  await row.hover();
-  await page.getByTestId(`project-run-delete-${runId}`).click();
+  const row = page.locator('.easymode-automation-card').first();
+  await row.locator('.easymode-automation-row').hover();
+  await page.getByTestId(`easymode-run-delete-${runId}`).click();
   await expect(page.getByRole('dialog', { name: 'Delete this run?' })).toBeVisible();
 }
 

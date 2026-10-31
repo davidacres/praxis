@@ -1,4 +1,4 @@
-import { openSession } from './sessionNavigation';
+import { openFromPalette } from './navigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -9,7 +9,7 @@ import { startMockGatewayServer, type MockGatewayServer } from './mockGatewaySer
 
 /**
  * A very long name must never push a row's action buttons out of reach. Every row that carries
- * archive / delete / cancel (a run node, a session — in the sidebar tree and in the panes)
+ * archive / delete / cancel (a run card, a session card — in the sidebar and in the panes)
  * truncates its name and keeps its buttons inside its container, at the narrowest the sidebar (180px) and
  * the right pane (280px) can be dragged to.
  */
@@ -96,31 +96,29 @@ test('long run and session names leave their action buttons reachable at the nar
   await page.reload();
   await expect(page.getByTestId('startup-splash')).toHaveCount(0, { timeout: 15000 });
 
-  // The sidebar tree: a run node and a session row (each revealed on hover).
-  // Saved workflows no longer render as sidebar rows — they are opened from the
-  // command palette or the project header's New workflow action.
-  const runRow = page.getByTestId('project-workflow-run-row').first();
+  // The sidebar: a run card and a session card, each with its actions revealed on hover.
+  const runCard = page.locator('.easymode-automation-card').first();
+  const runRow = runCard.locator('.easymode-automation-row');
   await runRow.hover();
-  await expectButtonsInside(runRow, 'run node');
-  const sessionRow = page.getByTestId('session-list-row').first();
-  await expect(sessionRow).toBeVisible();
-  await sessionRow.hover();
-  await expectButtonsInside(sessionRow, 'session row');
-  // And the sidebar itself never grows a horizontal scroll to hide them behind.
-  const scroller = await page.locator('.sidebar-scroll').evaluate(el => ({ scrollW: el.scrollWidth, clientW: el.clientWidth }));
-  expect(scroller.scrollW, 'the sidebar does not scroll sideways').toBeLessThanOrEqual(scroller.clientW);
+  await expectButtonsInside(runRow, 'run card');
+  const sessionCard = page.getByTestId('easymode-sessions-list').locator('[data-testid^="easymode-session-card-"]').first();
+  await expect(sessionCard).toBeVisible();
+  await sessionCard.hover();
+  await expectButtonsInside(sessionCard, 'session card');
+  // And the sidebar never grows a horizontal scroll to hide them behind.
+  const scrollers = await page.getByTestId('easymode-sidebar').locator('.easymode-section__body').evaluateAll(els =>
+    els.map(el => ({ scrollW: el.scrollWidth, clientW: el.clientWidth })));
+  expect(scrollers.length).toBeGreaterThan(0);
+  for (const scroller of scrollers) expect(scroller.scrollW, 'the sidebar does not scroll sideways').toBeLessThanOrEqual(scroller.clientW);
 
-  // The panes: the run panel, the runs browser, and the session browser tab.
-  await runRow.getByTestId('automation-run-open').click();
+  // The panes: the run panel and the runs browser.
+  await runRow.click({ position: { x: 20, y: 10 } });
   const runPanel = page.getByTestId('wf-run-panel');
   await expect(runPanel).toBeVisible();
   await expect(runPanel.getByRole('button').first()).toBeVisible();
   await expectButtonsInside(runPanel, 'run panel');
-  await page.getByTestId('project-workflow-runs-nav-item').click();
+  await openFromPalette(page, 'Long Names · Workflow runs');
   const card = page.locator('.wf-run-card').first();
   await expect(card).toBeVisible();
   await expectButtonsInside(card, 'runs browser row');
-
-  await openSession(page);
-  await sessionRow.click();
 });

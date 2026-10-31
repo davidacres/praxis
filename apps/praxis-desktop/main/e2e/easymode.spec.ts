@@ -1067,8 +1067,9 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   await expect(win.locator('[data-testid="agent-timeline-message"]')).toBeVisible();
 
   // The user's own message shows what they typed, not the speaker label stored in `summary`
-  const userPrompt = win.locator('[data-testid="agent-timeline-prompt"]').first();
-  await expect(userPrompt).toContainText('Please index the slow foreign keys first.');
+  // The session's original goal opens the transcript; the typed follow-up is its own prompt.
+  const userPrompt = win.locator('[data-testid="agent-timeline-prompt"]').filter({ hasText: 'Please index the slow foreign keys first.' });
+  await expect(userPrompt).toHaveCount(1);
   await expect(userPrompt.locator('[data-testid="session-chat-markdown"]')).not.toHaveText('You');
 
   // Workflows belong to automations in easy mode: the session composer has no workflow chip
@@ -1093,7 +1094,8 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   // Test Quote action inserts blockquote into composer input
   await win.locator('[data-testid="session-chat-quote-btn"]').first().click();
   const composerInput = win.locator('[data-testid="session-follow-up-input"]');
-  await expect(composerInput).toHaveValue(/> Please index the slow foreign keys first\./);
+  // The first message is the session's opening goal.
+  await expect(composerInput).toHaveValue(/> Optimize database queries\./);
 
   // Verify standard session composer
   await expect(win.locator('[data-testid="agent-details-composer-dock"]')).toBeVisible();
@@ -1908,11 +1910,9 @@ test('sidebar split button offers all creation paths without a separate conversa
   await win.reload();
   await chooseOption(win.getByTestId('sidebar-project-select'), projectId);
   await expect(win.getByTestId('easymode-new-conversation')).toHaveCount(0);
+  // The project picker now lives in the title bar, so the split button is measured on its own.
   const split = await win.locator('.easymode-new-split').boundingBox();
-  const picker = await win.getByTestId('sidebar-project-select').boundingBox();
   expect(split!.width).toBeLessThan(105);
-  expect(split!.height).toBeLessThanOrEqual(picker!.height + 2);
-  expect(Math.abs((split!.y + split!.height / 2) - (picker!.y + picker!.height / 2))).toBeLessThan(2);
 
   await win.getByTestId('easymode-new-session').click();
   await expect(win.getByTestId('new-session-view')).toBeVisible();

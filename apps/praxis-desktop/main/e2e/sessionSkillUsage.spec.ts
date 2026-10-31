@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openSession } from './sessionNavigation';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
@@ -55,8 +56,7 @@ test('a session shows its agent and the skills it used, and a skill lists the se
 
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   const win = app.window;
-  await win.getByTestId('nav-conversations').click();
-  await win.locator('[data-session-order-id="SESSION-SKILLS"] [data-testid="session-list-row"]').click();
+  await openSession(win, 'SESSION-SKILLS');
 
   const block = win.getByTestId('session-agent-skills');
   await expect(block).toBeVisible();

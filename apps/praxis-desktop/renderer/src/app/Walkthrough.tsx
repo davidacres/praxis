@@ -87,7 +87,11 @@ export function Walkthrough({ stops, onDone }: { stops: WalkthroughStop[]; onDon
   // Prefer below the target; flip above when there is no room.
   const below = rect.top + rect.height + GAP;
   const placeAbove = below + 150 > window.innerHeight;
-  const calloutTop = placeAbove ? Math.max(GAP, rect.top - GAP - 150) : below;
+  // Above, anchor the callout's bottom edge to the ring rather than guessing its
+  // height: a three-line body is taller than 150px and would otherwise cover it.
+  const calloutPosition = placeAbove
+    ? { bottom: Math.max(GAP, window.innerHeight - (rect.top - 4 - GAP)) }
+    : { top: below };
   const calloutLeft = Math.min(
     Math.max(GAP, rect.left + rect.width / 2 - CALLOUT_WIDTH / 2),
     Math.max(GAP, window.innerWidth - CALLOUT_WIDTH - GAP)
@@ -106,7 +110,7 @@ export function Walkthrough({ stops, onDone }: { stops: WalkthroughStop[]; onDon
         aria-live="polite"
         aria-label={`Walkthrough: ${stop.title}`}
         data-testid="walkthrough-callout"
-        style={{ top: calloutTop, left: calloutLeft, width: CALLOUT_WIDTH }}
+        style={{ ...calloutPosition, left: calloutLeft, width: CALLOUT_WIDTH }}
       >
         <span className="walkthrough-step">Step {index + 1}</span>
         <strong>{stop.title}</strong>

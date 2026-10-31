@@ -2,27 +2,19 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { listedBoards, openBoard, openProject } from './navigation';
 import { ProjectStore, WorkspaceStore, defaultProjectTickets, defaultProjectWorkflow, localToolDefinitionsForMode, type KeyValueStore, type ProjectType } from '@praxis/core';
 import { ProjectManager } from '../src/main/projectManager';
 
 let app: TestApp;
-
-async function toggleWorkMode(page: any) {
-  await page.keyboard.press('ControlOrMeta+k');
-  const palette = page.getByRole('dialog', { name: 'Go to' });
-  await expect(palette).toBeVisible();
-  await palette.getByRole('textbox').fill('toggle work mode');
-  await palette.getByRole('option', { name: /Toggle work mode/ }).click();
-  await expect(palette).toBeHidden();
-}
 
 test.beforeEach(async () => { app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false }); });
 test.afterEach(async () => { await closeTestApp(app); });
 
 test('creates a folderless Product project through advanced setup, then adds its board', async () => {
   const page = app.window;
-  await expect(page.getByTestId('overview-page')).toBeVisible();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-project').click();
   await page.getByTestId('add-project-no-folder').click();
@@ -80,42 +72,12 @@ test('creates a folderless Product project through advanced setup, then adds its
   await expect(page).toHaveScreenshot('project-wizard-review.png');
   await page.getByTestId('new-project-wizard').getByRole('button', { name: 'Create project' }).click();
 
+  // The new project is the one in view: the title bar names it and its home fills the right pane.
+  await expect(page.getByTestId('sidebar-project-select')).toContainText('Customer Portal');
   await expect(page.getByTestId('project-home')).toContainText('Customer Portal');
-  await expect(page.getByTestId('project-dashboard')).toBeVisible();
-  await expect(page.getByTestId('project-dashboard')).not.toContainText('Boards');
-  await expect(page.getByTestId('project-dashboard')).not.toContainText('Repository');
-  await expect(page.getByTestId('project-dashboard')).toContainText('Work progress');
-  await expect(page.getByTestId('project-dashboard')).toContainText('Recent activity');
-  const projectTree = page.getByTestId('project-tree').filter({ hasText: 'Customer Portal' });
-  await expect(page.getByTestId('nav-board')).toHaveCount(0);
-  await expect(page.getByTestId('board-nav-item').filter({ hasText: 'Customer Portal Board' })).toHaveCount(0);
-  await expect(projectTree.getByTestId('project-default-board-nav-item')).toHaveCount(0);
-  await expect(projectTree.getByTestId('project-git-nav-item')).toBeVisible();
-  await expect(projectTree.getByTestId('project-git-changes-nav-item')).toBeVisible();
-  await expect(projectTree.getByTestId('project-run-nav-item')).toBeVisible();
-  const themedColors = await projectTree.evaluate(tree => ({
-    accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
-    projectIcon: getComputedStyle(tree.querySelector('.project-icon')!).color,
-    boardIcon: tree.querySelector('.project-board-icon') ? getComputedStyle(tree.querySelector('.project-board-icon')!).color : ''
-  }));
-  expect(themedColors.projectIcon).toBe('rgb(198, 67, 31)');
-  expect(themedColors.accent).toBe('#c6431f');
-  expect(themedColors.boardIcon).toBe('');
-  // A freshly-created project lands with a Get Started strip: one lit action
-  // and a small checklist, not four zero cards.
-  const getStarted = page.getByTestId('project-getstarted');
-  await expect(getStarted).toBeVisible();
-  await expect(getStarted).toContainText('Project created');
-  await expect(getStarted).toContainText('6/6 sections');
-  await expect(getStarted.getByTestId('project-getstarted-start')).toBeVisible();
-  // The created date is today's, so it is masked — an unmasked baseline here
-  // goes red at midnight on a change that has nothing to do with the app.
-  await expect(page).toHaveScreenshot('project-home.png', {
-    mask: [page.getByTestId('project-created-date')],
-    maxDiffPixels: 200
-  });
-  await getStarted.getByRole('button', { name: 'Dismiss' }).click();
-  await expect(page.getByTestId('project-getstarted')).toHaveCount(0);
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
+  // No board until planning is added.
+  expect((await listedBoards(page)).filter(name => name.includes('Customer Portal'))).toHaveLength(0);
   const stored = await page.evaluate(() => window.praxis.projects.list());
   const created = stored.find(project => project.key === 'CUSTOMER');
   expect(created?.defaultAiToolMode).toBe('project-only');
@@ -133,18 +95,7 @@ test('creates a folderless Product project through advanced setup, then adds its
   ]);
   await page.getByTestId('project-add-board').click();
   await page.getByTestId('planning-source-local-board').click();
-  // The board stays hidden until the project's header toggle reveals it, and the toggle hides it again.
-  await expect(projectTree.getByTestId('project-default-board-nav-item')).toHaveCount(0);
-  await expect(projectTree.getByTestId('project-boards-toggle')).toHaveAttribute('aria-pressed', 'false');
-  await projectTree.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'project-board-hidden.png') });
-  await projectTree.getByTestId('project-boards-toggle').click();
-  await expect(projectTree.getByTestId('project-boards-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
-  await projectTree.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'project-board-shown.png') });
-  await projectTree.getByTestId('project-boards-toggle').click();
-  await expect(projectTree.getByTestId('project-default-board-nav-item')).toHaveCount(0);
-  await showProjectBoard(projectTree);
-  await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
+  await expect.poll(async () => (await listedBoards(page)).filter(name => name.includes('Customer Portal Board'))).toHaveLength(1);
   const workflowPanel = page.getByTestId('project-workflow');
   await expect(workflowPanel).toBeVisible();
   await expect(workflowPanel.getByTestId('workflow-stage-0')).toContainText('Backlog');
@@ -164,40 +115,29 @@ test('creates a folderless Product project through advanced setup, then adds its
   // The stage that means done stays last however the list is edited.
   expect(afterEdit?.workflowStages[afterEdit.workflowStages.length - 1].category).toBe('done');
 
-  // Project surfaces — including the detail panels — must inherit the active
-  // application theme instead of painting an opaque default background over the
-  // themed panes. The panels are borderless and carry no surface of their own.
+  // The project home and its panels inherit the active application theme instead of
+  // painting an opaque default background over the themed panes.
   await page.locator('[data-testid="titlebar-settings"]').click();
   await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await page.locator('[data-testid="theme-card-praxis-dark"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: 'output/playwright/project-dashboard-praxis-dark.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/project-home-praxis-dark.png', fullPage: true });
   const projectThemeStyles = await page.evaluate(() => {
-    const dashboard = document.querySelector('[data-testid="project-dashboard"]');
     const projectHome = document.querySelector('[data-testid="project-home"]');
     const panel = projectHome?.querySelector('.project-panel');
     return {
-      dashboardColor: dashboard ? getComputedStyle(dashboard).color : '',
-      dashboardBackground: dashboard ? getComputedStyle(dashboard).backgroundColor : '',
       homeBackground: projectHome ? getComputedStyle(projectHome).backgroundColor : '',
       panelBackground: panel ? getComputedStyle(panel).backgroundColor : '',
       panelBorderWidth: panel ? getComputedStyle(panel).borderTopWidth : ''
     };
   });
-  expect(projectThemeStyles.dashboardColor).not.toBe('');
-  expect(projectThemeStyles.dashboardBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(projectThemeStyles.homeBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(projectThemeStyles.panelBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(projectThemeStyles.panelBorderWidth).toBe('0px');
 
-  await showProjectBoard(projectTree);
-  await projectTree.getByTestId('project-default-board-nav-item').click();
+  await openBoard(page, 'Customer Portal Board');
   await expect(page.getByTestId('issue-card')).toHaveCount(0);
-  await toggleWorkMode(page);
-  const workProject = page.getByTestId('work-project').filter({ hasText: 'Customer Portal' });
-  await expect(workProject).toContainText('1 board');
-  await expect(workProject.getByTestId('work-card')).toContainText('Customer Portal Board');
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-session').click();
   await expect(page.getByRole('heading', { name: 'New session in Customer Portal' })).toBeVisible();
@@ -205,7 +145,7 @@ test('creates a folderless Product project through advanced setup, then adds its
 
 test('opens the unified Add Project flow from the New menu', async () => {
   const page = app.window;
-  const repoInspection = await page.evaluate(folder => window.praxis.projects.inspectFolder(folder), path.resolve(__dirname, '../../../..'));
+  const repoInspection = await page.evaluate(folder => window.praxis.projects.inspectFolder(folder), path.resolve(__dirname, '../..'));
   expect(repoInspection.planFiles?.length ?? 0).toBeGreaterThan(0);
   await page.getByTestId('new-menu').click();
   const triggerBox = await page.getByTestId('new-menu').boundingBox();
@@ -235,7 +175,7 @@ test('opens the unified Add Project flow from the New menu', async () => {
 
 test('a first project is three steps: type, name, review', async () => {
   const page = app.window;
-  await expect(page.getByTestId('overview-page')).toBeVisible();
+  await expect(page.getByTestId('easymode-canvas')).toBeVisible();
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-project').click();
   await page.getByTestId('add-project-no-folder').click();
@@ -255,7 +195,7 @@ test('a first project is three steps: type, name, review', async () => {
   await expect(page.getByText('Praxis only — no local folder')).toBeVisible();
   await page.locator('.project-wizard-footer').getByRole('button', { name: 'Create project' }).click();
 
-  await expect(page.getByTestId('project-dashboard')).toContainText('Quick Start');
+  await expect(page.getByTestId('sidebar-project-select')).toContainText('Quick Start');
   const stored = await page.evaluate(() => window.praxis.projects.list());
   const created = stored.find(project => project.name === 'Quick Start');
   expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(6);
@@ -321,18 +261,8 @@ test('uses a folder connection for an existing-folder project with plans', async
     expect(result.details?.issues).toHaveLength(1);
     expect(result.details?.issues[0].summary).toBe('Imported planning work');
     await app.window.reload();
-    const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Imported Plans' });
-    await showProjectBoard(projectTree);
-    await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Imported Plans');
-    await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans' })).toHaveCount(0);
-    await projectTree.getByTestId('project-default-board-nav-item').click();
+    await openBoard(app.window, 'Imported Plans');
     await expect(app.window.getByTestId('issue-card')).toContainText('Imported planning work');
-    await projectTree.getByRole('button', { name: 'Show docs for Imported Plans' }).click();
-    const importedPlan = projectTree.getByTestId('project-document-nav-item').filter({ hasText: 'Imported planning work' });
-    await expect(importedPlan.getByTestId('project-document-status')).toHaveClass(/status-dot/);
-    await expect(importedPlan.getByTestId('project-document-status')).toHaveAttribute('title', 'In Progress');
-    await expect(importedPlan.getByTestId('project-document-status')).toHaveAttribute('aria-label', 'Status: In Progress');
-    await expect(importedPlan.getByTestId('project-document-status')).toHaveCSS('background-color', 'rgb(210, 153, 34)');
     await app.window.screenshot({ path: 'output/playwright/project-imported-plans-board.png', fullPage: true });
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
@@ -526,42 +456,7 @@ test('attaches a folder later and enforces one-project ownership for linked boar
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('nests unlinked boards under the sidebar "Boards" heading', async () => {
-  const page = app.window;
-
-  // The built-in demo boards belong to no project, so they render in the
-  // standalone "Boards" section rather than inside a project tree.
-  const boardsHeading = page.getByTestId('toggle-boards');
-  await expect(boardsHeading).toBeVisible();
-  await expect(boardsHeading).toHaveAttribute('aria-expanded', 'true');
-
-  const boardTree = page.locator('.external-board-tree');
-  const boardRow = boardTree.getByTestId('board-nav-item').first();
-  await expect(boardRow).toBeVisible();
-
-  // The row must be indented under the heading, not flush with the sidebar
-  // edge — this was the "unlinked boards not nested" regression.
-  const rowPaddingLeft = await boardRow.evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
-  expect(rowPaddingLeft).toBeGreaterThanOrEqual(24);
-
-  // The row's glyph should sit at (roughly) the same x as the heading label,
-  // so the section reads as a tree with the boards as children of "Boards"
-  // (glyph under parent label, row label indented one glyph further — the
-  // same idiom as the project tree).
-  const headingLabelX = await boardsHeading.locator('span', { hasText: 'Boards' }).first().evaluate(el => el.getBoundingClientRect().x);
-  const rowIconX = await boardRow.locator('.tree-icon').evaluate(el => el.getBoundingClientRect().x);
-  const rowLabelX = await boardRow.locator('.tree-label').evaluate(el => el.getBoundingClientRect().x);
-  const sidebarX = await page.locator('.sidebar').evaluate(el => el.getBoundingClientRect().x);
-  expect(rowIconX).toBeGreaterThan(sidebarX + 20);
-  expect(rowLabelX).toBeGreaterThan(rowIconX);
-  expect(Math.abs(rowIconX - headingLabelX)).toBeLessThanOrEqual(12);
-
-  // Collapsing the heading hides its nested children.
-  await boardsHeading.click();
-  await expect(boardTree).toHaveCount(0);
-});
-
-test('shows a connected board only beneath its owning Praxis project', async () => {
+test('a connected board is listed by its owning project and unlinks without removing its connection', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-linked-board-'));
   const featureFolder = path.join(folder, 'features', 'feature-01-linked');
   fs.mkdirSync(featureFolder, { recursive: true });
@@ -593,28 +488,21 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     }, folder);
     await app.window.reload();
 
-    await expect(app.window.getByTestId('nav-board')).toHaveCount(0);
-    await expect(app.window.locator('.external-board-tree').getByTestId('board-nav-item').filter({ hasText: 'Delivery Workspace' })).toHaveCount(0);
-    const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Delivery Workspace' });
-    await showProjectBoard(projectTree);
-  const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
+    // The project's home lists the linked board as one of its planning sources…
+    await openProject(app.window, 'Delivery Workspace');
+    const linkedBoard = app.window.getByTestId('project-home').locator('.linked-board');
+    await expect(linkedBoard).toHaveCount(1);
     await expect(linkedBoard).toContainText('Linked Delivery');
-    await expect(linkedBoard).toContainText('Linked');
-    await linkedBoard.click();
+    // …and the board opens with its work.
+    await openBoard(app.window, 'Linked Delivery');
     await expect(app.window.getByTestId('issue-card')).toContainText('Linked delivery');
 
-    await toggleWorkMode(app.window);
-    const workProject = app.window.getByTestId('work-project').filter({ hasText: 'Delivery Workspace' });
-    await expect(workProject).toContainText('2 boards');
-    await expect(workProject.getByTestId('work-card')).toHaveCount(2);
-    await expect(workProject).toContainText('Linked Delivery');
-
-    // Unlinking from the sidebar must remove only this project's link, not
-    // the shared folder connection itself — the same "Linked delivery source"
-    // connection could be linked into another project too.
-    await toggleWorkMode(app.window);
-    await linkedBoard.getByTestId('board-unlink-btn').click();
-    await expect(projectTree.getByTestId('project-linked-board-nav-item')).toHaveCount(0);
+    // Unlinking removes only this project's link, not the shared folder
+    // connection itself — the same "Linked delivery source" connection could be
+    // linked into another project too.
+    await openProject(app.window, 'Delivery Workspace');
+    await app.window.getByRole('button', { name: 'Remove Linked Delivery from planning sources' }).click();
+    await expect(linkedBoard).toHaveCount(0);
     const stillConnected = await app.window.evaluate(async () =>
       (await window.praxis.connection.list()).some(connection => connection.id === 'linked-live-folder')
     );
@@ -626,7 +514,7 @@ test('shows a connected board only beneath its owning Praxis project', async () 
 
 /**
  * Regression test for a real bug: a board linked from *another project's own*
- * connection could never be unlinked from the sidebar. `onDeleteBoard`'s
+ * connection could never be unlinked. `onDeleteBoard`'s
  * "this board belongs to a project, delete the project instead" guard fired
  * for any board whose connection carried a `projectId` — which every
  * cross-project link does by definition — so the click silently did nothing.
@@ -654,12 +542,11 @@ test('unlinks a board that was cross-linked from another project\'s own connecti
   });
   await app.window.reload();
 
-  const projectTree = app.window.getByTestId('project-tree').filter({ hasText: result.firstName });
-  await showProjectBoard(projectTree);
-  const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
-  await expect(linkedBoard).toContainText('Linked');
-  await linkedBoard.getByTestId('board-unlink-btn').click();
-  await expect(projectTree.getByTestId('project-linked-board-nav-item')).toHaveCount(0);
+  await openProject(app.window, result.firstName);
+  const linkedBoard = app.window.getByTestId('project-home').locator('.linked-board');
+  await expect(linkedBoard).toHaveCount(1);
+  await linkedBoard.getByRole('button', { name: /^Remove .* from planning sources$/ }).click();
+  await expect(linkedBoard).toHaveCount(0);
 
   const after = await app.window.evaluate(async ({ firstId, secondId }) => ({
     firstLinkedBoards: (await window.praxis.projects.get(firstId))?.linkedBoards.length,
@@ -700,7 +587,7 @@ test('an existing folder is three steps too, and confirms the detected identity'
 
     await expect(page.locator('.step-count')).toHaveText('Step 3 of 3');
     await page.locator('.project-wizard-footer').getByRole('button', { name: 'Add project' }).click();
-    await expect(page.getByTestId('project-dashboard')).toBeVisible();
+    await expect(page.getByTestId('project-home')).toBeVisible();
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }

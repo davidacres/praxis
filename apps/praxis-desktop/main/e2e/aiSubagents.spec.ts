@@ -73,26 +73,11 @@ test('parent session displays subagents with status, tokens, and model across in
   // Navigate to Sessions view and select parent session
   await openSession(win, parent.issueKey);
 
-  // 3. Header bar subagents chip
-  const headerChip = win.locator('[data-testid="session-header-subagents-chip"]');
-  await expect(headerChip).toBeVisible();
-  await expect(headerChip).toContainText('1 subagent');
-
-  // 4. Inspector Summary block shows subagent with status badge, model, tokens
-  const summaryBlock = win.locator('[data-testid="session-subagents-summary-block"]');
-  await expect(summaryBlock).toBeVisible();
-  await expect(summaryBlock).toContainText('Subagents (1)');
-
-  const subagentStatus = summaryBlock.locator('[data-testid="subagent-status-badge"]').first();
-  await expect(subagentStatus).toBeVisible();
-  await expect(subagentStatus).toHaveText('Completed');
-
-  const subagentModel = summaryBlock.locator('[data-testid="subagent-model"]').first();
-  await expect(subagentModel).toBeVisible();
-  await expect(subagentModel).toContainText('claude-3-5-sonnet');
-
-  const subagentTokens = summaryBlock.locator('[data-testid="subagent-tokens"]').first();
-  await expect(subagentTokens).toBeVisible();
+  // 3. The subagents bar under the header lists the parent and its one subagent
+  const subagentsBar = win.locator('[data-testid="agent-details-subagents-bar"]');
+  await expect(subagentsBar).toBeVisible();
+  await expect(subagentsBar.locator('[data-testid="subagent-nav-primary"]')).toHaveCount(1);
+  await expect(subagentsBar.locator('[data-testid^="subagent-nav-"]:not([data-testid="subagent-nav-primary"])')).toHaveCount(1);
 
   // 5. Inspector Subagents Tab
   const subagentsTab = win.locator('[data-testid="session-tab-subagents"]');
@@ -120,19 +105,13 @@ test('parent session displays subagents with status, tokens, and model across in
   const openBtn = subagentCard.locator('[data-testid="subagent-open-session-btn"]');
   await expect(openBtn).toBeVisible();
   await openBtn.click();
-  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Perform code analysis subagent task');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Perform code analysis subagent task');
 
-  // Verify parent link banner on child session
-  const parentBanner = win.locator('[data-testid="session-parent-banner"]');
-  await expect(parentBanner).toBeVisible();
-  await expect(parentBanner).toContainText('Subagent of');
-
-  const parentLink = win.locator('[data-testid="session-parent-link"]');
+  // The subagents bar leads back to the parent session
+  const parentLink = win.locator('[data-testid="subagent-nav-primary"]');
   await expect(parentLink).toBeVisible();
-
-  // Click parent link to return to parent session
   await parentLink.click();
-  await expect(win.locator('[data-testid="session-purpose-goal"]')).toContainText('Coordinate primary feature delivery');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Coordinate primary feature delivery');
 
   // 7. Open the profile from Agent Runtime to inspect its runtime subagents.
   await win.getByTestId('titlebar-settings').click();

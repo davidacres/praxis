@@ -1,4 +1,5 @@
 import * as os from 'node:os';
+import { listedBoards, openBoard } from './navigation';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
@@ -29,8 +30,7 @@ test.afterEach(async () => {
 
 test('an unreachable connection is skipped instead of blanking the board list', async () => {
   // The demo boards must still be listed even though one connection throws.
-  const boardItems = window.locator('[data-testid="board-nav-item"]');
-  await expect(boardItems.first()).toBeVisible();
-  await boardItems.first().click();
+  expect(await listedBoards(window)).not.toHaveLength(0);
+  await openBoard(window);
   await expect(window.locator('[data-testid="issue-card"]').first()).toBeVisible();
 });

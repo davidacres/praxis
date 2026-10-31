@@ -5,6 +5,7 @@
 // the old one stopped) or to stop. The fake ACP agent stands in for Codex.
 
 import * as path from 'node:path';
+import { openFromPalette } from './navigation';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
@@ -39,7 +40,7 @@ async function outOfBudgetSession(): Promise<TestApp['window']> {
   );
   const win = app.window;
   await win.evaluate(() => window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Summarise the release plan.' } }));
-  await win.getByTestId('nav-conversations').click();
+  await openFromPalette(win, 'Conversations');
   await expect(win.getByTestId('session-state-badge')).toHaveText('Failed', { timeout: 15000 });
   return win;
 }
@@ -91,7 +92,7 @@ test('a CLI agent reporting a provider limit does not put the limit notice into 
     provider: 'codex-cli',
     task: { goal: 'Execute LIMIT_NOTICE test' }
   }));
-  await win.getByTestId('nav-conversations').click();
+  await openFromPalette(win, 'Conversations');
   await expect(win.getByTestId('session-state-badge')).toHaveText('Failed', { timeout: 15000 });
   await expect(win.getByTestId('session-error-banner')).toContainText('Provider Limit');
   await expect(win.getByTestId('session-chat-thread')).not.toContainText('hit your session limit');

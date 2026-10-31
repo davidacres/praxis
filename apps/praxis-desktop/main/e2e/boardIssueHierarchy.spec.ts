@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -76,10 +77,7 @@ async function launchWithFixture(): Promise<void> {
     ]
   });
   window = app.window;
-  await window
-    .locator('[data-testid="board-nav-item"]')
-    .getByText('E2E Hierarchy', { exact: true })
-    .click();
+  await openBoard(window, /^E2E Hierarchy$/);
   await window.waitForSelector('[data-testid="issue-card"]');
 }
 

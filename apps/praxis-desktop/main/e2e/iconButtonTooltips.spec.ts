@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openBoard } from './navigation';
+import { openBoard, openNewWorkflowDialog } from './navigation';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 /**
@@ -144,7 +144,7 @@ test('every visible icon-only control on the main screens has a tooltip', async 
   await audit('agent hub');
 
   await seedProjectWithWorkflow(page);
-  await page.getByRole('button', { name: 'New workflow in Tooltip Project' }).click();
+  await openNewWorkflowDialog(page, 'Tooltip Project');
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await audit('new workflow dialog');
   await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).click();

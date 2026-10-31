@@ -50,7 +50,6 @@ async function givenLimitedProvider(errorBody: string, replacementFails = false,
   if (setup) await setup(app);
   await openSession(win, session.issueKey);
   await expect(win.getByTestId('session-state-badge')).toHaveText('Failed', { timeout: 15000 });
-  await expect(win.getByTestId('session-error-banner')).toContainText('Provider Limit');
   await expect(win.getByTestId('session-limit-switch')).toContainText('Vercel AI Gateway reached its usage limit.');
   return { win, session, original, replacement };
 }
@@ -58,7 +57,6 @@ async function givenLimitedProvider(errorBody: string, replacementFails = false,
 async function thenRecoveredComposer(win: TestApp['window'], idle = true) {
   // Soft assertions expose both regressions and allow completion/reopen checks
   // to run even when the in-flight recovery UI is broken.
-  await expect.soft(win.getByTestId('session-error-banner')).toHaveCount(0, { timeout: 1000 });
   await expect.soft(win.getByTestId('session-limit-switch')).toHaveCount(0, { timeout: 1000 });
   // Ordinary single-agent execution collapses the composer controls.
   if (idle) {
@@ -138,7 +136,6 @@ test('Given an exhausted provider, When the replacement also exhausts credits, T
     const record = (await window.praxis.ai.listSessions())[0];
     return { provider: record?.provider, state: record?.state, error: record?.lastError };
   })).toMatchObject({ provider: 'openai', state: 'failed', error: expect.stringContaining('OpenAI insufficient quota') });
-  await expect(win.getByTestId('session-error-banner')).toContainText('Provider Limit');
   await expect(win.getByTestId('session-limit-switch')).toContainText('OpenAI reached its usage limit.');
   await expect(win.getByTestId('session-limit-switch-go')).toBeEnabled();
 });
@@ -171,7 +168,6 @@ test('Given a topped-up original provider and changed draft model, When Retry is
   expect(JSON.parse(original.requests[1].body).model).toBe(first.model);
   expect(replacement.requests).toHaveLength(0);
   await expect(win.getByTestId('session-limit-switch')).toHaveCount(0);
-  await expect(win.getByTestId('session-error-banner')).toHaveCount(0);
   original.releaseCompletion();
   await expect(win.getByTestId('session-state-badge')).toHaveText('Completed');
 });

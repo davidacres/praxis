@@ -5,6 +5,7 @@
  *   PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/aiLiveConversation.live.spec.ts
  */
 import { spawnSync } from 'node:child_process';
+import { openFromPalette } from './navigation';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -81,7 +82,7 @@ test('two real CLI agents visibly alternate in a capped read-only consult', asyn
   expect(speakers).toEqual(new Set(['host', 'guest']));
   expect((capped?.events ?? []).filter(event => event.type === 'user_input_completed')).toHaveLength(0);
 
-  await win.locator('[data-testid="nav-conversations"]').click();
+  await openFromPalette(win, 'Conversations');
   const thread = win.locator('[data-testid="session-chat-thread"]');
   await expect(thread).toContainText(PROVIDER_LABELS[HOST_PROVIDER] ?? HOST_PROVIDER);
   await expect(thread).toContainText(PROVIDER_LABELS[GUEST_PROVIDER] ?? GUEST_PROVIDER);

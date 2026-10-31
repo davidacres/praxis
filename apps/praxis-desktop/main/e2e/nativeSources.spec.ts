@@ -6,6 +6,7 @@
 // them itself — without being loaded twice by one that does (unit-tested in core).
 
 import * as fs from 'node:fs';
+import { openNewWorkflowDialog } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -181,7 +182,7 @@ test('an agent from another AI tool can be placed on a workflow stage and bound 
   });
   await page.reload();
 
-  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  await openNewWorkflowDialog(page, 'Delivery Project');
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await dialog.getByRole('listitem').filter({ hasText: 'Quick change' }).click();
   await dialog.getByRole('button', { name: /^Use/ }).click();

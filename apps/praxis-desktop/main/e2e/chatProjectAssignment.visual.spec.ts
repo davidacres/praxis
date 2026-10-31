@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { chooseOption } from './chipSelect';
 
 let app: TestApp | undefined;
 
@@ -48,13 +49,13 @@ test('assign chat picker and project session placement', async () => {
   }, sessionKey);
   await app.window.reload();
   const page = app.window;
-  const generalChatRow = page.getByTestId('session-list-row').filter({ hasText: /^Research notes/ });
-  await generalChatRow.hover();
-  await expect(generalChatRow.getByTestId('session-actions-menu')).toBeVisible();
-  await generalChatRow.getByTestId('session-actions-menu').click();
-  await expect(page.getByTestId('session-actions-menu-popover')).toBeVisible();
-  await page.getByTestId('session-assign-project-menu-item').click();
-  await expect(page.getByTestId('assign-chat-dialog')).toBeVisible();
+  const card = (key: string) => page.getByTestId(`easymode-session-card-${key}`);
+  const openAssign = async (key: string) => {
+    await card(key).hover();
+    await page.getByTestId(`easymode-session-assign-${key}`).click();
+    await expect(page.getByTestId('assign-chat-dialog')).toBeVisible();
+  };
+  await openAssign(sessionKey);
   await expect(page.getByText('Project', { exact: true })).toBeVisible();
   await expect(page.getByText('Ticket (optional)', { exact: true })).toBeVisible();
   const projectSelector = page.getByTestId('assign-chat-project-select');
@@ -65,25 +66,14 @@ test('assign chat picker and project session placement', async () => {
   await expect(ticketSelector).toContainText('General');
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assignment-dialog.png') });
   await page.getByTestId('assign-chat-confirm').click();
-  const projectTree = page.getByTestId('project-tree').filter({ hasText: project.name });
-  // Sessions read as one recency feed (E6): both chats were active today, so they land under Today.
-  const todaySessions = projectTree.getByTestId('project-session-bucket-today');
-  await expect(todaySessions).toContainText('Today');
-  await expect(todaySessions).toContainText('1');
-  const generalSession = projectTree.getByTestId('project-session-nav-item').filter({ hasText: 'Research notes' });
-  await expect(generalSession).toBeVisible();
-  await expect(generalSession.locator('.easymode-session-card__type-icon')).toHaveAttribute('title', 'General chat session');
-  await generalSession.click();
-  await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assigned-general.png') });
+  // The open chat moves into the project, and the view follows it there.
+  const picker = page.getByTestId('sidebar-project-select');
+  await expect(picker).toContainText(project.name);
+  await expect(page.getByTestId('easymode-session-bucket-today').getByTestId(`easymode-session-card-${sessionKey}`)).toBeVisible();
 
-  const ticketChatRow = page.getByTestId('session-list-row').filter({ hasText: 'Ticket research notes' });
-  await expect(ticketChatRow).toBeVisible();
-  await ticketChatRow.hover();
-  await expect(ticketChatRow.getByTestId('session-assign-btn')).toBeVisible();
-  await expect(ticketChatRow.getByTestId('session-assign-btn')).toHaveAttribute('title', 'Assign to ticket');
-  await ticketChatRow.getByTestId('session-actions-menu').click();
-  await page.getByTestId('session-assign-project-menu-item').click();
-  await expect(page.getByTestId('assign-chat-dialog')).toBeVisible();
+  // The ticket chat, still in General conversations, goes to the same project linked to its ticket.
+  await chooseOption(picker, 'conversations');
+  await openAssign(ticketSessionKey);
   await page.getByTestId('assign-chat-project-select').click();
   await page.getByRole('option', { name: project.name }).click();
   const ticketKey = project.ticketKey!;
@@ -92,12 +82,17 @@ test('assign chat picker and project session placement', async () => {
   await expect(ticketSelector).toContainText(ticketKey);
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assignment-ticket-selected.png') });
   await page.getByTestId('assign-chat-confirm').click();
-  await expect(todaySessions).toContainText('2');
-  const ticketSession = projectTree.getByTestId('project-session-nav-item').filter({ hasText: 'Ticket research notes' });
-  await expect(ticketSession).toBeVisible();
-  await expect(ticketSession).toContainText(ticketKey);
-  await expect(ticketSession.locator('.easymode-session-card__type-icon')).toHaveAttribute('title', `Linked to ${ticketKey}`);
-  await ticketSession.click();
+  await expect(page.getByTestId('assign-chat-dialog')).toHaveCount(0);
+
+  // Both are now in the project's feed, under Today.
+  await chooseOption(picker, project.id);
+  const today = page.getByTestId('easymode-session-bucket-today');
+  await expect(today.getByTestId(`easymode-session-card-${sessionKey}`)).toContainText('Research notes');
+  await expect(today.getByTestId(`easymode-session-card-${ticketSessionKey}`)).toContainText('Ticket research notes');
+  const records = await page.evaluate(() => window.praxis.ai.listSessions());
+  expect(records.find(record => record.issueKey === sessionKey)?.projectId).toBe(project.id);
+  expect(records.find(record => record.issueKey === ticketSessionKey)?.linkedIssueKey).toBe(ticketKey);
+  await card(ticketSessionKey).click();
   await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/chat-project-assigned-ticket.png') });
 });
 
@@ -143,10 +138,8 @@ test('assign chat ticket field lists tickets for a folder-backed project', async
     }, sessionKey);
     await app.window.reload();
     const page = app.window;
-    const chatRow = page.getByTestId('session-list-row').filter({ hasText: 'Folder project notes' });
-    await chatRow.hover();
-    await chatRow.getByTestId('session-actions-menu').click();
-    await page.getByTestId('session-assign-project-menu-item').click();
+    await page.getByTestId(`easymode-session-card-${sessionKey}`).hover();
+    await page.getByTestId(`easymode-session-assign-${sessionKey}`).click();
     await expect(page.getByTestId('assign-chat-dialog')).toBeVisible();
     await page.getByTestId('assign-chat-project-select').click();
     await page.getByRole('option', { name: project.name }).click();

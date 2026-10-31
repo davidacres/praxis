@@ -3,7 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, showProjectBoard, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { listedBoards } from './navigation';
+
+/** The boards listed for the most recently created project. */
+async function projectBoards(win: TestApp['window']): Promise<string[]> {
+  const project = (await win.evaluate(() => window.praxis.projects.list())).at(-1)!;
+  return (await listedBoards(win)).filter(name => name.includes(project.name));
+}
 
 let app: TestApp | undefined;
 
@@ -79,8 +86,7 @@ test('opening an existing folder creates a portable workspace and file-only proj
     await expect(win.getByTestId('planning-source-detected-plans')).toBeVisible();
     await win.getByTestId('project-planning-source-dialog').screenshot({ path: 'output/playwright/planning-source-detected.png' });
     await win.getByTestId('planning-source-detected-plans').click();
-    await showProjectBoard(win);
-    await expect(win.getByTestId('project-default-board-nav-item')).toBeVisible();
+    await expect.poll(() => projectBoards(win)).toHaveLength(1);
     const plannedProject = await win.evaluate(async projectId => window.praxis.projects.get(projectId), state.project!.id);
     expect(plannedProject?.planningMode).toBe('board');
     expect(plannedProject?.storage).toBe('folder');
@@ -183,8 +189,7 @@ test('workspace Add Project opens a folder without a board and adds planning lat
     expect(state.project?.linkedBoards).toEqual([]);
     expect(state.ownedConnection).toBe(false);
     expect(fs.existsSync(path.join(folder, 'project.praxis.md'))).toBe(true);
-    await expect(win.getByTestId('project-tree').getByText('Boards')).toHaveCount(0);
-    await expect(win.getByTestId('toggle-boards')).toHaveCount(0);
+    expect(await projectBoards(win)).toHaveLength(0);
     await win.screenshot({ path: 'output/playwright/quick-start-file-only.png', fullPage: true });
 
     await win.getByTestId('project-add-board').click();
@@ -192,8 +197,7 @@ test('workspace Add Project opens a folder without a board and adds planning lat
     await win.getByTestId('project-planning-source-dialog').scrollIntoViewIfNeeded();
     await win.getByTestId('project-planning-source-dialog').screenshot({ path: 'output/playwright/planning-source-options.png' });
     await win.getByTestId('planning-source-local-board').click();
-    await showProjectBoard(win);
-    await expect(win.getByTestId('project-default-board-nav-item')).toBeVisible();
+    await expect.poll(() => projectBoards(win)).toHaveLength(1);
     await win.screenshot({ path: 'output/playwright/quick-start-with-board.png', fullPage: true });
     const boardState = await win.evaluate(async () => {
       const project = (await window.praxis.projects.list()).at(-1);

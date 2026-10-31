@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { listedBoards } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -74,14 +75,11 @@ test('an issue-mirror stories/ folder next to a real plans root does not surface
   );
   window = app.window;
 
-  const primary = window
-    .locator('[data-testid="board-nav-item"]')
-    .getByText('E2E Issue Mirror', { exact: true });
-  await expect(primary).toHaveCount(1);
+  const boards = await listedBoards(window);
+  expect(boards.filter(name => name === 'E2E Issue Mirror')).toHaveLength(1);
 
   // The whole point of the fix: no board named after the mirror's stories/
   // folder, and no second board at all — only the one real plans root.
-  const phantom = window.locator('[data-testid="board-nav-item"]', { hasText: /^stories$/ });
-  await expect(phantom).toHaveCount(0);
-  await expect(window.locator('[data-testid="board-nav-item"]')).toHaveCount(1);
+  expect(boards).not.toContain('stories');
+  expect(boards).toHaveLength(1);
 });

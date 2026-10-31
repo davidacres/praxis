@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { chooseOption } from './chipSelect';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
@@ -88,77 +89,28 @@ test('session list displays single and multiple pixel-perfect AI brand icons bes
   // Relaunch app with seeded sessions
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   const win = app.window;
-  await win.locator('[data-testid="session-list-row"]').first().waitFor({ timeout: 15000 });
-
-  // Open Sessions section if collapsed
-  const sessionsToggle = win.getByTestId('nav-conversations-toggle');
-  if (await sessionsToggle.isVisible()) {
-    const isExpanded = await sessionsToggle.getAttribute('aria-expanded');
-    if (isExpanded === 'false') {
-      await sessionsToggle.click();
-    }
-  }
+  // Standalone chats live under General conversations in the sidebar.
+  await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
+  await expect(win.locator('[data-testid="easymode-sessions-list"]')).toBeVisible({ timeout: 10000 });
+  const icons = (key: string) => win.locator(`[data-testid="easymode-session-card-${key}"]`).locator('[data-testid="session-ai-icons"]');
 
   // 1. Single AI session: exactly 1 icon badge (Claude)
-  const singleRow = win.locator('[data-testid="session-list-row"]', { hasText: 'Single AI Session' });
-  await expect(singleRow).toBeVisible({ timeout: 10000 });
-  const singleIcons = singleRow.locator('[data-testid="session-ai-icons"]');
-  await expect(singleIcons).toBeVisible();
-  await expect(singleIcons.locator('.session-ai-icon-badge')).toHaveCount(1);
-  await expect(singleIcons.locator('[data-provider="claude-code-cli"]')).toBeVisible();
+  await expect(icons(session1)).toBeVisible();
+  await expect(icons(session1).locator('.session-ai-icon-badge')).toHaveCount(1);
+  await expect(icons(session1).locator('[data-provider="claude-code-cli"]')).toBeVisible();
 
-  // 2. Multi-epoch session: 2 icon badges (Claude + OpenAI)
-  const multiRow = win.locator('[data-testid="session-list-row"]', { hasText: 'Multi Epoch Session' });
-  await expect(multiRow).toBeVisible();
-  const multiIcons = multiRow.locator('[data-testid="session-ai-icons"]');
-  await expect(multiIcons).toBeVisible();
-  await expect(multiIcons.locator('.session-ai-icon-badge')).toHaveCount(2);
-  await expect(multiIcons.locator('[data-provider="claude-code-cli"]')).toBeVisible();
-  await expect(multiIcons.locator('[data-provider="codex-cli"]')).toBeVisible();
+  // 2. Multi-epoch session: 2 icon badges (Claude + Codex)
+  await expect(icons(session2).locator('.session-ai-icon-badge')).toHaveCount(2);
+  await expect(icons(session2).locator('[data-provider="claude-code-cli"]')).toBeVisible();
+  await expect(icons(session2).locator('[data-provider="codex-cli"]')).toBeVisible();
 
   // 3. Multi-conversation session: 2 icon badges (Anthropic + Gemini)
-  const convRow = win.locator('[data-testid="session-list-row"]', { hasText: 'Multi Conversation Session' });
-  await expect(convRow).toBeVisible();
-  const convIcons = convRow.locator('[data-testid="session-ai-icons"]');
-  await expect(convIcons).toBeVisible();
-  await expect(convIcons.locator('.session-ai-icon-badge')).toHaveCount(2);
-  await expect(convIcons.locator('[data-provider="anthropic"]')).toBeVisible();
-  await expect(convIcons.locator('[data-provider="gemini"]')).toBeVisible();
+  await expect(icons(session3).locator('.session-ai-icon-badge')).toHaveCount(2);
+  await expect(icons(session3).locator('[data-provider="anthropic"]')).toBeVisible();
+  await expect(icons(session3).locator('[data-provider="gemini"]')).toBeVisible();
 
-  // Capture verification artifact screenshot of the sidebar session list showing the AI brand icons
-  const sidebar = win.locator('.sidebar, nav[aria-label="Workspace"]').first();
   fs.mkdirSync('.praxis/session-artifacts', { recursive: true });
-  await sidebar.screenshot({
-    path: '.praxis/session-artifacts/session-list-ai-icons.png'
+  await win.locator('.easymode-sidebar').screenshot({
+    path: '.praxis/session-artifacts/easymode-session-list-ai-icons.png'
   });
-
-  // Switch to EasyMode to verify EasyMode session card icons
-  const easyModeSwitchBtn = win.getByRole('button', { name: /Switch to EasyMode/i });
-  if (await easyModeSwitchBtn.isVisible()) {
-    await easyModeSwitchBtn.click();
-    await expect(win.locator('[data-testid="easymode-sessions-list"]')).toBeVisible({ timeout: 10000 });
-
-    // Verify EasyMode single AI card
-    const easySingleCard = win.locator(`[data-testid="easymode-session-card-${session1}"]`);
-    await expect(easySingleCard).toBeVisible();
-    const easySingleIcons = easySingleCard.locator('[data-testid="session-ai-icons"]');
-    await expect(easySingleIcons).toBeVisible();
-    await expect(easySingleIcons.locator('.session-ai-icon-badge')).toHaveCount(1);
-    await expect(easySingleIcons.locator('[data-provider="claude-code-cli"]')).toBeVisible();
-
-    // Verify EasyMode multi-AI card (epoch)
-    const easyMultiCard = win.locator(`[data-testid="easymode-session-card-${session2}"]`);
-    await expect(easyMultiCard).toBeVisible();
-    const easyMultiIcons = easyMultiCard.locator('[data-testid="session-ai-icons"]');
-    await expect(easyMultiIcons).toBeVisible();
-    await expect(easyMultiIcons.locator('.session-ai-icon-badge')).toHaveCount(2);
-    await expect(easyMultiIcons.locator('[data-provider="claude-code-cli"]')).toBeVisible();
-    await expect(easyMultiIcons.locator('[data-provider="codex-cli"]')).toBeVisible();
-
-    // Capture EasyMode verification screenshot
-    const easySidebar = win.locator('.easymode-sidebar');
-    await easySidebar.screenshot({
-      path: '.praxis/session-artifacts/easymode-session-list-ai-icons.png'
-    });
-  }
 });

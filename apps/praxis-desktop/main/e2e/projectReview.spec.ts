@@ -4,18 +4,14 @@ import * as os from 'node:os';
 import { test, expect, type Page } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { chooseOption, chipOptionValues } from './chipSelect';
+import { openProjectPage } from './navigation';
 
 let app: TestApp;
 test.afterEach(async () => { if (app) await closeTestApp(app); });
 
-// The classic sidebar shows one project at a time: pick the project in the sidebar, then open its home.
+// A project's Daily Review is one of its own palette destinations.
 async function openProjectHome(page: Page, name: string): Promise<void> {
-  const tree = page.getByTestId('project-tree').filter({ hasText: name });
-  if (!(await tree.isVisible())) {
-    await page.getByTestId('sidebar-project-select').click();
-    await page.getByRole('listbox', { name: 'Select project options' }).getByRole('option', { name }).click();
-  }
-  await tree.getByTestId('project-nav-item').click();
+  await openProjectPage(page, name, 'Daily Review');
 }
 
 test('project review scopes history, surfaces blocked and stale work, and acts through the board rules', async () => {
@@ -271,5 +267,7 @@ test('daily review previews only the five most recently active unfinished projec
   await review.screenshot({ path: path.join(artifacts, 'project-review-recent-sessions.png') });
   await review.getByRole('button', { name: 'View all sessions', exact: true }).click();
   await expect(review).toHaveCount(0);
-  await expect(page.getByTestId('project-session-nav-item')).toHaveCount(8);
+  // The sidebar's session list collapses to the most recent few; expanding it shows every one.
+  await page.getByTestId('easymode-sessions-show-more').click();
+  await expect(page.getByTestId('easymode-sessions-list').locator('[data-testid^="easymode-session-card-"]')).toHaveCount(8);
 });

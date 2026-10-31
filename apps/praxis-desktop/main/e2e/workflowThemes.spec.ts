@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openNewWorkflowDialog, openStartRunDialog } from './navigation';
 import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -64,7 +65,7 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   const page = app.window;
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'custom-one-dark');
 
-  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  await openNewWorkflowDialog(page, 'Delivery Project');
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await expect(page).toHaveScreenshot('workflow-themes-new-dialog-dark.png');
   await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).click();
@@ -91,7 +92,7 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   await page.getByLabel('Name').fill('Plan the work');
   await page.getByRole('button', { name: 'Save workflow' }).click();
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await openStartRunDialog(page);
   await expect(page.getByTestId('wf-runstart-dialog')).toBeVisible();
   // The async estimate changes the dialog's height; capture the settled form.
   await expect(page.getByTestId('wf-runstart-estimate')).toBeVisible();

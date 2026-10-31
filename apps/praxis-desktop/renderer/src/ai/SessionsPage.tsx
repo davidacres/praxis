@@ -58,6 +58,7 @@ import type { SessionWorkflowOption } from './NewSession';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
 
 import { TranscriptAttachments, SessionChatThread } from './SessionChatThread';
+import { publishPendingTurn } from './pendingTurns';
 export { TranscriptAttachments, SessionChatThread };
 
 export interface SessionComposerOptions {
@@ -832,6 +833,21 @@ export function SessionsPage({
   const livePendingConversationMessages = optimisticFollowUp && !optimisticFollowUp.suppressPreviousResponse
     ? [{ participantId: 'optimistic', message: optimisticFollowUp.message }]
     : pendingConversationMessages;
+  // Embedded as the session page's composer, the transcript is drawn elsewhere
+  // (AgentActivityFeed): hand it the turn just sent so it shows at once. Keyed on
+  // content so typing in the composer does not re-render the transcript.
+  const pendingTurnKey = selected?.issueKey;
+  const pendingTurnSignature = composerOnly && pendingTurnKey
+    ? JSON.stringify([optimisticFollowUp?.message, optimisticFollowUp?.suppressPreviousResponse, optimisticFollowUp?.images?.length,
+      optimisticTerminalContext?.message, livePendingConversationMessages.map(pending => [pending.participantId, pending.message])])
+    : '';
+  const pendingTurnRef = useRef({ optimisticFollowUp, optimisticTerminalContext, livePendingConversationMessages });
+  pendingTurnRef.current = { optimisticFollowUp, optimisticTerminalContext, livePendingConversationMessages };
+  useEffect(() => {
+    if (!composerOnly || !pendingTurnKey) return;
+    publishPendingTurn(pendingTurnKey, pendingTurnRef.current);
+    return () => publishPendingTurn(pendingTurnKey, undefined);
+  }, [composerOnly, pendingTurnKey, pendingTurnSignature]);
   const latestEventResponse = [...conversationEvents]
     .reverse()
     .find(event => event.type === 'message')?.detail;

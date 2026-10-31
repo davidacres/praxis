@@ -8,6 +8,7 @@ import { formatCost, isLatestEditToPath, isLimitNoticeReply, liveActivity } from
 import { providerIconName, providerLabel } from '../../ai/modelProviders';
 import { ToolExecutionCard } from './ToolExecutionCard';
 import { SessionChatThread } from '../../ai/SessionChatThread';
+import { usePendingTurn } from '../../ai/pendingTurns';
 import { SessionTeamMessages } from '../../ai/SessionTeamMessages';
 
 export interface AgentActivityFeedProps {
@@ -99,6 +100,8 @@ export function AgentActivityFeed({
   const { confirm } = useDialogs();
   const [undoingChange, setUndoingChange] = useState<string>();
   const [error, setError] = useState<string>();
+  // What the composer has just sent, shown at once rather than when the record catches up.
+  const pendingTurn = usePendingTurn(session.issueKey);
 
 
   const undoEdit = async (eventTimestamp: string, path: string) => {
@@ -311,6 +314,9 @@ export function AgentActivityFeed({
           isExecuting={isExecuting}
           onSelectSession={onSelectSession}
           testIdVariant="timeline"
+          optimisticFollowUp={pendingTurn.optimisticFollowUp}
+          optimisticTerminalContext={pendingTurn.optimisticTerminalContext}
+          livePendingConversationMessages={pendingTurn.livePendingConversationMessages}
         />
       </div>
     );

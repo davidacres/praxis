@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openFromPalette } from './navigation';
 import * as path from 'node:path';
 import { test, expect, type Locator } from '@playwright/test';
 import {
@@ -79,7 +80,7 @@ async function sessionWithReply(
       task: { goal: 'Demonstrate interactive chat gadgets.' }
     });
   });
-  await win.locator('[data-testid="nav-conversations"]').click();
+  await openFromPalette(win, 'Conversations');
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   return win;
 }
@@ -483,7 +484,7 @@ test('answering a choice records it through the ledger and leaves it answered', 
   // selected session restores the completed choice without triggering another
   // provider request.
   await win.reload();
-  await win.locator('[data-testid="nav-conversations"]').click();
+  await openFromPalette(win, 'Conversations');
   await expect(win.locator('[data-testid="gadget-choice"]')).toHaveAttribute('data-gadget-state', 'completed');
   await expect(win.locator('[data-testid="gadget-choice"]')).toContainText('This decision has been made');
   // The chosen answer survives the reload, read back from the ledger.

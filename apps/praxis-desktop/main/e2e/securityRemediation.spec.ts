@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openStartRunDialog } from './navigation';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
@@ -86,7 +87,7 @@ test('repository workflows require command review, preserve trust on restart, an
   expect(refused).toContain('needs local workspace trust');
   // Saved workflows no longer render as sidebar rows; the Runs header's "+"
   // opens the start-run dialog, which preselects the project's only workflow.
-  await app.window.getByTestId('project-workflow-run-new').first().click();
+  await openStartRunDialog(app.window);
   const start = app.window.getByTestId('wf-runstart-dialog');
   await start.getByLabel('Run task').fill('Reviewed security check');
   await start.getByRole('button', { name: 'Start', exact: true }).click();

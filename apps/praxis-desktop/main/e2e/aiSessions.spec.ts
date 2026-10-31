@@ -177,7 +177,7 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.locator('[data-testid="new-session-submit"]').click();
 
   // Lands on the Sessions view with the new session selected.
-  await win.locator('[data-testid="sessions-view"]').waitFor();
+  await win.locator('[data-testid="agent-details-page"]').waitFor();
   await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.projectId))
     .toBe(ticketProject.id);
   await expect(win.getByTestId('nav-sessions')).toHaveCount(0);
@@ -222,8 +222,8 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.locator('.session-follow-up-composer').screenshot({
     path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'session-composer-thinking.png')
   });
-  await expect(win.getByTestId('session-console-title')).toContainText('Operations follow-up');
-  await expect(win.getByTestId('session-console-title')).toContainText(selectedTicket);
+  await expect(win.getByTestId('agent-details-title')).toContainText('Operations follow-up');
+  await expect(win.getByTestId('session-ticket-key')).toContainText(selectedTicket);
 
   // The agent runs to completion against the mock; the badge and console follow.
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
@@ -293,23 +293,22 @@ test('composer selects a board and open ticket, names the session, and streams t
   // Completed is terminal — no abort button.
   await expect(win.locator('[data-testid="session-abort-btn"]')).toHaveCount(0);
 
-  const row = win.getByTestId('project-session-nav-item').first();
-  await expect(row).toBeVisible();
+  // The session is listed in its ticket project's feed, and is renamed from its card.
+  await expect(win.getByTestId('sidebar-project-select')).toContainText(ticketProject.name);
+  const sessionKey = (await win.evaluate(() => window.praxis.ai.listSessions()))
+    .find(record => record.title === 'Operations follow-up')!.issueKey;
+  const row = win.getByTestId(`easymode-session-card-${sessionKey}`);
   await expect(row).toContainText('Operations follow-up');
-  await expect(win.getByTestId('project-tree').filter({ hasText: ticketProject.name })).toContainText('Operations follow-up');
-  await expect(win.getByTestId('session-list-row')).toHaveCount(0);
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/praxis-sidebar-ticket-project.png') });
   await row.hover();
-  await row.getByTestId('session-rename-btn').click();
-  const titleInput = row.getByTestId('session-title-input');
+  await win.getByTestId(`easymode-session-rename-${sessionKey}`).click();
+  const titleInput = win.getByTestId(`easymode-session-title-input-${sessionKey}`);
   await titleInput.fill('Demo store refactor session');
   await titleInput.press('Enter');
-  await expect(row.getByTestId('session-title')).toHaveText('Demo store refactor session');
-  await expect(win.getByTestId('session-console-title')).toContainText('Demo store refactor session');
+  await expect(row).toContainText('Demo store refactor session');
+  await expect(win.getByTestId('agent-details-title')).toContainText('Demo store refactor session');
   await win.reload();
   await openSession(win, 'Demo store refactor session');
-  const persistedRow = win.getByTestId('project-session-nav-item').filter({ hasText: 'Demo store refactor session' });
-  await persistedRow.hover();
   await expect(win.locator('[data-testid="session-provider"]')).toBeEnabled();
   await expect(win.locator('[data-testid="session-model"]')).toBeEnabled();
   await win.locator('[data-testid="session-model"]').click();
@@ -330,17 +329,16 @@ test('composer selects a board and open ticket, names the session, and streams t
   expect(persistedTranscriptOrder).toEqual(['user', 'assistant', 'user', 'assistant']);
 
   // Delete asks first, in an app-styled dialog with a third "Archive instead" escape hatch,
-  // then removes the persisted conversation and leaves the Sessions empty state.
-  await persistedRow.hover();
-  await persistedRow.locator('[data-testid="session-delete-btn"]').click();
+  // then removes the persisted conversation and leaves the sidebar's Sessions empty state.
+  await row.hover();
+  await win.getByTestId(`easymode-session-delete-${sessionKey}`).click();
   const deleteDialog = win.getByRole('dialog');
   await expect(deleteDialog).toContainText('Delete this session?');
   await expect(deleteDialog.getByTestId('app-dialog-tertiary')).toHaveText('Archive');
   await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(0);
-  await expect(win.getByTestId('project-session-nav-item')).toHaveCount(0);
+  await expect(row).toHaveCount(0);
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-deleted.png') });
-  await expect(win.locator('[data-testid="sessions-empty"]')).toBeVisible();
+  await expect(win.getByTestId('easymode-sessions-empty-card')).toBeVisible();
   expect(rendererErrors).toEqual([]);
 });
 
@@ -395,10 +393,10 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
 
   // Starting succeeds into the ticket-bound Sessions console instead of
   // leaving the user in the detail pane with no visible response.
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
   await expect.poll(() => win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.projectId))
     .toBe(ticketProject.id);
-  await expect(win.locator('[data-testid="session-console-title"]')).toContainText('Deliver the ticket');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toContainText('Deliver the ticket');
   await win.locator('[data-testid="session-abort-btn"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Aborted');
 
@@ -410,7 +408,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   const primaryAi = win.locator('[data-testid="issue-primary-ai-btn"]');
   await expect(primaryAi).toHaveAttribute('data-ai-mode', 'session');
   await primaryAi.click();
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
 
   await win.locator('[data-testid="titlebar-home"]').click();
   await openBoard(win, 'Platform Overview');
@@ -421,7 +419,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
     'Deliver the ticket from its saved details'
   );
   await win.getByRole('button', { name: 'View existing' }).click();
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
 });
 
 test('API session executes a tracker tool and shows the call and result inline', async () => {
@@ -470,7 +468,7 @@ test('composer surfaces the provider-not-configured error when no API key exists
     'No Vercel AI Gateway API key configured'
   );
   // Still on the composer — no navigation happened.
-  await expect(win.locator('[data-testid="sessions-view"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="agent-details-page"]')).toHaveCount(0);
 });
 
 test('a write_file tool call renders a red/green diff after the write is approved', async () => {
@@ -523,9 +521,7 @@ test('the inspector is tabbed state, not a second copy of the conversation', asy
     await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Summarise the plan.' } });
   });
   await openSession(win);
-  await expect(win.getByTestId('nav-sessions')).toHaveCount(0);
-  await expect(win.getByTestId('session-list-row')).toHaveCount(1);
-  await expect(win.getByTestId('project-session-nav-item')).toHaveCount(0);
+  await expect(win.getByTestId('easymode-sessions-list').locator('[data-testid^="easymode-session-card-"]')).toHaveCount(1);
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/praxis-sidebar-conversation.png') });
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   // The reply is in the transcript, once.
@@ -846,7 +842,7 @@ test('a human can direct a message to either participant during an AI conversati
   await chooseOption(target, 'host');
   await win.locator('[data-testid="session-follow-up-input"]').fill('Please review the other AI response for missing risks.');
   await win.locator('[data-testid="session-conversation-send"]').click();
-  const directedMessage = win.locator('[data-testid="session-chat-user"]').last();
+  const directedMessage = win.locator('[data-testid="agent-timeline-prompt"]').last();
   await expect(directedMessage).toContainText('Please review the other AI response', { timeout: 1000 });
   await expect(directedMessage).toHaveAttribute('data-pending', 'true');
   await expect(target).toHaveAttribute('data-value', 'host');
@@ -855,14 +851,14 @@ test('a human can direct a message to either participant during an AI conversati
     records.find(record => record.issueKey === key)?.conversation?.participants.find(participant => participant.id === 'host')?.model
   ), session.issueKey);
   if (hostModel) await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(`Vercel AI Gateway · ${hostModel}`);
-  await expect(win.locator('[data-testid="session-chat-assistant"].session-chat-participant-host')).not.toHaveCount(0);
-  await expect(win.locator('[data-testid="session-chat-assistant"].session-chat-participant-guest')).not.toHaveCount(0);
-  await expect(win.locator('[data-testid="session-chat-assistant"] .session-chat-author svg')).not.toHaveCount(0);
+  await expect(win.locator('[data-testid="agent-timeline-message"].session-chat-participant-host')).not.toHaveCount(0);
+  await expect(win.locator('[data-testid="agent-timeline-message"].session-chat-participant-guest')).not.toHaveCount(0);
+  await expect(win.locator('[data-testid="agent-timeline-message"] .session-chat-author svg')).not.toHaveCount(0);
   await expect.poll(async () => win.evaluate(key => window.praxis.ai.listSessions().then(records => {
     const conversation = records.find(record => record.issueKey === key)?.conversation;
     return conversation ? `${conversation.state}:${conversation.turnsUsed}` : '';
   }), session.issueKey), { timeout: 20000 }).toBe('capped:3');
-  await expect(win.locator('[data-testid="session-chat-user"]').last()).not.toHaveAttribute('data-pending', 'true');
+  await expect(win.locator('[data-testid="agent-timeline-prompt"]').last()).not.toHaveAttribute('data-pending', 'true');
   const directedTurn = await win.locator('.session-chat-message').evaluateAll(nodes => nodes.map(node => ({
     role: node.classList.contains('is-assistant') ? 'assistant' : 'user',
     text: node.textContent ?? '',
@@ -938,7 +934,7 @@ test('an image pasted during a conversation rides with the directed message', as
   ), session.issueKey), { timeout: 15000 }).toBe('stopped');
 });
 
-test('focus mode presents sessions as tabs and keeps them available while starting a new session', async () => {
+test('focus mode keeps sessions on the shelf, and as tabs while starting a new session', async () => {
   mock = await startMockGatewayServer({ mode: 'complete' });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
@@ -968,22 +964,10 @@ test('focus mode presents sessions as tabs and keeps them available while starti
   await win.getByRole('button', { name: 'Toggle sidebar' }).click();
   await win.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
 
-  const tabs = win.locator('[data-testid="session-focus-tabs"]');
-  await expect(tabs).toBeVisible();
-  const focusHeader = tabs.locator('..');
-  await expect.poll(async () => focusHeader.evaluate(node => ({
-    header: node.getBoundingClientRect().height,
-    tabs: node.querySelector<HTMLElement>('[data-testid="session-focus-tabs"]')?.getBoundingClientRect().height ?? 0
-  }))).toEqual({ header: 31, tabs: 30 });
-  await expect(win.locator('[data-testid="session-focus-tab"]')).toHaveCount(2);
-  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
+  // With both sidebars hidden, an open session keeps the others on the session shelf.
+  await expect(win.getByTestId('session-shelf').getByTestId('session-shelf-spine')).toHaveCount(2);
+  await expect(win.locator('[data-testid="agent-details-title"]')).toHaveText('Second focus chat');
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-focus-navigation.png') });
-
-  const activeTab = win.locator('[data-testid="session-focus-tab"][aria-selected="true"]');
-  await activeTab.focus();
-  await activeTab.press('ArrowRight');
-  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('First focus chat');
-  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('First focus-mode conversation.');
 
   await win.locator('[data-testid="session-focus-new"]').click();
   await expect(win.locator('[data-testid="new-session-view"]')).toBeVisible();
@@ -992,11 +976,11 @@ test('focus mode presents sessions as tabs and keeps them available while starti
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/new-conversation-focus-tabs.png') });
 
   await win.locator('[data-testid="session-focus-tab"]', { hasText: 'Second focus chat' }).click();
-  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('Second focus chat');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toHaveText('Second focus chat');
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText('Second focus-mode conversation.');
 });
 
-test('session failure displays unified error banner above the chat panel and not scattered in chat', async () => {
+test('session failure shows one limit notice and nothing scattered in chat', async () => {
   mock = await startMockGatewayServer({ mode: 'error' });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
@@ -1017,38 +1001,21 @@ test('session failure displays unified error banner above the chat panel and not
     timeout: 15000
   });
 
-  // The unified error banner is visible above the chat panel
-  const errorBanner = win.locator('[data-testid="session-error-banner"]');
-  await expect(errorBanner).toBeVisible();
-  await expect(errorBanner).toContainText('Provider Limit / Quota Exceeded');
-  await expect(errorBanner).toContainText('This provider has reached its usage limit. Switch providers to continue, or stop this session.');
-  await expect(errorBanner).not.toContainText('Insufficient balance or no resource package. Please recharge.');
-  await expect(errorBanner).not.toContainText('Code 1113 · HTTP 429');
+  // One readable limit notice says what happened and what to do — no raw provider error.
+  const notice = win.locator('[data-testid="session-limit-switch"]');
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText('reached its usage limit');
+  await expect(notice).not.toContainText('Insufficient balance or no resource package. Please recharge.');
+  await expect(notice).not.toContainText('Code 1113 · HTTP 429');
 
   // No error bubbles or duplicate banners in the chat thread or composer
   await expect(win.locator('[data-testid="session-chat-error"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="session-chat-failed-banner"]')).toHaveCount(0);
   await expect(win.locator('[data-testid="session-composer-failed-banner"]')).toHaveCount(0);
 
-  // Take a visual screenshot for verification
   const screenshotPath = path.resolve(__dirname, '../../.praxis/session-artifacts/session-error-banner.png');
   fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
   await win.screenshot({ path: screenshotPath });
-
-  // Position: error banner is located before the chat thread scroll container
-  const positions = await win.evaluate(() => {
-    const banner = document.querySelector('[data-testid="session-error-banner"]');
-    const thread = document.querySelector('[data-testid="session-chat-thread"]');
-    if (!banner || !thread) return null;
-    const bannerRect = banner.getBoundingClientRect();
-    const threadRect = thread.getBoundingClientRect();
-    return {
-      bannerBottom: bannerRect.bottom,
-      threadTop: threadRect.top
-    };
-  });
-  expect(positions).not.toBeNull();
-  expect(positions!.bannerBottom).toBeLessThanOrEqual(positions!.threadTop + 2);
 
   // Usage displays model name before tokens
   const usageSummary = win.locator('[data-testid="session-usage-summary"]');
@@ -1056,11 +1023,6 @@ test('session failure displays unified error banner above the chat panel and not
   const usageMeta = usageSummary.getByTestId('session-usage-current');
   await expect(usageMeta).toContainText('anthropic/claude-sonnet-4.6');
 
-  // Dismissing the error banner resets it
-  const dismissBtn = win.locator('[data-testid="session-error-banner-dismiss"]');
-  await expect(dismissBtn).toBeVisible();
-  await dismissBtn.click();
-  await expect(win.locator('[data-testid="session-error-banner"]')).toHaveCount(0);
 });
 
 test('composer paste and drop carries an image to the agent and the transcript', async () => {
@@ -1219,7 +1181,7 @@ test('a file dropped outside the composer never navigates the window', async () 
   await expect(win.locator('[data-testid="session-state-badge"]')).toBeVisible();
 });
 
-test('a session can be archived from its row and hidden from the tree', async () => {
+test('a session can be archived from its card and hidden from the sidebar', async () => {
   // 'complete' — archiving is refused while a task is still running, so the
   // sessions must settle before the row icon is exercised.
   mock = await startMockGatewayServer({ mode: 'complete' });
@@ -1245,21 +1207,19 @@ test('a session can be archived from its row and hidden from the tree', async ()
     )
   )).toBe(2);
 
-  // Both rows show in the sidebar tree.
+  // Both cards show in the sidebar.
   await openSession(win);
-  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(2);
+  const cards = win.getByTestId('easymode-sessions-list').locator('[data-testid^="easymode-session-card-"]');
+  await expect(cards).toHaveCount(2);
 
-  // Archive the first session from the sidebar row icon.
-  // Free-form sessions get synthesized keys the row deliberately hides, so
-  // match on the goal-derived title instead.
-  const firstRow = win.locator('[data-testid="session-list-row"]', { hasText: 'First archive-flow session' });
-  await firstRow.hover();
-  await firstRow.locator('[data-testid="session-archive-btn"]').click();
+  // Archive the first session from its card.
+  await win.getByTestId(`easymode-session-card-${first.issueKey}`).hover();
+  await win.getByTestId(`easymode-session-archive-${first.issueKey}`).click();
 
-  // It leaves the sidebar tree but stays listed — now under Archived.
+  // It leaves the sidebar but stays on record as archived.
   await win.screenshot({ path: 'output/playwright/session-archived-in-browser.png', fullPage: true });
-  await expect(win.locator('[data-testid="session-list-row"]')).toHaveCount(1);
-  await expect(win.locator('[data-testid="session-list-row"]', { hasText: first.issueKey })).toHaveCount(0);
+  await expect(cards).toHaveCount(1);
+  await expect(win.getByTestId(`easymode-session-card-${first.issueKey}`)).toHaveCount(0);
 
   // Archiving is persisted on the record and reversible.
   await expect.poll(() => win.evaluate(key =>

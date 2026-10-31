@@ -160,7 +160,7 @@ test('starting an AI session from a ticket warns about uncommitted changes and o
   await dialog.locator('[data-testid="uncommitted-base-include"]').click();
 
   // Verify it navigates into the session console
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
 });
 
 test('starting an AI session from a ticket can omit uncommitted files', async () => {
@@ -259,5 +259,5 @@ test('starting an AI session from a ticket can omit uncommitted files', async ()
 
   // Clicking "Start from last commit" proceeds and starts the session without changes
   await dialog.locator('[data-testid="uncommitted-base-omit"]').click();
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
 });
