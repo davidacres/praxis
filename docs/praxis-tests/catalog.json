@@ -3376,9 +3376,9 @@
       },
       "area": "background Tasks",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "native subagent completion is distinct from successful spawn",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated desktop app uses the background ACP fixture with the NATIVE_SUBAGENT scenario and captures native notification titles",
+        "when": "the foreground session completes and its background task reaches a terminal state",
+        "then": "the first background task is completed and the captured notifications equal one Background task completed notice"
       }
     },
     {
@@ -3392,9 +3392,9 @@
       },
       "area": "background Tasks",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "AIR child completion and its result reach the owning session separately from the parent transcript",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated desktop app uses the background ACP fixture with the AIR_SUBAGENT scenario and captures native notification titles",
+        "when": "the foreground session completes, its session view opens, and its background task reaches a terminal state",
+        "then": "the first background task is completed, parent message event details exclude Child review complete, and the captured notifications equal one Background task completed notice"
       }
     },
     {
@@ -3440,9 +3440,9 @@
       },
       "area": "board Filters",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "load-more fetches the next ten for a busy status without starving the other lanes",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "the isolated demo Application Board has five extra Backlog tickets, with 38 total items and 11 in Backlog",
+        "when": "the board opens with ten Backlog cards and 37 visible items, and the user clicks load more",
+        "then": "Backlog has 11 cards, the board has 38 cards, the count reads 38 items, and the load-more control disappears"
       }
     },
     {
