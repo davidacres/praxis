@@ -1,4 +1,8 @@
 import type {
+  NotesResult, ProjectNote, NoteGroup, CreateNoteInput, UpdateNoteInput,
+  CreateNoteGroupInput, UpdateNoteGroupInput, NoteSource, NoteRequestSnapshot
+} from '../notes/noteTypes';
+import type {
   AssistantTeamReviewRequest,
   AssistantTurnRequest,
   AssistantTurnResult,
@@ -2019,4 +2023,24 @@ export interface TaskDesignerIpc {
     connectionId: string | undefined,
     state: TaskDesignerPersistedState
   ): Promise<TaskDesignerMasterPlanResult>;
+}
+
+/** Future app-local notes slice. Not exposed by preload until persistence is implemented.
+ * Every call validates project existence and ownership. Main supplies IDs/timestamps.
+ * Mutations succeed only after persistence; failures preserve the prior document.
+ */
+export interface NotesIpc {
+  list(projectId: string): Promise<NotesResult<{ notes: ProjectNote[]; groups: NoteGroup[] }>>;
+  createNote(projectId: string, input: CreateNoteInput): Promise<NotesResult<ProjectNote>>;
+  updateNote(projectId: string, noteId: string, input: UpdateNoteInput): Promise<NotesResult<ProjectNote>>;
+  /** Removes memberships in the same atomic save. */
+  deleteNote(projectId: string, noteId: string): Promise<NotesResult<null>>;
+  createGroup(projectId: string, input: CreateNoteGroupInput): Promise<NotesResult<NoteGroup>>;
+  updateGroup(projectId: string, groupId: string, input: UpdateNoteGroupInput): Promise<NotesResult<NoteGroup>>;
+  /** Preserves the linked notes. */
+  deleteGroup(projectId: string, groupId: string): Promise<NotesResult<null>>;
+  replaceMemberships(projectId: string, groupId: string, noteIds: string[]): Promise<NotesResult<NoteGroup>>;
+  prepareSnapshot(projectId: string, source: NoteSource): Promise<NotesResult<NoteRequestSnapshot>>;
+  /** Emitted only after successful persistence; consumers re-query the changed project. */
+  onChanged(listener: (projectId: string) => void): () => void;
 }
