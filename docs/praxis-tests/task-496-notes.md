@@ -1,6 +1,6 @@
 # TASK-496 supplemental Praxis Test contracts
 
-Frozen source: `e6d04ce72afb38bfe83114499a4a6a6450bae0e3`. Runner: **node:test**. Nine tests registered in [core package.json](../../packages/core/package.json). These supplement the Playwright-only generated inventory; they are not counted by its validator. IDs use the existing SHA1(file + newline + title) convention. No existing IDs are renumbered.
+Frozen source: `16da886dd5c9be57305d450837a120045786ca2e`. Runner: **node:test**. Nine tests registered in [core package.json](../../packages/core/package.json). These supplement the Playwright-only generated inventory; they are not counted by its validator. IDs use the existing SHA1(file + newline + title) convention. No existing IDs are renumbered.
 
 ## PT-212D8FD0B1
 
@@ -63,21 +63,21 @@ Frozen source: `e6d04ce72afb38bfe83114499a4a6a6450bae0e3`. Runner: **node:test**
 
 **Given:** note create/update inputs at configured title and body limits.
 **When:** boundary, blank, non-string, Unicode and whitespace inputs are validated.
-**Then:** titles trim; tested maximum lengths pass and excess lengths fail; empty/whitespace bodies and an empty patch are retained as asserted.
+**Then:** titles trim; tested maximum lengths pass and excess lengths fail; empty/whitespace bodies are retained as asserted.
 
 ## PT-75D8223A74
 
 **Title:** patches reject immutable or unknown fields and explicit undefined; group edits remain narrow
-**Automation:** node:test — [packages/core/src/notes/noteValidation.test.ts:58](../../packages/core/src/notes/noteValidation.test.ts#L58)
+**Automation:** node:test — [packages/core/src/notes/noteValidation.test.ts:57](../../packages/core/src/notes/noteValidation.test.ts#L57)
 
 **Given:** note and group patches and group-create inputs.
-**When:** immutable/unknown fields, explicit undefined, invalid bodies or invalid member IDs are supplied.
-**Then:** tested invalid fields fail with sanitized issues; group edits reject memberships and trim titles; empty group membership is accepted.
+**When:** both update validators receive empty objects, or immutable/unknown fields, explicit undefined, invalid bodies or invalid member IDs are supplied.
+**Then:** both empty patches return VALIDATION_ERROR with the root issue “At least one editable field is required.”; tested invalid fields fail with sanitized issues; title-only note/group edits trim titles; group edits reject memberships; empty group membership is accepted.
 
 ## PT-A5DB078E2D
 
 **Title:** explicit project and entity scope produce typed transport-safe errors
-**Automation:** node:test — [packages/core/src/notes/noteValidation.test.ts:72](../../packages/core/src/notes/noteValidation.test.ts#L72)
+**Automation:** node:test — [packages/core/src/notes/noteValidation.test.ts:77](../../packages/core/src/notes/noteValidation.test.ts#L77)
 
 **Given:** a project registry and project-owned records.
 **When:** project, entity and membership helpers resolve invalid, missing or foreign IDs and valid ordered membership.
