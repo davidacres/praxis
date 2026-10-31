@@ -283,7 +283,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiBrowser.spec.ts",
-        "line": 84,
+        "line": 85,
         "project": "functional"
       },
       "area": "ai Browser",
@@ -299,7 +299,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiBrowser.spec.ts",
-        "line": 124,
+        "line": 125,
         "project": "functional"
       },
       "area": "ai Browser",
@@ -459,7 +459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 470,
+        "line": 482,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -475,7 +475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 491,
+        "line": 503,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -491,7 +491,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 520,
+        "line": 532,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -507,7 +507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 530,
+        "line": 542,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -523,7 +523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 596,
+        "line": 608,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -539,7 +539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 609,
+        "line": 621,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -555,7 +555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 632,
+        "line": 644,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",
@@ -571,7 +571,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
-        "line": 667,
+        "line": 679,
         "project": "functional"
       },
       "area": "ai Cli Agent Host",

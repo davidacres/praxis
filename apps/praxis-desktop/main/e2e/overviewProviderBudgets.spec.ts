@@ -32,7 +32,7 @@ test('a provider with no usage API is shown as no data, with the reason', async 
   // path rather than a network read.
   app = await launchWithProviders(['anthropic']);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   const section = page.getByTestId('overview-budgets-section');
   await expect(section).toBeVisible();
@@ -53,7 +53,7 @@ test('a disabled provider gets no card', async () => {
   // Anthropic is on, Gemini is explicitly off: only the enabled one is reported.
   app = await launchWithProviders(['anthropic']);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   await expect(page.getByTestId('overview-budgets-section')).toBeVisible();
   await expect(page.getByTestId('overview-budgets-card-anthropic')).toBeVisible();
@@ -70,7 +70,7 @@ test('every enabled provider gets its own card, whatever each one reports', asyn
   // the failure path deterministically instead.
   app = await launchWithProviders(['anthropic', 'gemini', 'codex-cli', 'claude-code-cli']);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   // The section renders once the slowest provider answers, and Codex and Claude
   // Code each spawn their own CLI (Claude's `/usage` takes a few seconds cold).
@@ -91,7 +91,7 @@ test('provider budgets render even when the usage ledger is empty', async () => 
   // the budgets behind "no usage yet" would be wrong.
   app = await launchWithProviders(['anthropic']);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   await expect(page.getByTestId('overview-usage-empty')).toBeVisible();
   await expect(page.getByTestId('overview-budgets-section')).toBeVisible();
@@ -101,7 +101,7 @@ test('provider budgets render even when the usage ledger is empty', async () => 
 test('no enabled providers explains how to add one', async () => {
   app = await launchWithProviders([]);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   await expect(page.getByTestId('overview-budgets-empty')).toContainText('No providers enabled');
 });
@@ -111,7 +111,7 @@ test('a provider that exposes no usage API is never badged Offline', async () =>
   // so a provider that will never report usage was badged Offline.
   app = await launchWithProviders(['anthropic']);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   const card = page.getByTestId('overview-budgets-card-anthropic');
   await expect(card).toBeVisible();
@@ -124,7 +124,7 @@ test('a card shows no invented spend, rate limit or reset figures', async () => 
   // real reading. A provider with no measurement must show nothing.
   app = await launchWithProviders(['anthropic']);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
 
   const card = page.getByTestId('overview-budgets-card-anthropic');
   await expect(card).not.toContainText('MTD Spend');

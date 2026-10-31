@@ -482,9 +482,8 @@ export function SessionChatThread({
             key={`${event.timestamp}-${index}`}
             data-testid={outerTestId}
           >
-            {/* Dual test ID hook for full cross-view assertion compatibility */}
-            <span data-testid={innerTestId} style={{ display: 'none' }} aria-hidden="true" />
-
+            {/* Both views expose the full rendered turn, including thought and telemetry. */}
+            <div className="session-chat-content" data-testid={innerTestId}>
             <div className="session-chat-header">
               <div className="session-chat-author">
                 {isAssistant ? (
@@ -688,6 +687,7 @@ export function SessionChatThread({
                 )}
               </div>
             )}
+            </div>
           </div>
         );
       })}

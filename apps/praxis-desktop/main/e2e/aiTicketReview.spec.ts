@@ -94,7 +94,7 @@ async function openReview(env: Record<string, string> = {}): Promise<{ win: Test
     { cliPath: FIXTURE_PATH }
   );
   await win.reload();
-  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('[data-testid="titlebar-home"]').click();
   await win.locator('[data-testid="board-nav-item"]').first().click();
   const card = win.locator('[data-testid="issue-card"]').first();
   const issueKey = (await card.getAttribute('data-issue-key')) ?? '';

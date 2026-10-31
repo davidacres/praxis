@@ -123,8 +123,7 @@ test('context compaction is offered only when the ACP provider advertises /compa
     .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(item => item.issueKey === k)?.state), key), { timeout: 20000 })
     .toBe('completed');
   await expect
-    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => {
-      const session = l.find(item => item.issueKey === k);
+    .poll(() => win.evaluate(k => window.praxis.ai.getSession(k).then(session => {
       return session?.events.some(event => event.type === 'user_input_completed' && event.detail === '/compact');
     }), key), { timeout: 20000 })
     .toBe(true);

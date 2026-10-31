@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { Icon } from '../../ui/Icon';
 import { StatusGlyph } from '../../ui/StatusGlyph';
@@ -47,6 +47,7 @@ export function AgentDetailsPage({
 }: AgentDetailsPageProps) {
   const { settings } = useSettings();
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
+  const browserDismissed = useRef(initialBrowserOpen === false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [isCompact, setIsCompact] = useState<boolean>(() => {
@@ -153,6 +154,20 @@ export function AgentDetailsPage({
     const frame = window.requestAnimationFrame(scrollToLatest);
     return () => window.cancelAnimationFrame(frame);
   }, [followKey, eventCount, followTarget?.reasoningText]);
+
+  const browserSession = childSession || parentSession;
+  const agentUsedBrowser = browserSession?.events.some(event => event.data?.toolName?.startsWith('browser_')) ?? false;
+  useEffect(() => {
+    browserDismissed.current = initialBrowserOpen === false;
+    setBrowserOpen(initialBrowserOpen ?? false);
+    setBrowserMaximized(false);
+  }, [browserSession?.issueKey]);
+  useEffect(() => {
+    if (agentUsedBrowser && !browserDismissed.current) {
+      setBrowserOpen(true);
+      onBrowserOpenChange?.(true);
+    }
+  }, [browserSession?.issueKey, agentUsedBrowser, onBrowserOpenChange]);
 
   if (!parentSession) {
     return (
@@ -321,6 +336,7 @@ export function AgentDetailsPage({
             title={browserOpen ? 'Hide the in-app browser' : 'Show the in-app browser'}
             onClick={() => {
               const next = !browserOpen;
+              browserDismissed.current = !next;
               setBrowserOpen(next);
               onBrowserOpenChange?.(next);
             }}
@@ -415,6 +431,7 @@ export function AgentDetailsPage({
             maximized={browserMaximized}
             onToggleMaximize={() => setBrowserMaximized(value => !value)}
             onClose={() => {
+              browserDismissed.current = true;
               setBrowserOpen(false);
               onBrowserOpenChange?.(false);
             }}

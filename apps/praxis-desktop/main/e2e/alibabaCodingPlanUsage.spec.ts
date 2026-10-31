@@ -144,7 +144,7 @@ test('Coding Plan quota is read through the Praxis-hosted Alibaba console sign-i
     // The endpoint form is a modal over Settings; close it before Settings itself.
     await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Cancel', exact: true }).click();
     await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
-    await win.getByTestId('nav-overview').click();
+    await win.getByTestId('titlebar-home').click();
     const card = win.getByTestId(`overview-budgets-card-${id}`);
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card.getByTestId('overview-budgets-percent-hour')).toHaveText('25%');

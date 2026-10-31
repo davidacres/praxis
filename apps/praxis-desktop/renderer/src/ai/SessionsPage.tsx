@@ -2306,7 +2306,34 @@ export function SessionsPage({
     </>
   );
 
-  if (composerOnly) return <>{activeComposer}{composerDialogs}</>;
+  const analysisBanner = selected?.taskDefinition.kind === 'analysis' && (
+    <div className="session-analysis-banner" data-testid="session-analysis-banner">
+      <Icon name={analysisState?.confirmed ? 'check-square' : 'search'} size={15} />
+      <div>
+        <strong>{analysisState?.confirmed ? 'Analysis confirmed' : 'Ticket analysis'}</strong>
+        <span>
+          {analysisState?.confirmed
+            ? 'Implementation is continuing in this conversation.'
+            : selected.state === 'completed'
+              ? 'Review the analysis, then confirm it to implement in this same session.'
+              : 'The agent is analysing the ticket in this conversation.'}
+        </span>
+      </div>
+      {!analysisState?.confirmed && selected.state === 'completed' && (
+        <button
+          className="btn btn-primary"
+          data-testid="session-analysis-confirm"
+          disabled={confirmingAnalysis}
+          onClick={() => void confirmAndContinue()}
+        >
+          <Icon name="check-square" size={13} />
+          {confirmingAnalysis ? 'Continuing…' : 'Confirm & implement'}
+        </button>
+      )}
+    </div>
+  );
+
+  if (composerOnly) return <>{analysisBanner}{activeComposer}{composerDialogs}</>;
 
   return (
     <MarkdownLinkContext.Provider value={chatLinkHandler}>
@@ -2441,32 +2468,7 @@ export function SessionsPage({
               )}
             </div>
 
-            {selected.taskDefinition.kind === 'analysis' && (
-              <div className="session-analysis-banner" data-testid="session-analysis-banner">
-                <Icon name={analysisState?.confirmed ? 'check-square' : 'search'} size={15} />
-                <div>
-                  <strong>{analysisState?.confirmed ? 'Analysis confirmed' : 'Ticket analysis'}</strong>
-                  <span>
-                    {analysisState?.confirmed
-                      ? 'Implementation is continuing in this conversation.'
-                      : selected.state === 'completed'
-                        ? 'Review the analysis below, then confirm it to implement in this same session.'
-                        : 'The agent is analysing the ticket in this conversation.'}
-                  </span>
-                </div>
-                {!analysisState?.confirmed && selected.state === 'completed' && (
-                  <button
-                    className="btn btn-primary"
-                    data-testid="session-analysis-confirm"
-                    disabled={confirmingAnalysis}
-                    onClick={() => void confirmAndContinue()}
-                  >
-                    <Icon name="check-square" size={13} />
-                    {confirmingAnalysis ? 'Continuing…' : 'Confirm & implement'}
-                  </button>
-                )}
-              </div>
-            )}
+            {analysisBanner}
 
             <SessionBackgroundTasks key={selected.sessionId} session={selected} />
             {activeErrorMessage && (

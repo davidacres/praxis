@@ -120,7 +120,7 @@ test('starting an AI session from a ticket warns about uncommitted changes and o
   await win.reload();
 
   // Open demo ticket APP-100
-  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('[data-testid="titlebar-home"]').click();
   await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 
@@ -242,7 +242,7 @@ test('starting an AI session from a ticket can omit uncommitted files', async ()
   fs.writeFileSync(path.join(repo, 'dirty-feature.ts'), 'export const dirty = true;\n');
 
   await win.reload();
-  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('[data-testid="titlebar-home"]').click();
   await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 

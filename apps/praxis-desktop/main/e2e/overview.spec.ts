@@ -8,7 +8,7 @@ test.afterEach(async () => { await closeTestApp(app); });
 
 test('renders the workspace overview dashboard', async () => {
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
   await expect(page.getByTestId('overview-page')).toBeVisible();
   await expect(page.getByText('Workspace overview')).toBeVisible();
   await expect(page.getByText('Active AI sessions')).toHaveCount(0);

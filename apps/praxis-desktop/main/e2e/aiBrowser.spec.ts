@@ -52,12 +52,13 @@ test('restores the selected session and browser URL and keeps an explicit close 
     task: { goal: 'persist browser state' }
   }), app.userDataDir);
   await openSession(win);
-  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('persist browser state');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toHaveText('persist browser state');
   await win.locator('[data-testid="session-browser-toggle"]').click();
   const url = win.locator('[data-testid="browser-url-input"]');
   await url.fill(`${pageOrigin}/next`);
   await url.press('Enter');
   await expect(url).toHaveValue(new RegExp(`${pageOrigin.replace(/[.]/g, '\\.')}/next`), { timeout: 15000 });
+  await win.screenshot({ path: '../.praxis/session-artifacts/session-browser-verified.png' });
   await win.getByRole('button', { name: 'Close browser' }).click();
   expect(await win.evaluate(() => JSON.parse(localStorage.getItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`) ?? '{}'))).toMatchObject({
     feature: 'conversations', sessionKey: session.issueKey, browserOpen: false
@@ -67,8 +68,8 @@ test('restores the selected session and browser URL and keeps an explicit close 
   const settingsPath = app.settingsPath;
   await app.electronApp.close();
   app = await launchTestApp(undefined, { userDataDir, settingsPath }, undefined, { workspace: false });
-  await expect(app.window.locator('[data-testid="sessions-view"]')).toBeVisible();
-  await expect(app.window.locator('[data-testid="session-console-title"]')).toHaveText('persist browser state');
+  await expect(app.window.locator('[data-testid="agent-details-page"]')).toBeVisible();
+  await expect(app.window.locator('[data-testid="agent-details-title"]')).toHaveText('persist browser state');
   await expect(app.window.locator('[data-testid="browser-pane"]')).toHaveCount(0);
 });
 
@@ -111,7 +112,7 @@ test('a full-tools session drives the in-app browser and reads the page', async 
   }, app.userDataDir);
 
   await openSession(win);
-  await expect(win.locator('[data-testid="session-console"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
 
   // The browser pane auto-opens when the agent first drives it, and shows the
   // page the tool navigated to.
@@ -151,8 +152,8 @@ test('the toolbar navigates the in-app browser by hand', async () => {
   const dock = win.locator('.session-browser-dock');
   const narrow = (await dock.boundingBox())!.width;
   await win.locator('[data-testid="browser-maximize-btn"]').click();
-  await expect(win.locator('.session-console.browser-maximized')).toBeVisible();
+  await expect(win.locator('.agent-details-page.browser-maximized')).toBeVisible();
   expect((await dock.boundingBox())!.width).toBeGreaterThan(narrow + 100);
   await win.locator('[data-testid="browser-maximize-btn"]').click();
-  await expect(win.locator('.session-console.browser-maximized')).toHaveCount(0);
+  await expect(win.locator('.agent-details-page.browser-maximized')).toHaveCount(0);
 });

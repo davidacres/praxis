@@ -115,7 +115,7 @@ test('What Changed records every source, says who made each change, and opens ea
 
   // Reachable in one interaction from somewhere else entirely (AC8): the Overview page, no project selected.
   await win.evaluate(() => { (window as unknown as { __noReload: boolean }).__noReload = true; });
-  await win.getByTestId('nav-overview').click();
+  await win.getByTestId('titlebar-home').click();
   await expect(review).toHaveCount(0);
   await win.getByTestId('titlebar-what-changed').click();
   await expect(review.getByRole('button', { name: 'What Changed', exact: true })).toHaveAttribute('aria-pressed', 'true');

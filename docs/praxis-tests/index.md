@@ -21,8 +21,8 @@ This catalogue describes **749 Playwright tests** under `apps/praxis-desktop/mai
 | PT-50968F20CE | ai Acp Modes And Commands | context compaction is offered only when the ACP provider advertises /compact | `apps/praxis-desktop/main/e2e/aiAcpModesAndCommands.spec.ts:98` |
 | PT-2BC663AF85 | ai Agent Resilience | aborting an agent that ignores cancel returns promptly | `apps/praxis-desktop/main/e2e/aiAgentResilience.spec.ts:53` |
 | PT-4E0F437EDA | ai Browser | restores the selected session and browser URL and keeps an explicit close closed | `apps/praxis-desktop/main/e2e/aiBrowser.spec.ts:42` |
-| PT-155F86379C | ai Browser | a full-tools session drives the in-app browser and reads the page | `apps/praxis-desktop/main/e2e/aiBrowser.spec.ts:84` |
-| PT-B7CF05FBB3 | ai Browser | the toolbar navigates the in-app browser by hand | `apps/praxis-desktop/main/e2e/aiBrowser.spec.ts:124` |
+| PT-155F86379C | ai Browser | a full-tools session drives the in-app browser and reads the page | `apps/praxis-desktop/main/e2e/aiBrowser.spec.ts:85` |
+| PT-B7CF05FBB3 | ai Browser | the toolbar navigates the in-app browser by hand | `apps/praxis-desktop/main/e2e/aiBrowser.spec.ts:125` |
 | PT-3E533BE77B | ai Cli Agent Host | delegate completes a session against a real ACP agent subprocess | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:145` |
 | PT-1433666F22 | ai Cli Agent Host | ACP read-only permission denial survives neutral titles, missing kinds and allow-only wire options | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:172` |
 | PT-8B3835312A | ai Cli Agent Host | an Agent Hub ACP binding launches its declared host entry point | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:203` |
@@ -32,14 +32,14 @@ This catalogue describes **749 Playwright tests** under `apps/praxis-desktop/mai
 | PT-59941C287E | ai Cli Agent Host | ACP resume replay does not duplicate the previous answer into a follow-up | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:333` |
 | PT-1999DA8875 | ai Cli Agent Host | a pasted image reaches an ACP agent as an image content block | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:392` |
 | PT-81CB515D12 | ai Cli Agent Host | ticket-selected Claude Code runs review and analysis without using Vercel | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:423` |
-| PT-1868BD4BF4 | ai Cli Agent Host | an in-flight turn shows one live status line, not streamed tool blocks | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:470` |
-| PT-18A9C6783D | ai Cli Agent Host | abort kills the ACP agent subprocess cleanly | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:491` |
-| PT-B20B70A423 | ai Cli Agent Host | listCliModelOptions reads the real model list from session/new | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:520` |
-| PT-5FE459F9D3 | ai Cli Agent Host | ACP model menus show context sizes and published pricing for model aliases | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:530` |
-| PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:596` |
-| PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:609` |
-| PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:632` |
-| PT-00AB250CE7 | ai Cli Agent Host | custom activity words persist and replace composer narration during a Codex turn | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:667` |
+| PT-1868BD4BF4 | ai Cli Agent Host | an in-flight turn shows one live status line, not streamed tool blocks | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:482` |
+| PT-18A9C6783D | ai Cli Agent Host | abort kills the ACP agent subprocess cleanly | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:503` |
+| PT-B20B70A423 | ai Cli Agent Host | listCliModelOptions reads the real model list from session/new | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:532` |
+| PT-5FE459F9D3 | ai Cli Agent Host | ACP model menus show context sizes and published pricing for model aliases | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:542` |
+| PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:608` |
+| PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:621` |
+| PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:644` |
+| PT-00AB250CE7 | ai Cli Agent Host | custom activity words persist and replace composer narration during a Codex turn | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:679` |
 | PT-F9FE6B89E2 | ai Coding Task | a ticket for a one-line fix is delegated to an agent and lands on disk | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:36` |
 | PT-41267424E7 | ai Coding Task | a read-only session cannot write the file | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:113` |
 | PT-3CFB8F109B | ai Coding Task | each turn records its reply once, and follow-ups carry the earlier answer | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:159` |

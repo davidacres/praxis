@@ -159,7 +159,7 @@ test('daily review: a configurable aging rule, a re-opened review for new blocke
     const created = await window.praxis.issue.create({ projectKey: key, issueType: 'Task', summary: 'Newly blocked elsewhere', description: '' }, id);
     await window.praxis.issue.transition(created.key, 'blocked', id);
   }, [project.key, connectionId] as const);
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
   await expect(review).toHaveCount(0);
   await openProject();
   await expect(review.getByTestId('project-review-reviewed')).toHaveCount(0);

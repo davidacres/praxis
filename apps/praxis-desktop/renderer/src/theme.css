@@ -9128,12 +9128,12 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Chat responses are Markdown, not preformatted tool/event text. Keep the
    renderer's block layout intact so tables, emphasis, lists, and code fences
    read as authored content inside the message bubble. */
-.session-chat-message > .markdown-body {
+.session-chat-message > .session-chat-content > .markdown-body {
   min-width: 0;
   white-space: normal;
 }
-.session-chat-message > .markdown-body > :first-child { margin-top: 0; }
-.session-chat-message > .markdown-body > :last-child { margin-bottom: 0; }
+.session-chat-message > .session-chat-content > .markdown-body > :first-child { margin-top: 0; }
+.session-chat-message > .session-chat-content > .markdown-body > :last-child { margin-bottom: 0; }
 .markdown-body table {
   width: 100%;
   margin: var(--space-2) 0;

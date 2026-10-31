@@ -440,9 +440,17 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
     },
     { cliPath: FIXTURE_PATH }
   );
+  const project = await win.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return window.praxis.projects.create({ name: 'CLI ticket review', key: 'CLI', type: 'product', purpose: '', brief: {}, startingPoint: 'app-storage',
+      starterTickets: [{ summary: 'Review a CLI ticket', description: 'Check this ticket.', issueType: 'Task', status: 'Todo' }],
+      workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], defaultAiToolMode: 'read-only' }, workspace.id);
+  });
   await win.reload();
-  await win.locator('[data-testid="nav-overview"]').click();
-  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await win.keyboard.press('ControlOrMeta+k');
+  const palette = win.getByRole('dialog', { name: 'Go to' });
+  await palette.getByRole('textbox').fill(project.name);
+  await palette.getByRole('option').filter({ hasText: project.name }).filter({ hasText: 'Board' }).click();
   await win.locator('[data-testid="issue-card"]').first().click();
   const provider = win.locator('[data-testid="issue-detail-ai-provider"]');
   await chooseOption(provider, 'claude-code-cli');
@@ -457,14 +465,18 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
   await win.locator('[aria-label="Close review"]').click();
 
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-provider"]')).toContainText('Claude Code');
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(
     'Hello from the fake ACP agent',
     { timeout: 15000 }
   );
   await expect(win.locator('[data-testid="session-analysis-confirm"]')).toBeVisible();
+  await win.screenshot({ path: '../.praxis/session-artifacts/session-analysis-confirm-verified.png' });
   await expect(win.locator('[data-testid="session-tool-mode"]')).toContainText('Read only');
+  await win.getByTestId('session-analysis-confirm').click();
+  await expect(win.getByTestId('session-chat-thread')).toContainText('I confirm the analysis and implementation plan.');
+  await expect(win.getByTestId('session-analysis-banner')).toContainText('Analysis confirmed');
 });
 
 test('an in-flight turn shows one live status line, not streamed tool blocks', async () => {

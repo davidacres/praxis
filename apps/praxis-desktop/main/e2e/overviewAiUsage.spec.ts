@@ -60,7 +60,7 @@ const POPULATED: SeedEvent[] = [
 test('shows exact period totals, peaks, cost and ranked models from a seeded ledger', async () => {
   app = await launchWithLedger(POPULATED);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
   const panel = page.getByTestId('overview-usage-panel');
   await expect(panel).toBeVisible();
 
@@ -116,7 +116,7 @@ test('shows exact period totals, peaks, cost and ranked models from a seeded led
 test('says cost comes from ACP agents only when no cost is reported', async () => {
   app = await launchWithLedger([POPULATED[1], POPULATED[2]]);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
   await expect(page.getByTestId('overview-usage-tokens-all')).toHaveText('3.4k tokens');
   await expect(page.getByTestId('overview-usage-cost-all')).toHaveText('Not reported');
   await expect(page.getByTestId('overview-usage-no-cost')).toContainText('ACP agents');
@@ -126,7 +126,7 @@ test('says cost comes from ACP agents only when no cost is reported', async () =
 test('invites a first conversation when the ledger is empty', async () => {
   app = await launchWithLedger([]);
   const page = app.window;
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
   await expect(page.getByTestId('overview-usage-empty')).toBeVisible();
   await expect(page.getByTestId('overview-usage-tile-today')).toHaveCount(0);
 });

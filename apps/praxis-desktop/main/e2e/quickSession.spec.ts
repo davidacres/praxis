@@ -123,7 +123,7 @@ test('a project session action scopes the composer to that project', async ({ pa
 
   // Global navigation must retain the chosen project instead of reverting
   // to the workspace's first/default project.
-  await page.getByTestId('nav-overview').click();
+  await page.getByTestId('titlebar-home').click();
   await expect(picker).toContainText('Target project');
   await expect(page.getByTestId('project-tree')).toHaveCount(1);
   await expect(page.getByTestId('project-tree')).toContainText('Target project');

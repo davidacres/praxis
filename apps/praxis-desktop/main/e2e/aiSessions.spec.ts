@@ -355,7 +355,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   await win.reload();
 
   // Open a demo issue in the aux detail pane.
-  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('[data-testid="titlebar-home"]').click();
   await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
@@ -403,7 +403,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
 
   // Reopening the ticket does not silently overwrite the stored session: the
   // setup identifies it and offers a direct route back to the existing console.
-  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('[data-testid="titlebar-home"]').click();
   await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   const primaryAi = win.locator('[data-testid="issue-primary-ai-btn"]');
@@ -411,7 +411,7 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   await primaryAi.click();
   await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
 
-  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('[data-testid="titlebar-home"]').click();
   await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   await win.locator('[data-testid="issue-ai-restart-btn"]').click();
