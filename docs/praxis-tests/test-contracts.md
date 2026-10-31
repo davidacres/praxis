@@ -1,8 +1,8 @@
 # test-contracts
 
 Ticket: PRX-T113-496 — TASK-496: Define note and group contracts.
-Frozen implementation: `f1ba0c422c925124315336b4cea73f2f4fdd5e60`.
-Stage iteration: 2 of 3.
+Frozen implementation: `1972df427bc53244a978878d75aeb015033534b3`.
+Stage iteration: 3 of 3.
 
 ## Outcome
 
@@ -14,7 +14,7 @@ approve or advance any workflow stage.
 ## Analysis and scope
 
 Before edits, verified a clean checkout whose HEAD exactly equals the required
-snapshot. Inspected the supplied change-diff and patch, commit metadata, existing
+snapshot. Inspected the supplied change-diff report, commit metadata, existing
 catalog/report, catalog generator and validator, root test registration,
 Playwright project configuration, core/desktop source references and related
 session-group and designer-note tests.
@@ -92,16 +92,15 @@ Two exact related links clarify the ambiguity:
 ## Stale and ambiguous contracts
 
 1. **Input provenance mismatch:** `.praxis/change-diff.md` targets PRX-S47-148,
-   commit `4d41f0d5` against `d1e624fb`; its patch adds scheduled-run handover
+   commit `4d41f0d5` against `d1e624fb`; it describes scheduled-run handover
    coverage. It does not describe TASK-496. Frozen HEAD instead has the title
    “Praxis Test contracts (workflow stage)” and changes only this report. Its
-   parent is `5e6b8c89` (“Repair session browser and analysis flows after UI
-   redesign”). The recovery patch also concerns unrelated Easy Mode automation
-   row selectors. No substitute
-   task patch was fabricated. Scheduled runs remain excluded from this audit's
+   parent is `f1ba0c42`, another report-only stage commit. The described
+   `session-artifacts/change-diff.patch` and recovery patch are absent from this
+   checkout; their contents were not inspected. No substitute task patch was fabricated. Scheduled runs remain excluded from this audit's
    acceptance claims.
-2. **Stale report replaced:** the inherited report targets parent `5e6b8c89`, not the
-   requested `f1ba0c42`. This iteration refreshes provenance and verification;
+2. **Stale report replaced:** the inherited report targets parent `f1ba0c42`, not the
+   requested `1972df42`. This iteration refreshes provenance and verification;
    its 749-entry inventory remains accurate.
 3. **Incomplete inventory scope:** the generator inventories direct literal-title
    `test(...)` calls only; dynamic titles and non-direct forms are omitted.
@@ -141,7 +140,9 @@ below. No additional unseen failures are inferred from the truncated excerpt.
 | Busy-status load more — PT-A9888638A2 | [boardFilters.spec.ts:32](../../apps/praxis-desktop/main/e2e/boardFilters.spec.ts#L32) | Adds five tickets; asserts lane 10→11, total 37→38, and disappearance of load-more. Title says next ten, but fixture exercises one remaining card. No runtime repair established. |
 | Dropping a ticket into another lane still applies its workflow transition — PT-41ED9F62A9 | [boardFilters.spec.ts:65](../../apps/praxis-desktop/main/e2e/boardFilters.spec.ts#L65) | Dispatches HTML drag events; asserts APP-101 moves To Do→In Progress. This proves event-handler behavior, not physical pointer drag. No runtime repair established. |
 
-No runtime or workflow changes were made to address these failures because they
+Iterations 1 and 2 reported npm exit 1 without actionable error details; neither
+is established as repaired by this audit. Iteration 3 lists the ten cases above,
+all still unresolved at runtime. No runtime or workflow changes were made because they
 are outside the authorized test-contracts stage. Their exact automation links
 and assertion limits are now recorded for the responsible implementation/QA
 stage, without advancing it.
