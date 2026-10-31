@@ -211,3 +211,7 @@ export * from './ai/feedback';
 
 
 export { runProviderPrompt } from './ai/providerPrompt';
+
+export * from './notes/noteTypes';
+export * from './notes/noteValidation';
+export * from './notes/noteSnapshot';

@@ -1,137 +1,56 @@
 # test-contracts
 
-Target: PRX-S47-148, frozen implementation `a8d574e71021b427576e4461882280d6ce199039`.
-The checkout was clean and HEAD exactly matched the target before edits. Inspected
-`.praxis/change-diff.md`, its referenced implementation history, generator,
-existing catalog/report, scheduler tests, handover guard tests, root scripts and
-Playwright configuration. The supplied change-diff describes implementation
-`4d41f0d5` against `d1e624fb`; the frozen target includes later changes. Counts
-below are freshly derived from the target, rather than copied from that report.
+Ticket: PRX-T113-496 — TASK-496: Define note and group contracts.
+Frozen implementation: `880dc9a6ebef73cf4a96a73148d8fe1b352ce72b`.
 
-## Exact inventory and validation
+## Outcome
 
-- **713 generated Playwright source contracts in 158 spec files**; **26 scheduling contracts** (25 scheduler, one provider handover).
-- **723 Playwright project executions discovered** (661 functional, 50 themes, one theme-regressions, 11 live-agent), exit 0, no discovery errors, using `npx playwright test --list --reporter=json` in desktop-main. Discovery is not execution or a passing-test count.
-- Zero duplicate generated IDs; zero duplicate source-file/title pairs.
-- Initial validator exited 0 but warned of five moved Easy Mode source links (PT-C7547B818D, PT-D6E1059F2C, PT-2516802E6F, PT-21C54F260E, PT-BD3466D9E5). Regeneration refreshed all five without changing IDs.
-- `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write`: exit 0, 713 contracts, all 713 prior flows carried over.
-- Final `npm run test:praxis-contracts`: exit 0, **“Praxis Tests: 713 Playwright tests catalogued and linked.”** No line-drift warnings.
-- [Structured English catalog](catalog.json), [complete exact-source index](index.md).
-- Scheduler Node source inventory: **90 literal test declarations**: domain 34, store 9, budget 14, runner 33. The stage handover guard adds two Node declarations. These are outside the generated catalog, and are not runtime result counts.
+The deterministic validator passes: **732 Playwright contracts across 161 spec files**. The implementation adds **9 node:test tests across 2 files**, all passing in this stage. Nine structured English supplemental contracts now link those tests exactly. The documented union is **741 contracts**, not a complete monorepo test count: the generator excludes Node and other runners, and omits some Playwright forms.
 
-The catalog covers desktop Playwright only. Core, desktop Node suites, mobile
-protocol/relay, Flutter and script checks are registered separately. A complete
-monorepo automated execution count is not established by this generator.
+Coverage links: [generated catalog](catalog.json), [automation index](index.md), [nine TASK-496 Given/When/Then contracts](task-496-notes.md), [generator/validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs), [core test registration](../../packages/core/package.json), [implementation evidence](../../.praxis/change-diff.md).
 
-## Curated contracts and acceptance coverage
+## Analysis and plan completed before edits
 
-Two existing enriched scheduling flows were retained. PT-ED816D0823 was enriched against its recovered assertions; all identifiers are preserved.
-All Playwright automation below uses the `functional` project. Exact titles,
-runner, files and lines are retained in catalog.json.
+The clean live checkout HEAD is `20ea4c9ab5a91e50d9483cb26bfe4a04bf8656f2`, not the required snapshot. Its differences from the snapshot are limited to this report and the supplemental contract document. Exported `880dc9a6ebef73cf4a96a73148d8fe1b352ce72b` with `git archive` into `/private/tmp/WF-C1A4F13F-test-contracts-lxq0ewnl` and performed validation, compilation and focused execution there. Read the frozen change-diff, all note types, validators, snapshot helpers and test bodies; traced exports, NotesIpc declarations, core suite registration and main/renderer references. Shared pure contracts live in core; main is expected to supply project registry, IDs and clock later. NotesIpc is a future interface, with no preload exposure or operational consumer. The generator uses Babel to index direct literal-title E2E test calls and preserves curated flows by file/title-derived ID.
 
-### PT-F32409778D — same-session allowance handover
+The ordered plan was to preserve the current generated inventory, correct the supplemental Node contracts and refresh the inherited report, then validate catalog identity, links and focused execution. The live checkout already contains the corrected supplemental snapshot reference; this run changes only this report. Product code, tests, generator, workflow and existing generated IDs remain unchanged.
 
-Automation: Playwright [scheduledProviderHandover.spec.ts:21](../../apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts#L21),
-“scheduled allowance handover checkpoints and continues the active stage in the same session”.
+## Requirement coverage
 
-**Given** an isolated Electron application, temporary Git repository, held mock
-gateway stage, fixture ACP provider below its allowance, and one scheduled ticket.
-**When** a file is written into the active worktree and gateway usage reaches 95%.
-**Then** exactly one handover is observed, its checkpoint contains the file,
-workflow/session IDs survive, provider becomes codex-cli, the durable brief
-revision increases, the workflow reaches awaiting-approval, and artifacts appear.
-This exercises production integration with mocked providers, not paid-account
-allowance measurement, approval completion, or next-ticket execution.
+| Requirement | Exact contract evidence | Limits |
+| --- | --- | --- |
+| Stable identities, ownership, timestamps, malformed storage | PT-18D794703A, PT-D46A865FCF | Preserves supplied IDs; does not generate IDs or exercise writes. |
+| Ordered many-to-many membership | PT-18D794703A, PT-D46A865FCF, PT-A5DB078E2D | Shared ordered links and validation; no persistence lifecycle. |
+| Detached request snapshots | PT-212D8FD0B1, PT-2B8CC00CB1 | Order/provenance and later source mutation/deletion; no session submission. |
+| Titles, bodies, immutable and empty patches | PT-8E6A92402A, PT-75D8223A74 | Tested boundary cases and sanitized failures. |
+| Missing IDs, cross-project requests, IPC errors | PT-A5DB078E2D, PT-2B8CC00CB1, PT-2736E32C0B | Pure typed failures and an IPC-typed function; no real IPC transport. |
+| Backward-compatible empty initialization | PT-780F67F095 | Undefined storage returns empty version 1; no migration of an actual application settings file. |
 
-### PT-706E3FFD23 — explicit start pauses before launch
+Each ID above resolves to runner, exact title, file and line in the [supplement](task-496-notes.md).
 
-Automation: Playwright [scheduledRuns.spec.ts:728](../../apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts#L728),
-“a due schedule starts by itself, and a provider at its allowance pauses it before anything launches”.
+## Findings: stale and ambiguous evidence
 
-**Given** a persisted two-ticket schedule made overdue while closed and provider
-usage of 97%. **When** the app reopens into Missed and the user chooses Start now.
-**Then** budget pauses the schedule before any workflow exists; the monitor shows
-95% threshold, 97% usage and two tickets; confirmed Stop creates a skipped report.
-The title overstates unattended start; the updated flow describes actual assertions.
+1. The inherited report and supplement referenced snapshot 16da886d. The live checkout already corrects both to the required frozen snapshot 880dc9a6; independently verified all nine IDs, titles and exact source lines. Their existing empty-patch prose already matches the assertions. No generated Playwright identity or line drift was reported.
+2. The generated inventory remains incomplete for the complete automated suite: Node tests and other runners are excluded; dynamic titles/non-direct test calls may be omitted; every generated project says functional regardless of runtime routing. No generator expansion is made in this ticket stage.
+3. 724 of 732 generated entries retain generic Then prose. Validator success checks identity and populated flow fields, not assertion adequacy or prose truth. No unrelated contracts were rewritten.
+4. Test title “initializes independently” has only one undefined-storage parse: independent repeated initialization is not explicitly asserted. The round-trip test parses JSON before mutation, so its non-aliasing check does not isolate direct-input copying. The Unicode boundary rejection also supplies body null, so that assertion alone does not isolate the astral-title limit. Supplemental prose records only what the assertions establish.
+5. Persistence failure/rollback, atomic deletion cleanup, change notifications, actual IPC dispatch, ID generation and application-level migration are declared future integration responsibilities, not proved here. Scheduled runs remain excluded. No end-to-end note UI coverage is claimed.
+6. IDs are derived from file and title: line moves preserve identity; file/title moves change IDs. The validator does not enforce all schema properties, duplicate detection or Markdown freshness, so independent duplicate/link checks were performed.
 
-### Additional exact automation links
+## Disposition of supplied review findings
 
-These Node contracts use `node:test` with fake runner ports and observations;
-their titles below are exact. They do not assert live provider completion.
+- **Empty update patches — addressed in the frozen implementation.** The shared editable-input guard rejects `{}`. PT-75D8223A74 explicitly invokes both update validators and asserts VALIDATION_ERROR and the exact sanitized root issue. The same test retains title-only updates; PT-8E6A92402A retains body-only updates and explicit empty-body clearing. Both pass in this stage. The existing supplement describes this behavior accurately.
+- **Missing persistence and operational IPC — addressed through the requested contracts-only acceptance alternative.** The frozen revision adds an explicit Contracts-only acceptance section to [TASK-496](../../apps/praxis-desktop/docs/plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-496.md), rather than relying only on the change-diff narrative. [TASK-497](../../apps/praxis-desktop/docs/plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-497.md) explicitly owns persistence, main/preload wiring, atomic saves, notifications and restoration. The checked-in acceptance now explicitly limits initialization to pure parsing and IPC evidence to typed JSON-compatible results; PERSISTENCE_FAILURE is a future handler obligation. Operational integration remains deferred and unverified, rather than fixed by this revision. This confirms the repository acceptance boundary, not a tracker update. No running handler or disk-failure guarantee is claimed; no ticket, implementation or workflow was changed in this stage.
 
-| Requirement / structured contract | Automation |
+## Verification
+
+| Check performed in this stage | Result |
 | --- | --- |
-| Given three tickets, when predecessors succeed, then launches remain ordered and the attempt ends. | [scheduledRunRunner.test.ts:122](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L122), “tickets run in order, each waiting for the one before to settle” |
-| Given a workflow approval gate, when observed, then no successor launches and clearing it restores running. | [scheduledRunRunner.test.ts:140](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L140), “a gate pauses the run, and it carries on by itself once the gate clears” |
-| Given no provider below 95%, when ticking, then budget pauses with no launch. | [scheduledRunRunner.test.ts:271](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L271), “budget: with no provider under 95% the run pauses and launches nothing” |
-| Given an active ticket at 95%, when ticking, then the fake handover port is called and its checkpoint and provider are recorded. | [scheduledRunRunner.test.ts:280](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L280), “mid-ticket hand-over at 95% records the brief, checkpoint and switch” |
-| Given a threshold pause, when the active workflow still reports running, then the pause persists and a second ticket does not launch. | [scheduledRunRunner.test.ts:465](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L465), “a threshold pause persists while the active turn still reports running” |
-| Given checkpoint failure, when subsequent ticks occur, then its reason is retained and handover is called only once. | [scheduledRunRunner.test.ts:476](../../packages/core/src/scheduledRuns/scheduledRunRunner.test.ts#L476), “a failed handover pauses once instead of retrying each tick” |
-| Given estimates and artifact references, when progress completes and storage is reopened, then estimates, artifacts and actual token spend survive. | [scheduledRunStore.test.ts:146](../../packages/core/src/scheduledRuns/scheduledRunStore.test.ts#L146), “ledger estimates and artifacts survive progress and a store restart” |
-| Given a held stage waiter, when an intentional abort is followed by replacement execution, then only subsequent completion settles it. | [stageHandoverGuard.test.ts:5](../../apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts#L5), “intentional abort is held until the replacement turn is launched” |
+| npm run test:praxis-contracts | Passed, exit 0: 732 catalogued and linked; no line warnings. |
+| Independent catalog inventory | 732 entries, 161 files, zero duplicate IDs or file/title pairs; all nine supplemental IDs, titles and source lines match. The deterministic validator reports no generated source-line drift. |
+| npm run build:core | Passed, exit 0. |
+| node --test packages/core/out/notes/noteValidation.test.js packages/core/out/notes/noteSnapshot.test.js | Passed, exit 0: 9 tests, 9 passed, 0 failed/skipped. |
 
-Quit/minimise is indexed as **PT-6890A4393F**, Playwright
-[scheduledRuns.spec.ts:862](../../apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts#L862),
-“quitting with a schedule pending asks first, and offers to minimise instead”.
+Initial commands in the temporary export failed because its dependency link pointed at an absent worktree node_modules directory (`@babel/parser` and Node type definitions were missing). Correcting that temporary link to the existing `/Users/daveacres/dev/tools/praxis/node_modules` resolved both failures; the validator and core build then passed. No dependencies were installed or repository dependencies changed.
 
-## Stale, ambiguous or incomplete evidence
-
-1. The inherited report targeted `4de9ceb40d76f3c9ae714c55f4d7b906b996f94f`; updated to the required frozen snapshot. Five moved source links were refreshed. No duplicate IDs or file/title pairs were found.
-2. Generator labels every entry `functional`; theme and live-agent routing must be read from [playwright.config.ts](../../apps/praxis-desktop/main/playwright.config.ts). Project metadata remains inaccurate for those entries.
-3. Dynamic template titles and non-direct `test(...)` calls are not inventoried by this generator. The 713 count is the exact generated static inventory, not a claim of complete runtime case enumeration.
-4. Most generated flows remain generic fixture/assertion boilerplate. Shape validation does not prove behavioral precision. The generator now preserves curated prose: the old report's assertion that enrichment would fail validation was stale.
-5. IDs hash file path and title: line moves preserve them, file moves or title changes do not. Cross-file-move stability remains a tooling gap; no IDs were changed here.
-6. PT-706E3FFD23 does not prove unattended timer firing: it explicitly starts a missed run. Core fake-clock tests support due-run logic, but are not real Electron unattended-start evidence. Missed schedules require a user choice rather than automatically firing after reopening.
-7. Handover threshold is configurable; tests exercise both 95% and custom settings. Treat 95% as the default-policy contract, not an invariant for every setting.
-8. No combined end-to-end assertion was identified here proving budget re-evaluation between each of multiple completed tickets; ordering and budget checks have separate evidence. No blanket claim is made that every ledger transition or allowance source is covered.
-9. PT-8738E01F29 is opt-in visual capture. Catalog presence proves neither screenshot quality nor that capture ran.
-10. Validator checks generated identities and nonempty flows, but not prose truth, runtime success, Markdown freshness or all top-level schema fields. Regeneration also refreshes the Markdown index.
-
-## Returned QA findings: disposition
-
-- Iterations 1, 2, 3 and 4: each supplied only npm exit 1 with no findings or underlying exception. They cannot be causally diagnosed from those excerpts; no unrelated repair was made in this stage.
-- Iteration 5: opacity remained 0 when the test hovered the outer automation card. Frozen commit `a8d574e7` changes hover/click to the styled `.easymode-automation-row` child; CSS reveals actions through that child's `:hover` selector. The opacity, unchanged-title-width and action assertions remain intact. The implementation change-diff records a focused pass with loopback access after a sandbox EPERM attempt. That is inherited runtime evidence, not a fresh run in this contract stage.
-
-### PT-ED816D0823 — recovered automation-row contract
-
-Automation: Playwright, functional,
-[easymode.spec.ts:874](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L874),
-“automation rows have rename, archive, delete and run actions like a session row”.
-
-**Given** an isolated Easy Mode app with a mocked succeeded Nightly Audit run and
-recording rename/archive/delete IPC handlers. **When** its styled row is hovered,
-clicked and left, then rename, archive and delete are used. **Then** actions reveal
-without shrinking the title and hide after the pointer leaves; all four controls
-are visible; Enter saves Weekly Audit; archive sends true; delete sends
-`deleteWork: false` only after confirmation. The run control is not clicked:
-this title does not establish run execution or real persistence of mocked mutations.
-The catalog now records these exact limits rather than generic boilerplate.
-
-No runtime suite was executed in this contract stage; fresh evidence consists of
-source inspection, Playwright discovery and deterministic catalog validation.
-Earlier report test:git results belong to an older stage and were removed from
-the current-results section to avoid attributing them to this snapshot audit.
-
-## Architecture and scope analysis
-
-Core scheduled-run domain, budget, runner and store modules own durable queue
-state and decisions. Electron scheduledRunRunnerInstance supplies workflow launch,
-live observations and provider handover ports; scheduledRunLive adds usage,
-estimates and artifact observations. The stage handover guard keeps intentional
-interruption from settling the active workflow waiter. Exact regression links
-above cover these boundaries through fake ports or isolated Electron fixtures.
-The supplied patch and current assertions were inspected before edits.
-
-The implementation plan for this stage was to verify snapshot identity, audit
-source contracts and project discovery, preserve existing curated flows and IDs,
-refresh this companion report, regenerate deterministically, and validate.
-The report, catalog flow and five moved catalog/index links required updates. No generator expansion or test repair
-is required to describe the snapshot accurately.
-
-## Handoff boundaries
-
-The required **test-contracts** report is this file. Catalog and index updates
-are documentation only. No product/test code, workflow configuration, tracker
-state or other stage was changed. Discovery did not execute journeys. No UI
-changes or visual verification were performed in this stage. Runtime success
-is not claimed by catalog validation.
+The implementation report's full-core and renderer results are prior-stage evidence, not reruns here. Full monorepo suites and Playwright runtime discovery/execution were not run in this catalog stage. No UI changes or visual verification occurred; no screenshot was captured. The required report **test-contracts** is this file. No stage advancement, workflow edit or tracker mutation was performed.
