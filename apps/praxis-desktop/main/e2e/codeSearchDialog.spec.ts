@@ -135,7 +135,7 @@ test('opens code search from command palette, searches symbols, and displays sou
   const win = app.window;
   await setupMockCodeIntelligence(app);
 
-  await expect(win.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(win.getByTestId('easymode-sidebar')).toBeVisible();
 
   // Open Command Palette
   await win.keyboard.press('ControlOrMeta+k');

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openBoard } from './navigation';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
@@ -22,7 +23,7 @@ test('issue detail shows sub-tasks, linked issues, attachments and essential hea
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
+  await openBoard(window, 'Platform Overview');
   await window.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 
   await expect(window.locator('[data-testid="issue-copy-key-btn"]')).toHaveCount(0);

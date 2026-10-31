@@ -1,4 +1,5 @@
 import { spawnCheck } from './workflowCheckProcess';
+import { formatTestRunSummary, summarizeTestRun } from './testRunnerSummary';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -209,12 +210,16 @@ export async function runWorkflowCheck(
     output: redactedOutput
   });
 
+  // A test runner's own summary is the verdict a person needs; the raw tail is the fallback
+  // for anything else. Either way the whole log is in the artifact.
+  const testSummary = summarizeTestRun(redactedOutput);
+  const verdict = testSummary ? formatTestRunSummary(testSummary) : undefined;
   return {
     status: 'failed',
     exitCode: result.code ?? undefined,
-    // The tail is what a person needs to act; the whole log is in the artifact.
-    error: `${environment ? `${environment.reason} ${environment.hint}\n\n` : ''}${node.command} exited ${result.code ?? 'without a code'}${
-      redactedOutput.trim() ? `:\n${tail(redactedOutput)}` : '.'
+    error: `${environment ? `${environment.reason} ${environment.hint}\n\n` : ''}${verdict
+      ? `${verdict}\n\n${node.command} exited ${result.code ?? 'without a code'}; the full log is in this stage's evidence.`
+      : `${node.command} exited ${result.code ?? 'without a code'}${redactedOutput.trim() ? `:\n${tail(redactedOutput)}` : '.'}`
     }${persistNote}`,
     artifacts,
     ...(environment ? { pause: 'environment' as const } : {}),

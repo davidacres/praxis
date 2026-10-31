@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -195,7 +196,7 @@ test('folder creation opt-in is enforced with an explanation and no discarded in
   try {
     app = await launchTestApp({ connections: [{ id: 'capture-readonly', name: 'Capture readonly', mode: 'folder', settings: { path: root, projectKey: 'CAP', projectName: 'Capture readonly' } }] });
     const page = app.window;
-    await page.getByTestId('board-nav-item').filter({ hasText: 'Capture readonly' }).click();
+    await openBoard(page, 'Capture readonly');
     await page.getByTestId('quick-capture').click();
     await page.getByTestId('quick-capture-title').fill('Keep this capture');
     await expect(page.getByTestId('quick-capture-unavailable')).toContainText('Allow issue creation');
@@ -216,7 +217,7 @@ test('an enabled folder capture explicitly requires a feature for its task', asy
   try {
     app = await launchTestApp({ connections: [{ id: 'capture-folder', name: 'Capture folder', mode: 'folder', settings: { path: root, projectKey: 'CAP', projectName: 'Capture folder', allowIssueCreation: true } }] });
     const page = app.window;
-    await page.getByTestId('board-nav-item').filter({ hasText: 'Capture folder' }).click();
+    await openBoard(page, 'Capture folder');
     await page.getByTestId('quick-capture').click();
     await page.getByTestId('quick-capture-title').fill('A captured folder task');
     await page.getByTestId('quick-capture-save').click();
@@ -243,7 +244,7 @@ test('a captured folder item is marked on disk and badged until it leaves the fi
   try {
     app = await launchTestApp({ connections: [{ id: 'capture-origin', name: 'Capture origin', mode: 'folder', settings: { path: root, projectKey: 'CAP', projectName: 'Capture origin', allowIssueCreation: true } }] });
     const page = app.window;
-    await page.getByTestId('board-nav-item').filter({ hasText: 'Capture origin' }).click();
+    await openBoard(page, 'Capture origin');
     await page.getByTestId('quick-capture').click();
     await page.getByTestId('quick-capture-title').fill('Captured stub');
     await page.getByTestId('quick-capture-parent').fill((await page.locator('#quick-capture-parents option').first().getAttribute('value'))!);

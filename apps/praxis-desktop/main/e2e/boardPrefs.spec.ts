@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openBoard } from './navigation';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
@@ -19,7 +20,7 @@ test.afterEach(async () => {
  * profile is the persistence check.
  */
 async function openApplicationBoard(win: Page) {
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
+  await openBoard(win, 'Application Board');
   await win.locator('[data-testid="issue-card"]').first().waitFor();
 }
 

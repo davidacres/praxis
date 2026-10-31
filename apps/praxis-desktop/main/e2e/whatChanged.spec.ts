@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openProjectPage } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -67,7 +68,7 @@ test('What Changed records every source, says who made each change, and opens ea
   const connectionId = `project:${project.id}`;
   // Opening the project loads its board, which starts the plan-folder watcher.
   await win.reload();
-  await win.getByTestId('project-tree').filter({ hasText: 'What Changed Demo' }).getByTestId('project-nav-item').click();
+  await openProjectPage(win, 'What Changed Demo', 'What Changed');
   const review = win.getByTestId('project-review-panel');
   await expect(review).toBeVisible();
   const taskKey = await win.evaluate(async id => {
@@ -88,7 +89,7 @@ test('What Changed records every source, says who made each change, and opens ea
 
   // Agent: a ticket review session, then the update it proposed, applied.
   await win.reload();
-  await win.getByTestId('project-tree').filter({ hasText: 'What Changed Demo' }).getByTestId('project-nav-item').click();
+  await openProjectPage(win, 'What Changed Demo', 'What Changed');
   await review.getByRole('button', { name: 'What Changed', exact: true }).click();
   await review.getByTestId('project-review-change').filter({ hasText: 'Status changed · Wire the form' }).getByRole('button', { name: 'Open item', exact: true }).click();
   await win.locator('[data-testid="issue-ai-section"]').waitFor();
@@ -132,7 +133,7 @@ test('What Changed records every source, says who made each change, and opens ea
   const times = await review.locator('[data-testid="project-review-change"] time').evaluateAll(nodes => nodes.map(node => Date.parse(node.getAttribute('datetime')!)));
   expect(times).toEqual([...times].sort((a, b) => b - a));
   // Relative, not clock, time inside a day group.
-  await expect(changes.filter({ hasText: 'Teammate fix' }).locator('time')).toHaveText(/ago|just now/);
+  await expect(changes.filter({ hasText: 'Teammate fix' }).locator('time[title]')).toHaveText(/ago|just now/);
 
   // Who (AC6): you, an agent, a named teammate, an edit outside Praxis — each badged differently.
   const actorOf = (text: string) => changes.filter({ hasText: text }).first().getAttribute('data-actor');
@@ -191,7 +192,7 @@ test('a week of several hundred changes renders and filters without a long main-
   fs.writeFileSync(path.join(reuse.userDataDir, 'project-activity.json'), JSON.stringify({ [`activity:${project.id}`]: { startedAt: new Date(now - 8 * DAY).toISOString(), entries: seeded } }));
   app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
   const page = app.window;
-  await page.getByTestId('project-tree').filter({ hasText: 'Busy Project' }).getByTestId('project-nav-item').click();
+  await openProjectPage(page, 'Busy Project', 'What Changed');
   const review = page.getByTestId('project-review-panel');
   await expect(review.getByRole('button', { name: 'What Changed', exact: true })).toBeVisible();
   await page.evaluate(() => {

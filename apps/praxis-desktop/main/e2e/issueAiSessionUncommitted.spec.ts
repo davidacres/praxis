@@ -1,4 +1,5 @@
 import * as child_process from 'node:child_process';
+import { openBoard } from './navigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -121,7 +122,7 @@ test('starting an AI session from a ticket warns about uncommitted changes and o
 
   // Open demo ticket APP-100
   await win.locator('[data-testid="titlebar-home"]').click();
-  await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
+  await openBoard(win, 'Platform Overview');
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 
   // Open Start AI session dialog
@@ -243,7 +244,7 @@ test('starting an AI session from a ticket can omit uncommitted files', async ()
 
   await win.reload();
   await win.locator('[data-testid="titlebar-home"]').click();
-  await win.getByTestId('board-nav-item').filter({ hasText: 'Platform Overview' }).click();
+  await openBoard(win, 'Platform Overview');
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();

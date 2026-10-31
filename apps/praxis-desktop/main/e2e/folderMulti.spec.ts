@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { listedBoards, openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -104,15 +105,9 @@ test('a parent folder with two plans roots lists one board per root', async () =
 
   // The primary root takes the connection's own project name; every other
   // discovered root is named for itself, so the two are distinguishable.
-  const primary = window
-    .locator('[data-testid="board-nav-item"]')
-    .getByText('E2E Multi', { exact: true });
-  await expect(primary).toHaveCount(1);
-
-  const extra = window.locator('[data-testid="board-nav-item"]', {
-    hasText: /^proj-(alpha|beta)$/
-  });
-  await expect(extra).toHaveCount(1);
+  const boards = await listedBoards(window);
+  expect(boards.filter(name => name === 'E2E Multi')).toHaveLength(1);
+  expect(boards.filter(name => /^proj-(alpha|beta)$/.test(name))).toHaveLength(1);
 });
 
 test('each board shows only its own root’s issues', async () => {
@@ -122,21 +117,16 @@ test('each board shows only its own root’s issues', async () => {
   // Two roots, two boards. The primary carries the connection's project name;
   // the extra is named for its own folder. Which root is promoted to primary
   // depends on readdir order, so pick whichever extra is present.
-  const primary = window
-    .locator('[data-testid="board-nav-item"]')
-    .getByText('E2E Multi', { exact: true });
-  const betaExtra = window.locator('[data-testid="board-nav-item"]', { hasText: /^proj-beta$/ });
-  const alphaExtra = window.locator('[data-testid="board-nav-item"]', { hasText: /^proj-alpha$/ });
-
-  await expect(primary).toHaveCount(1);
-  const extraIsBeta = (await betaExtra.count()) === 1;
-  const extraBoard = extraIsBeta ? betaExtra : alphaExtra;
+  const boards = await listedBoards(window);
+  expect(boards.filter(name => name === 'E2E Multi')).toHaveLength(1);
+  const extraIsBeta = boards.includes('proj-beta');
+  const extraBoard = extraIsBeta ? /^proj-beta$/ : /^proj-alpha$/;
   const extraOwnTitle = extraIsBeta ? 'Beta task card' : 'Alpha task card';
   const otherTitle = extraIsBeta ? 'Alpha task card' : 'Beta task card';
 
   // Click the extra. It must show its own root's cards and not the other's.
   // (A folder board renders the feature AND its tasks as cards.)
-  await extraBoard.click();
+  await openBoard(window, extraBoard);
   await expandAllIssueStacks(window);
   await expect(window.locator('[data-testid="issue-card"]', { hasText: extraOwnTitle })).toBeVisible();
   await expect(window.locator('[data-testid="issue-card"]', { hasText: otherTitle })).toHaveCount(0);
@@ -146,7 +136,7 @@ test('each board shows only its own root’s issues', async () => {
   // roots): that root's feature card plus its task card — two cards.
   const otherFeature = extraIsBeta ? 'Alpha Feature' : 'Beta Feature';
   const extraOwnFeature = extraIsBeta ? 'Beta Feature' : 'Alpha Feature';
-  await primary.click();
+  await openBoard(window, /^E2E Multi$/);
   await expandAllIssueStacks(window);
   const primaryCards = window.locator('[data-testid="issue-card"]');
   await expect(primaryCards).toHaveCount(2);
@@ -160,11 +150,10 @@ test('each board shows only its own root’s issues', async () => {
 test('a secondary plans root disables New issue up front and says why', async () => {
   await launchWithMultiRootFixture();
 
-  const primary = window.locator('[data-testid="board-nav-item"]').getByText('E2E Multi', { exact: true });
-  await primary.click();
+  await openBoard(window, /^E2E Multi$/);
   await expect(window.locator('[data-testid="board-new-issue-btn"]')).toBeEnabled();
 
-  await window.locator('[data-testid="board-nav-item"]', { hasText: /^proj-(alpha|beta)$/ }).click();
+  await openBoard(window, /^proj-(alpha|beta)$/);
   const newIssue = window.locator('[data-testid="board-new-issue-btn"]');
   await expect(newIssue).toBeDisabled();
   await expect(newIssue).toHaveAttribute('title', /specific plans root is not supported yet.*primary board/);

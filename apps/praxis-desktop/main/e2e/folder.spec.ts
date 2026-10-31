@@ -1,4 +1,5 @@
 import { openConnections } from './connectionNavigation';
+import { openBoard } from './navigation';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -64,9 +65,7 @@ async function addFolderConnection(name: string): Promise<void> {
 test('folder board lists the fixture feature task', async () => {
   await addFolderConnection('e2e-folder');
 
-  const boardItem = window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' });
-  await expect(boardItem).toBeVisible();
-  await boardItem.click();
+  await openBoard(window, 'Folder');
   await expandAllIssueStacks(window);
 
   const issueCard = window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' });
@@ -75,7 +74,7 @@ test('folder board lists the fixture feature task', async () => {
 
 test('transitioning a live folder issue writes the new status back to markdown', async () => {
   await addFolderConnection('e2e-folder');
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' }).click();
+  await openBoard(window, 'Folder');
   await expandAllIssueStacks(window);
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
@@ -92,7 +91,7 @@ test('transitioning a live folder issue writes the new status back to markdown',
 
 test('adding a comment on a live folder issue writes it back to markdown', async () => {
   await addFolderConnection('e2e-folder');
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' }).click();
+  await openBoard(window, 'Folder');
   await expandAllIssueStacks(window);
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 

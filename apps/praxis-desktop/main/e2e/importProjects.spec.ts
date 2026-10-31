@@ -5,6 +5,7 @@
 //
 // A folder of markdown plans becomes a `storage: 'folder'` project whose board
 // reads those files directly. These tests drive the `projects:*` import IPC
+import { openProject } from './navigation';
 // directly (same idiom as boardSettingsFile.spec.ts) and then assert on the UI
 // the import produces; the planner's own row-selection rules are unit-tested in
 // `packages/core/src/projects/projectImportPlanner.test.ts`.
@@ -161,9 +162,8 @@ test('the wizard is reachable from the sidebar New menu and imports through the 
   await window.getByTestId('import-submit-btn').click();
 
   await expect(window.getByTestId('import-projects-wizard')).toHaveCount(0);
-  await expect(
-    window.getByTestId('project-tree').filter({ hasText: 'UI Imported' })
-  ).toBeVisible();
+  await openProject(window, 'UI Imported');
+  await expect(window.getByTestId('titlebar-project')).toContainText('UI Imported');
 });
 
 test('re-scanning an imported folder flags it rather than offering it twice', async () => {

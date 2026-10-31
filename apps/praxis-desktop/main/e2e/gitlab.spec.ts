@@ -1,4 +1,5 @@
 import { openConnections } from './connectionNavigation';
+import { openBoard } from './navigation';
 // SPDX-License-Identifier: MIT
 //
 // e2e spec for the GitLab REST connection flow on the desktop app.
@@ -144,13 +145,9 @@ test('tracked board renders issue cards and accepts a new comment via the mock',
   await pickerRow.locator('input[type="checkbox"]').check();
   await window.locator('[data-testid="board-picker-save"]').click();
 
-  // Saving in the conn-form chain calls `onSaved('boards')`; the parent
-  // hides the form and surfaces the connections panel. To see the board we
-  // switch to the Boards nav (the sidebar entry labelled "Boards"), which
-  // refreshes `boards` and reveals the now-tracked "Demo Board" entry.
-  const navItem = window.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' });
-  await expect(navItem).toBeVisible();
-  await navItem.click();
+  // Saving in the conn-form chain calls `onSaved('boards')`, which refreshes
+  // `boards`; the now-tracked "Demo Board" is then reachable from the palette.
+  await openBoard(window, 'Demo Board');
 
   // `getBoardDetails` resolves the full board view including the two label
   // list columns and the Backlog/Closed columns — five columns total. Pick
@@ -204,7 +201,7 @@ async function openTrackedBoard(): Promise<void> {
   await expect(pickerRow).toBeVisible();
   await pickerRow.locator('input[type="checkbox"]').check();
   await window.locator('[data-testid="board-picker-save"]').click();
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' }).click();
+  await openBoard(window, 'Demo Board');
 }
 
 test('New issue is disabled on a GitLab board until the connection allows creation', async () => {

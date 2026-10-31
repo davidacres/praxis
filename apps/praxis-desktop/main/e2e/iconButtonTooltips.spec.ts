@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openBoard } from './navigation';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 /**
@@ -104,7 +105,7 @@ test('every visible icon-only control on the main screens has a tooltip', async 
 
   await audit('new session');
 
-  await page.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(page);
   await page.locator('[data-testid="issue-card"]').first().waitFor();
   await audit('board');
   await page.locator('[data-testid="titlebar-context"]').click();

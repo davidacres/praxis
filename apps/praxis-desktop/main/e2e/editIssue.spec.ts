@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -108,7 +109,7 @@ test.afterEach(async () => {
 test('editing a live folder issue writes the priority back to markdown', async () => {
   await launchWithEditFixture();
 
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Edit E2E' }).click();
+  await openBoard(window, 'Edit E2E');
   await expandAllIssueStacks(window);
 
   await window.locator('[data-testid="issue-card"]', { hasText: 'Edit me task' }).click();
@@ -143,7 +144,7 @@ test('editing a live folder issue writes the priority back to markdown', async (
 test('changing a folder ticket parent moves it to the selected feature', async () => {
   await launchWithEditFixture();
 
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Edit E2E' }).click();
+  await openBoard(window, 'Edit E2E');
   await expandAllIssueStacks(window);
   await window.locator('[data-testid="issue-card"]', { hasText: 'Edit me task' }).click();
 

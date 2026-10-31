@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openProjectPage } from './navigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -23,8 +24,7 @@ test('Git Graph explains that a project workspace is required', async () => {
     defaultAiToolMode: 'read-only'
   }, workspaceId); });
   await app.window.reload();
-  await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
-  await app.window.getByTestId('project-git-nav-item').click();
+  await openProjectPage(app.window, project.name, 'Git graph');
 
   await expect(app.window.getByTestId('git-onboarding')).toBeVisible();
   await expect(app.window.getByRole('heading', { name: 'Attach a workspace to use Git Graph' })).toBeVisible();
@@ -51,8 +51,7 @@ test('project Git navigation opens the graph for its workspace repository', asyn
       starterTickets: [{ summary: 'Repository work', description: 'Verify Git context', issueType: 'Task', status: 'todo' }], defaultAiToolMode: 'read-only'
     }, workspaceId); }, repository);
     await app.window.reload();
-    await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
-    await app.window.getByTestId('project-git-nav-item').click();
+    await openProjectPage(app.window, project.name, 'Git graph');
     await expect(app.window.getByTestId('git-graph-page')).toBeVisible();
     await expect(app.window.getByRole('list', { name: 'Commit history' })).toContainText('project repository');
   } finally {

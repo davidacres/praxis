@@ -28,51 +28,44 @@ test('background completion arrives after the turn, updates the session, and not
   await expect.poll(async () => (await record(session.issueKey))?.state).toBe('completed');
   expect((await record(session.issueKey))?.backgroundTasks?.[0].state).toBe('running');
   await openSession(app.window, session.issueKey);
-  const panel = app.window.getByTestId('session-background-tasks');
-  await expect(panel).toContainText('Background work is still running.');
   await expect(app.window.getByTestId('session-state-badge')).toHaveText('Background running');
-  const artifact = path.resolve('..', '.praxis/session-artifacts/background-tasks-running.png');
+  const artifact = path.resolve('..', '.praxis/session-artifacts/background-tasks-session.png');
   fs.mkdirSync(path.dirname(artifact), { recursive: true });
-  await panel.screenshot({ path: artifact, animations: 'disabled' });
-  await app.window.screenshot({ path: path.resolve('..', '.praxis/session-artifacts/background-tasks-session.png'), animations: 'disabled' });
+  await app.window.screenshot({ path: artifact, animations: 'disabled' });
   expect(await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices)).toEqual([]);
   // A follow-up gets its own foreground runtime without shutting the observer down.
   await app.window.evaluate(key => window.praxis.ai.continueSession(key, 'FOLLOW_UP_ONLY'), session.issueKey);
   await expect.poll(async () => (await record(session.issueKey))?.backgroundTasks?.[0].state, { timeout: 15000 }).toBe('completed');
-  await expect(panel).toContainText('All background checks passed.');
   await expect(app.window.getByTestId('session-state-badge')).toHaveText('Completed');
-  await panel.screenshot({ path: path.resolve('..', '.praxis/session-artifacts/background-tasks-completed.png'), animations: 'disabled' });
   expect(await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices.filter((title: string) => title === 'Background task completed'))).toHaveLength(1);
   expect((await record(session.issueKey))?.backgroundTasks).toHaveLength(1);
   expect((await record(session.issueKey))?.backgroundTasks?.some(task => task.id.includes('historical'))).toBe(false);
-  // Persisted terminal state remains visible after reopening the renderer.
+  // Persisted terminal state survives reopening the renderer.
   await app.window.reload();
   await openSession(app.window, session.issueKey);
-  await expect(app.window.getByTestId('session-background-tasks')).toContainText('Completed');
+  expect((await record(session.issueKey))?.backgroundTasks?.[0].state).toBe('completed');
 });
 
-async function assertBackgroundOutcome(scenario: { goal: string; state: string; label: string; notice: string }) {
+async function assertBackgroundOutcome(scenario: { goal: string; state: string; notice: string }) {
     const session = await start(scenario.goal);
     await expect.poll(async () => (await record(session.issueKey))?.state).toBe('completed');
     await openSession(app.window, session.issueKey);
     await expect.poll(async () => (await record(session.issueKey))?.backgroundTasks?.[0].state, { timeout: 15000 }).toBe(scenario.state);
-    await expect(app.window.getByTestId('session-background-tasks')).toContainText(scenario.label);
     if (scenario.state === 'unknown') await expect(app.window.getByTestId('session-state-badge')).toHaveText('Background status unknown');
     if (scenario.state === 'failed') await expect(app.window.getByTestId('session-state-badge')).toHaveText('Background failed');
     if (scenario.goal === 'AIR_SUBAGENT') {
-      await expect(app.window.getByTestId('session-background-tasks')).toContainText('Child review complete: no findings.');
       expect((await record(session.issueKey))?.events.filter(event => event.type === 'message').map(event => event.detail).join(' ')).not.toContain('Child review complete');
     }
     expect(await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices)).toEqual([scenario.notice]);
 }
 
-test('background failure is reported after the foreground reply', () => assertBackgroundOutcome({ goal: 'BACKGROUND_FAIL', state: 'failed', label: 'Failed', notice: 'Background task failed' }));
+test('background failure is reported after the foreground reply', () => assertBackgroundOutcome({ goal: 'BACKGROUND_FAIL', state: 'failed', notice: 'Background task failed' }));
 
-test('a lost background connection becomes unknown rather than completed', () => assertBackgroundOutcome({ goal: 'DROP_CONNECTION', state: 'unknown', label: 'Status unknown', notice: 'Background task status unknown' }));
+test('a lost background connection becomes unknown rather than completed', () => assertBackgroundOutcome({ goal: 'DROP_CONNECTION', state: 'unknown', notice: 'Background task status unknown' }));
 
-test('native subagent completion is distinct from successful spawn', () => assertBackgroundOutcome({ goal: 'NATIVE_SUBAGENT', state: 'completed', label: 'Completed', notice: 'Background task completed' }));
+test('native subagent completion is distinct from successful spawn', () => assertBackgroundOutcome({ goal: 'NATIVE_SUBAGENT', state: 'completed', notice: 'Background task completed' }));
 
-test('AIR child completion and its result reach the owning session separately from the parent transcript', () => assertBackgroundOutcome({ goal: 'AIR_SUBAGENT', state: 'completed', label: 'Completed', notice: 'Background task completed' }));
+test('AIR child completion and its result reach the owning session separately from the parent transcript', () => assertBackgroundOutcome({ goal: 'AIR_SUBAGENT', state: 'completed', notice: 'Background task completed' }));
 
 
 test('a direct API agent shell process reports its exit after the AI reply without inventing success', async () => {
@@ -89,8 +82,6 @@ test('a direct API agent shell process reports its exit after the AI reply witho
   await expect.poll(async () => (await record(session.issueKey))?.state, { timeout: 15000 }).toBe('completed');
   await openSession(app.window, session.issueKey);
   await expect.poll(async () => (await record(session.issueKey))?.backgroundTasks?.[0].state, { timeout: 15000 }).toBe('exited');
-  await expect(app.window.getByTestId('session-background-tasks')).toContainText('Exited · result unavailable');
-  await expect(app.window.getByTestId('session-background-tasks')).toContainText('final exit code is unavailable');
   const notices = await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices as string[]);
   expect(notices.filter(title => title === 'Background process exited')).toHaveLength(1);
   expect(notices).not.toContain('Background task completed');

@@ -50,7 +50,7 @@ async function focusedOutline(app: TestApp): Promise<{ tag: string; testId: stri
 
 test('every control reached by Tab paints a visible focus ring', async () => {
   const page = app.window;
-  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+  await expect(page.getByTestId('easymode-sidebar')).toBeVisible();
 
   // Walk a real run of the shell's tab order rather than one hand-picked
   // control — the regression this guards against was scattered, not local.

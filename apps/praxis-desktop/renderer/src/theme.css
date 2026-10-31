@@ -567,7 +567,11 @@ textarea {
 .titlebar-filter-popover {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  /* The filter button sits at the right of the title bar, so the popover grows
+     leftward: anchored on the left it ran past the window edge, and focusing its
+     search field scrolled the whole page sideways — the next click on the board
+     then landed where a control used to be. */
+  right: 0;
   z-index: 60;
   width: min(520px, calc(100vw - 32px));
   border: 1px solid var(--border-strong);
@@ -13291,7 +13295,7 @@ button.session-chat-attachment {
 .automation-sheet-stage-copy strong { overflow: hidden; font-size: var(--text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .automation-sheet-stage-copy small { color: var(--text-tertiary); font-size: 10px; }
 .automation-sheet-stage-details { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0 8px 8px 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-tertiary); background: var(--bg-sunken); font-size: var(--text-xs); }
-.automation-sheet-stage-details p { flex-basis: 100%; margin: 2px 0 0; color: var(--danger); line-height: 1.45; }
+.automation-sheet-stage-details p { flex-basis: 100%; margin: 2px 0 0; color: var(--danger); line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
 .automation-sheet-footer { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--bg-elevated); }
 .automation-sheet-footer-spacer { flex: 1; }
 .automation-sheet-delete { color: var(--danger); }
@@ -15064,7 +15068,7 @@ button.session-chat-attachment {
 .wf-stagecard { display: flex; flex-direction: column; gap: var(--space-2); }
 .wf-stagecard h2 { margin: 0; font-size: var(--text-lg); }
 .wf-stagecard code { font-family: var(--font-mono); font-size: var(--text-sm); }
-.wf-stage-error { margin: 0; color: var(--danger); font-size: var(--text-sm); }
+.wf-stage-error { margin: 0; color: var(--danger); font-size: var(--text-sm); white-space: pre-line; overflow-wrap: anywhere; }
 .wf-stage-artifacts { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); color: var(--text-tertiary); }
 .inspector-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
 

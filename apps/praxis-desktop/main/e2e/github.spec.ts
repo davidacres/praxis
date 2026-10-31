@@ -1,4 +1,5 @@
 import { openConnections } from './connectionNavigation';
+import { openBoard as openBoardByName } from './navigation';
 // SPDX-License-Identifier: MIT
 //
 // e2e spec for the GitHub REST connection flow on the desktop app (FX-BE-035).
@@ -81,9 +82,7 @@ async function openSeededConnection(): Promise<void> {
 }
 
 async function openBoard(): Promise<void> {
-  const boardItem = window.locator('[data-testid="board-nav-item"]', { hasText: `${OWNER}/${REPO}` });
-  await expect(boardItem).toBeVisible();
-  await boardItem.click();
+  await openBoardByName(window, `${OWNER}/${REPO}`);
 }
 
 test('test connection against the mock REST server reports success', async () => {

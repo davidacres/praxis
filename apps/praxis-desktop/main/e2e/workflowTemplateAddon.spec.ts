@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openFromPalette, openProject } from './navigation';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
@@ -89,7 +90,9 @@ test('the Security Review add-on installs and creates a workflow from its templa
   await page.keyboard.press('Escape');
 
   // It is now a template in the project's New Workflow dialog.
-  await page.getByRole('button', { name: 'New workflow in Audit Project' }).click();
+  await openProject(page, 'Audit Project');
+  await openFromPalette(page, 'Workflows');
+  await page.locator('.wf-page').getByRole('button', { name: 'New workflow' }).click();
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await dialog.getByRole('listitem').filter({ hasText: 'Security Review' }).click();
   await dialog.getByRole('button', { name: /^Use/ }).click();

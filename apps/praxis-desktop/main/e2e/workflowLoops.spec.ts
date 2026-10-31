@@ -171,7 +171,7 @@ test('a review that keeps finding a high bug loops back, then waits for a decisi
   const page = app.window;
   await seedProject(page, ['governed-delivery']);
 
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await page.getByTestId('section-header-add-automations').click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Fix the pager');
   // The worst case is shown before anything starts; this machine has measured nothing yet.
@@ -197,12 +197,11 @@ test('a review that keeps finding a high bug loops back, then waits for a decisi
   await advance(page, pass(HIGH));
   await advance(page, pass(HIGH));
 
-  // Budget spent: a decision, in the run view and on the sidebar row.
+  // Budget spent: a decision, in the run view.
   const decision = runPanel(page).getByTestId('wf-loop-decision');
   await expect(decision).toBeVisible();
   await expect(decision).toContainText('after 2 of 2 passes back to Implement');
   await expect(decision).toContainText('Off by one in the pager');
-  await expect(page.getByTestId('project-workflow-run-row').first()).toHaveAttribute('data-run-status', 'needs-decision');
   await page.screenshot({ path: 'output/playwright/workflow-loops-decision.png' });
 
   // One more pass, then accept with a reason.
@@ -237,7 +236,7 @@ test('improve until target asks for its goal and target and checks them before i
   const page = app.window;
   const projectId = await seedProject(page, ['improve-until-target']);
 
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await page.getByTestId('section-header-add-automations').click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Speed up the pager');
   const parameters = dialog.getByTestId('wf-runstart-parameters');
@@ -269,7 +268,7 @@ test('the loop views read in dark mode too', async () => {
   await page.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-dark', themeMode: 'dark' } }));
   await seedProject(page, ['governed-delivery']);
   await expect(page.locator('html')).toHaveAttribute('data-mode', 'dark');
-  await page.getByTestId('project-workflow-run-new').first().click();
+  await page.getByTestId('section-header-add-automations').click();
   const dialog = page.getByTestId('wf-runstart-dialog');
   await dialog.getByLabel('Run task').fill('Fix the pager');
   await dialog.getByRole('button', { name: 'Start', exact: true }).click();

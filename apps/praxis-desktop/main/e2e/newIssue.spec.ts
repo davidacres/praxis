@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -63,14 +64,14 @@ async function launchWithFolderConnection(plansDir: string, allowIssueCreation: 
     ]
   });
   window = app.window;
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
+  await openBoard(window, 'Live E2E');
 }
 
 test('creating a demo issue with the full field set shows it on the board', async () => {
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(window);
   await window.locator('[data-testid="board-new-issue-btn"]').click();
   await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 
@@ -153,7 +154,7 @@ test('the New idea button is available even with a retired preview opt-out', asy
   app = await launchTestApp({ preview: { enableCreateIdea: false } });
   window = app.window;
 
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(window);
   await expect(window.locator('[data-testid="board-new-issue-btn"]')).toBeVisible();
   await expect(window.locator('[data-testid="board-new-idea-btn"]')).toBeVisible();
 });
@@ -162,7 +163,7 @@ test('New idea opens the create form preset to Idea with the research transcript
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(window);
   await window.locator('[data-testid="board-new-idea-btn"]').click();
   await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 
@@ -205,7 +206,7 @@ test('creating a live folder idea writes the research transcript into the markdo
       ]
     });
     window = app.window;
-    await window.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
+    await openBoard(window, 'Live E2E');
 
     await window.locator('[data-testid="board-new-idea-btn"]').click();
     await expect(window.locator('[data-testid="new-issue-type"]')).toHaveAttribute('data-value', 'Idea');
@@ -245,7 +246,7 @@ test('the demo board offers Subtask with a required story/task/bug parent', asyn
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(window);
   await window.locator('[data-testid="board-new-issue-btn"]').click();
   await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
 

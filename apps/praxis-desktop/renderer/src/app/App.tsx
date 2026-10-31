@@ -1552,7 +1552,7 @@ export function App() {
         label: FEATURE_TITLES[feature],
         group: 'Go to',
         icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'schedules' ? 'clock' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : feature === 'conversations' ? 'chats' : 'home',
-        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments' || feature === 'schedules') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
+        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments' || feature === 'schedules' || feature === 'workflows') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
       });
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
@@ -2521,7 +2521,9 @@ export function App() {
         appVersion={appVersion}
         codeIntelFolder={composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder}
         projects={workspaceProjects}
-        activeProjectId={generalConversations ? 'conversations' : activeProjectId}
+        // The picker names the project the sidebar is showing, which keeps the last
+        // choice on global pages instead of falling back to the workspace default.
+        activeProjectId={generalConversations ? 'conversations' : easyModeProject?.id ?? activeProjectId}
         onSelectProject={projectId => navigate(projectId === 'conversations' ? { feature: 'conversations' } : { projectId })}
         contextLabel={contextLabel}
         contextIcon={contextIcon}

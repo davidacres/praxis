@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openBoard } from './navigation';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
@@ -22,7 +23,7 @@ test.afterEach(async () => {
  * bulk + APP-101 + APP-103.
  */
 async function openApplicationBoard(win: Page) {
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
+  await openBoard(win, 'Application Board');
   await win.locator('[data-testid="issue-card"]').first().waitFor();
   await win.locator('[data-testid="titlebar-context"]').click();
   await win.locator('[data-testid="titlebar-filter-popover"]').waitFor();
@@ -194,9 +195,9 @@ test('switching boards resets hidden title-bar criteria', async () => {
     .click();
   await expect(window.locator('[data-testid="issue-card"]')).toHaveCount(7);
 
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Operations Board' }).click();
+  await openBoard(window, 'Operations Board');
   await window.locator('[data-testid="issue-card"]').first().waitFor();
-  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
+  await openBoard(window, 'Application Board');
   await expect(window.locator('[data-testid="issue-card"]')).toHaveCount(33);
 
   await window.locator('[data-testid="titlebar-context"]').click();

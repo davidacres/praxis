@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
+import { openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { launchTestApp, closeTestApp, showProjectBoard, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { startMockGitLabApi, type MockGitLabServer } from './mockGitLabApi';
 import { chipOptionValues, chooseOption } from './chipSelect';
@@ -119,7 +120,7 @@ const DECOMPOSITION_REPLY = [
 /** Open the first demo board's first issue in the aux detail pane. */
 async function openFirstDemoIssue(win: import('playwright').Page): Promise<void> {
   await win.locator('[data-testid="titlebar-home"]').click();
-  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(win);
   await win.locator('[data-testid="issue-card"]').first().click();
   await win.locator('[data-testid="issue-ai-section"]').waitFor();
 }
@@ -222,7 +223,7 @@ test('analysis uses the selected runtime and continues implementation in the sam
   const primaryAi = win.locator('[data-testid="issue-primary-ai-btn"]');
   await expect(primaryAi).toHaveAttribute('data-ai-mode', 'analysis');
   await primaryAi.click();
-  await win.locator('[data-testid="sessions-view"]').waitFor();
+  await win.locator('[data-testid="agent-details-page"]').waitFor();
   await expect(win.locator('[data-testid="session-provider"]')).toContainText('Vercel AI Gateway');
   await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/thorough');
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText(
@@ -232,12 +233,12 @@ test('analysis uses the selected runtime and continues implementation in the sam
   expect(JSON.parse(mock.requests[0].body).model).toBe('mock/thorough');
   expect(mock.requests[0].body).toContain('You are a senior engineer assessing readiness.');
   await expect(win.locator('[data-testid="session-analysis-banner"]')).toContainText(
-    'Review the analysis below'
+    'Review the analysis, then confirm it'
   );
 
   // Confirmation is a second turn in the same recorded conversation, not a
   // separate analysis view followed by a replacement implementation session.
-  const originalTitle = await win.locator('[data-testid="session-console-title"]').textContent();
+  const originalTitle = await win.locator('[data-testid="agent-details-title"]').textContent();
   await win.locator('[data-testid="session-analysis-confirm"]').click();
   await expect.poll(() => mock!.requests.length, { timeout: 15000 }).toBe(2);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
@@ -246,7 +247,7 @@ test('analysis uses the selected runtime and continues implementation in the sam
   await expect(win.locator('[data-testid="session-analysis-banner"]')).toContainText(
     'Implementation is continuing in this conversation.'
   );
-  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText(originalTitle ?? '');
+  await expect(win.locator('[data-testid="agent-details-title"]')).toHaveText(originalTitle ?? '');
   await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText(
     'I confirm the analysis and implementation plan'
   );
@@ -281,11 +282,10 @@ test('analysis for a project ticket starts in the project folder', async () => {
   }, workspaceFolder);
 
   await win.reload();
-  await showProjectBoard(win.getByTestId('project-tree').filter({ hasText: project.name }));
-  await win.getByTestId('project-default-board-nav-item').filter({ hasText: project.name }).click();
+  await openBoard(win, project.name);
   await win.getByTestId('issue-card').filter({ hasText: 'Start from the project folder' }).click();
   await win.getByTestId('issue-primary-ai-btn').click();
-  await win.getByTestId('sessions-view').waitFor();
+  await win.getByTestId('agent-details-page').waitFor();
 
   await expect.poll(async () => win.evaluate(async projectId => {
     const sessions = await window.praxis.ai.listSessions();
@@ -336,7 +336,7 @@ test('analysis runs through the selected OpenAI provider and model', async () =>
   await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveAttribute('data-value', 'openai');
   await expect(win.locator('[data-testid="issue-detail-ai-model"]')).toHaveAttribute('data-value', 'gpt-e2e-analysis');
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
-  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="agent-details-page"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText(
     'Mock gateway reply',
     { timeout: 15000 }
@@ -446,7 +446,7 @@ test('feature decomposition creates the sub-task issues and lists them', async (
   const win = app.window;
 
   // Create the feature-request ticket through the normal New Issue flow.
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
+  await openBoard(win, 'Live E2E');
   await win.locator('[data-testid="board-new-issue-btn"]').click();
   await chooseOption(win.locator('[data-testid="new-issue-type"]'), 'Feature');
   await win.locator('[data-testid="new-issue-summary"]').fill('e2e feature request');
@@ -479,7 +479,7 @@ test('local peer review runs the three sections against the gateway', async () =
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
     timeout: 15000
   });
-  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(win);
   await win.locator('[data-testid="issue-card"]').first().click();
   await win.locator('[data-testid="issue-ai-lpr-btn"]').click();
   await win.locator('[data-testid="lpr-page"]').waitFor();
@@ -553,7 +553,7 @@ test('merge requests list empty, then create after a delivery recorded a branch'
   const win = app.window;
 
   // Open the first issue on the mock GitLab board.
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' }).first().click();
+  await openBoard(win, 'Demo Board');
   await win.locator('[data-testid="issue-card"]').first().click();
   await win.locator('[data-testid="issue-ai-section"]').waitFor();
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openBoard } from './navigation';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { startMockGitLabApi, type MockGitLabServer } from './mockGitLabApi';
@@ -135,7 +136,7 @@ test('selecting an issue pins a peek card above the sidebar footer', async () =>
   await expect(win.locator('[data-testid="issue-peek"]')).toHaveCount(0);
 
   // APP-100 is the seed feature on the Platform Overview board.
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
+  await openBoard(win, 'Platform Overview');
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 
   const peek = win.locator('[data-testid="issue-peek"]');

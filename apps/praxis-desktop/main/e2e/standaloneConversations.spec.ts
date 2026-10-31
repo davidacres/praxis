@@ -1,4 +1,6 @@
 import * as fs from 'node:fs';
+import { openFromPalette } from './navigation';
+import { openSession } from './sessionNavigation';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
@@ -32,7 +34,7 @@ test('standalone conversation persists and resumes across floating-window pop-in
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: fixture } } } },
     undefined, undefined, { openNewSession: false });
   let win = app.window;
-  await win.getByTestId('conversations-new-btn').click();
+  await openFromPalette(win, 'New conversation');
   await expect(win.getByTestId('new-conversation-heading')).toHaveText('New conversation');
   await expect(win.getByTestId('new-session-board-select')).toHaveCount(0);
   await expect(win.getByTestId('new-session-ticket-select')).toHaveCount(0);
@@ -108,8 +110,7 @@ test('standalone conversation persists and resumes across floating-window pop-in
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   win = app.window;
   expect(await win.evaluate(() => window.praxis.detachedChat.list())).toEqual([]);
-  await win.getByTestId('nav-conversations').click();
-  await win.locator(`[data-session-order-id="${key}"] [data-testid="session-list-row"]`).click();
+  await openSession(win, key);
   await expect(win.getByTestId('session-chat-thread')).toContainText('Continue in floating chat');
   expect((await win.evaluate(key => window.praxis.ai.getSession(key), key))?.toolMode).toBe('project-only');
 });

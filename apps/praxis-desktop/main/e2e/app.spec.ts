@@ -1,4 +1,5 @@
 import { openConnections } from './connectionNavigation';
+import { listedBoards, openBoard, openFromPalette } from './navigation';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import * as path from 'node:path';
@@ -40,8 +41,8 @@ test('focus mode button in titlebar is available in a session and toggles panels
   // Not available when not in a session
   await expect(toggles.getByRole('button', { name: 'Toggle focus mode' })).toHaveCount(0);
 
-  // Navigate to Sessions
-  await window.getByTestId('nav-conversations').click();
+  // Navigate to Conversations
+  await openFromPalette(window, 'Conversations');
 
   // Focus mode button is now available in a session
   const focusBtn = toggles.getByRole('button', { name: 'Toggle focus mode' });
@@ -65,30 +66,6 @@ test('focus mode button in titlebar is available in a session and toggles panels
   await focusBtn.click();
   await expect(window.locator('.pane-sidebar')).toBeVisible();
   await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
-});
-
-test('Praxis section in sidebar can expand to full sidebar and restore', async () => {
-  const sidebar = window.locator('.pane-sidebar');
-  await expect(sidebar).toBeVisible();
-
-  const maximizeBtn = sidebar.getByTestId('toggle-features-maximize');
-  await expect(maximizeBtn).toBeVisible();
-  await expect(maximizeBtn).toHaveAttribute('aria-label', 'Use full sidebar');
-
-  // Upper scroll area with projects/boards is visible
-  await expect(sidebar.locator('.sidebar-scroll')).toBeVisible();
-
-  // Click maximize to use full sidebar
-  await maximizeBtn.click();
-  await expect(maximizeBtn).toHaveAttribute('aria-label', 'Restore sidebar');
-  await expect(sidebar.locator('.sidebar-scroll')).toBeHidden();
-  await expect(sidebar.locator('.sidebar-footer-maximized')).toBeVisible();
-
-  // Click restore to return to normal
-  await maximizeBtn.click();
-  await expect(maximizeBtn).toHaveAttribute('aria-label', 'Use full sidebar');
-  await expect(sidebar.locator('.sidebar-scroll')).toBeVisible();
-  await expect(sidebar.locator('.sidebar-footer-maximized')).toHaveCount(0);
 });
 
 test('remembers which panels are open across a relaunch', async () => {
@@ -118,7 +95,8 @@ test('boards render on launch', async () => {
   await expect(window.locator('[data-testid="new-session-view"] h1')).toContainText('No board');
   await expect(window.locator('[data-testid="new-session-board-select"]')).toContainText('No board');
   await window.locator('[data-testid="titlebar-home"]').click();
-  await expect(window.getByTestId('board-nav-item').first()).toBeVisible();
+  expect(await listedBoards(window)).not.toHaveLength(0);
+  await openBoard(window);
 });
 
 test('normal launch does not include built-in demo data', async () => {
@@ -128,7 +106,7 @@ test('normal launch does not include built-in demo data', async () => {
 
   await window.locator('[data-testid="titlebar-home"]').click();
   await expect(window.getByTestId('overview-page')).toBeVisible();
-  await expect(window.locator('[data-testid="board-nav-item"]')).toHaveCount(0);
+  expect(await listedBoards(window)).toEqual([]);
 });
 
 // Proven against the original connectionCount === 0 notice: the first absence assertion fails.
@@ -142,7 +120,7 @@ test('a folder conversation without trackers does not claim to use demo boards',
   await expect(window.getByTestId('new-session-working-directory')).toContainText(path.basename(app.userDataDir));
   await expect(window.getByText('No tracker connected', { exact: true })).toHaveCount(0);
 
-  await window.getByTestId('conversations-new-btn').click();
+  await openFromPalette(window, 'New conversation');
   await expect(window.getByTestId('new-session-view').getByRole('heading', { name: 'New conversation', exact: true })).toBeVisible();
   await expect(window.getByTestId('new-session-working-directory')).toContainText(path.basename(app.userDataDir));
   await expect(window.getByText('No tracker connected', { exact: true })).toHaveCount(0);
@@ -156,7 +134,7 @@ test('selecting a board renders its columns and issue cards', async () => {
   // hid it: selecting a board is an explicit request for board context.
   await window.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
   await window.locator('[data-testid="titlebar-home"]').click();
-  await window.getByTestId('board-nav-item').first().click();
+  await openBoard(window);
   const issueCards = window.locator('[data-testid="issue-card"]');
   await expect(issueCards.first()).toBeVisible();
 
@@ -176,7 +154,7 @@ test('selecting a board renders its columns and issue cards', async () => {
 
 test('opening an issue card shows the issue detail panel', async () => {
   await window.locator('[data-testid="titlebar-home"]').click();
-  await window.getByTestId('board-nav-item').first().click();
+  await openBoard(window);
   await window.locator('[data-testid="issue-card"]').first().click();
   // `exact` matters now: the frameless title bar also has a "Close window" button.
   await expect(window.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
@@ -185,7 +163,7 @@ test('opening an issue card shows the issue detail panel', async () => {
 
 test('adding a comment appears in the issue detail panel', async () => {
   await window.locator('[data-testid="titlebar-home"]').click();
-  await window.getByTestId('board-nav-item').first().click();
+  await openBoard(window);
   await window.locator('[data-testid="issue-card"]').first().click();
 
   const commentBody = `e2e comment ${Date.now()}`;
@@ -197,7 +175,7 @@ test('adding a comment appears in the issue detail panel', async () => {
 
 test('closing the issue detail panel hides it', async () => {
   await window.locator('[data-testid="titlebar-home"]').click();
-  await window.getByTestId('board-nav-item').first().click();
+  await openBoard(window);
   await window.locator('[data-testid="issue-card"]').first().click();
   await window.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(window.getByRole('button', { name: 'Close', exact: true })).not.toBeVisible();
@@ -205,7 +183,7 @@ test('closing the issue detail panel hides it', async () => {
 
 test('Connections is absent from the sidebar and opens through the command palette', async () => {
   await expect(window.getByTestId('nav-connections')).toHaveCount(0);
-  await window.getByRole('navigation', { name: 'Workspace' }).screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/sidebar-without-connections.png') });
+  await window.getByTestId('easymode-sidebar').screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/sidebar-without-connections.png') });
   await openConnections(window);
   await expect(window.locator('[data-testid="connections-page"]')).toBeVisible();
   await expect(window.locator('[data-testid="add-connection-btn"]')).toBeVisible();

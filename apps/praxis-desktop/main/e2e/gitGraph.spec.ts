@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openProjectPage } from './navigation';
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -82,8 +83,7 @@ async function openProjectGit(repository: string): Promise<void> {
     defaultAiToolMode: 'read-only'
   }, workspaceId); }, repository);
   await app.window.reload();
-  await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
-  await app.window.getByTestId('project-git-nav-item').click();
+  await openProjectPage(app.window, project.name, 'Git graph');
 }
 
 // Jira Cloud is now a marketplace-only add-on, not bundled — seeded here as a
@@ -173,7 +173,7 @@ test('renders the visual Git graph and commit inspector', async () => {
   await window.screenshot({ path: 'output/playwright/git-graph-horizontal.png', fullPage: true });
   await window.screenshot({ path: 'output/playwright/git-graph.png', fullPage: true });
 
-  await window.getByTestId('project-git-changes-nav-item').click();
+  await window.getByTestId('git-changes').click();
   await expect(window.getByTestId('git-changes-page')).toBeVisible();
   await expect(window.getByRole('region', { name: 'Git changes' })).toContainText('Working tree');
   await expect(window.getByRole('button', { name: 'Review unstaged' })).toBeVisible();

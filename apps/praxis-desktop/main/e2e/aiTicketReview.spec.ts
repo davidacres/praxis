@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { openBoard } from './navigation';
 import * as fs from 'node:fs';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
@@ -95,7 +96,7 @@ async function openReview(env: Record<string, string> = {}): Promise<{ win: Test
   );
   await win.reload();
   await win.locator('[data-testid="titlebar-home"]').click();
-  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(win);
   const card = win.locator('[data-testid="issue-card"]').first();
   const issueKey = (await card.getAttribute('data-issue-key')) ?? '';
   await card.click();
@@ -403,7 +404,7 @@ test('review exposes shared runtime controls while preserving its review boundar
   await win.evaluate(() => window.praxis.settings.set({ appearance: { themeId: 'praxis-dark', themeMode: 'dark' } }));
   await win.reload();
   await expect(win.locator('html')).toHaveAttribute('data-mode', 'dark');
-  await win.getByTestId('board-nav-item').first().click();
+  await openBoard(win);
   await win.locator(`[data-testid="issue-card"][data-issue-key="${issueKey}"]`).click();
   await win.getByTestId('issue-ai-review-btn').click();
   await expect(composer).toBeVisible();

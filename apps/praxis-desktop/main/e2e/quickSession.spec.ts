@@ -69,7 +69,7 @@ test('the title-bar quick session opens the composer scoped to the current proje
   await seedProject(page);
   // Reload so the shell picks up the seeded project and its workflow readiness.
   await page.reload();
-  await page.getByTestId(`project-nav-item`).first().waitFor({ state: 'visible' });
+  await expect(page.getByTestId('sidebar-project-select')).toContainText('Quick session project');
 
   await expect(page.getByTestId('quick-session')).toBeVisible();
   await page.getByTestId('quick-session').click();
@@ -87,7 +87,7 @@ test('the title-bar quick session opens the composer scoped to the current proje
   // Starting the session runs it under the quick-change workflow.
   await page.locator('.composer-input').fill('Ship a tiny copy fix.');
   await page.getByTestId('new-session-submit').click();
-  await expect(page.getByTestId('session-console')).toBeVisible();
+  await expect(page.getByTestId('agent-details-page')).toBeVisible();
   await expect.poll(async () => page.evaluate(async () => {
     const sessions = await window.praxis.ai.listSessions();
     return sessions.find(session => session.taskDefinition.goal.includes('Ship a tiny copy fix'))?.workflowRunIds?.length ?? 0;
@@ -109,39 +109,32 @@ test('a project session action scopes the composer to that project', async ({ pa
 
   await seedProjects(page);
   await page.reload();
-  // Classic mode shows one project at a time; the sidebar's project picker switches between them.
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  // The title bar's project picker switches the current project.
   const picker = page.getByTestId('sidebar-project-select');
   await picker.click();
   const menu = page.getByRole('listbox', { name: 'Select project options' });
-  await expect(menu.getByRole('option')).toHaveCount(2);
+  await expect(menu.getByRole('option', { name: 'First project' })).toBeVisible();
   await menu.getByRole('option', { name: 'Target project' }).click();
   await expect(picker).toContainText('Target project');
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
-  await expect(page.getByTestId('project-tree')).toContainText('Target project');
-  await expect(page.getByTestId('board-nav-item').filter({ hasText: 'First project Board' })).toHaveCount(0);
 
   // Global navigation must retain the chosen project instead of reverting
   // to the workspace's first/default project.
   await page.getByTestId('titlebar-home').click();
   await expect(picker).toContainText('Target project');
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
-  await expect(page.getByTestId('project-tree')).toContainText('Target project');
   await picker.click();
   await page.screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'classic-project-picker.png'),
     fullPage: true
   });
   await menu.getByRole('option', { name: 'First project' }).click();
-  await expect(page.getByTestId('project-tree')).toContainText('First project');
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
+  await expect(picker).toContainText('First project');
   await picker.click();
   await menu.getByRole('option', { name: 'Target project' }).click();
+  await expect(picker).toContainText('Target project');
   await page.reload();
   await expect(picker).toContainText('Target project');
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
 
-  await page.getByTestId('project-tree').getByTestId('project-session-new').click();
+  await page.getByTestId('easymode-new-session').click();
 
   await expect(page.getByTestId('new-session-scope-heading')).toContainText('Target project');
   await page.screenshot({
@@ -153,11 +146,9 @@ test('a project session action scopes the composer to that project', async ({ pa
   await page.getByTestId('new-session-submit').click();
   await expect(page.getByTestId('session-follow-up-input')).toBeVisible();
   await expect(picker).toContainText('Target project');
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
-  await expect(page.getByTestId('project-tree').getByTestId('project-session-nav-item')).toHaveCount(1);
+  await expect(page.getByTestId('easymode-sessions-list').locator('[data-testid^="easymode-session-card-"]')).toHaveCount(1);
   await page.reload();
   await expect(picker).toContainText('Target project');
-  await expect(page.getByTestId('project-tree')).toHaveCount(1);
   await picker.click();
   await page.screenshot({
     path: path.resolve(__dirname, '..', '..', '.praxis', 'session-artifacts', 'classic-project-session.png'),
@@ -173,7 +164,7 @@ test('draft and existing sessions share the composer frame and input layout', as
   const page = app.window;
   await seedProject(page);
   await page.reload();
-  await page.getByTestId('project-session-new').first().click();
+  await page.getByTestId('easymode-new-session').click();
   const draft = page.getByTestId('new-session-view');
   const card = draft.locator('.session-follow-up-composer');
   // A draft has used nothing yet: 0 tok, never "Not reported".
@@ -193,9 +184,12 @@ test('draft and existing sessions share the composer frame and input layout', as
   const input = card.locator('textarea');
   await expect(input).toHaveAttribute('rows', '1');
   await input.fill('Compare composer frames.');
+  // Type and height limits match. Top padding deliberately differs: a live
+  // session's input centres its first line on the leading Add-context button,
+  // which a draft does not have.
   const inputStyle = await input.evaluate(element => {
     const style = getComputedStyle(element);
-    return [style.fontSize, style.lineHeight, style.paddingTop, style.maxHeight];
+    return [style.fontSize, style.lineHeight, style.maxHeight];
   });
   const artifacts = path.resolve(__dirname, '../../../../.praxis/session-artifacts');
   await page.screenshot({ path: path.join(artifacts, 'composer-draft-matched.png'), fullPage: true });
@@ -205,7 +199,7 @@ test('draft and existing sessions share the composer frame and input layout', as
   const active = page.getByTestId('session-follow-up-input');
   expect(await active.evaluate(element => {
     const style = getComputedStyle(element);
-    return [style.fontSize, style.lineHeight, style.paddingTop, style.maxHeight];
+    return [style.fontSize, style.lineHeight, style.maxHeight];
   })).toEqual(inputStyle);
   await expect(page.getByTestId('session-mode-panel')).toHaveCount(0);
   await expect(page.getByTestId('session-add-context')).toBeVisible();

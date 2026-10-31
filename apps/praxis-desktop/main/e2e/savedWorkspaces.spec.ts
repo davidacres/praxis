@@ -103,7 +103,7 @@ test('each workspace resumes at its own last route, not the other one\'s', async
   };
 
   await switchTo('Second Workspace');
-  await expect(win.getByTestId('project-dashboard')).toContainText('Beta');
+  await expect(win.getByTestId('easymode-canvas')).toContainText('Beta');
 
   // Seed workspace one's route while it is *not* active, so the live route
   // writer cannot overwrite it. Connections is a place its landing route would
@@ -117,5 +117,5 @@ test('each workspace resumes at its own last route, not the other one\'s', async
 
   // And back again: workspace one's route must not have leaked into two.
   await switchTo('Second Workspace');
-  await expect(win.getByTestId('project-dashboard')).toContainText('Beta');
+  await expect(win.getByTestId('easymode-canvas')).toContainText('Beta');
 });

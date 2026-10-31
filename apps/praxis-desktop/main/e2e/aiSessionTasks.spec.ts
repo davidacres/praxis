@@ -1,9 +1,8 @@
 import { openSession } from './sessionNavigation';
-// The agent's self-reported task list (ACP's `plan` update — Claude Code's
-// TodoWrite, Codex's plan tool). Lives in the sessions inspector rather than
-// the transcript specifically so it stays visible and current while the
-// centre pane keeps scrolling past new turns — this drives that end to end
-// with a fixture that streams a real, evolving plan across one turn.
+// ACP session reporting driven through the fake agent fixture. The agent's
+// self-reported task list (ACP's `plan` update) used to be checked here too;
+// the redesigned session page dropped that panel on purpose, so only the
+// usage half remains.
 
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -34,76 +33,6 @@ async function delegate(win: TestApp['window'], goal: string): Promise<string> {
   );
   return session.issueKey;
 }
-
-test('the task list updates live as the agent works through it, then settles once the turn ends', async () => {
-  app = await launchTestApp();
-  const win = app.window;
-  const key = await delegate(win, 'WITH_PLAN STOP_PLAN_MIDWAY please');
-
-  await openSession(win, 'WITH_PLAN STOP_PLAN_MIDWAY');
-
-  const tasks = win.getByTestId('session-tasks');
-  await expect(tasks).toBeVisible();
-  await expect(tasks.getByTestId('session-task')).toHaveCount(3);
-
-  // Watch it move through the same three snapshots the fixture streams,
-  // rather than only checking the state after the turn settles — a host that
-  // replaced only on the final event and dropped the ones in between would
-  // still pass an end-state-only check.
-  await expect(tasks.getByTestId('session-tasks-count')).toHaveText('0/3');
-  await expect.poll(() => tasks.getByTestId('session-tasks-count').textContent()).toBe('1/3');
-  await expect.poll(() => tasks.getByTestId('session-tasks-count').textContent()).toBe('2/3');
-
-  const rows = tasks.getByTestId('session-task');
-  await expect(rows.nth(0)).toHaveClass(/is-completed/);
-  await expect(rows.nth(1)).toHaveClass(/is-completed/);
-  await expect(rows.nth(2)).toHaveClass(/is-in_progress/);
-  await expect(rows.nth(2)).toContainText('Re-run the suite');
-
-  await win.screenshot({ path: 'output/playwright/session-tasks-inflight.png', fullPage: true });
-
-  // The turn is still running (STOP_PLAN_MIDWAY held the third task open) —
-  // confirm the list stayed exactly as the fixture left it, then let the turn
-  // finish and check nothing about it changes on its own afterward.
-  await expect
-    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
-    .toBe('completed');
-  await expect(tasks.getByTestId('session-tasks-count')).toHaveText('2/3');
-});
-
-test('a fully completed plan shows all three done', async () => {
-  app = await launchTestApp();
-  const win = app.window;
-  const key = await delegate(win, 'WITH_PLAN please');
-
-  await expect
-    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
-    .toBe('completed');
-
-  await openSession(win, 'WITH_PLAN please');
-
-  const tasks = win.getByTestId('session-tasks');
-  await expect(tasks.getByTestId('session-tasks-count')).toHaveText('3/3');
-  const rows = tasks.getByTestId('session-task');
-  for (const i of [0, 1, 2]) await expect(rows.nth(i)).toHaveClass(/is-completed/);
-});
-
-test('a session that never reports a plan shows no Tasks block at all', async () => {
-  app = await launchTestApp();
-  const win = app.window;
-  // No WITH_PLAN marker — the ordinary "hello" turn every other fixture test
-  // exercises. An empty "Tasks" heading here would be noise every session
-  // that never uses TodoWrite would pay for.
-  const key = await delegate(win, 'just say hello');
-
-  await expect
-    .poll(() => win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key), { timeout: 20000 })
-    .toBe('completed');
-
-  await openSession(win, 'just say hello');
-  await expect(win.getByTestId('session-state-badge')).toHaveText('Completed');
-  await expect(win.getByTestId('session-tasks')).toHaveCount(0);
-});
 
 test('an ACP agent reporting usage drives the context indicator and shows its cost', async () => {
   app = await launchTestApp();

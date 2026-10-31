@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { openBoard } from './navigation';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
@@ -52,7 +53,7 @@ function gatewayEnv(baseUrl: string): Record<string, string | undefined> {
 
 /** Open the first demo board in the Task Designer and wait for the canvas. */
 async function openDesigner(win: import('playwright').Page): Promise<void> {
-  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await openBoard(win);
   await win.locator('[data-testid="board-designer-btn"]').click();
   await win.locator('[data-testid="designer-page"]').waitFor();
   // The first open seeds the Session Log note.
