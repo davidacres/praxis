@@ -270,7 +270,7 @@
           {
             "type": "severity",
             "maxCount": 0,
-            "severityLevel": "low"
+            "severityLevel": "medium"
           }
         ]
       }
@@ -354,7 +354,7 @@
       "on": "findings",
       "required": true,
       "when": {
-        "severity": "high"
+        "severity": "medium"
       },
       "loop": {
         "maxIterations": 2
