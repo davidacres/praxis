@@ -1,8 +1,8 @@
 # test-contracts
 
 Ticket: PRX-T113-496 — TASK-496: Define note and group contracts.
-Frozen implementation: `1972df427bc53244a978878d75aeb015033534b3`.
-Stage iteration: 3 of 3.
+Frozen implementation: `e3765c3e8c301a734f778eda3efc53e1033fed5b`.
+Stage iteration: 4 of 4.
 
 ## Outcome
 
@@ -95,12 +95,15 @@ Two exact related links clarify the ambiguity:
    commit `4d41f0d5` against `d1e624fb`; it describes scheduled-run handover
    coverage. It does not describe TASK-496. Frozen HEAD instead has the title
    “Praxis Test contracts (workflow stage)” and changes only this report. Its
-   parent is `f1ba0c42`, another report-only stage commit. The described
-   `session-artifacts/change-diff.patch` and recovery patch are absent from this
-   checkout; their contents were not inspected. No substitute task patch was fabricated. Scheduled runs remain excluded from this audit's
-   acceptance claims.
-2. **Stale report replaced:** the inherited report targets parent `f1ba0c42`, not the
-   requested `1972df42`. This iteration refreshes provenance and verification;
+   parent is `1972df42`, another report-only stage commit. The supplied
+   `.praxis/session-artifacts/change-diff.patch` exists and its changed-path
+   inventory concerns scheduled-run handover; `change-diff-recovery.patch` also
+   exists and changes an Easy Mode automation-row hover test. Neither is a
+   TASK-496 implementation patch. This corrects the inherited report's inaccurate
+   claim that the patches were absent. No substitute task patch was fabricated.
+   Scheduled runs remain excluded from this audit's acceptance claims.
+2. **Stale report replaced:** the inherited report targets parent `1972df42`, not the
+   requested `e3765c3e`. This iteration refreshes provenance and verification;
    its 749-entry inventory remains accurate.
 3. **Incomplete inventory scope:** the generator inventories direct literal-title
    `test(...)` calls only; dynamic titles and non-direct forms are omitted.
@@ -140,9 +143,9 @@ below. No additional unseen failures are inferred from the truncated excerpt.
 | Busy-status load more — PT-A9888638A2 | [boardFilters.spec.ts:32](../../apps/praxis-desktop/main/e2e/boardFilters.spec.ts#L32) | Adds five tickets; asserts lane 10→11, total 37→38, and disappearance of load-more. Title says next ten, but fixture exercises one remaining card. No runtime repair established. |
 | Dropping a ticket into another lane still applies its workflow transition — PT-41ED9F62A9 | [boardFilters.spec.ts:65](../../apps/praxis-desktop/main/e2e/boardFilters.spec.ts#L65) | Dispatches HTML drag events; asserts APP-101 moves To Do→In Progress. This proves event-handler behavior, not physical pointer drag. No runtime repair established. |
 
-Iterations 1 and 2 reported npm exit 1 without actionable error details; neither
-is established as repaired by this audit. Iteration 3 lists the ten cases above,
-all still unresolved at runtime. No runtime or workflow changes were made because they
+Iterations 1, 2 and 3 reported npm exit 1 without actionable error details; none
+is established as repaired by this audit. The iteration-4 excerpt identifies
+the ten cases above, all still unresolved at runtime. No runtime or workflow changes were made because they
 are outside the authorized test-contracts stage. Their exact automation links
 and assertion limits are now recorded for the responsible implementation/QA
 stage, without advancing it.
