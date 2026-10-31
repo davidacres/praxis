@@ -10875,7 +10875,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 234,
+        "line": 244,
         "project": "functional"
       },
       "area": "workflow Loops",
@@ -10891,7 +10891,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 265,
+        "line": 275,
         "project": "functional"
       },
       "area": "workflow Loops",
@@ -10907,7 +10907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowLoops.spec.ts",
-        "line": 287,
+        "line": 297,
         "project": "functional"
       },
       "area": "workflow Loops",

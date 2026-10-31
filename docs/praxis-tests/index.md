@@ -683,9 +683,9 @@ This catalogue describes **732 Playwright tests** under `apps/praxis-desktop/mai
 | PT-311E757F0F | workflow Loops | a loop edge is drawn distinctly, edited in the inspector, and survives save and reload | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:98` |
 | PT-99CC50B3E7 | workflow Loops | a back-edge is a cycle unless it carries a loop budget | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:144` |
 | PT-B198D5BAF8 | workflow Loops | a review that keeps finding a high bug loops back, then waits for a decision that is recorded | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:169` |
-| PT-635AD53BB9 | workflow Loops | improve until target asks for its goal and target and checks them before it starts | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:234` |
-| PT-CDF14E0758 | workflow Loops | the loop views read in dark mode too | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:265` |
-| PT-21DED7008C | workflow Loops | run setup keeps its shell fixed across workflows, tabs and viewport sizes | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:287` |
+| PT-635AD53BB9 | workflow Loops | improve until target asks for its goal and target and checks them before it starts | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:244` |
+| PT-CDF14E0758 | workflow Loops | the loop views read in dark mode too | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:275` |
+| PT-21DED7008C | workflow Loops | run setup keeps its shell fixed across workflows, tabs and viewport sizes | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:297` |
 | PT-DE2926E8C8 | workflow Model Tiers | a stage runs on the model its tier maps to, and its report reaches the next stage | `apps/praxis-desktop/main/e2e/workflowModelTiers.spec.ts:132` |
 | PT-B34C2C3E33 | workflow Model Tiers | two stage sessions are reached through their project run rather than Conversations | `apps/praxis-desktop/main/e2e/workflowModelTiers.spec.ts:157` |
 | PT-52E2281D4E | workflow Model Tiers | Suggest model tiers fills only unset stages of the draft, and settings maps each tier | `apps/praxis-desktop/main/e2e/workflowModelTiers.spec.ts:179` |
