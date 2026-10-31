@@ -1,3 +1,4 @@
+import { isChatBackgroundImage, readChatBackgroundImage } from './themeChatBackground';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import { useResizable } from '../app/useResizable';
 import { useUpdateStatus } from '../app/useUpdateStatus';
@@ -2616,6 +2617,26 @@ function CustomThemeEditor({
   onDuplicate?: () => void;
   onExport?: () => void;
 }) {
+  const [imageError, setImageError] = useState('');
+  const [imageLoading, setImageLoading] = useState(false);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const currentTheme = useRef(theme);
+  currentTheme.current = theme;
+  const imageRequest = useRef(0);
+  useEffect(() => () => { imageRequest.current++; }, []);
+  const chooseImage = async (file: File) => {
+    const request = ++imageRequest.current;
+    setImageError('');
+    setImageLoading(true);
+    try {
+      const image = await readChatBackgroundImage(file);
+      if (request === imageRequest.current) onChange({ ...currentTheme.current, preview: { ...currentTheme.current.preview, chatBackgroundImage: image } });
+    } catch (error) {
+      if (request === imageRequest.current) setImageError(error instanceof Error ? error.message : 'The image could not be read.');
+    } finally {
+      if (request === imageRequest.current) setImageLoading(false);
+    }
+  };
   const update = (patch: Partial<ThemeDefinition>) => onChange({ ...theme, ...patch, source: 'custom' });
   const updateColor = (key: string, value: string) => onChange({ ...theme, source: 'custom', preview: { ...theme.preview, [key]: value } });
   return <div className="custom-theme-editor" role="region" aria-label="Custom theme editor">
@@ -2626,7 +2647,15 @@ function CustomThemeEditor({
       <label className="wide">Description<input value={theme.description} onChange={event => update({ description: event.target.value })} maxLength={240} /></label>
     </div>
     <div className="custom-theme-color-grid">{CUSTOM_COLOR_FIELDS.map(([key, label]) => <label key={key}>{label}<span><input type="color" value={/^#[0-9a-f]{6}$/i.test(theme.preview[key]) ? theme.preview[key] : '#7c5cff'} onChange={event => updateColor(key, event.target.value)} /><input value={theme.preview[key]} onChange={event => updateColor(key, event.target.value)} /></span></label>)}</div>
-    <div className="custom-theme-editor-actions"><button type="button" onClick={onCancel}>Cancel</button>{onExport && <button type="button" onClick={onExport}>Export</button>}{onDuplicate && <button type="button" onClick={onDuplicate}>Duplicate</button>}{onDelete && <button type="button" className="danger" onClick={onDelete}>Delete</button>}<button type="button" className="primary" onClick={onSave} disabled={!theme.name.trim()}>Save theme</button></div>
+    <div className="custom-theme-color-grid"><label>Session chat background<span><input aria-label="Session chat background color" type="color" value={/^#[0-9a-f]{6}$/i.test(theme.preview.chatBackground ?? '') ? theme.preview.chatBackground : theme.preview.canvas} onChange={event => updateColor('chatBackground', event.target.value)} /><input type="text" aria-label="Session chat background hex" placeholder="Use surface background" value={theme.preview.chatBackground ?? ''} onChange={event => updateColor('chatBackground', event.target.value)} /></span></label></div>
+    <button type="button" className="btn" onClick={() => { const { chatBackground: _removed, ...preview } = theme.preview; onChange({ ...theme, preview }); }} disabled={!theme.preview.chatBackground}>Use surface background</button>
+    <div className="custom-theme-chat-image">
+      <button type="button" className="btn" onClick={() => imageInput.current?.click()} disabled={imageLoading}>{imageLoading ? 'Loading image…' : 'Choose image'}</button><input ref={imageInput} aria-label="Session chat background image" type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void chooseImage(file); }} />
+      {isChatBackgroundImage(theme.preview.chatBackgroundImage) && <><img src={theme.preview.chatBackgroundImage} alt="Session chat background preview" /><button type="button" className="btn" onClick={() => { imageRequest.current++; setImageLoading(false); const { chatBackgroundImage: _removed, ...preview } = theme.preview; onChange({ ...theme, preview }); }}>Remove image</button></>}
+      <span>PNG, JPEG or WebP, up to 2 MB. Images fill the chat area and are saved with the theme.</span>
+      {imageError && <span role="alert">{imageError}</span>}
+    </div>
+    <div className="custom-theme-editor-actions"><button type="button" onClick={onCancel}>Cancel</button>{onExport && <button type="button" onClick={onExport}>Export</button>}{onDuplicate && <button type="button" onClick={onDuplicate}>Duplicate</button>}{onDelete && <button type="button" className="danger" onClick={onDelete}>Delete</button>}<button type="button" className="primary" onClick={onSave} disabled={!theme.name.trim() || imageLoading}>Save theme</button></div>
   </div>;
 }
 

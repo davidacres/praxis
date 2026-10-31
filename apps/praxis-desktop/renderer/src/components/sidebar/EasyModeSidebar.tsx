@@ -8,7 +8,6 @@ import { AssignSessionDialog } from './AssignSessionDialog';
 import { Icon } from '../../ui/Icon';
 import { ChipSelect } from '../../ui/ChipSelect';
 import { useStartTeamChat } from '../../assistant/TeamChatRow';
-import { ProjectSelector } from '../../app/ProjectSelector';
 
 export interface EasyModeSidebarProps {
   sessions: AgentSessionRecord[];
@@ -143,7 +142,6 @@ export function EasyModeSidebar({
       {/* Horizon Bar: Workspace Anchor */}
       <div className="horizon-bar">
         <div className="horizon-row-main">
-          <ProjectSelector includeConversations projects={selectableProjects} activeProjectId={generalConversations ? 'conversations' : activeProjectId} onSelectProject={onSelectProject} />
           <div className="easymode-new-split">
             <button type="button" className="easymode-new-primary" onClick={onNewSession}
               title="Create new session" aria-label="Create new session" data-testid="easymode-new-session">

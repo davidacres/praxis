@@ -207,24 +207,25 @@ test('draft and existing sessions share the composer frame and input layout', as
     const style = getComputedStyle(element);
     return [style.fontSize, style.lineHeight, style.paddingTop, style.maxHeight];
   })).toEqual(inputStyle);
-  await expect(page.getByTestId('session-mode-panel')).toBeVisible();
+  await expect(page.getByTestId('session-mode-panel')).toHaveCount(0);
+  await expect(page.getByTestId('session-add-context')).toBeVisible();
   await page.screenshot({ path: path.join(artifacts, 'composer-existing-matched.png'), fullPage: true });
 });
 
 for (const easyMode of [false, true]) {
-  test(`the ${easyMode ? 'EasyMode' : 'classic'} sidebar switches projects without a titlebar picker`, async () => {
+  test(`the ${easyMode ? 'EasyMode' : 'classic'} titlebar switches projects without a sidebar picker`, async () => {
     app = await launchTestApp({ preview: { enableEasyMode: easyMode } }, undefined, undefined, { openNewSession: false });
     const page = app.window;
     await seedProjects(page);
     await page.reload();
     const sidebar = page.locator(easyMode ? '.easymode-sidebar' : 'nav.sidebar');
-    const picker = sidebar.getByTestId('sidebar-project-select');
+    const picker = page.getByTestId('sidebar-project-select');
     await expect(picker).toContainText('First project');
-    await expect(page.locator('.titlebar').getByRole('button', { name: 'Select project', exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole('button', { name: 'Select project', exact: true })).toHaveCount(0);
     await picker.click();
     const options = page.getByRole('listbox', { name: 'Select project options' }).getByRole('option');
-    await expect(options).toHaveCount(easyMode ? 3 : 2);
-    await expect(options.filter({ hasText: 'General conversations' })).toHaveCount(easyMode ? 1 : 0);
+    await expect(options).toHaveCount(3);
+    await expect(options.filter({ hasText: 'General conversations' })).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(picker).toBeFocused();
     await chooseOption(picker, { label: 'Target project' });

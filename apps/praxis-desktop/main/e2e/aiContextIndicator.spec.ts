@@ -105,12 +105,12 @@ test('the runtime facts sit on the composer as chips, not tucked in a side panel
   const win = await runSession(20_000);
 
   const chips = win.locator('.composer-controls');
-  const modePanel = win.locator('[data-testid="session-mode-panel"]');
+  const modePanel = win.locator('.session-composer-footer');
   await expect(chips.getByTestId('session-provider')).toContainText('Vercel AI Gateway');
   await expect(chips.getByTestId('session-model')).toContainText(MODEL.id);
   await expect(modePanel.getByTestId('session-tool-mode')).toContainText('Read only');
-  await expect(modePanel.getByTestId('session-working-directory')).toBeVisible();
-  const workingDirectoryIcon = modePanel.getByTestId('session-working-directory').locator('svg');
+  await expect(win.getByTestId('session-context-references')).toBeVisible();
+  const workingDirectoryIcon = win.getByTestId('session-context-references').locator('.session-context-reference').first().locator('svg').first();
   const workingDirectoryIconBox = await workingDirectoryIcon.boundingBox();
   expect(workingDirectoryIconBox?.width).toBeGreaterThanOrEqual(12);
   expect(workingDirectoryIconBox?.height).toBeGreaterThanOrEqual(12);

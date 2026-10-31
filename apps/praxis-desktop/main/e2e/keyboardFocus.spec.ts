@@ -72,7 +72,7 @@ test('every control reached by Tab paints a visible focus ring', async () => {
 
 test('the ring is themed, and pointer clicks stay quiet', async () => {
   const page = app.window;
-  const button = page.getByRole('button', { name: 'Toggle secondary sidebar' });
+  const button = page.getByTestId('titlebar-settings');
   await expect(button).toBeVisible();
 
   // Clicking is a pointer interaction: `:focus-visible` must not fire, or every

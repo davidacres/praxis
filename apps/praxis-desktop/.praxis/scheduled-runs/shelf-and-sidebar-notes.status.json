@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "requestHash": "0724968415c1d9a427ef968c02206cc0a8e2f174429719be071b94b60ea3580b",
+  "checkedAt": "2026-10-31T02:55:50.932Z",
+  "state": "imported",
+  "runId": "run-request-008823cdb264923cab10",
+  "runStatus": "draft",
+  "projectId": "project-1788215224012-rap082",
+  "workflowId": "governed-delivery-project-1788215224012-rap082",
+  "scheduledStartAt": "2026-10-31T03:00:00.000Z",
+  "entries": [
+    {
+      "sequence": 1,
+      "issueKey": "PRX-T113-496",
+      "planningId": "TASK-496",
+      "title": "TASK-496: Define note and group contracts"
+    },
+    {
+      "sequence": 2,
+      "issueKey": "PRX-T113-497",
+      "planningId": "TASK-497",
+      "title": "TASK-497: Implement notes persistence and typed IPC"
+    },
+    {
+      "sequence": 3,
+      "issueKey": "PRX-T113-498",
+      "planningId": "TASK-498",
+      "title": "TASK-498: Add slim new-session and notes shelf controls"
+    },
+    {
+      "sequence": 4,
+      "issueKey": "PRX-T113-499",
+      "planningId": "TASK-499",
+      "title": "TASK-499: Add sidebar notes tree and shared editor"
+    },
+    {
+      "sequence": 5,
+      "issueKey": "PRX-T113-500",
+      "planningId": "TASK-500",
+      "title": "TASK-500: Add note and group session handoff"
+    },
+    {
+      "sequence": 6,
+      "issueKey": "PRX-T113-501",
+      "planningId": "TASK-501",
+      "title": "TASK-501: Handle send failures and note snapshot history"
+    },
+    {
+      "sequence": 7,
+      "issueKey": "PRX-T113-502",
+      "planningId": "TASK-502",
+      "title": "TASK-502: Add persistence and end-to-end regression coverage"
+    },
+    {
+      "sequence": 8,
+      "issueKey": "PRX-T113-503",
+      "planningId": "TASK-503",
+      "title": "TASK-503: Run full UI validation and preserve visual evidence"
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

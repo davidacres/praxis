@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "praxis.scheduledRunRequest",
+  "name": "Shelf and sidebar notes \u2014 ordered implementation",
+  "workflowId": "governed-delivery-project-1788215224012-rap082",
+  "date": "2026-10-31",
+  "time": "03:00",
+  "timezone": "Europe/London",
+  "order": "as-listed",
+  "tickets": [
+    "TASK-496",
+    "TASK-497",
+    "TASK-498",
+    "TASK-499",
+    "TASK-500",
+    "TASK-501",
+    "TASK-502",
+    "TASK-503"
+  ],
+  "satisfiedDependencies": []
+}

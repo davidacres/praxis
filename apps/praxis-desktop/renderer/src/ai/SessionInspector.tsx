@@ -19,7 +19,7 @@ import { agentStateLaneClass } from './aiSessionState';
  *
  * Answers "what is this session and what can I do to it?": live state and
  * every action that changes it. The facts fixed when the session started
- * (provider, model, tool access, folder, worktree), the mode switch, and the
+ * (provider, model, tool access, folder, worktree), and the
  * context indicator all live on the composer in the centre pane instead —
  * visible right where you are about to act, not in a panel you have to go
  * looking at.
@@ -270,7 +270,18 @@ export function SessionInspector({
         {/* What the session did to the working tree, and what to do about it.
             Renders its own empty state when the folder is not a repository or
             is clean. */}
-        {tab === 'changes' && <SessionChanges session={session} />}
+        {tab === 'changes' && <>
+          {!session.workflowNodeId && <div className="session-review-action">
+            <button type="button" className="btn btn-compact" data-testid="session-review-changes"
+              disabled={busy || !finished || !session.workingDirectory && !session.worktreePath}
+              onClick={() => void run(async () => {
+                await window.praxis.ai.switchSessionMode(session.issueKey, 'review');
+                await window.praxis.ai.continueSession(session.issueKey,
+                  'Review the current changes in this session’s workspace read-only. Report findings, risks, and actionable recommendations. Do not make changes.');
+              })}><Icon name="check-square" size={14} /> Review changes</button>
+          </div>}
+          <SessionChanges session={session} />
+        </>}
 
         {tab === 'scorecard' && (
           <SessionFeedbackPanel

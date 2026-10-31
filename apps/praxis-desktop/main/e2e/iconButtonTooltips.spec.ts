@@ -119,10 +119,12 @@ test('every visible icon-only control on the main screens has a tooltip', async 
   await page.locator('[data-testid="board-new-issue-btn"]').click();
   await audit('new issue');
 
+  await audit('views popover');
   await page.getByLabel('Toggle panel').click();
   await page.getByTestId('integrated-terminal').waitFor();
   await audit('terminal panel');
   await page.getByLabel('Toggle panel').click();
+  await page.keyboard.press('Escape');
 
   await page.getByTestId('titlebar-settings').click();
   const nav = page.locator('[data-testid^="settings-nav-"]');
@@ -160,7 +162,7 @@ test('every visible icon-only control on the main screens has a tooltip', async 
 test('an icon-only button shows its accessible name as its tooltip', async () => {
   app = await launchTestApp();
   const page = app.window;
-  // The panel toggle has an aria-label and no title of its own.
+  // The panel toggle inside Views has an aria-label and no title of its own.
   const toggle = page.getByLabel('Toggle panel');
   expect(await toggle.getAttribute('title')).toBeNull();
   await toggle.hover();

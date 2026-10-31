@@ -1,3 +1,4 @@
+import { sessionLastActivityAt } from '../app/sessionRecency';
 import { useState, type ReactNode } from 'react';
 import type { AgentSessionRecord, ProjectRecord } from '@praxis/core';
 import { PROJECT_BRIEF_FIELDS } from './projectBriefFields';
@@ -35,7 +36,7 @@ export function ProjectWorkspace({ project, sessions, onStartSession, onStartTou
   const completedBrief = briefFields.filter(field => Boolean(project.brief[field.key]?.trim())).length;
   const totalSteps = projectSessions.reduce((sum, session) => sum + session.stepCount, 0);
   const latestItem = [...project.workItems].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-  const latestSession = [...projectSessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  const latestSession = [...projectSessions].sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)))[0];
   const lastActivity = [project.updatedAt, latestItem?.updatedAt, latestSession?.startedAt].filter(Boolean).sort().at(-1);
   const statusCounts = project.workflowStages.map((stage, index) => ({
     name: stage.name,

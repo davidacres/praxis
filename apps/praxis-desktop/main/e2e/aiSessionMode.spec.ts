@@ -1,9 +1,3 @@
-import { openSession } from './sessionNavigation';
-// Re-running a finished session in a different mode (Chat/Analysis/Review),
-// driven from the composer chip row it moved into. This never had e2e
-// coverage before — the control existed only in the sidebar inspector, and
-// nothing exercised it there either.
-
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -30,7 +24,7 @@ test.afterEach(async () => {
   }
 });
 
-test('switching a finished session to Review sends the mode transition and resumes it', async () => {
+test('reviewing changes lives beside the diff and the composer has no mode tabs', async () => {
   repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-session-mode-'));
   mock = await startMockGatewayServer({ mode: 'complete' });
   app = await launchTestApp(undefined, undefined, {
@@ -55,29 +49,33 @@ test('switching a finished session to Review sends the mode transition and resum
     ), { timeout: 20000 })
     .toBe('completed');
 
-  await openSession(win);
-
-  // Lives in the raised mode panel above the composer input, not in the sidebar.
-  const toggle = win.locator('[data-testid="session-mode-panel"] .session-mode-toggle');
-  await expect(toggle).toBeVisible();
-  await win.locator('[data-testid="session-follow-up-input"]').focus();
-  await expect.poll(() => win.evaluate(() => {
-    const panel = document.querySelector<HTMLElement>('[data-testid="session-mode-panel"]');
-    const composer = document.querySelector<HTMLElement>('.session-follow-up-composer');
-    if (!panel || !composer) return false;
-    const panelStyle = getComputedStyle(panel);
-    const composerStyle = getComputedStyle(composer);
-    return panelStyle.borderTopWidth === '0px' && panelStyle.borderBottomWidth === '1px' && composerStyle.boxShadow !== 'none';
-  })).toBe(true);
-  await win.screenshot({ path: 'output/playwright/session-mode-panel.png' });
-  await expect(win.locator('[data-testid="session-switch-mode-chat"]')).toHaveClass(/active/);
-
-  await win.locator('[data-testid="session-switch-mode-review"]').click();
-
-  // Picking Review sends the mode-transition prompt as a real turn: the
-  // session leaves its terminal state, and the button reflects the new mode
-  // once the switch has taken.
-  await expect(win.locator('[data-testid="session-switch-mode-review"]')).toHaveClass(/active/);
+  await win.keyboard.press('ControlOrMeta+k');
+  const palette = win.getByRole('dialog', { name: 'Go to' });
+  await palette.getByRole('textbox').fill(session.issueKey);
+  await palette.getByRole('option').filter({ hasText: 'Draft the release notes.' }).click();
+  const composer = win.locator('.session-follow-up-composer');
+  await expect(composer.getByRole('group', { name: 'Switch session mode' })).toHaveCount(0);
+  await expect(composer.locator('[data-testid^="session-switch-mode-"]')).toHaveCount(0);
+  const footer = win.locator('.session-composer-footer');
+  const tools = footer.getByTestId('session-tool-mode');
+  await expect(tools).toBeVisible();
+  await expect(composer.getByTestId('session-tool-mode')).toHaveCount(0);
+  expect(await tools.evaluate(element => element.previousElementSibling?.getAttribute('data-testid'))).toBe('session-permission-chip');
+  await tools.click();
+  await expect(tools).toHaveAttribute('aria-expanded', 'true');
+  await tools.click();
+  await footer.getByTestId('session-permission-chip').click();
+  await expect(win.getByRole('listbox', { name: 'Permission mode' })).toBeVisible();
+  await win.getByTestId('session-permission-option-manual').click();
+  const review = win.getByTestId('session-review-changes');
+  await expect(win.getByTestId('session-panel-changes').getByTestId('session-review-changes')).toBeVisible();
+  await expect(review).toBeEnabled();
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await win.locator('.agent-details-composer-dock').screenshot({ path: path.join(artifacts, 'session-tools-next-to-permissions.png') });
+  await win.locator('.session-review-action').screenshot({ path: path.join(artifacts, 'session-review-changes-action.png') });
+  await review.click();
+  await expect.poll(() => win.evaluate(k => window.praxis.ai.getSession(k).then(record => record?.mode), session.issueKey)).toBe('review');
   await expect.poll(() => win.evaluate(
     k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
   ), { timeout: 20000 }).toBe('completed');
@@ -89,8 +87,30 @@ test('switching a finished session to Review sends the mode transition and resum
     if (!last) return false;
     const body = JSON.parse(last.body) as { messages: Array<{ role: string; content: string }> };
     const lastUserMessage = [...body.messages].reverse().find(message => message.role === 'user');
-    return lastUserMessage?.content.includes('Switch this conversation into Review mode');
+    return lastUserMessage?.content.includes('Review the current changes');
   }, { timeout: 20000 }).toBe(true);
 
   await win.screenshot({ path: 'output/playwright/session-mode-chip.png', fullPage: true });
+});
+
+test('ticket analysis remains an explicit action when the analysis gate is off', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp({ ai: { analysisPrompt: 'Assess this ticket read-only.', analysisGateEnabled: false } }, undefined,
+    { AI_GATEWAY_API_KEY: 'e2e-gateway-key', AI_GATEWAY_URL: mock.baseUrl }, { openNewSession: false });
+  const page = app.window;
+  const project = await page.evaluate(async () => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return window.praxis.projects.create({ name: 'Contextual analysis', key: 'CONTEXT', type: 'product', purpose: '', brief: {}, startingPoint: 'app-storage',
+      starterTickets: [{ summary: 'Clarify recovery behaviour', description: '', issueType: 'Task', status: 'Todo' }],
+      workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], defaultAiToolMode: 'read-only' }, workspace.id);
+  });
+  await page.reload();
+  await page.keyboard.press('ControlOrMeta+k');
+  const palette = page.getByRole('dialog', { name: 'Go to' });
+  await palette.getByRole('textbox').fill(project.name);
+  await palette.getByRole('option').filter({ hasText: project.name }).filter({ hasText: 'Board' }).click();
+  await page.getByTestId('issue-card').filter({ hasText: 'Clarify recovery behaviour' }).click();
+  await expect(page.getByTestId('issue-analyze-ticket')).toBeVisible();
+  await page.getByTestId('issue-analyze-ticket').click();
+  await expect.poll(() => page.evaluate(async id => (await window.praxis.ai.listSessions()).find(session => session.projectId === id)?.taskDefinition.kind, project.id)).toBe('analysis');
 });

@@ -1150,37 +1150,40 @@ export function IssueDetail({
   };
 
   const primaryAiMode = agentSession ? 'session' : analysisRequired ? 'analysis' : 'start';
+  const analyzeTicket = () => {
+    if (!selectedProviderStatus?.configured) {
+      setError('Configure an AI provider before analyzing this ticket.');
+      return;
+    }
+    if (!analysisPromptConfigured) {
+      setError('Set an analysis system prompt under Settings → AI Provider before analyzing this ticket.');
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    void window.praxis.ai
+      .delegate({
+        issueKey,
+        connectionId,
+        ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
+        provider: selectedProviderStatus.provider,
+        model: selectedRuntimeModel || undefined,
+        purpose: 'analysis'
+      })
+      .then(record => {
+        setAgentSession(record);
+        onOpenSession?.(record.issueKey);
+      })
+      .catch(err => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false));
+  };
   const runPrimaryAiAction = () => {
     if (primaryAiMode === 'session') {
       onOpenSession?.(issueKey);
       return;
     }
     if (primaryAiMode === 'analysis') {
-      if (!selectedProviderStatus?.configured) {
-        setError('Configure an AI provider before analyzing this ticket.');
-        return;
-      }
-      if (!analysisPromptConfigured) {
-        setError('Set an analysis system prompt under Settings → AI Provider before analyzing this ticket.');
-        return;
-      }
-      setBusy(true);
-      setError(undefined);
-      void window.praxis.ai
-        .delegate({
-          issueKey,
-          connectionId,
-          ...(effectiveProjectId ? { projectId: effectiveProjectId } : {}),
-          provider: selectedProviderStatus.provider,
-          model: selectedRuntimeModel || undefined,
-          purpose: 'analysis'
-        })
-        .then(record => {
-          setAgentSession(record);
-          onOpenSession?.(record.issueKey);
-        })
-        .catch(err => setError(err instanceof Error ? err.message : String(err)))
-        .finally(() => setBusy(false));
+      analyzeTicket();
       return;
     }
     openSessionSetup();
@@ -1766,6 +1769,8 @@ export function IssueDetail({
                 </div>
 
                 <div className="chip-row" style={{ margin: '6px 0' }}>
+                  {onOpenSession && primaryAiMode !== 'analysis' && <button type="button" className="chip"
+                    data-testid="issue-analyze-ticket" disabled={busy || Boolean(agentSession && !isTerminalAgentState(agentSession.state))} onClick={analyzeTicket}>Analyze ticket</button>}
                   {onOpenAiView && (
                     <>
                       <button

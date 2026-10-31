@@ -85,8 +85,8 @@ const MIRRORED_STYLES = [
 ] as const;
 
 /** One-line input that grows and shrinks with its content on every surface. */
-export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { collapsed?: boolean }>(
-  function SessionComposerInput({ collapsed = false, className = '', value, onClick, onScroll, onKeyDown, onSelect, ...props }, forwardedRef) {
+export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { collapsed?: boolean; leading?: ReactNode }>(
+  function SessionComposerInput({ collapsed = false, leading, className = '', value, onClick, onScroll, onKeyDown, onSelect, ...props }, forwardedRef) {
     const input = useRef<HTMLTextAreaElement | null>(null);
     const backdrop = useRef<HTMLDivElement | null>(null);
     const { highlights, ghost, requestPhrase, keyHandler, inputRef, inlineControls, inlineActions } = usePromptAnalysis();
@@ -171,7 +171,8 @@ export const SessionComposerInput = forwardRef<HTMLTextAreaElement, TextareaHTML
         pieces.push('\u200b');
       }
     }
-    return <div className={`composer-input-shell${inlineControls.visible && !collapsed ? ' has-inline-actions' : ''}${marks.length ? ' has-highlights' : ''}${shownGhost ? ' has-ghost' : ''}`}>
+    return <div className={`composer-input-shell${leading ? ' has-leading' : ''}${inlineControls.visible && !collapsed ? ' has-inline-actions' : ''}${marks.length ? ' has-highlights' : ''}${shownGhost ? ' has-ghost' : ''}`}>
+      {leading && <div className="composer-input-leading">{leading}</div>}
       {pieces && <div ref={backdrop} className="composer-input-highlights" aria-hidden="true">{pieces}</div>}
       <textarea {...props} value={value} rows={1}
         className={`composer-input session-follow-up-input${collapsed ? ' is-collapsed' : ''} ${className}`.trim()}

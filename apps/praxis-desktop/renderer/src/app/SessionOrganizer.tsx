@@ -21,7 +21,7 @@ function readLayout(key: string): Entry[] {
 }
 
 /** Sidebar-only organization; session ownership and workflow ancestry stay with their existing lists. */
-export function SessionOrganizer({ scope, items, preserveMissing = false, dragPreview = false }: { scope: string; items: Array<{ id: string; node: ReactNode }>; preserveMissing?: boolean; dragPreview?: boolean }) {
+export function SessionOrganizer({ scope, items, preserveMissing = false, dragPreview = false }: { scope: string; items: Array<{ id: string; at?: string; node: ReactNode }>; preserveMissing?: boolean; dragPreview?: boolean }) {
   const storageKey = `praxis-session-layout:${scope}`;
   const [saved, setSaved] = useState(() => readLayout(storageKey));
   const [editing, setEditing] = useState<string>();
@@ -53,6 +53,11 @@ export function SessionOrganizer({ scope, items, preserveMissing = false, dragPr
     return [entry];
   });
   for (const item of items) if (!seen.has(item.id)) entries.push({ id: item.id });
+  // Saved layouts retain groups; modification time determines their display order.
+  const activity = new Map(items.map(item => [item.id, Date.parse(item.at ?? '') || 0]));
+  const lastActivity = (entry: Entry) => Math.max(...(entry.members ?? [entry.id]).map(id => activity.get(id) ?? 0));
+  for (const entry of entries) entry.members?.sort((a, b) => (activity.get(b) ?? 0) - (activity.get(a) ?? 0));
+  entries.sort((a, b) => lastActivity(b) - lastActivity(a));
   const draggedSize = entries.find(entry => entry.id === draggedId)?.members?.length ?? 1;
 
   const save = (next: Entry[], ungroupedId?: string) => {

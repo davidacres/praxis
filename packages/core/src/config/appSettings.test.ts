@@ -3,6 +3,30 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { DEFAULT_APP_SETTINGS, mergeAppSettings, sanitizeAppSettings } from './appSettings';
 
+test('custom theme chat backgrounds accept only hex colors and remain optional', () => {
+  const theme = { id: 'custom-chat', name: 'Chat', mode: 'dark', description: '' };
+  for (const value of ['#123456', '#ABCDEF', 'red', 'url(https://example.com)', '']) {
+    const settings = sanitizeAppSettings({ appearance: { customThemes: [{ ...theme, preview: { chatBackground: value } }] } });
+    assert.equal(settings.appearance.customThemes[0]?.preview.chatBackground,
+      /^#[0-9a-f]{6}$/i.test(value) ? value : undefined);
+  }
+  const settings = sanitizeAppSettings({ appearance: { customThemes: [{ ...theme, preview: { canvas: '#123456' } }] } });
+  assert.equal(settings.appearance.customThemes[0]?.preview.chatBackground, undefined);
+});
+
+test('custom theme chat images accept bounded embedded raster images only', () => {
+  const theme = { id: 'custom-image', name: 'Image', mode: 'dark', description: '' };
+  for (const [value, accepted] of [
+    ['data:image/png;base64,YQ==', true], ['data:image/jpeg;base64,YQ==', true], ['data:image/webp;base64,YQ==', true],
+    ['https://example.com/image.png', false], ['data:image/svg+xml;base64,YQ==', false], ['data:image/png;base64,YQ==")', false],
+    [`data:image/png;base64,${'a'.repeat(2_800_000)}`, false]
+  ] as const) {
+    const settings = sanitizeAppSettings({ appearance: { customThemes: [{ ...theme, preview: { chatBackgroundImage: value } }] } });
+    assert.equal(settings.appearance.customThemes[0]?.preview.chatBackgroundImage,
+      accepted ? value : undefined);
+  }
+});
+
 test('startup defaults to reopening the last workspace and preserves an explicit opt-out', () => {
   assert.equal(sanitizeAppSettings({}).startup.reopenLastWorkspace, true);
   assert.equal(
@@ -671,4 +695,18 @@ test('prompt checks use their own provider and model without changing recommenda
   settings.ai.promptAnalysisProvider = undefined;
   settings.ai.promptAnalysisModel = undefined;
   assert.equal((await resolvePromptCheckProvider(secrets, settings.ai))?.provider, 'openai');
+});
+
+
+test('activity words are bounded, normalized, persisted and default safely', () => {
+  const words = (value: unknown) => sanitizeAppSettings({ ai: { activityWords: value } }).ai.activityWords;
+  for (const value of [undefined, null, 'Thinking', [], [false, '', '   ']]) {
+    assert.deepEqual(words(value), ['Thinking', 'Working', 'Pondering']);
+  }
+  assert.deepEqual(words([' Musing ', 'Musing', 'Hello\nthere', 42]), ['Musing', 'Hello there']);
+  assert.equal(words(['a'.repeat(100)])![0].length, 32);
+  assert.equal(words(Array.from({ length: 30 }, (_, i) => `Word ${i}`))!.length, 20);
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { ai: { activityWords: ['Musing'] } });
+  assert.deepEqual(merged.ai.activityWords, ['Musing']);
+  assert.equal(merged.ai.agentName, DEFAULT_APP_SETTINGS.ai.agentName);
 });

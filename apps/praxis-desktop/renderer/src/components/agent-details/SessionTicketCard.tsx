@@ -26,6 +26,9 @@ export function SessionTicketCard({ session }: SessionTicketCardProps) {
     (purpose?.issueKey && !/^SESSION-/i.test(purpose.issueKey) ? purpose.issueKey : undefined) ||
     (session.linkedIssueKey && !/^SESSION-/i.test(session.linkedIssueKey) ? session.linkedIssueKey : undefined);
 
+  // Free-form sessions already show their prompt in the conversation.
+  if (!ticketKey) return null;
+
   const goal = purpose?.goal?.trim() || taskDef?.goal?.trim() || '';
   const scope = purpose?.scope?.trim() || taskDef?.scope?.trim();
   const definitionOfDone = purpose?.definitionOfDone?.trim() || taskDef?.definitionOfDone?.trim();

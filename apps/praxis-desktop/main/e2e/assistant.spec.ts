@@ -508,10 +508,10 @@ test('page context follows navigation, can be detached, and chats persist in the
   const sidebar = win.getByTestId('easymode-sidebar');
   await expect(sidebar.getByTestId('team-chat-row')).toHaveCount(1);
   await expect(sidebar.getByTestId('easymode-sessions-empty-card')).toHaveCount(0);
-  const projectId = await sidebar.getByTestId('sidebar-project-select').getAttribute('data-value');
-  await chooseOption(sidebar.getByTestId('sidebar-project-select'), 'conversations');
+  const projectId = await win.getByTestId('sidebar-project-select').getAttribute('data-value');
+  await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
   await expect(sidebar.getByTestId('team-chat-row')).toHaveCount(0);
-  await chooseOption(sidebar.getByTestId('sidebar-project-select'), projectId!);
+  await chooseOption(win.getByTestId('sidebar-project-select'), projectId!);
   await expect(sidebar.getByTestId('team-chat-row')).toContainText('general question');
   await win.getByTestId('assistant-new-chat').click();
   await row.locator('.team-chat-main').click();

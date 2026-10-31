@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord, IssueSummary, ProjectActivityEntry, ProjectActivitySnapshot, ProjectRecord, WorkflowTransition } from '@praxis/core';
+import { Icon } from '../ui/Icon';
+import { sessionTitle } from '../ai/sessionNav';
+import { sessionStatusLabel } from '../ai/aiSessionState';
 import { ChipSelect } from '../ui/ChipSelect';
 import { sessionLastActivityAt } from '../app/sessionRecency';
 
@@ -151,8 +154,8 @@ export function ProjectReviewPanel({ project, sessions, onOpenIssue, onOpenSessi
     const issue = issueIndex.get(`${entry.connectionId}:${entry.targetKey}`);
     return <button className="btn" disabled={!issue} onClick={() => { if (issue) onOpenIssue(issue, issue.connectionId); }}>Open item</button>;
   };
-  return <section className="project-review-panel" aria-label="Project review" data-testid="project-review-panel" ref={sectionRef}>
-    <header className="project-review-heading"><h2>Project review</h2><button className="btn btn-quiet" onClick={() => setRevision(value => value + 1)}>Refresh review</button></header>
+  return <section className={`project-review-panel${view === 'changes' ? ' outcome-ledger' : ''}`} aria-label="Project review" data-testid="project-review-panel" ref={sectionRef}>
+    <header className="project-review-heading"><h2>{view === 'changes' ? 'What changed' : 'Project review'}</h2><button className="btn btn-quiet" onClick={() => setRevision(value => value + 1)}>Refresh review</button></header>
     <div className="project-review-tabs" aria-label="Review views">
       <button className="btn" aria-pressed={view === 'review'} onClick={() => setView('review')}>Daily Review</button>
       <button className="btn" aria-pressed={view === 'changes'} onClick={() => setView('changes')}>What Changed</button>
@@ -177,15 +180,26 @@ export function ProjectReviewPanel({ project, sessions, onOpenIssue, onOpenSessi
         Showing the {SESSION_PREVIEW_LIMIT} most recently active of {pendingSessions.length} unfinished sessions.{' '}
         <button className="btn btn-quiet" onClick={onOpenSessions}>View all sessions</button>
       </p>}
-    </> : <>
-      <p>Item and session changes recorded by Praxis from {history ? new Date(history.startedAt).toLocaleString() : 'now'}, plan files edited outside Praxis, and the last 30 days of commits in this project's repository.</p>
+    </> : <div className="outcome-ledger__layout"><div className="outcome-ledger__feed">
+      <p className="outcome-ledger__intro">Item and session changes recorded by Praxis from {history ? new Date(history.startedAt).toLocaleString() : 'now'}, plan files edited outside Praxis, and the last 30 days of commits in this project's repository.</p>
       <div className="project-review-filters">
         <ChipSelect ariaLabel="Change source" data-testid="project-review-source" value={source} onChange={value => setSource(value as typeof source)} options={[{ value: 'all', label: 'All sources' }, { value: 'issue', label: 'Items' }, { value: 'plan', label: 'Plan files' }, { value: 'session', label: 'Agent sessions' }, { value: 'commit', label: 'Git commits' }]} />
         <ChipSelect ariaLabel="Time window" data-testid="project-review-window" value={windowId} onChange={value => setWindowId(value as typeof windowId)} options={[{ value: '24h', label: 'Last 24 hours' }, { value: '7d', label: 'Last 7 days' }, { value: '30d', label: 'Last 30 days' }]} />
       </div>
       {!days.length ? <p className="project-review-empty">No recorded changes in this window. Changes to items, plan files, sessions and commits will appear here.{(history?.entries.length ?? 0) > 0 && windowId !== '30d' && <> <button className="btn btn-quiet" onClick={() => setWindowId('30d')}>Show last 30 days</button></>}</p>
-        : days.map(group => <div key={group.label} className="project-review-day"><h3>{group.label}</h3><ul className="project-review-list">{group.entries.map(entry => <li key={entry.id} data-testid="project-review-change" data-kind={entry.kind} data-actor={entry.actor ?? 'you'}><span><strong>{entry.action} · {entry.summary}</strong><small><span className={`project-review-actor project-review-actor--${entry.actor ?? 'you'}`}>{actorLabel(entry)}</span> <span className="project-review-source">{SOURCE_LABELS[entry.kind]}</span> {entry.kind === 'commit' ? entry.targetKey.slice(0, 7) : entry.targetKey} · <time dateTime={entry.timestamp} title={new Date(entry.timestamp).toLocaleString()}>{relativeTime(Date.parse(entry.timestamp))}</time></small></span>{openButton(entry)}</li>)}</ul></div>)}
-    </>}
+        : days.map(group => <div key={group.label} className="project-review-day"><h3>{group.label}</h3><ul className="project-review-list">{group.entries.map(entry => <li key={entry.id} data-testid="project-review-change" data-kind={entry.kind} data-actor={entry.actor ?? 'you'}><time className="outcome-ledger__time" dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</time><Icon name={entry.kind === 'commit' ? 'git-branch' : entry.kind === 'session' ? 'chats' : entry.kind === 'plan' ? 'file' : 'check-square'} size={17} /><span className="outcome-ledger__entry"><strong>{entry.action} · {entry.summary}</strong><small><span className={`project-review-actor project-review-actor--${entry.actor ?? 'you'}`}>{actorLabel(entry)}</span> <span className="project-review-source">{SOURCE_LABELS[entry.kind]}</span> {entry.kind === 'commit' ? entry.targetKey.slice(0, 7) : entry.targetKey} · <time dateTime={entry.timestamp} title={new Date(entry.timestamp).toLocaleString()}>{relativeTime(Date.parse(entry.timestamp))}</time></small></span>{openButton(entry)}</li>)}</ul></div>)}
+    </div><aside className="outcome-ledger__context" aria-label="Activity context">
+      <section><h3>Still unresolved <span>{items.length + pendingSessions.length}</span></h3>
+        {items.length === 0 && pendingSessions.length === 0 && <p>No blocked, inactive or unfinished work recorded.</p>}
+        {items.slice(0, 3).map(item => <article key={itemKey(item.issue)}><small>{item.issue.key} · {item.blocked ? 'Blocked' : 'Inactive'}</small><strong>{item.issue.summary}</strong><button className="btn" onClick={() => onOpenIssue(item.issue, item.issue.connectionId)}>Review item</button></article>)}
+        {recentSessions.slice(0, 3).map(session => <article key={session.issueKey}><small>{sessionStatusLabel(session)}</small><strong>{sessionTitle(session)}</strong><button className="btn" onClick={() => onOpenSession(session.issueKey)}>Open session</button></article>)}
+        {(items.length > 3 || pendingSessions.length > 3) && <button className="btn btn-quiet" onClick={() => setView('review')}>View all unresolved work</button>}
+      </section>
+      <section><h3>Resume context</h3><dl><dt>Project</dt><dd>{project.name}</dd>{project.purpose && <><dt>Purpose</dt><dd>{project.purpose}</dd></>}</dl>
+        {(() => { const latest = [...sessions].filter(session => session.projectId === project.id && !session.parentSessionKey).sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)))[0];
+          return latest ? <article><small>Last active session · {sessionStatusLabel(latest)}</small><strong>{sessionTitle(latest)}</strong><p>{latest.taskDefinition?.goal}</p><button className="btn btn-primary" onClick={() => onOpenSession(latest.issueKey)}>Resume session</button></article> : <p>No sessions recorded for this project yet.</p>; })()}
+      </section>
+    </aside></div>}
   </section>;
 }
 

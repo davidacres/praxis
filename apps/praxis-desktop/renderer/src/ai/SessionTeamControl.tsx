@@ -15,13 +15,7 @@ interface SessionTeamControlProps {
 
 const MENU_GAP = 4;
 
-/**
- * A split chip beside the send button: the left half lists the Virtual Team so
- * the user can add several members to this session, the right half starts an ask
- * as ordinary editable text in the composer. Adding a member starts nothing, and
- * neither does drafting an ask — the session behaves as normal until the user
- * sends an @mention.
- */
+/** The composer roster picker; team members are addressed with editable @mentions. */
 export function SessionTeamControl({ session, disabled = false, onDraftAsk }: SessionTeamControlProps) {
   const { confirm } = useDialogs();
   const { members, busy } = useSessionTeam(session.issueKey);
@@ -91,23 +85,15 @@ export function SessionTeamControl({ session, disabled = false, onDraftAsk }: Se
     });
   };
 
-  const draftAsk = () => {
-    const first = members[0];
-    if (!first) return;
-    onDraftAsk?.(`@${first} `);
-    setOpen(false);
-  };
-
   const count = members.length;
   const title = count === 0 ? 'Add team members to this session' : `Team: ${members.map(id => PERSONAS.find(p => p.id === id)?.name ?? id).join(', ')}`;
 
   return (
     <>
-      <div className="composer-chip session-team-chip session-team-split">
         <button
           ref={chipRef}
           type="button"
-          className={`composer-chip${open ? ' active' : ''}${count > 0 ? ' has-members' : ''}`}
+          className={`composer-chip session-team-chip${open ? ' active' : ''}${count > 0 ? ' has-members' : ''}`}
           aria-label={count === 0 ? 'Session team' : `Session team, ${count} selected`}
           aria-haspopup="listbox"
           aria-expanded={open}
@@ -119,19 +105,6 @@ export function SessionTeamControl({ session, disabled = false, onDraftAsk }: Se
           <Icon name="users" size={14} />
           {count > 0 && <span className="composer-chip-meta" data-testid="session-team-count">{count}</span>}
         </button>
-        <button
-          type="button"
-          className={`composer-chip session-team-ask${open ? ' active' : ''}`}
-          aria-label={count === 0 ? 'Ask the team' : `Ask the team, starts with ${PERSONAS.find(p => p.id === members[0])?.name ?? 'a member'}`}
-          title={count === 0 ? 'Add a team member first' : 'Draft an ask in the composer'}
-          data-testid="session-team-ask"
-          disabled={disabled || busy || count === 0}
-          onClick={draftAsk}
-        >
-          <Icon name="feather" size={14} />
-          <span>Ask…</span>
-        </button>
-      </div>
       {open && createPortal(
         <div
           ref={menuRef}

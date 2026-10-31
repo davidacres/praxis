@@ -1,9 +1,13 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockAddonRegistry } from './mockAddonRegistry';
 import { chooseOption, chipOptionValues } from './chipSelect';
+import { startMockGatewayServer } from './mockGatewayServer';
+import { openSession } from './sessionNavigation';
 
 /**
  * The suite runs fully isolated (see launchTestApp.ts): each test gets its own
@@ -247,12 +251,75 @@ test('creates a custom theme with editable colors and persists it', async () => 
   const editor = window.getByRole('region', { name: 'Custom theme editor' });
   await editor.getByLabel('Name').fill('Ocean Custom');
   await editor.getByLabel('Accent').last().fill('#149eca');
+  await editor.getByLabel('Session chat background hex').fill('#123456');
+  await editor.getByLabel('Session chat background image').setInputFiles({ name: 'invalid.png', mimeType: 'image/png', buffer: Buffer.from('not an image') });
+  await expect(editor.getByRole('alert')).toHaveText('Choose a valid image file.');
+  const imageData = await window.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = 800; canvas.height = 500;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createLinearGradient(0, 0, 800, 500);
+    gradient.addColorStop(0, '#123456'); gradient.addColorStop(1, '#396359');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 800, 500);
+    ctx.fillStyle = '#ffffff18';
+    for (let x = 0; x < 800; x += 100) { ctx.beginPath(); ctx.arc(x, 250, 140, 0, Math.PI * 2); ctx.fill(); }
+    return canvas.toDataURL('image/png');
+  });
+  await editor.getByLabel('Session chat background image').setInputFiles({ name: 'chat.png', mimeType: 'image/png', buffer: Buffer.from(imageData.split(',')[1]!, 'base64') });
+  await expect(editor.getByAltText('Session chat background preview')).toBeVisible();
+  await expect(editor.getByRole('alert')).toHaveCount(0);
+
+  const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
+  fs.mkdirSync(artifacts, { recursive: true });
+  await editor.screenshot({ path: path.join(artifacts, 'session-chat-background-editor.png') });
   await editor.getByRole('button', { name: 'Save theme' }).click();
   const custom = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance.customThemes.at(-1)));
   expect(custom?.name).toBe('Ocean Custom');
+  expect(custom?.preview.chatBackground).toBe('#123456');
+  expect(custom?.preview.chatBackgroundImage).toBe(imageData);
   await expect(window.locator('html')).toHaveAttribute('data-theme', custom!.id);
   await window.reload();
   await expect(window.locator('html')).toHaveAttribute('data-theme', custom!.id);
+  expect(await window.locator('html').evaluate(el => getComputedStyle(el).getPropertyValue('--session-chat-bg').trim())).toBe('#123456');
+  const mock = await startMockGatewayServer({ mode: 'complete' });
+  await closeTestApp(app);
+  app = await launchTestApp({ appearance: { ...DEFAULT_APP_SETTINGS.appearance, customThemes: [custom!], installedThemeIds: [custom!.id], themeId: custom!.id } }, undefined, {
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key', AI_GATEWAY_URL: mock.baseUrl
+  });
+  window = app.window;
+  try {
+    const session = await window.evaluate(() => window.praxis.ai.delegate({
+      provider: 'vercel-gateway', task: { goal: 'Show the custom chat background.' }, toolMode: 'read-only'
+    }));
+    await openSession(window, session.issueKey);
+    const chatPane = window.locator('.agent-details-page');
+    await expect(chatPane).toHaveCSS('background-color', 'rgb(18, 52, 86)');
+    await expect(chatPane).toHaveCSS('background-image', `url("${imageData}")`);
+    await expect(window.locator('.session-chat-scroll')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(window.locator('.session-chat-scroll')).toHaveCSS('background-image', 'none');
+    const paneBounds = await chatPane.boundingBox();
+    const threadBounds = await window.locator('.session-chat-scroll').boundingBox();
+    expect(paneBounds!.height).toBeGreaterThan(threadBounds!.height + 200);
+    // Prove the guard rejects moving the image back onto the message block.
+    const disabledImage = await window.addStyleTag({ content: '.agent-details-page { background-image: none !important; }' });
+    await expect(expect(chatPane).toHaveCSS('background-image', `url("${imageData}")`, { timeout: 200 })).rejects.toThrow();
+    await disabledImage.evaluate(element => element.remove());
+    expect(await chatPane.evaluate(async element => { const image = new Image(); image.src = getComputedStyle(element).backgroundImage.slice(5, -2); await image.decode(); return image.naturalWidth; })).toBe(800);
+    await window.locator('.pane-main').screenshot({ path: path.join(artifacts, 'session-chat-background.png') });
+    await window.locator('[data-testid="titlebar-settings"]').click();
+    await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
+    await window.getByTestId(`theme-card-${custom!.id}`).dblclick();
+    const savedEditor = window.getByRole('region', { name: 'Custom theme editor' });
+    await savedEditor.getByRole('button', { name: 'Remove image' }).click();
+    await expect(savedEditor.getByAltText('Session chat background preview')).toHaveCount(0);
+    await savedEditor.getByRole('button', { name: 'Use surface background' }).click();
+    await expect(savedEditor.getByLabel('Session chat background hex')).toHaveValue('');
+    await savedEditor.getByRole('button', { name: 'Save theme' }).click();
+    expect(await window.locator('html').evaluate(el => el.style.getPropertyValue('--session-chat-bg'))).toBe('');
+    expect(await window.locator('html').evaluate(el => el.style.getPropertyValue('--session-chat-image'))).toBe('');
+  } finally {
+    await mock.close();
+  }
+
 });
 
 test('gradient priorities expose a picker per stop plus a direction control', async () => {

@@ -23,7 +23,7 @@ test('titlebar scheduled-runs shortcut stays clickable at medium window widths',
       await expect(shortcut).toBeVisible();
       await expect(page.getByTestId('titlebar-what-changed')).toBeVisible();
       const doesNotOverlap = await page.evaluate(() => {
-        const center = document.querySelector('.titlebar-center')?.getBoundingClientRect();
+        const center = document.querySelector('.titlebar-crumb')?.getBoundingClientRect();
         const scheduled = document.querySelector('[data-testid="titlebar-scheduled-runs"]')?.getBoundingClientRect();
         return !!center && !!scheduled && (center.right <= scheduled.left || scheduled.right <= center.left);
       });

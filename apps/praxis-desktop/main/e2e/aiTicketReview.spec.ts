@@ -388,8 +388,10 @@ test('review exposes shared runtime controls while preserving its review boundar
     return { reasoning: session?.reasoningEffort, permission: session?.permissionMode, toolMode: session?.toolMode };
   }, issueKey)).toEqual({ reasoning: 'high', permission: 'auto', toolMode: 'read-only' });
 
-  await expect(composer.getByTestId('session-tool-mode')).toBeDisabled();
-  await expect(composer.locator('[data-testid="session-working-directory"], [data-testid="session-attach-folder"]')).toBeDisabled();
+  await expect(win.getByTestId('session-tool-mode')).toBeDisabled();
+  await composer.getByTestId('session-add-context').click();
+  await expect(win.getByTestId('context-folder')).toBeDisabled();
+  await win.getByRole('button', { name: 'Close context menu' }).click();
   await expect(composer.locator('[data-testid^="session-switch-mode-"]')).toHaveCount(0);
   await expect(composer.getByTestId('session-workflow-chips')).toHaveCount(0);
   await expect(composer.getByTestId('session-workflow-add')).toHaveCount(0);

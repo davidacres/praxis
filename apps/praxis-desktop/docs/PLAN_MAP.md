@@ -666,3 +666,22 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [TASK-493](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-187-composer-and-session-feedback-ui/tasks/task-493-session-inspector-scorecard-ui.md) | Task | Add post-session feedback form, deterministic scorecard, and one-click remediations | To Do | TASK-492 |
 | [TASK-494](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-188-feedback-scoring-verification/tasks/task-494-golden-scoring-corpus-tests.md) | Task | Add golden deterministic scoring corpus and IPC unit suites | To Do | TASK-489, TASK-490, TASK-491 |
 | [TASK-495](plans/features/fx-bf-112-prompt-and-session-feedback-scoring/stories/fx-be-188-feedback-scoring-verification/tasks/task-495-feedback-ui-e2e-verification.md) | Task | Verify composer and session feedback journeys in Playwright E2E | To Do | TASK-492, TASK-493, TASK-494 |
+
+
+## Slim shelf creation and linked notes
+
+| Ref | Type | Title | Status | Dependencies |
+| --- | --- | --- | --- | --- |
+| [FX-BF-113](plans/features/fx-bf-113-shelf-and-sidebar-notes/feature.md) | Feature | Slim shelf creation and linked notes | To Do | None |
+| [FX-BE-189](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/story.md) | Story | Persistent project notes and linked groups | To Do | None |
+| [TASK-496](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-496.md) | Task | Define note and group contracts | To Do | None |
+| [TASK-497](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-497.md) | Task | Implement notes persistence and typed IPC | To Do | TASK-496 |
+| [FX-BE-190](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-190/story.md) | Story | Capture notes from the fixed shelf and sidebar | To Do | FX-BE-189 |
+| [TASK-498](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-190/tasks/task-498.md) | Task | Add slim new-session and notes shelf controls | To Do | TASK-497 |
+| [TASK-499](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-190/tasks/task-499.md) | Task | Add sidebar notes tree and shared editor | To Do | TASK-498 |
+| [FX-BE-191](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-191/story.md) | Story | Send notes and linked groups to sessions | To Do | FX-BE-190 |
+| [TASK-500](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-191/tasks/task-500.md) | Task | Add note and group session handoff | To Do | TASK-499 |
+| [TASK-501](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-191/tasks/task-501.md) | Task | Handle send failures and note snapshot history | To Do | TASK-500 |
+| [FX-BE-192](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-192/story.md) | Story | Verify notes journeys and unchanged shelf geometry | To Do | FX-BE-191 |
+| [TASK-502](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-192/tasks/task-502.md) | Task | Add persistence and end-to-end regression coverage | To Do | TASK-501 |
+| [TASK-503](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-192/tasks/task-503.md) | Task | Run full UI validation and preserve visual evidence | To Do | TASK-502 |

@@ -6,6 +6,7 @@ import { StatusGlyph } from '../ui/StatusGlyph';
 export interface LiveTurnActivityIndicatorProps {
   startedAt?: number | string;
   statusText: string;
+  activityWords?: readonly string[];
   provider?: AiProvider;
   model?: string;
   tokenCount?: number;
@@ -43,6 +44,7 @@ export function formatElapsedDuration(elapsedMs: number): string {
 export function LiveTurnActivityIndicator({
   startedAt,
   statusText,
+  activityWords,
   provider,
   model,
   tokenCount,
@@ -70,6 +72,8 @@ export function LiveTurnActivityIndicator({
   const reportedTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) && tokenCount >= 0
     ? Math.round(tokenCount).toLocaleString() : undefined;
   const formattedTime = formatElapsedDuration(elapsedMs);
+  const word = activityWords?.length ? activityWords[Math.floor(elapsedMs / 8000) % activityWords.length] : undefined;
+  const displayText = word ? `${word.replace(/(?:…|\.\.\.)$/, '')}…` : statusText;
 
   return (
     <div
@@ -87,7 +91,7 @@ export function LiveTurnActivityIndicator({
       ) : (
         <StatusGlyph status="running" size="sm" ariaLabel="Active turn running" />
       )}
-      <span className="session-activity-label" title={variant === 'composer' ? statusText : undefined}>{statusText}</span>
+      <span className="session-activity-label" title={variant === 'composer' ? displayText : undefined}>{displayText}</span>
       <span className="session-activity-timer" data-testid={variant === 'composer' ? 'session-composer-activity-timer' : 'session-activity-timer'} aria-label={`Elapsed time: ${formattedTime}`}>
         {formattedTime}
       </span>

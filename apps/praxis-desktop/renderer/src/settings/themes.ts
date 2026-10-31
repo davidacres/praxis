@@ -1,3 +1,4 @@
+import { isChatBackgroundImage } from './themeChatBackground';
 export type ThemeMode = 'light' | 'dark';
 export type ThemeModePreference = ThemeMode | 'system';
 import type { AppearanceSettings } from '@praxis/core';
@@ -9,6 +10,10 @@ import {
 
 export interface ThemePreviewColors {
   canvas: string;
+  /** Optional transcript fill; omitted themes retain the surface material. */
+  chatBackground?: string;
+  /** Embedded raster image, portable with exported themes. */
+  chatBackgroundImage?: string;
   panel: string;
   raised: string;
   border: string;
@@ -145,13 +150,22 @@ export function applyTheme(themeId: string, modeOverride?: ThemeMode): ThemeDefi
   const theme = findTheme(themeId) ?? findTheme(DEFAULT_THEME_ID)!;
   document.documentElement.setAttribute('data-theme', theme.id);
   document.documentElement.setAttribute('data-mode', modeOverride ?? theme.mode);
-  const customTokens = ['--bg', '--bg-elevated', '--bg-sunken', '--bg-input', '--border', '--border-strong', '--text', '--text-secondary', '--text-tertiary', '--accent', '--accent-hover', '--accent-soft', '--accent-border', '--accent-contrast', '--danger'];
+  delete document.documentElement.dataset.sessionChatBackground;
+  const customTokens = ['--session-chat-image', '--session-chat-bg', '--bg', '--bg-elevated', '--bg-sunken', '--bg-input', '--border', '--border-strong', '--text', '--text-secondary', '--text-tertiary', '--accent', '--accent-hover', '--accent-soft', '--accent-border', '--accent-contrast', '--danger'];
   for (const token of customTokens) document.documentElement.style.removeProperty(token);
   localStorage.setItem('tm-theme-id', theme.id);
   localStorage.setItem('tm-theme-mode', modeOverride ?? theme.mode);
   if (theme.source === 'custom' || theme.source === 'marketplace') {
     const colors = theme.preview;
     const root = document.documentElement;
+    if (colors.chatBackground && /^#[0-9a-f]{6}$/i.test(colors.chatBackground)) {
+      root.style.setProperty('--session-chat-bg', colors.chatBackground);
+      root.dataset.sessionChatBackground = 'true';
+    }
+    if (isChatBackgroundImage(colors.chatBackgroundImage)) {
+      root.style.setProperty('--session-chat-image', `url("${colors.chatBackgroundImage}")`);
+      root.dataset.sessionChatBackground = 'true';
+    }
     root.style.setProperty('--bg', colors.canvas);
     root.style.setProperty('--bg-elevated', colors.panel);
     root.style.setProperty('--bg-sunken', colors.raised);

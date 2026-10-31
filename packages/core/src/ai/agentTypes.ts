@@ -559,6 +559,8 @@ export interface AgentSessionRecord {
   events: AgentEventSummary[];
   /** Whether the full event transcript is currently loaded in memory. */
   eventsLoaded?: boolean;
+  /** Latest transcript activity, retained when events are unloaded. */
+  lastActivityAt?: string;
   /** Total number of events in this session, available even when events are unloaded. */
   eventCount?: number;
   planText?: string;

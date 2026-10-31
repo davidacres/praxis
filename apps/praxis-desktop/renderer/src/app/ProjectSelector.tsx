@@ -2,7 +2,7 @@ import type { ProjectRecord } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
 import type { IconName } from '../ui/Icon';
 
-/** The workspace's project switcher, shared by both sidebar layouts. */
+/** The workspace's project switcher, hosted by the titlebar. */
 export function ProjectSelector({ projects, activeProjectId, onSelectProject, includeConversations = false }: {
   includeConversations?: boolean;
   projects: ProjectRecord[];

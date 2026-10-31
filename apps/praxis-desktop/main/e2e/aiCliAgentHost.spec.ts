@@ -662,3 +662,37 @@ test('a CLI agent\'s reply shows the turn\'s time, tokens, cost and model, and t
   // Tokens add up per turn; the window's occupancy stays what the agent said it is.
   expect(await tokens()).toEqual({ total: 2468, context: 1500 });
 });
+
+
+test('custom activity words persist and replace composer narration during a Codex turn', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'codex-cli', FIXTURE_PATH);
+  await win.getByTestId('titlebar-settings').click();
+  await win.getByTestId('settings-nav-ai').click();
+  await win.getByTestId('ai-tab-behaviour').click();
+  const words = win.getByRole('textbox', { name: 'Session activity words', exact: true });
+  await expect(words).toHaveValue('Thinking, Working, Pondering');
+  await words.fill('Musing, Tinkering');
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.settings.get()).ai.activityWords))
+    .toEqual(['Musing', 'Tinkering']);
+  await win.getByTestId('ai-tab-providers').click();
+  await win.getByTestId('ai-tab-behaviour').click();
+  await expect(words).toHaveValue('Musing, Tinkering');
+  await win.getByTestId('ai-tabpanel-behaviour').screenshot({ path: path.resolve('../../../.praxis/session-artifacts/activity-words-settings.png') });
+  await win.getByRole('button', { name: 'Close settings', exact: true }).click();
+  await delegate(win, 'APP-219', 'codex-cli', 'EMIT_CODEX_ACTIVITY HANG_UNTIL_CANCELLED');
+  await openSession(win, 'APP-219');
+  const activity = win.getByTestId('session-activity-disclosure');
+  await expect(activity).toHaveCount(1);
+  await expect(activity).not.toHaveAttribute('open', '');
+  const label = win.getByTestId('session-composer-activity-chip').locator('.session-activity-label');
+  await expect(label).toHaveText('Musing…');
+  await expect(label).toHaveText('Tinkering…', { timeout: 12000 });
+  await activity.getByTestId('session-activity-summary').click();
+  await expect(activity.getByTestId('session-activity-history')).toBeVisible();
+  await activity.getByTestId('session-activity-summary').click();
+  await win.screenshot({ path: path.resolve('../../../.praxis/session-artifacts/activity-words-session.png') });
+  await win.evaluate(async () => { await window.praxis.ai.abort('APP-219'); });
+  await expect(label).toHaveCount(0);
+});

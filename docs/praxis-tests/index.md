@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **749 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FCC07A19B5 | ai Cli Agent Host | delegating with a model override applies it via session/set_config_option | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:596` |
 | PT-0019D9276D | ai Cli Agent Host | a CLI model reasoning default applies through ACP thought_level | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:609` |
 | PT-478356E0FC | ai Cli Agent Host | a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:632` |
+| PT-00AB250CE7 | ai Cli Agent Host | custom activity words persist and replace composer narration during a Codex turn | `apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts:667` |
 | PT-F9FE6B89E2 | ai Coding Task | a ticket for a one-line fix is delegated to an agent and lands on disk | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:36` |
 | PT-41267424E7 | ai Coding Task | a read-only session cannot write the file | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:113` |
 | PT-3CFB8F109B | ai Coding Task | each turn records its reply once, and follow-ups carry the earlier answer | `apps/praxis-desktop/main/e2e/aiCodingTask.spec.ts:159` |
@@ -93,7 +94,8 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-CD171F469C | ai Provider Tabs | pressing the switch on a provider that is not set up opens its setup, and it turns on once a key is saved | `apps/praxis-desktop/main/e2e/aiProviderTabs.spec.ts:189` |
 | PT-49F972B78B | ai Provider Tabs | the Recommendations provider list leaves out providers that are turned off, but keeps a chosen one visible | `apps/praxis-desktop/main/e2e/aiProviderTabs.spec.ts:219` |
 | PT-0E64457F3C | ai Provider Tabs | prompt analysis provider and model persist independently of other routing | `apps/praxis-desktop/main/e2e/aiProviderTabs.spec.ts:255` |
-| PT-16A529CAF6 | ai Session Mode | switching a finished session to Review sends the mode transition and resumes it | `apps/praxis-desktop/main/e2e/aiSessionMode.spec.ts:33` |
+| PT-E4F2A32EC5 | ai Session Mode | reviewing changes lives beside the diff and the composer has no mode tabs | `apps/praxis-desktop/main/e2e/aiSessionMode.spec.ts:27` |
+| PT-224CE3B564 | ai Session Mode | ticket analysis remains an explicit action when the analysis gate is off | `apps/praxis-desktop/main/e2e/aiSessionMode.spec.ts:96` |
 | PT-E5CDA49312 | ai Sessions | closing Praxis warns before interrupting an active AI session | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:100` |
 | PT-391BE89930 | ai Sessions | composer selects a board and open ticket, names the session, and streams to completion | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:136` |
 | PT-C5EEB040ED | ai Sessions | issue detail starts a prompted ticket session and opens its console | `apps/praxis-desktop/main/e2e/aiSessions.spec.ts:346` |
@@ -144,7 +146,7 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-C813BD711A | ai Ticket Review | a queued review follow-up is sent exactly once when the current turn completes | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:299` |
 | PT-47C95EBD35 | ai Ticket Review | the review composer pastes and drops images, removes one and sends the retained image to the agent | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:317` |
 | PT-348197C67C | ai Ticket Review | review exposes shared runtime controls while preserving its review boundaries | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:349` |
-| PT-4C644762B5 | ai Ticket Review | a pending read permission is answered directly in the review composer | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:420` |
+| PT-4C644762B5 | ai Ticket Review | a pending read permission is answered directly in the review composer | `apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts:422` |
 | PT-B44F5463D3 | ai Usage Dashboard Redesign | AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functionality | `apps/praxis-desktop/main/e2e/aiUsageDashboardRedesign.spec.ts:11` |
 | PT-F3833555DA | ai Workflows | workflow pack picker lists discovered packs and assigns one | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:127` |
 | PT-3269A847C9 | ai Workflows | review page streams the review markdown and posts it as a comment | `apps/praxis-desktop/main/e2e/aiWorkflows.spec.ts:157` |
@@ -164,7 +166,7 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-865C5ABA3C | app | focus mode button in titlebar is available in a session and toggles panels | `apps/praxis-desktop/main/e2e/app.spec.ts:37` |
 | PT-4D5169B00E | app | Praxis section in sidebar can expand to full sidebar and restore | `apps/praxis-desktop/main/e2e/app.spec.ts:70` |
 | PT-8287929558 | app | remembers which panels are open across a relaunch | `apps/praxis-desktop/main/e2e/app.spec.ts:94` |
-| PT-CF9F8E1A1A | app | displays the running Praxis version in the title bar | `apps/praxis-desktop/main/e2e/app.spec.ts:111` |
+| PT-DEFAAE3BF0 | app | reports the running Praxis version on the Settings control | `apps/praxis-desktop/main/e2e/app.spec.ts:111` |
 | PT-2DDEE2CB06 | app | boards render on launch | `apps/praxis-desktop/main/e2e/app.spec.ts:117` |
 | PT-50D9451E47 | app | normal launch does not include built-in demo data | `apps/praxis-desktop/main/e2e/app.spec.ts:124` |
 | PT-2F0F85516F | app | a folder conversation without trackers does not claim to use demo boards | `apps/praxis-desktop/main/e2e/app.spec.ts:135` |
@@ -176,15 +178,15 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-9C84544990 | app | adding and removing a connection updates the list | `apps/praxis-desktop/main/e2e/app.spec.ts:215` |
 | PT-BBA9C83046 | app | a returning user gets the brief splash, not the full crawl | `apps/praxis-desktop/main/e2e/app.spec.ts:240` |
 | PT-2304961F00 | app | titlebar Home opens Overview and preserves navigation history | `apps/praxis-desktop/main/e2e/app.spec.ts:255` |
-| PT-0C494CCBEC | appearance Settings | opens Settings from the title bar as a dismissible popover dialog | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:33` |
-| PT-554DF61623 | appearance Settings | theme gallery previews and persists the selected complete palette | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:44` |
-| PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:71` |
-| PT-7FCBAD6580 | appearance Settings | startup splash inherits the saved app theme | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:84` |
-| PT-77C9928C26 | appearance Settings | installs a marketplace theme and makes it available on reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:154` |
-| PT-33995E247F | appearance Settings | creates a custom theme with editable colors and persists it | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:243` |
-| PT-D0CA7FE649 | appearance Settings | gradient priorities expose a picker per stop plus a direction control | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:258` |
-| PT-AD98619129 | appearance Settings | terminal settings expose detected profiles and persist appearance preferences | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:271` |
-| PT-AC8A2AC5A6 | appearance Settings | solid and gradient round trip through the mode toggle and survive a reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:290` |
+| PT-0C494CCBEC | appearance Settings | opens Settings from the title bar as a dismissible popover dialog | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:37` |
+| PT-554DF61623 | appearance Settings | theme gallery previews and persists the selected complete palette | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:48` |
+| PT-E7281D960A | appearance Settings | persists the selected theme and mode through app settings | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:75` |
+| PT-7FCBAD6580 | appearance Settings | startup splash inherits the saved app theme | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:88` |
+| PT-77C9928C26 | appearance Settings | installs a marketplace theme and makes it available on reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:158` |
+| PT-33995E247F | appearance Settings | creates a custom theme with editable colors and persists it | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:247` |
+| PT-D0CA7FE649 | appearance Settings | gradient priorities expose a picker per stop plus a direction control | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:325` |
+| PT-AD98619129 | appearance Settings | terminal settings expose detected profiles and persist appearance preferences | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:338` |
+| PT-AC8A2AC5A6 | appearance Settings | solid and gradient round trip through the mode toggle and survive a reload | `apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts:357` |
 | PT-FC37B447BF | app Shell | agent records and the Workflow designer sit inside the normal app shell | `apps/praxis-desktop/main/e2e/appShell.spec.ts:59` |
 | PT-F380FCD2FD | app Zoom | whole-window zoom scales the Praxis shell and supports VS Code shortcuts | `apps/praxis-desktop/main/e2e/appZoom.spec.ts:14` |
 | PT-002739DAF5 | app Zoom | zoom setting is preserved across app restart | `apps/praxis-desktop/main/e2e/appZoom.spec.ts:33` |
@@ -378,7 +380,7 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-6B6471DE4C | governed Application.live | a real AI creates a calculator application through Governed delivery and passes QA | `apps/praxis-desktop/main/e2e/governedApplication.live.spec.ts:26` |
 | PT-9D9D7DC61F | governed Delivery Loop.live | Governed delivery with a real AI: review findings loop back to Implement and the run converges or escalates | `apps/praxis-desktop/main/e2e/governedDeliveryLoop.live.spec.ts:64` |
 | PT-0EE345E8DC | icon Button Tooltips | every visible icon-only control on the main screens has a tooltip | `apps/praxis-desktop/main/e2e/iconButtonTooltips.spec.ts:96` |
-| PT-4031809C97 | icon Button Tooltips | an icon-only button shows its accessible name as its tooltip | `apps/praxis-desktop/main/e2e/iconButtonTooltips.spec.ts:160` |
+| PT-4031809C97 | icon Button Tooltips | an icon-only button shows its accessible name as its tooltip | `apps/praxis-desktop/main/e2e/iconButtonTooltips.spec.ts:162` |
 | PT-ECB4AC0EC3 | import Projects | importing a plans folder creates a folder-backed project whose board shows its markdown | `apps/praxis-desktop/main/e2e/importProjects.spec.ts:80` |
 | PT-BA81D1CAC5 | import Projects | a repository with no plans content is skipped, not guessed at | `apps/praxis-desktop/main/e2e/importProjects.spec.ts:116` |
 | PT-C951BA9B1E | import Projects | a repository whose plans sit outside docs/plans is still found | `apps/praxis-desktop/main/e2e/importProjects.spec.ts:131` |
@@ -423,6 +425,7 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-CD33498B00 | new Issue | New idea opens the create form preset to Idea with the research transcript field | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:161` |
 | PT-201D18C39C | new Issue | creating a live folder idea writes the research transcript into the markdown | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:188` |
 | PT-55715AB01F | new Issue | the demo board offers Subtask with a required story/task/bug parent | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:244` |
+| PT-F36FFCA684 | outcome Ledger | What Changed ledger keeps home intact and opens recorded evidence | `apps/praxis-desktop/main/e2e/outcomeLedger.spec.ts:7` |
 | PT-5870B4F60C | overview | renders the workspace overview dashboard | `apps/praxis-desktop/main/e2e/overview.spec.ts:9` |
 | PT-D0D129AB73 | overview Ai Usage | shows exact period totals, peaks, cost and ranked models from a seeded ledger | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:60` |
 | PT-41BEE977CD | overview Ai Usage | says cost comes from ACP agents only when no cost is reported | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:116` |
@@ -523,13 +526,15 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-A0C7008A04 | semantic Search Notification | offers an update instead of enable when an earlier model is installed | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:162` |
 | PT-4874B92CC2 | semantic Search Notification | the real main process reports a previously downloaded MiniLM bundle as an update | `apps/praxis-desktop/main/e2e/semanticSearchNotification.spec.ts:197` |
 | PT-E9A2A4583D | session Ai Icons | session list displays single and multiple pixel-perfect AI brand icons beside each session | `apps/praxis-desktop/main/e2e/sessionAiIcons.spec.ts:15` |
+| PT-05BC1A371E | session Context Picker | composer plus adds real folder, session and ticket context to a follow-up | `apps/praxis-desktop/main/e2e/sessionContextPicker.spec.ts:8` |
 | PT-0FBFC2BB99 | session Feedback | composer coach grounds fixes in the workspace, previews text, and steps aside when ready | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:115` |
-| PT-0783427DD3 | session Feedback | post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:316` |
-| PT-DC84821CF0 | session Feedback | checklist caches validated answers and falls back without a score when the provider fails | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:579` |
-| PT-22D6A42305 | session Feedback | a slow check for an old draft cannot replace the latest suggestions | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:638` |
-| PT-52361DF248 | session Feedback | malformed prompt analysis is reported as a model response failure with correlated logs | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:655` |
-| PT-1D75A10A96 | session Feedback | authentication recovery is readable inside the analysis notice at a narrow width | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:675` |
+| PT-0783427DD3 | session Feedback | post-session inspector scorecard audits tools/skills/MCPs, persists human feedback, and populates follow-up | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:343` |
+| PT-DC84821CF0 | session Feedback | checklist caches validated answers and falls back without a score when the provider fails | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:606` |
+| PT-22D6A42305 | session Feedback | a slow check for an old draft cannot replace the latest suggestions | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:665` |
+| PT-52361DF248 | session Feedback | malformed prompt analysis is reported as a model response failure with correlated logs | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:682` |
+| PT-1D75A10A96 | session Feedback | authentication recovery is readable inside the analysis notice at a narrow width | `apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts:702` |
 | PT-71A99A13A6 | session Groups | chat and project session groups reorder, rename inline, and persist | `apps/praxis-desktop/main/e2e/sessionGroups.spec.ts:19` |
+| PT-58EB8EE11F | session Modified Order | session shelf follows latest activity despite an earlier completion | `apps/praxis-desktop/main/e2e/sessionModifiedOrder.spec.ts:7` |
 | PT-228E76C299 | session Provider Limit | a session whose AI ran out can switch to another AI and carry on | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:47` |
 | PT-E181B9FAF4 | session Provider Limit | a session whose AI ran out can be stopped instead | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:64` |
 | PT-4F044C6563 | session Provider Limit | a CLI agent reporting a provider limit does not put the limit notice into the chat thread | `apps/praxis-desktop/main/e2e/sessionProviderLimit.spec.ts:77` |
@@ -549,8 +554,13 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0FBAAEEA42 | session Recovery | keyboard focus stays in recovery, and Escape leaves sessions stopped | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:85` |
 | PT-0F10648F67 | session Recovery | interrupted CLI sessions also wait for selection and resume through ACP | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:99` |
 | PT-75B0F93373 | session Recovery | teardown drains an ACP task even when the session list already reports completion | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:110` |
+| PT-4972638424 | session Shelf | collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:51` |
+| PT-1FCF628060 | session Shelf | the shelf card sends a quick reply into the session | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:146` |
+| PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:190` |
+| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:264` |
+| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:306` |
 | PT-2B75887CEB | session Skill Usage | a session shows its agent and the skills it used, and a skill lists the sessions that used it | `apps/praxis-desktop/main/e2e/sessionSkillUsage.spec.ts:21` |
-| PT-3C45DBB445 | session Team | a session can add several team members; a lone reviewer offers to draft an ask | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:20` |
+| PT-3C45DBB445 | session Team | a session can add several team members; a lone reviewer offers to draft an ask | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:21` |
 | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:42` |
 | PT-4F96A39603 | session Usage Quota | collapsed usage animates both bars while account limits load | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:173` |
 | PT-EEEE457808 | session Usage Quota | collapsed usage skips the count-up under reduced motion | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:250` |
@@ -641,6 +651,7 @@ This catalogue describes **738 Playwright tests** under `apps/praxis-desktop/mai
 | PT-11D6DA9B59 | titlebar Code Intel | on launch an unindexed folder asks once to build its index, before the model notice | `apps/praxis-desktop/main/e2e/titlebarCodeIntel.spec.ts:159` |
 | PT-9187B3ECD5 | titlebar Code Intel | "Not now" is remembered for the folder; the chip still builds on click | `apps/praxis-desktop/main/e2e/titlebarCodeIntel.spec.ts:179` |
 | PT-47C5E579CC | titlebar Layout | titlebar scheduled-runs shortcut stays clickable at medium window widths | `apps/praxis-desktop/main/e2e/titlebarLayout.spec.ts:6` |
+| PT-B09ECBFDB3 | titlebar Minimal | themed titlebar switches projects and exposes panel controls | `apps/praxis-desktop/main/e2e/titlebarMinimal.spec.ts:8` |
 | PT-1B0F699E2E | verify marketplace | VERIFY: Marketplace loads and displays real GitHub packages | `apps/praxis-desktop/main/e2e/verify-marketplace.spec.ts:10` |
 | PT-A17BEBD0BC | walkthrough | walks the shell, rings each control, and remembers it was seen | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:68` |
 | PT-3FCE413FDD | walkthrough | the ring is visibly not a control, and not the focus ring | `apps/praxis-desktop/main/e2e/walkthrough.spec.ts:99` |

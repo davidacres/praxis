@@ -469,6 +469,7 @@ export class AiSessionManager {
       if (!this.isSessionActive(record)) {
         return {
           ...record,
+          lastActivityAt: record.events.at(-1)?.timestamp ?? record.lastActivityAt,
           events: [],
           conversationHistory: undefined,
           eventsLoaded: false
@@ -1477,6 +1478,7 @@ export class AiSessionManager {
           state: interrupted ? 'aborted' : value.state,
           ...(interrupted ? { interruptedByRestart: true } : {}),
           completedAt: interrupted ? (value.completedAt ?? new Date().toISOString()) : value.completedAt,
+          lastActivityAt: events.at(-1)?.timestamp ?? value.lastActivityAt,
           events: subagentEvents,
           conversationHistory: this.transcriptStore ? undefined : value.conversationHistory,
           eventsLoaded: !this.transcriptStore,
@@ -1516,6 +1518,7 @@ export class AiSessionManager {
       if (this.transcriptStore) {
         record[key] = {
           ...session,
+          lastActivityAt: session.events.at(-1)?.timestamp ?? session.lastActivityAt,
           events: extractSubagentEvents(session.events ?? []),
           conversationHistory: undefined,
           acpAvailableCommands: undefined,

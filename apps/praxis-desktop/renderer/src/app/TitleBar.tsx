@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AiProvider, WorkspaceRecord, UpdateStatus } from '@praxis/core';
+import type { AiProvider, ProjectRecord, WorkspaceRecord, UpdateStatus } from '@praxis/core';
+import { ProjectSelector } from './ProjectSelector';
 import { CodeIntelTitlebarChip } from './CodeIntelTitlebarChip';
 import { Icon, type IconName } from '../ui/Icon';
-import { PraxisWordmark } from './StartupSplash';
 import { useUpdateStatus } from './useUpdateStatus';
 import { useDialogs } from '../ui/dialogs';
 import {
@@ -21,6 +21,9 @@ export interface TitleBarProps {
   appVersion?: string;
   contextLabel: string;
   contextIcon?: IconName;
+  projects?: ProjectRecord[];
+  activeProjectId?: string;
+  onSelectProject?: (projectId: string) => void;
   workspaces?: WorkspaceRecord[];
   activeWorkspaceId?: string;
   onSelectWorkspace?: (workspaceId: string) => void;
@@ -58,7 +61,6 @@ export interface TitleBarProps {
   boardFilter?: TitleBarBoardFilter;
   /** Opens the command palette (search issues, projects, sessions, navigation). */
   onOpenPalette?: () => void;
-  onOpenWhatsNew: () => void;
   settingsOpen: boolean;
   onOpenSettings: () => void;
   onOpenAiSettings: () => void;
@@ -77,7 +79,9 @@ export interface TitleBarProps {
 export function TitleBar({
   appVersion,
   contextLabel,
-  contextIcon,
+  projects = [],
+  activeProjectId,
+  onSelectProject,
   workspaces,
   activeWorkspaceId,
   onSelectWorkspace,
@@ -112,7 +116,6 @@ export function TitleBar({
   onForward,
   boardFilter,
   onOpenPalette,
-  onOpenWhatsNew,
   settingsOpen,
   onOpenSettings,
   onOpenAiSettings,
@@ -155,11 +158,13 @@ export function TitleBar({
       if (newMenuOpen && !newMenuRef.current?.contains(target)) {
         setNewMenuOpen(false);
       }
+
     };
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setWorkspaceMenuOpen(false);
         setNewMenuOpen(false);
+
       }
     };
     document.addEventListener('pointerdown', onDocumentPointerDown);
@@ -254,371 +259,383 @@ export function TitleBar({
 
   return (
     <header ref={headerRef} className={`titlebar${isMac ? ' titlebar-mac' : ''}${locked ? ' titlebar-locked' : ''}`} data-locked={locked || undefined}>
-      <div className="titlebar-group titlebar-header-group">
-        <div className="workspace-switcher" ref={workspaceMenuRef}>
-          <button
-            className="workspace-switcher-button"
-            aria-expanded={workspaceMenuOpen}
-            aria-label="Select workspace"
-            onClick={() => setWorkspaceMenuOpen(open => !open)}
-          >
-            <span className="workspace-switcher-mark"><Icon name="organization" size={14} /></span>
-            <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'All projects'}</span>
-            <Icon name="chevron-down" size={13} />
-          </button>
-          {workspaceMenuOpen && (
-            <div className="workspace-menu" role="menu">
-              {workspaces?.map(workspace => (
-                <div key={workspace.id} role="none" className="workspace-menu-row">
-                  <button
-                    role="menuitem"
-                    className={`workspace-menu-select${workspace.id === activeWorkspaceId ? ' active' : ''}`}
-                    onClick={() => { onSelectWorkspace?.(workspace.id); setWorkspaceMenuOpen(false); }}
-                  >
-                    <Icon name="organization" size={13} /><span>{workspace.name}</span>
-                  </button>
-                  <small className="workspace-menu-count">{workspace.projectIds.length}</small>
-                  {onDeleteWorkspace && (
+      <div className="titlebar-group titlebar-left">
+      <div className="titlebar-group titlebar-header-group" role="group" aria-label="Navigation">
+                <button type="button" className="icon-btn" aria-label="Back" disabled={!canGoBack} onClick={onBack}>
+                  <Icon name="arrow-left" />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Forward"
+                  disabled={!canGoForward}
+                  onClick={onForward}
+                >
+                  <Icon name="arrow-right" />
+                </button>
+
+
+        {onOpenOverview && <button type="button" className="icon-btn" aria-label="Home" title="Home"
+          data-testid="titlebar-home" onClick={onOpenOverview}><Icon name="home" size={14} /></button>}
+        <div className="titlebar-crumb">
+          <div className="workspace-switcher" ref={workspaceMenuRef}>
+            <button
+              type="button"
+              className="workspace-switcher-button"
+              aria-expanded={workspaceMenuOpen}
+              aria-label="Select workspace"
+              onClick={() => setWorkspaceMenuOpen(open => !open)}
+            >
+              <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'All projects'}</span>
+            </button>
+            {workspaceMenuOpen && (
+              <div className="workspace-menu" role="menu">
+                {workspaces?.map(workspace => (
+                  <div key={workspace.id} role="none" className="workspace-menu-row">
                     <button
-                      type="button"
-                      className="workspace-menu-delete"
-                      aria-label={`Delete workspace ${workspace.name}`}
-                      title="Delete workspace"
-                      onClick={() => onDeleteWorkspace(workspace.id)}
+                      role="menuitem"
+                      className={`workspace-menu-select${workspace.id === activeWorkspaceId ? ' active' : ''}`}
+                      onClick={() => { onSelectWorkspace?.(workspace.id); setWorkspaceMenuOpen(false); }}
                     >
-                      <Icon name="trash" size={12} />
+                      <Icon name="organization" size={13} /><span>{workspace.name}</span>
                     </button>
-                  )}
+                    <small className="workspace-menu-count">{workspace.projectIds.length}</small>
+                    {onDeleteWorkspace && (
+                      <button
+                        type="button"
+                        className="workspace-menu-delete"
+                        aria-label={`Delete workspace ${workspace.name}`}
+                        title="Delete workspace"
+                        onClick={() => onDeleteWorkspace(workspace.id)}
+                      >
+                        <Icon name="trash" size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="workspace-menu-divider" />
+                {onCreateWorkspace && (
+                  <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
+                    <Icon name="plus" size={13} /><span>New workspace</span>
+                  </button>
+                )}
+                {activeWorkspace && onSaveWorkspace && (
+                  <button role="menuitem" onClick={() => { onSaveWorkspace(); setWorkspaceMenuOpen(false); }}>
+                    <Icon name="archive" size={13} /><span>Save to file</span>
+                  </button>
+                )}
+                {onOpenFolder && (
+                  <button role="menuitem" data-testid="workspace-menu-open-folder" onClick={() => { onOpenFolder(); setWorkspaceMenuOpen(false); }}>
+                    <Icon name="folder" size={13} /><span>Open folder</span>
+                  </button>
+                )}
+                {onOpenWorkspace && (
+                  <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
+                    <Icon name="folder-open" size={13} /><span>Open workspace file</span>
+                  </button>
+                )}
+                {activeWorkspace && onCloseWorkspace && (
+                  <button role="menuitem" className="workspace-menu-close" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
+                    <Icon name="close" size={13} /><span>Close workspace</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <span className="titlebar-crumb-sep" aria-hidden="true">/</span>
+
+          <div className="titlebar-project" data-testid="titlebar-project">
+            <ProjectSelector projects={projects} activeProjectId={activeProjectId} includeConversations
+              onSelectProject={id => onSelectProject?.(id)} />
+          </div>
+        </div>
+      </div>
+
+      </div>
+      <div className="titlebar-spacer" />
+
+      <UpdateIndicator settingsOpen={settingsOpen} onOpenAiSettings={onOpenAiSettings} />
+
+      <div className="titlebar-group titlebar-right">
+            {boardFilter && (
+            <div className="titlebar-context-wrap" ref={filterRef}>
+              <button
+                ref={contextButtonRef}
+                type="button"
+                className={`titlebar-context titlebar-context-button${filterOpen ? ' active' : ''}`}
+                data-testid="titlebar-context"
+                title={`Filter issues on ${contextLabel}`}
+                aria-label={`Filter issues on ${contextLabel}`}
+                aria-haspopup="dialog"
+                aria-expanded={filterOpen}
+                onClick={() => setFilterOpen(open => !open)}
+              >
+                <Icon name="sliders" size={14} />
+                {activeFilterCount > 0 && (
+                  <span className="titlebar-filter-badge" data-testid="titlebar-filter-count">
+                    {activeFilterCount}
+                  </span>
+                )}
+                <span className="titlebar-context-chevron" aria-hidden="true">
+                  <Icon name={filterOpen ? 'chevron-up' : 'chevron-down'} size={11} />
+                </span>
+              </button>
+              <div
+                className="titlebar-filter-popover"
+                data-testid="titlebar-filter-popover"
+                role="dialog"
+                aria-label={`Filter issues on ${contextLabel}`}
+                hidden={!filterOpen}
+              >
+                <div className="titlebar-filter-heading">
+                  <span>Filter issues</span>
+                  <span>{contextLabel}</span>
                 </div>
-              ))}
-              <div className="workspace-menu-divider" />
-              {onCreateWorkspace && (
-                <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="plus" size={13} /><span>New workspace</span>
-                </button>
-              )}
-              {activeWorkspace && onSaveWorkspace && (
-                <button role="menuitem" onClick={() => { onSaveWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="archive" size={13} /><span>Save to file</span>
-                </button>
-              )}
-              {onOpenFolder && (
-                <button role="menuitem" data-testid="workspace-menu-open-folder" onClick={() => { onOpenFolder(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="folder" size={13} /><span>Open folder</span>
-                </button>
-              )}
-              {onOpenWorkspace && (
-                <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="folder-open" size={13} /><span>Open workspace file</span>
-                </button>
-              )}
-              {activeWorkspace && onCloseWorkspace && (
-                <button role="menuitem" className="workspace-menu-close" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
-                  <Icon name="close" size={13} /><span>Close workspace</span>
-                </button>
-              )}
+                <BoardFilterBar
+                  value={boardFilter.value}
+                  onChange={boardFilter.onChange}
+                  statusOptions={boardFilter.statusOptions}
+                  issueTypeOptions={boardFilter.issueTypeOptions}
+                  parentOptions={boardFilter.parentOptions}
+                  shown={boardFilter.shown}
+                  total={boardFilter.total}
+                  active={filterOpen}
+                />
+              </div>
             </div>
-          )}
-        </div>
+            )}
 
-        <div className="new-menu-anchor" ref={newMenuRef}>
-          <button
-            className="new-pill new-pill-icon"
-            aria-label="New"
-            title="New (Ctrl+N)"
-            onClick={() => setNewMenuOpen(open => !open)}
-            data-testid="new-menu"
-          >
-            <Icon name="plus" size={13} />
-          </button>
-          {newMenuOpen && (
-            <div className="new-menu" role="menu">
-              {newProjectEnabled && onNewProject && (
-                <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}>
-                  <Icon name="plus" size={14} />
-                  <span><strong>Add Project</strong><small>Open a folder, create one, or start without files</small></span>
-                </button>
-              )}
-              {newProjectEnabled && onImportProjects && (
-                <button role="menuitem" data-testid="import-projects" onClick={() => { setNewMenuOpen(false); onImportProjects(); }}>
-                  <Icon name="markdown" size={14} />
-                  <span><strong>Import plans folders</strong><small>Turn several folders of markdown plans into projects</small></span>
-                </button>
-              )}
-              {onNewSession && (
-                <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}>
-                  <Icon name="robot" size={14} />
-                  <span><strong>New Session</strong><small>Start an AI session in this workspace</small></span>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
+        <div className="titlebar-group titlebar-center" role="group" aria-label="Session actions">
         {onNewSession && (
           <button
             type="button"
-            className="new-pill new-pill-icon"
+            className="icon-btn"
             aria-label="New AI session"
             title="New AI session"
             data-testid="session-focus-new"
             onClick={onNewSession}
           >
-            <Icon name="robot" size={13} />
-          </button>
-        )}
-
-        {onQuickCapture && (
-          <button type="button" className="new-pill new-pill-icon" aria-label="Quick Capture" title="Quick Capture (⌘⇧C / Ctrl+Shift+C)" data-testid="quick-capture" onClick={onQuickCapture}>
-            <Icon name="ticket" size={13} />
-          </button>
-        )}
-
-        {onOpenScheduledRuns && (
-          <button type="button" className="new-pill new-pill-icon" aria-label="Scheduled runs" title="Scheduled runs" data-testid="titlebar-scheduled-runs" onClick={onOpenScheduledRuns}>
-            <Icon name="clock" size={13} />
-          </button>
-        )}
-        {onOpenWhatChanged && (
-          <button type="button" className="new-pill new-pill-icon" aria-label="What Changed" data-testid="titlebar-what-changed" onClick={onOpenWhatChanged}>
-            <Icon name="clock" size={13} />
-          </button>
-        )}
-
-        {onQuickSession && (
-          <button
-            className="new-pill new-pill-icon"
-            aria-label="Quick session"
-            title="Quick session (Ctrl+Shift+N)"
-            data-testid="quick-session"
-            onClick={onQuickSession}
-          >
-            <Icon name="zap" size={13} />
-          </button>
-        )}
-
-
-      </div>
-
-      <div className="titlebar-spacer" />
-
-      {/* Back / forward sit against the context pill, and the whole block is
-          centred on the window rather than between the two side groups. */}
-      <div className="titlebar-group titlebar-center">
-        {onOpenOverview && (
-          <button type="button" className="icon-btn" aria-label="Home" title="Home" data-testid="titlebar-home" onClick={onOpenOverview}>
-            <Icon name="home" />
-          </button>
-        )}
-        <button className="icon-btn" aria-label="Back" disabled={!canGoBack} onClick={onBack}>
-          <Icon name="arrow-left" />
-        </button>
-        <button
-          className="icon-btn"
-          aria-label="Forward"
-          disabled={!canGoForward}
-          onClick={onForward}
-        >
-          <Icon name="arrow-right" />
-        </button>
-
-        {boardFilter ? (
-          <div className="titlebar-context-wrap" ref={filterRef}>
-            {(() => {
-              const filterTrigger = (className: string) => (
-                <button
-                  ref={contextButtonRef}
-                  type="button"
-                  className={className}
-                  data-testid="titlebar-context"
-                  title={`Filter issues on ${contextLabel}`}
-                  aria-label={`Filter issues on ${contextLabel}`}
-                  aria-haspopup="dialog"
-                  aria-expanded={filterOpen}
-                  onClick={() => setFilterOpen(open => !open)}
-                >
-                  <Icon name={contextIcon ?? 'ticket'} size={13} />
-                  <span className="titlebar-context-label">{contextLabel}</span>
-                  {activeFilterCount > 0 && (
-                    <span className="titlebar-filter-badge" data-testid="titlebar-filter-count">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                  <Icon name={filterOpen ? 'chevron-up' : 'chevron-down'} size={11} />
-                </button>
-              );
-              return filterTrigger(`titlebar-context titlebar-context-button${filterOpen ? ' active' : ''}`);
-            })()}
-            <div
-              className="titlebar-filter-popover"
-              data-testid="titlebar-filter-popover"
-              role="dialog"
-              aria-label={`Filter issues on ${contextLabel}`}
-              hidden={!filterOpen}
-            >
-              <div className="titlebar-filter-heading">
-                <span>Filter issues</span>
-                <span>{contextLabel}</span>
-              </div>
-              <BoardFilterBar
-                value={boardFilter.value}
-                onChange={boardFilter.onChange}
-                statusOptions={boardFilter.statusOptions}
-                issueTypeOptions={boardFilter.issueTypeOptions}
-                parentOptions={boardFilter.parentOptions}
-                shown={boardFilter.shown}
-                total={boardFilter.total}
-                active={filterOpen}
-              />
-            </div>
-          </div>
-        ) : onOpenPalette ? (
-          <div
-            className="titlebar-context titlebar-context-button"
-            data-testid="titlebar-context"
-            role="button"
-            tabIndex={0}
-            title={`${contextLabel} · Search (⌘K)`}
-            aria-label={`${contextLabel} · Search (⌘K)`}
-            onClick={onOpenPalette}
-            onKeyDown={event => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                onOpenPalette();
-              }
-            }}
-          >
-            <Icon name={contextIcon ?? 'ticket'} size={13} />
-            <span className="titlebar-context-label">{contextLabel}</span>
-            <span className="titlebar-context-search-hint" aria-hidden="true">
-              <Icon name="search" size={11} />
+            <span className="titlebar-ghost-plus" aria-hidden="true">
+              <Icon name="plus" size={12} strokeWidth={2} />
             </span>
-          </div>
-        ) : (
-          <div
-            className="titlebar-context"
-            data-testid="titlebar-context"
-            title={contextLabel}
-          >
-            <Icon name={contextIcon ?? 'ticket'} size={13} />
-            <span className="titlebar-context-label">{contextLabel}</span>
-          </div>
-        )}
-
-        <span className="titlebar-logo">
-          <PraxisWordmark className="praxis-wordmark" />
-        </span>
-        {appVersion && <span className="titlebar-version">v{appVersion}</span>}
-      </div>
-
-      <div className="titlebar-spacer" />
-
-      <CodeIntelTitlebarChip folder={codeIntelFolder} />
-      <UpdateIndicator settingsOpen={settingsOpen} onOpenAiSettings={onOpenAiSettings} />
-
-      <div className="titlebar-group titlebar-layout-toggles">
-        <button
-          className={`icon-btn${sidebarVisible ? ' active' : ''}`}
-          aria-label="Toggle sidebar"
-          aria-pressed={sidebarVisible}
-          onClick={onToggleSidebar}
-        >
-          <Icon name="sidebar-left" />
-        </button>
-        <button
-          className={`icon-btn${panelVisible ? ' active' : ''}`}
-          aria-label="Toggle panel"
-          aria-pressed={panelVisible}
-          onClick={onTogglePanel}
-        >
-          <Icon name="panel-bottom" />
-        </button>
-        <button
-          className={`icon-btn${auxVisible ? ' active' : ''}`}
-          aria-label="Toggle secondary sidebar"
-          title="Toggle secondary sidebar"
-          data-testid="titlebar-aux-toggle"
-          aria-pressed={auxVisible}
-          onClick={onToggleAux}
-        >
-          <Icon name="sidebar-right" />
-        </button>
-        {onToggleAssistant && (
-          <button
-            className={`icon-btn${assistantOpen ? ' active' : ''}`}
-            aria-label="Toggle virtual team assistant"
-            aria-pressed={assistantOpen}
-            data-testid="titlebar-assistant"
-            title="Virtual team assistant (⌘J)"
-            onClick={onToggleAssistant}
-          >
-            <Icon name="sparkles" />
           </button>
         )}
-        {focusModeAvailable && (
-          <button
-            className={`icon-btn${isFocusMode ? ' active' : ''}`}
-            aria-label="Toggle focus mode"
-            title="Toggle focus mode"
-            aria-pressed={isFocusMode}
-            onClick={onToggleFocusMode}
-            data-testid="toggle-focus-mode"
-          >
-            <Icon name="layout-focus" />
-          </button>
-        )}
-        <div className="titlebar-zoom-controls" data-testid="titlebar-zoom-controls" aria-label="Application zoom">
-          <button
-            className="icon-btn icon-btn-sm"
-            data-testid="titlebar-zoom-out"
-            aria-label="Zoom out application"
-            title="Zoom out (⌘− / Ctrl−)"
-            onClick={() => changeZoom(-0.1)}
-          >
-            <Icon name="zoom-out" size={13} />
-          </button>
-          <button
-            className="titlebar-zoom-value"
-            data-testid="titlebar-zoom-reset"
-            aria-label={`Reset application zoom, currently ${Math.round(zoomFactor * 100)} percent`}
-            title="Reset application zoom (⌘0 / Ctrl+0)"
-            onClick={resetZoom}
-          >
-            {Math.round(zoomFactor * 100)}%
-          </button>
-          <button
-            className="icon-btn icon-btn-sm"
-            data-testid="titlebar-zoom-in"
-            aria-label="Zoom in application"
-            title="Zoom in (⌘+ / Ctrl+)"
-            onClick={() => changeZoom(0.1)}
-          >
-            <Icon name="zoom-in" size={13} />
-          </button>
+
+        <div className="titlebar-group titlebar-actions" role="group" aria-label="Create and activity">
+                <div className="new-menu-anchor" ref={newMenuRef}>
+                  <button
+                    type="button"
+                    className="icon-btn titlebar-action-btn"
+                    aria-label="New"
+                    title="New (Ctrl+N)"
+                    onClick={() => setNewMenuOpen(open => !open)}
+                    data-testid="new-menu"
+                  >
+                    <Icon name="square-plus" size={13} />
+                  </button>
+                  {newMenuOpen && (
+                    <div className="new-menu" role="menu">
+                      {newProjectEnabled && onNewProject && (
+                        <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}>
+                          <Icon name="plus" size={14} />
+                          <span><strong>Add Project</strong><small>Open a folder, create one, or start without files</small></span>
+                        </button>
+                      )}
+                      {newProjectEnabled && onImportProjects && (
+                        <button role="menuitem" data-testid="import-projects" onClick={() => { setNewMenuOpen(false); onImportProjects(); }}>
+                          <Icon name="markdown" size={14} />
+                          <span><strong>Import plans folders</strong><small>Turn several folders of markdown plans into projects</small></span>
+                        </button>
+                      )}
+                      {onNewSession && (
+                        <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}>
+                          <Icon name="robot" size={14} />
+                          <span><strong>New Session</strong><small>Start an AI session in this workspace</small></span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {onQuickCapture && (
+                  <button
+                    type="button"
+                    className="icon-btn titlebar-action-btn"
+                    aria-label="Quick Capture"
+                    title="Quick Capture (⌘⇧C / Ctrl+Shift+C)"
+                    data-testid="quick-capture"
+                    onClick={() => { onQuickCapture(); }}
+                  >
+                    <Icon name="ticket" size={13} />
+
+                  </button>
+                )}
+                {onQuickSession && (
+                  <button
+                    type="button"
+                    className="icon-btn titlebar-action-btn"
+                    aria-label="Quick session"
+                    title="Quick session (Ctrl+Shift+N)"
+                    data-testid="quick-session"
+                    onClick={() => { onQuickSession(); }}
+                  >
+                    <Icon name="zap" size={13} />
+
+                  </button>
+                )}
         </div>
+        <div className="titlebar-group titlebar-activity" role="group" aria-label="Activity">
+                {onOpenScheduledRuns && (
+                  <button
+                    type="button"
+                    className="icon-btn titlebar-action-btn"
+                    aria-label="Scheduled runs"
+                    title="Scheduled runs"
+                    data-testid="titlebar-scheduled-runs"
+                    onClick={() => { onOpenScheduledRuns(); }}
+                  >
+                    <Icon name="calendar-clock" size={13} />
+                  </button>
+                )}
+                {onOpenWhatChanged && (
+                  <button
+                    type="button"
+                    className="icon-btn titlebar-action-btn"
+                    aria-label="What Changed"
+                    data-testid="titlebar-what-changed"
+                    onClick={() => { onOpenWhatChanged(); }}
+                  >
+                    <Icon name="git-branch" size={13} />
+                  </button>
+                )}
+
+        </div>
+        </div>
+        <div className="titlebar-group titlebar-utilities" role="group" aria-label="Utilities">
+                <CodeIntelTitlebarChip folder={codeIntelFolder} />
+
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-sm"
+                  aria-label="Reload window"
+                  title="Reload window (⌘R / Ctrl+R)"
+                  data-testid="titlebar-reload"
+                  onClick={() => void window.praxis.window.reload()}
+                >
+                  <Icon name="refresh" size={13} />
+                </button>
+
+        </div>
+
+
+              <div className="titlebar-group titlebar-layout-toggles" role="group" aria-label="Panels">
+                <button
+                  type="button"
+                  className={`icon-btn${sidebarVisible ? ' active' : ''}`}
+                  aria-label="Toggle sidebar"
+                  aria-pressed={sidebarVisible}
+                  onClick={onToggleSidebar}
+                >
+                  <Icon name="sidebar-left" />
+                </button>
+                <button
+                  type="button"
+                  className={`icon-btn${panelVisible ? ' active' : ''}`}
+                  aria-label="Toggle panel"
+                  aria-pressed={panelVisible}
+                  onClick={onTogglePanel}
+                >
+                  <Icon name="panel-bottom" />
+                </button>
+                <button
+                  type="button"
+                  className={`icon-btn${auxVisible ? ' active' : ''}`}
+                  aria-label="Toggle secondary sidebar"
+                  title="Toggle secondary sidebar"
+                  data-testid="titlebar-aux-toggle"
+                  aria-pressed={auxVisible}
+                  onClick={onToggleAux}
+                >
+                  <Icon name="sidebar-right" />
+                </button>
+                {focusModeAvailable && (
+                  <button
+                    type="button"
+                    className={`icon-btn${isFocusMode ? ' active' : ''}`}
+                    aria-label="Toggle focus mode"
+                    title="Toggle focus mode"
+                    aria-pressed={isFocusMode}
+                    onClick={onToggleFocusMode}
+                    data-testid="toggle-focus-mode"
+                  >
+                    <Icon name="layout-focus" />
+                  </button>
+                )}
+                {onToggleAssistant && (
+                  <button
+                    type="button"
+                    className={`icon-btn${assistantOpen ? ' active' : ''}`}
+                    aria-label="Toggle virtual team assistant"
+                    aria-pressed={assistantOpen}
+                    data-testid="titlebar-assistant"
+                    title="Virtual team assistant (⌘J)"
+                    onClick={onToggleAssistant}
+                  >
+                    <Icon name="sparkles" />
+                  </button>
+                )}
+
+              </div>
+
+        <div className="titlebar-group titlebar-preferences" role="group" aria-label="Zoom and settings">
+
+                <div className="titlebar-zoom-controls" data-testid="titlebar-zoom-controls" aria-label="Application zoom">
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-sm"
+                    data-testid="titlebar-zoom-out"
+                    aria-label="Zoom out application"
+                    title="Zoom out (⌘− / Ctrl−)"
+                    onClick={() => changeZoom(-0.1)}
+                  >
+                    <Icon name="minus" size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    className="titlebar-zoom-value"
+                    data-testid="titlebar-zoom-reset"
+                    aria-label={`Reset application zoom, currently ${Math.round(zoomFactor * 100)} percent`}
+                    title="Reset application zoom (⌘0 / Ctrl+0)"
+                    onClick={resetZoom}
+                  >
+                    {Math.round(zoomFactor * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-sm"
+                    data-testid="titlebar-zoom-in"
+                    aria-label="Zoom in application"
+                    title="Zoom in (⌘+ / Ctrl+)"
+                    onClick={() => changeZoom(0.1)}
+                  >
+                    <Icon name="plus" size={13} />
+                  </button>
+                </div>
         <button
-          className="icon-btn"
-          aria-label="Reload window"
-          title="Reload window (⌘R / Ctrl+R)"
-          data-testid="titlebar-reload"
-          onClick={() => void window.praxis.window.reload()}
-        >
-          <Icon name="refresh" />
-        </button>
-        <button className="icon-btn" aria-label="What's new" title="What's new" onClick={onOpenWhatsNew}>
-          <Icon name="sparkles" />
-        </button>
-        <button
-          className={`icon-btn${settingsOpen ? ' active' : ''}`}
+          type="button"
+          className={`titlebar-ghost-pill titlebar-ghost-pill--icon${settingsOpen ? ' active' : ''}`}
           aria-label="Settings"
           aria-haspopup="dialog"
           aria-expanded={settingsOpen}
           data-testid="titlebar-settings"
-          title="Settings"
+          title={appVersion ? `Settings · Praxis v${appVersion}` : 'Settings'}
           onClick={onOpenSettings}
         >
-          <Icon name="gear" />
+          <Icon name="gear" size={13} />
         </button>
+        </div>
+
       </div>
 
       {/* macOS already has the native traffic lights (see `titleBarStyle`/

@@ -15,5 +15,5 @@ export async function openSession(page: Page, keyOrTitle?: string): Promise<void
   await palette.getByRole('textbox', { name: 'Go to' }).fill(session.key);
   await palette.getByRole('option').filter({ hasText: session.title }).click();
   await expect(palette).toHaveCount(0);
-  await expect(page.getByTestId('sessions-view')).toBeVisible();
+  await expect(page.getByTestId('session-chat-thread')).toBeVisible();
 }

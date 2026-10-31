@@ -283,20 +283,12 @@ export function AgentActivityFeed({
     return items;
   }, [session.events, session.taskDefinition?.goal, session.purpose?.goal, session.startedAt, subagentId, session.issueKey, viewMode]);
 
-  if (timelineItems.length === 0 && (!isExecuting || viewMode !== 'conversation')) {
+  if (viewMode !== 'conversation' && timelineItems.length === 0) {
     return (
       <div className="agent-activity-empty" data-testid="agent-activity-empty">
-        <Icon name={viewMode === 'conversation' ? 'chats' : 'tools'} size={32} />
-        <span>
-          {viewMode === 'conversation'
-            ? 'No conversation messages yet.'
-            : 'No activity recorded yet for this agent.'}
-        </span>
-        <p className="hint">
-          {viewMode === 'conversation'
-            ? 'Ask a question or provide follow-up instructions below.'
-            : 'Actions, tool calls, and model reasoning will appear here as the agent works.'}
-        </p>
+        <Icon name="tools" size={32} />
+        <span>No activity recorded yet for this agent.</span>
+        <p className="hint">Actions, tool calls, and model reasoning will appear here as the agent works.</p>
       </div>
     );
   }

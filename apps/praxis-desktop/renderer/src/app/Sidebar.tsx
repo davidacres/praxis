@@ -25,7 +25,6 @@ import { IssuePeek } from '../issues/IssuePeek';
 import { projectColorValue } from '../projects/projectColors';
 import { useSettings } from '../settings/useSettings';
 import { useDialogs } from '../ui/dialogs';
-import { ProjectSelector } from './ProjectSelector';
 import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
@@ -432,7 +431,7 @@ function ProjectRecencyFeed({
               ><span className={`tree-section-icon${bucketCollapsed ? '' : ' open'}`}><Icon name={bucketCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
             </div>
           </div>
-          {!bucketCollapsed && <SessionOrganizer key={key} scope={key} items={items.map(({ id, node }) => ({ id, node }))} />}
+          {!bucketCollapsed && <SessionOrganizer key={key} scope={key} items={items} />}
         </div>;
       })}
       <div className="ledger-footer">
@@ -971,12 +970,6 @@ export function Sidebar({
 
   return (
     <nav className="sidebar" aria-label="Workspace">
-      {workspaceScopedProjects.length > 0 && <div className="sidebar-project-header">
-        <ProjectSelector projects={workspaceScopedProjects} activeProjectId={focusedProjectId} onSelectProject={id => {
-          const project = workspaceScopedProjects.find(candidate => candidate.id === id);
-          if (project) onSelectProject(project);
-        }} />
-      </div>}
       {effectiveSearching && (
         <div style={{ padding: '4px 12px 8px' }}>
           <input
@@ -1944,7 +1937,7 @@ function SessionsNav({
         onAssign={onAssignConversation}
       />
       {!collapsed &&
-        <SessionOrganizer scope={testId} items={rootItems.map(item => ({ id: item.kind === 'session' ? item.session.issueKey : `run:${item.runId}`, node: (() => {
+        <SessionOrganizer scope={testId} items={rootItems.map(item => ({ id: item.kind === 'session' ? item.session.issueKey : `run:${item.runId}`, at: item.kind === 'session' ? sessionLastActivityAt(item.session) : item.members.map(sessionLastActivityAt).sort().at(-1), node: (() => {
           if (item.kind === 'session') return renderNode(item.session, 0);
           const runCollapsed = collapsedRuns[item.runId] ?? false;
           const live = item.members.filter(member => !isTerminalAgentState(member.state)).length;

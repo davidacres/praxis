@@ -31,6 +31,10 @@ export type IconName =
   | 'compress'
   | 'search'
   | 'sliders'
+  | 'minus'
+  | 'square-plus'
+  | 'calendar-clock'
+  | 'file-star'
   | 'plus'
   | 'close'
   | 'mic'
@@ -210,6 +214,10 @@ const PATHS: Record<IconName, string | string[]> = {
   link: ['M6.4 9.6a2.6 2.6 0 0 1 0-3.7l1.9-1.9a2.6 2.6 0 0 1 3.7 3.7l-1 1', 'M9.6 6.4a2.6 2.6 0 0 1 0 3.7l-1.9 1.9a2.6 2.6 0 0 1-3.7-3.7l1-1'],
   paperclip: ['M11.8 7.6 6.9 12.5a2.8 2.8 0 0 1-4-4l5.6-5.6a1.9 1.9 0 0 1 2.7 2.7l-5.6 5.6a1 1 0 0 1-1.4-1.4l4.6-4.6'],
   ticket: ['M1.9 4.6h12.2v2.2a1.2 1.2 0 0 0 0 2.4v2.2H1.9V9.2a1.2 1.2 0 0 0 0-2.4z', 'M8 5.6v1.2M8 9.2v1.2'],
+  minus: ['M3 8h10'],
+  'square-plus': ['M3 2.5h10v11H3z', 'M5.5 8h5M8 5.5v5'],
+  'calendar-clock': ['M3 3h10v4M3 3v10h4M5 1.5v3M10 1.5v3M3 6h10', 'M14 11a3 3 0 1 1-6 0 3 3 0 0 1 6 0M11 9.5V11l1 .7'],
+  'file-star': ['M3 2h6l4 4v8H3zM9 2v4h4', 'm8 7 1 2 2 .3-1.5 1.4.4 2L8 11.8l-1.9.9.4-2L5 9.3 2-.3z'],
   calendar: ['M3 3.2h10v10.2H3z', 'M5.2 1.9v2.6M10.8 1.9v2.6M3 6.1h10'],
   clock: ['M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2z', 'M8 4.8v3.4l2.4 1.4'],
   cursor: 'M4.2 2.4 12 8.4l-4 .6-2.2 3.8z',

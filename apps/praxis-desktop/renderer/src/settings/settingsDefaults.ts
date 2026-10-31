@@ -95,6 +95,7 @@ export const DEFAULT_APP_SETTINGS = {
     gatewayUrl: '',
     defaultModel: '',
     agentName: '',
+    activityWords: ['Thinking', 'Working', 'Pondering'] as string[],
     spendLimit: 0,
     providerHandoverPercent: 95,
     browserTools: { enabled: false, allowedHosts: [] as string[] },

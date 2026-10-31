@@ -371,13 +371,16 @@ textarea {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  justify-content: space-between;
+  gap: var(--space-2);
   height: var(--titlebar-height);
   flex-shrink: 0;
-  padding-left: var(--space-2);
+  padding: 0 18px 0 var(--space-3);
   background-color: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  color: var(--text);
   backdrop-filter: var(--surface-backdrop);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
   -webkit-app-region: drag;
   user-select: none;
   z-index: 50;
@@ -387,7 +390,6 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 1px;
-  margin-left: 2px;
   padding: 1px;
   border: 1px solid var(--border-subtle, var(--border));
   border-radius: var(--radius-md);
@@ -423,55 +425,92 @@ textarea {
 .titlebar-group {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   -webkit-app-region: no-drag;
 }
 
 .titlebar-header-group {
+  min-width: 0;
   gap: var(--space-2);
+}
+
+.titlebar-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .titlebar-header-group .workspace-switcher {
   flex: 0 1 auto;
-  min-width: 120px;
+  min-width: 0;
   max-width: 220px;
+}
+
+.titlebar-crumb .workspace-switcher-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  height: calc(28px * var(--ui-scale));
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 500;
+}
+
+.titlebar-crumb .workspace-switcher-button:hover,
+.titlebar-crumb .workspace-switcher-button[aria-expanded="true"] {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.titlebar-crumb .workspace-switcher-name {
+  font-size: inherit;
+  font-weight: 500;
+  text-box: trim-both cap alphabetic;
+}
+
+.titlebar-crumb-sep {
+  color: var(--text-tertiary);
+  opacity: 0.65;
+  font-weight: 400;
+  user-select: none;
 }
 
 .titlebar-spacer {
   flex: 1;
 }
 
-/* The centre "address bar" pill: sleek, elevated, and authentic to Praxis. */
+/* Second segment of the monolith breadcrumb: bold active context + subtle chevron. */
 .titlebar-context {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  /* The reference pill is wide — roughly a third of the window. */
-  width: 32vw;
-  min-width: 220px;
-  max-width: 520px;
-  height: 26px;
-  padding: 0 12px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(10px);
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  letter-spacing: 0.01em;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(380px, 42vw);
+  height: calc(28px * var(--ui-scale));
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: calc(13px * var(--ui-scale));
   white-space: nowrap;
-  /* No container-level overflow hidden here: the easy-mode project menu is
-     an absolutely-positioned child that must escape the pill's box, and
-     every text span in the pill truncates itself already. */
   -webkit-app-region: no-drag;
   cursor: default;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .titlebar-context-wrap {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   -webkit-app-region: no-drag;
 }
 
@@ -480,23 +519,16 @@ textarea {
   cursor: pointer;
 }
 
-.titlebar-context-button.active {
-  border-color: var(--border-strong);
-  background: var(--bg-active);
+.titlebar-context-button.active,
+.titlebar-context-button:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
 
-.titlebar-context-search-hint {
+.titlebar-context-chevron {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  margin-left: 2px;
-  opacity: 0.45;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.titlebar-context:hover .titlebar-context-search-hint {
-  opacity: 0.9;
+  color: var(--text-tertiary);
 }
 
 .titlebar-context-label,
@@ -509,6 +541,7 @@ textarea {
 .titlebar-context-label {
   color: var(--text);
   font-weight: 600;
+  text-box: trim-both cap alphabetic;
 }
 
 .titlebar-context-detail {
@@ -534,14 +567,15 @@ textarea {
 .titlebar-filter-popover {
   position: absolute;
   top: calc(100% + 6px);
-  left: 50%;
+  left: 0;
   z-index: 60;
   width: min(520px, calc(100vw - 32px));
-  transform: translateX(-50%);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-panel);
+  border-radius: calc(var(--radius-lg) + var(--surface-radius-boost));
+  background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  box-shadow: var(--surface-accent-glow), var(--shadow-panel);
+  backdrop-filter: var(--surface-backdrop);
   color: var(--text);
   user-select: text;
 }
@@ -582,11 +616,56 @@ textarea {
   flex: 1;
 }
 
-.titlebar-context:hover {
-  background: color-mix(in srgb, var(--bg-hover) 85%, transparent);
-  border-color: var(--border-strong);
+/* Right-side Monolith Ghost Pills: + Session, Views, Settings */
+.titlebar-right {
+  gap: 6px;
+}
+
+.titlebar-ghost-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: calc(28px * var(--ui-scale));
+  padding: 0 11px;
+  border-radius: calc(7px + var(--surface-radius-boost));
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: calc(12px * var(--ui-scale));
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.titlebar-ghost-pill:hover {
+  background: color-mix(in srgb, var(--text) 7.5%, transparent);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+
+.titlebar-ghost-pill.active {
+  background: color-mix(in srgb, var(--text) 8.5%, transparent);
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+
+.titlebar-ghost-pill--icon {
+  padding: 0 9px;
+}
+
+.titlebar-ghost-plus {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.titlebar-ghost-label {
+  color: var(--text);
+  text-box: trim-both cap alphabetic;
 }
 
 .titlebar-divider {
@@ -596,24 +675,17 @@ textarea {
   background: var(--border);
 }
 
-.titlebar-center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Compact version of the splash wordmark sitting to the right of the run controls. */
+/* Compact version of the splash wordmark inside the Views popover. */
 .titlebar-logo {
   display: inline-flex;
   align-items: center;
-  margin-left: var(--space-2);
   color: var(--text);
 }
 .titlebar-version { margin-left: 4px; color: var(--text-tertiary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .titlebar-update { margin-right: 6px; }
 .titlebar-update-btn { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border: 1px solid var(--accent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); font-size: var(--text-xs); white-space: nowrap; cursor: pointer; }
 .titlebar-update-btn:hover { background: color-mix(in srgb, var(--accent) 24%, transparent); }
-.titlebar-code-intel { margin-right: 6px; }
+.titlebar-code-intel { margin-right: 2px; }
 .titlebar-code-intel-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; -webkit-app-region: no-drag; }
 .titlebar-code-intel-chip:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
 .titlebar-code-intel-chip.is-hybrid { color: var(--text); }
@@ -633,32 +705,6 @@ textarea {
 .acp-update-row > .btn { flex: 0 0 auto; white-space: nowrap; }
 .acp-update-error { margin: var(--space-2) 0 0; color: var(--danger); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .acp-update-settings { display: inline-block; margin-top: var(--space-2); font-size: var(--text-xs); }
-
-/* The centred address group can overlap the right-hand controls before the
-   fully compact titlebar takes over. Drop its decorative identity first so
-   layout controls remain visible and clickable in medium-width windows. */
-@media (max-width: 1100px) {
-  .titlebar-logo,
-  .titlebar-version { display: none; }
-  /* The code search chip keeps its icon; its tooltip still says the rest. */
-  .titlebar-code-intel-chip > span { display: none; }
-  .titlebar-code-intel-chip { padding: 0 6px; }
-}
-/* Windows and Linux draw minimise / maximise / close at the right edge (macOS keeps its traffic
-   lights on the left), so there the absolutely-centred group runs into the layout buttons below
-   ~1650px (measured: 61px of overlap at 1280, 34px at 1360 even without the wordmark). Below that
-   width it joins the flex row between the two spacers instead, so its pill gives way rather than
-   sitting on top of a button; the wordmark goes first, as on macOS. */
-@media (max-width: 1360px) {
-  .titlebar:not(.titlebar-mac) .titlebar-logo,
-  .titlebar:not(.titlebar-mac) .titlebar-version { display: none; }
-}
-@media (max-width: 1680px) {
-  .titlebar-center { position: static; transform: none; flex: 0 1 auto; min-width: 0; }
-  .titlebar-center > .titlebar-context-wrap,
-  .titlebar-center > .titlebar-context { flex: 0 1 auto; min-width: 0; }
-  .titlebar-context { min-width: 160px; }
-}
 
 .praxis-wordmark {
   width: 58px;
@@ -9031,7 +9077,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   max-width: min(760px, 84%);
   margin-bottom: var(--space-3);
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-md);
   color: var(--text);
   font-size: var(--text-sm);
@@ -9065,8 +9111,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .session-chat-message.is-reasoning {
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
   background: color-mix(in srgb, var(--accent) 4%, var(--bg-elevated));
 }
 
@@ -14338,30 +14382,6 @@ button.session-chat-attachment {
 }
 .session-team-menu .chip-select-check { margin-top: 3px; }
 
-/* ── Split chip — roster on the left half, pre-composed ask on the right ─────
-   Two targets inside one chip height: the left half manages who is on the team,
-   the right half starts an ask as editable text in the composer, so nothing
-   runs until the user reads it and sends it. */
-.session-team-split {
-  display: inline-flex;
-  align-items: stretch;
-  padding: 0;
-  overflow: hidden;
-}
-.session-team-split .composer-chip {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.session-team-split > :first-child { padding-right: calc(2px * var(--ui-scale)); }
-.session-team-split > :last-child { padding-left: calc(6px * var(--ui-scale)); border-left: 1px solid var(--border); }
-.session-team-split > :last-child:not(:disabled):hover:not(.active) { background: var(--bg-hover); }
-.session-team-split > :last-child.active { background: var(--bg-sunken); }
-.session-team-split > :last-child:disabled { opacity: .45; cursor: default; }
-.session-team-ask { color: var(--accent); }
-.session-team-ask svg { color: var(--accent); }
-.session-team-split > :last-child:disabled .session-team-ask,
-.session-team-split > :last-child:disabled .session-team-ask svg { color: var(--text-tertiary); }
 /* Toggle chips — a few on/off choices (approval gates) in one row. */
 .wf-toggle-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .wf-toggle-chip { height: var(--field-chip-height); border: 1px solid var(--border); font-size: var(--text-md); }
@@ -23254,8 +23274,6 @@ button.feedback-score-pill {
 .session-shelf__spine.is-today + .session-shelf__spine:not(.is-today) {
   border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
 }
-.session-shelf__spine:hover::before,
-.session-shelf__spine:focus-visible::before,
 .session-shelf__spine[aria-expanded="true"]::before {
   width: 3px;
   height: calc(100% - 8px);
@@ -23263,12 +23281,12 @@ button.feedback-score-pill {
   opacity: 1;
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
 }
-.session-shelf__spine.is-today:hover::after,
-.session-shelf__spine.is-today:focus-visible::after,
 .session-shelf__spine.is-today[aria-expanded="true"]::after {
   opacity: 0;
 }
-.session-shelf__spine[aria-current]::before { width: 3px; background: var(--accent); opacity: 1; }
+/* Selection is a quiet edge mark; only the revealed preview lights a spine.
+   Keyboard focus keeps the global focus ring without a second preview glow. */
+.session-shelf__spine[aria-current] { box-shadow: inset 1px 0 color-mix(in srgb, var(--accent) 45%, transparent); }
 .session-shelf__spine[aria-expanded="true"] { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 8%, transparent)); }
 /* The sleeve is the shelf opening: it clips the card's slide, so the card can
    never appear to the left of the rail. Its padding keeps the card's shadow
@@ -23288,7 +23306,9 @@ button.feedback-score-pill {
   pointer-events: none;
   transition: visibility 240ms;
 }
-.session-shelf__sleeve.is-open { visibility: visible; pointer-events: auto; }
+/* Only the visible book receives presses, not the full-height clipping area. */
+.session-shelf__sleeve.is-open { visibility: visible; }
+.session-shelf__sleeve.is-open > .session-shelf__card { pointer-events: auto; }
 .session-shelf__card {
   width: 100%;
   max-height: 100%;
@@ -23384,4 +23404,267 @@ button.feedback-score-pill {
   .session-shelf__spine::before,
   .session-shelf__spine::after,
   .session-shelf__sleeve { transition: none; }
+}
+
+/* Typographic Studio: text actions on a continuous, borderless canvas. */
+.titlebar {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: calc(14px * var(--ui-scale));
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.titlebar-header-group { flex: 1; gap: 4px; }
+.titlebar-spacer { flex: 0; }
+.titlebar-crumb { gap: 10px; }
+.titlebar-project { min-width: 0; max-width: calc(220px * var(--ui-scale)); flex: 0 1 auto; }
+.titlebar-project .sidebar-project-select { width: auto; max-width: 100%; }
+.titlebar .workspace-switcher-button,
+.titlebar .workspace-switcher-name,
+.titlebar-project .chip-select,
+.titlebar .titlebar-ghost-pill,
+.titlebar .titlebar-zoom-value {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.25;
+  letter-spacing: inherit;
+}
+.titlebar .workspace-switcher-name { font-size: calc(13px * var(--ui-scale)); font-weight: 500; min-width: 0; }
+.titlebar-crumb .workspace-switcher-button { max-width: 100%; min-width: 0; }
+.titlebar-crumb-sep { flex: 0 0 auto; }
+.titlebar-project .chip-select { color: var(--text); font-weight: 600; }
+.titlebar .titlebar-ghost-label { font-weight: 500; }
+.titlebar-right { flex-shrink: 0; gap: 12px; }
+.titlebar-actions, .titlebar-utilities { gap: 6px; }
+.titlebar .icon-btn,
+.titlebar .titlebar-ghost-pill,
+.titlebar .titlebar-code-intel-chip,
+.titlebar .titlebar-zoom-value,
+.titlebar .workspace-switcher-button,
+.titlebar-project .chip-select {
+  height: calc(32px * var(--ui-scale));
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+.titlebar .icon-btn { width: calc(32px * var(--ui-scale)); }
+.titlebar .titlebar-ghost-pill { width: auto; padding: 0 6px; color: var(--text); }
+.titlebar .icon-btn.titlebar-text-action { width: auto; padding: 0 6px; gap: 6px; font: inherit; white-space: nowrap; }
+.titlebar .icon-btn:hover:not(:disabled),
+.titlebar .titlebar-ghost-pill:hover,
+.titlebar .titlebar-code-intel-chip:hover,
+.titlebar .titlebar-zoom-value:hover,
+.titlebar .workspace-switcher-button:hover,
+.titlebar-project .chip-select:hover {
+  color: var(--text);
+  background: transparent;
+  border-bottom-color: var(--text-secondary);
+}
+.titlebar .icon-btn.active,
+.titlebar .titlebar-ghost-pill.active,
+.titlebar .workspace-switcher-button[aria-expanded="true"],
+.titlebar-project .chip-select[aria-expanded="true"] {
+  color: var(--text);
+  background: transparent;
+  border-bottom-color: var(--accent);
+}
+.titlebar .icon-btn .ui-icon {
+  width: calc(18px * var(--ui-scale));
+  height: calc(18px * var(--ui-scale));
+  flex-shrink: 0;
+}
+.titlebar-right > .titlebar-layout-toggles {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.titlebar-actions [data-testid="titlebar-scheduled-runs"] { margin-left: 8px; }
+.titlebar-zoom-controls {
+  height: calc(32px * var(--ui-scale));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.titlebar .titlebar-zoom-controls .icon-btn { width: calc(28px * var(--ui-scale)); }
+.titlebar .titlebar-zoom-value {
+  color: var(--text);
+  font-size: calc(13px * var(--ui-scale));
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.titlebar-code-intel-chip { font-size: calc(13px * var(--ui-scale)); font-weight: 500; }
+.titlebar-code-intel-chip.is-hybrid .ui-icon { display: none; }
+.titlebar-code-intel-chip.is-hybrid::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+@media (max-width: 1200px) {
+  .titlebar-right { gap: 4px; }
+  .titlebar-actions, .titlebar-utilities, .titlebar-header-group { gap: 2px; }
+  .titlebar .icon-btn { width: calc(24px * var(--ui-scale)); }
+  .titlebar .icon-btn.titlebar-text-action { width: auto; gap: 4px; padding: 0 4px; font-size: calc(13px * var(--ui-scale)); }
+  .titlebar-project { max-width: 140px; }
+  .titlebar-header-group .workspace-switcher { max-width: 130px; }
+  .titlebar-crumb { gap: 4px; }
+}
+.titlebar .icon-btn.titlebar-text-action { color: var(--text); }
+.titlebar .titlebar-ghost-plus .ui-icon { width: calc(18px * var(--ui-scale)); height: calc(18px * var(--ui-scale)); }
+.titlebar .icon-btn.active:hover:not(:disabled) { border-bottom-color: var(--accent); }
+.titlebar .icon-btn.active .ui-icon { color: var(--accent); }
+
+/* Keep session actions at the window midpoint, independent of side widths. */
+.titlebar { --titlebar-start-inset: var(--space-3); --titlebar-center-half: calc(140px * var(--ui-scale)); }
+.titlebar-mac { --titlebar-start-inset: 78px; }
+.titlebar-left {
+  min-width: 0;
+  max-width: calc(50vw - var(--titlebar-start-inset) - var(--titlebar-center-half) - 12px);
+  flex: 1;
+  gap: 10px;
+}
+.titlebar-preferences { flex-shrink: 0; gap: 2px; }
+.titlebar-header-group { flex: 1; min-width: 0; padding-left: 10px; border-left: 1px solid var(--border); }
+.titlebar-center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  height: 100%;
+  transform: translateX(-50%);
+  gap: 6px;
+}
+.titlebar-activity { gap: 6px; border-left: 1px solid var(--border); padding-left: 10px; }
+.titlebar-activity [data-testid="titlebar-scheduled-runs"] { margin-left: 0; }
+.titlebar-right { margin-left: auto; }
+.titlebar-right > .titlebar-layout-toggles { padding-left: 10px; border-left: 1px solid var(--border); }
+.titlebar-utilities { padding-left: 10px; border-left: 1px solid var(--border); }
+@media (max-width: 1200px) {
+  .titlebar { --titlebar-center-half: calc(112px * var(--ui-scale)); }
+  .titlebar-left { gap: 4px; }
+  .titlebar-header-group { padding-left: 4px; }
+  .titlebar-center, .titlebar-activity { gap: 2px; }
+  .titlebar-activity, .titlebar-utilities, .titlebar-right > .titlebar-layout-toggles { padding-left: 6px; }
+}
+.titlebar-project .sidebar-project-select { min-width: 0; width: 100%; }
+.titlebar-center::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 25%;
+  width: 1px;
+  height: 50%;
+  background: var(--border);
+}
+
+/* Outcome ledger: the What Changed view only; the workspace landing stays intact. */
+.outcome-ledger .project-review-heading h2 { font-size: var(--text-xl); letter-spacing: -.025em; }
+.outcome-ledger__layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: calc(28px * var(--ui-scale)); }
+.outcome-ledger__feed { min-width: 0; }
+.outcome-ledger__intro { font-size: var(--text-sm); max-width: 75ch; }
+.outcome-ledger .project-review-tabs .btn { border-radius: 0; background: transparent; border-color: transparent; }
+.outcome-ledger .project-review-tabs .btn[aria-pressed="true"] { border-bottom-color: var(--accent); color: var(--accent); }
+.outcome-ledger .project-review-day > h3 { color: var(--text-secondary); font-weight: 500; }
+.outcome-ledger .project-review-day li { display: grid; grid-template-columns: 54px 20px minmax(0, 1fr); align-items: start; gap: var(--space-3); position: relative; padding: var(--space-4) 0; }
+.outcome-ledger .project-review-day li > svg { color: var(--accent); margin-top: 3px; }
+.outcome-ledger .project-review-day li > .btn { grid-column: 3; justify-self: start; border-radius: 2px; }
+.outcome-ledger__time { font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; padding-top: 3px; }
+.outcome-ledger__entry { min-width: 0; overflow-wrap: anywhere; }
+.outcome-ledger__entry strong { line-height: 1.5; }
+.outcome-ledger__entry small { margin-top: var(--space-2); line-height: 1.6; }
+.outcome-ledger__context { border-left: 1px solid var(--border); padding-left: var(--space-4); min-width: 0; }
+.outcome-ledger__context section + section { margin-top: var(--space-5); border-top: 1px solid var(--border); }
+.outcome-ledger__context h3 { display: flex; gap: var(--space-2); align-items: center; }
+.outcome-ledger__context h3 span { color: var(--text-secondary); font-size: var(--text-xs); font-weight: 400; }
+.outcome-ledger__context article { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.outcome-ledger__context small, .outcome-ledger__context dt, .outcome-ledger__coverage { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.6; }
+.outcome-ledger__context strong { font-size: var(--text-sm); line-height: 1.5; }
+.outcome-ledger__context p { margin: 0; font-size: var(--text-sm); }
+.outcome-ledger__context .btn { border-radius: 2px; }
+.outcome-ledger__context dl { display: grid; grid-template-columns: auto minmax(0,1fr); gap: var(--space-3); font-size: var(--text-sm); }
+.outcome-ledger__context dd { margin: 0; overflow-wrap: anywhere; }
+.outcome-ledger__context .outcome-ledger__coverage { margin-top: var(--space-4); font-size: var(--text-xs); }
+@container (max-width: 700px) { .outcome-ledger__layout { grid-template-columns: 1fr; } .outcome-ledger__context { border-left: 0; padding-left: 0; border-top: 1px solid var(--border); } }
+@media (max-width: 1000px) { .outcome-ledger__layout { grid-template-columns: 1fr; } .outcome-ledger__context { border-left: 0; padding-left: 0; border-top: 1px solid var(--border); } }
+.outcome-ledger-shell { container-type: inline-size; }
+.outcome-ledger .project-review-heading h2 { font-size: calc(26px * var(--ui-scale)); }
+
+/* Shelf books follow their spine; selection and attention use separate marks. */
+.session-shelf__sleeve { align-items: flex-start; }
+.session-shelf__spine[aria-current]::before { background: var(--tone-progress); opacity: 1; }
+.session-shelf__spine[aria-current] { box-shadow: inset 1px 0 var(--tone-progress); }
+.session-shelf__spine[aria-current][aria-expanded="true"]::before { box-shadow: 0 0 8px color-mix(in srgb, var(--tone-progress) 45%, transparent); }
+.session-shelf__attention { position: absolute; top: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
+@media (prefers-reduced-motion: reduce) {
+  .session-shelf__card, .session-shelf__sleeve,
+  .session-shelf__spine::before, .session-shelf__spine::after { transition-duration: 1ms; }
+  .session-shelf__card { transition-property: transform; }
+  .session-shelf__sleeve { transition-property: visibility; }
+}
+
+/* Zoom and settings finish the titlebar, after the panel controls. */
+.titlebar-right > .titlebar-preferences { padding-left: 10px; border-left: 1px solid var(--border); }
+.titlebar-left .titlebar-header-group { padding-left: 0; border-left: 0; }
+@media (max-width: 1200px) { .titlebar-right > .titlebar-preferences { padding-left: 6px; } }
+
+.session-review-action { display: flex; justify-content: flex-end; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); }
+
+.composer-input-shell.has-leading > textarea { padding-left: calc(42px * var(--ui-scale)); }
+/* All three session-composer rows (context chips, text, providers) share one
+   fixed height so each row's contents sit perfectly centred in its band. */
+:root { --composer-row-h: calc(var(--tool-btn-size) + var(--space-1) * 2); }
+/* The plus button shares the input's first line: the row grows to fit it and
+   both sit centred on the same axis. The extra top padding is half the height
+   difference between the button and the 1.3 text line, so the first line lines
+   up with the button while later draft lines keep their normal spacing. */
+.composer-input-shell.has-leading > .composer-input {
+  min-height: var(--composer-row-h);
+  padding-top: calc((var(--composer-row-h) - var(--text-sm) * 1.3) / 2);
+}
+.composer-input-leading { position: absolute; top: calc((var(--composer-row-h) - var(--tool-btn-size)) / 2); left: calc(7px * var(--ui-scale)); z-index: 4; }
+/* Tighter session composer: one space-1 rhythm between the reference chips,
+   the text line and the provider row. Scoped to the session chat dock so the
+   New Session card keeps its airier 16px-prompt proportions. */
+.session-chat-composer .composer-controls { height: var(--composer-row-h); padding: 0 var(--space-2); }
+.session-context-add { width: var(--tool-btn-size); height: var(--tool-btn-size); }
+.session-context-references { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); height: var(--composer-row-h); padding: 0 var(--space-3); }
+.session-context-reference { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding-left: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--text-secondary); }
+.session-context-reference > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 35ch; }
+.session-context-reference .icon-btn { width: 22px; height: 22px; flex-shrink: 0; }
+.session-context-picker { width: min(340px, calc(100vw - 16px)); max-height: min(440px, 65vh); overflow: auto; z-index: 1100; padding: var(--space-2); }
+.session-context-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2); }
+.session-context-picker .composer-provider-option { white-space: normal; overflow-wrap: anywhere; width: 100%; }
+.session-context-picker small { display: block; color: var(--text-secondary); font-size: var(--text-xs); margin-top: 3px; }
+.session-context-picker > .input { width: 100%; margin-block: var(--space-2); }
+.session-context-picker-results { max-height: 240px; overflow: auto; }
+.session-composer-footer { flex-wrap: wrap; }
+
+.custom-theme-chat-image { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.custom-theme-chat-image img { width: 80px; height: 48px; object-fit: cover; border-radius: var(--radius-sm); }
+.custom-theme-chat-image > span { color: var(--text-secondary); font-size: var(--text-xs); }
+
+/* The full session shell owns the background, including empty space and the
+   composer surroundings. Nested transcript blocks must not repaint the image. */
+.session-console {
+  background-color: var(--session-chat-bg, transparent);
+}
+.agent-details-page {
+  background-color: var(--session-chat-bg, var(--bg-elevated));
+}
+.session-console,
+.agent-details-page {
+  background-image: var(--session-chat-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+:root[data-session-chat-background] .sessions-layout.plain-surface .session-chat-scroll {
+  background-color: transparent;
 }

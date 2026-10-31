@@ -1,3 +1,4 @@
+import { sessionLastActivityAt } from './sessionRecency';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentRuntimeSnapshot,
@@ -153,6 +154,7 @@ interface Route {
    *  workflow and focuses the goal. Transient, not persisted. */
   quickSession?: boolean;
   projectId?: string;
+  projectReview?: 'review' | 'changes';
   feature?: FeatureId;
   boardId?: string;
   issueKey?: string;
@@ -297,6 +299,7 @@ function readLastWorkspaceRoute(workspaceId: string): Route {
       ...(stored.newConversation === true ? { newConversation: true } : {}),
       ...(stored.newSession === true ? { newSession: true } : {}),
       ...(typeof stored.projectId === 'string' ? { projectId: stored.projectId } : {}),
+      ...(stored.projectReview === 'review' || stored.projectReview === 'changes' ? { projectReview: stored.projectReview } : {}),
       ...(feature ? { feature } : {}),
       ...(typeof stored.boardId === 'string' ? { boardId: stored.boardId } : {}),
       ...(typeof stored.issueKey === 'string' ? { issueKey: stored.issueKey } : {}),
@@ -320,6 +323,7 @@ function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
   const durableRoute: Route = {
     ...(route.newConversation ? { newConversation: true } : !route.projectId && !route.feature && !route.boardId ? { newSession: true } : {}),
     ...(route.projectId ? { projectId: route.projectId } : {}),
+    ...(route.projectReview ? { projectReview: route.projectReview } : {}),
     ...(route.feature ? { feature: route.feature } : {}),
     ...(route.boardId ? { boardId: route.boardId } : {}),
     ...(route.issueKey ? { issueKey: route.issueKey } : {}),
@@ -380,7 +384,7 @@ function restoredRouteForWorkspace(
   if (stored.newSession) return { newSession: true };
   if (project || board || stored.feature) {
     return {
-      ...(project ? { projectId: project.id } : {}),
+      ...(project ? { projectId: project.id, ...(stored.projectReview ? { projectReview: stored.projectReview } : {}) } : {}),
       ...(stored.feature ? { feature: stored.feature } : {}),
       ...(board ? { boardId: board.id } : {}),
       ...(board && stored.issueKey ? { issueKey: stored.issueKey } : {}),
@@ -1074,9 +1078,9 @@ export function App() {
         const isSelected = targetKey === record.issueKey || targetKey === record.sessionId;
         const isTerminal = record.state === 'completed' || record.state === 'failed' || record.state === 'aborted';
         const recordToStore = (!isSelected && isTerminal)
-          ? { ...record, events: [], eventsLoaded: false }
+          ? { ...record, lastActivityAt: sessionLastActivityAt(record), events: [], eventsLoaded: false }
           : record;
-        return [recordToStore, ...rest].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+        return [recordToStore, ...rest].sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)));
       });
     });
     const unsubscribeDeleted = window.praxis.ai.onSessionDeleted(issueKey => {
@@ -1162,7 +1166,7 @@ export function App() {
   const [reviewRequest, setReviewRequest] = useState<{ view: 'review' | 'changes'; at: number }>();
   const openProjectReview = useCallback((projectId: string, view: 'review' | 'changes') => {
     setReviewRequest({ view, at: Date.now() });
-    navigate({ projectId });
+    navigate({ projectId, projectReview: view });
   }, [navigate]);
 
   const agentSelection: CatalogSelection | undefined =
@@ -2114,6 +2118,28 @@ export function App() {
         />
       );
     }
+    if (selectedProject && route.projectReview) {
+      return <div className="view-scroll outcome-ledger-shell"><ProjectReviewPanel key={selectedProject.id} project={selectedProject} sessions={agentSessions} request={reviewRequest ?? { view: route.projectReview ?? 'changes', at: 0 }}
+          onOpenPlanFile={relativePath => {
+            void window.praxis.projects.readDocument(selectedProject.id, relativePath)
+              .then(setProjectDocument)
+              .catch(error => console.error('Failed to open project document:', error));
+          }}
+          onOpenCommit={hash => navigate({ projectId: selectedProject.id, feature: 'git', gitView: 'graph', gitCommit: hash })}
+          onOpenIssue={(issue, connectionId) => {
+            const board = boards.find(candidate => candidate.connectionId === connectionId);
+            // Same route as the sidebar's: a projectId here would keep project home in the centre pane.
+            if (board) navigate({ boardId: board.id, issueKey: issue.key });
+          }}
+          onOpenSession={sessionKey => navigate({ projectId: selectedProject.id, feature: 'sessions', sessionKey })}
+          onOpenSessions={() => navigate({ projectId: selectedProject.id, feature: 'sessions' })}
+          onOpenBoard={() => {
+            const board = boards.find(candidate => candidate.connectionId === `project:${selectedProject.id}`)
+              ?? boards.find(candidate => selectedProject.linkedBoards.some(linked => linked.connectionId === candidate.connectionId));
+            if (board) openBoard(board.id);
+          }}
+        /></div>;
+    }
     const activeProject = easyModeProject;
     if ((!route.feature || route.feature === 'overview') && !route.boardId && !route.issueKey && !route.view) {
       return (
@@ -2491,6 +2517,9 @@ export function App() {
         onOpenOverview={() => navigate({ feature: 'overview', view: 'overview' })}
         appVersion={appVersion}
         codeIntelFolder={composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder}
+        projects={workspaceProjects}
+        activeProjectId={generalConversations ? 'conversations' : activeProjectId}
+        onSelectProject={projectId => navigate(projectId === 'conversations' ? { feature: 'conversations' } : { projectId })}
         contextLabel={contextLabel}
         contextIcon={contextIcon}
         workspaces={workspaces}
@@ -2512,7 +2541,6 @@ export function App() {
         onNewProject={() => requestAddProject()}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
         onOpenFolder={openExistingFolder}
-        onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
         onOpenAiSettings={() => setSettingsDialogCategory('ai')}

@@ -24,14 +24,16 @@ export const RECENCY_BUCKET_LABEL: Record<RecencyBucket, string> = {
 export const RECENCY_BUCKETS: RecencyBucket[] = ['today', 'this-week', 'last-week', 'older'];
 
 /**
- * When a session was last touched: its completion time when it has one, then
- * the newest event on its transcript, then its start. Older records carry only
+ * When a session was last touched: the latest of its completion time,
+ * newest transcript event, and start. Older records carry only
  * `startedAt`, so that is the floor rather than "now" — a session with no
  * activity since launch belongs where it started.
  */
 export function sessionLastActivityAt(session: AgentSessionRecord): string {
   const lastEvent = session.events?.[session.events.length - 1]?.timestamp;
-  return session.completedAt ?? lastEvent ?? session.startedAt;
+  return [session.startedAt, session.completedAt, session.lastActivityAt, lastEvent]
+    .filter((at): at is string => Boolean(at) && Number.isFinite(Date.parse(at!)))
+    .reduce((latest, at) => Date.parse(at) > Date.parse(latest) ? at : latest, session.startedAt);
 }
 
 export function recencyBucket(isoTimestamp: string, now: Date = new Date()): RecencyBucket {

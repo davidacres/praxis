@@ -219,6 +219,11 @@ export function BehaviourTab({ settings, update }: { settings: AppSettings; upda
         ] as const).map(([key, label, description]) => <Toggle key={key} label={label} description={description}
           checked={settings.notifications[key]} onChange={value => update({ notifications: { [key]: value } })} />)}
       </TabCard>
+      <TabCard title="Session activity">
+        <SettingLine label="Activity words" help="Comma-separated busy labels, shown in order every 8 seconds in the session composer. Cosmetic only; detailed activity stays in the chat disclosure. Up to 20 labels, 32 characters each. Clear to restore defaults.">
+          <DebouncedTextField ariaLabel="Session activity words" value={(settings.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']).join(', ')} onCommit={value => update({ ai: { activityWords: value.split(',') } })} placeholder="Thinking, Working, Pondering" />
+        </SettingLine>
+      </TabCard>
       <TabCard title="Identity">
         <SettingLine label="Display name" help="On the agent’s comments and commits.">
           <DebouncedTextField ariaLabel="AI agent display name" value={settings.ai.agentName} onCommit={value => update({ ai: { agentName: value } })} placeholder="e.g. Ticket Agent" />

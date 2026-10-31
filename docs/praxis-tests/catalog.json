@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 738,
+  "testCount": 749,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -562,6 +562,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a CLI agent's reply shows the turn's time, tokens, cost and model, and the session total grows",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-00AB250CE7",
+      "title": "custom activity words persist and replace composer narration during a Codex turn",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiCliAgentHost.spec.ts",
+        "line": 667,
+        "project": "functional"
+      },
+      "area": "ai Cli Agent Host",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "custom activity words persist and replace composer narration during a Codex turn",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -1430,18 +1446,34 @@
       }
     },
     {
-      "id": "PT-16A529CAF6",
-      "title": "switching a finished session to Review sends the mode transition and resumes it",
+      "id": "PT-E4F2A32EC5",
+      "title": "reviewing changes lives beside the diff and the composer has no mode tabs",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiSessionMode.spec.ts",
-        "line": 33,
+        "line": 27,
         "project": "functional"
       },
       "area": "ai Session Mode",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "switching a finished session to Review sends the mode transition and resumes it",
+        "when": "reviewing changes lives beside the diff and the composer has no mode tabs",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-224CE3B564",
+      "title": "ticket analysis remains an explicit action when the analysis gate is off",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/aiSessionMode.spec.ts",
+        "line": 96,
+        "project": "functional"
+      },
+      "area": "ai Session Mode",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "ticket analysis remains an explicit action when the analysis gate is off",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -2251,7 +2283,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/aiTicketReview.spec.ts",
-        "line": 420,
+        "line": 422,
         "project": "functional"
       },
       "area": "ai Ticket Review",
@@ -2566,8 +2598,8 @@
       }
     },
     {
-      "id": "PT-CF9F8E1A1A",
-      "title": "displays the running Praxis version in the title bar",
+      "id": "PT-DEFAAE3BF0",
+      "title": "reports the running Praxis version on the Settings control",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/app.spec.ts",
@@ -2577,7 +2609,7 @@
       "area": "app",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "displays the running Praxis version in the title bar",
+        "when": "reports the running Praxis version on the Settings control",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -2763,7 +2795,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 33,
+        "line": 37,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2779,7 +2811,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 44,
+        "line": 48,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2795,7 +2827,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 71,
+        "line": 75,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2811,7 +2843,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 84,
+        "line": 88,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2827,7 +2859,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 154,
+        "line": 158,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2843,7 +2875,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 243,
+        "line": 247,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2859,7 +2891,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 258,
+        "line": 325,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2875,7 +2907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 271,
+        "line": 338,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -2891,7 +2923,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/appearanceSettings.spec.ts",
-        "line": 290,
+        "line": 357,
         "project": "functional"
       },
       "area": "appearance Settings",
@@ -5995,7 +6027,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/iconButtonTooltips.spec.ts",
-        "line": 160,
+        "line": 162,
         "project": "functional"
       },
       "area": "icon Button Tooltips",
@@ -6706,6 +6738,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "the demo board offers Subtask with a required story/task/bug parent",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-F36FFCA684",
+      "title": "What Changed ledger keeps home intact and opens recorded evidence",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/outcomeLedger.spec.ts",
+        "line": 7,
+        "project": "functional"
+      },
+      "area": "outcome Ledger",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "What Changed ledger keeps home intact and opens recorded evidence",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -8310,6 +8358,22 @@
       }
     },
     {
+      "id": "PT-05BC1A371E",
+      "title": "composer plus adds real folder, session and ticket context to a follow-up",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionContextPicker.spec.ts",
+        "line": 8,
+        "project": "functional"
+      },
+      "area": "session Context Picker",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "composer plus adds real folder, session and ticket context to a follow-up",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-0FBFC2BB99",
       "title": "composer coach grounds fixes in the workspace, previews text, and steps aside when ready",
       "source": {
@@ -8331,7 +8395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
-        "line": 316,
+        "line": 343,
         "project": "functional"
       },
       "area": "session Feedback",
@@ -8347,7 +8411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
-        "line": 579,
+        "line": 606,
         "project": "functional"
       },
       "area": "session Feedback",
@@ -8363,7 +8427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
-        "line": 638,
+        "line": 665,
         "project": "functional"
       },
       "area": "session Feedback",
@@ -8379,7 +8443,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
-        "line": 655,
+        "line": 682,
         "project": "functional"
       },
       "area": "session Feedback",
@@ -8395,7 +8459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionFeedback.spec.ts",
-        "line": 675,
+        "line": 702,
         "project": "functional"
       },
       "area": "session Feedback",
@@ -8418,6 +8482,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "chat and project session groups reorder, rename inline, and persist",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-58EB8EE11F",
+      "title": "session shelf follows latest activity despite an earlier completion",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionModifiedOrder.spec.ts",
+        "line": 7,
+        "project": "functional"
+      },
+      "area": "session Modified Order",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "session shelf follows latest activity despite an earlier completion",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -8726,6 +8806,86 @@
       }
     },
     {
+      "id": "PT-4972638424",
+      "title": "collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
+        "line": 51,
+        "project": "functional"
+      },
+      "area": "session Shelf",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-1FCF628060",
+      "title": "the shelf card sends a quick reply into the session",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
+        "line": 146,
+        "project": "functional"
+      },
+      "area": "session Shelf",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the shelf card sends a quick reply into the session",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-90617ED6C8",
+      "title": "the shelf closes reliably on pointer leave and outside clicks without interrupting replies",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
+        "line": 190,
+        "project": "functional"
+      },
+      "area": "session Shelf",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the shelf closes reliably on pointer leave and outside clicks without interrupting replies",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-FFEA37801D",
+      "title": "only the revealed spine glows when moving across all five sessions",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
+        "line": 264,
+        "project": "functional"
+      },
+      "area": "session Shelf",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "only the revealed spine glows when moving across all five sessions",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-2EE0F7086B",
+      "title": "shelf books follow spines, retain drafts, delay hover and distinguish selection",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
+        "line": 306,
+        "project": "functional"
+      },
+      "area": "session Shelf",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "shelf books follow spines, retain drafts, delay hover and distinguish selection",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-2B75887CEB",
       "title": "a session shows its agent and the skills it used, and a skill lists the sessions that used it",
       "source": {
@@ -8747,7 +8907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionTeam.spec.ts",
-        "line": 20,
+        "line": 21,
         "project": "functional"
       },
       "area": "session Team",
@@ -10194,6 +10354,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "titlebar scheduled-runs shortcut stays clickable at medium window widths",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-B09ECBFDB3",
+      "title": "themed titlebar switches projects and exposes panel controls",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/titlebarMinimal.spec.ts",
+        "line": 8,
+        "project": "functional"
+      },
+      "area": "titlebar Minimal",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "themed titlebar switches projects and exposes panel controls",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

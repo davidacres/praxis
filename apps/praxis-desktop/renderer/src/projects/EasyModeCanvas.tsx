@@ -1,3 +1,4 @@
+import { sessionLastActivityAt } from '../app/sessionRecency';
 import React, { useState, useEffect, useMemo } from 'react';
 import type { AgentSessionRecord, ProjectRecord, GitStatusSnapshot, AppSettings, AppSettingsPatch } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -100,7 +101,7 @@ export function EasyModeCanvas({
 
   const recentSessions = useMemo(() => {
     return [...projectSessions]
-      .sort((a, b) => (new Date(b.startedAt).getTime() || 0) - (new Date(a.startedAt).getTime() || 0))
+      .sort((a, b) => Date.parse(sessionLastActivityAt(b)) - Date.parse(sessionLastActivityAt(a)))
       .slice(0, 4);
   }, [projectSessions]);
 

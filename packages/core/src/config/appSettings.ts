@@ -137,6 +137,8 @@ export interface AiSettings {
   defaultModel: string;
   /** Display name used for agent attribution (comments, commits). */
   agentName: string;
+  /** Cosmetic composer busy labels, cycled in order; never used for agent instructions. */
+  activityWords?: string[];
   /**
    * Default working directory for agent sessions (tool sandbox root, workflow-pack
    * discovery, delivery runs). Empty means the app's own directory.
@@ -612,6 +614,15 @@ export const BUILT_IN_LOOKS: AppearanceLook[] = [
   builtInLook('look-flat', 'Flat', 'flat')
 ];
 
+/** Bound display-only text and fall back when a saved list is empty or malformed. */
+function sanitizeActivityWords(value: unknown): string[] {
+  const words = Array.isArray(value)
+    ? [...new Set(value.filter((word): word is string => typeof word === 'string')
+      .map(word => word.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 32)).filter(Boolean))].slice(0, 20)
+    : [];
+  return words.length ? words : [...DEFAULT_APP_SETTINGS.ai.activityWords!];
+}
+
 /** Shipped defaults — kept in sync with `package.json` contributes.configuration. */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   notifications: { completed: true, failed: true, needsAttention: true, sound: true, suppressWhenViewing: true },
@@ -619,6 +630,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     gatewayUrl: '',
     defaultModel: '',
     agentName: '',
+    activityWords: ['Thinking', 'Working', 'Pondering'],
     workingDirectory: '',
     analysisPrompt: '',
     analysisGateEnabled: false,
@@ -854,7 +866,10 @@ function readCustomThemes(value: unknown): AppearanceSettings['customThemes'] {
     name: (item.name as string).trim().slice(0, 80),
     mode: item.mode as 'light' | 'dark',
     description: (item.description as string).slice(0, 240),
-    preview: Object.fromEntries(Object.entries(item.preview as Record<string, unknown>).filter(([, value]) => typeof value === 'string').slice(0, 40)) as Record<string, string>
+    preview: Object.fromEntries(Object.entries(item.preview as Record<string, unknown>).filter(([key, value]) => typeof value === 'string'
+      && (key !== 'chatBackground' || /^#[0-9a-f]{6}$/i.test(value))
+      && (key !== 'chatBackgroundImage' || (value.length <= 2_800_000
+        && /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)))).slice(0, 40)) as Record<string, string>
   }));
 }
 
@@ -1239,6 +1254,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         gatewayUrl: readString(raw.ai.gatewayUrl, DEFAULT_APP_SETTINGS.ai.gatewayUrl),
         defaultModel: readString(raw.ai.defaultModel, DEFAULT_APP_SETTINGS.ai.defaultModel),
         agentName: readString(raw.ai.agentName, DEFAULT_APP_SETTINGS.ai.agentName),
+        activityWords: sanitizeActivityWords(raw.ai.activityWords),
         workingDirectory: readString(raw.ai.workingDirectory, DEFAULT_APP_SETTINGS.ai.workingDirectory),
         analysisPrompt: readString(raw.ai.analysisPrompt, DEFAULT_APP_SETTINGS.ai.analysisPrompt),
         spendLimit: clampNumber(raw.ai.spendLimit, 0, Number.MAX_SAFE_INTEGER, DEFAULT_APP_SETTINGS.ai.spendLimit),

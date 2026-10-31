@@ -11,7 +11,6 @@ import type {
   AiProvider,
   AiProviderStatus,
   PermissionDecision,
-  SessionMode,
   TerminalSessionInfo,
   WireImageAttachment,
   WorkflowRunSummary
@@ -31,8 +30,10 @@ import { workflowPreview } from './workflowPreview';
 import { SessionUsageSummary } from './SessionUsageSummary';
 import { SessionComposerToolbar } from './SessionComposerToolbar';
 import { SessionPromptScoreBar } from './SessionPromptScoreBar';
-import { SessionComposerCard, SessionComposerHeader, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
+import { SessionComposerCard, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
+import { SessionContextPicker } from './SessionContextPicker';
+import { withSessionContext, type SessionContextReference } from './sessionContext';
 import { SessionTeamControl } from './SessionTeamControl';
 import { askSessionTeamMember, mentionedSessionTeamMember } from './sessionTeamStore';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
@@ -55,19 +56,6 @@ import { collectTurnTools } from './chatToolCalls';
 import { collectMessageRuns, messageRunCovering, messageRunStartingAt } from './chatTurns';
 import type { SessionWorkflowOption } from './NewSession';
 import { UncommittedBaseError, UncommittedBaseNotice, type UncommittedChoice } from '../workflows/UncommittedBaseNotice';
-
-/**
- * Switching mode is not just a flag: the session is told, in its own thread,
- * what the new mode means. These are the prompts the console used to send.
- */
-const MODE_TRANSITION: Record<SessionMode, string> = {
-  analysis:
-    'Switch this conversation into Analysis mode. Inspect the relevant ticket and workspace read-only, then return a concrete analysis and implementation plan. Do not make changes.',
-  review:
-    'Switch this conversation into Review mode. Review the relevant ticket, workspace, and current implementation read-only, then report findings, risks, and actionable recommendations. Do not make changes.',
-  chat:
-    'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.'
-};
 
 import { TranscriptAttachments, SessionChatThread } from './SessionChatThread';
 export { TranscriptAttachments, SessionChatThread };
@@ -532,6 +520,7 @@ export function SessionsPage({
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
   const [respondingTo, setRespondingTo] = useState<string | undefined>();
   const [followUp, setFollowUp] = useState('');
+  const [contextReferences, setContextReferences] = useState<SessionContextReference[]>([]);
   /** Images pasted/dropped into the composer, carried with the next follow-up. */
   const [followUpImages, setFollowUpImages] = useState<WireImageAttachment[]>([]);
   const [followUpError, setFollowUpError] = useState<string | undefined>();
@@ -555,7 +544,7 @@ export function SessionsPage({
   /** When true, expands the in-flight composer so the user can queue a follow-up. */
   const [inflightComposerExpanded, setInflightComposerExpanded] = useState(false);
   /** Queued follow-up messages per session, automatically dispatched when the session's active turn finishes. */
-  const [queuedFollowUpsBySession, setQueuedFollowUpsBySession] = useState<Record<string, { message: string; images?: WireImageAttachment[] }>>({});
+  const [queuedFollowUpsBySession, setQueuedFollowUpsBySession] = useState<Record<string, { message: string; draftMessage?: string; references?: SessionContextReference[]; images?: WireImageAttachment[] }>>({});
   const [extraSkillsBySession, setExtraSkillsBySession] = useState<Record<string, string[]>>({});
   const hadTypedInInflightComposerRef = useRef(false);
   const [abortingSession, setAbortingSession] = useState(false);
@@ -584,8 +573,7 @@ export function SessionsPage({
     }, 260);
   };
   /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
-  const [switchingMode, setSwitchingMode] = useState(false);
-  /** ACP's own Session Mode (e.g. "ask"/"architect"/"code") — see `setAcpMode` below. Unrelated to `switchingMode`/chat-analysis-review above. */
+  /** ACP's own Session Mode (e.g. "ask"/"architect"/"code") — see `setAcpMode` below. Independent of ticket analysis and change reviews. */
   const [settingAcpMode, setSettingAcpMode] = useState(false);
   // `bottom`, not `top` — these two open from the composer at the bottom of the
   // page, so they must grow upward, not downward off the viewport like
@@ -689,6 +677,7 @@ export function SessionsPage({
   }, []);
 
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
+  useEffect(() => { setContextReferences([]); }, [selected?.issueKey]);
   const selectedSubagents = useMemo(() => (selected ? extractSubagents(selected, sessions) : []), [selected, sessions]);
   const selectedWorkflowRuns = useSessionWorkflowRuns(selected);
   const activeWorkflowRun = selectedWorkflowRuns.find(run => run.runId === selected?.workflowRunId);
@@ -1173,18 +1162,20 @@ export function SessionsPage({
   const sendFollowUp = async () => {
     if (!selected || sendingFollowUp) return;
     if (!followUp.trim() && followUpImages.length === 0) return;
+    const contextMessage = withSessionContext(followUp.trim(), contextReferences);
     const mentioned = followUpImages.length === 0 ? mentionedSessionTeamMember(selected.issueKey, followUp) : undefined;
     if (mentioned) {
       // Only an explicit @mention of an added member diverts the message; the session itself stays idle.
-      const request = followUp.trim();
+      const request = contextMessage;
       setFollowUp('');
       askSessionTeamMember(selected, mentioned, request)
+        .then(() => setContextReferences([]))
         .catch(error => setFollowUpError(error instanceof Error ? error.message : String(error)));
       return;
     }
     setLimitStoppedFor(undefined);
     if (selected.conversation?.state === 'running') {
-      const message = followUp.trim();
+      const message = contextMessage;
       setSendingFollowUp(true);
       setFollowUpError(undefined);
       setDismissedError(undefined);
@@ -1206,9 +1197,10 @@ export function SessionsPage({
           message,
           ...(stagedImages.length ? { images: stagedImages } : {})
         });
+        setContextReferences([]);
       } catch (error) {
         setSubmittedTurn(undefined);
-        setFollowUp(current => current || message);
+        setFollowUp(current => current || followUp.trim());
         setFollowUpImages(stagedImages);
         setFollowUpError(error instanceof Error ? error.message : String(error));
       } finally {
@@ -1217,7 +1209,7 @@ export function SessionsPage({
       return;
     }
     if (isSingleAgentRunning) {
-      let message = followUp.trim();
+      let message = contextMessage;
       if (attachTerminalContext && terminalForContext) {
         try {
           const context = await window.praxis.terminal.getContext(terminalForContext.id);
@@ -1233,13 +1225,14 @@ export function SessionsPage({
       setQueuedFollowUpsBySession(prev => ({
         ...prev,
         [selected.issueKey]: {
-          message,
+          message, draftMessage: followUp.trim(), references: contextReferences,
           images: stagedImages.length ? [...stagedImages] : undefined
         }
       }));
       setFollowUp('');
       setFollowUpImages([]);
       setAttachTerminalContext(false);
+      setContextReferences([]);
       setInflightComposerExpanded(false);
       hadTypedInInflightComposerRef.current = false;
       return;
@@ -1250,7 +1243,7 @@ export function SessionsPage({
     setFollowUpError(undefined);
     setDismissedError(undefined);
     try {
-      let message = followUp.trim();
+      let message = contextMessage;
       if (attachTerminalContext) {
         if (!terminalForContext) throw new Error('The selected terminal has no recent output to attach.');
         const context = await window.praxis.terminal.getContext(terminalForContext.id);
@@ -1270,6 +1263,7 @@ export function SessionsPage({
       setFollowUp('');
       setFollowUpImages([]);
       await window.praxis.ai.continueSession(selected.issueKey, message, stagedImages);
+      setContextReferences([]);
       setAttachTerminalContext(false);
     } catch (error) {
       setSubmittedTurn(undefined);
@@ -1365,20 +1359,6 @@ export function SessionsPage({
       await window.praxis.ai.setConversationToolOwner(selected.issueKey, participantId);
     } catch (error) {
       setFollowUpError(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const switchMode = async (mode: SessionMode) => {
-    if (!selected || mode === (selected.mode ?? 'chat') || !isTerminalAgentState(selected.state)) return;
-    setSwitchingMode(true);
-    setFollowUpError(undefined);
-    try {
-      await window.praxis.ai.switchSessionMode(selected.issueKey, mode);
-      await window.praxis.ai.continueSession(selected.issueKey, MODE_TRANSITION[mode]);
-    } catch (error) {
-      setFollowUpError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSwitchingMode(false);
     }
   };
 
@@ -1667,114 +1647,6 @@ export function SessionsPage({
                     <span className="session-image-hint">{followUpImages.length}/{MAX_ATTACHED_IMAGES}</span>
                   </div>
                 )}
-                {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && (
-                  <SessionComposerHeader data-testid="session-mode-panel">
-                    {composerOptions.allowModeChange !== false && <div className="session-mode-toggle" role="group" aria-label="Switch session mode">
-                      {(['chat', 'analysis', 'review'] as const).map(mode => (
-                        <button
-                          key={mode}
-                          type="button"
-                          className={selected.mode === mode || (!selected.mode && mode === 'chat') ? 'active' : ''}
-                          disabled={switchingMode}
-                          onClick={() => void switchMode(mode)}
-                          data-testid={`session-switch-mode-${mode}`}
-                        >
-                          {mode[0].toUpperCase() + mode.slice(1)}
-                        </button>
-                      ))}
-                    </div>}
-                    <div className="session-mode-panel-meta">
-                      {usageHidden && (
-                        <button
-                          type="button"
-                          className="composer-chip session-runtime-chip session-restore-usage-btn"
-                          data-testid="session-restore-usage-btn"
-                          title="Show usage bar"
-                          onClick={() => toggleUsageHidden(false)}
-                        >
-                          <Icon name="graph" size={14} />
-                          <span className="session-runtime-chip-label">Usage</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'toolMode' ? ' active' : ''}`}
-                        data-testid="session-tool-mode"
-                        disabled={composerOptions.allowToolAccessChange === false}
-                        title="Tool access for this session — click to change"
-                        aria-haspopup="listbox"
-                        aria-expanded={transitionPopover?.open === 'toolMode'}
-                        onClick={event => {
-                          if (transitionPopover?.open === 'toolMode') {
-                            setTransitionPopover(undefined);
-                            return;
-                          }
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          setConversationPopoverPosition(undefined);
-                          setTransitionPopover({
-                            open: 'toolMode',
-                            position: { bottom: window.innerHeight - rect.top + 6, left: rect.left }
-                          });
-                        }}
-                      >
-                        <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
-                        <span className="session-runtime-chip-label">
-                          {selected.toolMode === 'project-only' ? 'Project only' : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
-                        </span>
-                      </button>
-                      {selected.workingDirectory ? (
-                        <button
-                          type="button"
-                          className={`composer-chip session-runtime-chip${transitionPopover?.open === 'folder' ? ' active' : ''}`}
-                          data-testid="session-working-directory"
-                          disabled={composerOptions.allowToolAccessChange === false}
-                          title={`${selected.workingDirectory} — click to change or detach folder`}
-                          aria-haspopup="listbox"
-                          aria-expanded={transitionPopover?.open === 'folder'}
-                          onClick={event => {
-                            if (transitionPopover?.open === 'folder') {
-                              setTransitionPopover(undefined);
-                              return;
-                            }
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            setConversationPopoverPosition(undefined);
-                            setTransitionPopover({
-                              open: 'folder',
-                              position: { bottom: window.innerHeight - rect.top + 6, left: rect.left }
-                            });
-                          }}
-                        >
-                          <Icon name="folder" size={14} />
-                          <span className="session-runtime-chip-label">{basename(selected.workingDirectory)}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="composer-chip session-runtime-chip"
-                          data-testid="session-attach-folder"
-                          disabled={composerOptions.allowToolAccessChange === false}
-                          title="Attach a working folder to this session"
-                          onClick={async () => {
-                            try {
-                              const picked = await window.praxis.dialog.pickFolder('Choose working folder for this session');
-                              if (picked) {
-                                await window.praxis.ai.updateSessionToolAccess(selected.issueKey, {
-                                  workingDirectory: picked,
-                                  toolMode: selected.toolMode === 'project-only' ? 'read-only' : selected.toolMode
-                                });
-                              }
-                            } catch (cause) {
-                              console.error('Failed to attach folder', cause);
-                            }
-                          }}
-                        >
-                          <Icon name="folder" size={14} />
-                          <span className="session-runtime-chip-label">Attach folder…</span>
-                        </button>
-                      )}
-                    </div>
-                  </SessionComposerHeader>
-                )}
                 {attachTerminalContext && terminalForContext && (
                   <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
                     <Icon name="terminal" size={14} />
@@ -1785,7 +1657,15 @@ export function SessionsPage({
                     </button>
                   </div>
                 )}
+                {(contextReferences.length > 0 || selected.workingDirectory) && !followUpCollapsed && <div className="session-context-references" data-testid="session-context-references">
+                  {selected.workingDirectory && <span className="session-context-reference" title={selected.workingDirectory}><Icon name="folder" size={13} /><span>{basename(selected.workingDirectory)}</span>
+                    <button type="button" className="icon-btn" aria-label="Detach working folder" disabled={sendingFollowUp || composerOptions.allowToolAccessChange === false || !canChangeSessionRuntime(selected)}
+                      onClick={() => void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { workingDirectory: null, toolMode: 'project-only' }).catch(cause => setFollowUpError(String(cause)))}><Icon name="close" size={12} /></button></span>}
+                  {contextReferences.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}><Icon name={reference.kind === 'ticket' ? 'ticket' : 'chats'} size={13} /><span>{reference.label}</span><button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={sendingFollowUp} onClick={() => setContextReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button></span>)}
+                </div>}
                 <SessionComposerInput
+                  leading={!followUpCollapsed && <SessionContextPicker key={selected.issueKey} session={selected} sessions={sessions} references={contextReferences} onChange={setContextReferences}
+                    disabled={sendingFollowUp} folderDisabled={composerOptions.allowToolAccessChange === false || !canChangeSessionRuntime(selected) || conversationRunning} />}
                   ref={followUpTextareaRef}
                   collapsed={followUpCollapsed}
                   data-testid={inputTestId}
@@ -1832,6 +1712,7 @@ export function SessionsPage({
                   testId={composerOptions.activityTestId}
                   startedAt={activeTurnStartedAt}
                   statusText={liveActivityText ?? 'Working…'}
+                  activityWords={settings?.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']}
                   provider={activityProvider}
                   tokenCount={selected.tokenUsage?.totalTokens}
                 />}
@@ -1843,6 +1724,7 @@ export function SessionsPage({
                         testId={composerOptions.activityTestId}
                         startedAt={activeTurnStartedAt}
                         statusText={liveActivityText ?? 'Working…'}
+                        activityWords={settings?.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']}
                         provider={activityProvider}
                         tokenCount={selected.tokenUsage?.totalTokens}
                       />}
@@ -1858,7 +1740,8 @@ export function SessionsPage({
                             className="session-runtime-chip-label"
                             style={{ cursor: 'pointer' }}
                             onClick={() => {
-                              setFollowUp(activeQueuedMessage.message);
+                              setFollowUp(activeQueuedMessage.draftMessage ?? activeQueuedMessage.message);
+                              setContextReferences(activeQueuedMessage.references ?? []);
                               if (activeQueuedMessage.images?.length) {
                                 setFollowUpImages(activeQueuedMessage.images);
                               }
@@ -1872,7 +1755,7 @@ export function SessionsPage({
                               setTimeout(() => followUpTextareaRef.current?.focus(), 50);
                             }}
                           >
-                            Queued: {activeQueuedMessage.message.length > 32 ? `${activeQueuedMessage.message.slice(0, 32)}…` : activeQueuedMessage.message}
+                            Queued: {(activeQueuedMessage.draftMessage ?? activeQueuedMessage.message).slice(0, 32)}
                           </span>
                           <button
                             type="button"
@@ -1926,6 +1809,7 @@ export function SessionsPage({
                         testId={composerOptions.activityTestId}
                         startedAt={activeTurnStartedAt}
                         statusText={liveActivityText}
+                        activityWords={settings?.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']}
                         provider={activityProvider}
                         tokenCount={selected.tokenUsage?.totalTokens}
                       />}
@@ -1980,6 +1864,36 @@ export function SessionsPage({
                           document.body
                         )}
                       <span className="spacer" />
+                      {context && (
+                        <button
+                          ref={contextChipRef}
+                          type="button"
+                          className={`session-context-chip is-${context.level}${contextPopoverPosition ? ' active' : ''}`}
+                          aria-label={`Context usage: ${context.percent}% used`}
+                          aria-haspopup="dialog"
+                          aria-expanded={Boolean(contextPopoverPosition)}
+                          aria-controls="session-context-popover"
+                          title={`${context.percent}% of context used`}
+                          data-testid="session-context-chip"
+                          onClick={() => {
+                            if (contextPopoverPosition) {
+                              setContextPopoverPosition(undefined);
+                              return;
+                            }
+                            const rect = contextChipRef.current?.getBoundingClientRect();
+                            if (rect) {
+                              setTransitionPopover(undefined);
+                              setConversationPopoverPosition(undefined);
+                              setContextPopoverPosition({
+                                bottom: window.innerHeight - rect.top + 6,
+                                left: rect.right - 300
+                              });
+                            }
+                          }}
+                        >
+                          <SessionContextRing percent={context.percent} />
+                        </button>
+                      )}
                       <button
                         className="composer-send composer-send-cancel"
                         aria-label="Cancel response"
@@ -2267,6 +2181,7 @@ export function SessionsPage({
               </SessionComposerCard>
               {!followUpCollapsed && !limitSwitchVisible && (
                 <div className="session-composer-footer">
+                  {usageHidden && <button type="button" className="composer-chip" data-testid="session-restore-usage-btn" onClick={() => toggleUsageHidden(false)}><Icon name="graph" size={14} /> Usage</button>}
                   <SessionPermissionModeControl
                     value={selected.permissionMode}
                     onChange={(permissionMode: AgentPermissionMode) => {
@@ -2275,6 +2190,34 @@ export function SessionsPage({
                     testId="session"
                     disabled={conversationRunning || !canChangeSessionRuntime(selected)}
                   />
+                  {isTerminalAgentState(selected.state) && !conversationRunning && !isWorkflowStageSession(selected) && (
+                      <button
+                        type="button"
+                        className={`composer-chip session-runtime-chip${transitionPopover?.open === 'toolMode' ? ' active' : ''}`}
+                        data-testid="session-tool-mode"
+                        disabled={composerOptions.allowToolAccessChange === false}
+                        title="Tool access for this session — click to change"
+                        aria-haspopup="listbox"
+                        aria-expanded={transitionPopover?.open === 'toolMode'}
+                        onClick={event => {
+                          if (transitionPopover?.open === 'toolMode') {
+                            setTransitionPopover(undefined);
+                            return;
+                          }
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setConversationPopoverPosition(undefined);
+                          setTransitionPopover({
+                            open: 'toolMode',
+                            position: { bottom: window.innerHeight - rect.top + 6, left: rect.left }
+                          });
+                        }}
+                      >
+                        <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
+                        <span className="session-runtime-chip-label">
+                          {selected.toolMode === 'project-only' ? 'Project only' : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
+                        </span>
+                      </button>
+                  )}
                   <SessionGitBranchControl
                     session={selected}
                     disabled={conversationRunning || !canChangeSessionRuntime(selected)}

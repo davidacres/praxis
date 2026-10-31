@@ -29,7 +29,6 @@ export function CodexActivityBlock({
     <details
       className={`session-chat-activity${streaming ? ' session-chat-activity-streaming' : ''}`}
       data-testid={disclosureId}
-      open={streaming || undefined}
     >
       <summary className="session-chat-activity-summary" data-testid={`${testIdPrefix}-activity-summary`}>
         <Icon name="radio-tower" size={11} />

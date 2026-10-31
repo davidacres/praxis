@@ -108,10 +108,10 @@ test('remembers which panels are open across a relaunch', async () => {
   await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
 });
 
-test('displays the running Praxis version in the title bar', async () => {
+test('reports the running Praxis version on the Settings control', async () => {
   const version = await window.evaluate(() => window.praxis.app.getVersion());
   expect(version).toMatch(/^\d+\.\d+\.\d+$/);
-  await expect(window.locator('.titlebar-version')).toHaveText(`v${version}`);
+  await expect(window.getByTestId('titlebar-settings')).toHaveAttribute('title', `Settings · Praxis v${version}`);
 });
 
 test('boards render on launch', async () => {

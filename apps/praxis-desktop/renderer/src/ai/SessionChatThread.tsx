@@ -1,3 +1,4 @@
+import { displaySessionContext } from './sessionContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import { createPortal } from 'react-dom';
@@ -215,9 +216,11 @@ export function SessionChatThread({
     );
   }, [propConversationEvents, rawEvents]);
 
-  const hasAnyPrompt = useMemo(
-    () => conversationEvents.some(event => event.type === 'user_input_completed'),
-    [conversationEvents]
+  const hasOpeningPrompt = useMemo(
+    () => conversationEvents.some(event => event.type === 'user_input_completed'
+      && displaySessionContext(event.detail || event.summary || '').trim()
+        === displaySessionContext(session.taskDefinition?.goal || '').trim()),
+    [conversationEvents, session.taskDefinition?.goal]
   );
 
   useEffect(() => {
@@ -244,7 +247,7 @@ export function SessionChatThread({
     if (feedbackFocus) feedbackFocusRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [feedbackFocus]);
 
-  const showOpeningGoal = showOpeningGoalProp ?? (testIdVariant === 'classic' ? true : !hasAnyPrompt);
+  const showOpeningGoal = showOpeningGoalProp ?? (testIdVariant === 'classic' ? true : !hasOpeningPrompt);
 
   const turnTools = useMemo(() => collectTurnTools(rawEvents), [rawEvents]);
   const toolCallsAt = useCallback(
@@ -421,7 +424,7 @@ export function SessionChatThread({
         const messageKey = `event-${event.timestamp}-${index}`;
         const rawText = event.type === 'message'
           ? visibleMessageText(event.detail ?? event.summary ?? '')
-          : stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '');
+          : stripGadgetFences(displaySessionContext(terminalContext?.message ?? event.detail ?? event.summary ?? ''));
 
         if (messageRunCovering(messageRuns, index)) return null;
 
@@ -709,7 +712,7 @@ export function SessionChatThread({
             </details>
           )}
           <Markdown
-            text={stripGadgetFences(optimisticTerminalContext?.message ?? optimisticFollowUp.message)}
+            text={stripGadgetFences(displaySessionContext(optimisticTerminalContext?.message ?? optimisticFollowUp.message))}
             testId="session-chat-markdown"
             imageSessionId={session?.issueKey}
           />
@@ -756,7 +759,7 @@ export function SessionChatThread({
           data-pending="true"
         >
           <div className="session-chat-author">You</div>
-          <Markdown text={stripGadgetFences(pending.message)} testId="session-chat-markdown" imageSessionId={session?.issueKey} />
+          <Markdown text={stripGadgetFences(displaySessionContext(pending.message))} testId="session-chat-markdown" imageSessionId={session?.issueKey} />
         </div>
       ))}
 

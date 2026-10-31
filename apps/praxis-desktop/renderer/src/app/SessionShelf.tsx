@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import type { AgentSessionRecord } from '@praxis/core';
 import { recencyBucket, sessionLastActivityAt } from './sessionRecency';
 import { isConversationSession, sessionTitle } from '../ai/sessionNav';
@@ -6,6 +6,10 @@ import { agentStateLaneClass, sessionStatusLabel, sessionVisualState } from '../
 import { Icon } from '../ui/Icon';
 
 const SHELF_SESSION_LIMIT = 5;
+const HOVER_DELAY_MS = 120;
+// Window-local drafts survive card switches and sidebar expansion, without
+// persisting unsent text to disk. Successful sends remove their draft.
+const replyDrafts = new Map<string, string>();
 
 /**
  * The collapsed sidebar's hidden shelf: a thin vertical line of session spines
@@ -38,16 +42,61 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   const revealedRef = useRef(revealed);
   revealedRef.current = revealed;
   const closeTimer = useRef<number>();
+  const hoverTimer = useRef<number>();
+  const [cardOffset, setCardOffset] = useState(0);
+  const cancelHover = () => window.clearTimeout(hoverTimer.current);
+  const shelfRef = useRef<HTMLElement>(null);
   const sleeveRef = useRef<HTMLDivElement>(null);
   const spinesRef = useRef<HTMLDivElement>(null);
   const cancelClose = () => window.clearTimeout(closeTimer.current);
   const deferClose = () => {
+    cancelHover();
     cancelClose();
-    closeTimer.current = window.setTimeout(() => setRevealed(undefined), 140);
+    closeTimer.current = window.setTimeout(() => {
+      // A reply being edited stays open until focus leaves or the user clicks away.
+      if (sleeveRef.current?.contains(document.activeElement)) return;
+      setRevealed(undefined);
+    }, 140);
   };
-  const reveal = (key: string) => { cancelClose(); setRevealed(key); setMounted(key); };
-  const close = () => { cancelClose(); setRevealed(undefined); };
-  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
+  const reveal = (key: string) => { cancelHover(); cancelClose(); setRevealed(key); setMounted(key); };
+  const close = () => { cancelHover(); cancelClose(); setRevealed(undefined); };
+  const hover = (key: string) => {
+    cancelHover(); cancelClose();
+    hoverTimer.current = window.setTimeout(() => reveal(key), HOVER_DELAY_MS);
+  };
+  useEffect(() => () => { window.clearTimeout(closeTimer.current); window.clearTimeout(hoverTimer.current); }, []);
+  // Keep the book beside its spine, clamped inside the workspace at every size.
+  useLayoutEffect(() => {
+    const shelf = shelfRef.current;
+    const card = sleeveRef.current?.querySelector<HTMLElement>('.session-shelf__card');
+    if (!shelf || !card) return;
+    const position = () => {
+      const spine = Array.from(spinesRef.current?.querySelectorAll<HTMLElement>('[data-session-key]') ?? [])
+        .find(element => element.dataset.sessionKey === mounted);
+      if (!spine) return;
+      const bounds = spine.getBoundingClientRect();
+      const centre = (bounds.top + bounds.bottom) / 2 - shelf.getBoundingClientRect().top - 24;
+      const height = card.getBoundingClientRect().height;
+      setCardOffset(Math.max(0, Math.min(centre - height / 2, shelf.clientHeight - 48 - height)));
+    };
+    position();
+    const observer = new ResizeObserver(position);
+    observer.observe(shelf); observer.observe(card);
+    return () => observer.disconnect();
+  }, [mounted]);
+  // Capture outside presses even when another control stops propagation or a
+  // click on non-focusable content leaves the reply field focused.
+  useEffect(() => {
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (spinesRef.current?.contains(target) || sleeveRef.current?.querySelector('.session-shelf__card')?.contains(target)) return;
+      window.clearTimeout(closeTimer.current);
+      window.clearTimeout(hoverTimer.current);
+      setRevealed(undefined);
+    };
+    document.addEventListener('pointerdown', dismissOutside, true);
+    return () => document.removeEventListener('pointerdown', dismissOutside, true);
+  }, []);
   // Leaving the shelf by keyboard tucks the card away once focus is elsewhere.
   useEffect(() => {
     const spines = spinesRef.current;
@@ -78,24 +127,25 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
       if (event.key !== 'Escape' || !open) return;
       event.preventDefault();
       const index = shelfSessions.findIndex(session => session.issueKey === revealed);
-      setRevealed(undefined);
       spinesRef.current?.querySelectorAll<HTMLButtonElement>('.session-shelf__spine')[index]?.focus();
+      // Restoring focus can reveal the spine again; close after that event.
+      close();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, revealed, shelfSessions]);
-  return <nav className="session-shelf" aria-label="Session shelf" data-testid="session-shelf">
+  return <nav className="session-shelf" aria-label="Session shelf" data-testid="session-shelf" ref={shelfRef}
+    onPointerEnter={cancelClose} onPointerLeave={deferClose}>
     <div className="session-shelf__spines" ref={spinesRef} onScroll={close}>
       {shelfSessions.map(session => <ShelfSpine key={session.issueKey} session={session}
         today={isTodaySession(session)}
         active={activeSessionKey === session.issueKey} open={revealed === session.issueKey}
-        onReveal={() => reveal(session.issueKey)} onHide={deferClose} />)}
+        onReveal={() => reveal(session.issueKey)} onHover={() => hover(session.issueKey)} onLeave={cancelHover} />)}
     </div>
     <div className={`session-shelf__sleeve${open ? ' is-open' : ''}`} ref={sleeveRef}
-      aria-hidden={!open}
-      onPointerEnter={cancelClose} onPointerLeave={deferClose}>
+      aria-hidden={!open}>
       {shelfSessions.map(session => mounted === session.issueKey
-        ? <ShelfCard key={session.issueKey} session={session} open={revealed === session.issueKey}
+        ? <ShelfCard key={session.issueKey} session={session} open={revealed === session.issueKey} offset={cardOffset}
           onClosed={key => setMounted(current => current === key && revealedRef.current !== key ? undefined : current)}
           onOpenSession={key => { close(); onSelectSession(key); }} />
         : null)}
@@ -103,19 +153,24 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   </nav>;
 }
 
-function ShelfSpine({ session, today, active, open, onReveal, onHide }: {
+function ShelfSpine({ session, today, active, open, onReveal, onHover, onLeave }: {
   session: AgentSessionRecord;
   today: boolean;
   active: boolean;
   open: boolean;
   onReveal: () => void;
-  onHide: () => void;
+  onHover: () => void;
+  onLeave: () => void;
 }) {
   const title = sessionTitle(session);
+  const state = sessionVisualState(session);
+  const attention = state === 'awaiting_input' || state === 'awaiting_approval';
   return <button type="button" className={`session-shelf__spine${today ? ' is-today' : ''}`}
-    data-testid="session-shelf-spine" data-recency={today ? 'today' : 'earlier'}
+    data-testid="session-shelf-spine" data-session-key={session.issueKey} aria-description={attention ? sessionStatusLabel(session) : undefined} data-recency={today ? 'today' : 'earlier'}
     aria-label={`Preview ${title}`} aria-expanded={open} aria-current={active ? 'true' : undefined}
-    onPointerEnter={onReveal} onFocus={onReveal} onClick={onReveal} onBlur={onHide} />;
+    onPointerEnter={onHover} onPointerLeave={onLeave} onFocus={onReveal} onClick={onReveal}>
+    {attention && <span className="session-shelf__attention" data-testid="session-shelf-attention" aria-hidden />}
+  </button>;
 }
 
 /** The last assistant or user message in the session, for the card's quote block. */
@@ -129,11 +184,12 @@ function latestMessage(session: AgentSessionRecord): string | undefined {
   return undefined;
 }
 
-function ShelfCard({ session, open, onOpenSession, onClosed }: {
+function ShelfCard({ session, open, offset, onOpenSession, onClosed }: {
   session: AgentSessionRecord;
   open: boolean;
   onOpenSession: (key: string) => void;
   onClosed: (key: string) => void;
+  offset: number;
 }) {
   const [hydrated, setHydrated] = useState<AgentSessionRecord>();
   useEffect(() => {
@@ -153,7 +209,7 @@ function ShelfCard({ session, open, onOpenSession, onClosed }: {
   // position is what the slide-out transition animates from.
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(open); }, [open]);
-  const [reply, setReply] = useState('');
+  const [reply, setReply] = useState(() => replyDrafts.get(session.issueKey) ?? '');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string>();
@@ -172,6 +228,7 @@ function ShelfCard({ session, open, onOpenSession, onClosed }: {
       } else {
         await window.praxis.ai.continueSession(session.issueKey, text);
       }
+      replyDrafts.delete(session.issueKey);
       setReply('');
       setSent(true);
     } catch (cause) {
@@ -181,7 +238,7 @@ function ShelfCard({ session, open, onOpenSession, onClosed }: {
     }
   };
   return <article className={`session-shelf__card${shown ? ' is-open' : ''}`}
-    aria-label={`Session preview: ${title}`} data-testid="session-shelf-card"
+    style={{ marginTop: offset }} aria-label={`Session preview: ${title}`} data-testid="session-shelf-card"
     onTransitionEnd={event => { if (event.propertyName === 'transform' && !shown) onClosed(session.issueKey); }}>
     <header className="session-shelf__meta">
       {ticketKey && <span className="session-shelf__key">{ticketKey}</span>}
@@ -194,7 +251,11 @@ function ShelfCard({ session, open, onOpenSession, onClosed }: {
       <div className="session-shelf__reply-row">
         <input value={reply} disabled={sending} placeholder="Quick reply…" autoComplete="off"
           aria-label={`Quick reply to ${title}`} data-testid="session-shelf-reply-input"
-          onChange={event => { setReply(event.target.value); setSent(false); }} />
+          onChange={event => {
+            const value = event.target.value;
+            setReply(value); setSent(false);
+            if (value) replyDrafts.set(session.issueKey, value); else replyDrafts.delete(session.issueKey);
+          }} />
         <button type="submit" className="session-shelf__send" disabled={!reply.trim() || sending}
           aria-label="Send quick reply"><Icon name="arrow-right" size={14} /></button>
       </div>
