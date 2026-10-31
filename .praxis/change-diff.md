@@ -1,5 +1,28 @@
 # change-diff — PRX-T113-496
 
+## Current recovery — explicit acceptance boundary
+
+Recovery base: `50c62248`. This recovery changes only TASK-496's checked-in acceptance text and this artifact; the implementation and all verification gates are preserved. Earlier sections below describe previous revisions.
+
+The supplied medium quality finding is addressed through its contracts-only alternative. The prior recovery explained the boundary only in this report, leaving the actual task acceptance ambiguous. `apps/praxis-desktop/docs/plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-189/tasks/task-496.md` now explicitly defines pure schema initialisation, transport contract proof and the limits of `PERSISTENCE_FAILURE` evidence. TASK-497 retains operational storage, main/preload handlers, atomic persistence, notifications and restart restoration, including absent/existing storage and failed-write verification. No runtime integration is claimed or added, consistent with the supplied plan. The already-fixed empty-update rejection remains covered by both validators' tests.
+
+Current-revision verification:
+
+| Check | Result |
+| --- | --- |
+| `npm run build:core` | Passed. |
+| Both compiled notes contract test files | 9 passed, 0 failed. |
+| `npm run test:core` | Approved run passed: 1,811 total, 1,809 passed, 2 skipped, 0 failed. Sandbox run failed: 27 failures with localhost EPERM and watcher EMFILE; no checks changed. |
+| `npm run check-types` | Passed across all workspaces. |
+| `npm run build:renderer` | Passed; existing chunk-size warning. |
+| `npm run test:praxis-contracts` | Passed: 732 Playwright tests catalogued and linked. |
+| Read-only `parsePlanFolder` before and after | Unchanged: 58 features, 184 stories, 408 tasks, 18 bugs (610 child items). |
+| `git diff --check` | Passed. |
+
+Plan metadata remains TASK-496 / Task / To Do / H1 `TASK-496: Define note and group contracts`: ID, explicit type, status, title and dependencies are unchanged, preserving the plan-authoring rules. No UI changes or visual verification were performed. No workflow definition, stage progression, tracker state or TASK-497 gates changed.
+
+---
+
 Base revision: `8856cb7b`.
 
 ## Implemented scope
