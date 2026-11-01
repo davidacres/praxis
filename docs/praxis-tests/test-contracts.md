@@ -1,78 +1,86 @@
 # test-contracts
 
-Ticket: PRX-T113-499 — TASK-499: Add sidebar notes tree and shared editor.
-Frozen implementation: `3b721e79682a3b3d61ec9ff5805b159269a9e37a` (it was the checkout HEAD when this stage ran, with a clean tree, so no export was needed).
+Ticket: PRX-T113-500 — TASK-500: Add note and group session handoff.
+Frozen implementation: `59e34fccb5aafea06d948a569aaa8e55f21689ff` (it was the checkout HEAD when this stage ran, with a clean tree, so no export was needed).
 
 ## Outcome
 
-At the frozen snapshot the validator failed with **2 problems**: two new tests in `sidebarNotes.spec.ts` were missing from the catalog. After `--write` and curated prose for both, it passes: **742 Playwright contracts catalogued and linked** (740 carried over unchanged), with no line-drift warnings.
+At the frozen snapshot the validator failed with **4 problems**: the four tests in the new `noteSessionHandoff.spec.ts` were missing from the catalog. After `--write` and curated prose for all four, it passes: **746 Playwright contracts catalogued and linked** (742 carried over unchanged), with no line-drift warnings.
 
-The task contributes **2 Playwright tests** and **6 node:test tests**, so this task documents **8 contracts**. That is not a full monorepo count, because the generator indexes only Playwright.
+The task contributes **4 Playwright tests** and **7 node:test tests**, so this task documents **11 contracts**. That is not a full monorepo count, because the generator indexes only Playwright.
 
-Coverage links: [generated catalog](catalog.json), [automation index](index.md), [6 TASK-499 node:test contracts](task-499-notes.md), [generator/validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs), [e2e spec](../../apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts), unit tests [notesSession](../../apps/praxis-desktop/renderer/test/notesSession.test.ts) and [notesTree](../../apps/praxis-desktop/renderer/test/notesTree.test.ts).
+Coverage links: [generated catalog](catalog.json), [automation index](index.md), [7 TASK-500 node:test contracts](task-500-notes.md), [generator/validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs), [e2e spec](../../apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts), unit tests [noteSendReference](../../apps/praxis-desktop/renderer/test/noteSendReference.test.ts) and [noteSendStore](../../apps/praxis-desktop/renderer/test/noteSendStore.test.ts).
 
 | ID | Runner | Automation |
 | --- | --- | --- |
-| PT-2DFB759892 | playwright | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:39` |
-| PT-0754F5395E | playwright | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:81` |
-| PT-EF24B1568D | node:test | `apps/praxis-desktop/renderer/test/notesSession.test.ts:74` |
-| PT-2DF357AC10 | node:test | `apps/praxis-desktop/renderer/test/notesSession.test.ts:86` |
-| PT-8932C374BF | node:test | `apps/praxis-desktop/renderer/test/notesSession.test.ts:97` |
-| PT-6DA0575B35 | node:test | `apps/praxis-desktop/renderer/test/notesTree.test.ts:8` |
-| PT-A1B52A5EE5 | node:test | `apps/praxis-desktop/renderer/test/notesTree.test.ts:18` |
-| PT-1DB2C21417 | node:test | `apps/praxis-desktop/renderer/test/notesTree.test.ts:24` |
+| PT-90ABEBFC94 | playwright | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:60` |
+| PT-35D3A2F43C | playwright | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:74` |
+| PT-26461FF4CC | playwright | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:99` |
+| PT-63BC0F273F | playwright | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:120` |
+| PT-3E8EC78A44 | node:test | `apps/praxis-desktop/renderer/test/noteSendReference.test.ts:11` |
+| PT-DF4904DCB7 | node:test | `apps/praxis-desktop/renderer/test/noteSendReference.test.ts:22` |
+| PT-BF2D16D5CC | node:test | `apps/praxis-desktop/renderer/test/noteSendReference.test.ts:29` |
+| PT-5EBAB8CEEE | node:test | `apps/praxis-desktop/renderer/test/noteSendReference.test.ts:36` |
+| PT-A46CCC1147 | node:test | `apps/praxis-desktop/renderer/test/noteSendStore.test.ts:7` |
+| PT-07B180DC2A | node:test | `apps/praxis-desktop/renderer/test/noteSendStore.test.ts:15` |
+| PT-D2E0BD9A9E | node:test | `apps/praxis-desktop/renderer/test/noteSendStore.test.ts:24` |
 
 ## Changes in this stage
 
-- `catalog.json` / `index.md`: regenerated with `--write`, adding the 2 entries. The generic placeholder Given/When/Then was replaced with prose that states only what each test asserts, and records where a title promises more than the test checks.
-- `task-499-notes.md`: new; 6 node:test contracts.
+- `catalog.json` / `index.md`: regenerated with `--write`, adding the 4 entries. The generic placeholder Given/When/Then was replaced with prose that states only what each test asserts, and records where a title promises more than the test checks.
+- `task-500-notes.md`: new; 7 node:test contracts.
+- `test-contracts.md`: this report (replaces the TASK-499 report; that one remains in git history at `64c02f5b`).
 
 No product code, test, generator or workflow definition was changed.
 
 ## Requirement coverage
 
-| TASK-499 requirement | Contract evidence | Limits |
+| TASK-500 requirement | Contract evidence | Limits |
 | --- | --- | --- |
-| Notes section in the sidebar, compact rows | PT-2DFB759892 | EasyMode only. The classic sidebar is no longer rendered (`f977690f`), so "Classic and Easy Mode" now means one sidebar. No test checks the row styling. |
-| Expandable named groups | PT-2DFB759892, PT-6DA0575B35 | The e2e test asserts collapse only (`aria-expanded` false). After the second click, nothing checks that the group expanded again. |
-| Create note | PT-2DFB759892, PT-0754F5395E | |
-| Rename (note or group) | PT-2DF357AC10 | **No e2e coverage** for either rename menu action. The unit test covers renaming the open note only. |
-| Membership: add, remove, move (menu-driven) | PT-2DFB759892, PT-A1B52A5EE5, PT-1DB2C21417 | Move up/down is unit-tested only. A note in two groups is unit-tested only. See finding 3. |
-| Delete note | PT-0754F5395E, PT-EF24B1568D | Asserts Cancel, Delete, the editor reset and removal from the group. |
-| Delete group keeps notes | — | **Not proved.** PT-0754F5395E deletes a group that is already empty. Store-level group deletion is covered by TASK-497's PT-F6E2585D72. |
-| Shared selection/editor with the shelf | PT-2DFB759892 | The shelf card shows the body of the note opened from the sidebar. |
-| Autosave with visible errors and retry | PT-8932C374BF (sidebar: none) | Shelf error/retry is TASK-498's PT-B4FF318316. **No sidebar e2e** for the error banner or retry. |
-| Preserve text across navigation | — | **Not tested** in the sidebar. |
-| Preserve text across project switching | — | **Not tested.** |
-| Preserve text across restart | PT-8932C374BF | Simulated by calling `restoreUnsavedDraft()` again. No test relaunches the app with unsaved text. |
+| Send to session for an ordered **group** | PT-35D3A2F43C, PT-26461FF4CC, PT-3E8EC78A44 | Opened from the sidebar group menu only. |
+| Send to session for **one note** | PT-DF4904DCB7 (label only) | **No e2e coverage.** Neither the note row's "Send to session…" menu item nor the editor's `note-send-open` button is exercised. Every e2e test sends the "Ideas" group. |
+| Choose an **existing** compatible session in the same project | PT-35D3A2F43C, PT-5EBAB8CEEE | The e2e seed has one session, so the destination is the default and is never picked from a list. Filtering (other project, archived, subagent, workflow, review) is unit-tested only. |
+| Choose a **new** session | PT-90ABEBFC94, PT-26461FF4CC | |
+| Preview snapshot titles, body and order | PT-35D3A2F43C, PT-90ABEBFC94 | The e2e test checks titles and order (`<strong>`) and the note count. Preview bodies are not asserted on screen; body order is asserted in the sent message. |
+| Snapshot is fixed at send time | PT-3E8EC78A44, PT-35D3A2F43C | The unit test proves the content is copied. In e2e, see finding 3. |
+| User can add instructions | PT-35D3A2F43C, PT-26461FF4CC, PT-DF4904DCB7 | The empty-instruction default is unit-tested only. |
+| Explicit Send required | PT-35D3A2F43C, PT-26461FF4CC | Existing session: a double-click on Send produces exactly one `continueSession` call. New session: nothing is sent until Start. |
+| Cancel makes no provider request | PT-90ABEBFC94 | Only the Cancel button. Escape, the Close button and an overlay click are untested. Draft instructions surviving Cancel are unit-tested only (PT-07B180DC2A). |
+| Opening makes no provider request | PT-90ABEBFC94 | |
+| Destination creation makes no provider request | PT-90ABEBFC94, PT-26461FF4CC | Asserted after switching to "New session…" and after landing in the New Session composer. |
+| Extend context types | PT-3E8EC78A44, PT-DF4904DCB7 | `note-group` kind asserted; the single note's `note` kind is not. |
+| Compact chat receipts | PT-BF2D16D5CC | Unit only. **No e2e** checks the receipt rendered in a session transcript. |
+| Empty group cannot be sent | PT-63BC0F273F | |
+| Handoff only auto-submits shortly after Send (fix in `59e34fcc`) | PT-D2E0BD9A9E | Predicate only. See finding 4. |
+| Dialog focus trap and focus return (fix in `59e34fcc`) | — | **Not tested.** |
 | Scheduled runs excluded | n/a | Nothing in the diff touches scheduling. |
 
 ## Findings: stale, uncovered and ambiguous contracts
 
-1. **Both new e2e tests fail deterministically at the frozen snapshot (test defect).** `sidebarNotes.spec.ts:57` and `:91` call `getByRole('button', { name: 'Create' })` without `exact: true`. The match is a substring, so it hits six buttons, including this change's own "Create new note" header. Playwright's strict mode then throws before any grouping assertion runs. The fix is `{ name: 'Create', exact: true }`, which belongs to Implement, not this stage. Until that fix lands, the two contracts describe tests that do not get past their setup.
-2. **The two e2e tests were not run by Implement, or did not pass there.** The defect above fails the test on every run, so neither test can have gone green at this snapshot.
-3. **The `listitem` count assertion is ambiguous and probably wrong (PLAUSIBLE).** `sidebarNotes.spec.ts:61` expects exactly one notes-tree list item with the text "Beta". Group rows are `<li>` elements that contain their member `<li>`s, so the expanded Ideas group's `<li>` also contains "Beta". The count would then be 2. Finding 1 stops the test earlier, so this could not be observed. The comment above it ("a note in two groups") does not match the steps, which never put a note in two groups.
-4. **Weak assertion:** after "Remove from this group" (`:70`), the test checks only that a Beta button is visible. A Beta button was already visible inside the expanded group, so this passes whether or not the note left the group.
-5. **Title overclaims:** PT-0754F5395E says "deleting a group keeps notes", but the group is empty when it is deleted. The contract states this.
-6. **The renderer unit tests run in no aggregate script.** `npm test --workspace=@praxis/desktop-renderer` is not called by the root `test` or `test:full`. Governed QA therefore never runs the 9 notesSession/notesTree tests.
-7. **Earlier unit tests are uncatalogued:** the three TASK-498 tests in `notesSession.test.ts` (lines 35, 51, 66) have no Praxis Test contract. They are out of this task's scope and left as found.
-8. **Not in the smoke set:** neither `sidebarNotes.spec.ts` nor `sessionShelfNotes.spec.ts` is in `SMOKE_SPECS`, so only the full `test:desktop` runs them.
-9. **Generator limits carried over:** node tests are not indexed; titles built from template literals with expressions are skipped; every entry is labelled `project: functional`. The validator checks identity and that the flow fields are filled, not whether the prose is true.
+1. **Single-note handoff has no journey test.** The ticket's first case is "one note". Both entry points added for it (note row menu, editor button) are unexercised. Only the label and default instruction are unit-tested.
+2. **New-session test does not prove the instruction carries over to the goal (ambiguous).** `noteSessionHandoff.spec.ts:111` fills the goal box itself with the same text the instruction used ("Plan from these"). So the test passes whether or not `newSessionGoal` pre-fills it. The comment at `:110` says Start stays disabled without a goal, but nothing asserts that. The delegate payload is checked for "alpha body" only; "beta body" and the order are not checked on this path.
+3. **"Later edits don't resend" is a weak check.** `:95–96` edits the note and reads the call count once, with no wait. It shows there was no immediate resend. It does not prove that none happens later, or that the delivered message is unchanged.
+4. **Stale or busy handoff behaviour is untested in the UI.** `59e34fcc` changed `SessionsPage` so a handoff that is stale, or that reaches a busy session, only fills the composer and keeps existing draft text and chips. Only the `isFreshHandoff` predicate is tested. Merging with an existing draft, and the not-sending branch, have no test.
+5. **Focus trap, Escape and focus return are untested.** All three were added in `59e34fcc`.
+6. **Preview error path is untested.** Nothing exercises a failed `prepareSnapshot` (`note-send-error`), or checks that the confirm button stays disabled while the preview is loading.
+7. **The renderer unit tests still run in no aggregate script.** The root `test` and `test:full` do not call `npm test --workspace=@praxis/desktop-renderer`, so governed QA never runs these 7 tests or the 9 earlier ones. This was already reported for TASK-499 and has not changed.
+8. **Generator limits carried over:** node tests are not indexed; titles built from template literals with expressions are skipped; every entry is labelled `project: functional`. The validator checks identity and that the flow fields are filled, not whether the prose is true.
 
-## Environment note: e2e results here are not valid evidence
+On the positive side, `noteSessionHandoff` was added to `SMOKE_SPECS`, so governed runs execute it. It uses no hover, `page.mouse`, drag or screenshots.
 
-This worktree has no `node_modules`. Node resolves packages upward from the main checkout, and `@praxis/core` resolves to `/Users/daveacres/dev/tools/praxis/packages/core`, a different source tree from this worktree's core. As a result, `npm run build:renderer` fails `tsc` (`Property 'notes' does not exist on type 'PraxisIpc'`). The Electron main process under e2e also loads the other tree's core. Per the stage's non-goals, no link or install was made. The workflow's install stage has to provide this worktree's own dependencies before QA.
+## Environment note: no e2e run in this stage
+
+This worktree has no `node_modules`. `@praxis/core` resolves to `/Users/daveacres/dev/tools/praxis/packages/core/out`, the main checkout's tree, not this worktree's. The pre-built renderer in `apps/praxis-desktop/main/renderer/` dates from 11:08, before both TASK-500 commits (11:11 and 11:12). An e2e run here would therefore test a renderer without this change, and the wrong core. It was not run, because its result would not be evidence for this snapshot. Per the stage's non-goals, no link or install was made. The workflow's install and QA stages have to provide this.
 
 ## Verification
 
 | Check performed in this stage | Result |
 | --- | --- |
-| `npm run test:praxis-contracts` at the frozen snapshot | **Failed:** 2 new tests missing from the catalog. |
-| `npm run test:praxis-contracts -- --write` | Wrote 742 contracts (740 carried over). |
-| `npm run test:praxis-contracts` after edits | **Passed:** 742 catalogued and linked, no warnings. |
-| ID audit of `task-499-notes.md` | All 6 IDs recomputed with SHA1(file + newline + title); both e2e IDs taken from the generated index. |
-| `npm test --workspace=@praxis/desktop-renderer` | 9 passed, 0 failed/skipped (6 of them are TASK-499's). |
-| `npx playwright test e2e/sidebarNotes.spec.ts e2e/sessionShelfNotes.spec.ts --project=functional` (pre-built renderer from 10:41) | 1 passed, 5 failed, 2 skipped. Both sidebar failures are finding 1 (strict-mode violation). The 3 shelf failures (project picker shows "No matches"; title not focused) passed in the TASK-498 stage and are not explained by this diff. Given the cross-tree `@praxis/core` resolution above, they are unattributed, neither confirmed as a regression nor ruled out. |
-| `npm run build:renderer` | Failed in `tsc`; see the environment note. No rebuild or copy-renderer was possible. |
+| `npm run test:praxis-contracts` at the frozen snapshot | **Failed:** 4 new tests missing from the catalog. |
+| `npm run test:praxis-contracts -- --write` | Wrote 746 contracts (742 carried over). |
+| `npm run test:praxis-contracts` after edits | **Passed:** 746 catalogued and linked, no warnings. |
+| ID audit of `task-500-notes.md` | All 7 IDs recomputed with SHA1(file + newline + title); line numbers checked against the source. The 4 e2e IDs were taken from the generated catalog. |
+| `npm test --workspace=@praxis/desktop-renderer` | 16 passed, 0 failed or skipped (7 of them are TASK-500's). |
+| Playwright `noteSessionHandoff.spec.ts` | Not run; see the environment note. |
 
 No UI changed in this stage, so no visual verification was done and no screenshot was kept. No stage was advanced, the workflow was not edited, and no tracker was changed.
