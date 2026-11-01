@@ -1,0 +1,34 @@
+# TASK-503 validation report (PRX-T113-503, FX-BF-113)
+
+Status: **BLOCKED — no validation was run.**
+
+## Cause
+No dependencies are installed in this worktree: `node_modules` is absent at the
+root, in `packages/core`, and in `apps/praxis-desktop/{main,renderer}`, and
+`packages/core/dist` does not exist. The task forbids linking or copying
+dependencies from another checkout, and the install step belongs to the workflow's
+install stage. Per the plan (step 1), work stops here.
+
+## Passed
+None.
+
+## Failed
+None ran.
+
+## Did not run (all of them)
+- Builds: build:core, build:renderer, desktop:copy-renderer, build:desktop
+- Guards: check-types, check-core-imports, test:praxis-contracts
+- Unit: test:desktop:git (notesStore), test:core
+- E2E: focused notes specs, test:desktop (full), folder gate (13 passed), test:desktop:themes
+- Manual app exercise (shelf, notes, sidebar groups, send) with keyboard and pointer
+- Visual checks (light/dark, surface pack, scales 1 / 1.16 / 110% zoom, narrow window,
+  14px rail measurement) — so there are no screenshots to preserve
+
+## Snapshots changed
+None.
+
+## Code changed
+None. No FX-BF-113 regression was found or claimed.
+
+## Next
+Re-run this stage after dependencies are installed (`npm ci`), then follow the plan from step 2.
