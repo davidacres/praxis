@@ -1,16 +1,21 @@
 import type { AgentSessionRecord, NoteRequestSnapshot } from '@praxis/core';
-import type { SessionContextReference } from '../ai/sessionContext';
+import type { SessionContextReference, SessionContextSnapshot } from '../ai/sessionContext';
 
 /** Copies a captured snapshot into a context reference; later edits to the notes can't change it. */
 export function snapshotToReference(snapshot: NoteRequestSnapshot): SessionContextReference {
+  const provenance: SessionContextSnapshot = {
+    projectId: snapshot.projectId,
+    source: { kind: snapshot.source.kind, id: snapshot.source.id, title: snapshot.source.title },
+    notes: snapshot.notes.map(note => ({ id: note.id, title: note.title, updatedAt: note.updatedAt }))
+  };
   const content = snapshot.notes.map((note, index) => `${index + 1}. ${note.title}\n\n${note.body}`).join('\n\n---\n\n');
   if (snapshot.source.kind === 'note') {
-    return { id: `note:${snapshot.source.id}@${snapshot.capturedAt}`, kind: 'note', label: `Note: ${snapshot.source.title}`, content, capturedAt: snapshot.capturedAt };
+    return { id: `note:${snapshot.source.id}@${snapshot.capturedAt}`, kind: 'note', label: `Note: ${snapshot.source.title}`, content, capturedAt: snapshot.capturedAt, snapshot: provenance };
   }
   const count = snapshot.notes.length;
   return {
     id: `note-group:${snapshot.source.id}@${snapshot.capturedAt}`, kind: 'note-group',
-    label: `Group: ${snapshot.source.title} (${count} ${count === 1 ? 'note' : 'notes'})`, content, capturedAt: snapshot.capturedAt
+    label: `Group: ${snapshot.source.title} (${count} ${count === 1 ? 'note' : 'notes'})`, content, capturedAt: snapshot.capturedAt, snapshot: provenance
   };
 }
 

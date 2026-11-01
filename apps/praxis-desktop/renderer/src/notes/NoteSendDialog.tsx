@@ -42,10 +42,12 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
   const instructionRef = useRef<HTMLTextAreaElement>(null);
   const openerRef = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const destinations = useMemo(() => compatibleNoteSessions(sessions, projectId), [sessions, projectId]);
-  const [chosen, setChosen] = useState<string | undefined>();
-  const destination = chosen ?? destinations[0]?.issueKey ?? NEW_SESSION;
-  const target = destination === NEW_SESSION ? undefined : destinations.find(session => session.issueKey === destination);
-  const toNew = !target;
+  const [chosen, setChosen] = useState<string>(() => destinations[0]?.issueKey ?? NEW_SESSION);
+  const target = chosen === NEW_SESSION ? undefined : destinations.find(session => session.issueKey === chosen);
+  // A chosen session that has since gone must never quietly turn into "new session".
+  const destinationGone = chosen !== NEW_SESSION && !target;
+  const toNew = chosen === NEW_SESSION;
+  const confirmingRef = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -66,12 +68,15 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
   const close = () => { saveDraftInstruction(projectId, source, instruction); closeNoteSend(); };
 
   const confirm = () => {
-    if (sending || capture.state !== 'ready') return;
+    if (confirmingRef.current || sending || destinationGone || capture.state !== 'ready') return;
+    confirmingRef.current = true;
     setSending(true);
     const { snapshot } = capture;
     const text = instruction.trim() || defaultNoteInstruction(snapshot);
-    stageSessionHandoff(target ? target.issueKey : NEW_SESSION_HANDOFF, { reference: snapshotToReference(snapshot), instruction: text });
-    saveDraftInstruction(projectId, source, '');
+    saveDraftInstruction(projectId, source, instruction);
+    stageSessionHandoff(target ? target.issueKey : NEW_SESSION_HANDOFF, {
+      reference: snapshotToReference(snapshot), instruction: text, draft: { projectId, source }
+    });
     closeNoteSend();
     if (target) onOpenSession(target.issueKey); else onNewSession(projectId, text);
   };
@@ -95,12 +100,15 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
       <div className="modal-body note-send-dialog__body">
         <div className="note-send-dialog__field">
           <span className="note-send-dialog__label">Destination</span>
-          <ChipSelect block ariaLabel="Destination session" data-testid="note-send-destination" value={destination}
+          <ChipSelect block ariaLabel="Destination session" data-testid="note-send-destination" value={chosen}
             options={[
+              ...(destinationGone ? [{ value: chosen, label: 'Unavailable session', icon: 'chats' as const }] : []),
               ...destinations.map(session => ({ value: session.issueKey, label: sessionLabel(session), icon: 'chats' as const })),
               { value: NEW_SESSION, label: 'New session…', icon: 'plus' as const }
             ]}
             onChange={setChosen} />
+          {destinationGone && <p className="note-send-dialog__status" role="alert" data-testid="note-send-destination-error">
+            That session is no longer available — choose another destination.</p>}
         </div>
         <div className="note-send-dialog__preview" data-testid="note-send-preview" aria-live="polite">
           {capture.state === 'loading' && <p className="note-send-dialog__status">Preparing preview…</p>}
@@ -125,7 +133,7 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
       <div className="modal-footer">
         <button type="button" className="btn" data-testid="note-send-cancel" onClick={close}>Cancel</button>
         <button type="button" className="btn btn-primary" data-testid="note-send-confirm"
-          disabled={sending || capture.state !== 'ready'} onClick={confirm}>
+          disabled={sending || destinationGone || capture.state !== 'ready'} onClick={confirm}>
           {toNew ? 'Continue in new session' : 'Send'}
         </button>
       </div>
