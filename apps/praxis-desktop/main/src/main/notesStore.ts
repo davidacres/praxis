@@ -47,8 +47,8 @@ export class NotesStore {
     this.fs = deps.fs ?? fs.promises;
   }
 
-  public list(projectId: string): Promise<NotesResult<{ notes: ProjectNote[]; groups: NoteGroup[] }>> {
-    return this.read(projectId, document => ({
+  public list(projectId: unknown): Promise<NotesResult<{ notes: ProjectNote[]; groups: NoteGroup[] }>> {
+    return this.read(projectId, (document, projectId) => ({
       ok: true,
       value: clone({
         notes: document.notes.filter(note => note.projectId === projectId),
@@ -57,8 +57,8 @@ export class NotesStore {
     }));
   }
 
-  public createNote(projectId: string, input: unknown): Promise<NotesResult<ProjectNote>> {
-    return this.mutate(projectId, document => {
+  public createNote(projectId: unknown, input: unknown): Promise<NotesResult<ProjectNote>> {
+    return this.mutate(projectId, (document, projectId) => {
       const valid = validateCreateNoteInput(input);
       if (!valid.ok) return valid;
       const at = this.deps.now();
@@ -67,8 +67,8 @@ export class NotesStore {
     });
   }
 
-  public updateNote(projectId: string, noteId: string, input: unknown): Promise<NotesResult<ProjectNote>> {
-    return this.mutate(projectId, document => {
+  public updateNote(projectId: unknown, noteId: unknown, input: unknown): Promise<NotesResult<ProjectNote>> {
+    return this.mutate(projectId, (document, projectId) => {
       const valid = validateUpdateNoteInput(input);
       if (!valid.ok) return valid;
       const found = resolveNoteEntity(document.notes, projectId, noteId, 'note');
@@ -79,21 +79,21 @@ export class NotesStore {
   }
 
   /** Removes the note and every membership of it in the same save. */
-  public deleteNote(projectId: string, noteId: string): Promise<NotesResult<null>> {
-    return this.mutate(projectId, document => {
+  public deleteNote(projectId: unknown, noteId: unknown): Promise<NotesResult<null>> {
+    return this.mutate(projectId, (document, projectId) => {
       const found = resolveNoteEntity(document.notes, projectId, noteId, 'note');
       if (!found.ok) return found;
       const groups = document.groups.map(group =>
-        group.noteIds.includes(noteId)
-          ? { ...group, noteIds: group.noteIds.filter(id => id !== noteId), updatedAt: this.stamp(group.updatedAt) }
+        group.noteIds.includes(found.value.id)
+          ? { ...group, noteIds: group.noteIds.filter(id => id !== found.value.id), updatedAt: this.stamp(group.updatedAt) }
           : group
       );
-      return ok({ ...document, notes: document.notes.filter(item => item.id !== noteId), groups }, null);
+      return ok({ ...document, notes: document.notes.filter(item => item.id !== found.value.id), groups }, null);
     });
   }
 
-  public createGroup(projectId: string, input: unknown): Promise<NotesResult<NoteGroup>> {
-    return this.mutate(projectId, document => {
+  public createGroup(projectId: unknown, input: unknown): Promise<NotesResult<NoteGroup>> {
+    return this.mutate(projectId, (document, projectId) => {
       const valid = validateCreateNoteGroupInput(input);
       if (!valid.ok) return valid;
       const members = validateNoteMemberships(document, projectId, valid.value.noteIds);
@@ -104,8 +104,8 @@ export class NotesStore {
     });
   }
 
-  public updateGroup(projectId: string, groupId: string, input: unknown): Promise<NotesResult<NoteGroup>> {
-    return this.mutate(projectId, document => {
+  public updateGroup(projectId: unknown, groupId: unknown, input: unknown): Promise<NotesResult<NoteGroup>> {
+    return this.mutate(projectId, (document, projectId) => {
       const valid = validateUpdateNoteGroupInput(input);
       if (!valid.ok) return valid;
       const found = resolveNoteEntity(document.groups, projectId, groupId, 'group');
@@ -116,17 +116,17 @@ export class NotesStore {
   }
 
   /** Removes the group only; its notes are kept. */
-  public deleteGroup(projectId: string, groupId: string): Promise<NotesResult<null>> {
-    return this.mutate(projectId, document => {
+  public deleteGroup(projectId: unknown, groupId: unknown): Promise<NotesResult<null>> {
+    return this.mutate(projectId, (document, projectId) => {
       const found = resolveNoteEntity(document.groups, projectId, groupId, 'group');
       if (!found.ok) return found;
-      return ok({ ...document, groups: document.groups.filter(item => item.id !== groupId) }, null);
+      return ok({ ...document, groups: document.groups.filter(item => item.id !== found.value.id) }, null);
     });
   }
 
   /** Replaces a group's ordered membership (add, remove and reorder are all expressed this way). */
-  public replaceMemberships(projectId: string, groupId: string, noteIds: unknown): Promise<NotesResult<NoteGroup>> {
-    return this.mutate(projectId, document => {
+  public replaceMemberships(projectId: unknown, groupId: unknown, noteIds: unknown): Promise<NotesResult<NoteGroup>> {
+    return this.mutate(projectId, (document, projectId) => {
       const found = resolveNoteEntity(document.groups, projectId, groupId, 'group');
       if (!found.ok) return found;
       const members = validateNoteMemberships(document, projectId, noteIds);
@@ -137,8 +137,8 @@ export class NotesStore {
   }
 
   /** Read-only capture: never writes and never emits a change. */
-  public prepareSnapshot(projectId: string, source: unknown): Promise<NotesResult<NoteRequestSnapshot>> {
-    return this.read(projectId, document =>
+  public prepareSnapshot(projectId: unknown, source: unknown): Promise<NotesResult<NoteRequestSnapshot>> {
+    return this.read(projectId, (document, projectId) =>
       prepareNoteSnapshot(document, this.deps.knownProjectIds(), projectId, source, this.deps.now())
     );
   }
@@ -149,22 +149,22 @@ export class NotesStore {
     return now > previous ? now : previous;
   }
 
-  private read<T>(projectId: string, fn: (document: NotesDocument) => NotesResult<T>): Promise<NotesResult<T>> {
+  private read<T>(projectId: unknown, fn: (document: NotesDocument, projectId: string) => NotesResult<T>): Promise<NotesResult<T>> {
     return this.enqueue(async () => {
       const project = validateNotesProject(projectId, this.deps.knownProjectIds());
       if (!project.ok) return project;
       const loaded = await this.load();
-      return loaded.ok ? fn(loaded.value) : loaded;
+      return loaded.ok ? fn(loaded.value, project.value) : loaded;
     });
   }
 
-  private mutate<T>(projectId: string, build: (document: NotesDocument) => NotesResult<Mutation<T>>): Promise<NotesResult<T>> {
+  private mutate<T>(projectId: unknown, build: (document: NotesDocument, projectId: string) => NotesResult<Mutation<T>>): Promise<NotesResult<T>> {
     return this.enqueue(async () => {
       const project = validateNotesProject(projectId, this.deps.knownProjectIds());
       if (!project.ok) return project;
       const loaded = await this.load();
       if (!loaded.ok) return loaded;
-      const built = build(loaded.value);
+      const built = build(loaded.value, project.value);
       if (!built.ok) return built;
       try {
         await this.persist(built.value.document);
@@ -173,7 +173,7 @@ export class NotesStore {
       }
       this.document = built.value.document;
       try {
-        this.deps.onChanged(projectId);
+        this.deps.onChanged(project.value);
       } catch {
         // A listener failure must not turn a durable save into a reported failure.
       }
@@ -190,8 +190,11 @@ export class NotesStore {
 
   private load(): Promise<NotesResult<NotesDocument>> {
     if (this.document) return Promise.resolve({ ok: true, value: this.document });
-    this.loaded ??= this.readFromDisk();
-    return this.loaded.then(result => {
+    const attempt = (this.loaded ??= this.readFromDisk());
+    return attempt.then(result => {
+      // A transient read error (EACCES, EBUSY, EIO) must not disable notes for the session:
+      // forget it so the next call retries. A file known to be bad stays cached.
+      if (!result.ok && result.error.code === 'PERSISTENCE_FAILURE' && this.loaded === attempt) this.loaded = undefined;
       if (result.ok) this.document ??= result.value;
       return result.ok ? { ok: true, value: this.document as NotesDocument } : result;
     });

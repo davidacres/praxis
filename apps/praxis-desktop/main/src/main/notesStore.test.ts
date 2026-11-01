@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -10,6 +10,7 @@ const B = 'project-b';
 
 function setup(options: { fs?: ConstructorParameters<typeof NotesStore>[0]['fs']; file?: string } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-notes-'));
+  created.push(dir);
   const filePath = options.file ?? path.join(dir, 'notes.json');
   const changes: string[] = [];
   let tick = 0;
@@ -34,6 +35,10 @@ function value<T>(result: { ok: boolean } & object): T {
 function code(result: { ok: boolean; error?: { code: string } }): string | undefined {
   return result.ok ? undefined : result.error?.code;
 }
+const created: string[] = [];
+after(() => {
+  for (const dir of created) fs.rmSync(dir, { recursive: true, force: true });
+});
 const strays = (dir: string) => fs.readdirSync(dir).filter(name => name.endsWith('.tmp'));
 
 test('missing file lists empty and writes nothing until the first mutation', async () => {
@@ -197,12 +202,37 @@ test('snapshots are detached and empty groups are refused', async () => {
 });
 
 test('a backwards clock never makes updatedAt precede createdAt', async () => {
-  const { dir, filePath, make } = setup();
-  const times = ['2026-01-02T00:00:00.000Z', '2026-01-01T00:00:00.000Z'];
+  const { filePath, make } = setup();
+  const times = [
+    '2026-01-02T00:00:00.000Z', // createNote
+    '2026-01-02T00:00:00.000Z', // createGroup
+    '2026-01-01T00:00:00.000Z', // updateNote (clock stepped back)
+    '2026-01-01T00:00:00.000Z' // deleteNote -> group membership stamp
+  ];
   const store = make({ now: () => times.shift() ?? '2026-01-01T00:00:00.000Z' });
   const n = value<{ id: string }>(await store.createNote(A, { title: 'one', body: '' }));
-  value(await store.updateNote(A, n.id, { body: 'x' }));
-  assert.ok(dir);
-  value(await make().list(A));
+  const g = value<{ id: string }>(await store.createGroup(A, { title: 'g', noteIds: [n.id] }));
+  const updated = value<{ createdAt: string; updatedAt: string }>(await store.updateNote(A, n.id, { body: 'x' }));
+  assert.equal(updated.updatedAt, updated.createdAt);
+  value(await store.deleteNote(A, n.id));
+  const reloaded = value<{ groups: { id: string; createdAt: string; updatedAt: string }[] }>(await make().list(A));
+  const group = reloaded.groups.find(item => item.id === g.id);
+  assert.ok(group);
+  assert.equal(group.updatedAt, group.createdAt);
   assert.ok(fs.existsSync(filePath));
+});
+
+test('a transient read failure is retried instead of disabling notes for the session', async () => {
+  let reads = 0;
+  const flaky = {
+    ...fs.promises,
+    readFile: async (...args: Parameters<typeof fs.promises.readFile>) => {
+      if (reads++ === 0) throw Object.assign(new Error('busy'), { code: 'EBUSY' });
+      return fs.promises.readFile(...args);
+    }
+  } as unknown as ConstructorParameters<typeof NotesStore>[0]['fs'];
+  const { store } = setup({ fs: flaky });
+  assert.equal(code(await store.list(A)), 'PERSISTENCE_FAILURE');
+  assert.deepEqual(value(await store.list(A)), { notes: [], groups: [] });
+  value(await store.createNote(A, { title: 'one', body: '' }));
 });
