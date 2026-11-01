@@ -250,6 +250,7 @@ export class ScheduledRunRunner {
 
     run = await this.settleInterruptedLaunch(run);
     for (const entry of activeScheduledEntries(run)) run = await this.observeActive(run, entry.id);
+    run = await this.observeRecovered(run);
     if (run.status === 'running') await this.launchNext(run);
   }
 
@@ -271,6 +272,23 @@ export class ScheduledRunRunner {
       }
     }
     return current;
+  }
+
+  /**
+   * A schedule paused on a failed entry keeps watching that entry's workflow run. A person can
+   * bring the run back — retry the stage, start a new revision — and finish it; the schedule used to
+   * stop looking at the moment it failed, so TASK-503's run succeeded and merged while the schedule
+   * sat paused on the old failure. A run that is going again, waiting at a gate, or done now carries
+   * the entry with it. A run that is still failed changes nothing.
+   */
+  private async observeRecovered(run: ScheduledRun): Promise<ScheduledRun> {
+    if (run.status !== 'paused' || run.pause?.reason !== 'failure' || !run.pause.entryId) return run;
+    const entry = run.entries.find(candidate => candidate.id === run.pause?.entryId);
+    const workflowRunId = entry?.outcome?.workflowRunId;
+    if (!entry || entry.outcome?.status !== 'failed' || !workflowRunId) return run;
+    const progress = this.ports.observe(workflowRunId)?.progress;
+    if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    return this.save(applyEntryProgress(run, entry.id, progress, this.ports.now()));
   }
 
   /**

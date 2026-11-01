@@ -182,6 +182,40 @@ test('a failure pauses and never moves on by itself; retry, skip and stop each w
   assert.equal(h.run.status, 'failed');
 });
 
+test('a failed ticket whose run a person brings back and finishes carries the schedule on', async () => {
+  // TASK-503: the run failed, a person started a new revision and it merged, but the schedule
+  // had stopped watching at the failure and stayed paused on it.
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'failed', reason: 'The stage session was aborted.' } });
+  await h.runner.tick();
+  assert.equal(h.run.pause?.reason, 'failure');
+
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+  await h.runner.handleWorkflowChanged('wf-T-1');
+  assert.equal(h.status('T-1'), 'running', 'the entry follows its run back to running');
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.launches.length, 1, 'nothing is relaunched: the same run carries on');
+
+  h.setWorkflow('T-1', { progress: { kind: 'succeeded' } });
+  await h.runner.tick();
+  assert.equal(h.status('T-1'), 'done');
+  assert.deepEqual(h.launches.map(launch => launch.key), ['T-1', 'T-2'], 'and the next ticket starts');
+});
+
+test('a failed ticket whose run finished while the schedule was not looking is caught up on the next check', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'failed', reason: 'boom' } });
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'succeeded' } });
+  await h.runner.tick();
+  assert.equal(h.status('T-1'), 'done');
+  assert.equal(h.launches.at(-1)?.key, 'T-2');
+  const failedEvents = h.run.events.filter(event => event.kind === 'entry-failed').length;
+  assert.equal(failedEvents, 1, 'watching a still-failed run adds nothing');
+});
+
 test('a crash between saving and launching never launches twice: the run is found by its token', async () => {
   const h = new Harness();
   h.failLaunch = new Error('process died');
