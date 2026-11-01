@@ -39,3 +39,10 @@ Re-checked before doing anything else: `node_modules` (root, `packages/core`,
 are still absent, so the install stage has not populated this worktree. The task
 forbids linking or copying packages from another checkout, so nothing was run.
 TASK-503 stays open; the outcome above is unchanged.
+
+## Iteration 3 re-check (2026-11-01)
+`node_modules` (root, `packages/core`, `apps/praxis-desktop/main`, `apps/praxis-desktop/renderer`)
+is still absent. No validation was run and none is claimed. The task's non-goals say
+packages are provided by the workflow's install stage, so I did not install, link or
+copy them. TASK-503 stays open: re-run this stage once the install stage has populated
+this worktree, then follow the plan from step 2.
