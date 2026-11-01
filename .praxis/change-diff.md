@@ -1,23 +1,30 @@
 # change-diff — PRX-T113-503
 
-Base: `336ec028c5f9e5efc2c15baa783bceb22df7f149`.
+Base: `336ec028` (product revision under test). History since then: `01b22d6b` (a concurrent session's
+partial report) and `a81aab04` (workflow auto-commit that swept in a throwaway capture spec).
 
 ## Scope
 
-Evidence-only recovery for TASK-503. Replaces the stale dependency-blocked report with current build, guard, unit, focused/full UI, theme, geometry and partial visual evidence. Product code, tests, snapshots, plan and workflow definitions are unchanged.
+Evidence only for TASK-503. No product code, spec, snapshot, setting or workflow definition is changed.
 
 Changed files:
-- `.praxis/session-artifacts/task-503/validation-report.md`: exact results, failure diagnostics/classification, verification limits and preserved evidence references.
-- `.praxis/change-diff.md`: required artifact for this stage, replacing unrelated TASK-496 artifact content.
+- `.praxis/session-artifacts/task-503/validation-report.md` — full validation results: builds, guards,
+  unit, focused/full functional and theme suites, failure classification, rail measurement matrix,
+  inspected screenshots, journeys, observations and unrun checks.
+- `.praxis/change-diff.md` — this artifact.
+- `apps/praxis-desktop/main/e2e/zzTask503Capture.spec.ts` — **deleted**. A throwaway capture script
+  that `a81aab04` committed by accident; leaving it would add it to every functional run.
 
 ## Verification outcome
 
-Builds and type/import/contract guards pass. Renderer notes: 18 passed. Desktop unit suite: 107 passed with permitted localhost execution (sandbox: 103 passed / 4 EPERM failures). Focused UI: 32 passed / 7 failed / 2 skipped. Full UI: 706 passed / 9 failed / 14 skipped. Current folder gate: 15 passed. Theme/surface: 47 passed. No snapshots updated.
+- All four builds, `check-types`, core-import guard and contracts catalogue pass.
+- Unit tests: renderer 18/18, `test:desktop:git` 107/107.
+- Theme suites: 47 passed, no snapshot changes. Folder gate: 15 passed (the documented 13 is stale).
+- Full functional suite: 706 passed / 10 failed / 13 skipped. After isolated re-runs and probes:
+  - **one product defect:** keyboard Enter on the shelf pencil leaves focus on the pencil, not the note title (`sessionShelfNotes:96`).
+  - four spec selector/reload defects (`sessionShelfNotes:66/:107`, `sidebarNotes:41/:83`).
+  - two specs made stale by FX-BF-113 layout (`sessionShelf:51` spine centring, `easymode:1377` tab order; the divider label needs an owner decision).
+  - one environment test (`marketplace:271`) and three flaky tests (`aiPermissions:36`, `themeAccent:33`, `sessionShelf:306`).
+- Rail: 14.00 px at scale 1, 16.23 px at 1.16, and identical to the no-controls baseline with an unchanged 4 px inset. This holds in light/dark, Parchment/Aurora Glass/Graphite, at 110% zoom and at 720 px, empty and full, with the sleeve open and closed. The sleeve is flush and there is no horizontal overflow.
 
-Two unrelated full-run failures were reproduced once individually. Notes shelf focus/project-picker and sidebar test-selector failures remain findings; this validation-only plan forbids product fixes. Actual-theme screenshot matrix is partial: two fresh PNGs inspected, remaining cases stopped after an absent-sleeve measurement error. Complete manual keyboard/pointer acceptance was not performed. Classic no longer exists in this revision.
-
-## Recovery handling
-
-The supplied abort has no diagnostic cause. Dependency preflight now passes; no dependencies installed/copied/linked. Tests reached completion instead of repeating the older missing-package report. Sandbox denial was handled through permitted execution without weakened checks. All unresolved findings and unrun checks remain explicit. Evidence is not a release-ready or green-gate claim.
-
-The untracked `apps/praxis-desktop/main/e2e/zzTask503Capture.spec.ts` appeared separately and is left untouched and unstaged. Fresh PNGs/logs are retained locally under `.praxis/session-artifacts/task-503/`; only the report and this artifact are committed.
+The UI gate is **not green**. The product defect and the spec fixes are follow-up work, outside this validation-only task.
