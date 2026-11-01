@@ -19,5 +19,15 @@ export const notesClient = {
     settle(() => window.praxis.notes.createNote(projectId, { title, body })),
   update: (projectId: string, noteId: string, title: string, body: string): Promise<NotesOutcome<ProjectNote>> =>
     settle(() => window.praxis.notes.updateNote(projectId, noteId, { title, body })),
+  deleteNote: (projectId: string, noteId: string): Promise<NotesOutcome<null>> =>
+    settle(() => window.praxis.notes.deleteNote(projectId, noteId)),
+  createGroup: (projectId: string, title: string, noteIds: string[] = []): Promise<NotesOutcome<NoteGroup>> =>
+    settle(() => window.praxis.notes.createGroup(projectId, { title, noteIds })),
+  renameGroup: (projectId: string, groupId: string, title: string): Promise<NotesOutcome<NoteGroup>> =>
+    settle(() => window.praxis.notes.updateGroup(projectId, groupId, { title })),
+  deleteGroup: (projectId: string, groupId: string): Promise<NotesOutcome<null>> =>
+    settle(() => window.praxis.notes.deleteGroup(projectId, groupId)),
+  setMembers: (projectId: string, groupId: string, noteIds: string[]): Promise<NotesOutcome<NoteGroup>> =>
+    settle(() => window.praxis.notes.replaceMemberships(projectId, groupId, noteIds)),
   onChanged: (listener: (projectId: string) => void): (() => void) => window.praxis.notes.onChanged(listener)
 };

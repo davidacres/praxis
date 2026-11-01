@@ -8,6 +8,7 @@ import { AssignSessionDialog } from './AssignSessionDialog';
 import { Icon } from '../../ui/Icon';
 import { ChipSelect } from '../../ui/ChipSelect';
 import { useStartTeamChat } from '../../assistant/TeamChatRow';
+import { NotesSection } from '../../notes/NotesSection';
 
 export interface EasyModeSidebarProps {
   sessions: AgentSessionRecord[];
@@ -44,6 +45,8 @@ export interface EasyModeSidebarProps {
   onStartWorkflow?: (workflowId: string) => void;
   renderSessionsContent?: () => React.ReactNode;
   renderAutomationsContent?: () => React.ReactNode;
+  /** The project whose notes the Notes section shows; none in General conversations. */
+  notesProjectId?: string;
 }
 
 /**
@@ -81,7 +84,8 @@ export function EasyModeSidebar({
   runnableWorkflows,
   onStartWorkflow,
   renderSessionsContent,
-  renderAutomationsContent
+  renderAutomationsContent,
+  notesProjectId
 }: EasyModeSidebarProps) {
   const [gitStatus, setGitStatus] = useState<GitStatusSnapshot | null>(null);
   const [assignSession, setAssignSession] = useState<AgentSessionRecord>();
@@ -215,6 +219,8 @@ export function EasyModeSidebar({
             )}
           </div>
         </section>
+
+        <NotesSection projectId={notesProjectId} projects={selectableProjects} />
 
         <div
           className="easymode-feed-divider"
