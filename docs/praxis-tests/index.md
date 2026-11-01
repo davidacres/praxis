@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **734 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **740 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -550,6 +550,12 @@ This catalogue describes **734 Playwright tests** under `apps/praxis-desktop/mai
 | PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:190` |
 | PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:264` |
 | PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:306` |
+| PT-A0F01650EE | session Shelf Notes | the rail stays 14px with both controls inside it, and the plus opens a new session without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
+| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:66` |
+| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:96` |
+| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:107` |
+| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:138` |
+| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:155` |
 | PT-2B75887CEB | session Skill Usage | a session shows its agent and the skills it used, and a skill lists the sessions that used it | `apps/praxis-desktop/main/e2e/sessionSkillUsage.spec.ts:22` |
 | PT-3C45DBB445 | session Team | a session can add several team members; a lone reviewer offers to draft an ask | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:21` |
 | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:44` |
