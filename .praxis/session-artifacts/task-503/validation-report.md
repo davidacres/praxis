@@ -32,3 +32,10 @@ None. No FX-BF-113 regression was found or claimed.
 
 ## Next
 Re-run this stage after dependencies are installed (`npm ci`), then follow the plan from step 2.
+
+## Iteration 2 re-check (2026-11-01)
+Re-checked before doing anything else: `node_modules` (root, `packages/core`,
+`apps/praxis-desktop/main`, `apps/praxis-desktop/renderer`) and `packages/core/dist`
+are still absent, so the install stage has not populated this worktree. The task
+forbids linking or copying packages from another checkout, so nothing was run.
+TASK-503 stays open; the outcome above is unchanged.
