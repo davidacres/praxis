@@ -123,3 +123,19 @@ Status: Failed · Duration: 34m 1s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+
+**PRX-T113-497** — 2026-11-01T01:20:23.605Z
+**Workflow run failed: Governed delivery — TASK-497: Implement notes persistence and typed IPC**
+
+Status: Failed · Duration: 34m 36s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
