@@ -1,6 +1,6 @@
 # TASK-497 supplemental Praxis Test contracts
 
-Frozen source: `149c3521c52b6f4f7c8d9fff820b54d94c3e9e08`. Runner: **node:test**. Fourteen tests in one file, registered in `test:git` in [desktop main package.json](../../apps/praxis-desktop/main/package.json) and run by the root `npm run test` through `test:desktop:git`. The generated inventory indexes only Playwright, so its validator does not count these. IDs use the existing SHA1(file + newline + title) convention. Three cases come from one parameterized `test(\`${label} …\`)` call at line 91; each is listed under its expanded title. No existing IDs were renumbered.
+Frozen source: `20ddf0f8e93ab69502d0bbcb5322b30c699d8ce3`. Runner: **node:test**. Fourteen tests in one file, registered in `test:git` in [desktop main package.json](../../apps/praxis-desktop/main/package.json) and run by the root `npm run test` through `test:desktop:git`. The generated inventory indexes only Playwright, so its validator does not count these. IDs use the existing SHA1(file + newline + title) convention. Three cases come from one parameterized `test(\`${label} …\`)` call at line 91; each is listed under its expanded title. No existing IDs were renumbered.
 
 The Playwright journey for the same task is **PT-3C92E05E68** in [catalog.json](catalog.json) (`apps/praxis-desktop/main/e2e/notes.spec.ts:29`).
 
@@ -119,14 +119,14 @@ All store tests use a real temporary directory, a fixed project registry (`proje
 **Title:** a backwards clock never makes updatedAt precede createdAt
 **Automation:** node:test — [apps/praxis-desktop/main/src/main/notesStore.test.ts:204](../../apps/praxis-desktop/main/src/main/notesStore.test.ts#L204)
 
-**Given:** a clock that steps back one day after a note and group are created.
-**When:** the note is updated, then deleted (which restamps the group).
-**Then:** the updated note's `updatedAt` equals its `createdAt`; after reload the group's `updatedAt` equals its `createdAt`, so the file stays loadable.
+**Given:** an explicit clock variable that the test sets back one day after a note and a group containing it are created. The result does not depend on how many times the store reads the clock.
+**When:** the note is updated, then deleted (which removes it from the group and restamps the group).
+**Then:** the updated note's `updatedAt` equals its `createdAt`; a fresh store on the same file loads, and the group has no members and an `updatedAt` equal to its `createdAt`.
 
 ## PT-CE269CF17F
 
 **Title:** a transient read failure is retried instead of disabling notes for the session
-**Automation:** node:test — [apps/praxis-desktop/main/src/main/notesStore.test.ts:225](../../apps/praxis-desktop/main/src/main/notesStore.test.ts#L225)
+**Automation:** node:test — [apps/praxis-desktop/main/src/main/notesStore.test.ts:223](../../apps/praxis-desktop/main/src/main/notesStore.test.ts#L223)
 
 **Given:** a `readFile` that throws `EBUSY` once.
 **When:** the store lists twice, then creates a note.
