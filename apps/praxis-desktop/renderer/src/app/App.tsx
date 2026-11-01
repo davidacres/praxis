@@ -2656,7 +2656,11 @@ export function App() {
               ? { feature: 'conversations', sessionKey: key }
               : { feature: 'sessions', sessionKey: key, view: 'agent-details', subagentId: key,
                   ...(session?.projectId ? { projectId: session.projectId } : {}) });
-          }} />}
+          }}
+          onNewSession={() => navigate(generalConversations
+            ? { newConversation: true }
+            : { newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
+          notesProjectId={easyModeProject?.id} projects={workspaceProjects} />}
         {sidebarVisible && (
           <>
             <div className="pane-sidebar" style={{ width: sidebar.size }}>

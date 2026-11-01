@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 734,
+  "testCount": 740,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -8739,6 +8739,102 @@
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "shelf books follow spines, retain drafts, delay hover and distinguish selection",
         "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-A0F01650EE",
+      "title": "the rail stays 14px with both controls inside it, and the plus opens a new session without sending",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
+        "line": 43,
+        "project": "functional"
+      },
+      "area": "session Shelf Notes",
+      "flow": {
+        "given": "an isolated desktop app launched without an open new session, with the sidebar hidden so the session shelf rail shows",
+        "when": "the rail width and the plus and pencil control boxes are measured, then the plus (session-shelf-new) is clicked",
+        "then": "the rail is 14px times --ui-scale (within 0.5px), both controls sit inside the rail horizontally and do not overflow its bottom, the new-session composer appears, the AI session count is unchanged (nothing created or sent), and the rail width is unchanged after the click"
+      }
+    },
+    {
+      "id": "PT-062E28E533",
+      "title": "the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
+        "line": 66,
+        "project": "functional"
+      },
+      "area": "session Shelf Notes",
+      "flow": {
+        "given": "an isolated desktop app with an app-storage project \"Shelf Notes\" and the session shelf showing",
+        "when": "the pencil is focused and activated with Enter, the project is chosen if a picker shows, a title and body are typed, the pointer moves away, Escape is pressed, and the pencil is clicked again",
+        "then": "the notes card opens with the pencil aria-expanded, the save state reads Saved, the card stays open after the pointer leaves, Escape hides it and returns focus to the pencil, reopening shows the same body, and notes.json in user data contains the text"
+      }
+    },
+    {
+      "id": "PT-773AA26797",
+      "title": "activating the pencil with the keyboard puts focus in the note title",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
+        "line": 96,
+        "project": "functional"
+      },
+      "area": "session Shelf Notes",
+      "flow": {
+        "given": "an isolated desktop app with an app-storage project \"Shelf Notes\" and the session shelf showing",
+        "when": "the notes pencil is focused and activated with Enter",
+        "then": "the note title field has keyboard focus"
+      }
+    },
+    {
+      "id": "PT-B4FF318316",
+      "title": "a failed save keeps the draft, flags the pencil and recovers on Retry",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
+        "line": 107,
+        "project": "functional"
+      },
+      "area": "session Shelf Notes",
+      "flow": {
+        "given": "an isolated desktop app with a saved note, after notes.json is replaced by a non-empty directory so the next atomic save fails",
+        "when": "the note body is edited, the card is dismissed by clicking outside, the pencil reopens it, notes.json is restored, and Retry is clicked",
+        "then": "a save error shows, the dismissed card leaves an unsaved marker on the pencil, reopening shows the unsaved draft with no Saved state, and after Retry the state reads Saved, the marker is gone and notes.json holds the edited text"
+      }
+    },
+    {
+      "id": "PT-F5F522F4DD",
+      "title": "Escape closes the project picker before it closes the notes card",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
+        "line": 138,
+        "project": "functional"
+      },
+      "area": "session Shelf Notes",
+      "flow": {
+        "given": "an isolated desktop app with an app-storage project and the notes card open with its \"Save note to project\" picker (the test skips itself when the shelf already has a project and no picker shows)",
+        "when": "the picker is opened and Escape is pressed once",
+        "then": "the picker collapses (aria-expanded false) while the notes card stays visible"
+      }
+    },
+    {
+      "id": "PT-6109A0FF71",
+      "title": "picking a project with the mouse keeps the notes card open",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
+        "line": 155,
+        "project": "functional"
+      },
+      "area": "session Shelf Notes",
+      "flow": {
+        "given": "an isolated desktop app with an app-storage project \"Shelf Notes\" and the notes card open with its project picker (the test skips itself when no picker shows)",
+        "when": "the picker is opened and the Shelf Notes option is clicked with the mouse",
+        "then": "the notes card stays visible and the project picker is no longer shown"
       }
     },
     {

@@ -23223,6 +23223,8 @@ button.feedback-score-pill {
   position: relative;
   z-index: 25;
   flex: 0 0 calc(14px * var(--ui-scale));
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   background: var(--bg);
   border-right: 1px solid var(--border);
@@ -23230,7 +23232,8 @@ button.feedback-score-pill {
 .session-shelf__spines {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
   padding-block: 8px;
@@ -23606,6 +23609,51 @@ button.feedback-score-pill {
 .session-shelf__spine[aria-current] { box-shadow: inset 1px 0 var(--tone-progress); }
 .session-shelf__spine[aria-current][aria-expanded="true"]::before { box-shadow: 0 0 8px color-mix(in srgb, var(--tone-progress) 45%, transparent); }
 .session-shelf__attention { position: absolute; top: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
+/* Slim creation controls live in the rail's own 14px: full-width, unpadded, etched outline icons. */
+.session-shelf__actions { flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.session-shelf__action {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: calc(22px * var(--ui-scale));
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.session-shelf__action:hover,
+.session-shelf__action[aria-expanded="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+/* The ring is drawn inside the rail so it neither clips nor widens it. */
+.session-shelf__action:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: -2px; }
+.session-shelf__action .icon, .session-shelf__action svg { width: calc(10px * var(--ui-scale)); height: calc(10px * var(--ui-scale)); font-size: calc(10px * var(--ui-scale)); }
+.session-shelf__unsaved { position: absolute; top: 3px; right: 2px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
+.session-shelf__card--notes { min-height: 0; }
+.note-editor { display: flex; flex-direction: column; gap: 8px; }
+.note-editor__title, .note-editor__body {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.note-editor__title { font-weight: 600; }
+.note-editor__body { resize: vertical; min-height: 96px; }
+.note-editor__title:focus, .note-editor__body:focus { border-color: var(--accent-border, var(--accent)); }
+.note-editor__status { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 18px; color: var(--text-secondary); font-size: 11px; }
+.note-editor__status p { margin: 0; }
+.note-editor__status [role="alert"] { color: var(--danger); }
+.note-editor__status button, .note-editor__recent button { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.note-editor__status button:hover, .note-editor__recent button:hover { color: var(--accent); }
+.note-editor__recent { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--border); list-style: none; font-size: 12px; color: var(--text-secondary); }
+.note-editor__recent button { max-width: 100%; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.note-editor__recent button[aria-current] { color: var(--text); font-weight: 600; }
 @media (prefers-reduced-motion: reduce) {
   .session-shelf__card, .session-shelf__sleeve,
   .session-shelf__spine::before, .session-shelf__spine::after { transition-duration: 1ms; }
