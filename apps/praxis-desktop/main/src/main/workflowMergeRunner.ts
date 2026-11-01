@@ -37,7 +37,8 @@ export async function runWorkflowMerge(
   node: WorkflowMergeNode,
   context: StageDispatchContext,
   projectFolder: string | undefined,
-  evidenceRoot: string
+  evidenceRoot: string,
+  resolveConflicts?: MergeConflictResolver
 ): Promise<StageOutcome> {
   const root = projectFolder ? await repositoryRoot(projectFolder) : undefined;
   if (!root) {
@@ -123,40 +124,138 @@ export async function runWorkflowMerge(
     };
   }
 
-  // Conflict occurred!
+  // Conflict occurred. The base checkout is never left half-merged, whatever happens next.
   log += `\nMerge conflict encountered!\n`;
-  const conflictStatus = await git(root, ['status', '--porcelain']);
-  const conflictedFiles = conflictStatus.stdout
-    .split('\n')
-    .filter(l => l.startsWith('UU ') || l.startsWith('AA ') || l.startsWith('UD ') || l.startsWith('DU '))
-    .map(l => l.slice(3).trim());
-
+  const conflictedFiles = await unmergedFiles(root);
   if (conflictedFiles.length > 0) {
     log += `Conflicted files:\n${conflictedFiles.map(f => ` - ${f}`).join('\n')}\n`;
   }
-
-  if (node.onConflict === 'ai-resolve') {
-    log += `onConflict is set to ai-resolve. Leaving conflict markers in place for agent resolution.\n`;
-    await writeMergeEvidence(context, node, evidenceRoot, log);
-    return {
-      status: 'failed',
-      exitCode: mergeResult.exitCode,
-      error: `Merge conflict in ${conflictedFiles.length} files (${conflictedFiles.slice(0, 3).join(', ')}). Ready for AI resolution.`,
-      pause: 'environment'
-    };
-  }
-
-  // Default / 'fail': Abort the merge so the repo isn't left in a conflicted state
   log += `Aborting merge...\n`;
   await git(root, ['merge', '--abort']);
   log += `Merge aborted cleanly.\n`;
-  await writeMergeEvidence(context, node, evidenceRoot, log);
 
+  if (node.onConflict === 'ai-resolve') {
+    if (!resolveConflicts || !context.worktreePath) {
+      log += `AI resolution needs the run's worktree and an implementer stage; neither is available here.\n`;
+      await writeMergeEvidence(context, node, evidenceRoot, log);
+      return {
+        status: 'failed',
+        exitCode: mergeResult.exitCode,
+        error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}. AI resolution could not start: the run has no worktree.`
+      };
+    }
+
+    // Resolve where the run's own work lives: bring the target into the run's branch, have the
+    // implementer settle the conflicts there, and only then merge into the target again.
+    const resolved = await resolveOnRunBranch(context.worktreePath, targetBranch, resolveConflicts);
+    log += resolved.log;
+    if (!resolved.ok) {
+      await writeMergeEvidence(context, node, evidenceRoot, log);
+      return {
+        status: 'failed',
+        exitCode: mergeResult.exitCode,
+        error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}. AI resolution did not settle it: ${resolved.error}`
+      };
+    }
+
+    log += `\n$ git ${mergeArgs.join(' ')}\n`;
+    const retry = await git(root, mergeArgs);
+    log += retry.stdout + retry.stderr;
+    if (retry.exitCode === 0) {
+      log += `\nMerge succeeded into ${targetBranch} after AI resolution.\n`;
+      await writeMergeEvidence(context, node, evidenceRoot, log);
+      return { status: 'succeeded', exitCode: 0, ...(scope ? { findings: scope.findings } : {}) };
+    }
+    const still = await unmergedFiles(root);
+    await git(root, ['merge', '--abort']);
+    log += `The merge still conflicts after AI resolution; aborted again.\n`;
+    await writeMergeEvidence(context, node, evidenceRoot, log);
+    return {
+      status: 'failed',
+      exitCode: retry.exitCode,
+      error: `The merge still conflicts after AI resolution, in ${still.length} file(s): ${still.join(', ')}.`
+    };
+  }
+
+  await writeMergeEvidence(context, node, evidenceRoot, log);
   return {
     status: 'failed',
     exitCode: mergeResult.exitCode,
     error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}.`
   };
+}
+
+/** Asks an agent to resolve conflict markers in the given files, in the given worktree. */
+export type MergeConflictResolver = (request: { worktreePath: string; files: string[]; targetBranch: string }) => Promise<{ ok: boolean; error?: string }>;
+
+async function unmergedFiles(cwd: string): Promise<string[]> {
+  const result = await git(cwd, ['diff', '--name-only', '--diff-filter=U']);
+  return result.stdout.split('\n').map(line => line.trim()).filter(Boolean);
+}
+
+const CONFLICT_MARKER = /^(<{7}|>{7})( |$)/m;
+
+/**
+ * Merges `targetBranch` into the run's branch in its worktree and has the resolver settle any
+ * conflict. Accepted only when the merge is concluded and no file it touched still carries a
+ * conflict marker; otherwise the branch is put back exactly where it was.
+ */
+async function resolveOnRunBranch(
+  worktreePath: string,
+  targetBranch: string,
+  resolver: MergeConflictResolver
+): Promise<{ ok: boolean; error?: string; log: string }> {
+  let log = `\nResolving on the run's branch in ${worktreePath}.\n`;
+  const before = (await git(worktreePath, ['rev-parse', 'HEAD'])).stdout.trim();
+  const putBack = async (why: string) => {
+    await git(worktreePath, ['merge', '--abort']);
+    await git(worktreePath, ['reset', '--hard', before]);
+    log += `${why} The run's branch was put back at ${before.slice(0, 8)}.\n`;
+    return { ok: false, error: why, log };
+  };
+
+  const args = ['merge', '--no-ff', '-m', `Merge ${targetBranch} into the run branch to resolve conflicts`, targetBranch];
+  log += `$ git ${args.join(' ')}\n`;
+  const merged = await git(worktreePath, args);
+  log += merged.stdout + merged.stderr;
+  if (merged.exitCode === 0) return { ok: true, log: `${log}It merged cleanly on the run's branch.\n` };
+
+  const files = await unmergedFiles(worktreePath);
+  if (files.length === 0) return putBack(`Merging ${targetBranch} into the run's branch failed without a conflict to resolve.`);
+
+  log += `Asking the implementer to resolve ${files.length} file(s): ${files.join(', ')}\n`;
+  const outcome = await resolver({ worktreePath, files, targetBranch }).catch(error => ({
+    ok: false,
+    error: error instanceof Error ? error.message : String(error)
+  }));
+  if (!outcome.ok) return putBack(`The implementer could not resolve the conflicts: ${outcome.error ?? 'no reason given'}.`);
+
+  // The agent stage commits what it leaves; an unfinished merge is concluded here. Either way
+  // the result is accepted only if no file that conflicted still carries a marker.
+  if ((await unmergedFiles(worktreePath)).length > 0) return putBack('Conflicts were left unresolved.');
+  const mergeHead = await git(worktreePath, ['rev-parse', '-q', '--verify', 'MERGE_HEAD']);
+  if (mergeHead.exitCode === 0) {
+    await git(worktreePath, ['add', '-A']);
+    const commit = await git(worktreePath, ['commit', '--no-edit']);
+    log += commit.stdout + commit.stderr;
+    if (commit.exitCode !== 0) return putBack('The resolved merge could not be committed.');
+  }
+  if ((await git(worktreePath, ['status', '--porcelain'])).stdout.trim()) {
+    await git(worktreePath, ['add', '-A']);
+    await git(worktreePath, ['commit', '-m', 'Resolve merge conflicts']);
+  }
+  const marked: string[] = [];
+  for (const file of files) {
+    const shown = await git(worktreePath, ['show', `HEAD:${file}`]);
+    if (shown.exitCode === 0 && CONFLICT_MARKER.test(shown.stdout)) marked.push(file);
+  }
+  if (marked.length > 0) return putBack(`Conflict markers were left in ${marked.join(', ')}.`);
+  const target = (await git(worktreePath, ['rev-parse', targetBranch])).stdout.trim();
+  if ((await git(worktreePath, ['merge-base', '--is-ancestor', target, 'HEAD'])).exitCode !== 0) {
+    return putBack(`The run's branch does not contain ${targetBranch} after resolution.`);
+  }
+  log += `Resolved on the run's branch.\n`;
+  return { ok: true, log };
 }
 
 /**

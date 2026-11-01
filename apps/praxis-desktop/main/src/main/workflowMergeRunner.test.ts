@@ -276,3 +276,93 @@ test('Praxis metadata in the base checkout does not block a merge, but real unco
     cleanup();
   }
 });
+
+// ── AI conflict resolution ────────────────────────────────────────────────
+
+/** main and the run's branch (checked out in its own worktree) both rewrite README.md. */
+function conflictingRun(): { repo: string; worktree: string; branch: string; cleanup: () => void } {
+  const { repo, cleanup } = setupRepo();
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+  const branch = 'WF-C0FFEE12-notes';
+  git('checkout', '-b', branch);
+  fs.writeFileSync(path.join(repo, 'README.md'), '# Main\nRun line\n');
+  git('commit', '-am', 'Run edit');
+  git('checkout', 'main');
+  fs.writeFileSync(path.join(repo, 'README.md'), '# Main\nMain line\n');
+  git('commit', '-am', 'Main edit');
+  const worktree = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-merge-wt-'));
+  fs.rmSync(worktree, { recursive: true });
+  git('worktree', 'add', worktree, branch);
+  return { repo, worktree, branch, cleanup: () => { fs.rmSync(worktree, { recursive: true, force: true }); cleanup(); } };
+}
+
+const aiNode: WorkflowMergeNode = { type: 'merge', id: 'merge', name: 'Merge to main', targetBranch: 'main', onConflict: 'ai-resolve', x: 0, y: 0, inputs: [] };
+
+test('ai-resolve settles the conflict on the run branch, then merges cleanly into main', async () => {
+  const { repo, worktree, branch, cleanup } = conflictingRun();
+  try {
+    const asked: string[][] = [];
+    const outcome = await runWorkflowMerge(
+      aiNode,
+      { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree },
+      repo,
+      fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')),
+      async ({ worktreePath, files }) => {
+        asked.push(files);
+        // While the resolver works, main itself is not left half-merged.
+        assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), '');
+        assert.match(fs.readFileSync(path.join(worktreePath, 'README.md'), 'utf8'), /<<<<<<< /);
+        fs.writeFileSync(path.join(worktreePath, 'README.md'), '# Main\nMain line\nRun line\n');
+        execFileSync('git', ['add', 'README.md'], { cwd: worktreePath });
+        return { ok: true };
+      }
+    );
+    assert.equal(outcome.status, 'succeeded', outcome.error);
+    assert.deepEqual(asked, [['README.md']]);
+    assert.equal(fs.readFileSync(path.join(repo, 'README.md'), 'utf8'), '# Main\nMain line\nRun line\n');
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), '');
+    // The resolution is on the run's branch, so the delivered history shows it.
+    assert.match(execFileSync('git', ['log', '--format=%s', branch], { cwd: repo, encoding: 'utf8' }), /Merge main into the run branch to resolve conflicts/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('ai-resolve that leaves conflict markers is refused: main untouched, run branch put back', async () => {
+  const { repo, worktree, branch, cleanup } = conflictingRun();
+  try {
+    const mainBefore = execFileSync('git', ['rev-parse', 'main'], { cwd: repo, encoding: 'utf8' }).trim();
+    const branchBefore = execFileSync('git', ['rev-parse', branch], { cwd: repo, encoding: 'utf8' }).trim();
+    const outcome = await runWorkflowMerge(
+      aiNode,
+      { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree },
+      repo,
+      fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')),
+      // Claims success but only stages the file, markers and all.
+      async ({ worktreePath }) => {
+        execFileSync('git', ['add', 'README.md'], { cwd: worktreePath });
+        return { ok: true };
+      }
+    );
+    assert.equal(outcome.status, 'failed');
+    assert.match(outcome.error ?? '', /AI resolution did not settle it: Conflict markers were left in README\.md\./);
+    assert.equal(execFileSync('git', ['rev-parse', 'main'], { cwd: repo, encoding: 'utf8' }).trim(), mainBefore);
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), '');
+    assert.equal(execFileSync('git', ['rev-parse', branch], { cwd: repo, encoding: 'utf8' }).trim(), branchBefore);
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: worktree, encoding: 'utf8' }).trim(), '');
+  } finally {
+    cleanup();
+  }
+});
+
+test('ai-resolve with no resolver available fails and names why, leaving main clean', async () => {
+  const { repo, worktree, cleanup } = conflictingRun();
+  try {
+    const outcome = await runWorkflowMerge(aiNode, { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree }, repo, fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')));
+    assert.equal(outcome.status, 'failed');
+    assert.match(outcome.error ?? '', /AI resolution could not start/);
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), '');
+  } finally {
+    cleanup();
+  }
+});

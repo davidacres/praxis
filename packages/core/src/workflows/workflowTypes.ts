@@ -378,7 +378,11 @@ export interface WorkflowMergeNode extends WorkflowNodeBase {
   targetBranch?: string;
   /** Whether merge uses --no-ff commit (default true). */
   noFastForward?: boolean;
-  /** Handling on conflict: 'fail' or 'ai-resolve' (default 'ai-resolve'). */
+  /**
+   * On a conflict: `fail` undoes the merge and fails the stage; `ai-resolve` has the workflow's
+   * implementer resolve the conflicts on the run's branch, then tries the merge again. Absent
+   * means `fail`. The base checkout is never left half-merged either way.
+   */
   onConflict?: 'fail' | 'ai-resolve';
   /**
    * Repository paths (files or folders) this run was meant to change (FX-BE-094 / TASK-265).

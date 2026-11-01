@@ -23,6 +23,7 @@ export const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: Ic
   { type: 'check', label: 'Check', icon: 'shield', description: 'Verification, test, or security gate' },
   { type: 'approval', label: 'Approval', icon: 'check-square', description: 'Manual human sign-off gate' },
   { type: 'deployment', label: 'Deployment', icon: 'rocket', description: 'Deployment or release step' },
+  { type: 'merge', label: 'Merge', icon: 'git-branch', description: 'Merges the run’s branch into main, optionally letting AI resolve conflicts' },
   { type: 'join', label: 'Join', icon: 'split-horizontal', description: 'Parallel branches synchronizer' },
   { type: 'map', label: 'For each', icon: 'layers', description: 'Runs an agent once per finding or plan item, in parallel' }
 ];

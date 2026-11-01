@@ -113,7 +113,8 @@ export interface StageDispatcher {
     onSession: (sessionId: string) => void
   ): Promise<StageOutcome>;
   /** Merges changes from the delivery worktree/branch into the base branch. */
-  runMerge?(node: WorkflowMergeNode, context: StageDispatchContext): Promise<StageOutcome>;
+  /** `onSession` reports the session of an agent the merge starts, e.g. to resolve conflicts. */
+  runMerge?(node: WorkflowMergeNode, context: StageDispatchContext, onSession?: (sessionId: string) => void): Promise<StageOutcome>;
   /** Fans a map node's agent out over its items and folds their results (FX-BE-165). */
   runMap?(node: WorkflowMapNode, context: StageDispatchContext): Promise<StageOutcome>;
   /** Stops a stage that has outrun its timeout or whose run was cancelled. */
@@ -359,7 +360,9 @@ export class WorkflowOrchestrator {
         if (!this.options.dispatcher.runMerge) {
           throw new Error('Merge stage dispatcher is not configured.');
         }
-        return this.options.dispatcher.runMerge(node, context);
+        return this.options.dispatcher.runMerge(node, context, sessionId => {
+          void this.recordSession(runId, node.id, sessionId);
+        });
       }
       if (isMapNode(node)) {
         if (!this.options.dispatcher.runMap) throw new Error('This host cannot run map stages.');

@@ -943,6 +943,34 @@ function NodeInspector({
           />
         </Field>
       )}
+
+      {node.type === 'merge' && (
+        <>
+          <Field label="Merge into" stacked hint="Leave empty to merge into the branch the project checkout is on.">
+            <input
+              value={node.targetBranch ?? ''}
+              placeholder="main"
+              data-testid="wf-merge-target"
+              onChange={event => set({ targetBranch: event.target.value.trim() ? event.target.value : undefined })}
+            />
+          </Field>
+          <Field label="On a conflict">
+            <ChipSelect
+              ariaLabel="On a conflict"
+              value={node.onConflict ?? 'fail'}
+              onChange={onConflict => set({ onConflict: onConflict as never })}
+              options={[
+                { value: 'fail', label: 'Stop and report', description: 'Undo the merge and fail the stage, naming the conflicted files' },
+                {
+                  value: 'ai-resolve',
+                  label: 'Let AI resolve',
+                  description: 'The implementer resolves the conflicts on the run’s branch, then the merge is tried again'
+                }
+              ]}
+            />
+          </Field>
+        </>
+      )}
     </div>
   );
 }

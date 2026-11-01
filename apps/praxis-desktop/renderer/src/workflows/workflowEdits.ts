@@ -49,7 +49,7 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
     case 'approval':
       return { ...base, type: 'approval', name: 'Approval', prompt: '', requiredGates: [], allowBypass: false };
     case 'merge':
-      return { ...base, type: 'merge', name: 'Merge', onConflict: 'ai-resolve' };
+      return { ...base, type: 'merge', name: 'Merge to main', targetBranch: 'main', onConflict: 'fail' };
     case 'join':
       return { ...base, type: 'join', name: 'Join', mode: 'all' };
     case 'map':

@@ -9,18 +9,23 @@ import {
   ExclusiveResources,
   WorkflowOrchestrator,
   WorkflowRunStore,
+  isAgentTaskNode,
   isCheckNode,
   isMergeNode,
+  nodeMutatesWorktree,
   isRunSettled,
   summarizeWorkflowRun,
+  type StageDispatchContext,
   type StageDispatcher,
   type StageRow,
+  type WorkflowAgentTaskNode,
+  type WorkflowMergeNode,
   type WorkflowRun
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
-import { runWorkflowMerge } from './workflowMergeRunner';
+import { runWorkflowMerge, type MergeConflictResolver } from './workflowMergeRunner';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
@@ -141,6 +146,40 @@ export async function writeBackToIssue(run: WorkflowRun): Promise<void> {
   }
 }
 
+/**
+ * The workflow's implementer, run as this merge stage's session, asked to settle the conflicts
+ * on the run's branch. Undefined when the workflow has no stage that changes code to ask.
+ */
+function mergeConflictResolver(
+  node: WorkflowMergeNode,
+  context: StageDispatchContext,
+  onSession: (sessionId: string) => void
+): MergeConflictResolver | undefined {
+  const implementer = context.run.definition.nodes.find(
+    (candidate): candidate is WorkflowAgentTaskNode => isAgentTaskNode(candidate) && nodeMutatesWorktree(candidate)
+  );
+  if (!implementer) return undefined;
+  return async ({ files, targetBranch }) => {
+    const resolver: WorkflowAgentTaskNode = {
+      ...implementer,
+      id: node.id,
+      name: `${node.name}: resolve conflicts`,
+      inputs: [],
+      outputs: [],
+      guardTests: undefined,
+      maxAttempts: 1,
+      instructions: [
+        `Merging ${targetBranch} into this run's branch stopped on conflicts in: ${files.join(', ')}.`,
+        `Resolve every conflict in those files, keeping the intent of both sides: this run's change and what ${targetBranch} changed since it branched.`,
+        'Remove every conflict marker, make sure the result still builds, and commit the resolution. Do not change anything unrelated to the conflicts.',
+        'If a conflict cannot be resolved without a decision only a person can make, leave it and say why.'
+      ].join('\n')
+    };
+    const outcome = await runWorkflowAgentStage(resolver, context, onSession);
+    return outcome.status === 'succeeded' ? { ok: true } : { ok: false, error: outcome.error };
+  };
+}
+
 async function runTrustError(run: WorkflowRun): Promise<string | undefined> {
   const trust = await projectWorkflowTrust(getWorkflowBackingStore(), projectFolderFor(run), run.workflowId, run.definition, true);
   if (!trust.trusted) return 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.';
@@ -169,13 +208,14 @@ const dispatcher: StageDispatcher = {
     if (error) return { status: 'failed' as const, error };
     return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
-  async runMerge(node, context) {
+  async runMerge(node, context, onSession) {
     const error = await runTrustError(context.run);
     if (error) return { status: 'failed' as const, error };
     const folder = projectFolderFor(context.run);
+    const resolveConflicts = mergeConflictResolver(node, context, onSession ?? (() => undefined));
     // The base checkout is the one thing parallel runs share (FX-BE-149): merges into it take turns.
     const merge = async () => {
-      const outcome = await runWorkflowMerge(node, context, folder, evidenceStorageRoot());
+      const outcome = await runWorkflowMerge(node, context, folder, evidenceStorageRoot(), resolveConflicts);
       // E2E only: hold the checkout a little longer, so a spec can tell turns from overlap.
       if (MERGE_HOLD_MS > 0) await new Promise(resolve => setTimeout(resolve, MERGE_HOLD_MS));
       return outcome;
