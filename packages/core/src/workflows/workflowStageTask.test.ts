@@ -89,7 +89,10 @@ test('each kind of stage is told a failure in delivered work is fixed here, and 
   const implement = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'change-diff', kind: 'diff', required: true }] })).definitionOfDone;
   const review = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'review-findings', kind: 'findings', required: true }] })).definitionOfDone;
   assert.match(plan, /Plan to fix every failing test .* already delivered .* later ticket in the same plan explicitly covers/);
-  assert.match(implement, /run the tests that cover what you changed, including the end-to-end or UI tests/);
+  assert.match(implement, /run the tests that cover what you changed \(the plan's "Tests to keep passing".*including the end-to-end or UI tests/);
+  assert.match(plan, /## Tests to keep passing/);
+  assert.match(plan, /Search the test files for the test ids \(data-testid\), aria-labels, role names/);
+  assert.match(review, /report an existing test that covers changed code or UI but is missing from it/);
   assert.match(implement, /even when earlier, already-delivered work caused it: no other ticket will/);
   assert.match(review, /later ticket .* report it as info and name that ticket/);
   assert.match(review, /already delivered .* not deferred: report it at its real severity/);

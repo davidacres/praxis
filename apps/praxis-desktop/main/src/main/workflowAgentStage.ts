@@ -38,6 +38,7 @@ import {
   type AgentToolMode,
   type AgentTaskAttachment,
   type IssueDetails,
+  mcpServerSlug,
   type IssueTrackerService,
   type StageDispatchContext,
   type StageOutcome,
@@ -57,6 +58,7 @@ import { getProjectStore } from './projectStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
+import { getSessionCodeIntelligenceServer } from './codeIntelligenceIpc';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 import { stageCapableProvider, usableProviders } from './providerFallback';
 import { restoreWorktreeTo } from './runWork';
@@ -416,6 +418,16 @@ export async function runWorkflowAgentStage(
         args: [require.resolve('@praxis/core/out/ai/readOnlyFilesMcp.js'), worktreePath],
         env: { ELECTRON_RUN_AS_NODE: '1' }
       }];
+    }
+    // Code intelligence finds the tests that cover a change (callers for code, search for the test ids
+    // and labels end-to-end tests use), which a planner otherwise misses. It reads the project's own
+    // index: a run worktree is a fresh checkout that would otherwise be indexed from scratch per run.
+    if (prepared.plan.state === 'acp' && projectRoot) {
+      const codeIntel = await getSessionCodeIntelligenceServer(projectRoot, provider).catch(() => undefined);
+      if (codeIntel?.command) {
+        mcpServers = [...(mcpServers ?? []), { name: mcpServerSlug(codeIntel.name), command: codeIntel.command, args: codeIntel.args, env: codeIntel.env }];
+        taskDefinition.scope += '\n\nThe code-intelligence tools (symbol lookup, callers, related code, code search) index the project\'s main checkout as of when this run branched. Use them to find code and the tests that cover it; read files in this working folder for their current text.';
+      }
     }
     await launchAgentTask(prepared, {
       issue,

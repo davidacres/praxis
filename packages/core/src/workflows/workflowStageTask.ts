@@ -18,6 +18,7 @@ import { isProviderLimitError, extractProviderLimitMessage } from '../ai/provide
 import { nodeOutputs, type CheckFindings, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
 import { parseReviewFindings } from '../ai/aiReviewService';
 import { PUBLISHABLE_PLAN_INSTRUCTIONS } from './workflowPlanPublishing';
+import { PLANNED_TESTS_HEADING } from './affectedTests';
 import type { StageOutcome } from './workflowOrchestrator';
 import type { WorkflowStageContext } from './workflowStageSession';
 
@@ -111,13 +112,14 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
   const rules: string[] = [];
   if (outputs.some(output => output.kind === 'plan')) {
     rules.push(
-      'Plan to fix every failing test or check the work uncovers, including failures caused by work that is already delivered (an earlier or completed ticket, or the base branch). Leave out only work that a later ticket in the same plan explicitly covers, and name that ticket.'
+      'Plan to fix every failing test or check the work uncovers, including failures caused by work that is already delivered (an earlier or completed ticket, or the base branch). Leave out only work that a later ticket in the same plan explicitly covers, and name that ticket.',
+      PLANNED_TESTS_INSTRUCTIONS
     );
   }
   if (outputs.some(output => output.kind === 'diff')) {
     rules.push(
       [
-        'Before you finish, run the tests that cover what you changed, including the end-to-end or UI tests for any UI you changed, and fix what fails.',
+        `Before you finish, run the tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), including the end-to-end or UI tests for any UI you changed, and fix what fails.`,
         'Fix a failing test or check even when earlier, already-delivered work caused it: no other ticket will. Leave it only when a later ticket in the same plan explicitly covers it, and name that ticket.'
       ].join(' ')
     );
@@ -126,12 +128,28 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
     rules.push(
       [
         'Judge findings against this ticket\'s scope. Work that a later ticket in the same plan explicitly covers is not a defect in this change: report it as info and name that ticket.',
-        'A failure in work that is already delivered (an earlier or completed ticket, or the base branch) is not deferred: report it at its real severity, so this run fixes it.'
+        'A failure in work that is already delivered (an earlier or completed ticket, or the base branch) is not deferred: report it at its real severity, so this run fixes it.',
+        `If the plan lists "${PLANNED_TESTS_HEADING}", check it against the change: report an existing test that covers changed code or UI but is missing from it (one that uses a changed test id, label or class, or imports a changed module), naming the test file.`
       ].join(' ')
     );
   }
   return rules;
 }
+
+/**
+ * How a planner finds and records the existing tests a change must keep passing. QA runs the files
+ * listed under the heading, alongside the ones Praxis finds from the diff itself.
+ *
+ * End-to-end tests are the ones a planner misses: they never import the UI they drive, they find it
+ * by a test id, label, role name or class. So the search has to be for those strings, not for code
+ * references alone.
+ */
+export const PLANNED_TESTS_INSTRUCTIONS = [
+  'Find the existing tests that cover what this plan changes, before planning the change:',
+  '- For code: the tests that import or call it. Code-intelligence tools, when you have them (callers, related symbols, code search), follow these better than text search.',
+  '- For UI: end-to-end and UI tests do not import the components they drive. Search the test files for the test ids (data-testid), aria-labels, role names, visible labels and CSS classes of every component you will change. Code search finds tests by meaning too, such as the feature\'s name.',
+  `List them in the plan under a heading of their own, "## ${PLANNED_TESTS_HEADING}", one test file path per line, with why it is affected. Say which of them the change is meant to alter (its behaviour changes on purpose) rather than keep passing. QA runs every file listed.`
+].join('\n');
 
 /**
  * How a stage says its environment stopped it. Without it, an implementer with no dependencies

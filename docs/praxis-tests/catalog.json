@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 767,
+  "testCount": 768,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -10898,6 +10898,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a project with no build script is not failed by the build stage having nothing to say",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-06220981BD",
+      "title": "a QA check also picks the tests that drive what the change touched, and names why",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowChangeTests.spec.ts",
+        "line": 30,
+        "project": "functional"
+      },
+      "area": "workflow Change Tests",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a QA check also picks the tests that drive what the change touched, and names why",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

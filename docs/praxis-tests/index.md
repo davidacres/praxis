@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **767 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -685,6 +685,7 @@ This catalogue describes **767 Playwright tests** under `apps/praxis-desktop/mai
 | PT-01868F6849 | workflow Build Stage | a governed run refuses a dirty product checkout instead of testing an older committed snapshot | `apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts:110` |
 | PT-E0ECD22131 | workflow Build Stage | a build stage produces the output in the run's worktree, so QA passes — and the main checkout gets none | `apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts:131` |
 | PT-F75C48C431 | workflow Build Stage | a project with no build script is not failed by the build stage having nothing to say | `apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts:143` |
+| PT-06220981BD | workflow Change Tests | a QA check also picks the tests that drive what the change touched, and names why | `apps/praxis-desktop/main/e2e/workflowChangeTests.spec.ts:30` |
 | PT-DC013E489D | workflow Designer | creates a workflow from a template, edits a stage in the right pane, and persists it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:95` |
 | PT-E049A4DE12 | workflow Designer | blocks save while the graph is invalid and announces the errors | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:126` |
 | PT-37B15BC378 | workflow Designer | the canvas moves a stage with the keyboard and selects it | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:142` |

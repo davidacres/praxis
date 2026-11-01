@@ -1,6 +1,7 @@
 import { spawnCheck } from './workflowCheckProcess';
 import { formatTestRunSummary, summarizeTestRun } from './testRunnerSummary';
 import { removeEscapingDependencyLinks } from './worktreeDependencyLinks';
+import { runAffectedTests, selectAffectedTests } from './affectedTestsRunner';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -44,11 +45,17 @@ import {
 const OUTPUT_TAIL = 4000;
 const execFileAsync = promisify(execFile);
 
+export interface WorkflowCheckPorts {
+  /** The run's plan text, for the `Tests to keep passing` a QA check also runs. */
+  planText?(run: StageDispatchContext['run']): string | undefined;
+}
+
 export async function runWorkflowCheck(
   node: WorkflowCheckNode,
   context: StageDispatchContext,
   fallbackCwd: string | undefined,
-  evidenceRoot: string
+  evidenceRoot: string,
+  ports: WorkflowCheckPorts = {}
 ): Promise<StageOutcome> {
   const cwd = context.worktreePath ?? fallbackCwd;
   if (!cwd) {
@@ -78,10 +85,27 @@ export async function runWorkflowCheck(
       context.reportProgress?.(`Removed ${link}, a link to ${target} outside this run's worktree, so this check cannot change files there.`);
     }
   }
-  const result = await spawnCheck(command, cwd, context.signal, line => {
+  let result = await spawnCheck(command, cwd, context.signal, line => {
     const progress = checkProgressLine(line);
     if (progress) context.reportProgress?.(progress);
   });
+
+  // A QA check also runs the tests for this change, which the project's own test command may not
+  // include (a smoke set, say). Only once that command passed: a failing one already fails QA.
+  if (
+    node.satisfiesGate === 'qa' && node.affectedTests !== false && context.worktreePath && fallbackCwd &&
+    result.code !== null && (node.successExitCodes?.length ? node.successExitCodes : [0]).includes(result.code) && !context.signal?.aborted
+  ) {
+    const affected = await runChangeTests(node, context, context.worktreePath, fallbackCwd, ports);
+    if (affected) {
+      result = {
+        ...result,
+        code: affected.code === 0 ? result.code : affected.code,
+        timedOut: result.timedOut || affected.timedOut,
+        output: `${result.output.trimEnd()}\n\n${affected.output}`
+      };
+    }
+  }
 
   const key: WorkflowEvidenceBundleKey = {
     projectId: context.run.projectId,
@@ -241,6 +265,37 @@ export async function runWorkflowCheck(
  * run did not make. Undefined when the project checkout has no branch (detached
  * HEAD) or git cannot answer, and the caller then checks everything.
  */
+async function runChangeTests(
+  node: WorkflowCheckNode,
+  context: StageDispatchContext,
+  worktreePath: string,
+  projectFolder: string,
+  ports: WorkflowCheckPorts
+) {
+  const baseCommit = await runForkPoint(worktreePath, projectFolder);
+  if (!baseCommit) {
+    context.reportProgress?.('Could not tell where this run branched, so the tests for this change were not picked.');
+    return undefined;
+  }
+  try {
+    const selection = await selectAffectedTests(worktreePath, baseCommit, ports.planText?.(context.run));
+    context.reportProgress?.(selection.tests.length
+      ? `Running the ${selection.tests.length} test file${selection.tests.length === 1 ? '' : 's'} for this change.`
+      : 'No existing tests refer to what this change touched.');
+    return await runAffectedTests(worktreePath, selection, {
+      spawn: (check, cwd, signal) => spawnCheck(check, cwd, signal, line => {
+        const progress = checkProgressLine(line);
+        if (progress) context.reportProgress?.(progress);
+      })
+    }, { signal: context.signal, timeoutMs: node.timeoutMs });
+  } catch (error) {
+    // Praxis failing to pick tests is not the change failing them: say so, and leave QA to the project's command.
+    const message = `Could not pick or run the tests for this change: ${error instanceof Error ? error.message : String(error)}`;
+    context.reportProgress?.(message);
+    return { code: 0, timedOut: false, output: `== Tests for this change ==\n${message}` };
+  }
+}
+
 async function runForkPoint(worktreePath: string, projectFolder: string): Promise<string | undefined> {
   try {
     const branch = (await execFileAsync('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd: projectFolder })).stdout.trim();

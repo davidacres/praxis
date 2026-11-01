@@ -308,6 +308,12 @@ export interface WorkflowCheckNode extends WorkflowNodeBase {
     repairNodeId: string;
     maxAttempts: number;
   };
+  /**
+   * A QA-gate check also runs the tests for this run's change — the plan's `Tests to keep passing`
+   * and the tests that use what the diff touched (see `affectedTests.ts`) — after its own command
+   * passes. `false` turns that off for this check.
+   */
+  affectedTests?: boolean;
 }
 
 /**

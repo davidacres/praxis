@@ -12,6 +12,7 @@ import {
   WorkflowOrchestrator,
   WorkflowRunStore,
   isAgentTaskNode,
+  stageSessionKey,
   isCheckNode,
   isMergeNode,
   nodeMutatesWorktree,
@@ -27,6 +28,7 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
+import { getAiSessionManager } from './aiInstance';
 import { spawnCheck } from './workflowCheckProcess';
 import { ensureRunDependencies } from './runDependencies';
 import { runWorkflowMerge, type MergeConflictResolver } from './workflowMergeRunner';
@@ -202,6 +204,15 @@ function mergeConflictResolver(
   };
 }
 
+/** What the run's plan stages wrote, for the `Tests to keep passing` its QA check also runs. */
+function runPlanText(run: WorkflowRun): string | undefined {
+  const texts = run.definition.nodes
+    .filter(node => isAgentTaskNode(node) && node.outputs.some(output => output.kind === 'plan'))
+    .map(node => getAiSessionManager().getAgentSession(stageSessionKey(run.runId, node.id))?.responseText ?? '')
+    .filter(Boolean);
+  return texts.length ? texts.join('\n\n') : undefined;
+}
+
 async function runTrustError(run: WorkflowRun): Promise<string | undefined> {
   const trust = await projectWorkflowTrust(getWorkflowBackingStore(), projectFolderFor(run), run.workflowId, run.definition, true);
   if (!trust.trusted) return 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.';
@@ -228,7 +239,7 @@ const dispatcher: StageDispatcher = {
   async runCheck(node, context) {
     const error = await runTrustError(context.run);
     if (error) return { status: 'failed' as const, error };
-    return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
+    return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot(), { planText: runPlanText });
   },
   async runMerge(node, context, onSession) {
     const error = await runTrustError(context.run);

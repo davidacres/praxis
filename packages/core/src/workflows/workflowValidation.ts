@@ -282,6 +282,7 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (GATE_KINDS.has(raw.satisfiesGate as WorkflowGateKind)) node.satisfiesGate = raw.satisfiesGate as WorkflowGateKind;
       if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
       if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
+      if (raw.affectedTests === false) node.affectedTests = false;
       // How a scanner's report becomes findings. Dropping these on save meant a SARIF-producing
       // check never had its findings parsed, so the security gate judged nothing.
       if (ADAPTERS.has(raw.adapter as CheckResultAdapterKind)) node.adapter = raw.adapter as CheckResultAdapterKind;
