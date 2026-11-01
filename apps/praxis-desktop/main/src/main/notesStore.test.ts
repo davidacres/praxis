@@ -202,24 +202,22 @@ test('snapshots are detached and empty groups are refused', async () => {
 });
 
 test('a backwards clock never makes updatedAt precede createdAt', async () => {
-  const { filePath, make } = setup();
-  const times = [
-    '2026-01-02T00:00:00.000Z', // createNote
-    '2026-01-02T00:00:00.000Z', // createGroup
-    '2026-01-01T00:00:00.000Z', // updateNote (clock stepped back)
-    '2026-01-01T00:00:00.000Z' // deleteNote -> group membership stamp
-  ];
-  const store = make({ now: () => times.shift() ?? '2026-01-01T00:00:00.000Z' });
+  const { make } = setup();
+  // An explicit clock set before each step, so the test does not depend on how many
+  // times the store reads it.
+  let clock = '2026-01-02T00:00:00.000Z';
+  const store = make({ now: () => clock });
   const n = value<{ id: string }>(await store.createNote(A, { title: 'one', body: '' }));
   const g = value<{ id: string }>(await store.createGroup(A, { title: 'g', noteIds: [n.id] }));
+  clock = '2026-01-01T00:00:00.000Z'; // stepped back a day
   const updated = value<{ createdAt: string; updatedAt: string }>(await store.updateNote(A, n.id, { body: 'x' }));
   assert.equal(updated.updatedAt, updated.createdAt);
   value(await store.deleteNote(A, n.id));
-  const reloaded = value<{ groups: { id: string; createdAt: string; updatedAt: string }[] }>(await make().list(A));
+  const reloaded = value<{ groups: { id: string; noteIds: string[]; createdAt: string; updatedAt: string }[] }>(await make().list(A));
   const group = reloaded.groups.find(item => item.id === g.id);
   assert.ok(group);
+  assert.deepEqual(group.noteIds, []);
   assert.equal(group.updatedAt, group.createdAt);
-  assert.ok(fs.existsSync(filePath));
 });
 
 test('a transient read failure is retried instead of disabling notes for the session', async () => {
