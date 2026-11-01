@@ -1,4 +1,5 @@
 import { backgroundTaskIsLive, type ProviderBackgroundUpdate } from '../backgroundTasks';
+import { isReadOnlyShellCommand, shellCommandOf } from '../readOnlyShell';
 import { randomUUID } from 'node:crypto';
 import type { CoordinationGate } from '../coordination/coordinationGate';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
@@ -542,12 +543,15 @@ export class AcpAgentHost {
     const record = this.sessionManager.getAgentSession(issueKey);
     // Titles are agent-authored display text, not an authorization boundary.
     // Unclassified actions (including missing kinds) fail closed in read-only mode.
-    const readOnlyKind = request.kind === 'read' || request.kind === 'search' || request.kind === 'think' || request.kind === 'fetch';
+    const command = request.kind === undefined || request.kind === 'execute' || request.kind === 'other' ? shellCommandOf(request.rawInput) : undefined;
+    // A refused tool ends Copilot's whole turn, so a command that can only look is not refused.
+    const readOnlyKind = request.kind === 'read' || request.kind === 'search' || request.kind === 'think' || request.kind === 'fetch' ||
+      (command !== undefined && isReadOnlyShellCommand(command));
     if (
       record?.toolMode === 'project-only' ||
       (record?.toolMode === 'read-only' && !readOnlyKind)
     ) {
-      this.appendEvent(issueKey, evt('warning', `Blocked by read-only tools: ${request.title}`));
+      this.appendEvent(issueKey, evt('warning', `Blocked by read-only tools: ${request.title}${command ? ` (${command.length > 200 ? `${command.slice(0, 200)}…` : command})` : ''}`));
       return Promise.resolve('deny');
     }
     if (task.allowPermissionsForTask) {

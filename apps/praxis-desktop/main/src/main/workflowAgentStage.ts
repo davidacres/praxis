@@ -1,5 +1,5 @@
 import { stageHandoverGuard } from './stageHandoverGuard';
-import type { AgentSessionRecord, BackgroundTask } from '@praxis/core';
+import type { AcpMcpServer, AgentSessionRecord, BackgroundTask } from '@praxis/core';
 import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -57,7 +57,7 @@ import { getProjectStore } from './projectStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { workflowLogSink } from './workflowLogSink';
-import { launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
+import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 import { stageCapableProvider, usableProviders } from './providerFallback';
 import { restoreWorktreeTo } from './runWork';
 import { getCurrentBranch } from './gitService';
@@ -391,10 +391,12 @@ export async function runWorkflowAgentStage(
   const baseRef = node.guardTests ? startRef : undefined;
   const settled = waitForSession(issueKey);
   let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
+  let prepared: Awaited<ReturnType<typeof prepareAgentLaunch>> | undefined;
+  let mcpServers: AcpMcpServer[] | undefined;
 
   try {
     const skillNames = preflight.binding.skills.map(skill => skill.name);
-    const prepared = await prepareAgentLaunch({
+    prepared = await prepareAgentLaunch({
       profileId: preflight.binding.profileId,
       hostId: preflight.binding.hostId,
       provider,
@@ -405,7 +407,15 @@ export async function runWorkflowAgentStage(
     dispatch.signal?.throwIfAborted();
     const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
     if (needsReviewFileTools) {
-      taskDefinition.scope += '\n\nUse the praxis-review-files MCP read_file and list_dir tools to inspect this working folder and .praxis-run artifacts. These tools are read-only; do not execute commands.';
+      taskDefinition.scope += '\n\nUse the praxis-review-files MCP read_file and list_dir tools to inspect this working folder and .praxis-run artifacts. These tools are read-only. Shell commands that only read (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n) are allowed. Anything else is refused, and a refused command can end your turn before you have answered, so do not try to run tests, builds or scripts.';
+    }
+    if (needsReviewFileTools) {
+      mcpServers = [{
+        name: 'praxis-review-files',
+        command: process.execPath,
+        args: [require.resolve('@praxis/core/out/ai/readOnlyFilesMcp.js'), worktreePath],
+        env: { ELECTRON_RUN_AS_NODE: '1' }
+      }];
     }
     await launchAgentTask(prepared, {
       issue,
@@ -413,12 +423,7 @@ export async function runWorkflowAgentStage(
       provider,
       ...(modelChoice.model ? { model: modelChoice.model } : {}),
       workingDirectory: worktreePath,
-      ...(needsReviewFileTools ? { mcpServers: [{
-        name: 'praxis-review-files',
-        command: process.execPath,
-        args: [require.resolve('@praxis/core/out/ai/readOnlyFilesMcp.js'), worktreePath],
-        env: { ELECTRON_RUN_AS_NODE: '1' }
-      }] } : {}),
+      ...(mcpServers ? { mcpServers } : {}),
       toolMode,
       ...(stagePermissionMode(workflowRun) === 'autopilot' ? { permissionMode: 'autopilot' as const } : {}),
       autoApprovePermissions: workflowRun.permissionMode === 'auto'
@@ -468,7 +473,32 @@ export async function runWorkflowAgentStage(
     });
   }
 
-  const finished = await settled.promise;
+  let finished = await settled.promise;
+  // Copilot ends its whole turn when a tool is refused, so a read-only stage that tried a command
+  // which could write stopped there, with nothing produced. Tell it why and let it carry on.
+  let refusalsSeen = 0;
+  for (let nudge = 0; nudge < MAX_REFUSAL_CONTINUATIONS && prepared && toolMode === 'read-only'; nudge++) {
+    const refusals = readOnlyRefusals(issueKey);
+    if (finished.state !== 'completed' || dispatch.signal?.aborted || refusals <= refusalsSeen) break;
+    refusalsSeen = refusals;
+    if (stageOutcomeFromSession(node, finished).status === 'succeeded') break;
+    const again = waitForSession(issueKey, sessions.getAgentSession(issueKey)?.completedAt);
+    try {
+      await continueAgentTask(prepared, {
+        issueKey,
+        message: REFUSAL_CONTINUATION,
+        ...(modelChoice.model ? { model: modelChoice.model } : {}),
+        workingDirectory: worktreePath,
+        toolMode,
+        ...(mcpServers ? { mcpServers } : {})
+      });
+    } catch (error) {
+      again.cancel();
+      workflowLogSink.appendLine(`Could not continue ${context.stageName} after a refused command: ${error instanceof Error ? error.message : String(error)}`);
+      break;
+    }
+    finished = await again.promise;
+  }
   await removeRunFiles(worktreePath);
   const snapshotRef = node.mutatesWorktree && !dispatch.signal?.aborted && finished.state === 'completed'
     ? await freezeWorktree(worktreePath, context.stageName)
@@ -664,8 +694,25 @@ export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' 
   return { state: 'completed' };
 }
 
-/** Resolves when the stage's session reaches a terminal state. */
-function waitForSession(issueKey: string): { promise: Promise<FinishedStageSession>; cancel: () => void } {
+const MAX_REFUSAL_CONTINUATIONS = 2;
+
+const REFUSAL_CONTINUATION = [
+  'Your last command was refused because this stage is read-only, and that ended your turn before you finished.',
+  'You can still read: use your file read and search tools, or shell commands that only read (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n).',
+  'Do not run tests, builds, installs or scripts. Continue the stage from where you stopped and produce every required output.'
+].join(' ');
+
+/** How many tools the stage's session has had refused for being read-only. */
+function readOnlyRefusals(issueKey: string): number {
+  const record = getAiSessionManager().getAgentSession(issueKey);
+  return (record?.events ?? []).filter(event => event.type === 'warning' && event.summary?.startsWith('Blocked by read-only tools')).length;
+}
+
+/**
+ * Resolves when the stage's session reaches a terminal state. For a continued session, `after` is
+ * when its previous turn completed: that turn's state still shows until the next one starts.
+ */
+function waitForSession(issueKey: string, after?: string): { promise: Promise<FinishedStageSession>; cancel: () => void } {
   const sessions = getAiSessionManager();
   let dispose: (() => void) | undefined;
 
@@ -694,6 +741,7 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
       if (stageHandoverGuard.isHeld(issueKey)) return;
       const record = sessions.getAgentSession(issueKey);
       if (!record) return;
+      if (after !== undefined && record.state === 'completed' && record.completedAt === after) return;
       const completion = stageSessionCompletion(record);
       if (completion) settle(completion.state, completion.error);
     };

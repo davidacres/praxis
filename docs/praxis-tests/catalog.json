@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 746,
+  "testCount": 747,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -11250,6 +11250,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a global policy composes strictest-wins with a project policy",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-1F91E11178",
+      "title": "a read-only plan stage may run git status, and is continued after a refused command ends its turn",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowReadOnlyShell.spec.ts",
+        "line": 29,
+        "project": "functional"
+      },
+      "area": "workflow Read Only Shell",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a read-only plan stage may run git status, and is continued after a refused command ends its turn",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

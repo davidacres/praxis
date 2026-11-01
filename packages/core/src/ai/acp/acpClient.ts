@@ -41,6 +41,8 @@ export interface AcpPermissionRequest {
   /** Optional provider tool name; useful when `title` is only an opaque ID. */
   name?: string;
   kind?: string;
+  /** The tool's input as the agent sent it — for a shell tool, the command it would run. */
+  rawInput?: unknown;
   options: Array<{ optionId: string; name: string; kind: string }>;
 }
 
@@ -351,6 +353,7 @@ export class AcpClientWrapper {
         title: toolCall.title ?? toolCall.toolCallId,
         name: toolCall.name ?? undefined,
         kind: toolCall.kind ?? undefined,
+        ...(toolCall.rawInput !== undefined ? { rawInput: toolCall.rawInput } : {}),
         options: options.map(o => ({ optionId: o.optionId, name: o.name, kind: o.kind }))
       });
       const optionId = pickPermissionOptionId(decision, options);

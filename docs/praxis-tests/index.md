@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **746 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **747 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -707,6 +707,7 @@ This catalogue describes **746 Playwright tests** under `apps/praxis-desktop/mai
 | PT-06291D4ECD | workflow Model Tiers | archiving a completed project run retains its sessions and deleting the run removes them | `apps/praxis-desktop/main/e2e/workflowModelTiers.spec.ts:280` |
 | PT-BDA1AF8005 | workflow Policy | creating a project policy from the command palette persists it and composes it into the effective policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:60` |
 | PT-9BA804745D | workflow Policy | a global policy composes strictest-wins with a project policy | `apps/praxis-desktop/main/e2e/workflowPolicy.spec.ts:87` |
+| PT-1F91E11178 | workflow Read Only Shell | a read-only plan stage may run git status, and is continued after a refused command ends its turn | `apps/praxis-desktop/main/e2e/workflowReadOnlyShell.spec.ts:29` |
 | PT-3C3795C3D1 | workflow Retry Failed | a failed step on a failed run has a retry icon button that reopens the run | `apps/praxis-desktop/main/e2e/workflowRetryFailed.spec.ts:97` |
 | PT-BFED3B2E58 | workflow Review Diff | a read-only review stage is handed the whole implementation patch as a file | `apps/praxis-desktop/main/e2e/workflowReviewDiff.spec.ts:77` |
 | PT-5E977102C0 | workflow Run | runs the governed pipeline: parallel branches converge, then approval unlocks | `apps/praxis-desktop/main/e2e/workflowRun.spec.ts:112` |
