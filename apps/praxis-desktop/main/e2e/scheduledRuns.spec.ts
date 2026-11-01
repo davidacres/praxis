@@ -1277,3 +1277,42 @@ test('a parallel run whose readiness is blocked starts nothing in any lane and s
   await expect(page.getByTestId('schedule-pause-banner')).toContainText(`${keys[0]} could not be started`);
   await expect(page.getByTestId('schedule-lanes-panel')).toContainText('0 of up to 2 in use');
 });
+
+test('a schedule paused on an untrusted workflow offers to review and trust it, then carries on', async () => {
+  const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
+  const { page, projectId, repo } = await launch({ env, titles: ['Needs trust'] });
+  const workflowId = await page.evaluate(async id => {
+    const now = new Date().toISOString();
+    const workflowId = 'schedule-untrusted';
+    await window.praxis.workflows.save(id, {
+      schemaVersion: 1, id: workflowId, name: 'Untrusted merge', scope: 'project', projectId: id, version: 1,
+      entryNodeId: 'merge', createdAt: now, updatedAt: now, edges: [],
+      nodes: [{ type: 'merge', id: 'merge', name: 'Merge', x: 0, y: 0, inputs: [] }]
+    } as never);
+    return workflowId;
+  }, projectId);
+  // Saving in the app is a review. A change that arrives through the repository (a pull, a
+  // commit) is not, so the edited file must be trusted again before it can run.
+  const file = path.join(repo, '.praxis', 'workflows', `${workflowId}.json`);
+  const definition = JSON.parse(fs.readFileSync(file, 'utf8'));
+  definition.nodes[0].targetBranch = 'main';
+  fs.writeFileSync(file, JSON.stringify(definition, null, 2));
+  const { runId, keys } = await startParallelRun(page, projectId, 'Untrusted', [[0]], 1, workflowId);
+  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.pause?.reason, runId), { timeout: 30000 }).toBe('trust');
+
+  await openScheduleSidebar(page);
+  await page.getByTestId('schedule-card').filter({ hasText: 'Untrusted' }).getByTestId('schedule-open').click();
+  const banner = page.getByTestId('schedule-pause-banner');
+  await expect(banner).toContainText('Workflow not trusted.');
+  await expect(banner).toContainText(`${keys[0]} could not be started`);
+
+  // The commands are shown before anything is trusted; Cancel leaves it paused.
+  await banner.getByTestId('schedule-trust-workflow').click();
+  const dialog = page.getByRole('dialog', { name: 'Trust this project workflow?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Trust workflow' }).click();
+
+  await expect.poll(async () => page.evaluate(async ({ id, wf }) => (await window.praxis.workflows.projectTrust(id, wf)).trusted, { id: projectId, wf: workflowId })).toBe(true);
+  await expect.poll(async () => (await entriesOf(page, runId))[0].workflowRunId, { timeout: 30000 }).toBeTruthy();
+  await expect(page.getByTestId('schedule-trust-workflow')).toHaveCount(0);
+});

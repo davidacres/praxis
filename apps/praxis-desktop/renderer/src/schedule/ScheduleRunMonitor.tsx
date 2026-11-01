@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ScheduledQueueEntry, ScheduledRunView } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
+import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { ENTRY_STATUS_LABEL, STATUS_LABEL, formatClock, formatSpend } from './scheduleFormat';
@@ -92,6 +93,25 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun }: Schedule
             <span className="schedule-pause-actions">
               <button type="button" className="btn btn-primary" data-testid="schedule-retry" disabled={busy} onClick={() => void act(() => live?.recovery ? window.praxis.workflows.retryStage(live.workflowRunId, live.recovery.nodeId) : api.retryEntry(run.id, active.id))}>{live?.recovery ? 'Retry stage' : 'Retry ticket'}</button>
               <button type="button" className="btn" data-testid="schedule-skip-entry" disabled={busy} onClick={() => void act(() => api.skipEntry(run.id, active.id))}>Skip</button>
+            </span>
+          )}
+          {pause.reason === 'trust' && run.projectId && run.policy.workflowId && (
+            <span className="schedule-pause-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-testid="schedule-trust-workflow"
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    // Shows the workflow's exact commands first; Cancel leaves it untrusted and paused.
+                    await confirmProjectWorkflowTrust(run.projectId!, run.policy.workflowId!, confirm);
+                    return api.resume(run.id);
+                  })
+                }
+              >
+                Review and trust workflow
+              </button>
             </span>
           )}
           {active && atGate && (
