@@ -146,11 +146,19 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession, onNe
     const sleeve = sleeveRef.current as (HTMLDivElement & { inert?: boolean }) | null;
     if (sleeve) sleeve.inert = !open;
   }, [open]);
+  // Opening the notes card by click or key moves focus into its title, so keyboard
+  // users land in the editor and the card is not tucked away when the pointer leaves.
+  // After the inert effect above: an inert sleeve cannot take focus.
+  const notesOpen = revealed === NOTES_KEY;
+  useEffect(() => {
+    if (!notesOpen) return;
+    sleeveRef.current?.querySelector<HTMLElement>('[data-testid="note-title"]')?.focus({ preventScroll: true });
+  }, [notesOpen]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !open) return;
-      // An open drop-down (the note's project picker) takes Escape first.
-      if (document.querySelector('.composer-provider-menu')) return;
+      // An open drop-down (the note's project picker) handles Escape first and prevents it.
+      if (event.defaultPrevented) return;
       event.preventDefault();
       if (revealed === NOTES_KEY) notesButtonRef.current?.focus();
       else {
