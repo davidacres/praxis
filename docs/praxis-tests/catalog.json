@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 733,
+  "testCount": 734,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -6595,6 +6595,22 @@
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "the demo board offers Subtask with a required story/task/bug parent",
         "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-3C92E05E68",
+      "title": "notes round-trip, notify, reject cross-project access and survive a relaunch",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/notes.spec.ts",
+        "line": 29,
+        "project": "functional"
+      },
+      "area": "notes",
+      "flow": {
+        "given": "a fresh isolated Praxis profile with two app-storage projects, A and B, and no notes file",
+        "when": "the renderer calls window.praxis.notes over IPC: subscribes to onChanged, creates two notes and a group of both in A and one note in B, tries to delete the B note through A and to list an unknown project, deletes one A note, unsubscribes, edits the kept note, then the app is relaunched on the same profile",
+        "then": "the cross-project delete returns PROJECT_MISMATCH and the unknown project returns PROJECT_NOT_FOUND; the group keeps one member after the note is deleted; five change events arrive, each carrying only a project ID, and none arrive after unsubscribing; notes.json exists under userData; after relaunch A lists only the kept note with its post-unsubscribe body and a one-member group, and B still lists its note"
       }
     },
     {
