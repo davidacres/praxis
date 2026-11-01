@@ -6832,9 +6832,9 @@
       },
       "area": "notes Persistence",
       "flow": {
-        "given": "a saved shelf note and a notes file made unwritable",
-        "when": "more text is typed and the app is relaunched after the file is restored",
-        "then": "the editor shows the error and never Saved for the lost text, the file holds only committed text, and the note reopens with its last committed text"
+        "given": "an app-storage project \"Draft Notes\" with a shelf note titled \"Draft title\" whose body \"safe line\" shows Saved",
+        "when": "notes.json is replaced by a non-empty directory so the atomic write fails, more body text is typed, the file is put back from the test's own copy of the committed text, and the app is relaunched on the same profile",
+        "then": "during the failure the save error is visible and no save state is shown; after relaunch the note opens from the sidebar with text containing \"safe line\", and if the editor shows the unsaved text it does not read Saved. The file check after restore reads the test's restored copy, so it does not prove what the app wrote; the test does not require the unsaved text to be gone after restart."
       }
     },
     {
@@ -6864,9 +6864,9 @@
       },
       "area": "notes Persistence",
       "flow": {
-        "given": "one note in two groups plus another note",
-        "when": "it is removed from one group, a delete is cancelled, then the note is deleted and the app relaunched",
-        "then": "the note stays in the other group, cancel leaves the file byte-identical, and after restart no group or file entry refers to the deleted note"
+        "given": "an app-storage project with notes \"Shared note\" and \"Other note\", both members of \"First group\" and \"Second group\" (in opposite orders), both groups expanded in the sidebar",
+        "when": "\"Shared note\" is removed from First group via that group's row menu, a delete of \"Other note\" is cancelled, \"Shared note\" is deleted and confirmed, and the app is relaunched",
+        "then": "First group holds only Other note while Second group keeps [Other note, Shared note]; the cancelled delete leaves notes.json byte-identical; after relaunch only Other note remains, no group references Shared note, both groups still exist, and the sidebar shows no Shared note row."
       }
     },
     {
@@ -6896,9 +6896,9 @@
       },
       "area": "notes Shelf Geometry",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "a full rail keeps its width and keeps both controls reachable inside it",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a fresh profile seeded with eight completed sessions in ai-sessions.json, launched without opening a new session, with the session shelf showing",
+        "when": "the rail is measured with its new-session and notes controls, and again with `.session-shelf__actions` hidden by an injected style (the in-run stand-in for the rail before those controls)",
+        "then": "five session spines are shown; rail width and the main-content-pane left edge match the hidden-actions measurement within 0.5px; `session-shelf-new` and `session-shelf-notes` are visible and lie inside the rail horizontally and vertically; `.session-shelf__spines` and `.session-shelf__actions` overflow sideways by at most 1px. The baseline is the current build with the controls hidden, not a measurement of the pre-change build."
       }
     },
     {
@@ -6912,9 +6912,9 @@
       },
       "area": "notes Shelf Geometry",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "keyboard focus on a control does not move the rail or the workspace, and the ring stays inside",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a launched app with no new session open and the session shelf showing",
+        "when": "each shelf control (new session, notes) is focused, then Tab and Shift+Tab return keyboard focus to it",
+        "then": "the control is focused; rail width and the main-content-pane left edge are unchanged within 0.5px; the control's right edge plus outline width and offset stays within the rail's right edge. Only the right edge of the focus ring is checked, and a control with `outline-style: none` is measured without a ring."
       }
     },
     {
@@ -6928,9 +6928,9 @@
       },
       "area": "notes Shelf Geometry",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "the open notes card is the only part that reaches into the workspace",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a launched app with an app-storage project \"Rail Notes\", reloaded, with the session shelf showing and its notes card closed",
+        "when": "the notes card is opened from the shelf for \"Rail Notes\"",
+        "then": "the card's parent sleeve starts within 1px of the rail's right edge, and rail width and the main-content-pane left edge are unchanged within 0.5px. Whether any other element reaches into the workspace, as the title says, is not checked."
       }
     },
     {
@@ -6944,9 +6944,9 @@
       },
       "area": "notes Shelf Geometry",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "whole-window zoom at 110% leaves the rail 14 x scale in CSS pixels",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a launched app with no new session open",
+        "when": "the titlebar zoom-in button is clicked once and the session shelf is shown",
+        "then": "the zoom readout reads 110%; the rail width equals 14 x the computed `--ui-scale` within 0.5px CSS pixels, and the gap to the main-content-pane is not negative."
       }
     },
     {
