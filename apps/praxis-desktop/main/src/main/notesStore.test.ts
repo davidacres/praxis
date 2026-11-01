@@ -234,3 +234,47 @@ test('a transient read failure is retried instead of disabling notes for the ses
   assert.deepEqual(value(await store.list(A)), { notes: [], groups: [] });
   value(await store.createNote(A, { title: 'one', body: '' }));
 });
+
+test('a stray temp file from an interrupted write is ignored, and the last committed data loads', async () => {
+  const { store, make, dir, filePath } = setup();
+  const n = value<{ id: string }>(await store.createNote(A, { title: 'committed', body: 'kept' }));
+  fs.writeFileSync(`${filePath}.1234.interrupted.tmp`, '{ "half": ');
+  const reopened = make();
+  const listed = value<{ notes: { id: string; body: string }[] }>(await reopened.list(A));
+  assert.deepEqual(listed.notes.map(item => [item.id, item.body]), [[n.id, 'kept']]);
+  value(await reopened.createNote(A, { title: 'next', body: '' }));
+  assert.equal(value<{ notes: unknown[] }>(await make().list(A)).notes.length, 2);
+  // Only the interrupted write's own file remains: a successful write leaves none of its own.
+  assert.deepEqual(strays(dir), [path.basename(`${filePath}.1234.interrupted.tmp`)]);
+});
+
+test('ungrouping persists across a restart: the note stays, the other group and the order are unchanged', async () => {
+  const { store, make } = setup();
+  const n1 = value<{ id: string }>(await store.createNote(A, { title: 'one', body: '' }));
+  const n2 = value<{ id: string }>(await store.createNote(A, { title: 'two', body: '' }));
+  const n3 = value<{ id: string }>(await store.createNote(A, { title: 'three', body: '' }));
+  const g1 = value<{ id: string }>(await store.createGroup(A, { title: 'g1', noteIds: [n3.id, n1.id, n2.id] }));
+  const g2 = value<{ id: string }>(await store.createGroup(A, { title: 'g2', noteIds: [n2.id, n1.id] }));
+  value(await store.replaceMemberships(A, g1.id, [n3.id, n2.id]));
+  const loaded = value<{ notes: { id: string }[]; groups: { id: string; noteIds: string[] }[] }>(await make().list(A));
+  assert.deepEqual(loaded.notes.map(n => n.id).sort(), [n1.id, n2.id, n3.id].sort());
+  assert.deepEqual(loaded.groups.find(g => g.id === g1.id)?.noteIds, [n3.id, n2.id]);
+  assert.deepEqual(loaded.groups.find(g => g.id === g2.id)?.noteIds, [n2.id, n1.id]);
+});
+
+test('deleting a note persists across a restart: no group in any project still points at it', async () => {
+  const { store, make } = setup();
+  const gone = value<{ id: string }>(await store.createNote(A, { title: 'gone', body: '' }));
+  const stays = value<{ id: string }>(await store.createNote(A, { title: 'stays', body: '' }));
+  const other = value<{ id: string }>(await store.createNote(B, { title: 'b note', body: '' }));
+  value(await store.createGroup(A, { title: 'g1', noteIds: [gone.id, stays.id] }));
+  value(await store.createGroup(A, { title: 'g2', noteIds: [stays.id, gone.id] }));
+  value(await store.createGroup(B, { title: 'bg', noteIds: [other.id] }));
+  value(await store.deleteNote(A, gone.id));
+  const fresh = make();
+  const a = value<{ notes: { id: string }[]; groups: { noteIds: string[] }[] }>(await fresh.list(A));
+  const b = value<{ notes: { id: string }[]; groups: { noteIds: string[] }[] }>(await fresh.list(B));
+  assert.deepEqual(a.notes.map(n => n.id), [stays.id]);
+  assert.deepEqual(a.groups.map(g => g.noteIds), [[stays.id], [stays.id]]);
+  assert.deepEqual(b.groups.map(g => g.noteIds), [[other.id]]);
+});

@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **752 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **766 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -426,6 +426,18 @@ This catalogue describes **752 Playwright tests** under `apps/praxis-desktop/mai
 | PT-F56F3DC1A3 | note Session Handoff | a note deleted before the dialog opens is left out of the preview | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:179` |
 | PT-91DB826501 | note Session Handoff | a destination that disappears is reported, not replaced by a new session | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:194` |
 | PT-3FA587C66D | note Session Handoff | a failed new-session Start keeps the goal and the note chip | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:213` |
+| PT-CAF9491769 | note Session Handoff | a single note sends once to an existing session as a one-note reference; cancelling sends nothing | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:228` |
+| PT-FA51ED8FDB | notes Persistence | every notes channel resolves a typed result for bad input, a foreign project or a foreign note | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:17` |
+| PT-E5F2DCBB1C | notes Persistence | onChanged fires once per mutation with the project id, and never for reads | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:59` |
+| PT-36C563F01A | notes Persistence | a restart restores notes from both surfaces, the group and its order | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:87` |
+| PT-0B84FC3A29 | notes Persistence | a failed save never reports saved, and a restart keeps the last committed text | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:136` |
+| PT-F825F0D43D | notes Persistence | notes stay in their own project, in the sidebar, the store and the file | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:168` |
+| PT-CE216214B3 | notes Persistence | ungrouping and deleting persist across a restart; cancelling a delete changes nothing | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:200` |
+| PT-E705B57437 | notes Persistence | ordinary note actions never call a provider or create a session | `apps/praxis-desktop/main/e2e/notesPersistence.spec.ts:244` |
+| PT-74DEC0CE31 | notes Shelf Geometry | a full rail keeps its width and keeps both controls reachable inside it | `apps/praxis-desktop/main/e2e/notesShelfGeometry.spec.ts:80` |
+| PT-2E308B7C65 | notes Shelf Geometry | keyboard focus on a control does not move the rail or the workspace, and the ring stays inside | `apps/praxis-desktop/main/e2e/notesShelfGeometry.spec.ts:111` |
+| PT-2BEF880E16 | notes Shelf Geometry | the open notes card is the only part that reaches into the workspace | `apps/praxis-desktop/main/e2e/notesShelfGeometry.spec.ts:138` |
+| PT-B20CB25D7D | notes Shelf Geometry | whole-window zoom at 110% leaves the rail 14 x scale in CSS pixels | `apps/praxis-desktop/main/e2e/notesShelfGeometry.spec.ts:173` |
 | PT-F36FFCA684 | outcome Ledger | What Changed ledger keeps home intact and opens recorded evidence | `apps/praxis-desktop/main/e2e/outcomeLedger.spec.ts:7` |
 | PT-5870B4F60C | overview | renders the workspace overview dashboard | `apps/praxis-desktop/main/e2e/overview.spec.ts:9` |
 | PT-D0D129AB73 | overview Ai Usage | shows exact period totals, peaks, cost and ranked models from a seeded ledger | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:60` |
@@ -581,8 +593,10 @@ This catalogue describes **752 Playwright tests** under `apps/praxis-desktop/mai
 | PT-31AED72E90 | shell Polish | output tab filters, copies and clears the log | `apps/praxis-desktop/main/e2e/shellPolish.spec.ts:78` |
 | PT-2A163FAD48 | shell Polish | output history survives a restart | `apps/praxis-desktop/main/e2e/shellPolish.spec.ts:100` |
 | PT-34D8F21852 | sidebar Long Names | long run and session names leave their action buttons reachable at the narrowest widths | `apps/praxis-desktop/main/e2e/sidebarLongNames.spec.ts:52` |
-| PT-2DFB759892 | sidebar Notes | notes created in the sidebar tree show in the shelf editor, and groups link without duplicating | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:39` |
-| PT-0754F5395E | sidebar Notes | deleting an open note asks first, resets the editor and removes it from groups; deleting a group keeps notes | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:81` |
+| PT-2DFB759892 | sidebar Notes | notes created in the sidebar tree show in the shelf editor, and groups link without duplicating | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:41` |
+| PT-0754F5395E | sidebar Notes | deleting an open note asks first, resets the editor and removes it from groups; deleting a group keeps notes | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:83` |
+| PT-16C2B2785B | sidebar Notes | an edit made in the shelf shows under every group in the sidebar, once per membership | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:110` |
+| PT-22A558A1FC | sidebar Notes | the sidebar editor reports a failed save, keeps the text and recovers on Retry | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:152` |
 | PT-A370DC483D | standalone Conversations | detached-chat IPC refuses a window outside the trusted renderer | `apps/praxis-desktop/main/e2e/standaloneConversations.spec.ts:11` |
 | PT-B82F563EB2 | standalone Conversations | standalone conversation persists and resumes across floating-window pop-in, close and app restart | `apps/praxis-desktop/main/e2e/standaloneConversations.spec.ts:31` |
 | PT-A21E3FDD8F | startup Experience | first launch offers one folder-first workspace entry flow | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:24` |
