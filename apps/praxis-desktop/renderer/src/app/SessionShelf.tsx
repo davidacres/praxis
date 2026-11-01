@@ -115,6 +115,8 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession, onNe
   useEffect(() => {
     const dismissOutside = (event: PointerEvent) => {
       const target = event.target as Node;
+      // The project picker's menu is portalled to <body>, so choosing from it is not an outside press.
+      if ((target as Element).closest?.('[role="listbox"]')) return;
       if (spinesRef.current?.contains(target) || actionsRef.current?.contains(target) || sleeveRef.current?.querySelector('.session-shelf__card')?.contains(target)) return;
       window.clearTimeout(closeTimer.current);
       window.clearTimeout(hoverTimer.current);

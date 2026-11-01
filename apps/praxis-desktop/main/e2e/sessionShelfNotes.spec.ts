@@ -151,3 +151,19 @@ test('Escape closes the project picker before it closes the notes card', async (
   await expect(picker).toHaveAttribute('aria-expanded', 'false');
   await expect(card).toBeVisible();
 });
+
+test('picking a project with the mouse keeps the notes card open', async () => {
+  test.slow();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  await createProject(page);
+  const shelf = await openShelf(page);
+  await shelf.getByTestId('session-shelf-notes').click();
+  const card = page.getByTestId('session-shelf-notes-card');
+  const picker = card.getByRole('button', { name: 'Save note to project' });
+  test.skip(await picker.count() === 0, 'The shelf already has a project, so there is no picker to click.');
+  await picker.click();
+  await page.getByRole('option', { name: /Shelf Notes/ }).click();
+  await expect(card).toBeVisible();
+  await expect(picker).toHaveCount(0);
+});
