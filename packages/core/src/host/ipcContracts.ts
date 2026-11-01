@@ -1300,6 +1300,7 @@ export interface PraxisIpc {
   preview: PreviewIpc;
   deployments: DeploymentsIpc;
   scheduledRuns: ScheduledRunsIpc;
+  notes: NotesIpc;
 }
 
 /** What closing or quitting would interrupt or prevent, when the renderer is asked to confirm. */
@@ -2027,7 +2028,7 @@ export interface TaskDesignerIpc {
   ): Promise<TaskDesignerMasterPlanResult>;
 }
 
-/** Future app-local notes slice. Not exposed by preload until persistence is implemented.
+/** App-local notes slice, backed by `userData/notes.json`.
  * Every call validates project existence and ownership. Main supplies IDs/timestamps.
  * Mutations succeed only after persistence; failures preserve the prior document.
  */

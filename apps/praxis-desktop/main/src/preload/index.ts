@@ -41,6 +41,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
+import type { CreateNoteGroupInput, CreateNoteInput, NoteGroup, NoteRequestSnapshot, NoteSource, NotesResult, ProjectNote, UpdateNoteGroupInput, UpdateNoteInput } from '@praxis/core';
 import type { MissedResolution, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledWorkflowChoice, WindowCloseRequest } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
@@ -833,6 +834,31 @@ const praxis: PraxisIpc = {
       const handler = () => listener();
       ipcRenderer.on('scheduledRuns:changed', handler);
       return () => ipcRenderer.off('scheduledRuns:changed', handler);
+    }
+  },
+  notes: {
+    list: (projectId: string) =>
+      ipcRenderer.invoke('notes:list', projectId) as Promise<NotesResult<{ notes: ProjectNote[]; groups: NoteGroup[] }>>,
+    createNote: (projectId: string, input: CreateNoteInput) =>
+      ipcRenderer.invoke('notes:createNote', projectId, input) as Promise<NotesResult<ProjectNote>>,
+    updateNote: (projectId: string, noteId: string, input: UpdateNoteInput) =>
+      ipcRenderer.invoke('notes:updateNote', projectId, noteId, input) as Promise<NotesResult<ProjectNote>>,
+    deleteNote: (projectId: string, noteId: string) =>
+      ipcRenderer.invoke('notes:deleteNote', projectId, noteId) as Promise<NotesResult<null>>,
+    createGroup: (projectId: string, input: CreateNoteGroupInput) =>
+      ipcRenderer.invoke('notes:createGroup', projectId, input) as Promise<NotesResult<NoteGroup>>,
+    updateGroup: (projectId: string, groupId: string, input: UpdateNoteGroupInput) =>
+      ipcRenderer.invoke('notes:updateGroup', projectId, groupId, input) as Promise<NotesResult<NoteGroup>>,
+    deleteGroup: (projectId: string, groupId: string) =>
+      ipcRenderer.invoke('notes:deleteGroup', projectId, groupId) as Promise<NotesResult<null>>,
+    replaceMemberships: (projectId: string, groupId: string, noteIds: string[]) =>
+      ipcRenderer.invoke('notes:replaceMemberships', projectId, groupId, noteIds) as Promise<NotesResult<NoteGroup>>,
+    prepareSnapshot: (projectId: string, source: NoteSource) =>
+      ipcRenderer.invoke('notes:prepareSnapshot', projectId, source) as Promise<NotesResult<NoteRequestSnapshot>>,
+    onChanged: (listener: (projectId: string) => void) => {
+      const handler = (_event: unknown, projectId: string) => listener(projectId);
+      ipcRenderer.on('notes:changed', handler);
+      return () => ipcRenderer.off('notes:changed', handler);
     }
   }
 };
