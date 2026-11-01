@@ -102,10 +102,10 @@ const STATUS_LABEL: Record<'succeeded' | 'failed' | 'cancelled', string> = {
 };
 
 /** The comment body a settled, ticket-linked run writes back — see `writeBackToIssue`. */
-function buildWriteBackComment(run: WorkflowRun): string {
+function buildWriteBackComment(run: WorkflowRun, options: { duration?: boolean } = {}): string {
   const status = run.status as 'succeeded' | 'failed' | 'cancelled';
   const summary = summarizeWorkflowRun(run);
-  const duration = run.endedAt ? formatRunDuration(run.startedAt, run.endedAt) : undefined;
+  const duration = run.endedAt && options.duration !== false ? formatRunDuration(run.startedAt, run.endedAt) : undefined;
   const stageLines = summary.stages
     .filter(stage => stage.type === 'agent-task' || stage.type === 'check')
     .map(stage => `- ${STAGE_ICON[stage.outcome] ?? '⏳'} ${stage.name}: ${stage.outcome}`);
@@ -131,6 +131,7 @@ function buildWriteBackComment(run: WorkflowRun): string {
  */
 const issueWriteBack = new WorkflowIssueWriteBack({
   get: runId => new WorkflowRunStore(getWorkflowBackingStore()).get(runId),
+  outcomeOf: run => buildWriteBackComment(run, { duration: false }),
   send: async run => {
     const service = await getServiceForConnection(run.issueConnectionId);
     // A folder-backed ticket is a file in the repository: commit what this comment changed, or the
@@ -149,7 +150,8 @@ const issueWriteBack = new WorkflowIssueWriteBack({
       );
     }
   },
-  mark: (runId, at) => getWorkflowOrchestrator().updateRun(runId, current => ({ ...current, issueWriteBackAt: at }))
+  mark: (runId, at, outcome) =>
+    getWorkflowOrchestrator().updateRun(runId, current => ({ ...current, issueWriteBackAt: at, issueWriteBackOutcome: outcome }))
 });
 
 export async function writeBackToIssue(run: WorkflowRun): Promise<void> {

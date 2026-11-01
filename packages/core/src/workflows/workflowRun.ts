@@ -339,6 +339,12 @@ export interface WorkflowRun {
    * command, and never read by anything in this file.
    */
   issueWriteBackAt?: string;
+  /**
+   * The outcome last written back, without its time or duration. Unlike `issueWriteBackAt` it
+   * survives a retry, so a stage that fails the same way again does not record it on the ticket
+   * again — one run once added the same Plan failure ten times.
+   */
+  issueWriteBackOutcome?: string;
   /** Whether this run has been archived by the user to tidy the sidebar. */
   archived?: boolean;
   archivedAt?: string;
@@ -1667,6 +1673,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
         }
       : {}),
     ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {}),
+    ...(typeof raw.issueWriteBackOutcome === 'string' ? { issueWriteBackOutcome: raw.issueWriteBackOutcome } : {}),
     ...(raw.archived === true ? { archived: true } : {}),
     ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})
   };
