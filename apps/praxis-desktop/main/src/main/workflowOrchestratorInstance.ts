@@ -3,6 +3,8 @@ import { projectWorkflowTrust } from './workflowProjectTrust';
 import { runAsAgent } from './projectActivityInstance';
 import { cancelWorkflowMap, runWorkflowMap } from './workflowMapRunner';
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
+import { RunDisplayWake } from './runDisplayWake';
+import { powerSaveBlocker } from 'electron';
 import { broadcastToAllWindows } from './windowBroadcast';
 import { resolve as resolvePath } from 'node:path';
 import {
@@ -277,6 +279,11 @@ function ensureTimeoutTick(): void {
   timeoutTimer.unref?.();
 }
 
+const displayWake = new RunDisplayWake({
+  start: () => powerSaveBlocker.start('prevent-display-sleep'),
+  stop: id => powerSaveBlocker.stop(id)
+});
+
 export function getWorkflowOrchestrator(): WorkflowOrchestrator {
   if (!orchestrator) {
     for (const run of new WorkflowRunStore(getWorkflowBackingStore()).list()) taskNotificationPolicy.run(run, true);
@@ -288,6 +295,7 @@ export function getWorkflowOrchestrator(): WorkflowOrchestrator {
       onRunChanged: run => {
         deliverTaskNotice(taskNotificationPolicy.run(run));
         broadcastRunChanged(run);
+        displayWake.update(run);
         // A stage may have just gone `running`; make sure the tick is armed.
         if (Object.values(run.nodes).some(state => state.outcome === 'running')) ensureTimeoutTick();
         if (isRunSettled(run)) void writeBackToIssue(run);
