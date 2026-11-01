@@ -8,6 +8,7 @@ import { NoteEditor } from './NoteEditor';
 import { notesClient, type NotesOutcome } from './notesClient';
 import { addMember, buildNotesTree, moveMember, removeMember } from './notesTree';
 import { notesSession, useNotesSession } from './notesSession';
+import { requestNoteSend } from './noteSendStore';
 import { useNotesCollection } from './useProjectNotes';
 
 const expandedKey = (projectId: string) => `praxis-notes-expanded:${projectId}`;
@@ -97,6 +98,7 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
     const index = inGroup ? inGroup.noteIds.indexOf(note.id) : -1;
     const options: ChipSelectOption[] = [
       { value: 'rename', label: 'Rename', icon: 'pencil' },
+      { value: 'send', label: 'Send to session…', icon: 'arrow-right' },
       ...addTargets.map(group => ({ value: `add:${group.id}`, label: `Add to ${group.title}`, icon: 'folder' as const })),
       { value: 'new-group', label: 'Add to new group…', icon: 'folder' },
       ...(inGroup ? [
@@ -108,6 +110,7 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
     ];
     const onChange = (value: string) => {
       if (value === 'rename') void renameNote(note);
+      else if (value === 'send') requestNoteSend({ projectId: note.projectId, source: { kind: 'note', id: note.id }, title: note.title });
       else if (value === 'delete') void deleteNote(note);
       else if (value === 'new-group') void createGroup([note.id]);
       else if (value === 'remove' && inGroup) void setMembers(inGroup.id, removeMember(inGroup.noteIds, note.id));
@@ -155,8 +158,12 @@ export function NotesSection({ projectId, projects }: { projectId?: string; proj
               </button>
               <ChipSelect value="" placeholder="" icon="ellipsis" variant="plain" menuAlign="end" className="notes-row__menu"
                 ariaLabel={`Actions for group ${group.title}`} title="Group actions"
-                options={[{ value: 'rename', label: 'Rename', icon: 'pencil' }, { value: 'delete', label: 'Delete group', icon: 'trash' }]}
-                onChange={value => { if (value === 'rename') void renameGroup(group.id, group.title); else void deleteGroup(group.id); }} />
+                options={[{ value: 'rename', label: 'Rename', icon: 'pencil' }, { value: 'send', label: 'Send to session…', icon: 'arrow-right', disabled: group.noteIds.length === 0 }, { value: 'delete', label: 'Delete group', icon: 'trash' }]}
+                onChange={value => {
+                  if (value === 'rename') void renameGroup(group.id, group.title);
+                  else if (value === 'send') requestNoteSend({ projectId: group.projectId, source: { kind: 'group', id: group.id }, title: group.title });
+                  else void deleteGroup(group.id);
+                }} />
             </div>
             {open && <ul className="notes-tree__members" aria-label={`Notes in ${group.title}`}>
               {members.length === 0 && <li className="notes-section__empty notes-row--l2">No notes in this group</li>}

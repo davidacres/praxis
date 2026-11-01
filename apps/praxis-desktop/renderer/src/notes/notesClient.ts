@@ -1,12 +1,19 @@
-import type { NoteGroup, NotesResult, ProjectNote } from '@praxis/core';
+import type { NoteGroup, NoteRequestSnapshot, NotesResult, ProjectNote } from '@praxis/core';
 
 export type NotesOutcome<T> = { ok: true; value: T } | { ok: false; message: string };
+
+/** Codes the send-to-session dialog meets in ordinary use, in words a person can act on. */
+const FRIENDLY: Record<string, string> = {
+  EMPTY_GROUP: 'This group has no notes.',
+  NOTE_NOT_FOUND: 'This note no longer exists.',
+  GROUP_NOT_FOUND: 'This group no longer exists.'
+};
 
 /** Collapses a `NotesResult` (or a bridge failure) into a value the UI can branch on. */
 async function settle<T>(call: () => Promise<NotesResult<T>>): Promise<NotesOutcome<T>> {
   try {
     const result = await call();
-    return result.ok ? { ok: true, value: result.value } : { ok: false, message: result.error.message };
+    return result.ok ? { ok: true, value: result.value } : { ok: false, message: FRIENDLY[result.error.code] ?? result.error.message };
   } catch {
     return { ok: false, message: 'Notes are unavailable.' };
   }
@@ -29,5 +36,8 @@ export const notesClient = {
     settle(() => window.praxis.notes.deleteGroup(projectId, groupId)),
   setMembers: (projectId: string, groupId: string, noteIds: string[]): Promise<NotesOutcome<NoteGroup>> =>
     settle(() => window.praxis.notes.replaceMemberships(projectId, groupId, noteIds)),
+  /** Reads a separate copy of a note or ordered group. Reads storage only; never contacts AI. */
+  prepareSnapshot: (projectId: string, source: { kind: 'note' | 'group'; id: string }): Promise<NotesOutcome<NoteRequestSnapshot>> =>
+    settle(() => window.praxis.notes.prepareSnapshot(projectId, source)),
   onChanged: (listener: (projectId: string) => void): (() => void) => window.praxis.notes.onChanged(listener)
 };

@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **742 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **746 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -417,6 +417,10 @@ This catalogue describes **742 Playwright tests** under `apps/praxis-desktop/mai
 | PT-201D18C39C | new Issue | creating a live folder idea writes the research transcript into the markdown | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:189` |
 | PT-55715AB01F | new Issue | the demo board offers Subtask with a required story/task/bug parent | `apps/praxis-desktop/main/e2e/newIssue.spec.ts:245` |
 | PT-3C92E05E68 | notes | notes round-trip, notify, reject cross-project access and survive a relaunch | `apps/praxis-desktop/main/e2e/notes.spec.ts:29` |
+| PT-90ABEBFC94 | note Session Handoff | opening, changing the destination and cancelling make no provider request | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:60` |
+| PT-35D3A2F43C | note Session Handoff | a group previews in group order and sends once to an existing session | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:74` |
+| PT-26461FF4CC | note Session Handoff | a new-session destination stages the note in the composer and sends only on Start | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:99` |
+| PT-63BC0F273F | note Session Handoff | an empty group cannot be sent | `apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts:120` |
 | PT-F36FFCA684 | outcome Ledger | What Changed ledger keeps home intact and opens recorded evidence | `apps/praxis-desktop/main/e2e/outcomeLedger.spec.ts:7` |
 | PT-5870B4F60C | overview | renders the workspace overview dashboard | `apps/praxis-desktop/main/e2e/overview.spec.ts:9` |
 | PT-D0D129AB73 | overview Ai Usage | shows exact period totals, peaks, cost and ranked models from a seeded ledger | `apps/praxis-desktop/main/e2e/overviewAiUsage.spec.ts:60` |

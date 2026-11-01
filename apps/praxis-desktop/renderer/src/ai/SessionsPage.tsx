@@ -34,6 +34,7 @@ import { SessionComposerCard, SessionComposerInput, SessionContextRing } from '.
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionContextPicker } from './SessionContextPicker';
 import { withSessionContext, type SessionContextReference } from './sessionContext';
+import { isFreshHandoff, takeSessionHandoff, useStagedHandoff } from '../notes/noteSendStore';
 import { SessionTeamControl } from './SessionTeamControl';
 import { askSessionTeamMember, mentionedSessionTeamMember } from './sessionTeamStore';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
@@ -1175,11 +1176,13 @@ export function SessionsPage({
     };
   }, [selected?.issueKey, selected?.taskDefinition.kind]);
 
-  const sendFollowUp = async () => {
+  const sendFollowUp = async (override?: { text: string; references: SessionContextReference[] }) => {
+    const text = override?.text ?? followUp;
+    const references = override?.references ?? contextReferences;
     if (!selected || sendingFollowUp) return;
-    if (!followUp.trim() && followUpImages.length === 0) return;
-    const contextMessage = withSessionContext(followUp.trim(), contextReferences);
-    const mentioned = followUpImages.length === 0 ? mentionedSessionTeamMember(selected.issueKey, followUp) : undefined;
+    if (!text.trim() && followUpImages.length === 0) return;
+    const contextMessage = withSessionContext(text.trim(), references);
+    const mentioned = followUpImages.length === 0 ? mentionedSessionTeamMember(selected.issueKey, text) : undefined;
     if (mentioned) {
       // Only an explicit @mention of an added member diverts the message; the session itself stays idle.
       const request = contextMessage;
@@ -1216,7 +1219,7 @@ export function SessionsPage({
         setContextReferences([]);
       } catch (error) {
         setSubmittedTurn(undefined);
-        setFollowUp(current => current || followUp.trim());
+        setFollowUp(current => current || text.trim());
         setFollowUpImages(stagedImages);
         setFollowUpError(error instanceof Error ? error.message : String(error));
       } finally {
@@ -1241,7 +1244,7 @@ export function SessionsPage({
       setQueuedFollowUpsBySession(prev => ({
         ...prev,
         [selected.issueKey]: {
-          message, draftMessage: followUp.trim(), references: contextReferences,
+          message, draftMessage: text.trim(), references,
           images: stagedImages.length ? [...stagedImages] : undefined
         }
       }));
@@ -1283,13 +1286,33 @@ export function SessionsPage({
       setAttachTerminalContext(false);
     } catch (error) {
       setSubmittedTurn(undefined);
-      setFollowUp(current => current || followUp.trim());
+      setFollowUp(current => current || text.trim());
       setFollowUpImages(stagedImages);
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setSendingFollowUp(false);
     }
   };
+
+  // A note or group sent from the Notes dialog arrives staged for this session. It is consumed once.
+  // A fresh handoff to a session that can take input submits through the ordinary follow-up path, so
+  // failures keep the text and chip in the composer. Anything else (session busy, user arrived later)
+  // only fills the composer, visibly, for the user's own Send. Existing draft text and chips are kept.
+  // Declared after the reset-on-session-change effect so that reset cannot clear the staged chip.
+  const stagedHandoff = useStagedHandoff(selected?.issueKey);
+  useEffect(() => {
+    if (!selected || !stagedHandoff || sendingFollowUp) return;
+    const handoff = takeSessionHandoff(selected.issueKey);
+    if (!handoff) return;
+    const references = contextReferences.some(item => item.id === handoff.reference.id)
+      ? contextReferences : [...contextReferences, handoff.reference];
+    const text = followUp.trim() ? `${followUp.trim()}\n\n${handoff.instruction}` : handoff.instruction;
+    setContextReferences(references);
+    setFollowUp(text);
+    const sendable = isTerminalAgentState(selected.state) || isSingleAgentRunning || selected.conversation?.state === 'running';
+    if (sendable && isFreshHandoff(handoff)) void sendFollowUp({ text, references });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.issueKey, selected?.state, stagedHandoff, sendingFollowUp]);
 
   /** Encodes pasted/dropped files into wire attachments, replacing anything already staged beyond the cap. */
   const stageImageFiles = async (files: FileList | File[]) => {
@@ -1677,7 +1700,7 @@ export function SessionsPage({
                   {selected.workingDirectory && <span className="session-context-reference" title={selected.workingDirectory}><Icon name="folder" size={13} /><span>{basename(selected.workingDirectory)}</span>
                     <button type="button" className="icon-btn" aria-label="Detach working folder" disabled={sendingFollowUp || composerOptions.allowToolAccessChange === false || !canChangeSessionRuntime(selected)}
                       onClick={() => void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { workingDirectory: null, toolMode: 'project-only' }).catch(cause => setFollowUpError(String(cause)))}><Icon name="close" size={12} /></button></span>}
-                  {contextReferences.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}><Icon name={reference.kind === 'ticket' ? 'ticket' : 'chats'} size={13} /><span>{reference.label}</span><button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={sendingFollowUp} onClick={() => setContextReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button></span>)}
+                  {contextReferences.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}><Icon name={reference.kind === 'ticket' ? 'ticket' : reference.kind === 'note' ? 'note' : reference.kind === 'note-group' ? 'folder' : 'chats'} size={13} /><span>{reference.label}</span><button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={sendingFollowUp} onClick={() => setContextReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button></span>)}
                 </div>}
                 <SessionComposerInput
                   leading={!followUpCollapsed && <SessionContextPicker key={selected.issueKey} session={selected} sessions={sessions} references={contextReferences} onChange={setContextReferences}
