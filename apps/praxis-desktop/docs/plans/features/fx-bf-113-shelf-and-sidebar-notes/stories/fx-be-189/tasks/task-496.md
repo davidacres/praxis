@@ -178,3 +178,19 @@ Status: Succeeded · Duration: 14h 14m
 - ✅ Build: succeeded
 - ✅ QA: succeeded
 - ✅ Security scan: succeeded
+
+**PRX-T113-496** — 2026-11-01T00:34:05.461Z
+**Workflow run cancelled: Governed delivery — TASK-496: Define note and group contracts**
+
+Status: Cancelled · Duration: 9m 2s
+
+- ✅ Plan: succeeded
+- ❌ Implement: failed
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+Skipped from the schedule.
