@@ -277,6 +277,9 @@ export function WorkflowRunPage({
 
   const canCancel = run?.actions.some(a => a.kind === 'cancel-run') ?? false;
   const reworkActions = run?.actions.filter(action => action.kind === 'rework-stage') ?? [];
+  const mergeConflictActions = (run?.actions ?? []).filter(
+    (action): action is Extract<WorkflowRunSummary['actions'][number], { kind: 'resolve-merge-with-ai' }> => action.kind === 'resolve-merge-with-ai'
+  );
   const approveActions = run?.actions.filter(action => action.kind === 'approve') ?? [];
   // The approval step being reached does not make it approvable: a gate can still be failing.
   // Offering the button anyway only produced a refusal after the click.
@@ -560,6 +563,18 @@ export function WorkflowRunPage({
                       Open controller session
                     </button>
                   )}
+                  {mergeConflictActions.map(action => (
+                    <button
+                      key={`merge-ai-${action.nodeId}`}
+                      type="button"
+                      className="btn btn-primary btn-compact"
+                      data-testid="wf-merge-resolve-ai"
+                      title={`The implementer resolves the conflicts in ${action.files.join(', ')} on the run’s branch, then the merge is tried again. Main is only changed if that merge is clean.`}
+                      onClick={() => void act(() => window.praxis.workflows.resolveMergeWithAi(run.runId, action.nodeId))}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
                   {reworkActions.map(action => (
                     <button
                       key={action.nodeId}

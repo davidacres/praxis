@@ -296,15 +296,27 @@ function conflictingRun(): { repo: string; worktree: string; branch: string; cle
   return { repo, worktree, branch, cleanup: () => { fs.rmSync(worktree, { recursive: true, force: true }); cleanup(); } };
 }
 
-const aiNode: WorkflowMergeNode = { type: 'merge', id: 'merge', name: 'Merge to main', targetBranch: 'main', onConflict: 'ai-resolve', x: 0, y: 0, inputs: [] };
+const aiNode: WorkflowMergeNode = { type: 'merge', id: 'merge', name: 'Merge to main', targetBranch: 'main', x: 0, y: 0, inputs: [] };
 
-test('ai-resolve settles the conflict on the run branch, then merges cleanly into main', async () => {
+/** The run as it stands after a person chose "Let AI resolve" for the merge's second attempt. */
+function aiChosenRun(): WorkflowRun {
+  const run = runFor(aiNode, 'c0ffee1234567890');
+  const now = new Date().toISOString();
+  run.nodes.merge.attempts = [
+    { attempt: 1, startedAt: now, outcome: 'failed', conflictFiles: ['README.md'] },
+    { attempt: 2, startedAt: now, outcome: 'running' }
+  ];
+  run.mergeAiAttempt = { merge: 2 };
+  return run;
+}
+
+test('when the person chooses AI, it settles the conflict on the run branch, then merges cleanly into main', async () => {
   const { repo, worktree, branch, cleanup } = conflictingRun();
   try {
     const asked: string[][] = [];
     const outcome = await runWorkflowMerge(
       aiNode,
-      { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree },
+      { run: aiChosenRun(), worktreePath: worktree },
       repo,
       fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')),
       async ({ worktreePath, files }) => {
@@ -328,14 +340,14 @@ test('ai-resolve settles the conflict on the run branch, then merges cleanly int
   }
 });
 
-test('ai-resolve that leaves conflict markers is refused: main untouched, run branch put back', async () => {
+test('an AI resolution that leaves conflict markers is refused: main untouched, run branch put back', async () => {
   const { repo, worktree, branch, cleanup } = conflictingRun();
   try {
     const mainBefore = execFileSync('git', ['rev-parse', 'main'], { cwd: repo, encoding: 'utf8' }).trim();
     const branchBefore = execFileSync('git', ['rev-parse', branch], { cwd: repo, encoding: 'utf8' }).trim();
     const outcome = await runWorkflowMerge(
       aiNode,
-      { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree },
+      { run: aiChosenRun(), worktreePath: worktree },
       repo,
       fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')),
       // Claims success but only stages the file, markers and all.
@@ -355,12 +367,33 @@ test('ai-resolve that leaves conflict markers is refused: main untouched, run br
   }
 });
 
-test('ai-resolve with no resolver available fails and names why, leaving main clean', async () => {
+test('choosing AI with no resolver available fails and names why, leaving main clean', async () => {
   const { repo, worktree, cleanup } = conflictingRun();
   try {
-    const outcome = await runWorkflowMerge(aiNode, { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree }, repo, fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')));
+    const outcome = await runWorkflowMerge(aiNode, { run: aiChosenRun(), worktreePath: worktree }, repo, fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')));
     assert.equal(outcome.status, 'failed');
     assert.match(outcome.error ?? '', /AI resolution could not start/);
+    assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), '');
+  } finally {
+    cleanup();
+  }
+});
+
+test('a conflict stops and asks: nothing merged, no AI started, the conflicted files recorded', async () => {
+  const { repo, worktree, cleanup } = conflictingRun();
+  try {
+    let asked = false;
+    const outcome = await runWorkflowMerge(
+      aiNode,
+      { run: runFor(aiNode, 'c0ffee1234567890'), worktreePath: worktree },
+      repo,
+      fs.mkdtempSync(path.join(os.tmpdir(), 'evidence-')),
+      async () => { asked = true; return { ok: true }; }
+    );
+    assert.equal(outcome.status, 'failed');
+    assert.equal(asked, false, 'no AI runs until the person chooses it');
+    assert.deepEqual(outcome.conflictFiles, ['README.md']);
+    assert.match(outcome.error ?? '', /Let AI resolve the conflicts/);
     assert.equal(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), '');
   } finally {
     cleanup();

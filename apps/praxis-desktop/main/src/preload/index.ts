@@ -512,6 +512,7 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('workflows:switchStageProvider', runId, nodeId, provider, model),
     stopForProviderLimit: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:stopForProviderLimit', runId, nodeId),
     reworkStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:reworkStage', runId, nodeId),
+    resolveMergeWithAi: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:resolveMergeWithAi', runId, nodeId),
     cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),
     inspectRunWork: (runId: string) => ipcRenderer.invoke('workflows:inspectRunWork', runId),
     deleteRun: (runId: string, options?: { deleteWork?: boolean }) => ipcRenderer.invoke('workflows:deleteRun', runId, options),

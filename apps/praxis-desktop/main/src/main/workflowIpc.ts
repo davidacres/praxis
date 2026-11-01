@@ -30,6 +30,7 @@ import {
   readEvidenceContent,
   recoverWorkflowRun,
   reworkWorkflowRun,
+  allowAiMergeResolution,
   failingGateFindings,
   resolveWorkflowCatalog,
   stageSessionKey,
@@ -1165,6 +1166,17 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       });
       if (result.reason) throw new Error(result.reason);
       return result.run;
+    });
+    await getWorkflowOrchestrator().step(runId);
+    const run = runStore().get(runId);
+    return run ? summarize(run) : summary;
+  });
+
+  ipcMain.handle('workflows:resolveMergeWithAi', async (_event, runId: string, nodeId: string): Promise<WorkflowRunSummary> => {
+    const summary = await withRun(runId, run => {
+      const next = allowAiMergeResolution(run, nodeId, new Date().toISOString());
+      if (next === run) throw new Error('This merge is not stopped on a conflict.');
+      return next;
     });
     await getWorkflowOrchestrator().step(runId);
     const run = runStore().get(runId);

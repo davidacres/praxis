@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  allowAiMergeResolution,
   applyWorkflowRunCommand,
   canRetry,
   exhaustedProviders,
@@ -1072,4 +1073,36 @@ test('compactWorkflowRunEvents preserves lifecycle events and bounds repetitive 
   assert.equal(settled[settled.length - 1].kind, 'node-succeeded');
   assert.equal(settled[0].kind, 'run-started');
   assert.equal(settled[1].kind, 'node-started');
+});
+
+// ── Merge conflicts ask the person ───────────────────────────────────────
+
+test('a merge stopped on a conflict offers "Let AI resolve", which covers only the next attempt', () => {
+  const def: WorkflowDefinition = {
+    ...definition(),
+    nodes: [{ type: 'merge', id: 'merge', name: 'Merge to main', x: 0, y: 0, inputs: [], targetBranch: 'main' }],
+    edges: [],
+    entryNodeId: 'merge'
+  };
+  let run = applyWorkflowRunCommand(newRun(def), { kind: 'node-started', nodeId: 'merge', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'merge', at: T(2), error: 'Merge conflict in 1 file(s): README.md.', conflictFiles: ['README.md'] });
+  assert.equal(run.status, 'failed');
+  assert.deepEqual(run.nodes.merge.attempts[0].conflictFiles, ['README.md']);
+
+  const offer = nextActions(run).find(action => action.kind === 'resolve-merge-with-ai');
+  assert.deepEqual(offer, { kind: 'resolve-merge-with-ai', nodeId: 'merge', label: 'Let AI resolve the conflicts', files: ['README.md'] });
+
+  const chosen = allowAiMergeResolution(run, 'merge', T(3));
+  assert.equal(chosen.status, 'running');
+  assert.deepEqual(chosen.mergeAiAttempt, { merge: 2 });
+  assert.deepEqual(scheduleWorkflowRun(chosen).ready, ['merge']);
+  assert.match(chosen.events.at(-1)?.message ?? '', /AI will resolve the merge conflicts in README\.md/);
+  assert.deepEqual(normalizeWorkflowRun(JSON.parse(JSON.stringify(chosen)))?.mergeAiAttempt, { merge: 2 });
+  assert.equal(nextActions(chosen).some(action => action.kind === 'resolve-merge-with-ai'), false, 'asked once, answered');
+
+  // Any other failure is not a conflict to resolve, and the choice is refused.
+  let other = applyWorkflowRunCommand(newRun(def), { kind: 'node-started', nodeId: 'merge', at: T(1) });
+  other = applyWorkflowRunCommand(other, { kind: 'node-failed', nodeId: 'merge', at: T(2), error: 'Target checkout contains uncommitted changes.' });
+  assert.equal(nextActions(other).some(action => action.kind === 'resolve-merge-with-ai'), false);
+  assert.equal(allowAiMergeResolution(other, 'merge', T(3)), other);
 });

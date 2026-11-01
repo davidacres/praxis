@@ -147,6 +147,8 @@ export interface WorkflowNodeAttempt {
   model?: string;
   /** For an `independentOf` stage: whether it ran apart from the stage it judges, and why. */
   independence?: StageIndependence;
+  /** A merge that stopped on a conflict: the files, so a person can choose to let AI resolve it. */
+  conflictFiles?: string[];
 }
 
 /** Whether an `independentOf` stage's attempt ran on a different AI or model from its author (FX-BE-164). */
@@ -304,6 +306,11 @@ export interface WorkflowRun {
    */
   revisionFindings?: WorkflowRevisionFindings;
   /**
+   * Merge stages a person told to let AI resolve their conflicts, by the attempt that applies
+   * to. Per attempt, so the choice covers the retry it was made for and nothing after it.
+   */
+  mergeAiAttempt?: Record<string, number>;
+  /**
    * The git worktree this run's stages execute in, once acquired. Recorded on
    * the run so a restart re-attaches to the same tree instead of branching a
    * second one beside it.
@@ -382,6 +389,7 @@ export type WorkflowRunCommand =
       model?: string;
       independence?: StageIndependence;
       mapItems?: WorkflowMapItemState[];
+      conflictFiles?: string[];
     }
   /**
    * Moves a stage to another AI after the one it used ran out; a paused stage is
@@ -527,7 +535,8 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
         provider: command.provider,
         model: command.model,
         independence: command.independence,
-        mapItems: command.mapItems
+        mapItems: command.mapItems,
+        conflictFiles: command.conflictFiles
       });
     case 'stage-provider-switched':
       return switchStageProvider(run, command.nodeId, command.at, command.provider, command.model, command.automatic === true);
@@ -714,6 +723,7 @@ function settleNode(
     model?: string;
     independence?: StageIndependence;
     mapItems?: WorkflowMapItemState[];
+    conflictFiles?: string[];
   }
 ): WorkflowRun {
   const state = run.nodes[nodeId];
@@ -763,7 +773,8 @@ function settleNode(
     ...(effective === 'failed' && detail.pause ? { pause: detail.pause } : {}),
     ...(detail.provider ? { provider: detail.provider } : {}),
     ...(detail.model ? { model: detail.model } : {}),
-    ...(detail.independence ? { independence: detail.independence } : {})
+    ...(detail.independence ? { independence: detail.independence } : {}),
+    ...(effective === 'failed' && detail.conflictFiles?.length ? { conflictFiles: detail.conflictFiles } : {})
   };
 
   let next = withNode(run, {
@@ -1335,6 +1346,34 @@ function restoredLoop(run: WorkflowRun, at: string, ok: boolean, detail?: string
 }
 
 /** Loop state read back from disk; anything unreadable is dropped rather than guessed. */
+/** The files a merge stage last stopped on, when its latest attempt failed on a conflict. */
+export function mergeConflictOf(run: WorkflowRun, nodeId: string): string[] | undefined {
+  const state = run.nodes[nodeId];
+  const node = findNode(run, nodeId);
+  if (!state || state.outcome !== 'failed' || node?.type !== 'merge') return undefined;
+  const files = state.attempts[state.attempts.length - 1]?.conflictFiles;
+  return files?.length ? files : undefined;
+}
+
+/**
+ * A person's answer to a merge conflict: let AI resolve it. Retries the merge stage, and marks
+ * that retry (only that one) to have the workflow's implementer settle the conflicts first.
+ */
+export function allowAiMergeResolution(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
+  const files = mergeConflictOf(run, nodeId);
+  if (!files) return run;
+  const nextAttempt = run.nodes[nodeId].attempts.length + 1;
+  const marked: WorkflowRun = { ...run, mergeAiAttempt: { ...(run.mergeAiAttempt ?? {}), [nodeId]: nextAttempt } };
+  const retried = applyWorkflowRunCommand(marked, { kind: 'node-retry', nodeId, at });
+  if (retried === marked) return run;
+  return append(retried, {
+    at,
+    kind: 'node-retried',
+    nodeId,
+    message: `AI will resolve the merge conflicts in ${files.join(', ')}, then ${label(run, nodeId)} is tried again.`
+  });
+}
+
 function normalizeRevisionFindings(value: unknown): Pick<WorkflowRun, 'revisionFindings'> {
   if (!value || typeof value !== 'object') return {};
   const raw = value as Record<string, unknown>;
@@ -1618,6 +1657,15 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
     ...(typeof raw.scheduledLaunchToken === 'string' ? { scheduledLaunchToken: raw.scheduledLaunchToken } : {}),
     ...normalizeRevisionFindings(raw.revisionFindings),
+    ...(raw.mergeAiAttempt && typeof raw.mergeAiAttempt === 'object' && !Array.isArray(raw.mergeAiAttempt)
+      ? {
+          mergeAiAttempt: Object.fromEntries(
+            Object.entries(raw.mergeAiAttempt as Record<string, unknown>).filter(
+              (entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isInteger(entry[1]) && entry[1] > 0
+            )
+          )
+        }
+      : {}),
     ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {}),
     ...(raw.archived === true ? { archived: true } : {}),
     ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})

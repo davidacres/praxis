@@ -18,6 +18,7 @@ import {
   applyWorkflowRunCommand,
   attemptsSpent,
   isRunSettled,
+  mergeConflictOf,
   type WorkflowRun
 } from './workflowRun';
 import { scheduleWorkflowRun } from './workflowScheduler';
@@ -93,6 +94,7 @@ export type WorkflowNextAction =
   | { kind: 'start-stage'; nodeId: string; label: string }
   | { kind: 'retry-stage'; nodeId: string; label: string; attemptsUsed: number; maxAttempts: number }
   | { kind: 'rework-stage'; nodeId: string; label: string }
+  | { kind: 'resolve-merge-with-ai'; nodeId: string; label: string; files: string[] }
   | { kind: 'approve'; nodeId: string; label: string }
   | { kind: 'skip-approval'; nodeId: string; label: string }
   | { kind: 'cancel-run'; label: string }
@@ -167,8 +169,15 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
     return [{ kind: 'rework-stage', nodeId: entry.id, label: `Start a new revision from ${entry.name}` }];
   };
 
+  // A merge stopped on a conflict asks the person rather than deciding for them.
+  const mergeConflictActions = (): WorkflowNextAction[] =>
+    run.definition.nodes.flatMap(node => {
+      const files = mergeConflictOf(run, node.id);
+      return files ? [{ kind: 'resolve-merge-with-ai' as const, nodeId: node.id, label: 'Let AI resolve the conflicts', files }] : [];
+    });
+
   if (isRunSettled(run)) {
-    const recover = run.status === 'failed' ? [...retryActions(), ...reworkActions()] : [];
+    const recover = run.status === 'failed' ? [...mergeConflictActions(), ...retryActions(), ...reworkActions()] : [];
     return [
       { kind: 'none', label: `Run ${run.status}${run.endedReason ? `: ${run.endedReason}` : '.'}` },
       ...recover,
@@ -190,6 +199,7 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
     actions.push({ kind: 'start-stage', nodeId, label: `Start ${label(nodeId)}` });
   }
 
+  actions.push(...mergeConflictActions());
   actions.push(...retryActions());
   actions.push(...reworkActions());
 

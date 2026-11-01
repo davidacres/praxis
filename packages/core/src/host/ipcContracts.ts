@@ -1681,6 +1681,8 @@ export interface WorkflowsIpc {
   stopForProviderLimit(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Starts a new delivery revision and replays the selected stage's downstream path. */
   reworkStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** A merge stopped on a conflict: let AI resolve it, then try the merge again. */
+  resolveMergeWithAi(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Cancels a run. */
   cancelRun(runId: string, reason?: string): Promise<WorkflowRunSummary>;
   /**

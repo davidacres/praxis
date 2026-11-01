@@ -954,21 +954,9 @@ function NodeInspector({
               onChange={event => set({ targetBranch: event.target.value.trim() ? event.target.value : undefined })}
             />
           </Field>
-          <Field label="On a conflict">
-            <ChipSelect
-              ariaLabel="On a conflict"
-              value={node.onConflict ?? 'fail'}
-              onChange={onConflict => set({ onConflict: onConflict as never })}
-              options={[
-                { value: 'fail', label: 'Stop and report', description: 'Undo the merge and fail the stage, naming the conflicted files' },
-                {
-                  value: 'ai-resolve',
-                  label: 'Let AI resolve',
-                  description: 'The implementer resolves the conflicts on the run’s branch, then the merge is tried again'
-                }
-              ]}
-            />
-          </Field>
+          <p className="hint" data-testid="wf-merge-conflict-note">
+            On a conflict nothing is merged: the run stops here, names the conflicted files, and asks whether to let AI resolve them.
+          </p>
         </>
       )}
     </div>

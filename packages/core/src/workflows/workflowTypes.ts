@@ -379,9 +379,10 @@ export interface WorkflowMergeNode extends WorkflowNodeBase {
   /** Whether merge uses --no-ff commit (default true). */
   noFastForward?: boolean;
   /**
-   * On a conflict: `fail` undoes the merge and fails the stage; `ai-resolve` has the workflow's
-   * implementer resolve the conflicts on the run's branch, then tries the merge again. Absent
-   * means `fail`. The base checkout is never left half-merged either way.
+   * On a conflict the merge is undone and the stage stops, asking the person whether to let AI
+   * resolve it (`allowAiMergeResolution`). `ai-resolve` skips the question and always lets the
+   * workflow's implementer resolve it; `fail` and absent ask. The base checkout is never left
+   * half-merged either way.
    */
   onConflict?: 'fail' | 'ai-resolve';
   /**

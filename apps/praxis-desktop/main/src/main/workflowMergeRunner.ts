@@ -134,7 +134,11 @@ export async function runWorkflowMerge(
   await git(root, ['merge', '--abort']);
   log += `Merge aborted cleanly.\n`;
 
-  if (node.onConflict === 'ai-resolve') {
+  // A person decides: a conflict stops the merge and asks, unless the workflow said to let AI
+  // resolve every time, or the person chose "Let AI resolve" for this attempt.
+  const attempt = context.run.nodes[node.id]?.attempts.length ?? 0;
+  const useAi = node.onConflict === 'ai-resolve' || (attempt > 0 && context.run.mergeAiAttempt?.[node.id] === attempt);
+  if (useAi) {
     if (!resolveConflicts || !context.worktreePath) {
       log += `AI resolution needs the run's worktree and an implementer stage; neither is available here.\n`;
       await writeMergeEvidence(context, node, evidenceRoot, log);
@@ -154,7 +158,8 @@ export async function runWorkflowMerge(
       return {
         status: 'failed',
         exitCode: mergeResult.exitCode,
-        error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}. AI resolution did not settle it: ${resolved.error}`
+        error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}. AI resolution did not settle it: ${resolved.error}`,
+        conflictFiles: conflictedFiles
       };
     }
 
@@ -181,7 +186,8 @@ export async function runWorkflowMerge(
   return {
     status: 'failed',
     exitCode: mergeResult.exitCode,
-    error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}.`
+    error: `Merge conflict in ${conflictedFiles.length} file(s): ${conflictedFiles.join(', ')}. Nothing was merged. Choose "Let AI resolve the conflicts" on the run, or resolve them yourself and retry.`,
+    conflictFiles: conflictedFiles
   };
 }
 

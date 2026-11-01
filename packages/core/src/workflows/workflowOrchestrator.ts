@@ -74,6 +74,8 @@ export interface StageOutcome {
   independence?: { independent: boolean; reason: string };
   /** For a map node: how each item went. */
   mapItems?: WorkflowMapItemState[];
+  /** For a merge stopped on a conflict: the conflicted files. */
+  conflictFiles?: string[];
 }
 
 export interface StageDispatchContext {
@@ -474,7 +476,8 @@ export class WorkflowOrchestrator {
                   ...(result.outcome.provider ? { provider: result.outcome.provider } : {}),
                   ...(result.outcome.model ? { model: result.outcome.model } : {}),
                   ...(result.outcome.independence ? { independence: result.outcome.independence } : {}),
-                  ...(result.outcome.mapItems ? { mapItems: result.outcome.mapItems } : {})
+                  ...(result.outcome.mapItems ? { mapItems: result.outcome.mapItems } : {}),
+                  ...(result.outcome.conflictFiles?.length ? { conflictFiles: result.outcome.conflictFiles } : {})
                 });
         if (next !== run) {
           const recoverySource = next.definition.nodes.find(candidate =>
