@@ -26,6 +26,8 @@ import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
 import { runWorkflowMerge, type MergeConflictResolver } from './workflowMergeRunner';
+import { changedPaths, commitPraxisWrite } from './ticketWriteBackCommit';
+import { repositoryRoot } from './runWork';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
@@ -131,7 +133,21 @@ const issueWriteBack = new WorkflowIssueWriteBack({
   get: runId => new WorkflowRunStore(getWorkflowBackingStore()).get(runId),
   send: async run => {
     const service = await getServiceForConnection(run.issueConnectionId);
-    await runAsAgent(() => service.addComment(run.issueKey!, buildWriteBackComment(run)));
+    // A folder-backed ticket is a file in the repository: commit what this comment changed, or the
+    // checkout reads as dirty and the schedule's next ticket refuses to start.
+    const folder = projectFolderFor(run);
+    const root = folder ? await repositoryRoot(folder) : undefined;
+    const before = root ? await changedPaths(root).catch(() => undefined) : undefined;
+    const comment = buildWriteBackComment(run);
+    await runAsAgent(() => service.addComment(run.issueKey!, comment));
+    if (root && before) {
+      const marker = comment.split('\n').find(line => line.trim()) ?? comment;
+      await commitPraxisWrite(root, before, marker.trim(), `Record run outcome on ${run.issueKey}`).catch(error =>
+        workflowLogSink.appendLine(
+          `Recorded the outcome on ${run.issueKey} but could not commit it: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
   },
   mark: (runId, at) => getWorkflowOrchestrator().updateRun(runId, current => ({ ...current, issueWriteBackAt: at }))
 });
