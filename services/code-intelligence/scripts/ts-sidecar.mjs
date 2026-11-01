@@ -12,7 +12,7 @@ console.debug = (...args) => console.error(...args);
 console.warn = (...args) => console.error(...args);
 
 const PROTOCOL_VERSION = '1.1';
-const ADAPTER_VERSION = 'typescript-7.0/v2';
+const ADAPTER_VERSION = 'typescript-7.0/v3';
 
 function sha256(input) {
   return 'sha256:' + crypto.createHash('sha256').update(input).digest('hex');
@@ -1008,6 +1008,91 @@ function analyzeRepository(ts, request) {
             });
           }
 
+          // The single symbol for one UI hook value, shared by every context that sets or looks it up.
+          function uiHookSymbol(kind, value) {
+            const identity = jsonIdentity(1, 'synthetic', repositoryId, 'uiHook', kind, value);
+            const id = makeId('pci:sym:', identity);
+            if (!symbols.has(id)) {
+              symbols.set(id, {
+                id,
+                identity,
+                contextId: ctx.id,
+                kind: 'ui_hook',
+                name: value,
+                qualifiedName: `[ui ${kind}] ${value}`,
+                signature: `[ui ${kind}] ${value}`,
+                revision: sha256(Buffer.from(identity, 'utf8')),
+                resolution: 'resolved',
+                containerId: null,
+                external: false,
+                documentation: `A UI ${kind === 'testid' ? 'test id' : kind}: components that set it expose it (exposes_ui); tests that look it up target it (targets_ui).`,
+                locations: []
+              });
+            }
+            return id;
+          }
+
+          function stringValue(expr) {
+            if (!expr) return undefined;
+            if (expr.kind === SyntaxKind.StringLiteral || expr.kind === SyntaxKind.NoSubstitutionTemplateLiteral) return expr.text;
+            if (expr.kind === SyntaxKind.JsxExpression) return stringValue(expr.expression);
+            return undefined;
+          }
+
+          // Distinctive class names only (`session-shelf__rail`), not `row` or `active`.
+          const distinctiveClasses = text => text.split(/\s+/).filter(name => /^[a-z][\w-]*[-_][\w-]+$/i.test(name) && name.length >= 6);
+          const LABEL_ATTRIBUTES = new Set(['aria-label', 'title', 'placeholder', 'alt']);
+          const TESTID_ATTRIBUTES = new Set(['data-testid', 'data-test-id', 'data-test']);
+
+          function selectorHooks(selector, at) {
+            const hooks = [];
+            for (const m of selector.matchAll(/\[(data-testid|data-test-id|data-test|aria-label)\s*[~|^$*]?=\s*["']?([^"'\]]+)["']?\s*\]/g)) {
+              hooks.push({ kind: m[1] === 'aria-label' ? 'label' : 'testid', value: m[2], edge: 'targets_ui', node: at });
+            }
+            for (const m of selector.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
+              for (const name of distinctiveClasses(m[1])) hooks.push({ kind: 'class', value: name, edge: 'targets_ui', node: at });
+            }
+            return hooks;
+          }
+
+          function uiHooksAt(node) {
+            if (node.kind === SyntaxKind.JsxAttribute && node.name) {
+              const attr = node.name.getText(sf);
+              const value = stringValue(node.initializer);
+              if (value === undefined || !value.trim()) return [];
+              if (TESTID_ATTRIBUTES.has(attr)) return [{ kind: 'testid', value: value.trim(), edge: 'exposes_ui', node }];
+              if (LABEL_ATTRIBUTES.has(attr)) return [{ kind: 'label', value: value.trim(), edge: 'exposes_ui', node }];
+              if (attr === 'className' || attr === 'class') return distinctiveClasses(value).map(name => ({ kind: 'class', value: name, edge: 'exposes_ui', node }));
+              return [];
+            }
+            if (node.kind === SyntaxKind.CallExpression && node.expression) {
+              const callee = node.expression.kind === SyntaxKind.PropertyAccessExpression ? node.expression.name.getText(sf)
+                : node.expression.kind === SyntaxKind.Identifier ? node.expression.getText(sf) : undefined;
+              const first = stringValue(node.arguments?.[0]);
+              if (!callee || first === undefined) return [];
+              switch (callee) {
+                case 'getByTestId':
+                  return [{ kind: 'testid', value: first, edge: 'targets_ui', node }];
+                case 'getByLabel': case 'getByPlaceholder': case 'getByTitle': case 'getByAltText':
+                case 'getByLabelText': case 'getByPlaceholderText': case 'findByLabelText':
+                  return [{ kind: 'label', value: first, edge: 'targets_ui', node }];
+                case 'getByRole': case 'findByRole': case 'queryByRole': {
+                  const options = node.arguments?.[1];
+                  const nameProp = options && options.kind === SyntaxKind.ObjectLiteralExpression
+                    ? options.properties.find(p => p.name && p.name.getText(sf) === 'name')
+                    : undefined;
+                  const name = nameProp ? stringValue(nameProp.initializer) : undefined;
+                  return name ? [{ kind: 'label', value: name, edge: 'targets_ui', node }] : [];
+                }
+                case 'locator': case '$': case '$$': case 'querySelector': case 'querySelectorAll': case 'waitForSelector':
+                  return selectorHooks(first, node);
+                default:
+                  return [];
+              }
+            }
+            return [];
+          }
+
           function walk(node) {
             const start = node.getStart(sf);
             const end = node.getEnd();
@@ -1100,6 +1185,29 @@ function analyzeRepository(ts, request) {
                 kind: 'calls'
               });
               if (target) recordCrossProjectDependency(target, tagStart, tagEnd, tagRange);
+            }
+
+            // 1c. UI hooks. End-to-end tests never import the components they drive; they find them by a
+            // test id, a label or a class. A component that sets one `exposes_ui` it, a test that looks
+            // one up `targets_ui` it, and both point at one synthetic `ui_hook` symbol per value, so
+            // `find_related` can go from a component to the tests that drive it.
+            for (const hook of uiHooksAt(node)) {
+              const hookId = uiHookSymbol(hook.kind, hook.value);
+              const hookStart = hook.node.getStart(sf);
+              const hookEnd = hook.node.getEnd();
+              relationships.push({
+                id: makeId('pci:occ:', ctx.id, source.path, source.hash, hookStart, hookEnd, hook.edge, hookId),
+                contextId: ctx.id,
+                filePath: source.path,
+                hash: source.hash,
+                ownerId,
+                targetId: hookId,
+                start: hookStart,
+                end: hookEnd,
+                range: rangeOf(sf, hookStart, hookEnd),
+                resolution: 'resolved',
+                kind: hook.edge
+              });
             }
 
             // 2. Heritage clauses (extends / implements)

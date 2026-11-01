@@ -147,7 +147,7 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
 export const PLANNED_TESTS_INSTRUCTIONS = [
   'Find the existing tests that cover what this plan changes, before planning the change:',
   '- For code: the tests that import or call it. Code-intelligence tools, when you have them (callers, related symbols, code search), follow these better than text search.',
-  '- For UI: end-to-end and UI tests do not import the components they drive. Search the test files for the test ids (data-testid), aria-labels, role names, visible labels and CSS classes of every component you will change. Code search finds tests by meaning too, such as the feature\'s name.',
+  '- For UI: end-to-end and UI tests do not import the components they drive. Code intelligence\'s find_related on a component returns the tests that look up its test ids, labels and classes (reason "sharedUiHook"); without it, search the test files for the test ids (data-testid), aria-labels, role names, visible labels and CSS classes of every component you will change. Code search finds tests by meaning too, such as the feature\'s name.',
   `List them in the plan under a heading of their own, "## ${PLANNED_TESTS_HEADING}", one test file path per line, with why it is affected. Say which of them the change is meant to alter (its behaviour changes on purpose) rather than keep passing. QA runs every file listed.`
 ].join('\n');
 

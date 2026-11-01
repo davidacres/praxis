@@ -490,9 +490,32 @@ public sealed class QueryService(IndexDatabase database, ModelStore? models = nu
                     var edges = Edges(symbolId, false, 1000).Concat(Edges(symbolId, true, 1000));
                     if (arguments["kinds"] is JsonArray { Count: > 0 } kinds) edges = edges.Where(row => kinds.Any(k => k!.GetValue<string>() == Text(row, "kind")));
                     var ids = edges.Select(row => Text(row, "source_symbol_id") == symbolId ? Text(row, "target_symbol_id")! : Text(row, "source_symbol_id")!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
-                    more = ids.Length > offset + limit;
-                    data = new() { ["items"] = Array(ids.Skip(offset).Take(limit).Select(relatedId =>
-                    { var symbol = Symbol(relatedId); return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["reasons"] = new JsonArray("compilerRelationship"), ["evidenceIds"] = symbol["declarations"]!.DeepClone() }; })) }; break;
+                    // A UI hook (a test id, label or class) links a component to the tests that drive it only
+                    // through itself: follow it one step, so a component's related code includes those tests.
+                    var viaHook = new Dictionary<string, string>(StringComparer.Ordinal);
+                    var hookIds = new HashSet<string>(StringComparer.Ordinal);
+                    if (arguments["kinds"] is not JsonArray { Count: > 0 })
+                        foreach (var relatedId in ids)
+                        {
+                            var related = Symbol(relatedId);
+                            if (related["kind"]?.GetValue<string>() != "ui_hook") continue;
+                            hookIds.Add(relatedId);
+                            foreach (var row in Edges(relatedId, false, 1000).Concat(Edges(relatedId, true, 1000)))
+                            {
+                                var other = Text(row, "source_symbol_id") == relatedId ? Text(row, "target_symbol_id")! : Text(row, "source_symbol_id")!;
+                                if (other != symbolId && !ids.Contains(other, StringComparer.Ordinal)) viaHook.TryAdd(other, related["qualifiedName"]!.GetValue<string>());
+                            }
+                        }
+                    // The code the symbol relates to, then the tests reached through its hooks, then the hooks
+                    // themselves: a page cut to the response budget keeps the tests rather than the hook list.
+                    var all = ids.Where(id => !hookIds.Contains(id)).Concat(viaHook.Keys.Order(StringComparer.Ordinal)).Concat(ids.Where(hookIds.Contains)).ToArray();
+                    more = all.Length > offset + limit;
+                    data = new() { ["items"] = Array(all.Skip(offset).Take(limit).Select(relatedId =>
+                    {
+                        var symbol = Symbol(relatedId);
+                        var reasons = viaHook.TryGetValue(relatedId, out var hook) ? new JsonArray("sharedUiHook", hook) : new JsonArray("compilerRelationship");
+                        return (JsonNode?)new JsonObject { ["symbol"] = symbol, ["reasons"] = reasons, ["evidenceIds"] = symbol["declarations"]!.DeepClone() };
+                    })) }; break;
                 }
                 case "trace_flow":
                 {

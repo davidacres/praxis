@@ -358,6 +358,50 @@ public sealed class TypeScriptTests : IDisposable
     }
 
     [Fact]
+    public void UiHooksLinkAComponentToTheEndToEndTestsThatDriveItThroughFindRelated()
+    {
+        Write("app/tsconfig.json", """
+            { "compilerOptions": { "target": "ES2022", "module": "commonjs", "strict": true, "jsx": "preserve" }, "include": ["src/**/*"] }
+            """);
+        Write("app/src/jsx.d.ts", "declare namespace JSX { interface IntrinsicElements { [name: string]: unknown } }\n");
+        Write("app/src/Shelf.tsx", """
+            export function Shelf() {
+              return <div className="session-shelf__rail active"><button data-testid="shelf-new" aria-label="New session">+</button></div>;
+            }
+            """);
+        Write("e2e/tsconfig.json", """
+            { "compilerOptions": { "target": "ES2022", "module": "commonjs", "strict": true }, "include": ["*.ts"] }
+            """);
+        Write("e2e/page.d.ts", "declare const page: { getByTestId(id: string): unknown; getByRole(role: string, options?: { name?: string }): unknown; locator(selector: string): unknown };\n");
+        Write("e2e/shelf.spec.ts", """
+            export function shelfOpensANewSession() { page.getByTestId("shelf-new"); }
+            export function shelfRailIsNarrow() { page.locator(".session-shelf__rail"); }
+            export function newSessionButtonIsLabelled() { page.getByRole("button", { name: "New session" }); }
+            """);
+        Write("e2e/board.spec.ts", """
+            export function boardShowsColumns() { page.getByTestId("board-column"); }
+            """);
+
+        var indexer = new RepositoryIndexer(database); var repoId = indexer.Register(root); indexer.Index(repoId);
+        var queries = new QueryService(database); var allowed = new HashSet<string> { repoId };
+        JsonNode Single(string name) => Assert.Single(queries.Execute("find_symbol", new JsonObject { ["repositoryId"] = repoId, ["name"] = name }, allowed)["data"]!["items"]!.AsArray())!;
+        var shelf = Single("Shelf");
+        var related = queries.Execute("find_related", new JsonObject { ["repositoryId"] = repoId, ["symbolId"] = shelf["symbolId"]!.GetValue<string>(), ["limit"] = 50 }, allowed)["data"]!["items"]!.AsArray();
+        string[] Names(string reason) => related.Where(item => item!["reasons"]!.AsArray().Any(r => r!.GetValue<string>() == reason))
+            .Select(item => item!["symbol"]!["qualifiedName"]!.GetValue<string>()).Order(StringComparer.Ordinal).ToArray();
+
+        // The hooks the component exposes are related to it directly…
+        Assert.Contains("[ui testid] shelf-new", Names("compilerRelationship"));
+        Assert.Contains("[ui class] session-shelf__rail", Names("compilerRelationship"));
+        Assert.DoesNotContain(Names("compilerRelationship"), name => name.Contains("active"));
+        // …and every test that looks one of them up is related through it; the board test is not.
+        var viaHooks = Names("sharedUiHook");
+        Assert.Equal(3, viaHooks.Length);
+        Assert.All(viaHooks, name => Assert.Contains("shelf.spec", name));
+        Assert.DoesNotContain(related, item => item!["symbol"]!["qualifiedName"]!.GetValue<string>().Contains("boardShowsColumns"));
+    }
+
+    [Fact]
     public void PolyglotRepositorySupportsLanguageFiltersAcrossCSharpTypeScriptAndJavaScript()
     {
         Write("Backend.cs", "namespace Backend; public class SharedWorker { public void ExecuteWork() {} }");
