@@ -1,12 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import type { AgentSessionRecord } from '@praxis/core';
+import type { AgentSessionRecord, ProjectRecord } from '@praxis/core';
 import { recencyBucket, sessionLastActivityAt } from './sessionRecency';
 import { isConversationSession, sessionTitle } from '../ai/sessionNav';
 import { agentStateLaneClass, sessionStatusLabel, sessionVisualState } from '../ai/aiSessionState';
 import { Icon } from '../ui/Icon';
+import { NoteEditor } from '../notes/NoteEditor';
+import { flush as flushNotes, useNotesSession } from '../notes/notesSession';
 
 const SHELF_SESSION_LIMIT = 5;
 const HOVER_DELAY_MS = 120;
+// The sleeve's open key for the notes editor; session cards use their issue key.
+const NOTES_KEY = 'praxis:notes';
 // Window-local drafts survive card switches and sidebar expansion, without
 // persisting unsent text to disk. Successful sends remove their draft.
 const replyDrafts = new Map<string, string>();
@@ -17,11 +21,16 @@ const replyDrafts = new Map<string, string>();
  * the sleeve behind the edge — a book pulled from a bookshelf — showing the
  * session's latest exchange with a quick reply at the bottom of the card.
  */
-export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
+export function SessionShelf({ sessions, activeSessionKey, onSelectSession, onNewSession, notesProjectId, projects }: {
   sessions: AgentSessionRecord[];
   activeSessionKey?: string;
   onSelectSession: (key: string) => void;
+  onNewSession: () => void;
+  notesProjectId?: string;
+  projects: ProjectRecord[];
 }) {
+  const notesState = useNotesSession();
+  const notesUnsaved = notesState.dirty || notesState.save === 'error';
   const [today, setToday] = useState(() => new Date());
   useEffect(() => {
     const now = new Date();
@@ -48,6 +57,13 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   const shelfRef = useRef<HTMLElement>(null);
   const sleeveRef = useRef<HTMLDivElement>(null);
   const spinesRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const notesButtonRef = useRef<HTMLButtonElement>(null);
+  // Every way of tucking the notes card away saves first, so dismissal never loses text.
+  const dismiss = () => {
+    if (revealedRef.current === NOTES_KEY) void flushNotes();
+    setRevealed(undefined);
+  };
   const cancelClose = () => window.clearTimeout(closeTimer.current);
   const deferClose = () => {
     cancelHover();
@@ -55,28 +71,38 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
     closeTimer.current = window.setTimeout(() => {
       // A reply being edited stays open until focus leaves or the user clicks away.
       if (sleeveRef.current?.contains(document.activeElement)) return;
-      setRevealed(undefined);
+      dismiss();
     }, 140);
   };
-  const reveal = (key: string) => { cancelHover(); cancelClose(); setRevealed(key); setMounted(key); };
-  const close = () => { cancelHover(); cancelClose(); setRevealed(undefined); };
+  const reveal = (key: string) => {
+    cancelHover(); cancelClose();
+    if (revealedRef.current === NOTES_KEY && key !== NOTES_KEY) void flushNotes();
+    setRevealed(key); setMounted(key);
+  };
+  const close = () => { cancelHover(); cancelClose(); dismiss(); };
   const hover = (key: string) => {
+    // An open notes card is only replaced by a click or focus, never a passing pointer.
+    if (revealedRef.current === NOTES_KEY) return;
     cancelHover(); cancelClose();
     hoverTimer.current = window.setTimeout(() => reveal(key), HOVER_DELAY_MS);
   };
-  useEffect(() => () => { window.clearTimeout(closeTimer.current); window.clearTimeout(hoverTimer.current); }, []);
+  useEffect(() => () => {
+    window.clearTimeout(closeTimer.current); window.clearTimeout(hoverTimer.current);
+    if (revealedRef.current === NOTES_KEY) void flushNotes();
+  }, []);
   // Keep the book beside its spine, clamped inside the workspace at every size.
   useLayoutEffect(() => {
     const shelf = shelfRef.current;
     const card = sleeveRef.current?.querySelector<HTMLElement>('.session-shelf__card');
     if (!shelf || !card) return;
     const position = () => {
+      const height = card.getBoundingClientRect().height;
+      if (mounted === NOTES_KEY) { setCardOffset(Math.max(0, shelf.clientHeight - 48 - height)); return; }
       const spine = Array.from(spinesRef.current?.querySelectorAll<HTMLElement>('[data-session-key]') ?? [])
         .find(element => element.dataset.sessionKey === mounted);
       if (!spine) return;
       const bounds = spine.getBoundingClientRect();
       const centre = (bounds.top + bounds.bottom) / 2 - shelf.getBoundingClientRect().top - 24;
-      const height = card.getBoundingClientRect().height;
       setCardOffset(Math.max(0, Math.min(centre - height / 2, shelf.clientHeight - 48 - height)));
     };
     position();
@@ -89,10 +115,10 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   useEffect(() => {
     const dismissOutside = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (spinesRef.current?.contains(target) || sleeveRef.current?.querySelector('.session-shelf__card')?.contains(target)) return;
+      if (spinesRef.current?.contains(target) || actionsRef.current?.contains(target) || sleeveRef.current?.querySelector('.session-shelf__card')?.contains(target)) return;
       window.clearTimeout(closeTimer.current);
       window.clearTimeout(hoverTimer.current);
-      setRevealed(undefined);
+      dismiss();
     };
     document.addEventListener('pointerdown', dismissOutside, true);
     return () => document.removeEventListener('pointerdown', dismissOutside, true);
@@ -101,19 +127,17 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   useEffect(() => {
     const spines = spinesRef.current;
     const sleeve = sleeveRef.current;
-    if (!spines || !sleeve) return;
+    const actions = actionsRef.current;
+    if (!spines || !sleeve || !actions) return;
     const handle = (event: FocusEvent) => {
       const next = event.relatedTarget as Node | null;
-      if (spines.contains(next) || sleeve.contains(next)) return;
-      if (spines.matches(':hover') || sleeve.matches(':hover')) return;
+      if (spines.contains(next) || sleeve.contains(next) || actions.contains(next)) return;
+      if (spines.matches(':hover') || sleeve.matches(':hover') || actions.matches(':hover')) return;
       deferClose();
     };
-    spines.addEventListener('focusout', handle);
-    sleeve.addEventListener('focusout', handle);
-    return () => {
-      spines.removeEventListener('focusout', handle);
-      sleeve.removeEventListener('focusout', handle);
-    };
+    const regions = [spines, sleeve, actions];
+    regions.forEach(region => region.addEventListener('focusout', handle));
+    return () => regions.forEach(region => region.removeEventListener('focusout', handle));
   }, []);
   // The sleeve must stay out of the tab order while tucked away, or its reply
   // field would trap keyboard users on an invisible card.
@@ -125,9 +149,14 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !open) return;
+      // An open drop-down (the note's project picker) takes Escape first.
+      if (document.querySelector('.composer-provider-menu')) return;
       event.preventDefault();
-      const index = shelfSessions.findIndex(session => session.issueKey === revealed);
-      spinesRef.current?.querySelectorAll<HTMLButtonElement>('.session-shelf__spine')[index]?.focus();
+      if (revealed === NOTES_KEY) notesButtonRef.current?.focus();
+      else {
+        const index = shelfSessions.findIndex(session => session.issueKey === revealed);
+        spinesRef.current?.querySelectorAll<HTMLButtonElement>('.session-shelf__spine')[index]?.focus();
+      }
       // Restoring focus can reveal the spine again; close after that event.
       close();
     };
@@ -136,14 +165,27 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
   }, [open, revealed, shelfSessions]);
   return <nav className="session-shelf" aria-label="Session shelf" data-testid="session-shelf" ref={shelfRef}
     onPointerEnter={cancelClose} onPointerLeave={deferClose}>
-    <div className="session-shelf__spines" ref={spinesRef} onScroll={close}>
+    <div className="session-shelf__spines" ref={spinesRef} onScroll={() => { if (revealedRef.current !== NOTES_KEY) close(); }}>
       {shelfSessions.map(session => <ShelfSpine key={session.issueKey} session={session}
         today={isTodaySession(session)}
         active={activeSessionKey === session.issueKey} open={revealed === session.issueKey}
         onReveal={() => reveal(session.issueKey)} onHover={() => hover(session.issueKey)} onLeave={cancelHover} />)}
     </div>
+    <div className="session-shelf__actions" ref={actionsRef}>
+      <button type="button" className="session-shelf__action" data-testid="session-shelf-new"
+        aria-label="New session" onClick={onNewSession}><Icon name="plus" size={10} /></button>
+      <button type="button" className="session-shelf__action" data-testid="session-shelf-notes" ref={notesButtonRef}
+        aria-label="Notes" aria-expanded={revealed === NOTES_KEY} aria-controls="session-shelf-notes-card"
+        onClick={() => { if (revealed === NOTES_KEY) close(); else reveal(NOTES_KEY); }}>
+        <Icon name="pencil" size={10} />
+        {notesUnsaved && <span className="session-shelf__unsaved" data-testid="session-shelf-notes-unsaved" aria-hidden />}
+      </button>
+    </div>
     <div className={`session-shelf__sleeve${open ? ' is-open' : ''}`} ref={sleeveRef}
       aria-hidden={!open}>
+      {mounted === NOTES_KEY && <ShelfNotesCard open={revealed === NOTES_KEY} offset={cardOffset}
+        projectId={notesProjectId} projects={projects}
+        onClosed={() => setMounted(current => current === NOTES_KEY && revealedRef.current !== NOTES_KEY ? undefined : current)} />}
       {shelfSessions.map(session => mounted === session.issueKey
         ? <ShelfCard key={session.issueKey} session={session} open={revealed === session.issueKey} offset={cardOffset}
           onClosed={key => setMounted(current => current === key && revealedRef.current !== key ? undefined : current)}
@@ -151,6 +193,22 @@ export function SessionShelf({ sessions, activeSessionKey, onSelectSession }: {
         : null)}
     </div>
   </nav>;
+}
+
+function ShelfNotesCard({ open, offset, projectId, projects, onClosed }: {
+  open: boolean;
+  offset: number;
+  projectId?: string;
+  projects: ProjectRecord[];
+  onClosed: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => { setShown(open); }, [open]);
+  return <article id="session-shelf-notes-card" className={`session-shelf__card session-shelf__card--notes${shown ? ' is-open' : ''}`}
+    style={{ marginTop: offset }} aria-label="Notes" data-testid="session-shelf-notes-card"
+    onTransitionEnd={event => { if (event.propertyName === 'transform' && !shown) onClosed(); }}>
+    <NoteEditor projectId={projectId} projects={projects} />
+  </article>;
 }
 
 function ShelfSpine({ session, today, active, open, onReveal, onHover, onLeave }: {
