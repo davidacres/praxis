@@ -6,7 +6,11 @@ import type { SessionContextReference } from '../ai/sessionContext';
 export interface NoteSendRequest { projectId: string; source: NoteSource; title: string }
 
 /** A reference staged for a session composer to send (existing session) or hold (new session). */
-export interface SessionHandoff { reference: SessionContextReference; instruction: string; stagedAt?: number }
+export interface SessionHandoff {
+  reference: SessionContextReference; instruction: string; stagedAt?: number;
+  /** The dialog's saved instruction; kept until the destination takes the handoff so a lost destination loses nothing. */
+  draft?: { projectId: string; source: NoteSource };
+}
 
 /** How long after the explicit Send a staged handoff may still submit itself; later it only fills the composer. */
 export const HANDOFF_AUTO_SEND_MS = 10_000;
@@ -46,6 +50,7 @@ export const peekSessionHandoff = (key: string): SessionHandoff | undefined => h
 export function takeSessionHandoff(key: string): SessionHandoff | undefined {
   const handoff = handoffs.get(key);
   handoffs.delete(key);
+  if (handoff?.draft) saveDraftInstruction(handoff.draft.projectId, handoff.draft.source, '');
   if (handoff) emit();
   return handoff;
 }

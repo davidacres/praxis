@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 747,
+  "testCount": 752,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -6619,7 +6619,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
-        "line": 60,
+        "line": 64,
         "project": "functional"
       },
       "area": "note Session Handoff",
@@ -6635,14 +6635,14 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
-        "line": 74,
+        "line": 78,
         "project": "functional"
       },
       "area": "note Session Handoff",
       "flow": {
         "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws)",
-        "when": "the user opens Send to session… for \"Ideas\" (the existing session is the default destination), types the instruction \"Summarise these\" and double-clicks Send; the source note is then edited through the API",
-        "then": "the preview lists \"Second idea\" before \"First idea\"; exactly one continueSession call reaches SESSION-abc123, its message carries a <selected_context> block with beta body before alpha body and the instruction text; the count is still 1 after the note edit. The post-edit count is read once without waiting, so it shows no immediate resend rather than proving none later."
+        "when": "the user opens Send to session… for \"Ideas\" (the existing session is the default destination), types the instruction \"Summarise these\" and Send is clicked twice in the same frame through two scripted button.click() calls; the source note is then edited through the API",
+        "then": "the preview lists \"Second idea\" before \"First idea\"; exactly one continueSession call reaches SESSION-abc123, its message carries a <selected_context> block with beta body before alpha body and the instruction text; the count is still 1 after the note edit. The two clicks are scripted, not a pointer double-click, so they exercise the submit guard rather than real mouse timing. The post-edit count is read once without waiting."
       }
     },
     {
@@ -6651,7 +6651,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
-        "line": 99,
+        "line": 104,
         "project": "functional"
       },
       "area": "note Session Handoff",
@@ -6667,7 +6667,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
-        "line": 120,
+        "line": 125,
         "project": "functional"
       },
       "area": "note Session Handoff",
@@ -6675,6 +6675,86 @@
         "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws)",
         "when": "the user opens the \"Empty\" group's actions menu",
         "then": "the \"Send to session…\" option is shown and disabled"
+      }
+    },
+    {
+      "id": "PT-6C43ED01A2",
+      "title": "a rejected send keeps the note, chip and instruction, and retry sends the same snapshot",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
+        "line": 137,
+        "project": "functional"
+      },
+      "area": "note Session Handoff",
+      "flow": {
+        "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws); continueSession is set to throw \"mock provider rejection\" on its next call only",
+        "when": "the user sends \"Ideas\" to the existing session with the instruction \"Summarise these\", the provider rejects it, and the user then clicks the session's follow-up Send",
+        "then": "an alert containing \"mock provider rejection\" is shown; the follow-up box still holds \"Summarise these\"; the context chip still reads \"Group: Ideas (2 notes)\"; the notes API still returns \"beta body\"; the retry makes a second continueSession call whose message is identical to the first, and that message contains the note id and an \"updatedAt\" field. Only the existing-session path is covered; a rejection while the session is busy (the queued branch) is not."
+      }
+    },
+    {
+      "id": "PT-7C9174A432",
+      "title": "editing or deleting a note after sending changes nothing already recorded",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
+        "line": 161,
+        "project": "functional"
+      },
+      "area": "note Session Handoff",
+      "flow": {
+        "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws)",
+        "when": "the user sends \"Ideas\" to the existing session, then the first note is renamed and its body edited, then deleted, through the notes API",
+        "then": "exactly one continueSession call is recorded before and after the edit and delete, its message is unchanged, and it contains \"beta body\" and the note id. This proves that editing and deleting make no provider call. It reads the main-process call log, which cannot change after the fact, so it does not show a session transcript or receipt staying unchanged; that the reference is a copy is proven by the unit contract PT-FF8CD95C75."
+      }
+    },
+    {
+      "id": "PT-F56F3DC1A3",
+      "title": "a note deleted before the dialog opens is left out of the preview",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
+        "line": 179,
+        "project": "functional"
+      },
+      "area": "note Session Handoff",
+      "flow": {
+        "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws)",
+        "when": "the user opens Send to session… for \"Ideas\" and cancels, the first note is deleted through the notes API, and the dialog is opened again from the group menu",
+        "then": "the dialog shows 1 preview note instead of 2, and the provider call counter is 0. Which note remains, and the group's stored membership, are not asserted."
+      }
+    },
+    {
+      "id": "PT-91DB826501",
+      "title": "a destination that disappears is reported, not replaced by a new session",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
+        "line": 194,
+        "project": "functional"
+      },
+      "area": "note Session Handoff",
+      "flow": {
+        "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws)",
+        "when": "the user opens Send to session… for \"Ideas\" with the existing session as destination and types \"Keep this text\"; main then broadcasts ai:sessionDeleted for SESSION-abc123; the user cancels and reopens the dialog",
+        "then": "the destination error is shown, Send is disabled, no provider call is made, and after reopening the instruction box still reads \"Keep this text\". The deletion is simulated by broadcasting the event, not by deleting a session. The \"Unavailable session\" option label, and choosing another destination and sending, are not asserted."
+      }
+    },
+    {
+      "id": "PT-3FA587C66D",
+      "title": "a failed new-session Start keeps the goal and the note chip",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/noteSessionHandoff.spec.ts",
+        "line": 213,
+        "project": "functional"
+      },
+      "area": "note Session Handoff",
+      "flow": {
+        "given": "a project with group \"Ideas\" holding notes \"Second idea\" (beta body) then \"First idea\" (alpha body), an empty group \"Empty\", and one completed session \"Existing work\" (SESSION-abc123) in the same project; the main-process delegate, continueSession and sendConversationMessage handlers are replaced with counters (delegate throws)",
+        "when": "the user sends \"Ideas\" to \"New session…\", fills the New Session goal with \"Plan from these\" and clicks Start, and the mocked delegate call throws",
+        "then": "exactly one provider call (the delegate) is made; the goal box still holds \"Plan from these\" and the New Session context chips still read \"Group: Ideas (2 notes)\". No error message is asserted, and retrying Start is not exercised."
       }
     },
     {

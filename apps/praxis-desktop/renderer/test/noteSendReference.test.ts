@@ -43,3 +43,19 @@ test('only the project\'s live top-level sessions are compatible, newest first',
   ], 'p');
   assert.deepEqual(list.map(x => x.issueKey), ['SESSION-aaaaaa2', 'SESSION-aaaaaa3', 'SESSION-aaaaaa1']);
 });
+
+test('a reference records provenance as a copy, and only the raw message carries it', () => {
+  const notes = [entry('b', 'Second', 'two'), entry('a', 'First', 'one')];
+  const reference = snapshotToReference(snapshot('group', notes));
+  assert.deepEqual(reference.snapshot, {
+    projectId: 'p', source: { kind: 'group', id: 'src', title: 'Src' },
+    notes: [{ id: 'b', title: 'Second', updatedAt: 't' }, { id: 'a', title: 'First', updatedAt: 't' }]
+  });
+  notes[0].title = 'edited';
+  notes.pop();
+  assert.equal(reference.snapshot!.notes.length, 2);
+  assert.equal(reference.snapshot!.notes[0].title, 'Second');
+  const message = withSessionContext('go', [reference]);
+  assert.ok(message.includes('"updatedAt":"t"') && message.includes('"projectId":"p"'));
+  assert.equal(displaySessionContext(message), 'go\n\nContext: Group: Src (2 notes)');
+});

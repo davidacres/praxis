@@ -967,7 +967,8 @@ export function SessionsPage({
       return next;
     });
     if (selected.state !== 'completed') {
-      setFollowUp(current => current || queued.message);
+      setFollowUp(current => current || (queued.draftMessage ?? queued.message));
+      setContextReferences(queued.references ?? []);
       if (queued.images?.length) setFollowUpImages(queued.images);
       return;
     }
@@ -989,7 +990,8 @@ export function SessionsPage({
         await window.praxis.ai.continueSession(selected.issueKey, queued.message, queued.images);
       } catch (error) {
         setSubmittedTurn(undefined);
-        setFollowUp(current => current || queued.message);
+        setFollowUp(current => current || (queued.draftMessage ?? queued.message));
+        setContextReferences(queued.references ?? []);
         if (queued.images?.length) setFollowUpImages(queued.images);
         setFollowUpError(error instanceof Error ? error.message : String(error));
       } finally {

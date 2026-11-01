@@ -27,3 +27,15 @@ test('a handoff only submits itself shortly after the explicit Send', () => {
   assert.equal(isFreshHandoff(staged), true);
   assert.equal(isFreshHandoff(staged, staged.stagedAt! + HANDOFF_AUTO_SEND_MS + 1), false);
 });
+
+test('the saved instruction survives staging and is cleared only when the handoff is taken', () => {
+  const source = { kind: 'note', id: 'n9' } as const;
+  saveDraftInstruction('p', source, 'keep me');
+  stageSessionHandoff('d', { ...(handoff as object), draft: { projectId: 'p', source } } as never);
+  assert.equal(draftInstruction('p', source), 'keep me');
+  takeSessionHandoff('d');
+  assert.equal(draftInstruction('p', source), '');
+  saveDraftInstruction('p', source, 'typed again');
+  assert.equal(takeSessionHandoff('d'), undefined);
+  assert.equal(draftInstruction('p', source), 'typed again');
+});
