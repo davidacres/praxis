@@ -81,6 +81,34 @@ test('the brief forbids the agent advancing the workflow itself', () => {
   const task = buildStageTaskDefinition(context());
   assert.ok(task.nonGoals?.some(goal => /approve, or skip/.test(goal)));
   assert.ok(task.nonGoals?.some(goal => /Do not link, copy or install dependencies from outside/.test(goal)));
+  assert.ok(task.nonGoals?.some(goal => /throwaway files.*system temporary directory.*never commit them/.test(goal)));
+});
+
+test('each kind of stage is told a failure in delivered work is fixed here, and only a later ticket\'s work is deferred', () => {
+  const plan = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'plan-doc', kind: 'plan', required: true }] })).definitionOfDone;
+  const implement = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'change-diff', kind: 'diff', required: true }] })).definitionOfDone;
+  const review = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'review-findings', kind: 'findings', required: true }] })).definitionOfDone;
+  assert.match(plan, /Plan to fix every failing test .* already delivered .* later ticket in the same plan explicitly covers/);
+  assert.match(implement, /run the tests that cover what you changed, including the end-to-end or UI tests/);
+  assert.match(implement, /even when earlier, already-delivered work caused it: no other ticket will/);
+  assert.match(review, /later ticket .* report it as info and name that ticket/);
+  assert.match(review, /already delivered .* not deferred: report it at its real severity/);
+  assert.doesNotMatch(review, /run the tests that cover/, 'a reviewer is not told to run tests');
+  for (const brief of [plan, implement, review]) assert.match(brief, /Stage status: blocked-environment:/);
+});
+
+test('a stage that says its environment stopped it pauses, without using an attempt or sending a loop round', () => {
+  const node = reviewNode({ id: 'implement', name: 'Implement', outputs: [{ id: 'change-diff', kind: 'diff', required: true }], mutatesWorktree: true });
+  const outcome = stageOutcomeFromSession(node, {
+    state: 'completed',
+    responseText: 'I could not run anything.\n\nStage status: blocked-environment: node_modules is missing; run the install stage first.',
+    startRef: 'a', snapshotRef: 'b'
+  });
+  assert.equal(outcome.status, 'failed');
+  assert.equal(outcome.pause, 'environment');
+  assert.match(outcome.error ?? '', /Implement was blocked by its environment: node_modules is missing; run the install stage first\./);
+  const quoted = stageOutcomeFromSession(reviewNode(), { state: 'completed', responseText: 'The brief mentions `Stage status: blocked-environment:` lines.\n\nAll good.' });
+  assert.notEqual(quoted.pause, 'environment', 'only a line of its own counts');
 });
 
 test('a governed stage receives bounded workflow-pack guidance and immutable provenance', () => {

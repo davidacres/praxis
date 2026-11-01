@@ -71,7 +71,9 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       `Produce every required artifact before finishing:\n${outputs}`,
       context.expectedOutputs.some(output => output.kind === 'findings') ? FINDINGS_BLOCK_INSTRUCTIONS : undefined,
       context.expectedOutputs.some(output => output.kind === 'plan' && output.publishTo !== 'board') ? PLAN_STATUS_INSTRUCTIONS : undefined,
-      context.expectedOutputs.some(output => output.publishTo === 'board') ? PUBLISHABLE_PLAN_INSTRUCTIONS : undefined
+      context.expectedOutputs.some(output => output.publishTo === 'board') ? PUBLISHABLE_PLAN_INSTRUCTIONS : undefined,
+      ...stageRoleRules(context),
+      STAGE_STATUS_INSTRUCTIONS
     ]
       .filter((line): line is string => Boolean(line))
       .join('\n\n'),
@@ -87,9 +89,69 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       'Do not modify the workflow definition itself.',
       // An agent short of packages once linked the run's node_modules to the main checkout's, and the
       // install stage's `npm ci` then emptied the main checkout through that link.
-      'Do not link, copy or install dependencies from outside this working directory (such as a symlink to another checkout\'s node_modules). If packages are missing, say so in your report; the workflow\'s install stage provides them.'
+      'Do not link, copy or install dependencies from outside this working directory (such as a symlink to another checkout\'s node_modules). If packages are missing, say so in your report; the workflow\'s install stage provides them.',
+      // TASK-503's implementer wrote a throwaway capture spec into the e2e folder and committed it, so
+      // every later test run would have picked it up.
+      'Put throwaway files (scratch scripts, one-off test specs, captures, logs) in the system temporary directory, not in this working directory, and never commit them.'
     ]
   };
+}
+
+/**
+ * What each kind of stage owns, whatever project it runs in.
+ *
+ * TASK-498 to TASK-502 each merged with UI tests failing that an earlier ticket in the plan had added.
+ * When TASK-503 found them, its planner, implementer and reviewer all treated them as "another
+ * ticket's" and deferred them — to tickets that were already done, so no loop could ever fix them.
+ * Deferring is right only for work a *later* ticket covers; a failure in delivered work belongs to
+ * the run that finds it.
+ */
+function stageRoleRules(context: WorkflowStageContext): string[] {
+  const outputs = context.expectedOutputs;
+  const rules: string[] = [];
+  if (outputs.some(output => output.kind === 'plan')) {
+    rules.push(
+      'Plan to fix every failing test or check the work uncovers, including failures caused by work that is already delivered (an earlier or completed ticket, or the base branch). Leave out only work that a later ticket in the same plan explicitly covers, and name that ticket.'
+    );
+  }
+  if (outputs.some(output => output.kind === 'diff')) {
+    rules.push(
+      [
+        'Before you finish, run the tests that cover what you changed, including the end-to-end or UI tests for any UI you changed, and fix what fails.',
+        'Fix a failing test or check even when earlier, already-delivered work caused it: no other ticket will. Leave it only when a later ticket in the same plan explicitly covers it, and name that ticket.'
+      ].join(' ')
+    );
+  }
+  if (outputs.some(output => output.kind === 'findings')) {
+    rules.push(
+      [
+        'Judge findings against this ticket\'s scope. Work that a later ticket in the same plan explicitly covers is not a defect in this change: report it as info and name that ticket.',
+        'A failure in work that is already delivered (an earlier or completed ticket, or the base branch) is not deferred: report it at its real severity, so this run fixes it.'
+      ].join(' ')
+    );
+  }
+  return rules;
+}
+
+/**
+ * How a stage says its environment stopped it. Without it, an implementer with no dependencies
+ * installed could only write a "blocked" report, Review rejected it, and the loop spent every
+ * iteration on a condition no iteration could change. A stage that says this pauses for a person
+ * instead, without using an attempt or a loop iteration.
+ */
+export const STAGE_STATUS_INSTRUCTIONS = [
+  'If something outside your control stops you doing this stage (a missing tool, service, credential or dependency you may not provide), do not present a report of that as the stage\'s result.',
+  'End your response with this line on its own instead: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
+].join(' ');
+
+const STAGE_BLOCKED_ENVIRONMENT = /^\s*Stage status:\s*blocked-environment\s*:?\s*(.*)$/im;
+
+/** The reason a stage gave for being stopped by its environment, when it gave one. */
+export function readEnvironmentBlock(responseText: string | undefined): string | undefined {
+  const lines = (responseText ?? '').split('\n').filter(line => STAGE_BLOCKED_ENVIRONMENT.test(line));
+  const last = lines[lines.length - 1];
+  if (!last) return undefined;
+  return STAGE_BLOCKED_ENVIRONMENT.exec(last)?.[1]?.trim() || 'no reason given';
 }
 
 /** How a stage delivers a `findings` output: the block `parseReviewFindings` reads. */
@@ -181,6 +243,13 @@ export function stageOutcomeFromSession(
           ? 'The stage session was aborted.'
           : `The stage session failed${detail ? `: ${detail}` : '.'}`
     };
+  }
+
+  // A stage its environment stopped has no verdict yet: pause it for a person rather than fail it
+  // (which would spend an attempt) or let its report through (which would send a loop round).
+  const blocked = readEnvironmentBlock(session.responseText);
+  if (blocked) {
+    return { status: 'failed', pause: 'environment', error: `${node.name} was blocked by its environment: ${blocked}` };
   }
 
   // A diff that is the commit the stage started on is not a change. Recording it as one let an

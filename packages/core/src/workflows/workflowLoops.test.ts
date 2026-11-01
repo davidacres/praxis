@@ -317,6 +317,27 @@ test('a spent budget waits for a decision instead of failing or continuing', () 
   assert.match(stopped.endedReason ?? '', /Stopped by dave after 2 loop iterations .*Not converging/);
 });
 
+test('a revision a person starts gets its loop budget back, grants included', () => {
+  let r = run(start(), 'plan', 'succeeded');
+  for (let lap = 0; lap < 2; lap += 1) {
+    r = run(r, 'implement', 'succeeded', { snapshotRef: `sha-${lap}` });
+    r = run(r, 'review', 'succeeded', { findings: HIGH });
+    r = applyWorkflowRunCommand(r, { kind: 'loop-taken', edgeId: 'e-fix', at: now() });
+  }
+  r = applyWorkflowRunCommand(r, { kind: 'loop-decided', edgeId: 'e-fix', at: now(), actor: 'dave', decision: 'grant', extraIterations: 1 });
+  r = applyWorkflowRunCommand(r, { kind: 'loop-taken', edgeId: 'e-fix', at: now() });
+  r = run(r, 'implement', 'succeeded', { snapshotRef: 'sha-3' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  assert.equal(pendingLoop(r)?.kind, 'decide', 'three iterations spent of a budget of three');
+
+  r = reworkWorkflowRun(r, 'plan', now(), { byPerson: true }).run;
+  r = run(run(r, 'plan', 'succeeded'), 'implement', 'succeeded', { snapshotRef: 'sha-4' });
+  r = run(r, 'review', 'succeeded', { findings: HIGH });
+  assert.equal(pendingLoop(r)?.kind, 'take', 'the new revision loops on its own findings');
+  assert.equal(loopBudget(r, r.definition.edges[3]), 2, 'the earlier revision\'s grant does not carry over');
+  assert.equal(summarizeWorkflowRun(r).loops[0].iterationsTaken, 0);
+});
+
 test('a failure loop edge keeps a failing run open and loops back instead of failing it', () => {
   const definition = loopDefinition({ on: 'failure', when: undefined });
   delete definition.edges[3].when;

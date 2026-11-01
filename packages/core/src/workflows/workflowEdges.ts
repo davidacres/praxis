@@ -221,9 +221,23 @@ export function definitionWaivers(definition: Pick<WorkflowDefinition, 'nodes'>)
   return definition.nodes.flatMap(node => (node.type === 'approval' ? node.waivers ?? [] : []));
 }
 
-/** Times a loop edge has been taken in this run. */
-export function loopIterationsTaken(run: Pick<WorkflowRun, 'loopHistory'>, edgeId: string): number {
-  return (run.loopHistory ?? []).filter(entry => entry.edgeId === edgeId).length;
+/**
+ * When a person last started a new revision of this run, if they have.
+ *
+ * Loop budgets count from there. A revision is a person deciding the earlier attempts are history;
+ * carrying their loop count over left TASK-503's new revision with no iterations at all, so the
+ * first real findings it produced could not go back to Implement.
+ */
+export function currentRevisionStart(run: Partial<Pick<WorkflowRun, 'events'>>): string | undefined {
+  const events = run.events ?? [];
+  for (let i = events.length - 1; i >= 0; i--) if (events[i].kind === 'revision-started') return events[i].at;
+  return undefined;
+}
+
+/** Times a loop edge has been taken in this run's current revision. */
+export function loopIterationsTaken(run: Pick<WorkflowRun, 'loopHistory'> & Partial<Pick<WorkflowRun, 'events'>>, edgeId: string): number {
+  const since = currentRevisionStart(run);
+  return (run.loopHistory ?? []).filter(entry => entry.edgeId === edgeId && (!since || entry.at > since)).length;
 }
 
 /**
@@ -231,7 +245,8 @@ export function loopIterationsTaken(run: Pick<WorkflowRun, 'loopHistory'>, edgeI
  * integer run parameter bound to it, plus every iteration a person granted —
  * never more than `WORKFLOW_MAX_LOOP_ITERATIONS`.
  */
-export function loopBudget(run: Pick<WorkflowRun, 'definition' | 'parameters' | 'loopDecisions'>, edge: WorkflowEdge): number {
+export function loopBudget(run: Pick<WorkflowRun, 'definition' | 'parameters' | 'loopDecisions'> & Partial<Pick<WorkflowRun, 'events'>>, edge: WorkflowEdge): number {
+  const since = currentRevisionStart(run);
   const bound = (run.definition.parameters ?? []).find(parameter => parameter.bindsLoopEdge === edge.id);
   const fromParameter = bound ? run.parameters?.[bound.id] : undefined;
   const base =
@@ -239,13 +254,13 @@ export function loopBudget(run: Pick<WorkflowRun, 'definition' | 'parameters' | 
       ? fromParameter
       : edge.loop?.maxIterations ?? 0;
   const granted = (run.loopDecisions ?? [])
-    .filter(decision => decision.edgeId === edge.id && decision.decision === 'grant')
+    .filter(decision => decision.edgeId === edge.id && decision.decision === 'grant' && (!since || decision.at > since))
     .reduce((sum, decision) => sum + Math.max(0, decision.extraIterations ?? 0), 0);
   return Math.min(WORKFLOW_MAX_LOOP_ITERATIONS, base + granted);
 }
 
 /** Every loop edge's status, in definition order. */
-export function loopStatuses(run: Pick<WorkflowRun, 'definition' | 'nodes' | 'parameters' | 'loopDecisions' | 'loopHistory'>): LoopStatus[] {
+export function loopStatuses(run: Pick<WorkflowRun, 'definition' | 'nodes' | 'parameters' | 'loopDecisions' | 'loopHistory'> & Partial<Pick<WorkflowRun, 'events'>>): LoopStatus[] {
   const waivers = definitionWaivers(run.definition);
   return loopEdges(run.definition).map(edge => {
     const recorded = run.nodes[edge.from];
