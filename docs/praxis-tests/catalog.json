@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 766,
+  "testCount": 767,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -11323,7 +11323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts",
-        "line": 111,
+        "line": 118,
         "project": "functional"
       },
       "area": "workflow Install Deps",
@@ -11339,13 +11339,29 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts",
-        "line": 124,
+        "line": 131,
         "project": "functional"
       },
       "area": "workflow Install Deps",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "an install stage gives the worktree its own dependencies, QA passes, and the main checkout is left untouched",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-6DB6505AF1",
+      "title": "an agent stage ahead of the install stage starts with the dependencies already installed",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts",
+        "line": 150,
+        "project": "functional"
+      },
+      "area": "workflow Install Deps",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an agent stage ahead of the install stage starts with the dependencies already installed",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },

@@ -56,9 +56,9 @@ function createRepository(): string {
   return repo;
 }
 
-async function seed(page: Page, repo: string, withInstall: boolean): Promise<{ projectId: string; workflowId: string }> {
+async function seed(page: Page, repo: string, withInstall: boolean, withPlan = false): Promise<{ projectId: string; workflowId: string }> {
   return page.evaluate(
-    async ({ repoPath, install }) => {
+    async ({ repoPath, install, plan }) => {
       const workspace = (await window.praxis.workspaces.list())[0];
       const project = await window.praxis.projects.create(
         {
@@ -70,6 +70,7 @@ async function seed(page: Page, repo: string, withInstall: boolean): Promise<{ p
         },
         workspace.id
       );
+      if (plan) await window.praxis.agentRuntime.refresh();
       const now = new Date().toISOString();
       const workflowId = `deps-${project.id}`;
       // The install stage is the one the Governed delivery template uses (same command, same registry flag).
@@ -84,17 +85,23 @@ async function seed(page: Page, repo: string, withInstall: boolean): Promise<{ p
       };
       await window.praxis.workflows.save(project.id, {
         schemaVersion: 1, id: workflowId, name: install ? 'With install' : 'Without install', scope: 'project', projectId: project.id, version: 1,
-        entryNodeId: install ? 'install' : 'qa', createdAt: now, updatedAt: now,
+        entryNodeId: plan ? 'plan' : install ? 'install' : 'qa', createdAt: now, updatedAt: now,
         nodes: [
+          // A read-only agent stage ahead of the install, as Plan and Implement are in Governed delivery.
+          ...(plan ? [{
+            type: 'agent-task', id: 'plan', name: 'Plan', x: -200, y: 0, inputs: [],
+            agent: { agentId: 'praxis-reviewer', profileId: 'praxis-reviewer', hostId: 'praxis-reviewer', scope: 'global', toolMode: 'read-only' },
+            instructions: 'Plan the validation.', outputs: [{ id: 'plan', kind: 'plan', required: true }], mutatesWorktree: false
+          }] : []),
           ...(install ? [installNode] : []),
           qaNode,
           { type: 'approval', id: 'approve', name: 'Approve', x: 400, y: 0, inputs: ['qa-log'], prompt: 'Ship?', requiredGates: ['qa'], allowBypass: false }
         ],
-        edges: [...(install ? [{ id: 'e1', from: 'install', to: 'qa', on: 'success', required: true }] : []), { id: 'e2', from: 'qa', to: 'approve', on: 'success', required: true }]
+        edges: [...(plan ? [{ id: 'e0', from: 'plan', to: 'install', on: 'success', required: true }] : []), ...(install ? [{ id: 'e1', from: 'install', to: 'qa', on: 'success', required: true }] : []), { id: 'e2', from: 'qa', to: 'approve', on: 'success', required: true }]
       } as never);
       return { projectId: project.id, workflowId };
     },
-    { repoPath: repo, install: withInstall }
+    { repoPath: repo, install: withInstall, plan: withPlan }
   );
 }
 
@@ -137,5 +144,30 @@ test('an install stage gives the worktree its own dependencies, QA passes, and t
   expect(worktree).toBeTruthy();
   expect(fs.existsSync(path.join(worktree, 'node_modules', 'praxis-fixture-dep'))).toBe(true);
   expect(fs.lstatSync(path.join(worktree, 'node_modules')).isSymbolicLink()).toBe(false);
+  expect(fs.existsSync(path.join(repo, 'node_modules'))).toBe(false);
+});
+
+test('an agent stage ahead of the install stage starts with the dependencies already installed', async () => {
+  // TASK-503: a validation ticket's Implement ran before Install, found no node_modules, and could
+  // only report itself blocked — four times. The run now installs before the first stage works.
+  const repo = createRepository();
+  const log = path.join(path.dirname(repo), 'probe.log');
+  app = await launchTestApp({
+    ai: {
+      activeProvider: 'copilot-cli', workingDirectory: repo,
+      providers: {
+        'copilot-cli': { cliPath: path.join(__dirname, 'fixtures', 'dependencyProbeAcpAgent.mjs') },
+        'codex-cli': { enabled: false }, 'claude-code-cli': { enabled: false },
+        'antigravity-cli': { enabled: false }, 'cursor-cli': { enabled: false }
+      }
+    }
+  }, undefined, { DEPENDENCY_PROBE_LOG: log }, { openNewSession: false });
+  const page = app.window;
+  const { projectId, workflowId } = await seed(page, repo, true, true);
+
+  const run = await page.evaluate(async ids => window.praxis.workflows.startRun(ids.projectId, ids.workflowId, 'Validate', undefined, undefined, undefined, { uncommittedChanges: 'omit', permissionMode: 'auto' }), { projectId, workflowId });
+  await expect.poll(async () => (await stage(page, run.runId, 'qa')).status, { timeout: 90000 }).toBe('awaiting-approval');
+  expect((await stage(page, run.runId, 'plan')).outcome).toBe('succeeded');
+  expect(fs.readFileSync(log, 'utf8').trim()).toBe('installed');
   expect(fs.existsSync(path.join(repo, 'node_modules'))).toBe(false);
 });

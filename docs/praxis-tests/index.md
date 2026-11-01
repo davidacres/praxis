@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **766 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **767 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -711,8 +711,9 @@ This catalogue describes **766 Playwright tests** under `apps/praxis-desktop/mai
 | PT-F895248CB0 | workflow Designer | walks the workflow designer, rings each area, and directs the user through all steps | `apps/praxis-desktop/main/e2e/workflowDesigner.spec.ts:926` |
 | PT-2CA87FB459 | workflow Environment Pause | a registry that cannot audit pauses the run instead of failing it; siblings finish and Resume completes it | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:126` |
 | PT-4B8D3275C8 | workflow Environment Pause | a genuine audit finding still fails the run, and the sibling it left running is stopped and recorded | `apps/praxis-desktop/main/e2e/workflowEnvironmentPause.spec.ts:173` |
-| PT-F5764CCA2F | workflow Install Deps | without an install stage a fresh run worktree cannot load the dependency, so QA fails — however good the change is | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:111` |
-| PT-C525D5E06F | workflow Install Deps | an install stage gives the worktree its own dependencies, QA passes, and the main checkout is left untouched | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:124` |
+| PT-F5764CCA2F | workflow Install Deps | without an install stage a fresh run worktree cannot load the dependency, so QA fails — however good the change is | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:118` |
+| PT-C525D5E06F | workflow Install Deps | an install stage gives the worktree its own dependencies, QA passes, and the main checkout is left untouched | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:131` |
+| PT-6DB6505AF1 | workflow Install Deps | an agent stage ahead of the install stage starts with the dependencies already installed | `apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts:150` |
 | PT-311E757F0F | workflow Loops | a loop edge is drawn distinctly, edited in the inspector, and survives save and reload | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:98` |
 | PT-99CC50B3E7 | workflow Loops | a back-edge is a cycle unless it carries a loop budget | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:144` |
 | PT-B198D5BAF8 | workflow Loops | a review that keeps finding a high bug loops back, then waits for a decision that is recorded | `apps/praxis-desktop/main/e2e/workflowLoops.spec.ts:169` |

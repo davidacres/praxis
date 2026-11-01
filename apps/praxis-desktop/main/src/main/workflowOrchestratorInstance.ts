@@ -27,6 +27,8 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
+import { spawnCheck } from './workflowCheckProcess';
+import { ensureRunDependencies } from './runDependencies';
 import { runWorkflowMerge, type MergeConflictResolver } from './workflowMergeRunner';
 import { changedPaths, commitPraxisWrite } from './ticketWriteBackCommit';
 import { repositoryRoot } from './runWork';
@@ -245,6 +247,16 @@ const dispatcher: StageDispatcher = {
   async runAgentStage(node, context, onSession) {
     const error = await runTrustError(context.run);
     if (error) return { status: 'failed' as const, error };
+    if (context.worktreePath) {
+      const installError = await ensureRunDependencies(context.run.definition, context.worktreePath, {
+        spawn: spawnCheck,
+        report: message => {
+          context.reportProgress?.(message);
+          workflowLogSink.appendLine(`[workflow ${context.run.runId}] ${node.name}: ${message}`);
+        }
+      }, context.signal);
+      if (installError) return { status: 'failed' as const, error: installError };
+    }
     return runWorkflowAgentStage(node, context, onSession);
   },
   async cancelStage(nodeId, context) {
