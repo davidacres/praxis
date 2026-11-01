@@ -1,10 +1,40 @@
 # TASK-503 validation report — PRX-T113-503 / FX-BF-113
 
-Status: **UI gate not green.** Every planned check ran. Geometry and visual contract hold across the
+Status: **UI gate not green.** The prior pass records the planned automated checks below; manual
+launcher and baseline-main checks remain unrun. Geometry and visual contract hold across the
 full matrix; nine functional e2e tests fail deterministically, of which **one is a product defect**
 (keyboard focus into the note title), the rest are stale or over-broad specs and one environment test.
 Date: 2026-11-01. Product revision tested: `336ec028` (no product change since).
 This task is validation only: no product code, spec, snapshot, setting or workflow was changed.
+
+## Iteration 2 recovery review disposition
+
+Recovery input revision: `8bbd5835`. The working tree was clean. The supplied findings describe an
+earlier snapshot: that revision already deletes `zzTask503Capture.spec.ts` and supersedes the partial
+report. This recovery changes documentation only; historical suite results below are retained evidence,
+not fresh runs in this recovery.
+
+1. **Committed throwaway spec:** addressed by its deletion in `8bbd5835`. Fresh functional discovery
+   exits 0: **729 tests in 157 files**, with no `zzTask503Capture` entry. No replacement capture script
+   is committed or added under the discovery path.
+2. **Import-time writes:** addressed by removing the entire offending module, including its top-level
+   `mkdirSync` and repository JSON output code. No lazy-output replacement is needed for deleted code.
+3. **Null sleeve measurement:** the unsafe helper is deleted with that module. No repaired helper is
+   shipped. The prior pass's completed matrix and retained captures are listed below; they were not
+   regenerated in this recovery.
+4. **Inaccurate scope report:** corrected in the input revision and clarified here. Relative to
+   `a81aab04`, the capture spec is deleted; relative to `336ec028`, only the two Markdown artifacts
+   differ. This recovery itself modifies those two artifacts only.
+5. **Acceptance incomplete:** remains unresolved; this is a **failed UI gate**, not approval to advance.
+   TASK-501 owns the editor focus defect; TASK-502 owns the selector/reload and stale geometry/tab-order
+   coverage fixes described below. These are dependency owners, not a claim that a later ticket is
+   scheduled or that the failures are waived. The supplied validation-only plan explicitly prohibits
+   product/spec fixes here. Validation must run again after those repairs. No tracker transitions or
+   comments were sent.
+
+Fresh recovery checks: `npm run test:praxis-contracts` exits 0 (**766 tests catalogued and linked**);
+`npx playwright test --project=functional --list` exits 0 as above. No UI was changed, no snapshots
+were updated, and no full suites or manual journeys were repeated during this documentation recovery.
 
 ## Concurrency note (read first)
 

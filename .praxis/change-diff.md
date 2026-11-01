@@ -1,5 +1,17 @@
 # change-diff — PRX-T113-503
 
+## Iteration 2 recovery delta
+
+Recovery base: `8bbd5835`. Only this artifact and the tracked validation report change in this
+recovery commit. The input revision already removed the reviewed throwaway spec. Functional discovery
+now confirms 729 tests in 157 files and excludes `zzTask503Capture`; the contracts check passes with
+766 catalogued tests. The report maps all five findings to their disposition and distinguishes retained
+prior execution evidence from these fresh checks. No product/spec changes, snapshot updates or fresh
+visual verification occurred. The UI gate remains failed pending the TASK-501/502 repairs named in
+the report; no workflow stage is advanced.
+
+## Prior validation change
+
 Base: `336ec028` (product revision under test). History since then: `01b22d6b` (a concurrent session's
 partial report) and `a81aab04` (workflow auto-commit that swept in a throwaway capture spec).
 
