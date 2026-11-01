@@ -46,3 +46,10 @@ is still absent. No validation was run and none is claimed. The task's non-goals
 packages are provided by the workflow's install stage, so I did not install, link or
 copy them. TASK-503 stays open: re-run this stage once the install stage has populated
 this worktree, then follow the plan from step 2.
+
+## Iteration 4 re-check (2026-11-01)
+`node_modules` and `packages/core/dist` are still absent. Nothing has changed since
+the earlier iterations, so no validation could run. The brief forbids linking or
+copying dependencies from another checkout and leaves installing them to the
+workflow's install stage. TASK-503 stays open. Re-run it after `npm ci` has run, then
+follow the plan from step 2.
