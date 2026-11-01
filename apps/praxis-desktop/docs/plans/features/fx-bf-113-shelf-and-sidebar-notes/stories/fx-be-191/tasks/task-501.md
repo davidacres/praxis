@@ -26,3 +26,20 @@ TASK-500
 
 
 ## Comments
+
+
+**PRX-T113-501** — 2026-11-01T11:53:00.767Z
+**Workflow run failed: Governed delivery — TASK-501: Handle send failures and note snapshot history**
+
+Status: Failed · Duration: 30m 10s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
