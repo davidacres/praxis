@@ -91,3 +91,17 @@ Status: Failed · Duration: 1m 30s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+
+**PRX-T113-501** — 2026-11-01T15:11:04.411Z
+**Workflow run succeeded: Governed delivery — TASK-501: Handle send failures and note snapshot history**
+
+Status: Succeeded · Duration: 23m 24s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ✅ QA: succeeded
+- ✅ Security scan: succeeded
