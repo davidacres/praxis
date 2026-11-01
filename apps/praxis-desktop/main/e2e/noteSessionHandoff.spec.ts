@@ -224,3 +224,29 @@ test('a failed new-session Start keeps the goal and the note chip', async () => 
   await expect(page.locator('.composer-input')).toHaveValue('Plan from these');
   await expect(page.getByTestId('new-session-context-references')).toContainText('Group: Ideas (2 notes)');
 });
+
+test('a single note sends once to an existing session as a one-note reference; cancelling sends nothing', async () => {
+  test.slow();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  const { noteId } = await seed(page, app.electronApp);
+  // The group starts collapsed, so open it to reach its notes.
+  await page.getByRole('button', { name: /^Ideas/ }).click();
+  await openFromMenu(page, 'Actions for note Second idea');
+  await expect(page.getByTestId('note-send-preview-note')).toHaveCount(1);
+  await page.getByTestId('note-send-cancel').click();
+  await expect(page.getByTestId('note-send-dialog')).toHaveCount(0);
+  expect(await providerCalls(app.electronApp)).toBe(0);
+
+  await openFromMenu(page, 'Actions for note Second idea');
+  await page.getByTestId('note-send-instruction').fill('Expand on this');
+  await expect(page.getByTestId('note-send-confirm')).toHaveText('Send');
+  await page.getByTestId('note-send-confirm').click();
+  await expect.poll(() => providerCalls(app!.electronApp)).toBe(1);
+  const [sent] = await recorded(app.electronApp);
+  expect(sent.key).toBe('SESSION-abc123');
+  expect(sent.message).toContain('beta body');
+  expect(sent.message).not.toContain('alpha body');
+  expect(sent.message).toContain(noteId);
+  expect(sent.message).toContain('Expand on this');
+});

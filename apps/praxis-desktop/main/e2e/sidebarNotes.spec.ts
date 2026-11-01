@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { chooseOption } from './chipSelect';
@@ -103,4 +105,69 @@ test('deleting an open note asks first, resets the editor and removes it from gr
   await menu(page, 'Actions for group Temp', 'Delete group');
   await page.getByRole('button', { name: 'Delete group' }).last().click();
   await expect(section.getByRole('button', { name: /Temp/ })).toHaveCount(0);
+});
+
+test('an edit made in the shelf shows under every group in the sidebar, once per membership', async () => {
+  test.slow();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  await createProject(page);
+  await page.reload();
+  const section = page.getByTestId('notes-section');
+  await addNote(page, 'Linked', 'original body');
+  await section.getByRole('button', { name: 'Close editor' }).click();
+  await menu(page, 'Actions for note Linked', 'Add to new group…');
+  await page.getByLabel('Group name').fill('Left');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await menu(page, 'Actions for note Linked', 'Add to new group…');
+  await page.getByLabel('Group name').fill('Right');
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(section.locator('[data-testid^="notes-row-"]').filter({ hasText: 'Linked' })).toHaveCount(2);
+
+  // Open it in the shared editor, then edit it from the shelf's view of that same editor.
+  await section.getByRole('button', { name: 'Linked', exact: true }).first().click();
+  await expect(section.getByTestId('note-body')).toHaveValue('original body');
+  await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.getByTestId('session-shelf-notes').click();
+  const card = page.getByTestId('session-shelf-notes-card');
+  await expect(card).toBeVisible();
+  await card.getByTestId('note-title').fill('Linked, edited');
+  await card.getByTestId('note-body').fill('edited from the shelf');
+  await expect(card.getByTestId('note-save-state')).toHaveText('Saved');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
+
+  // Groups restore their own expanded state; open any that are collapsed so every membership shows.
+  for (const name of [/^Left/, /^Right/]) {
+    const header = section.getByRole('button', { name });
+    if (await header.getAttribute('aria-expanded') === 'false') await header.click();
+  }
+  const rows = section.locator('[data-testid^="notes-row-"]').filter({ hasText: 'Linked, edited' });
+  await expect(rows).toHaveCount(2);
+  await section.getByRole('button', { name: 'Linked, edited', exact: true }).first().click();
+  await expect(section.getByTestId('note-body')).toHaveValue('edited from the shelf');
+});
+
+test('the sidebar editor reports a failed save, keeps the text and recovers on Retry', async () => {
+  test.slow();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+  await createProject(page);
+  await page.reload();
+  const section = page.getByTestId('notes-section');
+  await addNote(page, 'Fragile', 'first line');
+  const file = path.join(app.userDataDir, 'notes.json');
+  const saved = fs.readFileSync(file, 'utf8');
+  fs.rmSync(file);
+  fs.mkdirSync(path.join(file, 'blocker'), { recursive: true });
+  await section.getByTestId('note-body').fill('first line, then more');
+  await expect(section.getByTestId('note-save-error')).toBeVisible();
+  await expect(section.getByTestId('note-save-state')).toHaveCount(0);
+  await expect(section.getByTestId('note-body')).toHaveValue('first line, then more');
+  fs.rmSync(file, { recursive: true, force: true });
+  fs.writeFileSync(file, saved);
+  await section.getByRole('button', { name: 'Retry' }).click();
+  await expect(section.getByTestId('note-save-state')).toHaveText('Saved');
+  expect(fs.readFileSync(file, 'utf8')).toContain('first line, then more');
 });
