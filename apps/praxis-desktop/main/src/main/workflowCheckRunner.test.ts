@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { StageDispatchContext, WorkflowCheckNode, WorkflowRun } from '@praxis/core';
@@ -91,6 +91,28 @@ test('a successful check retains its output as a readable evidence bundle', asyn
     assert.deepEqual(bundle?.source, { kind: 'unknown' }); // cwd is not a git repository
     const content = await readFile(outcome.artifacts![0].path!, 'utf8');
     assert.match(content, /build ok/);
+  });
+});
+
+test("a node_modules link out of the run's worktree is removed before the check runs, leaving its target alone", async () => {
+  await withTempDirs(async (cwd, evidenceRoot) => {
+    const elsewhere = await mkdtemp(join(tmpdir(), 'praxis-check-main-'));
+    try {
+      await mkdir(join(elsewhere, 'node_modules'));
+      await writeFile(join(elsewhere, 'node_modules', 'kept.txt'), 'main checkout');
+      await symlink(join(elsewhere, 'node_modules'), join(cwd, 'node_modules'));
+      const node = check("console.log(require('fs').existsSync('node_modules') ? 'still linked' : 'unlinked')");
+      const progress: string[] = [];
+      const context = { ...runContext(node, cwd), reportProgress: (line: string) => progress.push(line) };
+      const outcome = await runWorkflowCheck(node, context, undefined, evidenceRoot);
+
+      assert.equal(outcome.status, 'succeeded');
+      assert.match(await readFile(outcome.artifacts![0].path!, 'utf8'), /unlinked/);
+      assert.ok(progress.some(line => /Removed node_modules, a link to .* outside this run's worktree/.test(line)), progress.join('\n'));
+      assert.equal(await readFile(join(elsewhere, 'node_modules', 'kept.txt'), 'utf8'), 'main checkout');
+    } finally {
+      await rm(elsewhere, { recursive: true, force: true });
+    }
   });
 });
 

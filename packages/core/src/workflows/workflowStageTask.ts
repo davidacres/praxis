@@ -84,7 +84,10 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
     ...(context.ticketContext ? { ticketContext: context.ticketContext } : {}),
     nonGoals: [
       'Do not advance, approve, or skip any other stage of this workflow.',
-      'Do not modify the workflow definition itself.'
+      'Do not modify the workflow definition itself.',
+      // An agent short of packages once linked the run's node_modules to the main checkout's, and the
+      // install stage's `npm ci` then emptied the main checkout through that link.
+      'Do not link, copy or install dependencies from outside this working directory (such as a symlink to another checkout\'s node_modules). If packages are missing, say so in your report; the workflow\'s install stage provides them.'
     ]
   };
 }

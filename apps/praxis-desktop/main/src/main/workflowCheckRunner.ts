@@ -1,5 +1,6 @@
 import { spawnCheck } from './workflowCheckProcess';
 import { formatTestRunSummary, summarizeTestRun } from './testRunnerSummary';
+import { removeEscapingDependencyLinks } from './worktreeDependencyLinks';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -68,6 +69,14 @@ export async function runWorkflowCheck(
     context.reportProgress?.(baseCommit
       ? `Checking only what changed since ${baseCommit.slice(0, 12)}, where this run branched.`
       : 'Could not tell where this run branched, so checking everything.');
+  }
+  // A check such as `npm ci` follows a node_modules link out of the worktree and empties what it
+  // points at, so a link a stage agent made to the main checkout is removed before anything runs.
+  if (context.worktreePath) {
+    const removed = await removeEscapingDependencyLinks(context.worktreePath).catch(() => []);
+    for (const { link, target } of removed) {
+      context.reportProgress?.(`Removed ${link}, a link to ${target} outside this run's worktree, so this check cannot change files there.`);
+    }
   }
   const result = await spawnCheck(command, cwd, context.signal, line => {
     const progress = checkProgressLine(line);

@@ -80,6 +80,7 @@ test('a stage with no inputs says so rather than leaving the list blank', () => 
 test('the brief forbids the agent advancing the workflow itself', () => {
   const task = buildStageTaskDefinition(context());
   assert.ok(task.nonGoals?.some(goal => /approve, or skip/.test(goal)));
+  assert.ok(task.nonGoals?.some(goal => /Do not link, copy or install dependencies from outside/.test(goal)));
 });
 
 test('a governed stage receives bounded workflow-pack guidance and immutable provenance', () => {
