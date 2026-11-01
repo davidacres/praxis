@@ -37,6 +37,8 @@ import { SessionGitBranchControl } from './SessionGitBranchControl';
 import { SessionCodeIntelControl } from './SessionCodeIntelControl';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
+import { NEW_SESSION_HANDOFF, peekSessionHandoff, takeSessionHandoff } from '../notes/noteSendStore';
+import { withSessionContext, type SessionContextReference } from './sessionContext';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 
 /** An explicit Settings model wins even when model curation hides it from the catalog. */
@@ -162,6 +164,12 @@ export function NewSession({
 }: NewSessionProps) {
   const { settings: liveSettings } = useSettings();
   const [goal, setGoal] = useState(initialGoal ?? '');
+  // Notes handed over from the Notes dialog ride along as removable chips; Start is the explicit send.
+  const [references, setReferences] = useState<SessionContextReference[]>(() => {
+    const handoff = peekSessionHandoff(NEW_SESSION_HANDOFF);
+    return handoff ? [handoff.reference] : [];
+  });
+  useEffect(() => { takeSessionHandoff(NEW_SESSION_HANDOFF); }, []);
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const [openTickets, setOpenTickets] = useState<IssueSummary[]>([]);
   const [selectedIssueKey, setSelectedIssueKey] = useState('');
@@ -566,7 +574,7 @@ export function NewSession({
         ...(selectedBoard ? { board: selectedBoard } : {}),
         ...(selectedIssueKey ? { issueKey: selectedIssueKey } : {}),
         title,
-        goal: trimmed,
+        goal: withSessionContext(trimmed, references),
         provider: selectedProvider,
         model: selectedModel,
         ...(supportsReasoningEffort(selectedProvider, selectedModel) ? { reasoningEffort } : {}),
@@ -590,6 +598,7 @@ export function NewSession({
         ...(uncommittedChanges ? { uncommittedChanges } : {})
       });
       setGoal('');
+      setReferences([]);
     } catch (err) {
       if (err instanceof UncommittedBaseError) {
         setUncommittedFiles(err);
@@ -910,6 +919,13 @@ export function NewSession({
               </button>
             </div>
           </SessionComposerHeader>
+          {references.length > 0 && <div className="session-context-references" data-testid="new-session-context-references">
+            {references.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}>
+              <Icon name={reference.kind === 'note' ? 'note' : 'folder'} size={13} /><span>{reference.label}</span>
+              <button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={submitting}
+                onClick={() => setReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button>
+            </span>)}
+          </div>}
           <SessionComposerInput
             ref={composerInputRef}
             placeholder={conversational ? 'Ask anything, brainstorm, or get something done…' : "What's the goal?"}

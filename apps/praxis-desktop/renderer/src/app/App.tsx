@@ -34,6 +34,7 @@ import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
 import { TaskDesignerItemDetail } from '../taskDesigner/TaskDesignerItemDetail';
 import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
 import { SessionShelf } from './SessionShelf';
+import { NoteSendDialog } from '../notes/NoteSendDialog';
 import { EasyModeSidebar } from '../components/sidebar/EasyModeSidebar';
 import { AgentDetailsPage } from '../components/agent-details/AgentDetailsPage';
 import { BottomPanel } from './BottomPanel';
@@ -2649,6 +2650,13 @@ export function App() {
         />
       ) : (
       <div className="shell">
+        <NoteSendDialog sessions={agentSessions}
+          onOpenSession={issueKey => {
+            const session = agentSessions.find(candidate => candidate.issueKey === issueKey);
+            navigate({ feature: 'sessions', sessionKey: issueKey, view: 'agent-details', subagentId: issueKey,
+              ...(session?.projectId ? { projectId: session.projectId } : {}) });
+          }}
+          onNewSession={(projectId, goal) => navigate({ newSession: true, projectId, newSessionGoal: goal })} />
         {!sidebarVisible && <SessionShelf sessions={easyModeSessions} activeSessionKey={route.sessionKey}
           onSelectSession={key => {
             const session = agentSessions.find(candidate => candidate.issueKey === key);

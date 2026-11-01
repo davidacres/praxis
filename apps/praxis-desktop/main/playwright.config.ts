@@ -23,7 +23,7 @@ const SMOKE_SPECS = [
   'savedWorkspaces', 'workspaceFile', 'importProjects',
   // AI sessions and providers
   'aiSessionMode', 'aiMcpServers', 'aiSessionTasks', 'aiSpendLimit', 'aiWorktree', 'cancelTurn',
-  'sessionRecovery', 'standaloneConversations', 'quickSession', 'aiProviderTabs', 'aiWorkflows',
+  'sessionRecovery', 'noteSessionHandoff', 'standaloneConversations', 'quickSession', 'aiProviderTabs', 'aiWorkflows',
   // Workflow runs and scheduled runs
   'workflowLoops', 'workflowAgentStage', 'workflowBuildStage', 'workflowInstallDeps', 'workflowRetryFailed',
   'workflowPolicy', 'workflowReviewDiff', 'workflowTemplateAddon', 'scheduledProviderHandover', 'securityReviewRun',

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { ProjectRecord } from '@praxis/core';
 import { ChipSelect } from '../ui/ChipSelect';
 import { flush, notesSession, useNotesSession } from './notesSession';
+import { requestNoteSend } from './noteSendStore';
 import { useProjectNotes } from './useProjectNotes';
 
 const RECENT_LIMIT = 5;
@@ -32,6 +33,8 @@ export function NoteEditor({ projectId, projects, showRecent = true }: { project
         ? <p role="alert" data-testid="note-save-error">Couldn't save — your text is kept.
           <button type="button" onClick={() => { void flush(); }}>Retry</button></p>
         : <p role="status" data-testid="note-save-state">{status}</p>}
+      {draft.noteId && effectiveProject && <button type="button" data-testid="note-send-open"
+        onClick={() => requestNoteSend({ projectId: effectiveProject, source: { kind: 'note', id: draft.noteId! }, title: draft.title })}>Send to session…</button>}
       <button type="button" onClick={() => { void notesSession.startNew(projectId); }}>New note</button>
     </div>
     {showRecent && recent.length > 0 && <ul className="note-editor__recent" aria-label="Recent notes">

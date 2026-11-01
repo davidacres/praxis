@@ -23741,3 +23741,17 @@ button.feedback-score-pill {
 :root[data-session-chat-background] .sessions-layout.plain-surface .session-chat-scroll {
   background-color: transparent;
 }
+
+/* Send note / group to session (TASK-500) */
+.note-send-dialog { width: min(calc(520px * var(--ui-scale, 1)), 92vw); }
+.note-send-dialog__body { display: flex; flex-direction: column; gap: 12px; }
+.note-send-dialog__field { display: flex; flex-direction: column; gap: 4px; }
+.note-send-dialog__label { font-size: 11px; color: var(--text-secondary); }
+.note-send-dialog__preview { max-height: calc(240px * var(--ui-scale, 1)); overflow: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated, var(--bg)); }
+.note-send-dialog__status { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.note-send-dialog__status[role="alert"] { color: var(--danger); }
+.note-send-dialog__source { margin: 0 0 6px; font-weight: 600; color: var(--text); }
+.note-send-dialog__source span { font-weight: 400; color: var(--text-secondary); }
+.note-send-dialog__notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--text); }
+.note-send-dialog__notes pre { margin: 2px 0 0; white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 12px; color: var(--text-secondary); }
+.note-send-dialog__instruction { resize: vertical; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
