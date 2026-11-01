@@ -10,7 +10,7 @@ const RECENT_LIMIT = 5;
  * Title, body and save state for one note. All state lives in `notesSession`, so
  * the shelf and (TASK-499) the sidebar edit the same draft. Writing never invokes AI.
  */
-export function NoteEditor({ projectId, projects }: { projectId?: string; projects: ProjectRecord[] }) {
+export function NoteEditor({ projectId, projects, showRecent = true }: { projectId?: string; projects: ProjectRecord[]; showRecent?: boolean }) {
   const { draft, dirty, save } = useNotesSession();
   const effectiveProject = draft.projectId ?? projectId;
   const notes = useProjectNotes(effectiveProject);
@@ -34,7 +34,7 @@ export function NoteEditor({ projectId, projects }: { projectId?: string; projec
         : <p role="status" data-testid="note-save-state">{status}</p>}
       <button type="button" onClick={() => { void notesSession.startNew(projectId); }}>New note</button>
     </div>
-    {recent.length > 0 && <ul className="note-editor__recent" aria-label="Recent notes">
+    {showRecent && recent.length > 0 && <ul className="note-editor__recent" aria-label="Recent notes">
       {recent.map(note => <li key={note.id}>
         <button type="button" aria-current={draft.noteId === note.id ? 'true' : undefined}
           onClick={() => { void notesSession.open(note); }}>{note.title}</button>

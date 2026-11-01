@@ -21109,6 +21109,27 @@ button.session-chat-attachment {
   max-height: 45%;
   min-height: 72px;
 }
+/* Notes sit between Sessions and Runs; they scroll on their own so they never push Runs out of view. */
+.easymode-section--notes { flex: 0 1 auto; max-height: 40%; min-height: 72px; }
+.easymode-section--notes > .easymode-section__body { min-height: 0; overflow-y: auto; }
+.notes-tree, .notes-tree__members { margin: 0; padding: 0; list-style: none; }
+.notes-row { display: flex; align-items: center; gap: 2px; min-height: var(--tool-btn-size); color: var(--text-secondary); font-size: 12px; }
+.notes-row--l1 { padding-left: var(--tree-indent-1); }
+.notes-row--l2 { padding-left: var(--tree-indent-2); }
+.notes-row:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.notes-row__main { display: flex; flex: 1 1 auto; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.notes-row__main[aria-current] { color: var(--text); font-weight: 600; }
+.notes-row__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-row__count { color: var(--text-muted, var(--text-secondary)); font-size: 11px; }
+.notes-row__menu { flex: 0 0 auto; min-width: 0; }
+.notes-row--missing { font-style: italic; }
+.notes-row__remove, .notes-section__close, .notes-section__new-group { padding: 0 var(--space-2); border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.notes-row__remove:hover, .notes-section__close:hover, .notes-section__new-group:hover { color: var(--accent); }
+.notes-section__new-group { display: flex; align-items: center; gap: 6px; padding-left: var(--tree-indent-1); }
+.notes-section__empty { margin: 0; padding: 2px var(--space-3) 2px var(--tree-indent-1); color: var(--text-secondary); font-size: 12px; }
+.notes-section__error { margin: 0; padding: 2px var(--space-3); color: var(--danger); font-size: 12px; }
+.notes-section__editor { display: flex; flex-direction: column; gap: 4px; padding: 6px var(--space-3) 0; border-top: 1px solid var(--border-subtle); }
+.notes-section__close { align-self: flex-end; }
 .easymode-feed-divider {
   flex: 0 0 8px;
   position: relative;

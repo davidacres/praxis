@@ -1,80 +1,78 @@
 # test-contracts
 
-Ticket: PRX-T113-497 — TASK-497: Implement notes persistence and typed IPC.
-Frozen implementation: `20ddf0f8e93ab69502d0bbcb5322b30c699d8ce3` (iteration 2 of 3; it was the checkout HEAD when this stage ran, so no export was needed).
+Ticket: PRX-T113-499 — TASK-499: Add sidebar notes tree and shared editor.
+Frozen implementation: `3b721e79682a3b3d61ec9ff5805b159269a9e37a` (it was the checkout HEAD when this stage ran, with a clean tree, so no export was needed).
 
 ## Outcome
 
-The deterministic validator passes: **734 Playwright contracts catalogued and linked**, with no line-drift warnings. The task contributes **1 Playwright test** and **14 node:test tests** (11 fixed titles plus 3 cases from one parameterized call). The documented union for this task is **15 contracts**. That is not a full monorepo count: the generator indexes only Playwright.
+At the frozen snapshot the validator failed with **2 problems**: two new tests in `sidebarNotes.spec.ts` were missing from the catalog. After `--write` and curated prose for both, it passes: **742 Playwright contracts catalogued and linked** (740 carried over unchanged), with no line-drift warnings.
 
-Since the last contracts stage (`62c4f83d`), Implement changed only `notesStore.test.ts`. That made two node:test contracts stale. Both are fixed here (see finding 1). The generated catalog needed no change.
+The task contributes **2 Playwright tests** and **6 node:test tests**, so this task documents **8 contracts**. That is not a full monorepo count, because the generator indexes only Playwright.
 
-Coverage links: [generated catalog](catalog.json), [automation index](index.md), [14 TASK-497 node:test contracts](task-497-notes.md), [generator/validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs), [e2e spec](../../apps/praxis-desktop/main/e2e/notes.spec.ts), [unit tests](../../apps/praxis-desktop/main/src/main/notesStore.test.ts).
+Coverage links: [generated catalog](catalog.json), [automation index](index.md), [6 TASK-499 node:test contracts](task-499-notes.md), [generator/validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs), [e2e spec](../../apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts), unit tests [notesSession](../../apps/praxis-desktop/renderer/test/notesSession.test.ts) and [notesTree](../../apps/praxis-desktop/renderer/test/notesTree.test.ts).
 
-## QA feedback from iteration 1: 189 of 189 smoke tests failed
+| ID | Runner | Automation |
+| --- | --- | --- |
+| PT-2DFB759892 | playwright | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:39` |
+| PT-0754F5395E | playwright | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:81` |
+| PT-EF24B1568D | node:test | `apps/praxis-desktop/renderer/test/notesSession.test.ts:74` |
+| PT-2DF357AC10 | node:test | `apps/praxis-desktop/renderer/test/notesSession.test.ts:86` |
+| PT-8932C374BF | node:test | `apps/praxis-desktop/renderer/test/notesSession.test.ts:97` |
+| PT-6DA0575B35 | node:test | `apps/praxis-desktop/renderer/test/notesTree.test.ts:8` |
+| PT-A1B52A5EE5 | node:test | `apps/praxis-desktop/renderer/test/notesTree.test.ts:18` |
+| PT-1DB2C21417 | node:test | `apps/praxis-desktop/renderer/test/notesTree.test.ts:24` |
 
-**Addressed by investigation; no code was changed.** The evidence shows the failure came from the environment, not from TASK-497:
+## Changes in this stage
 
-- Every smoke test failed, across 48 unrelated spec files. A regression in a new IPC slice would not stop every window from opening. The only startup change is one `registerNotesIpc()` call, which registers handlers and does no I/O. The store loads lazily on first use.
-- `pmset -g log` shows the macOS display was **off from 01:47:53 to 09:06:12 UTC**. The previous stage committed at 02:04, so the QA run fell inside that window. A whole-suite failure while the display is asleep is a known pattern on this machine: Electron windows never reach `firstWindow`.
-- With the display on, at this snapshot:
-  - the four spec files that failed most in QA all pass with `--project=smoke`: `app.spec.ts`, `newIssue.spec.ts`, `editIssue.spec.ts`, `folderMulti.spec.ts`, **27 passed, 0 failed**. All 27 had failed in QA.
-  - `notes.spec.ts` plus `folder.spec.ts` with `--project=functional`: **4 passed**. That includes PT-3C92E05E68, which could not be run at all in the previous stage.
+- `catalog.json` / `index.md`: regenerated with `--write`, adding the 2 entries. The generic placeholder Given/When/Then was replaced with prose that states only what each test asserts, and records where a title promises more than the test checks.
+- `task-499-notes.md`: new; 6 node:test contracts.
 
-The remaining 161 smoke tests were not rerun here. The full smoke run belongs to QA, and it should run with the display awake.
-
-## Analysis before edits
-
-Diffed `62c4f83d..20ddf0f8`: one file, `notesStore.test.ts`. The backwards-clock test went from a queue of timestamps to an explicit clock variable the test steps back itself. It now also asserts that the group has no members after `deleteNote`, and no longer asserts that the file exists. The test shrank by two lines, so the next test moved from line 225 to 223. Recomputed every TASK-497 ID with the SHA1(file + newline + title) formula: no titles changed, so no IDs changed. Rechecked every link in `task-497-notes.md` against the source; the 14 line numbers now match. `notes.spec.ts`, the store, IPC, preload and core contracts are byte-identical to what the last stage reviewed, so PT-3C92E05E68 and the other 12 node:test contracts still hold.
-
-## Changes
-
-- `task-497-notes.md`:
-  - The frozen-source reference now points to `20ddf0f8`.
-  - **PT-7AB52FB741**: Given/When/Then rewritten to match the new assertions. It now covers the explicit clock and the empty group after delete, and no longer claims a file-exists check.
-  - **PT-CE269CF17F**: link moved from line 225 to 223.
-- This report replaces the iteration-1 report.
-- `catalog.json` / `index.md`: no change needed (the validator was already clean).
-
-No product code, tests, generator or workflow definition was changed.
+No product code, test, generator or workflow definition was changed.
 
 ## Requirement coverage
 
-| TASK-497 requirement | Contract evidence | Limits |
+| TASK-499 requirement | Contract evidence | Limits |
 | --- | --- | --- |
-| CRUD | PT-922ACE7DB3, PT-3C92E05E68 | Every store method is unit-tested. Over real IPC, only list, createNote, updateNote, deleteNote, createGroup and onChanged are exercised. |
-| Membership operations | PT-922ACE7DB3, PT-332E268E96, PT-F6E2585D72, PT-7AB52FB741 | `replaceMemberships` is proved at store level only. |
-| Atomic saves | PT-96B828D1AA, PT-F6E2585D72, PT-DAAFD76BFA | Proves rename failure, temp-file cleanup, memory unchanged after a failure, one write per delete, and queued concurrent writes. See finding 4. |
-| Change notifications | PT-922ACE7DB3, PT-96B828D1AA, PT-332E268E96, PT-DAAFD76BFA, PT-3C92E05E68 | Counts per mutation, none on failure/rejection/read/snapshot, unsubscribe over IPC. Event order is not asserted. |
-| Restart restoration | PT-922ACE7DB3, PT-04C7D12B91, PT-D561C40BDB, PT-7AB52FB741, PT-3C92E05E68 | The e2e test relaunches the real app on the same profile; it passed in this stage. |
-| Group removal keeps notes; note deletion cleans memberships | PT-F6E2585D72, PT-7AB52FB741, PT-3C92E05E68 | Group deletion over IPC is not exercised. |
-| Reject cross-project access | PT-899DBBA933, PT-3C92E05E68 | All nine operations at store level; deleteNote and list over IPC. |
-| Failed writes | PT-96B828D1AA, PT-CE269CF17F | Rename failure and a transient read failure only. |
-| Existing-data startup and malformed data | PT-04C7D12B91, PT-CDBBA295F5, PT-6C3A61B2C1, PT-16907A2B00 | |
+| Notes section in the sidebar, compact rows | PT-2DFB759892 | EasyMode only. The classic sidebar is no longer rendered (`f977690f`), so "Classic and Easy Mode" now means one sidebar. No test checks the row styling. |
+| Expandable named groups | PT-2DFB759892, PT-6DA0575B35 | The e2e test asserts collapse only (`aria-expanded` false). After the second click, nothing checks that the group expanded again. |
+| Create note | PT-2DFB759892, PT-0754F5395E | |
+| Rename (note or group) | PT-2DF357AC10 | **No e2e coverage** for either rename menu action. The unit test covers renaming the open note only. |
+| Membership: add, remove, move (menu-driven) | PT-2DFB759892, PT-A1B52A5EE5, PT-1DB2C21417 | Move up/down is unit-tested only. A note in two groups is unit-tested only. See finding 3. |
+| Delete note | PT-0754F5395E, PT-EF24B1568D | Asserts Cancel, Delete, the editor reset and removal from the group. |
+| Delete group keeps notes | — | **Not proved.** PT-0754F5395E deletes a group that is already empty. Store-level group deletion is covered by TASK-497's PT-F6E2585D72. |
+| Shared selection/editor with the shelf | PT-2DFB759892 | The shelf card shows the body of the note opened from the sidebar. |
+| Autosave with visible errors and retry | PT-8932C374BF (sidebar: none) | Shelf error/retry is TASK-498's PT-B4FF318316. **No sidebar e2e** for the error banner or retry. |
+| Preserve text across navigation | — | **Not tested** in the sidebar. |
+| Preserve text across project switching | — | **Not tested.** |
+| Preserve text across restart | PT-8932C374BF | Simulated by calling `restoreUnsavedDraft()` again. No test relaunches the app with unsaved text. |
 | Scheduled runs excluded | n/a | Nothing in the diff touches scheduling. |
 
 ## Findings: stale, uncovered and ambiguous contracts
 
-1. **Two stale contracts at the frozen snapshot (fixed here).** PT-7AB52FB741 described the old assertions: it claimed a file-exists check that was removed, and did not mention the new empty-membership check. PT-CE269CF17F linked to line 225 instead of 223. The validator cannot see either, because it does not index node:test.
-2. **The QA failure in iteration 1 was environmental (display asleep).** See the QA section above. QA should rerun with the display awake.
-3. **The e2e journey is outside the smoke set.** Governed workflow QA runs `test:desktop:smoke`, so PT-3C92E05E68 does not run there; only the full `test:desktop` runs it. The spec uses no hover, mouse or screenshots, so it would qualify for the smoke set. Adding it is a later decision, not one for this stage.
-4. **"Atomic" is proved only in part.** PT-96B828D1AA checks the in-memory list after a failed rename, not the bytes on disk. No test reads `notes.json` back after a failure or simulates a crash between write and rename.
-5. **IPC handlers with no transport test.** `notes:updateGroup`, `notes:deleteGroup`, `notes:replaceMemberships` and `notes:prepareSnapshot` are covered only by store tests. Each is a one-line pass-through, so the risk is low, but only five of the nine channels are tested over IPC.
-6. **The e2e notification assertion is loose.** It checks five events, each equal to project A or B, but not which project each event belongs to or their order.
-7. **The e2e title says "round-trip"** but asserts restored titles and bodies only, not IDs, timestamps or the order of group members across the relaunch. Order across a reload is proved by PT-922ACE7DB3 at store level.
-8. **Documented but untested boundary.** Removing a project leaves its notes in the file, unreachable (`notesStoreInstance.ts`). There is no test, as intended.
-9. **Generator limits carried over:** node tests are not indexed; titles built from template literals with expressions are skipped; every entry is labelled `project: functional`. The validator checks identity and that the flow fields are filled, not whether the prose is true. Most of the 734 entries still carry the generic Then text.
+1. **Both new e2e tests fail deterministically at the frozen snapshot (test defect).** `sidebarNotes.spec.ts:57` and `:91` call `getByRole('button', { name: 'Create' })` without `exact: true`. The match is a substring, so it hits six buttons, including this change's own "Create new note" header. Playwright's strict mode then throws before any grouping assertion runs. The fix is `{ name: 'Create', exact: true }`, which belongs to Implement, not this stage. Until that fix lands, the two contracts describe tests that do not get past their setup.
+2. **The two e2e tests were not run by Implement, or did not pass there.** The defect above fails the test on every run, so neither test can have gone green at this snapshot.
+3. **The `listitem` count assertion is ambiguous and probably wrong (PLAUSIBLE).** `sidebarNotes.spec.ts:61` expects exactly one notes-tree list item with the text "Beta". Group rows are `<li>` elements that contain their member `<li>`s, so the expanded Ideas group's `<li>` also contains "Beta". The count would then be 2. Finding 1 stops the test earlier, so this could not be observed. The comment above it ("a note in two groups") does not match the steps, which never put a note in two groups.
+4. **Weak assertion:** after "Remove from this group" (`:70`), the test checks only that a Beta button is visible. A Beta button was already visible inside the expanded group, so this passes whether or not the note left the group.
+5. **Title overclaims:** PT-0754F5395E says "deleting a group keeps notes", but the group is empty when it is deleted. The contract states this.
+6. **The renderer unit tests run in no aggregate script.** `npm test --workspace=@praxis/desktop-renderer` is not called by the root `test` or `test:full`. Governed QA therefore never runs the 9 notesSession/notesTree tests.
+7. **Earlier unit tests are uncatalogued:** the three TASK-498 tests in `notesSession.test.ts` (lines 35, 51, 66) have no Praxis Test contract. They are out of this task's scope and left as found.
+8. **Not in the smoke set:** neither `sidebarNotes.spec.ts` nor `sessionShelfNotes.spec.ts` is in `SMOKE_SPECS`, so only the full `test:desktop` runs them.
+9. **Generator limits carried over:** node tests are not indexed; titles built from template literals with expressions are skipped; every entry is labelled `project: functional`. The validator checks identity and that the flow fields are filled, not whether the prose is true.
+
+## Environment note: e2e results here are not valid evidence
+
+This worktree has no `node_modules`. Node resolves packages upward from the main checkout, and `@praxis/core` resolves to `/Users/daveacres/dev/tools/praxis/packages/core`, a different source tree from this worktree's core. As a result, `npm run build:renderer` fails `tsc` (`Property 'notes' does not exist on type 'PraxisIpc'`). The Electron main process under e2e also loads the other tree's core. Per the stage's non-goals, no link or install was made. The workflow's install stage has to provide this worktree's own dependencies before QA.
 
 ## Verification
 
 | Check performed in this stage | Result |
 | --- | --- |
-| `npm run test:praxis-contracts` at the frozen snapshot | Passed: 734 catalogued and linked. |
-| Manual link and ID audit of `task-497-notes.md` | 2 stale contracts found, both fixed; all 14 IDs recomputed and unchanged. |
-| `npm run test:praxis-contracts` after edits | Passed: 734 catalogued and linked, no warnings. |
-| `npm run compile` (desktop main, including `check-ipc-senders`) | Passed. |
-| `node --test out/main/notesStore.test.js` | 14 passed, 0 failed/skipped. |
-| `npx playwright test e2e/notes.spec.ts e2e/folder.spec.ts --project=functional` | 4 passed. |
-| `npx playwright test e2e/app.spec.ts e2e/newIssue.spec.ts e2e/editIssue.spec.ts e2e/folderMulti.spec.ts --project=smoke` | 27 passed (all 27 had failed in iteration-1 QA). |
+| `npm run test:praxis-contracts` at the frozen snapshot | **Failed:** 2 new tests missing from the catalog. |
+| `npm run test:praxis-contracts -- --write` | Wrote 742 contracts (740 carried over). |
+| `npm run test:praxis-contracts` after edits | **Passed:** 742 catalogued and linked, no warnings. |
+| ID audit of `task-499-notes.md` | All 6 IDs recomputed with SHA1(file + newline + title); both e2e IDs taken from the generated index. |
+| `npm test --workspace=@praxis/desktop-renderer` | 9 passed, 0 failed/skipped (6 of them are TASK-499's). |
+| `npx playwright test e2e/sidebarNotes.spec.ts e2e/sessionShelfNotes.spec.ts --project=functional` (pre-built renderer from 10:41) | 1 passed, 5 failed, 2 skipped. Both sidebar failures are finding 1 (strict-mode violation). The 3 shelf failures (project picker shows "No matches"; title not focused) passed in the TASK-498 stage and are not explained by this diff. Given the cross-tree `@praxis/core` resolution above, they are unattributed, neither confirmed as a regression nor ruled out. |
+| `npm run build:renderer` | Failed in `tsc`; see the environment note. No rebuild or copy-renderer was possible. |
 
-No UI changed, so no visual verification was needed and no screenshot was captured. No stage was advanced, the workflow was not edited, and no tracker was changed.
+No UI changed in this stage, so no visual verification was done and no screenshot was kept. No stage was advanced, the workflow was not edited, and no tracker was changed.

@@ -2679,6 +2679,7 @@ export function App() {
                 />
               ) : (
                 <EasyModeSidebar
+                  notesProjectId={easyModeProject?.id}
                   selectableProjects={workspaceProjects}
                   activeProjectId={easyModeProject?.id}
                   onSelectProject={projectId => navigate(projectId === 'conversations' ? { feature: 'conversations' } : { projectId })}

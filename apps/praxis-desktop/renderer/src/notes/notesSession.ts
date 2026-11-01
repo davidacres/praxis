@@ -30,8 +30,25 @@ let timer: number | undefined;
 let chain: Promise<void> = Promise.resolve();
 const listeners = new Set<() => void>();
 
+/** Unsaved text survives a restart here; it is removed as soon as a save lands. */
+export const UNSAVED_DRAFT_KEY = 'praxis-notes-unsaved-draft';
+
+function storage(): Storage | undefined {
+  try { return typeof localStorage === 'undefined' ? undefined : localStorage; } catch { return undefined; }
+}
+
+function persistUnsaved() {
+  const store = storage();
+  if (!store) return;
+  try {
+    if (state.dirty && hasContent(state.draft)) store.setItem(UNSAVED_DRAFT_KEY, JSON.stringify(state.draft));
+    else store.removeItem(UNSAVED_DRAFT_KEY);
+  } catch { /* a full or blocked store must not break editing */ }
+}
+
 const set = (next: Partial<NotesSessionState>) => {
   state = { ...state, ...next };
+  persistUnsaved();
   listeners.forEach(listener => listener());
 };
 
@@ -80,6 +97,27 @@ export function flush(): Promise<void> {
   return chain;
 }
 
+/** Puts text that was never saved (before a quit or crash) back into the shared draft and saves it. */
+export function restoreUnsavedDraft(): boolean {
+  let raw: string | null | undefined;
+  try { raw = storage()?.getItem(UNSAVED_DRAFT_KEY); } catch { return false; }
+  if (!raw || state.dirty || hasContent(state.draft)) return false;
+  try {
+    const parsed = JSON.parse(raw) as Partial<NoteDraft>;
+    const draft: NoteDraft = {
+      projectId: typeof parsed.projectId === 'string' ? parsed.projectId : undefined,
+      noteId: typeof parsed.noteId === 'string' ? parsed.noteId : undefined,
+      title: typeof parsed.title === 'string' ? parsed.title : '',
+      body: typeof parsed.body === 'string' ? parsed.body : ''
+    };
+    if (!hasContent(draft)) return false;
+    version += 1;
+    set({ draft, dirty: true, save: 'idle', error: undefined });
+    if (draft.projectId) schedule(0);
+    return true;
+  } catch { return false; }
+}
+
 export const notesSession = {
   subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   getSnapshot: () => state,
@@ -106,6 +144,20 @@ export const notesSession = {
     if (state.dirty) return;
     set({ draft: blank(projectId), dirty: false, save: 'idle', error: undefined });
   },
+  /** The note was deleted: if it is open, reset to a blank draft in the same project. */
+  forget(noteId: string) {
+    if (state.draft.noteId !== noteId) return;
+    window.clearTimeout(timer);
+    timer = undefined;
+    version += 1;
+    set({ draft: blank(state.draft.projectId), dirty: false, save: 'idle', error: undefined });
+  },
+  /** Renames the open note through the shared draft so the rename and the editor can't conflict. */
+  async renameOpen(noteId: string, title: string) {
+    if (state.draft.noteId !== noteId) return;
+    notesSession.edit({ title });
+    await flush();
+  },
   /** Called when the shelf's project changes: a saved draft is dropped, an unsaved one stays put. */
   async followProject(projectId?: string) {
     await flush();
@@ -117,3 +169,6 @@ export const notesSession = {
 export function useNotesSession(): NotesSessionState {
   return useSyncExternalStore(notesSession.subscribe, notesSession.getSnapshot);
 }
+
+restoreUnsavedDraft();
+if (typeof window.addEventListener === 'function') window.addEventListener('beforeunload', () => { void flush(); });
