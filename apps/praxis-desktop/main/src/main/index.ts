@@ -1,3 +1,4 @@
+import './testAppFailFast';
 import { registerTaskNotifications } from './taskNotifications';
 import { registerProjectActivityIpc } from './projectActivityInstance';
 import { registerCodeIntelligenceIpc, maintainCodeIntelligenceOnStartup } from './codeIntelligenceIpc';

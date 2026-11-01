@@ -120,6 +120,8 @@ export async function launchTestApp(
   const env: Record<string, string> = {
     ...process.env,
     PRAXIS_SETTINGS_PATH: settingsPath,
+    // A startup error exits the test app instead of opening a modal error box on the desktop.
+    PRAXIS_E2E: '1',
     ...(freeMobilePort ? { PRAXIS_MOBILE_PORT: String(freeMobilePort) } : {}),
     // Full-tools AI sessions require a working folder; give every test profile
     // one (its own isolated user-data dir) unless a test overrides it.
