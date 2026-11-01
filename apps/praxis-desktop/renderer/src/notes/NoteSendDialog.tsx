@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentSessionRecord, NoteRequestSnapshot } from '@praxis/core';
 import { sessionLabel } from '../ai/sessionNav';
 import { ChipSelect } from '../ui/ChipSelect';
@@ -39,6 +39,8 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
   const [capture, setCapture] = useState<Capture>({ state: 'loading' });
   const [instruction, setInstruction] = useState(() => draftInstruction(projectId, source));
   const [sending, setSending] = useState(false);
+  const instructionRef = useRef<HTMLTextAreaElement>(null);
+  const openerRef = useRef<HTMLElement | null>(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const destinations = useMemo(() => compatibleNoteSessions(sessions, projectId), [sessions, projectId]);
   const [chosen, setChosen] = useState<string | undefined>();
   const destination = chosen ?? destinations[0]?.issueKey ?? NEW_SESSION;
@@ -53,6 +55,13 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
     });
     return () => { live = false; };
   }, [projectId, source.kind, source.id]);
+
+  // Take focus on open so Escape and Tab act on the dialog, and hand it back to the opener on close.
+  useEffect(() => {
+    instructionRef.current?.focus();
+    const opener = openerRef.current;
+    return () => { if (opener?.isConnected) opener.focus(); };
+  }, []);
 
   const close = () => { saveDraftInstruction(projectId, source, instruction); closeNoteSend(); };
 
@@ -70,7 +79,15 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
   return <div className="modal-overlay" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
     <div className="modal-card note-send-dialog" role="dialog" aria-modal="true" aria-label="Send to session"
       data-testid="note-send-dialog"
-      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); } }}>
+      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+        if (event.key !== 'Tab') return;
+        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+        )).filter(element => element.getClientRects().length > 0);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
       <div className="modal-header">
         <h3>Send to session</h3>
         <button type="button" className="btn-icon" aria-label="Close" onClick={close}><Icon name="close" size={13} /></button>
@@ -101,7 +118,7 @@ function Dialog({ request, sessions, onOpenSession, onNewSession }: {
         </div>
         <label className="note-send-dialog__field">
           <span className="note-send-dialog__label">Instructions (optional)</span>
-          <textarea className="note-send-dialog__instruction" rows={3} value={instruction} data-testid="note-send-instruction"
+          <textarea ref={instructionRef} className="note-send-dialog__instruction" rows={3} value={instruction} data-testid="note-send-instruction"
             placeholder="What should the session do with this?" onChange={event => setInstruction(event.target.value)} />
         </label>
       </div>

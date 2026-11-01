@@ -6,7 +6,10 @@ import type { SessionContextReference } from '../ai/sessionContext';
 export interface NoteSendRequest { projectId: string; source: NoteSource; title: string }
 
 /** A reference staged for a session composer to send (existing session) or hold (new session). */
-export interface SessionHandoff { reference: SessionContextReference; instruction: string }
+export interface SessionHandoff { reference: SessionContextReference; instruction: string; stagedAt?: number }
+
+/** How long after the explicit Send a staged handoff may still submit itself; later it only fills the composer. */
+export const HANDOFF_AUTO_SEND_MS = 10_000;
 
 /** Key under which a handoff waits for the New Session composer. */
 export const NEW_SESSION_HANDOFF = 'new';
@@ -31,7 +34,10 @@ export const saveDraftInstruction = (projectId: string, source: NoteSource, text
   else instructions.delete(instructionKey(projectId, source));
 };
 
-export const stageSessionHandoff = (key: string, handoff: SessionHandoff) => { handoffs.set(key, handoff); emit(); };
+export const stageSessionHandoff = (key: string, handoff: SessionHandoff) => { handoffs.set(key, { ...handoff, stagedAt: Date.now() }); emit(); };
+/** True while the user's Send click is recent enough that submitting on their behalf is not a surprise. */
+export const isFreshHandoff = (handoff: SessionHandoff, now = Date.now()): boolean =>
+  handoff.stagedAt !== undefined && now - handoff.stagedAt <= HANDOFF_AUTO_SEND_MS;
 /** Re-renders when a handoff is staged or consumed, so an already-open session notices it. */
 export const useStagedHandoff = (key: string | undefined): SessionHandoff | undefined =>
   useSyncExternalStore(subscribe, () => (key ? handoffs.get(key) : undefined));

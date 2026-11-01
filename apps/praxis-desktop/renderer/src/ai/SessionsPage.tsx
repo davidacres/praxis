@@ -34,7 +34,7 @@ import { SessionComposerCard, SessionComposerInput, SessionContextRing } from '.
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionContextPicker } from './SessionContextPicker';
 import { withSessionContext, type SessionContextReference } from './sessionContext';
-import { takeSessionHandoff, useStagedHandoff } from '../notes/noteSendStore';
+import { isFreshHandoff, takeSessionHandoff, useStagedHandoff } from '../notes/noteSendStore';
 import { SessionTeamControl } from './SessionTeamControl';
 import { askSessionTeamMember, mentionedSessionTeamMember } from './sessionTeamStore';
 import { SessionGitBranchControl } from './SessionGitBranchControl';
@@ -1294,22 +1294,25 @@ export function SessionsPage({
     }
   };
 
-  // A note or group sent from the Notes dialog arrives staged for this session. It is consumed once and
-  // submitted through the ordinary follow-up path, so failures keep the text and chip in the composer.
+  // A note or group sent from the Notes dialog arrives staged for this session. It is consumed once.
+  // A fresh handoff to a session that can take input submits through the ordinary follow-up path, so
+  // failures keep the text and chip in the composer. Anything else (session busy, user arrived later)
+  // only fills the composer, visibly, for the user's own Send. Existing draft text and chips are kept.
   // Declared after the reset-on-session-change effect so that reset cannot clear the staged chip.
   const stagedHandoff = useStagedHandoff(selected?.issueKey);
   useEffect(() => {
-    if (!selected || !stagedHandoff) return;
-    const sendable = isTerminalAgentState(selected.state) || isSingleAgentRunning || selected.conversation?.state === 'running';
-    if (!sendable) return;
+    if (!selected || !stagedHandoff || sendingFollowUp) return;
     const handoff = takeSessionHandoff(selected.issueKey);
     if (!handoff) return;
-    const references = [handoff.reference];
+    const references = contextReferences.some(item => item.id === handoff.reference.id)
+      ? contextReferences : [...contextReferences, handoff.reference];
+    const text = followUp.trim() ? `${followUp.trim()}\n\n${handoff.instruction}` : handoff.instruction;
     setContextReferences(references);
-    setFollowUp(handoff.instruction);
-    void sendFollowUp({ text: handoff.instruction, references });
+    setFollowUp(text);
+    const sendable = isTerminalAgentState(selected.state) || isSingleAgentRunning || selected.conversation?.state === 'running';
+    if (sendable && isFreshHandoff(handoff)) void sendFollowUp({ text, references });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.issueKey, selected?.state, stagedHandoff]);
+  }, [selected?.issueKey, selected?.state, stagedHandoff, sendingFollowUp]);
 
   /** Encodes pasted/dropped files into wire attachments, replacing anything already staged beyond the cap. */
   const stageImageFiles = async (files: FileList | File[]) => {
