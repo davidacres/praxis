@@ -22,6 +22,7 @@ import { registerAutoUpdate } from './autoUpdate';
 import { registerShellIpc } from './shellIpc';
 import { registerBrowserIpc } from './browserIpc';
 import { registerBoardPrefsIpc } from './boardPrefsIpc';
+import { registerNotesIpc } from './notesIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiUsageIpc, startAiUsageTracking } from './aiUsageIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
@@ -368,6 +369,7 @@ void app.whenReady().then(async () => {
   registerShellIpc();
   registerBrowserIpc();
   registerBoardPrefsIpc();
+  registerNotesIpc();
   registerTaskNotifications();
   registerAiIpc();
   registerCodeIntelligenceIpc();
