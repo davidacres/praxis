@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 740,
+  "testCount": 742,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -9091,6 +9091,38 @@
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "long run and session names leave their action buttons reachable at the narrowest widths",
         "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-2DFB759892",
+      "title": "notes created in the sidebar tree show in the shelf editor, and groups link without duplicating",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts",
+        "line": 39,
+        "project": "functional"
+      },
+      "area": "sidebar Notes",
+      "flow": {
+        "given": "an isolated desktop app launched without an open new session, with an app-storage project \"Sidebar Notes\" created and the window reloaded so the EasyMode sidebar's Notes section is visible and reads \"No notes yet\"",
+        "when": "notes Alpha and Beta are created from the section's \"Create new note\" button (choosing the project if a picker shows) and the editor is closed after each; Alpha's row menu \"Add to new group…\" creates group \"Ideas\"; Beta's row menu \"Add to Ideas\" adds it; the group header is clicked twice; Beta's \"Remove from this group\" is chosen; Alpha is opened from the tree; the sidebar is hidden and the shelf pencil is clicked",
+        "then": "each note's save state reads Saved and a row with its title appears; the Ideas header is aria-expanded true; exactly one list item in the notes tree contains \"Beta\"; one header click sets aria-expanded false; a Beta row is visible after removal from the group; the sidebar editor body and then the shelf notes card body both read \"first body\". The test does not put a note in two groups, rename, move, or relaunch the app"
+      }
+    },
+    {
+      "id": "PT-0754F5395E",
+      "title": "deleting an open note asks first, resets the editor and removes it from groups; deleting a group keeps notes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts",
+        "line": 81,
+        "project": "functional"
+      },
+      "area": "sidebar Notes",
+      "flow": {
+        "given": "an isolated desktop app with an app-storage project \"Sidebar Notes\", reloaded, and a note \"Doomed\" created and left open in the sidebar editor, then added to a new group \"Temp\" through its row menu",
+        "when": "\"Delete note\" is chosen and the confirmation is cancelled; \"Delete note\" is chosen again and Delete is confirmed; then \"Delete group\" is chosen on Temp and confirmed",
+        "then": "after Cancel the Doomed row is still shown; after Delete no Doomed row remains, the editor body is empty and Temp shows \"No notes in this group\"; after Delete group no Temp row remains. Temp is already empty when it is deleted, so this test does not prove that deleting a group keeps its notes"
       }
     },
     {

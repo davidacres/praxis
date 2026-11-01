@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **740 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **742 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -572,6 +572,8 @@ This catalogue describes **740 Playwright tests** under `apps/praxis-desktop/mai
 | PT-31AED72E90 | shell Polish | output tab filters, copies and clears the log | `apps/praxis-desktop/main/e2e/shellPolish.spec.ts:78` |
 | PT-2A163FAD48 | shell Polish | output history survives a restart | `apps/praxis-desktop/main/e2e/shellPolish.spec.ts:100` |
 | PT-34D8F21852 | sidebar Long Names | long run and session names leave their action buttons reachable at the narrowest widths | `apps/praxis-desktop/main/e2e/sidebarLongNames.spec.ts:52` |
+| PT-2DFB759892 | sidebar Notes | notes created in the sidebar tree show in the shelf editor, and groups link without duplicating | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:39` |
+| PT-0754F5395E | sidebar Notes | deleting an open note asks first, resets the editor and removes it from groups; deleting a group keeps notes | `apps/praxis-desktop/main/e2e/sidebarNotes.spec.ts:81` |
 | PT-A370DC483D | standalone Conversations | detached-chat IPC refuses a window outside the trusted renderer | `apps/praxis-desktop/main/e2e/standaloneConversations.spec.ts:11` |
 | PT-B82F563EB2 | standalone Conversations | standalone conversation persists and resumes across floating-window pop-in, close and app restart | `apps/praxis-desktop/main/e2e/standaloneConversations.spec.ts:31` |
 | PT-A21E3FDD8F | startup Experience | first launch offers one folder-first workspace entry flow | `apps/praxis-desktop/main/e2e/startupExperience.spec.ts:24` |
