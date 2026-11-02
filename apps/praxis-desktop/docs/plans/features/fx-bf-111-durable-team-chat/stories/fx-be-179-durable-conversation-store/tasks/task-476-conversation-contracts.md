@@ -60,6 +60,24 @@ Status: Cancelled · Duration: 1h 8m
 - ⏭️ Security scan: cancelled
 
 cancelled from the run view
+
+**PRX-T111-476** — 2026-11-02T23:33:50.733Z
+**Workflow run failed: Full SDLC — TASK-476: Define typed conversation, turn, attempt, and binding contracts**
+
+Status: Failed · Duration: 3m 26s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ Type check: pending
+- ⏳ Unit tests: pending
+- ⏳ SAST scan: pending
+- ⏳ Secret scan: pending
+- ⏳ SCA scan: pending
+- ⏳ Structured code review: pending
+
+Required stage "plan" failed.
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
