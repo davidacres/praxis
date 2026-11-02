@@ -329,12 +329,20 @@ export class ScheduledRunRunner {
   private async checkHandover(run: ScheduledRun, entryId: string, workflowRunId: string, provider: string | undefined): Promise<ScheduledRun> {
     const entry = run.entries.find(candidate => candidate.id === entryId);
     if (!entry || !provider) return run;
+    const handovers = entry.outcome?.handovers ?? [];
+    // A hand-over takes effect at the next stage, so the stage in flight still reports the
+    // provider it was moved away from (and each observation writes that back onto the entry).
+    // That is the switch waiting to land, not a reason to switch again: repeating it here is
+    // how one ticket logged the same codex-cli → claude-code-cli hand-over 55 times.
+    const last = handovers[handovers.length - 1];
+    if (last && last.from === provider) return run;
     const usage = await this.ports.usage();
     const decision = decideProviderForEntry({
       active: provider,
       usable: usage.usable,
       used: usage.used,
       exclude: entry.outcome?.exhausted,
+      leftBehind: [...new Set(handovers.map(handover => handover.from))],
       threshold: this.ports.threshold?.()
     });
     if (decision.kind === 'handover' && decision.from) {

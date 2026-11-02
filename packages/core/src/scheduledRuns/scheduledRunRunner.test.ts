@@ -529,3 +529,42 @@ test('a handover records the AI the host actually handed to when it had to pick 
   assert.equal(h.run.entries[0].outcome?.handovers?.[0]?.to, 'codex');
   assert.equal(h.run.entries[0].outcome?.provider, 'codex');
 });
+
+test('hand-over does not bounce: no repeat while the switch waits for the next stage, and never back to a provider left behind', async () => {
+  const h = new Harness(['T-1']);
+  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.1, codex: 0.1 } };
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.95, codex: 0.3 } };
+  await h.runner.tick();
+  assert.deepEqual(h.handovers, [{ from: 'claude', to: 'codex' }]);
+
+  // The stage in flight still reports claude: the switch is waiting for the next stage, not a reason to switch again.
+  for (let i = 0; i < 5; i += 1) await h.runner.tick();
+  assert.equal(h.handovers.length, 1);
+
+  // Now on codex, which is near its limit too, while claude's reading has dropped. Handing it back
+  // is how a ticket bounced 109 times; the run pauses and says why instead.
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'codex' } });
+  h.usage = { usable: ['claude', 'codex'], active: 'codex', used: { claude: 0.5, codex: 0.98 } };
+  await h.runner.tick();
+  assert.equal(h.handovers.length, 1);
+  assert.equal(h.run.status, 'paused');
+  assert.equal(h.run.pause?.reason, 'budget');
+  assert.match(h.run.pause?.message ?? '', /already moved away from claude/);
+  assert.equal(h.run.events.filter(event => event.kind === 'provider-handover').length, 1);
+});
+
+test('hand-over moves on to a provider with room rather than back to the one left behind', async () => {
+  const h = new Harness(['T-1']);
+  h.usage = { usable: ['claude', 'codex', 'copilot'], active: 'claude', used: { claude: 0.1, codex: 0.1, copilot: 0.4 } };
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+  h.usage = { usable: ['claude', 'codex', 'copilot'], active: 'claude', used: { claude: 0.96, codex: 0.2, copilot: 0.4 } };
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'codex' } });
+  h.usage = { usable: ['claude', 'codex', 'copilot'], active: 'codex', used: { claude: 0.3, codex: 0.97, copilot: 0.4 } };
+  await h.runner.tick();
+  assert.deepEqual(h.handovers, [{ from: 'claude', to: 'codex' }, { from: 'codex', to: 'copilot' }]);
+  assert.equal(h.run.status, 'running');
+});

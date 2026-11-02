@@ -7,6 +7,10 @@
  * - A provider that already ran out during this ticket (`exclude`) is never
  *   started on again and never handed over to, whatever its reported figures
  *   say — a hard limit arrives long before the quota adapter shows one.
+ * - A provider this ticket was already moved away from for being near its limit
+ *   (`leftBehind`) is never a hand-over target again for that ticket. Without
+ *   this, two providers both near their limit hand the ticket back and forth on
+ *   every check — one ticket once did so 109 times in three hours.
  * - A provider that reports nothing is *unknown*. Unknown is a last resort: it
  *   is preferred to stopping the ticket, but never to a provider with a known
  *   allowance below the threshold. It may always be the provider the run is
@@ -26,6 +30,11 @@ export interface ProviderBudgetInput {
   used: Readonly<Record<string, number | undefined>>;
   /** Providers that ran out during this ticket: never chosen, whatever their figures say. */
   exclude?: readonly string[];
+  /**
+   * Providers this ticket was already handed over *from*. They may stay the one it
+   * is on, but are never a hand-over target again, whatever they report now.
+   */
+  leftBehind?: readonly string[];
   /**
    * When nothing else can run, an excluded provider may still be chosen rather
    * than stopping the ticket. Used when starting work: a limit an hour ago may
@@ -83,7 +92,8 @@ export function decideProviderForEntry(input: ProviderBudgetInput): ProviderDeci
     }
   }
 
-  const others = candidates.filter(provider => provider !== current);
+  const leftBehind = input.leftBehind ?? [];
+  const others = candidates.filter(provider => provider !== current && !leftBehind.includes(provider));
   // Known and below the threshold first, most room left first; a provider that reports nothing only
   // when nothing better is left, which beats stopping a ticket that could still run.
   const free = others
@@ -113,7 +123,9 @@ export function decideProviderForEntry(input: ProviderBudgetInput): ProviderDeci
     reason: spent
       ? `${current} ran out and no other provider is available to move the ticket to.`
       : current
-        ? `${current} has used ${percent(input.used[current] as number)} of its allowance and every other provider is at or past ${percent(threshold)}.`
+        ? candidates.some(provider => provider !== current && leftBehind.includes(provider))
+          ? `${current} has used ${percent(input.used[current] as number)} of its allowance, and this ticket already moved away from ${candidates.filter(provider => provider !== current && leftBehind.includes(provider)).join(', ')} for the same reason.`
+          : `${current} has used ${percent(input.used[current] as number)} of its allowance and every other provider is at or past ${percent(threshold)}.`
         : `No provider has an allowance below ${percent(threshold)}.`
   };
 }

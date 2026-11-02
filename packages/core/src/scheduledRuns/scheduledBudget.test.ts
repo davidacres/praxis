@@ -84,3 +84,16 @@ test('an active provider that is not usable is replaced', () => {
   const decision = decideProviderForEntry({ active: 'gone', usable: ['codex'], used: { codex: 0.2 } });
   assert.equal(decision.kind === 'handover' && decision.provider, 'codex');
 });
+
+test('a provider the ticket was moved away from is never a hand-over target again, whatever it reports now', () => {
+  // The shape that bounced one ticket 109 times: both near the limit, each reading a little lower in turn.
+  const decision = decideProviderForEntry({ active: 'codex', usable: ['claude', 'codex'], used: { claude: 0.5, codex: 0.98 }, leftBehind: ['claude'] });
+  assert.equal(decision.kind, 'pause');
+  assert.match(decision.kind === 'pause' ? decision.reason : '', /already moved away from claude/);
+  // Another provider with room is still fine.
+  const third = decideProviderForEntry({ active: 'codex', usable: ['claude', 'codex', 'copilot'], used: { claude: 0.5, codex: 0.98, copilot: 0.4 }, leftBehind: ['claude'] });
+  assert.deepEqual(third.kind === 'handover' && [third.from, third.provider], ['codex', 'copilot']);
+  // Left behind does not stop it carrying on where it is, when it has room there.
+  const stay = decideProviderForEntry({ active: 'claude', usable: ['claude', 'codex'], used: { claude: 0.5, codex: 0.2 }, leftBehind: ['claude'] });
+  assert.equal(stay.kind, 'ok');
+});
