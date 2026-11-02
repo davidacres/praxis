@@ -29,6 +29,19 @@ Summarise a finished run: outcome, spend, time per stage, artifacts, approvals a
 
 See `scheduled-runs-v2/4-run-report.html`.
 
+**Retargeted 2026-11-02:** the report now follows the `F-Report` board on the
+FX-BE-193 design canvas: "Needed you" (approvals and retries with how long
+each waited), "Worth knowing" (review loops with their findings, provider
+hand-overs with checkpoint, QA repairs, retried stages), one receipt per ticket
+with a bar per agent task (amber when it took more than one attempt), session
+and run links, and "Where the time went" per task. Per-task data comes from
+`TASK-504`.
+
+E2E: `scheduledRuns.spec.ts` test 769 asserts `schedule-report-status` and
+`schedule-report-table`. Update it in the same change as the report (keep
+both ids if their meaning survives), and inspect the report screenshot.
+`TASK-509` re-runs the whole suite.
+
 ## Description
 
 

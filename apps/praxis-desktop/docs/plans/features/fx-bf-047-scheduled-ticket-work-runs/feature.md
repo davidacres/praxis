@@ -9,8 +9,8 @@ slug: scheduled-ticket-work-runs
 title: Scheduled ticket work runs with ordered execution
 status: In Progress
 owner: Electron desktop app
-updated: 2026-10-24
-stories: [FX-BE-147, FX-BE-148, FX-BE-149, FX-BE-173]
+updated: 2026-11-02
+stories: [FX-BE-147, FX-BE-148, FX-BE-149, FX-BE-173, FX-BE-193]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run build:desktop, npm run test:core, npm run test:desktop]
 ---
 
@@ -90,6 +90,17 @@ lanes (FX-BE-149) are not.
 8. **The preview stays off by default.** The runner checks `preview.enableScheduledRuns`
    on every tick. Turning it on by default is a release decision after real overnight use.
 
+## Design decision (2026-11-02)
+
+Five new directions for the run monitor and the composer were compared on a
+design canvas (https://claude.ai/artifact/ALm5NWJ25ZEWCbTNCmQhk4, private to the
+owner). Chosen: **Spotlight** for the run monitor (a card per in-flight ticket
+with its workflow's agent tasks live, a deck of waiting tickets, receipts for
+finished ones, decisions on the card) and **the Line** for the composer, drawn
+in Spotlight's look with a rehearsal of the forecast. This replaces the v2
+belt/processor layout. The work is `FX-BE-193`, and `TASK-466` (run report) is
+retargeted to the report board on the same canvas.
+
 ## Scope
 
 - Create a scheduled work-run model with start time, timezone, ticket list,
@@ -119,6 +130,7 @@ lanes (FX-BE-149) are not.
 - `FX-BE-148` — Budget-aware sequential runner and audit trail.
 - `FX-BE-149` — Optional bounded parallel lanes.
 - `FX-BE-173` — Processor run view, lineup and run report.
+- `FX-BE-193` — Spotlight run monitor and Line composer (2026-11-02 design).
 
 ## Dependencies
 
