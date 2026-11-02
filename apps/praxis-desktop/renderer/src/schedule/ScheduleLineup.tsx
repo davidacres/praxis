@@ -173,7 +173,7 @@ export function lineupWhen(view: ScheduledRunView, now: number): { main: string;
 }
 
 /** The opened row: the issues (editable runs only), the tickets by step, and the facts. */
-export function LineupDetails({ view, editable }: { view: ScheduledRunView; editable: boolean }) {
+export function LineupDetails({ view, editable, onTrust }: { view: ScheduledRunView; editable: boolean; onTrust?: () => void }) {
   const { run, readiness, forecast } = view;
   const steps = stepNumbers(run.entries);
   const issuesByKey = new Map<string, string>();
@@ -196,6 +196,9 @@ export function LineupDetails({ view, editable }: { view: ScheduledRunView; edit
             {condenseIssues(readiness.issues).map((issue, index) => (
               <li key={`${issue.code}-${index}`} className={`schedule-issue schedule-issue--${issue.severity}`} data-code={issue.code}>
                 <Icon name="warning" size={12} /> {issue.message}
+                {issue.code === 'workflow-untrusted' && onTrust && (
+                  <button type="button" className="btn lineup-issue-fix" data-testid="schedule-review-trust" onClick={onTrust}>Review and trust</button>
+                )}
               </li>
             ))}
           </ul>

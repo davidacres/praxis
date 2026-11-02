@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ScheduledQueueEntry, ScheduledRunLive, ScheduledRunView, ScheduledStageDetail } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
-import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
+import { confirmProjectWorkflowTrust, isTrustCancelled } from '../workflows/workflowProjectTrust';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { ENTRY_STATUS_LABEL, STATUS_LABEL, formatClock, formatSpan, formatSpend } from './scheduleFormat';
@@ -175,8 +175,13 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun, onShowRepo
                 disabled={busy}
                 onClick={() =>
                   void act(async () => {
-                    // Shows the workflow's exact commands first; Cancel leaves it untrusted and paused.
-                    await confirmProjectWorkflowTrust(run.projectId!, run.policy.workflowId!, confirm);
+                    // Shows the workflow's exact commands first; Cancel leaves it untrusted and paused, without an error.
+                    try {
+                      await confirmProjectWorkflowTrust(run.projectId!, run.policy.workflowId!, confirm);
+                    } catch (reason) {
+                      if (isTrustCancelled(reason)) return undefined;
+                      throw reason;
+                    }
                     return api.resume(run.id);
                   })
                 }

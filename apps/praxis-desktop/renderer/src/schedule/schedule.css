@@ -647,3 +647,8 @@ button.spot-bar:hover { outline: 1px solid var(--text-tertiary); }
 @media (prefers-reduced-motion: reduce) {
   .brief-card, .brief-detail-grid { animation: none; }
 }
+
+/* "Review and trust" beside an untrusted-workflow warning, wherever the warning shows. */
+.lineup-issue-fix, .schedule-chip-fix { flex: none; height: 24px; padding: 0 var(--space-2); margin-left: var(--space-2); font-size: var(--text-xs); white-space: nowrap; }
+.lineup-issue-fix { margin-left: auto; }
+.schedule-chip-pill .schedule-chip-fix { margin-left: var(--space-1); }

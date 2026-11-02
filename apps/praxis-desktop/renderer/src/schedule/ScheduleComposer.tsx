@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunForecast, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef, ScheduledWorkflowChoice } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
+import { useDialogs } from '../ui/dialogs';
+import { confirmProjectWorkflowTrust, isTrustCancelled } from '../workflows/workflowProjectTrust';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './scheduleFormat';
@@ -125,6 +127,19 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
     [initial?.run.id, project.id, name, date, time, timezone, belt, workflowId, lanes]
   );
 
+  const { confirm } = useDialogs();
+  /** Bumped after a trust review, so readiness is asked again even though the form did not change. */
+  const [recheck, setRecheck] = useState(0);
+  // Shows the workflow's exact commands first; cancelling leaves it untrusted and is not an error.
+  const reviewTrust = async () => {
+    try {
+      await confirmProjectWorkflowTrust(project.id, workflowId, confirm);
+      setRecheck(value => value + 1);
+    } catch (reason) {
+      if (!isTrustCancelled(reason)) setSaveError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   // Readiness is derived from the live board in main, so ask it as the form changes.
   useEffect(() => {
     let current = true;
@@ -137,7 +152,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
       current = false;
       window.clearTimeout(timer);
     };
-  }, [input]);
+  }, [input, recheck]);
 
   const onBelt = (candidate: Candidate) => belt.tickets.some(ticket => sameTicket(ticket, { connectionId: candidate.connectionId, issueKey: candidate.key }));
   const flash = (issueKey: string) => {
@@ -430,6 +445,9 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
           {!preview.error && condenseIssues(readiness?.issues ?? []).map((issue, index) => (
             <span key={`${issue.code}-${index}`} className={`schedule-chip-pill schedule-chip-pill--${issue.severity}`} data-code={issue.code}>
               <Icon name="warning" size={12} /> {issue.message}
+              {issue.code === 'workflow-untrusted' && workflowId && (
+                <button type="button" className="btn schedule-chip-fix" data-testid="schedule-review-trust" onClick={() => void reviewTrust()}>Review and trust</button>
+              )}
             </span>
           ))}
         </div>

@@ -1409,6 +1409,69 @@ test('a parallel run whose readiness is blocked starts nothing in any lane and s
   await expect(page.getByTestId('schedule-flight-card')).toHaveCount(0);
 });
 
+test('a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor', async () => {
+  const { page, projectId, repo } = await launch({ titles: ['Needs trust'] });
+  const workflowId = await page.evaluate(async id => {
+    const now = new Date().toISOString();
+    const workflowId = 'schedule-needs-trust';
+    await window.praxis.workflows.save(id, {
+      schemaVersion: 1, id: workflowId, name: 'Needs trust', scope: 'project', projectId: id, version: 1,
+      entryNodeId: 'merge', createdAt: now, updatedAt: now, edges: [],
+      nodes: [{ type: 'merge', id: 'merge', name: 'Merge', x: 0, y: 0, inputs: [] }]
+    } as never);
+    return workflowId;
+  }, projectId);
+  // A change that arrives through the repository is not a review, so the workflow must be trusted again.
+  const untrust = () => {
+    const file = path.join(repo, '.praxis', 'workflows', `${workflowId}.json`);
+    const definition = JSON.parse(fs.readFileSync(file, 'utf8'));
+    definition.nodes[0].targetBranch = definition.nodes[0].targetBranch === 'main' ? 'trunk' : 'main';
+    fs.writeFileSync(file, JSON.stringify(definition, null, 2));
+  };
+  untrust();
+  await page.evaluate(async ({ id, workflowId }) => {
+    const issues = await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 10, `project:${id}`);
+    const tickets = issues.issues.slice(0, 1).map(issue => ({ connectionId: `project:${id}`, issueKey: issue.key, title: issue.summary }));
+    await window.praxis.scheduledRuns.save({ projectId: id, name: 'Trust me', timezone: 'UTC', date: '2099-01-02', time: '21:00', tickets, workflowId, arm: false });
+  }, { id: projectId, workflowId });
+  await page.reload();
+  await openScheduleSidebar(page);
+
+  // On the schedule's own row, beside the warning.
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Trust me' });
+  const warning = card.getByTestId('schedule-issues').locator('[data-code="workflow-untrusted"]');
+  await expect(warning).toBeVisible();
+  await expect(card.getByTestId('schedule-arm')).toBeDisabled();
+  // Picking the schedule in the sidebar keeps its "Needs you" entry, with the same action.
+  await page.getByTestId('schedule-nav-run').filter({ hasText: 'Trust me' }).click();
+  await expect(page.getByTestId('schedule-needs').getByTestId('schedule-need-trust')).toBeVisible();
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-needs-trust.png') });
+
+  // Cancelling the review leaves it untrusted, and is not an error.
+  await warning.getByTestId('schedule-review-trust').click();
+  const dialog = page.getByRole('dialog', { name: 'Trust this project workflow?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('schedule-error')).toHaveCount(0);
+  await expect(warning).toBeVisible();
+
+  await warning.getByTestId('schedule-review-trust').click();
+  await page.getByRole('dialog', { name: 'Trust this project workflow?' }).getByRole('button', { name: 'Trust workflow' }).click();
+  await expect(card.getByTestId('schedule-issues').locator('[data-code="workflow-untrusted"]')).toHaveCount(0);
+  await expect(card.getByTestId('schedule-arm')).toBeEnabled();
+  expect((await page.evaluate(({ id, wf }) => window.praxis.workflows.projectTrust(id, wf), { id: projectId, wf: workflowId })).trusted).toBe(true);
+
+  // In the editor: the readiness warning carries the same action, and readiness updates after it.
+  untrust();
+  await card.getByTestId('schedule-edit').click();
+  const chip = page.getByTestId('schedule-readiness').locator('[data-code="workflow-untrusted"]');
+  await expect(chip).toBeVisible();
+  await chip.getByTestId('schedule-review-trust').click();
+  await page.getByRole('dialog', { name: 'Trust this project workflow?' }).getByRole('button', { name: 'Trust workflow' }).click();
+  await expect(page.getByTestId('schedule-readiness').locator('[data-code="workflow-untrusted"]')).toHaveCount(0);
+  await expect(page.getByTestId('schedule-ready')).toBeVisible();
+});
+
 test('a schedule paused on an untrusted workflow offers to review and trust it, then carries on', async () => {
   const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
   const { page, projectId, repo } = await launch({ env, titles: ['Needs trust'] });

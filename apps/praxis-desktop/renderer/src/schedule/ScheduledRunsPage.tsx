@@ -11,7 +11,7 @@ import { ScheduleRunMonitor } from './ScheduleRunMonitor';
 import { ScheduleRunReport } from './ScheduleRunReport';
 import { STATUS_LABEL, condenseIssues, formatStart, groupScheduledRuns, type ScheduledRunGroups } from './scheduleFormat';
 import { LineupDetails, LineupNeeds, LineupWeek, isFinished, lineupWhen, LineupBeads, type Need } from './ScheduleLineup';
-import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
+import { confirmProjectWorkflowTrust, isTrustCancelled } from '../workflows/workflowProjectTrust';
 
 type LineupTab = 'all' | 'active' | 'drafts' | 'finished';
 import './schedule.css';
@@ -239,9 +239,15 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     setTab('all');
     window.requestAnimationFrame(() => document.querySelector(`[data-testid="schedule-card"][data-run-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   };
+  // Shows the workflow's exact commands first. Cancelling leaves it untrusted, and is not an error.
   const trust = (view: ScheduledRunView) => act(async () => {
     if (!view.run.projectId || !view.run.policy.workflowId) return;
-    await confirmProjectWorkflowTrust(view.run.projectId, view.run.policy.workflowId, confirm);
+    try {
+      await confirmProjectWorkflowTrust(view.run.projectId, view.run.policy.workflowId, confirm);
+    } catch (reason) {
+      if (isTrustCancelled(reason)) return;
+      throw reason;
+    }
     await load();
   });
   const needs: Need[] = (views ?? []).flatMap(view => {
@@ -307,7 +313,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
       )}
 
       {views !== undefined && total > 0 && <LineupWeek views={views} now={now} onPick={reveal} />}
-      {views !== undefined && !selectedRunId && <LineupNeeds needs={needs} />}
+      {views !== undefined && <LineupNeeds needs={selectedRunId ? needs.filter(need => need.id === selectedRunId) : needs} />}
 
       {GROUPS.map(({ key, title }) => {
         const shown = groups[key].filter(view => (!selectedRunId || view.run.id === selectedRunId) && inTab(view));
@@ -325,6 +331,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
                 onOpen={() => setDetailRunId(view.run.id)}
                 onDelete={() => void remove(view)}
                 onArm={armed => void act(() => window.praxis.scheduledRuns.setArmed(view.run.id, armed))}
+                onTrust={() => void trust(view)}
                 onRunNow={() => void runNow(view.run.id)}
                 starting={startingRunId === view.run.id}
                 onResolve={resolution => void act(() => window.praxis.scheduledRuns.resolveMissed(view.run.id, resolution))}
@@ -351,6 +358,7 @@ function RunCard({
   onOpen,
   onDelete,
   onArm,
+  onTrust,
   onRunNow,
   starting,
   onResolve
@@ -363,6 +371,7 @@ function RunCard({
   onOpen: () => void;
   onDelete: () => void;
   onArm: (armed: boolean) => void;
+  onTrust: () => void;
   onRunNow: () => void;
   starting: boolean;
   onResolve: (resolution: 'start-now' | 'skip') => void;
@@ -409,7 +418,7 @@ function RunCard({
 
       {expanded && (
         <div className="lineup-row-body">
-          <LineupDetails view={view} editable={editable} />
+          <LineupDetails view={view} editable={editable} onTrust={onTrust} />
           <div className="schedule-actions lineup-actions">
             {run.status === 'draft' && primary !== runNow && runNow}
             {run.status === 'draft' && primary !== arm && arm}
