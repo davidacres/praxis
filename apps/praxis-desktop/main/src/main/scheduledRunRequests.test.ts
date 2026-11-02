@@ -63,6 +63,23 @@ test('a request file becomes an ordered, unarmed draft with a status file', asyn
   }
 });
 
+test('independent tickets in a request become a parallel draft with max 2', async () => {
+  const f = await fixture();
+  try {
+    // Override issues so TASK-1 and TASK-2 do not depend on each other
+    f.deps.issues = async () => [issue('PRX-1', 'TASK-1'), issue('PRX-2', 'TASK-2')];
+    await f.write('parallel.json', { name: 'Parallel night' });
+    await importScheduledRunRequests(f.deps);
+    const run = f.store.list().find(r => r.name === 'Parallel night');
+    assert.ok(run);
+    assert.deepEqual(run.policy, { mode: 'parallel', maxConcurrency: 2, workflowId: 'full-sdlc' });
+    assert.equal(run.entries[0].withPrevious, undefined);
+    assert.equal(run.entries[1].withPrevious, true);
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test('editing the request updates the same draft and keeps entry ids', async () => {
   const f = await fixture();
   try {

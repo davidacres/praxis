@@ -1,4 +1,5 @@
 import type { ScheduledQueueEntry, ScheduledTicketRef } from '@praxis/core';
+import type { Candidate } from './ScheduleTickets';
 
 /**
  * The composer's run order as steps (FX-BF-047). A step is one ticket, or several
@@ -106,4 +107,105 @@ export function toggleTogether(steps: FlowSteps, key: string): FlowSteps {
 /** "1", "2a", "2b": the label a ticket's node carries. */
 export function stepLabel(step: number, lane: number, size: number): string {
   return size > 1 ? `${step + 1}${String.fromCharCode(97 + Math.min(lane, 25))}` : String(step + 1);
+}
+
+/**
+ * Auto-detects which tickets can run in parallel based on plan dependencies and
+ * groups them into parallel steps with at most `maxConcurrency` tickets per step.
+ */
+export function autoDetectParallelSteps(
+  tickets: readonly ScheduledTicketRef[],
+  candidates: readonly Candidate[] | undefined,
+  maxConcurrency: number
+): FlowSteps {
+  const concurrency = Math.max(1, Math.min(4, Math.floor(maxConcurrency || 1)));
+  if (!tickets.length) return [];
+  if (concurrency === 1 || tickets.length === 1) {
+    return tickets.map(ticket => [{ ...ticket }]);
+  }
+
+  // Build maps of candidates to check dependencies
+  const candidateByKey = new Map<string, Candidate>();
+  const candidateByPlanId = new Map<string, Candidate>();
+  for (const c of candidates ?? []) {
+    candidateByKey.set(c.key, c);
+    candidateByKey.set(`${c.connectionId}\u0000${c.key}`, c);
+    if (c.planningId) {
+      candidateByPlanId.set(c.planningId, c);
+    }
+  }
+
+  // Set of tickets on the belt by flowKey and by issueKey
+  const beltByFlowKey = new Map<string, ScheduledTicketRef>();
+  const beltByIssueKey = new Map<string, ScheduledTicketRef>();
+  for (const t of tickets) {
+    beltByFlowKey.set(flowKey(t), t);
+    beltByIssueKey.set(t.issueKey, t);
+  }
+
+  // For each ticket on the belt, find which other tickets on the belt it depends on
+  const queuedDeps = new Map<string, Set<string>>();
+  for (const t of tickets) {
+    const fKey = flowKey(t);
+    const deps = new Set<string>();
+    const c = candidateByKey.get(fKey) ?? candidateByKey.get(t.issueKey);
+    for (const rawDep of c?.dependsOn ?? []) {
+      const depKey = rawDep.trim();
+      if (!depKey) continue;
+      const targetCandidate = candidateByKey.get(depKey) ?? candidateByPlanId.get(depKey);
+      const targetBeltTicket =
+        (targetCandidate ? beltByFlowKey.get(flowKey({ connectionId: targetCandidate.connectionId, issueKey: targetCandidate.key })) : undefined) ??
+        beltByIssueKey.get(targetCandidate?.key ?? depKey);
+
+      if (targetBeltTicket) {
+        const targetFlowKey = flowKey(targetBeltTicket);
+        if (targetFlowKey !== fKey) {
+          deps.add(targetFlowKey);
+        }
+      }
+    }
+    queuedDeps.set(fKey, deps);
+  }
+
+  // Partition into steps with topological grouping
+  const steps: FlowSteps = [];
+  const placed = new Set<string>();
+  const remaining = tickets.map(t => ({ ...t }));
+
+  while (remaining.length > 0) {
+    const readyIndices: number[] = [];
+    for (let i = 0; i < remaining.length; i++) {
+      const t = remaining[i];
+      const deps = queuedDeps.get(flowKey(t)) ?? new Set();
+      let allPlaced = true;
+      for (const dep of deps) {
+        if (!placed.has(dep)) {
+          allPlaced = false;
+          break;
+        }
+      }
+      if (allPlaced) {
+        readyIndices.push(i);
+        if (readyIndices.length >= concurrency) break;
+      }
+    }
+
+    if (readyIndices.length === 0) {
+      const [fallback] = remaining.splice(0, 1);
+      steps.push([fallback]);
+      placed.add(flowKey(fallback));
+      continue;
+    }
+
+    const batch: ScheduledTicketRef[] = [];
+    for (let i = readyIndices.length - 1; i >= 0; i--) {
+      batch.unshift(remaining.splice(readyIndices[i], 1)[0]);
+    }
+    steps.push(batch);
+    for (const item of batch) {
+      placed.add(flowKey(item));
+    }
+  }
+
+  return steps;
 }

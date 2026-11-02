@@ -394,15 +394,15 @@ The catalog is an index of the complete automated suite. Curated contracts may a
   'praxis-scheduled-runs': {
     name: 'praxis-scheduled-runs',
     title: 'Scheduled Run Authoring',
-    description: 'Prepare a Praxis scheduled run as an unarmed draft, with plan tasks ordered for execution, by writing a request file Praxis imports.',
+    description: 'Prepare a Praxis scheduled run as an unarmed draft, with plan tasks ordered for execution and independent tasks set to run in parallel (max 2), by writing a request file Praxis imports.',
     triggers: ['scheduled run', 'schedule tasks', 'overnight run', 'run queue', 'ordered tasks', 'schedule the plan'],
-    version: '1.0.0',
+    version: '1.1.0',
     instructions: `---
 name: praxis-scheduled-runs
 title: Scheduled Run Authoring
-description: "Prepare a Praxis scheduled run as an unarmed draft, with plan tasks ordered for execution, by writing a request file Praxis imports."
+description: "Prepare a Praxis scheduled run as an unarmed draft, with plan tasks ordered for execution and independent tasks set to run in parallel (max 2), by writing a request file Praxis imports."
 triggers: scheduled run, schedule tasks, overnight run, run queue, ordered tasks, schedule the plan
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Scheduled Run Authoring
@@ -421,6 +421,8 @@ does that in Praxis after reviewing the draft.
 3. Put each ticket after everything it depends on. Every dependency must be queued earlier, already done
    on the board, or listed in \`satisfiedDependencies\` because you confirmed it is finished. If unsure,
    set \`"order": "dependencies"\` and Praxis sorts the queue, keeping your order wherever it is free.
+   Independent tickets with no dependency between them are automatically detected and set to run in
+   parallel lanes with up to 2 tasks at once.
 4. Refer to tickets by plan ID (\`TASK-476\`) or board key. Praxis resolves both; a plan ID that matches
    two items is rejected, so use the board key then.
 
@@ -451,7 +453,8 @@ its \`.praxis\` directory and plans):
   "timezone": "Europe/London",
   "order": "as-listed",
   "tickets": ["TASK-476", "TASK-477", "TASK-478"],
-  "satisfiedDependencies": []
+  "satisfiedDependencies": [],
+  "maxConcurrency": 2
 }
 \`\`\`
 
@@ -459,6 +462,7 @@ its \`.praxis\` directory and plans):
   \`timezone\`, \`tickets\`.
 - \`order\`: \`as-listed\` (default) keeps your order and rejects one that breaks a dependency;
   \`dependencies\` sorts it.
+- \`maxConcurrency\`: tickets allowed at once (defaults to 2 for parallel lanes; set to 1 for sequential).
 - \`projectId\`: only needed when several Praxis projects share the folder; the status file names them.
 - Do not put request files under \`docs/plans\`, where they would be read as plan items.
 

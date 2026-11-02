@@ -40,6 +40,8 @@ export interface ScheduledRunRequest {
   tickets: string[];
   /** Dependencies outside the queue that are known to be finished even though the board does not say so. */
   satisfiedDependencies: string[];
+  /** Tickets allowed at once (default 2 for parallel task authoring; 1 keeps sequential). */
+  maxConcurrency?: number;
 }
 
 export interface ScheduledRunRequestEntry {
@@ -145,6 +147,14 @@ export function parseScheduledRunRequest(text: string): ScheduledRunRequest {
   const satisfiedDependencies = stringList(raw.satisfiedDependencies, 'satisfiedDependencies', problems);
   const projectId = optionalString(raw.projectId, 'projectId', problems);
   const workflowId = optionalString(raw.workflowId, 'workflowId', problems);
+  let maxConcurrency: number | undefined;
+  if (raw.maxConcurrency !== undefined) {
+    if (typeof raw.maxConcurrency !== 'number' || !Number.isInteger(raw.maxConcurrency) || raw.maxConcurrency < 1 || raw.maxConcurrency > 4) {
+      problems.push('"maxConcurrency" must be a whole number between 1 and 4.');
+    } else {
+      maxConcurrency = raw.maxConcurrency;
+    }
+  }
   if (problems.length) throw new ScheduledRunRequestError(problems);
   return {
     schemaVersion: 1,
@@ -157,7 +167,8 @@ export function parseScheduledRunRequest(text: string): ScheduledRunRequest {
     timezone,
     order: order as ScheduledRunRequestOrder,
     tickets,
-    satisfiedDependencies
+    satisfiedDependencies,
+    ...(maxConcurrency !== undefined ? { maxConcurrency } : {})
   };
 }
 
@@ -165,6 +176,8 @@ export interface ResolvedScheduledRunRequest {
   tickets: ScheduledTicketRef[];
   entries: ScheduledRunRequestEntry[];
   warnings: string[];
+  withPrevious: string[];
+  maxConcurrency: number;
 }
 
 function isDone(issue: IssueSummary): boolean {
@@ -182,7 +195,7 @@ function label(issue: IssueSummary): string {
  * earlier, already done, or named in `satisfiedDependencies`.
  */
 export function resolveScheduledRunRequest(
-  request: Pick<ScheduledRunRequest, 'tickets' | 'order' | 'satisfiedDependencies'>,
+  request: Pick<ScheduledRunRequest, 'tickets' | 'order' | 'satisfiedDependencies'> & { maxConcurrency?: number },
   issues: readonly IssueSummary[],
   connectionId: string
 ): ResolvedScheduledRunRequest {
@@ -265,15 +278,52 @@ export function resolveScheduledRunRequest(
   }
 
   if (problems.length) throw new ScheduledRunRequestError(problems);
-  const entries = ordered.map((issue, index) => ({
+
+  // Group ready tickets into parallel steps (up to maxConcurrency, default 2 for the skill)
+  const maxConcurrency = request.maxConcurrency ?? 2;
+  const steps: IssueSummary[][] = [];
+  const stepPlaced = new Set<string>();
+  const stepRemaining = [...ordered];
+  while (stepRemaining.length) {
+    const readyIndices: number[] = [];
+    for (let i = 0; i < stepRemaining.length; i++) {
+      const issue = stepRemaining[i];
+      const deps = queuedDeps.get(issue.key) ?? [];
+      if (deps.every(dep => stepPlaced.has(dep))) {
+        readyIndices.push(i);
+        if (readyIndices.length >= maxConcurrency) break;
+      }
+    }
+    if (readyIndices.length === 0) {
+      const [fallback] = stepRemaining.splice(0, 1);
+      steps.push([fallback]);
+      stepPlaced.add(fallback.key);
+      continue;
+    }
+    const batch: IssueSummary[] = [];
+    for (let i = readyIndices.length - 1; i >= 0; i--) {
+      batch.unshift(stepRemaining.splice(readyIndices[i], 1)[0]);
+    }
+    steps.push(batch);
+    for (const item of batch) {
+      stepPlaced.add(item.key);
+    }
+  }
+
+  const finalOrdered = steps.flat();
+  const withPrevious = steps.flatMap(step => step.slice(1).map(issue => `${connectionId}\u0000${issue.key}`));
+
+  const entries = finalOrdered.map((issue, index) => ({
     sequence: index + 1,
     issueKey: issue.key,
     ...(issue.planningId ? { planningId: issue.planningId } : {}),
     title: issue.summary
   }));
   return {
-    tickets: ordered.map(issue => ({ connectionId, issueKey: issue.key, title: issue.summary })),
+    tickets: finalOrdered.map(issue => ({ connectionId, issueKey: issue.key, title: issue.summary })),
     entries,
-    warnings
+    warnings,
+    withPrevious,
+    maxConcurrency
   };
 }

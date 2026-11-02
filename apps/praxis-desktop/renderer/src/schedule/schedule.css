@@ -103,6 +103,7 @@
   radial-gradient(420px 220px at 92% 40%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%), var(--bg-elevated); }
 .schedule-stage-head { display: flex; align-items: center; gap: var(--space-2); }
 .schedule-stage-head .schedule-panel-title { flex: 1; margin: 0; }
+.schedule-auto-detect-btn { height: 24px; padding: 0 var(--space-2); font-size: var(--text-xs); }
 .schedule-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 var(--space-2); border: 1px solid var(--border-strong); border-radius: var(--radius-pill); color: var(--text-secondary); font-size: var(--text-xs); font-weight: 600; background: var(--bg-elevated); }
 .schedule-tag { display: inline-block; padding: 0 var(--space-1); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text-tertiary); font-size: var(--text-xs); }
 

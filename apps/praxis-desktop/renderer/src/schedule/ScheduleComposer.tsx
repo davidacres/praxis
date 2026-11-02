@@ -12,7 +12,7 @@ import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './
 import { ScheduleFlowGraph } from './ScheduleFlowGraph';
 import { ScheduleRehearsal } from './ScheduleRehearsal';
 import { formatHourMinute, formatMoney } from './scheduleSpotlight';
-import { flattenSteps, flowKey, moveEarlier, moveLater, placeTickets, removeTicket, stepsFromEntries, toggleTogether, type FlowSteps, type FlowTarget } from './scheduleFlow';
+import { autoDetectParallelSteps, flattenSteps, flowKey, moveEarlier, moveLater, placeTickets, removeTicket, stepsFromEntries, toggleTogether, type FlowSteps, type FlowTarget } from './scheduleFlow';
 
 /**
  * The scheduled-run composer (FX-BF-047 / FX-BE-147 / TASK-384), drawn as the Line
@@ -170,6 +170,17 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   };
   const addCandidate = (candidate: Candidate, target?: FlowTarget) => addTickets(expandScheduleTickets(candidates ?? [], [candidate]).map(refOf), target);
 
+  const autoDetectParallel = () => {
+    const currentLanes = Number(lanes);
+    const targetLanes = Math.max(2, currentLanes);
+    const currentTickets = steps.flat();
+    const nextSteps = autoDetectParallelSteps(currentTickets, candidates, targetLanes);
+    setSteps(nextSteps);
+    if (currentLanes <= 1 && nextSteps.some(step => step.length > 1)) {
+      setLanes(String(targetLanes));
+    }
+  };
+
   const dropAt = (target: FlowTarget, dataTransfer?: DataTransfer) => {
     let drag = dragging.current;
     if (!drag && dataTransfer) {
@@ -310,6 +321,16 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
             data-drag-over={dropTarget !== undefined || undefined}>
             <div className="schedule-stage-head">
               <h3 className="schedule-panel-title">Run order <span className="schedule-panel-note">left to right · drop onto a ticket to share its step</span></h3>
+              <button
+                type="button"
+                className="btn btn-sm schedule-auto-detect-btn"
+                data-testid="schedule-auto-detect-parallel"
+                disabled={count < 2}
+                onClick={autoDetectParallel}
+                title="Auto-detect which tasks can run in parallel based on dependencies"
+              >
+                <Icon name="split-horizontal" size={12} /> Auto-detect parallel
+              </button>
               <span className="schedule-pill" data-testid="schedule-count">{count} ticket{count === 1 ? '' : 's'}</span>
               {stepCount > 0 && <span className="schedule-pill">{stepCount} step{stepCount === 1 ? '' : 's'}</span>}
             </div>

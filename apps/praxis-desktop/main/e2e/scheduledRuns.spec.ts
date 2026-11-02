@@ -1179,6 +1179,32 @@ test('parallel lanes are a deliberate choice in the editor: a budget warning sho
   await expect(page.getByTestId('schedule-lanes-warning')).toBeVisible();
 });
 
+test('auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number', async () => {
+  const titles = ['Fix pager bug', 'Add export CSV', 'Log retention'];
+  const { page } = await launch({ titles });
+  await page.getByTestId('schedule-new').click();
+  for (const title of titles) await page.getByTestId('schedule-hopper-card').filter({ hasText: title }).press('Enter');
+
+  // Initially in 3 sequential steps
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(3);
+  await expect(page.getByTestId('schedule-auto-detect-parallel')).toBeEnabled();
+
+  // Clicking auto-detect while lanes is 1 detects parallel tasks with max 2 and updates lanes
+  await page.getByTestId('schedule-auto-detect-parallel').click();
+  // 3 tickets with max 2 -> 2 steps (step 1 has 2 tickets, step 2 has 1 ticket)
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
+  await expect(page.getByTestId('schedule-lanes')).toHaveAttribute('data-value', '2');
+
+  // Changing lanes to 3 and clicking auto-detect parallel groups all 3 into 1 parallel step
+  await chooseOption(page.getByTestId('schedule-lanes'), { label: 'Up to 3 at once' });
+  await page.getByTestId('schedule-auto-detect-parallel').click();
+  await expect(page.getByTestId('schedule-flow-step')).toHaveCount(1);
+  await expect(page.getByTestId('schedule-lanes')).toHaveAttribute('data-value', '3');
+
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-auto-detect-parallel.png') });
+});
+
 test('two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first', async () => {
   const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
   const { page, projectId } = await launch({ env, titles: ['Lane one', 'Lane two', 'Lane three', 'After the step'] });

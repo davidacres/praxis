@@ -12,6 +12,8 @@ export interface Candidate {
   parentKey?: string;
   finished: boolean;
   container: boolean;
+  planningId?: string;
+  dependsOn?: string[];
 }
 
 /** Load the full hierarchy for group expansion; the picker hides completed work. */
@@ -34,7 +36,9 @@ export function useScheduleTickets(project: ProjectRecord) {
             const stage = project.workflowStages.find(item => item.name.toLowerCase() === issue.status.toLowerCase());
             found.push({ connectionId: source.connectionId, key: issue.key, title: issue.summary, status: issue.status, issueType: issue.issueType, parentKey: issue.parentKey,
               finished: stage ? stage.category === 'done' : (issue.statusCategory ?? '').toLowerCase() === 'done' || /^(done|closed|resolved|complete|completed)$/i.test(issue.status),
-              container: /^(feature|epic)$/i.test(issue.issueType) });
+              container: /^(feature|epic)$/i.test(issue.issueType),
+              planningId: issue.planningId,
+              dependsOn: issue.dependsOn });
           }
           startAt += page.issues.length;
           if (!page.issues.length || (page.total !== undefined ? startAt >= page.total : page.issues.length < 100)) break;

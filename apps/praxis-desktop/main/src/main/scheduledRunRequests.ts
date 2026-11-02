@@ -109,6 +109,8 @@ async function importOne(
       time: request.time,
       timezone: request.timezone,
       tickets: resolved.tickets,
+      withPrevious: resolved.withPrevious,
+      maxConcurrency: resolved.maxConcurrency,
       ...(workflowId ? { workflowId } : {}),
       arm: false,
       at: checkedAt

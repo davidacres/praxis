@@ -97,6 +97,29 @@ test('resolve rejects unknown, duplicate and ambiguous references and warns abou
   assert.match(warned.warnings[0], /already done/);
 });
 
+test('resolve automatically groups independent tickets into parallel steps with max 2', () => {
+  const board = [
+    issue('PRX-1', 'TASK-1'),
+    issue('PRX-2', 'TASK-2'),
+    issue('PRX-3', 'TASK-3', ['PRX-1']),
+    issue('PRX-4', 'TASK-4', ['PRX-2']),
+    issue('PRX-5', 'TASK-5')
+  ];
+  // TASK-1 and TASK-2 can run in parallel (Step 0)
+  // TASK-3 (depends on TASK-1) and TASK-4 (depends on TASK-2) can run in parallel (Step 1)
+  // TASK-5 runs in Step 2
+  const resolved = resolveScheduledRunRequest(parseScheduledRunRequest(request({ tickets: ['TASK-1', 'TASK-2', 'TASK-3', 'TASK-4', 'TASK-5'] })), board, 'project:p1');
+  assert.equal(resolved.maxConcurrency, 2);
+  assert.deepEqual(resolved.tickets.map(t => t.issueKey), ['PRX-1', 'PRX-2', 'PRX-3', 'PRX-4', 'PRX-5']);
+  // PRX-2 shares step with PRX-1, PRX-4 shares step with PRX-3
+  assert.deepEqual(resolved.withPrevious, ['project:p1\u0000PRX-2', 'project:p1\u0000PRX-4']);
+
+  // Explicit maxConcurrency: 1 keeps tickets sequential
+  const sequential = resolveScheduledRunRequest(parseScheduledRunRequest(request({ tickets: ['TASK-1', 'TASK-2'], maxConcurrency: 1 })), board, 'project:p1');
+  assert.equal(sequential.maxConcurrency, 1);
+  assert.deepEqual(sequential.withPrevious, []);
+});
+
 test('file naming helpers', () => {
   assert.equal(isScheduledRunRequestFile('night.json'), true);
   assert.equal(isScheduledRunRequestFile('night.status.json'), false);

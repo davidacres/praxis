@@ -167,7 +167,7 @@ test('the scheduled-run skill is installed for everyone, updated by version, and
     await mirrorBundledSkills(tmp);
     assert.strictEqual(await fs.readFile(file, 'utf8'), edited);
 
-    await fs.writeFile(file, edited.replace('version: 1.0.0', 'version: 0.9.0'));
+    await fs.writeFile(file, edited.replace(/version: \S+/, 'version: 0.9.0'));
     await mirrorBundledSkills(tmp);
     assert.strictEqual(await fs.readFile(file, 'utf8'), written);
   } finally {
