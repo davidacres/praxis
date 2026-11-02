@@ -38,6 +38,7 @@ import {
 import { isProviderLimitError, extractProviderLimitMessage } from './providerLimitError';
 import { dedupeCumulativeReasoning } from './agentEventUtils';
 import { detectSkillUses, mergeDetectedSkillUses } from './skillUsage';
+import { addToChangeSummary } from './sessionChangeSummary';
 import { estimateCostUsd } from './providers/modelPricing';
 import type { ReasoningEffort } from './providers/reasoningSupport';
 
@@ -440,6 +441,11 @@ export class AiSessionManager {
         if (record.detectedSkills?.length) void this.persistAgentSessions();
         else record.detectedSkills = undefined;
       }
+      // Sessions recorded before change summaries existed are totalled when first opened.
+      if (record.changeSummary === undefined) {
+        record.changeSummary = addToChangeSummary(undefined, record.events);
+        if (record.changeSummary) void this.persistAgentSessions();
+      }
       record.conversationHistory = transcript.conversationHistory;
       if (transcript.planText !== undefined) record.planText = transcript.planText;
       if (transcript.reasoningText !== undefined) record.reasoningText = transcript.reasoningText;
@@ -738,6 +744,7 @@ export class AiSessionManager {
     ));
     const skillUses = detectSkillUses(events);
     if (skillUses.length) record.detectedSkills = mergeDetectedSkillUses(record.detectedSkills, skillUses);
+    record.changeSummary = addToChangeSummary(record.changeSummary, events);
     if (incrementSteps) {
       record.stepCount += incrementSteps;
     }

@@ -23278,49 +23278,102 @@ button.feedback-score-pill {
   background: transparent;
   cursor: pointer;
 }
+/* Spines say what each session needs. Colour is its state and length is how recent it
+   is; a working stripe travels, a question is dashed, an approval is a wide bar, and the
+   two states that need you carry a filled ! or ? cap. */
+.session-shelf__spine { --spine: var(--lane-idle); }
+.session-shelf__spine.is-run { --spine: var(--lane-running); }
+.session-shelf__spine.is-appr, .session-shelf__spine.is-wait { --spine: var(--lane-awaiting); }
+.session-shelf__spine.is-done { --spine: var(--lane-done); }
+.session-shelf__spine.is-fail { --spine: var(--lane-failed); }
 .session-shelf__spine::before {
   content: '';
-  width: 2px;
-  height: calc(48% - 6px);
-  border-radius: 3px;
-  background: var(--text-secondary);
-  opacity: .38;
-  transition: width 200ms ease-out, height 200ms ease-out, background 200ms ease-out, box-shadow 200ms ease-out, opacity 200ms ease-out;
-}
-.session-shelf__spine.is-today::before {
   width: 3px;
-  height: calc(68% - 6px);
-  background: color-mix(in srgb, var(--accent) 62%, var(--text-secondary));
-  opacity: .88;
+  height: calc(20px * var(--ui-scale));
+  border-radius: 2px;
+  background: var(--spine);
+  opacity: .55;
+  transition: height 200ms ease-out, opacity 200ms ease-out, box-shadow 200ms ease-out;
 }
-.session-shelf__spine.is-today::after {
-  content: '';
-  position: absolute;
-  bottom: 5px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: .75;
-  transition: opacity 200ms ease-out;
+.session-shelf__spine.is-today::before { height: calc(36px * var(--ui-scale)); opacity: .9; }
+.session-shelf__spine.is-done::before { opacity: .45; }
+.session-shelf__spine.is-today.is-done::before { opacity: .75; }
+.session-shelf__spine.is-appr::before { width: 5px; border-radius: 1px; opacity: 1; }
+.session-shelf__spine.is-wait::before { opacity: 1; background: repeating-linear-gradient(180deg, var(--spine) 0 4px, transparent 4px 7px); }
+.session-shelf__spine.is-run::before, .session-shelf__spine.is-run .session-shelf__track-fill {
+  opacity: 1;
+  background: repeating-linear-gradient(180deg, var(--spine) 0 6px, color-mix(in srgb, var(--spine) 35%, transparent) 6px 12px);
+  background-size: 100% 24px;
+  animation: session-shelf-flow 1.2s linear infinite;
 }
+@keyframes session-shelf-flow { to { background-position: 0 24px; } }
 .session-shelf__spine.is-today + .session-shelf__spine:not(.is-today) {
   border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
 }
-.session-shelf__spine[aria-expanded="true"]::before {
-  width: 3px;
-  height: calc(100% - 8px);
-  background: var(--accent);
+/* Revealed: the slot takes a wash of the spine's colour and the spine glows. */
+.session-shelf__spine[aria-expanded="true"] { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--spine) 12%, transparent)); }
+.session-shelf__spine[aria-expanded="true"]::before, .session-shelf__spine[aria-expanded="true"] .session-shelf__track {
   opacity: 1;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--spine) 45%, transparent);
 }
-.session-shelf__spine.is-today[aria-expanded="true"]::after {
-  opacity: 0;
+/* Selection (the session open in the main pane) is a quiet edge mark, separate from state. */
+.session-shelf__spine[aria-current] { box-shadow: inset 1px 0 var(--text-secondary); }
+/* The cap is an 11px tile at the spine's head, centred on the 13px cell like the line. */
+.session-shelf__attention {
+  position: absolute;
+  top: 3px;
+  left: 1px;
+  display: grid;
+  place-items: center;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--spine);
+  color: var(--bg);
 }
-/* Selection is a quiet edge mark; only the revealed preview lights a spine.
-   Keyboard focus keeps the global focus ring without a second preview glow. */
-.session-shelf__spine[aria-current] { box-shadow: inset 1px 0 color-mix(in srgb, var(--accent) 45%, transparent); }
-.session-shelf__spine[aria-expanded="true"] { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 8%, transparent)); }
+.session-shelf__attention svg { display: block; }
+/* A task list turns the line into a track that fills as the agent ticks its steps off. */
+.session-shelf__spine.has-track::before { display: none; }
+.session-shelf__track {
+  position: relative;
+  width: 3px;
+  height: calc(20px * var(--ui-scale));
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--spine) 24%, transparent);
+}
+.session-shelf__spine.is-today .session-shelf__track { height: calc(36px * var(--ui-scale)); }
+.session-shelf__track-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--spine); }
+/* Files the session's own tools changed: green for lines added, red for removed. */
+.session-shelf__diff {
+  position: absolute;
+  top: 50%;
+  right: 1px;
+  display: flex;
+  flex-direction: column;
+  width: 2px;
+  height: 16px;
+  overflow: hidden;
+  border-radius: 1px;
+  transform: translateY(-50%);
+}
+.session-shelf__diff-add { background: var(--success); }
+.session-shelf__diff-del { background: var(--danger); }
+.session-shelf__more {
+  flex: none;
+  width: 100%;
+  height: calc(24px * var(--ui-scale));
+  margin-bottom: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font: 600 calc(9px * var(--ui-scale))/1 var(--font-mono);
+  letter-spacing: -.04em;
+  cursor: pointer;
+}
+.session-shelf__more:hover, .session-shelf__more[aria-expanded="true"] { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.session-shelf__more:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: -2px; }
 /* The sleeve is the shelf opening: it clips the card's slide, so the card can
    never appear to the left of the rail. Its padding keeps the card's shadow
    from being cut once the card is fully out. */
@@ -23631,10 +23684,6 @@ button.feedback-score-pill {
 
 /* Shelf books follow their spine; selection and attention use separate marks. */
 .session-shelf__sleeve { align-items: flex-start; }
-.session-shelf__spine[aria-current]::before { background: var(--tone-progress); opacity: 1; }
-.session-shelf__spine[aria-current] { box-shadow: inset 1px 0 var(--tone-progress); }
-.session-shelf__spine[aria-current][aria-expanded="true"]::before { box-shadow: 0 0 8px color-mix(in srgb, var(--tone-progress) 45%, transparent); }
-.session-shelf__attention { position: absolute; top: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
 /* Creation cells: both actions fill the rail's own 14px, each a 24px tinted cell
    coloured by what it makes (accent = session, --tone-note = note). The open cell
    fills solid, and its card slides out level with it, edged in the same colour. */
@@ -23708,6 +23757,99 @@ button.feedback-score-pill {
 .session-shelf__card--session[data-lane="done"] { --shelf-lane: var(--lane-done); }
 .session-shelf__card--session[data-lane="failed"] { --shelf-lane: var(--lane-failed); }
 .session-shelf__card--session[data-lane="idle"] { --shelf-lane: var(--text-secondary); }
+.session-shelf__card--list { --shelf-lane: var(--text-secondary); }
+.session-shelf__nav { display: inline-flex; gap: 2px; margin-right: -6px; }
+.session-shelf__nav button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.session-shelf__nav button:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 11%, transparent); }
+.session-shelf__nav button:disabled { opacity: .35; cursor: default; }
+.session-shelf__plan { display: grid; gap: 6px; }
+.session-shelf__plan-head { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+.session-shelf__plan-bar { flex: 1; height: 4px; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--text) 9%, transparent); }
+.session-shelf__plan-bar i { display: block; height: 100%; background: var(--lane-running); }
+.session-shelf__plan ul { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.session-shelf__plan li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.session-shelf__plan li > span { flex: none; width: 10px; height: 10px; border: 1px solid var(--border-strong, var(--border)); border-radius: 3px; }
+.session-shelf__plan li.is-completed { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-secondary) 50%, transparent); }
+.session-shelf__plan li.is-completed > span { border-color: var(--success); background: var(--success); }
+.session-shelf__plan li.is-in_progress { font-weight: 600; }
+.session-shelf__plan li.is-in_progress > span { border-color: var(--lane-running); background: var(--lane-running); box-shadow: inset 0 0 0 2px var(--bg-elevated); }
+.session-shelf__request { display: grid; gap: 4px; padding: 9px 11px; border-radius: 6px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.session-shelf__request code { color: var(--text); font: 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.session-shelf__request span { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 11px; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.session-shelf__check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.session-shelf__check input { margin: 0; accent-color: var(--accent); }
+.session-shelf__secondary {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.session-shelf__secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.session-shelf__primary:disabled, .session-shelf__secondary:disabled { opacity: .45; cursor: default; }
+.session-shelf__changes { display: grid; gap: 4px; font-size: 11.5px; }
+.session-shelf__changes-head { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.session-shelf__add { color: var(--success); font-variant-numeric: tabular-nums; }
+.session-shelf__del { color: var(--danger); font-variant-numeric: tabular-nums; }
+.session-shelf__changes ul { margin: 0; padding: 0; list-style: none; font: 11px var(--font-mono); }
+.session-shelf__changes li { display: flex; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); }
+.session-shelf__changes, .session-shelf__changes ul { min-width: 0; }
+.session-shelf__changes li > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-shelf__changes li b { color: var(--text); font-weight: 500; }
+.session-shelf__dir { margin-left: 6px; color: var(--text-secondary); }
+.session-shelf__changes li.session-shelf__more-files { color: var(--text-secondary); font-family: inherit; }
+.session-shelf__foot-action { display: inline-flex; align-items: center; gap: 4px; }
+.session-shelf__search {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.session-shelf__search:focus { border-color: var(--accent-border, var(--accent)); }
+.session-shelf__list { display: grid; gap: 1px; max-height: 320px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.session-shelf__list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.session-shelf__list button:hover, .session-shelf__list button:focus-visible { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.session-shelf__list-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-shelf__swatch { flex: none; width: 3px; height: 16px; border-radius: 2px; background: var(--lane-idle); }
+.session-shelf__list [data-state="run"] .session-shelf__swatch { background: var(--lane-running); }
+.session-shelf__list [data-state="appr"] .session-shelf__swatch, .session-shelf__list [data-state="wait"] .session-shelf__swatch { background: var(--lane-awaiting); }
+.session-shelf__list [data-state="done"] .session-shelf__swatch { background: var(--lane-done); }
+.session-shelf__list [data-state="fail"] .session-shelf__swatch { background: var(--lane-failed); }
+.session-shelf__empty { padding: 6px 8px; color: var(--text-secondary); font-size: 12px; }
 .session-shelf__band {
   display: flex;
   align-items: center;
@@ -23911,7 +24053,9 @@ button.feedback-score-pill {
   box-shadow: 0 10px 28px color-mix(in srgb, var(--text) 18%, transparent);
 }
 .session-shelf__split .session-shelf__menu button { display: flex; align-items: center; gap: 8px; height: auto; padding: 6px 8px; border-radius: 5px; font-weight: 400; text-align: left; }
-@media (prefers-reduced-motion: reduce) { .session-shelf__flag { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .session-shelf__flag, .session-shelf__spine.is-run::before, .session-shelf__spine.is-run .session-shelf__track-fill { animation: none; }
+}
 .note-editor { display: flex; flex-direction: column; gap: 8px; }
 .note-editor__title, .note-editor__body {
   width: 100%;

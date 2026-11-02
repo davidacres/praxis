@@ -68,21 +68,19 @@ test('collapsed session shelf shows the last 5 sessions, distinguishes today, an
     const earlierSpine = element.querySelector('.session-shelf__spine:not(.is-today)')!;
     const todayBefore = getComputedStyle(todaySpine, '::before');
     const earlierBefore = getComputedStyle(earlierSpine, '::before');
-    const todayAfter = getComputedStyle(todaySpine, '::after');
     return {
       todayHeight: parseFloat(todayBefore.height),
       earlierHeight: parseFloat(earlierBefore.height),
-      todayWidth: parseFloat(todayBefore.width),
-      earlierWidth: parseFloat(earlierBefore.width),
+      todayOpacity: parseFloat(todayBefore.opacity),
+      earlierOpacity: parseFloat(earlierBefore.opacity),
       todayColor: todayBefore.backgroundColor,
-      earlierColor: earlierBefore.backgroundColor,
-      todayPipWidth: parseFloat(todayAfter.width)
+      earlierColor: earlierBefore.backgroundColor
     };
   });
+  // Colour is the session's state (both are completed here); recency is length and strength.
   expect(spineVisuals.todayHeight).toBeGreaterThan(spineVisuals.earlierHeight);
-  expect(spineVisuals.todayWidth).toBeGreaterThan(spineVisuals.earlierWidth);
-  expect(spineVisuals.todayColor).not.toBe(spineVisuals.earlierColor);
-  expect(spineVisuals.todayPipWidth).toBeGreaterThan(0);
+  expect(spineVisuals.todayOpacity).toBeGreaterThan(spineVisuals.earlierOpacity);
+  expect(spineVisuals.todayColor).toBe(spineVisuals.earlierColor);
   const centred = await shelf.evaluate(element => {
     const bounds = element.getBoundingClientRect();
     const spines = element.querySelectorAll('.session-shelf__spine');
@@ -354,7 +352,8 @@ test('shelf books follow spines, retain drafts, delay hover and distinguish sele
   await expect.poll(() => shelf.evaluate(element => {
     const selected = element.querySelector('[aria-current]')!;
     const other = element.querySelector('[aria-expanded="true"]')!;
-    return getComputedStyle(selected, '::before').backgroundColor !== getComputedStyle(other, '::before').backgroundColor;
+    // Colour is the session's state, so selection is its own mark: an edge line on the selected spine only.
+    return getComputedStyle(selected).boxShadow !== 'none' && getComputedStyle(other).boxShadow === 'none';
   })).toBe(true);
   const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
   fs.mkdirSync(artifacts, { recursive: true });

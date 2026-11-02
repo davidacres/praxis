@@ -1,3 +1,4 @@
+import type { SessionChangeSummary } from './sessionChangeSummary';
 import type { DetectedSkillUse } from './skillUsage';
 import type { SessionFeedbackSummary } from './feedback/feedbackTypes';
 import type { AiProvider } from '../types';
@@ -545,6 +546,8 @@ export interface AgentSessionRecord {
   skillActivations?: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }>;
   /** Skills the session's AI loaded itself, detected from its tool calls (best-effort; see `skillUsage.ts`). */
   detectedSkills?: DetectedSkillUse[];
+  /** What this session's own tools reported writing, per file (see `sessionChangeSummary.ts`). */
+  changeSummary?: SessionChangeSummary;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   /** Ticket/plan purpose captured when the session started. Older records fall back to taskDefinition. */
