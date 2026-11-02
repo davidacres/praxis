@@ -34,6 +34,7 @@ import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
 import { TaskDesignerItemDetail } from '../taskDesigner/TaskDesignerItemDetail';
 import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
 import { SessionShelf } from './SessionShelf';
+import type { ShelfStartInput } from './ShelfNewSessionCard';
 import { NoteSendDialog } from '../notes/NoteSendDialog';
 import { EasyModeSidebar } from '../components/sidebar/EasyModeSidebar';
 import { AgentDetailsPage } from '../components/agent-details/AgentDetailsPage';
@@ -1753,6 +1754,27 @@ export function App() {
           total: undefined
         };
 
+  /** Starts a session from the collapsed shelf with the composer's untouched defaults — manual
+   *  approval, chat mode, the project's folder and tool mode — without leaving the page. */
+  const startShelfSession = async ({ goal, title, projectId, issueKey, provider, toolMode }: ShelfStartInput) => {
+    const project = projectId ? workspaceProjects.find(item => item.id === projectId) : undefined;
+    const connectionId = issueKey ? selectedBoard?.connectionId : undefined;
+    const workingDirectory = project?.workspaceFolder;
+    const record = await window.praxis.ai.delegate({
+      ...(issueKey ? { issueKey } : {}),
+      mode: 'chat',
+      ...(connectionId ? { connectionId } : {}),
+      ...(project ? { projectId: project.id } : {}),
+      task: { goal },
+      ...(provider ? { provider } : {}),
+      permissionMode: 'manual',
+      toolMode: workingDirectory ? toolMode : 'project-only',
+      ...(workingDirectory ? { workingDirectory } : {})
+    });
+    await window.praxis.ai.renameSession(record.issueKey, title);
+    return { ...record, title };
+  };
+
   const renderNewSession = () => (
     <NewSession
       sessions={agentSessions}
@@ -2665,9 +2687,12 @@ export function App() {
               : { feature: 'sessions', sessionKey: key, view: 'agent-details', subagentId: key,
                   ...(session?.projectId ? { projectId: session.projectId } : {}) });
           }}
-          onNewSession={() => navigate(generalConversations
+          onOpenComposer={goal => navigate(generalConversations
             ? { newConversation: true }
-            : { newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
+            : { newSession: true, ...(easyModeProject ? { projectId: easyModeProject.id } : {}), ...(goal?.trim() ? { newSessionGoal: goal } : {}) })}
+          onStartSession={startShelfSession}
+          onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+          ticketKey={generalConversations ? undefined : route.issueKey}
           notesProjectId={easyModeProject?.id} projects={workspaceProjects} />}
         {sidebarVisible && (
           <>

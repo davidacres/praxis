@@ -40,7 +40,7 @@ async function openNotes(page: Page) {
   return card;
 }
 
-test('the rail stays 14px with both controls inside it, and the plus opens a new session without sending', async () => {
+test('the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending', async () => {
   test.slow();
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
@@ -56,8 +56,10 @@ test('the rail stays 14px with both controls inside it, and the plus opens a new
   }
   const before = await page.evaluate(async () => (await window.praxis.ai.listSessions()).length);
   await shelf.getByTestId('session-shelf-new').click();
-  await expect(page.getByTestId('new-session-view')).toBeVisible();
-  // Opening the composer creates nothing and sends nothing.
+  // The card opens in the shelf with focus already in the goal; the full composer is one step further.
+  await expect(page.getByTestId('session-shelf-new-card')).toBeVisible();
+  await expect(page.getByTestId('shelf-new-goal')).toBeFocused();
+  // Opening the card creates nothing and sends nothing.
   const after = await page.evaluate(async () => (await window.praxis.ai.listSessions()).length);
   expect(after).toBe(before);
   expect((await shelf.boundingBox())!.width).toBeCloseTo(bounds.width, 0);

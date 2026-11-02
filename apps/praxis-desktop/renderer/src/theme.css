@@ -53,6 +53,11 @@
   --tone-workspace: #4ec9b0;
   --tone-green: #3fb950;
   --tone-amber: #d29922;
+  /* Notes (the shelf's note cell and card). Constant like the other tones; text in the
+     tone is mixed toward --text so it reads on light panels, and a solid fill takes dark ink. */
+  --tone-note: var(--tone-amber);
+  --tone-note-text: color-mix(in srgb, var(--tone-note) 72%, var(--text));
+  --tone-note-ink: #2a1c04;
   --tone-red: #f85149;
   --tone-progress: #4c9ee8;
   /* Walkthrough annotation only — deliberately outside the accent and the
@@ -23630,28 +23635,283 @@ button.feedback-score-pill {
 .session-shelf__spine[aria-current] { box-shadow: inset 1px 0 var(--tone-progress); }
 .session-shelf__spine[aria-current][aria-expanded="true"]::before { box-shadow: 0 0 8px color-mix(in srgb, var(--tone-progress) 45%, transparent); }
 .session-shelf__attention { position: absolute; top: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
-/* Slim creation controls live in the rail's own 14px: full-width, unpadded, etched outline icons. */
-.session-shelf__actions { flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+/* Creation cells: both actions fill the rail's own 14px, each a 24px tinted cell
+   coloured by what it makes (accent = session, --tone-note = note). The open cell
+   fills solid, and its card slides out level with it, edged in the same colour. */
+.session-shelf__actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: calc(4px * var(--ui-scale)) 0 calc(6px * var(--ui-scale));
+  border-top: 1px solid var(--border);
+}
 .session-shelf__action {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  /* The cell is 13px (the rail's border is the 14th), so centring a 10px glyph would put
+     it on a half-pixel. Start it 2px in instead: whole pixels, centred on the rail. */
+  place-items: center start;
+  padding-left: 2px;
   width: 100%;
-  height: calc(22px * var(--ui-scale));
-  padding: 0;
+  height: calc(24px * var(--ui-scale));
+  padding-block: 0;
+  padding-right: 0;
   border: 0;
-  background: none;
-  color: var(--text-secondary);
   cursor: pointer;
 }
-.session-shelf__action:hover,
-.session-shelf__action[aria-expanded="true"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.session-shelf__action--new { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.session-shelf__action--notes { color: var(--tone-note-text); background: color-mix(in srgb, var(--tone-note) 14%, transparent); }
+.session-shelf__action--new:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.session-shelf__action--notes:hover { background: color-mix(in srgb, var(--tone-note) 24%, transparent); }
+.session-shelf__action--new[aria-expanded="true"], .session-shelf__action--new.is-flagged { background: var(--accent); color: var(--accent-contrast); }
+.session-shelf__action--notes[aria-expanded="true"], .session-shelf__action--notes.is-flagged { background: var(--tone-note); color: var(--tone-note-ink); }
 /* The ring is drawn inside the rail so it neither clips nor widens it. */
 .session-shelf__action:focus-visible { outline: 2px solid var(--focus-ring, var(--accent)); outline-offset: -2px; }
-.session-shelf__action .icon, .session-shelf__action svg { width: calc(10px * var(--ui-scale)); height: calc(10px * var(--ui-scale)); font-size: calc(10px * var(--ui-scale)); }
-.session-shelf__unsaved { position: absolute; top: 3px; right: 2px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
-.session-shelf__card--notes { min-height: 0; }
+/* Pixel-fit glyphs: the 10px drawing at Compact, the 12px drawing at Large — never a scaled one. */
+.session-shelf__glyph { display: block; flex: none; }
+.session-shelf__glyph--12 { display: none; }
+:root[data-display-size='large'] .session-shelf__glyph--10 { display: none; }
+:root[data-display-size='large'] .session-shelf__glyph--12 { display: block; }
+.session-shelf__unsaved { position: absolute; top: 2px; right: 1px; width: 4px; height: 4px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 1px var(--bg); }
+/* The label flag is the actions' tooltip: it slides out of the rail at the cell's height. */
+.session-shelf__flag {
+  position: absolute;
+  left: 100%;
+  z-index: 27;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(24px * var(--ui-scale));
+  padding: 0 10px 0 9px;
+  border-radius: 0 6px 6px 0;
+  font-size: calc(12px * var(--ui-scale));
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--text) 16%, transparent);
+  animation: session-shelf-flag 140ms cubic-bezier(.2, .8, .2, 1);
+}
+.session-shelf__flag small { font-size: calc(11px * var(--ui-scale)); font-weight: 400; opacity: .85; }
+.session-shelf__flag--new { background: var(--accent); color: var(--accent-contrast); }
+.session-shelf__flag--notes { background: var(--tone-note); color: var(--tone-note-ink); }
+@keyframes session-shelf-flag { from { transform: translateX(-8px); opacity: 0; } }
+
+/* Every shelf card is one shape: a header band naming what it is, then its content
+   on a 10px rhythm. The band and left edge take the card's colour from --shelf-lane. */
+.session-shelf__card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border-left-color: var(--shelf-lane, var(--accent)); }
+.session-shelf__card--new { --shelf-lane: var(--accent); }
+.session-shelf__card--notes { --shelf-lane: var(--tone-note); --shelf-lane-text: var(--tone-note-text); min-height: 0; }
+.session-shelf__card--session { --shelf-lane-text: color-mix(in srgb, var(--shelf-lane) 72%, var(--text)); }
+.session-shelf__card--session[data-lane="running"] { --shelf-lane: var(--lane-running); }
+.session-shelf__card--session[data-lane="awaiting"] { --shelf-lane: var(--lane-awaiting); }
+.session-shelf__card--session[data-lane="done"] { --shelf-lane: var(--lane-done); }
+.session-shelf__card--session[data-lane="failed"] { --shelf-lane: var(--lane-failed); }
+.session-shelf__card--session[data-lane="idle"] { --shelf-lane: var(--text-secondary); }
+.session-shelf__band {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin: -14px -16px 0;
+  padding: 9px 16px;
+  border-radius: 0 calc(8px + var(--surface-radius-boost)) 0 0;
+  background: color-mix(in srgb, var(--shelf-lane) 12%, transparent);
+}
+.session-shelf__band-label {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--shelf-lane-text, var(--shelf-lane));
+}
+.session-shelf__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  min-width: 0;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.session-shelf__band--new .session-shelf__chip { margin-left: auto; }
+.session-shelf__chip-value { overflow: hidden; color: var(--text); text-overflow: ellipsis; }
+.session-shelf__chip.session-shelf__chip--context {
+  border-color: color-mix(in srgb, var(--tone-progress) 30%, var(--border));
+  background: color-mix(in srgb, var(--tone-progress) 9%, var(--bg-elevated));
+}
+.session-shelf__chip-remove { display: grid; place-items: center; width: 14px; height: 14px; margin-right: -3px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--text-secondary); cursor: pointer; }
+.session-shelf__chip-remove:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.session-shelf__project-pick { min-width: 0; }
+.session-shelf__elapsed { color: var(--text-secondary); font-size: 10px; font-variant-numeric: tabular-nums; }
+.session-shelf__save { display: inline-flex; align-items: center; gap: 3px; color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+.session-shelf__save .ui-icon { color: var(--success); }
+.session-shelf__grow { flex: 1; min-width: 0; }
+.session-shelf__row { display: flex; align-items: center; gap: 8px; min-width: 0; position: relative; }
+.session-shelf__row--end { justify-content: flex-end; }
+
+/* The preview card's own parts now sit on the card's gap instead of their margins. */
+.session-shelf__card .session-shelf__title, .session-shelf__card .session-shelf__message, .session-shelf__card .session-shelf__agent { margin: 0; }
+.session-shelf__agent-dot { background: var(--shelf-lane); }
+.session-shelf__card .session-shelf__reply { padding-top: 0; border-top: 0; }
+.session-shelf__card .session-shelf__foot { margin-top: 0; }
+
+/* Borderless writing fields. Focus shows as a hairline in the card's colour, not a box, so the card stays one sheet. */
+.session-shelf__goal, .session-shelf__note-title, .session-shelf__note-body {
+  display: block;
+  width: calc(100% + 12px);
+  box-sizing: border-box;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  caret-color: var(--shelf-lane);
+  font: inherit;
+  resize: none;
+  field-sizing: content;
+}
+.session-shelf__goal:focus-visible, .session-shelf__note-title:focus-visible, .session-shelf__note-body:focus-visible {
+  outline: none;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--shelf-lane) 45%, transparent);
+}
+.session-shelf__goal::placeholder, .session-shelf__note-title::placeholder, .session-shelf__note-body::placeholder { color: var(--text-secondary); }
+.session-shelf__goal { min-height: 46px; max-height: 160px; font-size: 14px; line-height: 1.5; }
+.session-shelf__sheet { display: flex; flex-direction: column; gap: 2px; }
+.session-shelf__note-title { font-size: 15px; font-weight: 600; letter-spacing: -.2px; line-height: 1.4; }
+.session-shelf__note-body { min-height: 92px; max-height: 240px; font-size: 12.5px; line-height: 1.6; }
+
+.session-shelf__starters { display: grid; gap: 1px; margin: -4px 0 0; padding: 0; list-style: none; }
+.session-shelf__starters button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.session-shelf__starters li:first-child button { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.session-shelf__starters button:hover, .session-shelf__starters button:focus-visible { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.session-shelf__card kbd {
+  margin-left: auto;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font: 10px/1.5 var(--font-mono);
+}
+.session-shelf__match {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px dashed color-mix(in srgb, var(--tone-progress) 45%, var(--border));
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.session-shelf__match > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-shelf__match .ui-icon { color: var(--tone-progress); flex: none; }
+.session-shelf__match:hover { background: color-mix(in srgb, var(--tone-progress) 6%, transparent); }
+.session-shelf__summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.session-shelf__summary > span:not(.session-shelf__summary-dot) { overflow: hidden; text-overflow: ellipsis; }
+.session-shelf__summary b { color: var(--text); font-weight: 500; }
+.session-shelf__summary:hover, .session-shelf__summary[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.session-shelf__summary-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+.session-shelf__send--start:disabled { opacity: .4; }
+.session-shelf__primary {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-shelf__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--text);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.session-shelf__alert > .ui-icon { flex: none; margin-top: 2px; color: var(--danger); }
+.session-shelf__alert > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.session-shelf__alert button { flex: none; padding: 0; border: 0; background: none; color: var(--danger); font: inherit; font-weight: 600; cursor: pointer; }
+.session-shelf__alert--warn { background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.session-shelf__alert--warn > .ui-icon { color: var(--warning); }
+.session-shelf__settings { display: grid; gap: 6px; padding: 10px; border-radius: 6px; background: color-mix(in srgb, var(--text) 4%, transparent); }
+.session-shelf__settings label { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--text-secondary); font-size: 11px; }
+.session-shelf__link { justify-self: start; padding: 0; border: 0; background: none; color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.session-shelf__link:hover { color: var(--accent); }
+.session-shelf__recent { color: var(--text-secondary); font-size: 11px; }
+.session-shelf__split {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--tone-note) 45%, var(--border));
+  border-radius: 6px;
+}
+.session-shelf__split button { height: 26px; border: 0; background: none; color: var(--text); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.session-shelf__split-main { padding: 0 10px; border-radius: 5px 0 0 5px; }
+.session-shelf__split .session-shelf__split-more { display: grid; place-items: center; width: 22px; padding: 0; border-left: 1px solid var(--border); border-radius: 0 5px 5px 0; }
+.session-shelf__split button:hover:not(:disabled) { background: color-mix(in srgb, var(--tone-note) 10%, transparent); }
+.session-shelf__split button:disabled { color: var(--text-secondary); cursor: default; }
+.session-shelf__menu {
+  position: absolute;
+  right: -1px;
+  bottom: calc(100% + 4px);
+  z-index: 3;
+  display: grid;
+  width: 220px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--text) 18%, transparent);
+}
+.session-shelf__split .session-shelf__menu button { display: flex; align-items: center; gap: 8px; height: auto; padding: 6px 8px; border-radius: 5px; font-weight: 400; text-align: left; }
+@media (prefers-reduced-motion: reduce) { .session-shelf__flag { animation: none; } }
 .note-editor { display: flex; flex-direction: column; gap: 8px; }
 .note-editor__title, .note-editor__body {
   width: 100%;
