@@ -2355,7 +2355,7 @@ export function App() {
           </div>
         );
       }
-      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} onOpenWorkflowRun={workflowRunId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId })} />;
+      return <ScheduledRunsPage key={selectedProject.id} project={selectedProject} initialTicketKeys={route.scheduleTicketKeys} sidebarHost={scheduleSidebarHost} onBack={() => navigate({ feature: 'overview', projectId: selectedProject.id })} onOpenWorkflowRun={workflowRunId => navigate({ projectId: selectedProject.id, feature: 'workflows', workflowView: 'runs', workflowRunId })} onOpenSession={sessionKey => navigate({ projectId: selectedProject.id, feature: 'sessions', sessionKey })} />;
     }
     if (route.feature) {
       return (

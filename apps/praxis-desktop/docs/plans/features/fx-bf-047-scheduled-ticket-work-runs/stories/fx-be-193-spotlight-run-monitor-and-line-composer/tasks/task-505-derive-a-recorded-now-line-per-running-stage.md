@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-505
 title: Derive a recorded "now" line per running stage
-status: To Do
+status: Done
 story: FX-BE-193
 updated: 2026-11-02
 dependencies: [TASK-504]
@@ -54,3 +54,6 @@ built only from things Praxis has recorded.
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+`stageActivityLine` and `describeToolEvent` in `scheduledRunDetail.ts`: a check's command or its own progress message; otherwise the newer of the stage's progress message and the session's latest tool call for this attempt; a paused stage's reason. One line, at most 120 characters, nothing when nothing was recorded. Unit-tested; the monitor reveals it once and shows it whole under reduced motion.

@@ -13,7 +13,10 @@ import {
   type ScheduledRun,
   type ScheduledRunLive,
   type WorkflowObservation,
-  type WorkflowRun
+  type WorkflowRun,
+  scheduledEntryDetail,
+  type ScheduledEntryDetail,
+  type AiUsageEvent
 } from '@praxis/core';
 import { getAiSessionManager } from './aiInstance';
 import { getAiUsageLog } from './aiUsageLogInstance';
@@ -177,10 +180,49 @@ export async function readProviderUsage(): Promise<ProviderUsageReading> {
 }
 
 
-/** Used by the IPC layer so it can describe the live entry without importing the engine. */
-export function describeLiveEntry(run: ScheduledRun) {
-  const entry = run.entries.find(candidate => candidate.outcome?.status === 'running' || candidate.outcome?.status === 'paused');
-  const workflowRunId = entry?.outcome?.workflowRunId;
-  if (!entry || !workflowRunId) return undefined;
-  return { entryId: entry.id, workflowRunId, ...(stageProgressFor(workflowRunId) ?? { stageLabel: 'Starting', stageIndex: 0, stageCount: 0 }) };
+/**
+ * What each started entry's workflow recorded (FX-BE-193 / TASK-504): its agent
+ * tasks in run order, with state, attempts, time, tokens, and the running task's
+ * "now" line. Read once per view: the usage log is listed a single time for all entries.
+ */
+export function entryDetailsFor(run: ScheduledRun): ScheduledEntryDetail[] {
+  const started = run.entries.filter(entry => entry.outcome?.workflowRunId);
+  if (started.length === 0) return [];
+  const store = runStore();
+  let usage: readonly AiUsageEvent[] | undefined;
+  const sessions = getAiSessionManager();
+  const details: ScheduledEntryDetail[] = [];
+  for (const entry of started) {
+    const workflowRun = store.get(entry.outcome!.workflowRunId!);
+    if (!workflowRun) continue;
+    usage ??= getAiUsageLog().list();
+    details.push(scheduledEntryDetail({
+      entryId: entry.id,
+      run: workflowRun,
+      summary: summarize(workflowRun),
+      usage,
+      sessionEvents: key => sessions.getAgentSession(key)?.events
+    }));
+  }
+  return details;
+}
+
+/** The entries in flight: running, waiting at a gate, or failed and waiting for a decision. */
+export function activeEntries(run: ScheduledRun) {
+  if (run.status !== 'running' && run.status !== 'paused') return [];
+  return run.entries.filter(entry => ['running', 'paused', 'failed'].includes(entry.outcome?.status ?? '') && entry.outcome?.workflowRunId);
+}
+
+/** One live record per in-flight entry, each with its own agent tasks. */
+export function describeLiveEntries(run: ScheduledRun, details: readonly ScheduledEntryDetail[]) {
+  return activeEntries(run).map(entry => {
+    const workflowRunId = entry.outcome!.workflowRunId!;
+    const stages = details.find(detail => detail.entryId === entry.id)?.stages;
+    return {
+      entryId: entry.id,
+      workflowRunId,
+      ...(stageProgressFor(workflowRunId) ?? { stageLabel: 'Starting', stageIndex: 0, stageCount: 0 }),
+      ...(stages ? { stages } : {})
+    };
+  });
 }

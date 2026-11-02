@@ -1,21 +1,25 @@
 import { createPortal } from 'react-dom';
 import { ScheduleTickets, expandScheduleTickets, type Candidate } from './ScheduleTickets';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef, ScheduledWorkflowChoice } from '@praxis/core';
+import type { ProjectRecord, SaveScheduledRunInput, ScheduledRunForecast, ScheduledRunReadiness, ScheduledRunView, ScheduledTicketRef, ScheduledWorkflowChoice } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ChipSelect } from '../ui/ChipSelect';
 import { useSettings } from '../settings/useSettings';
 import { DEFAULT_APP_SETTINGS } from '../settings/settingsDefaults';
 import { condenseIssues, localTimeZone, timeZoneOptions, tomorrowDate } from './scheduleFormat';
 import { ScheduleFlowGraph } from './ScheduleFlowGraph';
+import { ScheduleRehearsal } from './ScheduleRehearsal';
+import { formatHourMinute, formatMoney } from './scheduleSpotlight';
 import { flattenSteps, flowKey, moveEarlier, moveLater, placeTickets, removeTicket, stepsFromEntries, toggleTogether, type FlowSteps, type FlowTarget } from './scheduleFlow';
 
 /**
- * The scheduled-run composer (FX-BF-047 / FX-BE-147 / TASK-384).
+ * The scheduled-run composer (FX-BF-047 / FX-BE-147 / TASK-384), drawn as the Line
+ * in Spotlight's look (FX-BE-193 / TASK-508).
  *
- * Tickets are picked from the sidebar and dropped on a flow graph drawn like the
- * Task Designer: steps run left to right, linked by arrows, and tickets dropped
- * onto another ticket share its step (drawn as parallel lanes). The order is kept
+ * Tickets are picked from the sidebar and dropped on the Line: steps run left to
+ * right, each step a bay, and a ticket dropped onto another shares its step. Each
+ * card carries its own readiness issues and forecast window, and the rehearsal
+ * plays the forecast on the same beads the run monitor will show. The order is kept
  * on the schedule and never on the board. Dragging is an enhancement: every move
  * has a button, so the order can be built entirely from the keyboard.
  *
@@ -54,7 +58,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   const [lanes, setLanes] = useState(String(initial?.run.policy.mode === 'parallel' ? initial.run.policy.maxConcurrency : 1));
   const [workflowChoices, setWorkflowChoices] = useState<ScheduledWorkflowChoice[]>([]);
   const [steps, setSteps] = useState<FlowSteps>(() => stepsFromEntries(initial?.run.entries ?? []));
-  const [preview, setPreview] = useState<{ readiness?: ScheduledRunReadiness; error?: string }>({});
+  const [preview, setPreview] = useState<{ readiness?: ScheduledRunReadiness; forecast?: ScheduledRunForecast; error?: string }>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [justAdded, setJustAdded] = useState<string>();
@@ -189,6 +193,12 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
   const acceptsDrag = (event: DragEvent) => !!dragging.current || Array.from(event.dataTransfer.types).includes(SCHEDULE_TICKET_DRAG_TYPE);
 
   const readiness = preview.readiness;
+  const forecast = preview.error ? undefined : preview.forecast;
+  const issuesFor = (issueKey: string) => (readiness?.issues ?? []).filter(issue => issue.issueKey === issueKey && issue.code !== 'parallel-lanes');
+  const windowFor = (issueKey: string) => {
+    const entry = forecast?.entries.find(item => item.issueKey === issueKey);
+    return entry ? `${formatHourMinute(entry.startAt, timezone)}–${formatHourMinute(entry.endAt, timezone)}` : undefined;
+  };
   const blockers = readiness?.issues.filter(issue => issue.severity === 'blocker') ?? [];
   const count = belt.tickets.length;
   const canSchedule = !!readiness && readiness.ready && count > 0 && !preview.error;
@@ -229,17 +239,24 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
 
   return (
     <div className="view-scroll schedule-page schedule-composer" data-testid="schedule-composer">
-      <header className="schedule-head">
-        <div className="schedule-compose-title">
-          <Icon name="clock" size={16} />
-          <h2 className="schedule-title">{initial ? 'Edit scheduled run' : 'New scheduled run'}</h2>
+      <header className="spot-head">
+        <div className="spot-head-main">
+          <span className="spot-kicker">{initial ? 'Edit scheduled run' : 'New scheduled run'}</span>
           <input
-            className="schedule-name"
+            className="schedule-name spot-name"
             aria-label="Schedule name"
             data-testid="schedule-name"
             value={name}
             onChange={event => setName(event.target.value)}
           />
+        </div>
+        <div className="spot-head-clock" data-testid="schedule-forecast">
+          <span className="spot-clock">{time || '--:--'}</span>
+          <span className="spot-clock-sub">
+            {armedLabel?.day ?? 'No start set'}
+            {forecast?.likelyFinishAt ? <> · likely done <strong>{formatHourMinute(forecast.likelyFinishAt, timezone)}</strong></> : null}
+            {forecast?.spend ? ` · about ${formatMoney(forecast.spend.likely, forecast.spend.currency)}` : ''}
+          </span>
         </div>
         <div className="schedule-head-actions">
           <button type="button" className="btn" data-testid="schedule-cancel" onClick={onClose}>Cancel</button>
@@ -287,6 +304,8 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
               target={dropTarget}
               justAdded={justAdded}
               start={{ time: armedLabel?.time, day: armedLabel?.day, armed: canSchedule }}
+              issuesFor={issuesFor}
+              windowFor={windowFor}
               onCardDragStart={(ticket, event) => {
                 dragging.current = { from: 'belt', key: flowKey(ticket) };
                 event.dataTransfer.effectAllowed = 'move';
@@ -304,6 +323,12 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
             />
             <p className="schedule-hint">This order belongs to the schedule. It never changes the board.</p>
           </section>
+
+          <ScheduleRehearsal
+            tickets={steps.flatMap((step, index) => step.map(ticket => ({ issueKey: ticket.issueKey, title: ticket.title, step: index + 1 })))}
+            forecast={forecast}
+            timezone={timezone}
+          />
 
           <div className="schedule-panels">
             <section className="schedule-panel" aria-label="Start">
@@ -342,11 +367,21 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
             <section className="schedule-panel" aria-label="Run policy">
               <h3 className="schedule-panel-title">Run policy</h3>
               <label className="schedule-field">Workflow for each ticket
-                <select aria-label="Workflow" data-testid="schedule-workflow" value={workflowId} onChange={event => setWorkflowId(event.target.value)}>
-                  {!workflowId && <option value="">Choose a workflow…</option>}
-                  {workflowChoices.map(choice => <option key={choice.workflowId} value={choice.workflowId}>{choice.name}</option>)}
-                </select>
+                <ChipSelect
+                  block
+                  ariaLabel="Workflow"
+                  data-testid="schedule-workflow"
+                  value={workflowId}
+                  onChange={setWorkflowId}
+                  icon="graph"
+                  options={[...(workflowId ? [] : [{ value: '', label: 'Choose a workflow…' }]), ...workflowChoices.map(choice => ({ value: choice.workflowId, label: choice.name }))]}
+                />
               </label>
+              {forecast && forecast.stages.length > 0 && (
+                <ol className="spot-pipe" aria-label="Agent tasks each ticket runs" data-testid="schedule-workflow-tasks">
+                  {forecast.stages.map(stage => <li key={stage.nodeId} className={`spot-pipe-step spot-pipe-step--${stage.type}`}>{stage.name}</li>)}
+                </ol>
+              )}
               <label className="schedule-field">Tickets at once
                 <ChipSelect
                   block

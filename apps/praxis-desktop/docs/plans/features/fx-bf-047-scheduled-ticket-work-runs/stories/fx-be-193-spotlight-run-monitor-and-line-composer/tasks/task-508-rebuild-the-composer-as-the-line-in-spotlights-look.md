@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-508
 title: Rebuild the composer as the Line in Spotlight's look
-status: To Do
+status: Done
 story: FX-BE-193
 updated: 2026-11-02
 dependencies: [TASK-506]
@@ -91,3 +91,6 @@ tests that use these screens".
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+Steps are bays (`schedule-flow-bay`), each card carries its own readiness issues (`schedule-card-issue`, from the new `issueKey` on readiness issues) and forecast window; the header shows the start and likely finish; `ScheduleRehearsal.tsx` plays the forecast on the bead rail; the workflow picker is a `ChipSelect` with the workflow's tasks listed. Composer tests pass with only test 349's rail assertions changed to bay assertions.

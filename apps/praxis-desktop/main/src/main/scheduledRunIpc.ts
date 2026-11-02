@@ -8,6 +8,7 @@ import {
   type MissedResolution,
   type SaveScheduledRunInput,
   type ScheduledRunReadiness,
+  type ScheduledRunForecast,
   type ScheduledRun,
   type ScheduledRunView
 } from '@praxis/core';
@@ -103,12 +104,13 @@ export function registerScheduledRunIpc(): void {
 
   ipcMain.handle(
     'scheduledRuns:preview',
-    async (_event, input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; error?: string }> => {
+    async (_event, input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; forecast?: ScheduledRunForecast; error?: string }> => {
       try {
         const existing = input.id ? getScheduledRunStore().get(input.id) : undefined;
         const { id: _id, ...form } = await withDefaultWorkflow(input, existing);
         const run = composeScheduledRun(existing, { ...form, at: new Date().toISOString() });
-        return { readiness: (await buildScheduledRunView(run)).readiness };
+        const view = await buildScheduledRunView(run);
+        return { readiness: view.readiness, ...(view.forecast ? { forecast: view.forecast } : {}) };
       } catch (error) {
         return { error: error instanceof Error ? error.message : String(error) };
       }

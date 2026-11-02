@@ -79,6 +79,8 @@ export interface StageRow {
   exitCode?: number;
   /** Execution duration of the latest attempt in milliseconds. */
   durationMs?: number;
+  /** When the latest attempt started — with no `durationMs`, how long the running attempt has been going. */
+  startedAt?: string;
   /** Decision prompt for an approval stage. */
   prompt?: string;
   /** Gates required by an approval stage. */
@@ -369,6 +371,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       ...(command ? { command } : {}),
       ...(lastAttempt?.exitCode !== undefined ? { exitCode: lastAttempt.exitCode } : {}),
       ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(lastAttempt?.startedAt ? { startedAt: lastAttempt.startedAt } : {}),
       ...(isApprovalNode(node) ? { prompt: node.prompt, requiredGates: node.requiredGates } : {}),
       ...(inLoop.has(node.id) ? { loopIteration: inLoop.get(node.id) } : {})
     };

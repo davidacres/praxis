@@ -27,6 +27,8 @@ interface ScheduledRunsPageProps {
   onBack: () => void;
   initialTicketKeys?: string[];
   onOpenWorkflowRun?: (workflowRunId: string) => void;
+  /** Opens one stage's agent session (from the run report). */
+  onOpenSession?: (sessionKey: string) => void;
 }
 
 const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
@@ -37,7 +39,7 @@ const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
   { key: 'finished', title: 'Finished' }
 ];
 
-export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], onOpenWorkflowRun }: ScheduledRunsPageProps) {
+export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], onOpenWorkflowRun, onOpenSession }: ScheduledRunsPageProps) {
   const { confirm } = useDialogs();
   const ticketPanel = useResizable({
     storageKey: 'tm-pane-schedule-tickets',
@@ -58,6 +60,8 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   const [composerVersion, setComposerVersion] = useState(0);
   const [selectedRunId, setSelectedRunId] = useState<string>();
   const [detailRunId, setDetailRunId] = useState<string>();
+  /** A running schedule whose report the user opened ("Report so far"); the monitor is the default. */
+  const [reportFor, setReportFor] = useState<string>();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const { candidates, loadError } = useScheduleTickets(project);
   const [views, setViews] = useState<ScheduledRunView[]>();
@@ -204,9 +208,9 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   const detail = detailRunId ? views?.find(view => view.run.id === detailRunId) : undefined;
   if (detail) {
     const live = detail.run.status === 'running' || detail.run.status === 'paused';
-    return (<>{sidebar}{live
-      ? <ScheduleRunMonitor view={detail} onBack={() => setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} />
-      : <ScheduleRunReport view={detail} onBack={() => setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} />}</>);
+    return (<>{sidebar}{live && reportFor !== detail.run.id
+      ? <ScheduleRunMonitor view={detail} onBack={() => setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} onShowReport={() => setReportFor(detail.run.id)} />
+      : <ScheduleRunReport view={detail} live={live} onBack={() => live ? setReportFor(undefined) : setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} onOpenSession={onOpenSession} />}</>);
   }
 
   const total = views?.length ?? 0;

@@ -357,14 +357,13 @@ test('a ticket dropped onto another shares its step, drawn as parallel lanes, an
   await expect(page.getByTestId('schedule-flow-step')).toHaveCount(3);
   await page.waitForTimeout(800);
 
-  // Drag Log retention onto Add export CSV: they now share step 2, with a split and a join bar.
+  // Drag Log retention onto Add export CSV: they now share step 2, stacked in one bay.
   await node('Log retention').dragTo(node('Add export CSV'));
   await expect(page.getByTestId('schedule-flow-step')).toHaveCount(2);
   await expect(step(1)).toHaveClass(/is-together/);
-  await expect(step(1).getByTestId('schedule-belt-card')).toHaveCount(2);
-  await expect(step(1).locator('.schedule-flow-bar')).toHaveCount(2);
-  await expect(step(1).locator('.schedule-flow-rails')).toHaveCount(4);
-  await expect(step(1)).toContainText('Step 2 · together');
+  await expect(step(1)).toHaveAttribute('data-size', '2');
+  await expect(step(1).locator('.schedule-flow-bay').getByTestId('schedule-belt-card')).toHaveCount(2);
+  await expect(step(1)).toContainText('Step 2 · 2 side by side');
   await expect(node('Add export CSV').locator('.schedule-belt-seq')).toHaveText('2a');
   await expect(node('Log retention').locator('.schedule-belt-seq')).toHaveText('2b');
   await expect(page.getByTestId('schedule-summary')).toContainText('3 tickets in 2 steps');
@@ -789,10 +788,12 @@ test('a due schedule starts by itself, and a provider at its allowance pauses it
   const banner = window.getByTestId('schedule-pause-banner');
   await expect(banner).toHaveAttribute('data-reason', 'budget');
   await expect(banner).toContainText('95%');
-  // A budget stop needs a person, so the processor stops and shows the warning tone (see ScheduleRunMonitor).
-  await expect(window.getByTestId('schedule-processor')).toHaveAttribute('data-state', 'waiting');
+  // A budget stop happens before any ticket launches: nothing is in flight, and both tickets wait in the deck.
+  await expect(window.getByTestId('schedule-flight-card')).toHaveCount(0);
+  await expect(window.getByTestId('schedule-flight-empty')).toBeVisible();
   await expect(window.getByTestId('schedule-budget')).toContainText('97% used');
-  await expect(window.getByTestId('schedule-belt').locator('li')).toHaveCount(2);
+  await expect(window.getByTestId('schedule-deck-card')).toHaveCount(2);
+  await expect(window.getByTestId('schedule-rail').locator('[data-state]')).toHaveCount(2);
 
   await window.screenshot({ path: path.join(shots, 'scheduled-run-monitor-budget-pause.png') });
 
@@ -858,7 +859,7 @@ test('the editor can Run now without a scheduled start time and still obeys the 
   await page.getByTestId('schedule-run-now').click();
   await expect(page.getByTestId('schedule-monitor')).toBeVisible();
   await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'budget');
-  await expect(page.getByTestId('schedule-belt').locator('li')).toHaveCount(1);
+  await expect(page.getByTestId('schedule-deck-card')).toHaveCount(1);
 });
 
 test('a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped', async () => {
@@ -888,9 +889,13 @@ test('a ticket that cannot be launched pauses the run with the reason, keeps its
   expect(states).toEqual(['queued', 'queued']);
   await window.screenshot({ path: path.join(shots, 'scheduled-run-monitor-launch-paused.png') });
 
+  // The decision sits on the ticket it is about: the first waiting card, held with the reason.
+  const held = window.getByTestId('schedule-deck-card').first();
+  await expect(held).toHaveClass(/is-held/);
+  await expect(held.getByTestId('schedule-wait-reason')).toContainText('uncommitted file');
   // Skipping the stuck ticket lets the run carry on with the next one, which hits the same wall.
-  await window.getByTestId('schedule-skip-entry').click();
-  await expect(window.getByTestId('schedule-done-tray').locator('li[data-entry-status="skipped"]')).toHaveCount(1);
+  await held.getByTestId('schedule-skip-entry').click();
+  await expect(window.locator('[data-testid="schedule-receipt"][data-entry-status="skipped"]')).toHaveCount(1);
   await expect(window.getByTestId('schedule-pause-banner')).toBeVisible({ timeout: 20000 });
 
   // Clearing the cause and resuming starts the second ticket for real, through the workflow engine.
@@ -938,19 +943,27 @@ test('an idle failed stage pauses the schedule and retries in the same workflow'
   const card = page.getByTestId('schedule-card').filter({ hasText: 'Recover failed build' });
   await expect(card.getByTestId('schedule-status')).toHaveText('Paused', { timeout: 30000 });
   await card.getByTestId('schedule-open').click();
-  await expect(page.getByTestId('schedule-proc-state')).toHaveText('Build — needs attention');
-  await expect(page.getByTestId('schedule-stage-failure')).toContainText('Attempt 1 of 3');
+  // The failure, its attempt count and the decision are all on the ticket's own card.
+  const flight = page.getByTestId('schedule-flight-card');
+  await expect(flight).toHaveCount(1);
+  await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toHaveAttribute('data-lane', 'failed');
+  await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Build — needs attention');
+  await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Attempt 1 of 3');
   await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'failure');
-  await expect(page.getByTestId('schedule-review-workflow')).toBeVisible();
-  await expect(page.getByTestId('schedule-belt').locator('li[data-issue]')).toHaveCount(1);
+  await expect(flight.getByTestId('schedule-review-workflow')).toBeVisible();
+  await expect(page.getByTestId('schedule-deck-card')).toHaveCount(1);
   const before = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
   expect(before).toHaveLength(1);
   await page.screenshot({ path: path.join(shots, 'scheduled-run-stage-failure.png') });
   fs.writeFileSync(marker, 'ready');
-  await page.getByTestId('schedule-retry').click();
+  await flight.getByTestId('schedule-retry').click();
   await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].status, { timeout: 10000 }).toBe('awaiting-approval');
   await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'approval', { timeout: 10000 });
   await expect(page.getByTestId('schedule-stage-failure')).toHaveCount(0);
+  // Retried, Build passed on its second attempt and the approval now waits on the same card.
+  await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toHaveAttribute('data-lane', 'done');
+  await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toContainText('×2');
+  await expect(flight.getByTestId('schedule-approve')).toBeVisible();
   const after = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
   expect(after.map(run => run.runId)).toEqual(before.map(run => run.runId));
   expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(2);
@@ -991,7 +1004,9 @@ test('the stage-failure panel names the stage it shows, beside a stage paused fo
   await card.getByTestId('schedule-open').click();
 
   const failure = page.getByTestId('schedule-stage-failure');
-  await expect(page.getByTestId('schedule-proc-state')).toHaveText('Build — needs attention');
+  const rows = page.getByTestId('schedule-flight-card').getByTestId('schedule-task-row');
+  await expect(rows.and(page.locator('[data-node="build"]'))).toHaveAttribute('data-lane', 'failed');
+  await expect(rows.and(page.locator('[data-node="lint"]'))).toHaveAttribute('data-lane', 'paused');
   await expect(failure).toContainText('Build — needs attention');
   await expect(failure).toContainText('test exited 1');
 
@@ -1187,11 +1202,17 @@ test('two independent tickets run at once within the cap, a third waits for a la
   await openScheduleSidebar(page);
   const card = page.getByTestId('schedule-card').filter({ hasText: 'Two at once' });
   await card.getByTestId('schedule-open').click();
-  const lanes = page.getByTestId('schedule-lanes-panel');
-  await expect(lanes).toContainText('2 of up to 2 in use');
-  await expect(lanes.getByTestId('schedule-lane')).toHaveCount(2);
-  await expect(lanes.getByTestId('schedule-lane-reason').nth(1)).toContainText('runs alongside');
-  await expect(lanes.getByTestId('schedule-lanes-waiting').locator(`li[data-issue="${keys[3]}"]`)).toContainText('Waits for step 1 to finish.');
+  await expect(page.getByTestId('schedule-lanes-in-use')).toContainText('2 of up to 2 lanes in use');
+  const cards = page.getByTestId('schedule-flight-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toHaveAttribute('data-lane', '1');
+  await expect(cards.nth(1)).toHaveAttribute('data-lane', '2');
+  // Each ticket in flight shows its own agent tasks: this workflow has one, the approval.
+  await expect(cards.nth(0).getByTestId('schedule-task-row')).toHaveCount(1);
+  await expect(cards.nth(1).getByTestId('schedule-task-row')).toHaveCount(1);
+  await expect(cards.nth(1).getByTestId('schedule-lane-reason')).toContainText('runs alongside');
+  const waiting = (key: string) => page.locator(`[data-testid="schedule-deck-card"][data-issue="${key}"]`).getByTestId('schedule-wait-reason');
+  await expect(waiting(keys[3])).toContainText('Waits for step 1 to finish.');
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(shots, 'scheduled-run-parallel-monitor.png') });
 });
@@ -1261,6 +1282,44 @@ test('two parallel tickets that both merge into the base checkout take turns', a
   await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.status, runId)).toBe('completed');
 });
 
+test('an approval waits on its ticket\'s card, approving it there makes a receipt, and the report so far says what needed you', async () => {
+  const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
+  const { page, projectId } = await launch({ env, titles: ['Approve me', 'Then me'] });
+  const workflowId = await saveApprovalWorkflow(page, projectId);
+  const { runId, keys } = await startParallelRun(page, projectId, 'Gate on the card', [[0], [1]], 1, workflowId);
+  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.pause?.reason, runId), { timeout: 30000 }).toBe('approval');
+
+  await openScheduleSidebar(page);
+  await page.getByTestId('schedule-card').filter({ hasText: 'Gate on the card' }).getByTestId('schedule-open').click();
+  const flight = page.locator(`[data-testid="schedule-flight-card"][data-issue="${keys[0]}"]`);
+  await expect(flight).toBeVisible();
+  // The workflow's one task is the approval, waiting; the decision is on this card, not elsewhere.
+  await expect(flight.getByTestId('schedule-task-row')).toHaveAttribute('data-lane', 'awaiting');
+  await expect(page.getByTestId('schedule-approve')).toHaveCount(1);
+  await expect(page.getByTestId('schedule-rail').locator(`[data-issue="${keys[0]}"]`)).toHaveAttribute('data-state', 'waiting');
+  await expect(page.locator(`[data-testid="schedule-deck-card"][data-issue="${keys[1]}"]`)).toBeVisible();
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-spotlight-gate.png') });
+
+  await flight.getByTestId('schedule-approve').click();
+  await expect(page.locator(`[data-testid="schedule-receipt"][data-issue="${keys[0]}"]`)).toHaveAttribute('data-entry-status', 'done', { timeout: 30000 });
+  await expect(page.locator(`[data-testid="schedule-flight-card"][data-issue="${keys[1]}"]`)).toBeVisible({ timeout: 30000 });
+  await expect(page.getByTestId('schedule-rail').locator(`[data-issue="${keys[0]}"]`)).toHaveAttribute('data-state', 'done');
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-spotlight-receipt.png') });
+
+  // The report so far: both tickets listed, the first with its task bar, and the approval it waited for.
+  await page.getByTestId('schedule-show-report').click();
+  await expect(page.getByTestId('schedule-report')).toBeVisible();
+  await expect(page.getByTestId('schedule-report-table').locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByTestId('schedule-report-table').locator(`tr[data-issue="${keys[0]}"]`).getByTestId('schedule-report-tasks').locator('.spot-bar')).toHaveCount(1);
+  await expect(page.getByTestId('schedule-report-needs')).toContainText('approval');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-report-so-far.png') });
+  await page.getByTestId('schedule-report-back').click();
+  await expect(page.getByTestId('schedule-monitor')).toBeVisible();
+});
+
 test('a parallel run whose readiness is blocked starts nothing in any lane and says why', async () => {
   const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
   const { page, projectId, repo } = await launch({ env, titles: ['Lane one', 'Lane two'] });
@@ -1275,7 +1334,8 @@ test('a parallel run whose readiness is blocked starts nothing in any lane and s
   await openScheduleSidebar(page);
   await page.getByTestId('schedule-card').filter({ hasText: 'Blocked lanes' }).getByTestId('schedule-open').click();
   await expect(page.getByTestId('schedule-pause-banner')).toContainText(`${keys[0]} could not be started`);
-  await expect(page.getByTestId('schedule-lanes-panel')).toContainText('0 of up to 2 in use');
+  await expect(page.getByTestId('schedule-lanes-in-use')).toContainText('0 of up to 2 lanes in use');
+  await expect(page.getByTestId('schedule-flight-card')).toHaveCount(0);
 });
 
 test('a schedule paused on an untrusted workflow offers to review and trust it, then carries on', async () => {

@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-507
 title: Build the Spotlight run monitor
-status: To Do
+status: Done
 story: FX-BE-193
 updated: 2026-11-02
 dependencies: [TASK-504, TASK-505, TASK-506]
@@ -112,3 +112,6 @@ processor go, so update them in this change. The full list is in the story's
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+`ScheduleRunMonitor.tsx` rewritten as Spotlight: header with likely finish, bead rail, deck, one card per in-flight ticket with its task rows, now line, failure detail and decisions, receipts, allowance and activity footer. See the story's delivery notes for where it differs from the plan. `scheduledRuns.spec.ts` 33/33 (one opt-in capture skipped), screenshots inspected.

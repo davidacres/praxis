@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-506
 title: Forecast a schedule's finish and spend in core
-status: To Do
+status: Done
 story: FX-BE-193
 updated: 2026-11-02
 dependencies: []
@@ -55,3 +55,6 @@ use, so the two screens never disagree.
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+`scheduledRuns/scheduledRunForecast.ts`: `estimateScheduledTicket` (median and 90th-percentile stage times along the workflow's longest path, per-ticket cost percentiles, at least 3 finished runs of the same workflow) and `forecastScheduledRun` (the runner's step and lane rules, real times for finished tickets, remaining estimate from now for running ones). Main caches the estimate per workflow for a minute; `scheduledRuns.preview` and every view carry the forecast. Unit-tested.

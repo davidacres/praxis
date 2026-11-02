@@ -78,6 +78,8 @@ import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '..
 import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '../projects/deploymentProfile';
 import type { ComposeScheduledRunInput, MissedResolution, ScheduledRun } from '../scheduledRuns/scheduledRun';
 import type { ScheduledRunReadiness } from '../scheduledRuns/scheduledRunReadiness';
+import type { ScheduledEntryDetail, ScheduledStageDetail } from '../scheduledRuns/scheduledRunDetail';
+import type { ScheduledRunForecast } from '../scheduledRuns/scheduledRunForecast';
 import type { CredentialBindingStatus } from '../projects/deploymentProfileStore';
 import type { DeploymentRun } from '../projects/deploymentRunState';
 import type { PublishManifest } from '../projects/publishManifest';
@@ -1317,16 +1319,23 @@ export interface ScheduledRunView {
   readiness: ScheduledRunReadiness;
   /** The start as wall-clock parts in the run's own timezone, for the editor's date and time fields. */
   start: { date: string; time: string };
-  /** Present while a ticket is running or waiting at a gate: only what has actually been reported. */
-  live?: ScheduledRunLive;
   /**
    * Allowance each usable provider has used, while the run is running or paused —
-   * including a budget pause, when no ticket has launched and there is no `live`.
+   * including a budget pause, when no ticket has launched and `lives` is empty.
    */
   headroom?: ScheduledRunLive['headroom'];
+  /**
+   * One live record per entry that is in flight — running, waiting at a gate, or
+   * failed and waiting for a decision — each with its own agent tasks (FX-BE-193).
+   */
+  lives?: ScheduledRunLive[];
+  /** What each started entry's workflow recorded, for a running or finished schedule (monitor and report). */
+  details?: ScheduledEntryDetail[];
+  /** How the run is likely to go; shared by the composer's rehearsal and the monitor (TASK-506). */
+  forecast?: ScheduledRunForecast;
 }
 
-/** Where the running ticket is, read fresh from its workflow run. */
+/** Where one in-flight ticket is, read fresh from its workflow run: only what has actually been reported. */
 export interface ScheduledRunLive {
   entryId: string;
   workflowRunId: string;
@@ -1339,6 +1348,8 @@ export interface ScheduledRunLive {
   provider?: string;
   /** Allowance each usable provider has used (0-1); absent when the provider does not report it. */
   headroom: Array<{ provider: string; usedFraction?: number }>;
+  /** The entry's agent tasks in run order, with what each recorded (FX-BE-193 / TASK-504). */
+  stages?: ScheduledStageDetail[];
 }
 
 /** A workflow a scheduled run can start each ticket with. */
@@ -1372,7 +1383,7 @@ export interface ScheduledRunsIpc {
    * Validates what the composer holds without saving it: the readiness it would have,
    * or the reason it cannot be saved yet (a start that has passed, a time that does not exist).
    */
-  preview(input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; error?: string }>;
+  preview(input: SaveScheduledRunInput): Promise<{ readiness?: ScheduledRunReadiness; forecast?: ScheduledRunForecast; error?: string }>;
   /** Arms a draft, or puts an armed schedule back on hold. */
   setArmed(id: string, armed: boolean): Promise<ScheduledRunView>;
   /** Starts a saved draft or future schedule immediately through the normal runner checks. */

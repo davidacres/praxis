@@ -110,6 +110,8 @@ export * from './scheduledRuns/scheduledRun';
 export * from './scheduledRuns/scheduledBudget';
 export * from './scheduledRuns/exclusiveResource';
 export * from './scheduledRuns/scheduledRunExecution';
+export * from './scheduledRuns/scheduledRunDetail';
+export * from './scheduledRuns/scheduledRunForecast';
 export * from './scheduledRuns/scheduledRunReadiness';
 export * from './scheduledRuns/scheduledRunRequest';
 export * from './scheduledRuns/scheduledRunRunner';

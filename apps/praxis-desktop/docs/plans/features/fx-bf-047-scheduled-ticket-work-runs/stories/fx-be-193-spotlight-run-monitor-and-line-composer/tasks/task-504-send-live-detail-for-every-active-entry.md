@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-504
 title: Send live detail for every active entry
-status: To Do
+status: Done
 story: FX-BE-193
 updated: 2026-11-02
 dependencies: []
@@ -57,3 +57,6 @@ entry's full task list, so the Spotlight monitor can draw a card per lane.
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+`ScheduledRunView.lives` (one per in-flight entry) and `details` (every started entry, for the report) come from core's `scheduledEntryDetail` (`scheduledRuns/scheduledRunDetail.ts`): stages in run order (joins hidden, a failure-only repair stage shown once it runs), lane, attempts, duration, the running attempt's `startedAt` (new on `StageRow`), all-attempt `totalMs`, tokens and cost per node from the usage log's `workflowNodeId`, and the stage's `sessionKey`. `live` is removed. Covered by `scheduledRunDetail.test.ts`.

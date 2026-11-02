@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-509
 title: Bring the e2e suite in line with the new screens
-status: To Do
+status: Done
 story: FX-BE-193
 updated: 2026-11-02
 dependencies: [TASK-507, TASK-508, TASK-466]
@@ -62,3 +62,6 @@ weakened to get there.
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+`scheduledRuns.spec.ts`: 33 passed, 1 skipped (opt-in capture), with one new test (approval on the card → receipt → report so far). Full `npm run test:desktop`: 721 passed, 8 failed, 12 skipped. All 8 fail on unchanged HEAD as well: `sessionShelf.spec.ts:51`, `sessionShelfNotes` ×3, `sidebarNotes.spec.ts:41`/`:83`, `marketplace.spec.ts:271` (recorded in earlier runs) and `easymode.spec.ts:1377` (focus assertion; checked by stashing this work, rebuilding and running it on `764c6295`). Every `schedule-*` id used in a spec exists in the renderer. No test was deleted or skipped.

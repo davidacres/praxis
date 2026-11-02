@@ -5,7 +5,13 @@ import { app } from 'electron';
 import {
   ScheduledRunStore,
   assessScheduledRunReadiness,
+  estimateScheduledTicket,
+  forecastScheduledRun,
   instantToZonedParts,
+  WorkflowRunStore,
+  type ScheduledRunForecast,
+  type ScheduledTicketEstimate,
+  type WorkflowDefinition,
   type BackendMode,
   type ScheduledRun,
   type ScheduledRunView,
@@ -17,7 +23,8 @@ import { getServiceForConnection } from './serviceRegistry';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getProjectStore } from './projectStoreInstance';
 import { usableProviders } from './providerFallback';
-import { describeLiveEntry, handoverThreshold, readProviderUsage } from './scheduledRunLive';
+import { describeLiveEntries, entryDetailsFor, handoverThreshold, readProviderUsage } from './scheduledRunLive';
+import { getAiUsageLog } from './aiUsageLogInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { projectWorkflowTrust } from './workflowProjectTrust';
 import { projectFolder, runnableDefinition } from './workflowIpc';
@@ -120,9 +127,40 @@ export async function buildScheduledRunView(run: ScheduledRun, all: ScheduledRun
   const headroom = inFlight
     ? (usage?.usable ?? []).map(provider => ({ provider, ...(usage?.used[provider] !== undefined ? { usedFraction: usage.used[provider] } : {}) }))
     : undefined;
-  const liveEntry = inFlight ? describeLiveEntry(run) : undefined;
-  const live = liveEntry && headroom ? { ...liveEntry, headroom } : undefined;
-  return { run, readiness, start, ...(live ? { live } : {}), ...(headroom ? { headroom } : {}) };
+  // Per-task detail for the monitor and the report. A draft or an armed schedule has started nothing.
+  const showsWork = inFlight || ['completed', 'cancelled', 'failed'].includes(run.status);
+  const details = showsWork ? entryDetailsFor(run) : [];
+  const lives = inFlight && headroom ? describeLiveEntries(run, details).map(entry => ({ ...entry, headroom })) : [];
+  const forecast = await forecastFor(run).catch(() => undefined);
+  return {
+    run, readiness, start,
+    ...(headroom ? { headroom } : {}),
+    ...(lives.length ? { lives } : {}),
+    ...(details.length ? { details } : {}),
+    ...(forecast ? { forecast } : {})
+  };
+}
+
+const ESTIMATE_CACHE_MS = 60_000;
+const estimates = new Map<string, { at: number; definition: WorkflowDefinition; estimate: ScheduledTicketEstimate }>();
+
+/**
+ * How the schedule is likely to go (TASK-506), from earlier runs of its workflow on
+ * this machine. The per-ticket estimate scans every stored workflow run, so it is
+ * kept for a minute per workflow.
+ */
+export async function forecastFor(run: ScheduledRun): Promise<ScheduledRunForecast | undefined> {
+  if (!run.projectId || !run.policy.workflowId) return undefined;
+  const key = `${run.projectId}\u0000${run.policy.workflowId}`;
+  let cached = estimates.get(key);
+  if (!cached || Date.now() - cached.at > ESTIMATE_CACHE_MS) {
+    const definition = await runnableDefinition(run.projectId, run.policy.workflowId);
+    if (!definition) return undefined;
+    const history = new WorkflowRunStore(getWorkflowBackingStore()).list();
+    cached = { at: Date.now(), definition, estimate: estimateScheduledTicket(definition, history, getAiUsageLog().list()) };
+    estimates.set(key, cached);
+  }
+  return forecastScheduledRun(run, cached.estimate, cached.definition, new Date().toISOString());
 }
 
 /** Whether the schedule's workflow is trusted and whether the project's base is clean, as readiness facts. */

@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 To Do
+**Status:** ✅ Done
 **Created:** 2026-11-02T00:00:00.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-193
 title: Spotlight run monitor and Line composer
-status: To Do
+status: Done
 feature: FX-BF-047
 updated: 2026-11-02
 tasks: [TASK-504, TASK-505, TASK-506, TASK-507, TASK-508, TASK-509]
@@ -191,8 +191,34 @@ decisions from the card.
 - `FX-BE-173` — current monitor and report (`TASK-466` becomes the report half
   of this design).
 
+## Delivery notes (2026-11-02)
+
+Where the build differs from the plan above, and why:
+
+- **The pause banner stays in the header** for every pause (`schedule-pause-banner`, with its
+  `data-reason`). The *actions* are on the card the pause is about: Approve, Retry and Skip on an
+  in-flight card, Skip on a held deck card. Trust stays in the banner because it is about the
+  workflow, not one ticket. A banner with no button still says what is waiting, which a card alone
+  cannot do when nothing is in flight (a budget stop before any launch).
+- **The activity list stays** (`schedule-activity`) as a compact footer panel beside provider
+  allowance. Test 1204 reads it, and it is the only place a lane hold ("waits for a free lane") is
+  written down.
+- **The report keeps its ticket table** (`schedule-report-table`) and gains an "Agent tasks" column
+  of bars, one per task, each a link to that stage's session. A separate receipts grid would repeat
+  the table.
+- **The composer's ticket picker stays in the sidebar.** Test 510 asserts project tickets stay
+  outside the main pane; the canvas board drew them in the page.
+- **The loop-back scenario is covered in core, not e2e.** Driving a Review → Implement loop through
+  the scheduler needs agent stages, and with the mock provider the scheduler would start them itself,
+  racing the manual `advanceStage` seam. `scheduledRunDetail.test.ts` covers attempts and a re-opened
+  stage; the new e2e covers an approval on a card through to its receipt and the report so far.
+- `ScheduledRunView.live` is removed; `lives` (one per in-flight entry) replaced it.
+
 ## Description
 
 
 ## Comments
 
+## Delivery status (2026-11-02)
+
+All six tasks done. Core: 1855 tests (15 new). Renderer unit tests: 22 (4 new). Main unit tests: 107. E2E as in `TASK-509`.

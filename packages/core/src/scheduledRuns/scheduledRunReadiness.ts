@@ -39,6 +39,8 @@ export interface ScheduledReadinessIssue {
   severity: ReadinessSeverity;
   /** Present when the issue belongs to one queue entry. */
   entryId?: string;
+  /** The entry's ticket key, so a view can put the issue on that ticket even before the entry has a stable id. */
+  issueKey?: string;
   message: string;
 }
 
@@ -130,27 +132,28 @@ export function assessScheduledRunReadiness(run: ScheduledRun, context: Schedule
     const key = entry.ticket.issueKey;
     const probe = context.probe(entry.ticket);
     if (probe.state === 'missing') {
-      issues.push({ code: 'ticket-missing', severity: 'blocker', entryId: entry.id, message: `${key} no longer exists.` });
+      issues.push({ code: 'ticket-missing', severity: 'blocker', entryId: entry.id, issueKey: key, message: `${key} no longer exists.` });
       continue;
     }
     if (probe.state === 'moved') {
-      issues.push({ code: 'ticket-moved', severity: 'blocker', entryId: entry.id, message: `${key} is no longer on this board.` });
+      issues.push({ code: 'ticket-moved', severity: 'blocker', entryId: entry.id, issueKey: key, message: `${key} is no longer on this board.` });
       continue;
     }
     if (probe.closed) {
-      issues.push({ code: 'ticket-closed', severity: 'blocker', entryId: entry.id, message: `${key} is already finished.` });
+      issues.push({ code: 'ticket-closed', severity: 'blocker', entryId: entry.id, issueKey: key, message: `${key} is already finished.` });
     }
     if (probe.hasFolder === false) {
-      issues.push({ code: 'no-folder', severity: 'blocker', entryId: entry.id, message: `${key} has no working folder to run in.` });
+      issues.push({ code: 'no-folder', severity: 'blocker', entryId: entry.id, issueKey: key, message: `${key} has no working folder to run in.` });
     }
     if (probe.hasWorkflow === false) {
-      issues.push({ code: 'no-workflow', severity: 'blocker', entryId: entry.id, message: `${key} has no workflow assigned.` });
+      issues.push({ code: 'no-workflow', severity: 'blocker', entryId: entry.id, issueKey: key, message: `${key} has no workflow assigned.` });
     }
     if (probe.hasAcceptanceCriteria === false) {
       issues.push({
         code: 'no-acceptance-criteria',
         severity: 'warning',
         entryId: entry.id,
+        issueKey: key,
         message: `${key} has no acceptance criteria, so the agent may stop to ask.`
       });
     }
@@ -159,6 +162,7 @@ export function assessScheduledRunReadiness(run: ScheduledRun, context: Schedule
         code: 'in-other-schedule',
         severity: 'warning',
         entryId: entry.id,
+        issueKey: key,
         message: `${key} is also queued in "${probe.inOtherSchedule}".`
       });
     }

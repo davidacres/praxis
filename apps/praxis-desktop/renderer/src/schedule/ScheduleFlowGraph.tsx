@@ -5,10 +5,10 @@ import type { Candidate } from './ScheduleTickets';
 import { canMoveEarlier, canMoveLater, flowKey, stepLabel, type FlowSteps, type FlowTarget } from './scheduleFlow';
 
 /**
- * The run order drawn like the Task Designer (FX-BF-047): ticket nodes on a dot
- * grid, linked left to right by arrows in the order they run. A step shared by
- * several tickets splits at a bar, runs each ticket on its own pair of parallel
- * rails, and joins at a second bar before the next arrow.
+ * The run order as the Line (FX-BF-047 / FX-BE-193 / TASK-508): steps left to right,
+ * linked by arrows in the order they run. Each step is a bay; tickets that share a
+ * step stack in one bay and may run side by side. A ticket's card carries its own
+ * readiness issues and its forecast window.
  *
  * The graph lays itself out from `steps`; there is nothing to position by hand.
  * Every drop target carries `data-flow-gap` (a new step before that index) or
@@ -22,6 +22,10 @@ interface ScheduleFlowGraphProps {
   target?: FlowTarget;
   justAdded?: string;
   start: { time?: string; day?: string; armed: boolean };
+  /** Readiness issues that belong to one ticket, shown on its card. */
+  issuesFor?: (issueKey: string) => Array<{ code: string; severity: 'blocker' | 'warning'; message: string }>;
+  /** The forecast window for a ticket, e.g. "22:00–22:14". */
+  windowFor?: (issueKey: string) => string | undefined;
   onCardDragStart: (ticket: ScheduledTicketRef, event: DragEvent<HTMLElement>) => void;
   onCardDragEnd: () => void;
   onMoveEarlier: (key: string) => void;
@@ -30,7 +34,17 @@ interface ScheduleFlowGraphProps {
   onRemove: (key: string) => void;
 }
 
-export function ScheduleFlowGraph({ steps, candidates, target, justAdded, start, onCardDragStart, onCardDragEnd, onMoveEarlier, onMoveLater, onToggleTogether, onRemove }: ScheduleFlowGraphProps) {
+const CARD_ISSUE_LABEL: Record<string, string> = {
+  'no-acceptance-criteria': 'No acceptance criteria',
+  'in-other-schedule': 'In another schedule',
+  'ticket-missing': 'No longer exists',
+  'ticket-moved': 'Moved off this board',
+  'ticket-closed': 'Already finished',
+  'no-folder': 'No working folder',
+  'no-workflow': 'No workflow'
+};
+
+export function ScheduleFlowGraph({ steps, candidates, target, justAdded, start, issuesFor, windowFor, onCardDragStart, onCardDragEnd, onMoveEarlier, onMoveLater, onToggleTogether, onRemove }: ScheduleFlowGraphProps) {
   const details = (ticket: ScheduledTicketRef) => candidates?.find(item => item.connectionId === ticket.connectionId && item.key === ticket.issueKey);
   const empty = steps.length === 0;
 
@@ -81,7 +95,13 @@ export function ScheduleFlowGraph({ steps, candidates, target, justAdded, start,
         <div className="schedule-flow-node-foot">
           {info && <span className="schedule-flow-type">{info.issueType}</span>}
           {info && <span className="schedule-flow-status">{info.status}</span>}
+          {windowFor?.(ticket.issueKey) && <span className="schedule-flow-window" data-testid="schedule-card-window">{windowFor(ticket.issueKey)}</span>}
         </div>
+        {(issuesFor?.(ticket.issueKey) ?? []).map(issue => (
+          <span key={issue.code} className={`schedule-card-issue schedule-card-issue--${issue.severity}`} data-testid="schedule-card-issue" data-code={issue.code} title={issue.message}>
+            <Icon name="warning" size={11} /> {CARD_ISSUE_LABEL[issue.code] ?? issue.message}
+          </span>
+        ))}
       </div>
     );
   };
@@ -102,7 +122,7 @@ export function ScheduleFlowGraph({ steps, candidates, target, justAdded, start,
     <>
     <div className="schedule-flow-canvas" data-empty={empty || undefined}>
       <div className="schedule-flow-track">
-        <div className="schedule-flow-start" data-testid="schedule-processor" data-armed={start.armed ? 'true' : 'false'} aria-label={start.armed ? `Ready to start ${start.day ?? ''} ${start.time ?? ''}` : 'Run not ready'}>
+        <div className="schedule-flow-start" data-armed={start.armed ? 'true' : 'false'} aria-label={start.armed ? `Ready to start ${start.day ?? ''} ${start.time ?? ''}` : 'Run not ready'}>
           <Icon name="clock" size={13} />
           <span className="schedule-flow-start-time">{start.time ?? '--:--'}</span>
           {start.day && <span className="schedule-flow-start-day">{start.day}</span>}
@@ -114,29 +134,16 @@ export function ScheduleFlowGraph({ steps, candidates, target, justAdded, start,
             return (
               <Fragment key={step.map(flowKey).join('|')}>
                 {gap(index)}
-                <li className={`schedule-flow-step${lanes > 1 ? ' is-together' : ''}${joining ? ' is-target' : ''}`} data-flow-join={index} data-testid="schedule-flow-step">
-                  <span className="schedule-flow-step-label">Step {index + 1}{lanes > 1 ? ' · together' : ''}</span>
-                  {lanes > 1 ? (
-                    <div className="schedule-flow-lanes">
-                      <span className="schedule-flow-bar" aria-hidden="true" />
-                      <div className="schedule-flow-lane-list">
-                        {step.map((ticket, lane) => (
-                          <div key={flowKey(ticket)} className="schedule-flow-lane">
-                            <span className="schedule-flow-rails" aria-hidden="true" />
-                            {node(ticket, index, lane, step.length)}
-                            <span className="schedule-flow-rails" aria-hidden="true" />
-                          </div>
-                        ))}
-                      </div>
-                      <span className="schedule-flow-bar" aria-hidden="true" />
-                    </div>
-                  ) : node(step[0], index, 0, 1)}
+                <li className={`schedule-flow-step${lanes > 1 ? ' is-together' : ''}${joining ? ' is-target' : ''}`} data-flow-join={index} data-testid="schedule-flow-step" data-step={index + 1} data-size={lanes}>
+                  <span className="schedule-flow-step-label">Step {index + 1}{lanes > 1 ? ` · ${lanes} side by side` : ''}</span>
+                  {/* A step is a bay: tickets in it share the step and may run side by side. */}
+                  <div className="schedule-flow-bay">
+                    {step.map((ticket, lane) => node(ticket, index, lane, step.length))}
+                  </div>
                   {joining && (
                     // Floats below the step, so hovering never moves the node under the pointer.
                     <div className="schedule-flow-join-preview" aria-hidden="true">
-                      <span className="schedule-flow-rails is-target" />
                       <span className="schedule-flow-placeholder">Share step {index + 1}</span>
-                      <span className="schedule-flow-rails is-target" />
                     </div>
                   )}
                 </li>
@@ -158,8 +165,7 @@ export function ScheduleFlowGraph({ steps, candidates, target, justAdded, start,
     </div>
     <div className="schedule-flow-legend" aria-hidden="true">
       <span><span className="schedule-flow-legend-arrow" />Runs after</span>
-      <span><span className="schedule-flow-legend-rails" />Same step</span>
-      <span><span className="schedule-flow-legend-bar" />Split · wait for all</span>
+      <span><span className="schedule-flow-legend-bay" />One step · side by side, a step waits for all of it</span>
     </div>
     </>
   );
