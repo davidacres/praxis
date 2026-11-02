@@ -29,19 +29,9 @@
 
 /* Overview: tiles and the week strip */
 .schedule-overview { display: flex; gap: var(--space-3); align-items: stretch; flex-wrap: wrap; }
-.schedule-tile, .schedule-week { padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); }
+.schedule-tile { padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); }
 .schedule-tile { min-width: 112px; display: flex; flex-direction: column; gap: 2px; }
 .schedule-tile-label { font-size: var(--text-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 600; }
-.schedule-tile-value { font-size: var(--text-3xl); font-weight: 600; line-height: 1.1; }
-.schedule-tile--progress .schedule-tile-value { color: var(--accent); }
-.schedule-tile--info .schedule-tile-value { color: var(--tone-progress, var(--accent)); }
-.schedule-tile--bad .schedule-tile-value { color: var(--danger); }
-.schedule-week { flex: 1; min-width: 300px; }
-.schedule-week-days { display: flex; gap: var(--space-1); margin-top: var(--space-2); }
-.schedule-week-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: var(--space-1) 0; border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-tertiary); font-size: var(--text-xs); }
-.schedule-week-day.is-today { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text); }
-.schedule-week-dot { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
-.schedule-week-day:not([data-count='0']) .schedule-week-dot { background: var(--tone-progress, var(--accent)); }
 
 .schedule-group { display: flex; flex-direction: column; gap: var(--space-2); }
 .schedule-group-title { margin: 0; display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 600; }
@@ -52,11 +42,8 @@
 .schedule-card[data-status='running'] { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 8px 28px color-mix(in srgb, var(--accent) 10%, transparent); }
 .schedule-card[data-status='missed'], .schedule-card[data-status='failed'] { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: color-mix(in srgb, var(--danger) 5%, var(--bg-elevated)); }
 .schedule-card[data-status='paused'] { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
-.schedule-card-top { display: flex; align-items: center; gap: var(--space-3); }
-.schedule-card-main { flex: 1; min-width: 0; }
 .schedule-card-name { margin: 0; font-size: var(--text-lg); font-weight: 600; }
 .schedule-card-meta { display: flex; gap: var(--space-2); align-items: center; color: var(--text-tertiary); font-size: var(--text-sm); }
-.schedule-card-when { display: flex; flex-direction: column; align-items: flex-end; font-size: var(--text-md); }
 .schedule-countdown { color: var(--tone-progress, var(--accent)); font-size: var(--text-sm); font-weight: 600; }
 .schedule-countdown--bad { color: var(--danger); font-weight: 400; font-size: var(--text-xs); }
 
@@ -83,16 +70,8 @@
 .schedule-status--completed { color: var(--success); }
 
 /* The run's tickets as a short belt */
-.schedule-mini-belt { list-style: none; margin: 0; padding: var(--space-3); display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--space-3); align-items: stretch; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-sunken); position: relative; }
 .schedule-chip { position: relative; display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-elevated); font-size: var(--text-sm); }
-.schedule-chip--empty { border-style: dashed; color: var(--text-tertiary); }
-.schedule-chip-seq { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--accent-contrast, #fff); font-size: var(--text-xs); font-weight: 700; flex: none; }
-.schedule-chip-text { display: flex; flex-direction: column; min-width: 0; }
 .schedule-chip-key { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-tertiary); }
-.schedule-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
-.schedule-chip--done { border-color: color-mix(in srgb, var(--success) 55%, var(--border)); background: color-mix(in srgb, var(--success) 8%, var(--bg-elevated)); }
-.schedule-chip--running { border-color: var(--accent); }
-.schedule-chip--failed { border-color: var(--danger); }
 
 .schedule-actions { display: flex; gap: var(--space-2); justify-content: flex-end; align-items: center; }
 .schedule-issues { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
@@ -306,7 +285,6 @@
 .schedule-pause-banner strong { color: var(--text); }
 .schedule-pause-actions { display: inline-flex; gap: var(--space-2); margin-left: auto; }
 
-.schedule-chip--skipped { opacity: 0.6; border-style: dashed; }
 .schedule-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; font-size: var(--text-sm); color: var(--text-secondary); }
 .schedule-log time { color: var(--text-tertiary); font-family: var(--font-mono); font-size: var(--text-xs); margin-right: var(--space-2); }
 .schedule-report-value { font-size: var(--text-lg); font-weight: 600; }
@@ -523,4 +501,109 @@ button.spot-bar:hover { outline: 1px solid var(--text-tertiary); }
   .spot-bead--running .spot-bead-dot, .spot-task--running .spot-task-icon { animation: none; border-top-color: var(--lane-running); }
   .spot-bead--done .spot-bead-dot, .spot-task--done .spot-task-icon, .spot-card, .spot-receipt, .spot-receipt:first-child .spot-stamp--done,
   .spot-typed, .spot-decide, .spot-time-fill, .spot-rehearsal-line { animation: none; }
+}
+
+/*
+ * The lineup as an agenda (lineup redesign "1 · Agenda"): a week of bars, what needs
+ * a person with its fix, and one row per schedule that opens to its details.
+ * Tokens only; the lane tokens carry the bead states.
+ */
+.lineup { gap: var(--space-4); container-type: inline-size; }
+.lineup-head { display: flex; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; }
+.lineup-head-main { flex: 1 1 360px; min-width: 0; }
+.lineup-head-main .schedule-sub { max-width: 80ch; line-height: 1.5; }
+.lineup-tabs { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-elevated); }
+.lineup-tab { font: inherit; font-size: var(--text-sm); border: 0; border-radius: var(--radius-sm); padding: 4px var(--space-3); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.lineup-tab span { color: var(--text-tertiary); margin-left: 2px; }
+.lineup-tab:hover { background: var(--bg-hover); }
+.lineup-tab.is-on { background: var(--bg-active); color: var(--text); font-weight: 600; }
+.lineup-label { font-size: var(--text-xs); letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 600; }
+.lineup-hint { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+.lineup-week { padding: var(--space-3) var(--space-4) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--bg-elevated); }
+.lineup-week-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.lineup-days { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin-top: var(--space-2); border-top: 1px solid var(--border); transition: height 0.3s; }
+.lineup-day { padding: 6px var(--space-2); border-left: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-tertiary); }
+.lineup-day:first-child { border-left: 0; }
+.lineup-day b { display: block; color: var(--text-secondary); font-size: var(--text-sm); font-weight: 650; }
+.lineup-day.is-today b { color: var(--accent); }
+.lineup-bar { position: absolute; height: 22px; padding: 0 var(--space-2); border: 1px solid transparent; border-radius: var(--radius-md); font: inherit; font-size: var(--text-xs); font-weight: 600; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; animation: lineup-grow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: left; }
+.lineup-bar:hover { filter: brightness(1.12); }
+.lineup-bar--running, .lineup-bar--paused { background: color-mix(in srgb, var(--lane-running) 18%, transparent); border-color: var(--lane-running); color: var(--text); }
+.lineup-bar--paused { border-color: var(--warning); }
+.lineup-bar--scheduled { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); color: var(--text); }
+.lineup-bar--draft { background: transparent; border: 1px dashed var(--border-strong); color: var(--text-secondary); }
+.lineup-now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; }
+.lineup-now span { position: absolute; bottom: 2px; left: 4px; font-size: 10px; font-weight: 700; color: var(--accent); }
+
+.lineup-needs { display: flex; flex-direction: column; gap: var(--space-2); }
+.lineup-need { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: linear-gradient(90deg, color-mix(in srgb, var(--warning) 12%, transparent), transparent 45%), var(--bg-elevated); animation: lineup-rise 0.35s ease-out; }
+.lineup-need--bad { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); background: linear-gradient(90deg, color-mix(in srgb, var(--danger) 11%, transparent), transparent 45%), var(--bg-elevated); }
+.lineup-need-glyph { flex: none; width: 26px; height: 26px; border-radius: var(--radius-md); display: grid; place-items: center; font-weight: 800; color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
+.lineup-need--bad .lineup-need-glyph { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.lineup-need-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
+.lineup-need-text span { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.45; }
+.lineup-need-fixes { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+
+.lineup-group { gap: var(--space-2); }
+.lineup-row.schedule-card { gap: 0; padding: 0; border-radius: var(--radius-xl); overflow: hidden; transition: border-color 0.2s; }
+.lineup-row.schedule-card:hover { border-color: var(--border-strong); }
+.lineup-row-head { display: grid; grid-template-columns: 46px minmax(0, 1.5fr) minmax(0, 1.3fr) minmax(150px, auto) auto; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); }
+.lineup-row-head .schedule-ring { width: 40px; height: 40px; }
+.lineup-row-name { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lineup-row-name .schedule-card-name { font-size: var(--text-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lineup-row-name .schedule-card-meta { flex-wrap: wrap; font-size: var(--text-xs); }
+.lineup-row-name .spot-pill { height: 20px; }
+.lineup-row-name .schedule-status { color: inherit; }
+.lineup-beads-cell { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.lineup-beads { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.lineup-bead { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--border-strong); box-sizing: border-box; flex: none; }
+.lineup-bead.is-new-step { margin-left: 6px; }
+.lineup-bead--done { background: var(--lane-done); border-color: var(--lane-done); }
+.lineup-bead--running { border-color: var(--lane-running); border-top-color: transparent; animation: spot-spin 1s linear infinite; }
+.lineup-bead--waiting { background: var(--lane-awaiting); border-color: var(--lane-awaiting); }
+.lineup-bead--failed { background: var(--lane-failed); border-color: var(--lane-failed); }
+.lineup-bead--skipped { border-style: dashed; border-color: var(--lane-skipped); opacity: 0.7; }
+.lineup-beads-sum { font-size: var(--text-xs); color: var(--text-tertiary); }
+.lineup-when { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; font-size: var(--text-sm); }
+.lineup-when strong { font-weight: 650; white-space: nowrap; }
+.lineup-when span { font-size: var(--text-xs); color: var(--text-tertiary); }
+.lineup-when span.is-bad { color: var(--danger); }
+.lineup-when span.schedule-countdown { font-weight: 500; }
+.lineup-row-actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
+.lineup-row-body { border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); animation: lineup-rise 0.25s ease-out; }
+.lineup-details { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: var(--space-5); }
+.lineup-details-main { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.lineup-issues { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.lineup-tickets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 300px; overflow-y: auto; }
+.lineup-ticket { display: grid; grid-template-columns: 20px 110px minmax(0, 1fr) auto; gap: var(--space-2); align-items: center; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+.lineup-ticket:last-child { border-bottom: 0; }
+.lineup-ticket-step { font-size: var(--text-xs); color: var(--text-tertiary); text-align: center; }
+.lineup-ticket-key { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-tertiary); }
+.lineup-ticket-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lineup-ticket-state { font-size: var(--text-xs); color: var(--text-tertiary); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.lineup-ticket-state.is-warn { color: var(--warning); }
+.lineup-ticket--done .lineup-ticket-state { color: var(--success); }
+.lineup-ticket--running .lineup-ticket-state { color: var(--lane-running); }
+.lineup-ticket--skipped .lineup-ticket-title { color: var(--text-tertiary); text-decoration: line-through; }
+.lineup-facts { margin: 0; display: flex; flex-direction: column; gap: 0; font-size: var(--text-sm); }
+.lineup-facts > div { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.lineup-facts dt { font-size: var(--text-xs); color: var(--text-tertiary); }
+.lineup-facts dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.lineup-actions { justify-content: flex-end; }
+
+@keyframes lineup-grow { from { transform: scaleX(0); opacity: 0; } }
+@keyframes lineup-rise { from { opacity: 0; transform: translateY(-4px); } }
+
+@container (max-width: 900px) {
+  .lineup-row-head { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .lineup-row-head .lineup-beads-cell { grid-column: 2 / -1; grid-row: 2; }
+  .lineup-row-head .lineup-when { grid-column: 2; grid-row: 3; align-items: flex-start; text-align: left; }
+  .lineup-row-head .lineup-row-actions { grid-column: 3; grid-row: 1 / 4; align-self: start; }
+  .lineup-details { grid-template-columns: minmax(0, 1fr); }
+  .lineup-need { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lineup-bar, .lineup-need, .lineup-row-body, .lineup-bead--running { animation: none; }
+  .lineup-bead--running { border-top-color: var(--lane-running); }
 }

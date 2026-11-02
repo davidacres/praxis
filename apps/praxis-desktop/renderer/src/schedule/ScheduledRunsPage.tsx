@@ -9,14 +9,19 @@ import { useDialogs } from '../ui/dialogs';
 import { ScheduleComposer } from './ScheduleComposer';
 import { ScheduleRunMonitor } from './ScheduleRunMonitor';
 import { ScheduleRunReport } from './ScheduleRunReport';
-import { STATUS_LABEL, condenseIssues, describeCountdown, formatStart, groupScheduledRuns, type ScheduledRunGroups } from './scheduleFormat';
+import { STATUS_LABEL, condenseIssues, formatStart, groupScheduledRuns, type ScheduledRunGroups } from './scheduleFormat';
+import { LineupDetails, LineupNeeds, LineupWeek, isFinished, lineupWhen, LineupBeads, type Need } from './ScheduleLineup';
+import { confirmProjectWorkflowTrust } from '../workflows/workflowProjectTrust';
+
+type LineupTab = 'all' | 'active' | 'drafts' | 'finished';
 import './schedule.css';
 
 /**
- * The Scheduled runs lineup (FX-BF-047 / FX-BE-147 / TASK-462).
- *
- * Each schedule is a card with its tickets drawn as a mini belt, in the order they
- * will run, grouped by what needs a person: running, up next, needs attention,
+ * The Scheduled runs lineup (FX-BF-047 / FX-BE-147 / TASK-462), as an agenda: a week
+ * of bars from each run's start to its likely finish, what needs a person with the
+ * fix beside it, and one row per schedule — its beads in run order, its start and
+ * the one action that matters now — that opens to its tickets, facts and actions.
+ * Rows are grouped by what needs a person: running, up next, needs attention,
  * drafts, finished. The runner in the main process starts a schedule at its time
  * (only while Praxis is open); a running or paused card opens the live view, a
  * finished one opens its report.
@@ -62,6 +67,9 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   const [detailRunId, setDetailRunId] = useState<string>();
   /** A running schedule whose report the user opened ("Report so far"); the monitor is the default. */
   const [reportFor, setReportFor] = useState<string>();
+  /** Rows the user opened or shut; unset rows are open unless the run has finished. */
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
+  const [tab, setTab] = useState<LineupTab>('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const { candidates, loadError } = useScheduleTickets(project);
   const [views, setViews] = useState<ScheduledRunView[]>();
@@ -214,23 +222,70 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   }
 
   const total = views?.length ?? 0;
+  const inTab = (view: ScheduledRunView) =>
+    tab === 'all' ||
+    (tab === 'active' && ['running', 'paused', 'scheduled', 'missed'].includes(view.run.status)) ||
+    (tab === 'drafts' && view.run.status === 'draft') ||
+    (tab === 'finished' && isFinished(view));
+  const tabs: Array<{ id: LineupTab; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'active', label: 'Active' },
+    { id: 'drafts', label: 'Drafts' },
+    { id: 'finished', label: 'Finished' }
+  ];
+  const countFor = (id: LineupTab) => (views ?? []).filter(view => id === 'all' || (id === 'active' ? ['running', 'paused', 'scheduled', 'missed'].includes(view.run.status) : id === 'drafts' ? view.run.status === 'draft' : isFinished(view))).length;
+  const reveal = (id: string) => {
+    setOpenRows(current => ({ ...current, [id]: true }));
+    setTab('all');
+    window.requestAnimationFrame(() => document.querySelector(`[data-testid="schedule-card"][data-run-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  };
+  const trust = (view: ScheduledRunView) => act(async () => {
+    if (!view.run.projectId || !view.run.policy.workflowId) return;
+    await confirmProjectWorkflowTrust(view.run.projectId, view.run.policy.workflowId, confirm);
+    await load();
+  });
+  const needs: Need[] = (views ?? []).flatMap(view => {
+    const { run, readiness } = view;
+    if (run.status === 'missed') {
+      return [{ id: run.id, tone: 'bad' as const, title: run.name, text: `It was due ${formatStart(run.scheduledStartAt, run.timezone)} while Praxis was closed. Start it now or skip it.`, fixes: [
+        { label: 'Skip', testId: 'schedule-need-skip', run: () => void act(() => window.praxis.scheduledRuns.resolveMissed(run.id, 'skip')) },
+        { label: 'Start now', primary: true, testId: 'schedule-need-start-now', run: () => void act(() => window.praxis.scheduledRuns.resolveMissed(run.id, 'start-now')) }
+      ] }];
+    }
+    if (run.status === 'paused' || run.status === 'failed') {
+      return [{ id: run.id, tone: run.status === 'failed' ? 'bad' as const : 'warn' as const, title: run.name, text: run.pause?.message ?? (run.status === 'failed' ? 'The run failed.' : 'The run is paused.'), fixes: [
+        { label: run.status === 'failed' ? 'View report' : 'Open live view', primary: true, testId: 'schedule-need-open', run: () => setDetailRunId(run.id) }
+      ] }];
+    }
+    if (run.status !== 'draft' && run.status !== 'scheduled') return [];
+    const shown = readiness.issues.filter(issue => issue.severity === 'blocker' || run.status === 'scheduled');
+    if (shown.length === 0) return [];
+    const fixes: Need['fixes'] = [];
+    if (shown.some(issue => issue.code === 'workflow-untrusted')) fixes.push({ label: 'Review and trust', testId: 'schedule-need-trust', run: () => void trust(view) });
+    fixes.push({ label: shown.some(issue => issue.code === 'start-in-past') ? 'Pick a new time' : 'Edit', primary: true, testId: 'schedule-need-edit', run: () => { setSelectedRunId(run.id); setComposing({ view }); } });
+    return [{ id: run.id, tone: shown.some(issue => issue.severity === 'blocker') ? 'bad' as const : 'warn' as const, title: run.name, text: condenseIssues(shown).map(issue => issue.message).join(' '), fixes }];
+  });
 
   return (
-    <>{sidebar}<div className="view-scroll schedule-page" data-testid="scheduled-runs-page">
-      <header className="schedule-head">
-        <div>
+    <>{sidebar}<div className="view-scroll schedule-page lineup" data-testid="scheduled-runs-page">
+      <header className="lineup-head">
+        <div className="lineup-head-main">
           <h2 className="schedule-title">Scheduled runs</h2>
-          <p className="schedule-sub">Queue board tickets in a fixed order and set when to run them. One ticket at a time.</p>
+          <p className="schedule-sub" data-testid="schedule-runtime-note">
+            A schedule starts at its time while Praxis is open, runs its tickets in order, and pauses to ask you at an approval gate, a failure, or when a provider is nearly out of allowance.
+          </p>
         </div>
+        {total > 0 && (
+          <div className="lineup-tabs" role="tablist" aria-label="Show">
+            {tabs.map(item => (
+              <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={`lineup-tab${tab === item.id ? ' is-on' : ''}`} data-testid={`schedule-tab-${item.id}`} onClick={() => setTab(item.id)}>
+                {item.label} <span>{countFor(item.id)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <button type="button" className="btn btn-primary" data-testid="schedule-lineup-new" onClick={() => setComposing({})}><Icon name="plus" size={13} /> New scheduled run</button>
       </header>
-
-      <div className="schedule-notice" role="note" data-testid="schedule-runtime-note">
-        <Icon name="info" size={14} />
-        <span>
-          A schedule starts at its time while Praxis is open, runs its tickets one at a time in order, and
-          pauses to ask you at an approval gate, a failure, or when a provider is nearly out of allowance.
-        </span>
-      </div>
 
       {initialTicketKeys.length > 0 && !ticketHandoffDismissed && <section className="schedule-group" aria-label="Add selected tickets">
         <h3 className="schedule-group-title">Add {initialTicketKeys.length} selected ticket{initialTicketKeys.length === 1 ? '' : 's'}</h3>
@@ -239,16 +294,6 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
       </section>}
 
       {error && <div className="schedule-error" role="alert" data-testid="schedule-error">{error}</div>}
-
-      {views !== undefined && total > 0 && (
-        <div className="schedule-overview" data-testid="schedule-overview">
-          <Tile label="Running" value={groups.running.length} tone="progress" />
-          <Tile label="Scheduled" value={groups.upNext.length} tone="info" />
-          <Tile label="Needs you" value={groups.attention.length} tone="bad" />
-          <Tile label="Drafts" value={groups.drafts.length} />
-          <WeekStrip views={views} now={now} />
-        </div>
-      )}
 
       {views === undefined && !error && <div className="schedule-empty">Loading schedules…</div>}
 
@@ -261,15 +306,21 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
         </div>
       )}
 
-      {GROUPS.map(({ key, title }) =>
-        groups[key].filter(view => !selectedRunId || view.run.id === selectedRunId).length === 0 ? null : (
-          <section key={key} className="schedule-group" aria-label={title} data-testid={`schedule-group-${key}`}>
-            <h3 className="schedule-group-title">{title}<span className="schedule-group-count">{groups[key].length}</span></h3>
-            {groups[key].filter(view => !selectedRunId || view.run.id === selectedRunId).map(view => (
+      {views !== undefined && total > 0 && <LineupWeek views={views} now={now} onPick={reveal} />}
+      {views !== undefined && !selectedRunId && <LineupNeeds needs={needs} />}
+
+      {GROUPS.map(({ key, title }) => {
+        const shown = groups[key].filter(view => (!selectedRunId || view.run.id === selectedRunId) && inTab(view));
+        return shown.length === 0 ? null : (
+          <section key={key} className="schedule-group lineup-group" aria-label={title} data-testid={`schedule-group-${key}`}>
+            <h3 className="schedule-group-title">{title}<span className="schedule-group-count">{shown.length}</span></h3>
+            {shown.map(view => (
               <RunCard
                 key={view.run.id}
                 view={view}
                 now={now}
+                expanded={openRows[view.run.id] ?? !isFinished(view)}
+                onToggle={() => setOpenRows(current => ({ ...current, [view.run.id]: !(current[view.run.id] ?? !isFinished(view)) }))}
                 onEdit={() => { setSelectedRunId(view.run.id); setComposing({ view }); }}
                 onOpen={() => setDetailRunId(view.run.id)}
                 onDelete={() => void remove(view)}
@@ -280,15 +331,22 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
               />
             ))}
           </section>
-        )
-      )}
+        );
+      })}
     </div></>
   );
 }
 
+/**
+ * One schedule as a row: its status, name, beads and start, with the one action that
+ * matters now. Opened, it lists its tickets by step, its facts and every other action.
+ * Every action keeps one test id per card, so a row is driven the same open or shut.
+ */
 function RunCard({
   view,
   now,
+  expanded,
+  onToggle,
   onEdit,
   onOpen,
   onDelete,
@@ -299,6 +357,8 @@ function RunCard({
 }: {
   view: ScheduledRunView;
   now: number;
+  expanded: boolean;
+  onToggle: () => void;
   onEdit: () => void;
   onOpen: () => void;
   onDelete: () => void;
@@ -313,120 +373,56 @@ function RunCard({
   const canArm = readiness.ready && run.entries.length > 0;
   const startBlocker = blockers.find(issue => issue.code !== 'start-in-past');
   const canRunNow = run.entries.length > 0 && !startBlocker;
+  const when = lineupWhen(view, now);
+  const live = run.status === 'running' || run.status === 'paused';
+
+  const runNow = <button type="button" className={`btn${run.status === 'scheduled' ? '' : ' btn-primary'}`} data-testid="schedule-run-now" disabled={starting || !canRunNow} title={canRunNow ? 'Start this run immediately' : startBlocker?.message ?? 'Add a ticket first'} onClick={onRunNow}>{starting ? 'Starting…' : 'Run now'}</button>;
+  const arm = <button type="button" className="btn btn-primary" data-testid="schedule-arm" disabled={!canArm} title={canArm ? 'Schedule this run' : blockers[0]?.message ?? 'Add a ticket first'} onClick={() => onArm(true)}>Schedule run</button>;
+  const open = <button type="button" className="btn btn-primary" data-testid="schedule-open" onClick={onOpen}>{live ? 'Open live view' : 'View report'}</button>;
+  const startNow = <button type="button" className="btn btn-primary" data-testid="schedule-start-now" onClick={() => onResolve('start-now')}>Start now</button>;
+  // The one action that matters now sits on the row; the rest are inside it.
+  const primary = run.status === 'missed' ? startNow : run.status === 'draft' ? (canArm ? arm : runNow) : run.status === 'scheduled' ? runNow : open;
 
   return (
-    <article className="schedule-card" data-testid="schedule-card" data-status={run.status} data-run-id={run.id}>
-      <div className="schedule-card-top">
+    <article className={`schedule-card lineup-row${expanded ? ' is-open' : ''}`} data-testid="schedule-card" data-status={run.status} data-run-id={run.id}>
+      <div className="lineup-row-head">
         <RunRing view={view} now={now} />
-        <div className="schedule-card-main">
+        <button type="button" className="lineup-row-name" aria-expanded={expanded} aria-label={`${run.name}, ${expanded ? 'hide' : 'show'} details`} onClick={onToggle}>
           <h4 className="schedule-card-name" data-testid="schedule-card-name">{run.name}</h4>
-          <div className="schedule-card-meta">
-            <span className={`schedule-status schedule-status--${run.status}`} data-testid="schedule-status">{STATUS_LABEL[run.status]}</span>
-            <span>Once · {run.timezone}</span>
+          <span className="schedule-card-meta">
+            <span className={`spot-pill spot-pill--${run.status}`}><span className={`schedule-status schedule-status--${run.status}`} data-testid="schedule-status">{STATUS_LABEL[run.status]}</span></span>
+            <span>{run.policy.mode === 'parallel' ? `up to ${run.policy.maxConcurrency} at once` : 'one at a time'} · once</span>
+          </span>
+        </button>
+        <LineupBeads view={view} />
+        <div className="lineup-when">
+          <strong data-testid="schedule-start">{when.main}</strong>
+          <span className={run.status === 'missed' || (run.status === 'draft' && when.sub === 'start has passed') ? 'is-bad' : run.status === 'scheduled' ? 'schedule-countdown' : undefined}>{when.sub}</span>
+        </div>
+        <div className="lineup-row-actions">
+          {primary}
+          <button type="button" className="btn btn-icon lineup-chevron" aria-label={expanded ? `Hide details of ${run.name}` : `Show details of ${run.name}`} aria-expanded={expanded} onClick={onToggle}>
+            <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={14} />
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="lineup-row-body">
+          <LineupDetails view={view} editable={editable} />
+          <div className="schedule-actions lineup-actions">
+            {run.status === 'draft' && primary !== runNow && runNow}
+            {run.status === 'draft' && primary !== arm && arm}
+            {run.status === 'missed' && <button type="button" className="btn" data-testid="schedule-skip" onClick={() => onResolve('skip')}>Skip</button>}
+            {run.status === 'scheduled' && <button type="button" className="btn" data-testid="schedule-hold" onClick={() => onArm(false)}>Put on hold</button>}
+            {editable && <button type="button" className="btn" data-testid="schedule-edit" onClick={onEdit}>Edit</button>}
+            <button type="button" className="btn btn-icon" data-testid="schedule-delete" aria-label={`Delete ${run.name}`} onClick={onDelete}>
+              <Icon name="trash" size={13} />
+            </button>
           </div>
         </div>
-        <div className="schedule-card-when">
-          <strong data-testid="schedule-start">{formatStart(run.scheduledStartAt, run.timezone)}</strong>
-          {run.status === 'scheduled' && <span className="schedule-countdown">{describeCountdown(run.scheduledStartAt, now)}</span>}
-          {run.status === 'missed' && <span className="schedule-countdown schedule-countdown--bad">was due while Praxis was closed</span>}
-        </div>
-      </div>
-
-      <ol className="schedule-mini-belt" aria-label="Run order" data-testid="schedule-mini-belt">
-        {run.entries.map(entry => (
-          <li key={entry.id} className={`schedule-chip schedule-chip--${entry.outcome?.status ?? 'queued'}`} data-issue={entry.ticket.issueKey}>
-            <span className="schedule-chip-seq">{entry.sequence}</span>
-            <span className="schedule-chip-text">
-              <span className="schedule-chip-key">{entry.ticket.issueKey}</span>
-              <span className="schedule-chip-title" title={entry.ticket.title}>{entry.ticket.title}</span>
-            </span>
-          </li>
-        ))}
-        {run.entries.length === 0 && <li className="schedule-chip schedule-chip--empty">No tickets yet</li>}
-      </ol>
-
-      {readiness.issues.length > 0 && editable && (
-        <ul className="schedule-issues" data-testid="schedule-issues">
-          {condenseIssues(readiness.issues).map((issue, index) => (
-            <li key={`${issue.code}-${index}`} className={`schedule-issue schedule-issue--${issue.severity}`} data-code={issue.code}>
-              <Icon name="warning" size={12} /> {issue.message}
-            </li>
-          ))}
-        </ul>
       )}
-
-      <div className="schedule-actions">
-        {editable && <button type="button" className="btn btn-primary" data-testid="schedule-run-now" disabled={starting || !canRunNow} title={canRunNow ? 'Start this run immediately' : startBlocker?.message ?? 'Add a ticket first'} onClick={onRunNow}>{starting ? 'Starting…' : 'Run now'}</button>}
-        {run.status === 'missed' && (
-          <>
-            <button type="button" className="btn" data-testid="schedule-start-now" onClick={() => onResolve('start-now')}>Start now</button>
-            <button type="button" className="btn" data-testid="schedule-skip" onClick={() => onResolve('skip')}>Skip</button>
-          </>
-        )}
-        {run.status === 'draft' && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            data-testid="schedule-arm"
-            disabled={!canArm}
-            title={canArm ? 'Schedule this run' : blockers[0]?.message ?? 'Add a ticket first'}
-            onClick={() => onArm(true)}
-          >
-            Schedule run
-          </button>
-        )}
-        {run.status === 'scheduled' && (
-          <button type="button" className="btn" data-testid="schedule-hold" onClick={() => onArm(false)}>Put on hold</button>
-        )}
-        {editable && <button type="button" className="btn" data-testid="schedule-edit" onClick={onEdit}>Edit</button>}
-        {!editable && run.status !== 'missed' && (
-          <button type="button" className="btn btn-primary" data-testid="schedule-open" onClick={onOpen}>
-            {run.status === 'running' || run.status === 'paused' ? 'Open live view' : 'View report'}
-          </button>
-        )}
-        <button type="button" className="btn btn-icon" data-testid="schedule-delete" aria-label={`Delete ${run.name}`} onClick={onDelete}>
-          <Icon name="trash" size={13} />
-        </button>
-      </div>
     </article>
-  );
-}
-
-function Tile({ label, value, tone }: { label: string; value: number; tone?: 'progress' | 'info' | 'bad' }) {
-  return (
-    <div className={`schedule-tile${tone ? ` schedule-tile--${tone}` : ''}`}>
-      <span className="schedule-tile-label">{label}</span>
-      <strong className="schedule-tile-value">{value}</strong>
-    </div>
-  );
-}
-
-/** The next seven days, a dot on each day that has a schedule starting. Dates are the viewer's own. */
-function WeekStrip({ views, now }: { views: ScheduledRunView[]; now: number }) {
-  const key = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-  const counts = new Map<string, number>();
-  for (const view of views) {
-    if (view.run.status !== 'scheduled' && view.run.status !== 'draft') continue;
-    const day = key(new Date(view.run.scheduledStartAt));
-    counts.set(day, (counts.get(day) ?? 0) + 1);
-  }
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(now);
-    date.setDate(date.getDate() + index);
-    return { date, count: counts.get(key(date)) ?? 0 };
-  });
-  return (
-    <div className="schedule-week" aria-label="Next 7 days">
-      <span className="schedule-tile-label">Next 7 days</span>
-      <div className="schedule-week-days">
-        {days.map(({ date, count }, index) => (
-          <span key={index} className={`schedule-week-day${index === 0 ? ' is-today' : ''}`} data-count={count}>
-            {new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(date)}
-            <i className="schedule-week-dot" aria-label={count ? `${count} scheduled` : undefined} />
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
 
