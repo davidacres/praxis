@@ -1313,11 +1313,82 @@ test('an approval waits on its ticket\'s card, approving it there makes a receip
   await expect(page.getByTestId('schedule-report')).toBeVisible();
   await expect(page.getByTestId('schedule-report-table').locator('tbody tr')).toHaveCount(2);
   await expect(page.getByTestId('schedule-report-table').locator(`tr[data-issue="${keys[0]}"]`).getByTestId('schedule-report-tasks').locator('.spot-bar')).toHaveCount(1);
-  await expect(page.getByTestId('schedule-report-needs')).toContainText('approval');
+  await expect(page.getByTestId('schedule-report-needs')).toContainText('Approvals');
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(shots, 'scheduled-run-report-so-far.png') });
   await page.getByTestId('schedule-report-back').click();
   await expect(page.getByTestId('schedule-monitor')).toBeVisible();
+});
+
+test('a long run\'s report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket', async () => {
+  const { page, projectId } = await launch({ titles: ['Quiet ticket', 'Bouncing ticket'] });
+  const runId = await scheduleSoon(page, projectId, 'Long night', 2, 86400);
+  const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
+  await quitWithArmedSchedule();
+  // Rewrite the stored schedule as a finished overnight run shaped like a real one: six loop
+  // decisions on the first ticket, and 109 hand-overs on the second as two providers bounced it.
+  const file = path.join(app!.userDataDir, 'scheduled-runs.json');
+  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const run = stored['praxis.scheduledRuns.v1'].find((item: { id: string }) => item.id === runId);
+  const t = (minutes: number) => new Date(Date.parse('2026-10-31T09:30:00.000Z') + minutes * 60000).toISOString();
+  const [first, second] = run.entries;
+  const keyA = first.ticket.issueKey, keyB = second.ticket.issueKey;
+  const bounce = Array.from({ length: 109 }, (_, i) => ({ at: t(600 + i), from: i % 2 ? 'claude-code-cli' : 'codex-cli', to: i % 2 ? 'codex-cli' : 'claude-code-cli', usedPercent: i % 2 ? 98 : 95 }));
+  first.outcome = { status: 'done', startedAt: t(0), endedAt: t(560), provider: 'codex-cli', spend: { tokens: 4000000, cost: 3.5, currency: 'USD' } };
+  second.outcome = { status: 'done', startedAt: t(720), endedAt: t(745), provider: 'claude-code-cli', handovers: bounce, spend: { tokens: 3000000, cost: 2.25, currency: 'USD' } };
+  run.status = 'completed';
+  run.attempts = [{ id: 'attempt-1', trigger: 'schedule', startedAt: t(0), endedAt: t(745) }];
+  run.events = [
+    { at: t(0), kind: 'started', message: 'Started.' },
+    ...Array.from({ length: 6 }, (_, i) => [
+      { at: t(30 + i * 80), kind: 'paused', message: 'Needs a decision: Review still matches its loop back to Implement (any finding at high or above) after 2 of 2 iterations.', entryId: first.id },
+      { at: t(90 + i * 80), kind: 'resumed', message: `${keyA} is running again.`, entryId: first.id }
+    ]).flat(),
+    { at: t(550), kind: 'entry-gate', message: `${keyA} is waiting for approval: Approve.`, entryId: first.id },
+    { at: t(560), kind: 'entry-done', message: `${keyA} finished.`, entryId: first.id },
+    ...bounce.map(handover => ({ at: handover.at, kind: 'provider-handover', message: `${keyB}: ${handover.from} → ${handover.to} at ${handover.usedPercent}%, checkpoint abc${String(Math.round(Math.random() * 1e6))}.`, entryId: second.id })),
+    { at: t(745), kind: 'entry-done', message: `${keyB} finished.`, entryId: second.id },
+    { at: t(745), kind: 'completed', message: 'Finished: 2 of 2 tickets done.' }
+  ];
+  fs.writeFileSync(file, JSON.stringify(stored));
+  app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
+  const window = app.window;
+  await openScheduleSidebar(window);
+  const card = window.getByTestId('schedule-card').filter({ hasText: 'Long night' });
+  await card.getByTestId('schedule-open').click();
+
+  const report = window.getByTestId('schedule-report');
+  await expect(report).toBeVisible();
+  // Seven stops, two kinds: counted with their total wait, not listed.
+  const needs = window.getByTestId('schedule-report-needs');
+  await expect(needs).toContainText('Waiting for you · 7 stops');
+  await expect(needs.locator('li[data-kind="loop"]')).toContainText('6 · 6h 00m');
+  await expect(needs.locator('li[data-kind="approval"]')).toContainText('1 · 10m');
+  // The bouncing hand-over appears once, flagged.
+  const notes = window.getByTestId('schedule-report-notes');
+  await expect(notes).toContainText(`${keyB} bounced between providers 109 times`);
+  await expect(notes.locator('li')).toHaveCount(1);
+  // One row per ticket; the bouncing one says 109 in a chip, and opening it lists two pairs, not 109 lines.
+  const rows = window.getByTestId('schedule-report-table').locator('tbody tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('6 loop decisions');
+  await expect(rows.nth(1)).toContainText('109 hand-overs');
+  await rows.nth(1).click();
+  const detail = window.getByTestId('schedule-report-detail');
+  await expect(detail).toContainText('codex-cli → claude-code-cli ×55');
+  await expect(detail).toContainText('claude-code-cli → codex-cli ×54');
+  await expect(detail.locator('li')).toHaveCount(2);
+  // The raw events are behind a disclosure, with the burst of 109 folded into a handful of lines.
+  await expect(window.getByTestId('schedule-report-ledger')).toHaveCount(0);
+  await window.getByRole('button', { name: /Show raw events/ }).click();
+  const ledger = window.getByTestId('schedule-report-ledger');
+  const burst = ledger.locator('li[data-kind="provider-handover"]');
+  await expect(burst).toHaveCount(1);
+  await expect(burst).toContainText('×109');
+  expect(await ledger.locator('li').count()).toBeLessThan(25);
+  await window.getByRole('button', { name: 'Hide raw events' }).click();
+  await window.waitForTimeout(400);
+  await window.screenshot({ path: path.join(shots, 'scheduled-run-report-brief.png') });
 });
 
 test('a parallel run whose readiness is blocked starts nothing in any lane and says why', async () => {
