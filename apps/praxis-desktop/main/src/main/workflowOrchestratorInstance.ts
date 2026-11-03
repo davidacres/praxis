@@ -6,9 +6,7 @@ import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
 import { RunDisplayWake } from './runDisplayWake';
 import { powerSaveBlocker } from 'electron';
 import { broadcastToAllWindows } from './windowBroadcast';
-import { resolve as resolvePath } from 'node:path';
 import {
-  ExclusiveResources,
   WorkflowOrchestrator,
   WorkflowRunStore,
   isAgentTaskNode,
@@ -33,6 +31,7 @@ import { spawnCheck } from './workflowCheckProcess';
 import { ensureRunDependencies } from './runDependencies';
 import { runWorkflowMerge, type MergeConflictResolver } from './workflowMergeRunner';
 import { changedPaths, commitPraxisWrite } from './ticketWriteBackCommit';
+import { withBaseCheckout } from './baseCheckoutLock';
 import { repositoryRoot } from './runWork';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
@@ -143,18 +142,22 @@ const issueWriteBack = new WorkflowIssueWriteBack({
     // A folder-backed ticket is a file in the repository: commit what this comment changed, or the
     // checkout reads as dirty and the schedule's next ticket refuses to start.
     const folder = projectFolderFor(run);
-    const root = folder ? await repositoryRoot(folder) : undefined;
-    const before = root ? await changedPaths(root).catch(() => undefined) : undefined;
-    const comment = buildWriteBackComment(run);
-    await runAsAgent(() => service.addComment(run.issueKey!, comment));
-    if (root && before) {
-      const marker = comment.split('\n').find(line => line.trim()) ?? comment;
-      await commitPraxisWrite(root, before, marker.trim(), `Record run outcome on ${run.issueKey}`).catch(error =>
-        workflowLogSink.appendLine(
-          `Recorded the outcome on ${run.issueKey} but could not commit it: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
-    }
+    const record = async () => {
+      const root = folder ? await repositoryRoot(folder) : undefined;
+      const before = root ? await changedPaths(root).catch(() => undefined) : undefined;
+      const comment = buildWriteBackComment(run);
+      await runAsAgent(() => service.addComment(run.issueKey!, comment));
+      if (root && before) {
+        const marker = comment.split('\n').find(line => line.trim()) ?? comment;
+        await commitPraxisWrite(root, before, marker.trim(), `Record run outcome on ${run.issueKey}`).catch(error =>
+          workflowLogSink.appendLine(
+            `Recorded the outcome on ${run.issueKey} but could not commit it: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }
+    };
+    // Written and committed in one turn on the base checkout, so a parallel ticket never branches from it half-done.
+    await (folder ? withBaseCheckout(folder, record) : record());
   },
   mark: (runId, at, outcome) =>
     getWorkflowOrchestrator().updateRun(runId, current => ({ ...current, issueWriteBackAt: at, issueWriteBackOutcome: outcome }))
@@ -219,8 +222,6 @@ async function runTrustError(run: WorkflowRun): Promise<string | undefined> {
   return undefined;
 }
 
-/** Merges into one base checkout never overlap, whichever runs (or parallel schedule lanes) start them. */
-const baseCheckouts = new ExclusiveResources();
 const MERGE_HOLD_MS = Number(process.env.PRAXIS_E2E_MERGE_HOLD_MS) > 0 ? Number(process.env.PRAXIS_E2E_MERGE_HOLD_MS) : 0;
 
 const dispatcher: StageDispatcher = {
@@ -253,7 +254,8 @@ const dispatcher: StageDispatcher = {
       if (MERGE_HOLD_MS > 0) await new Promise(resolve => setTimeout(resolve, MERGE_HOLD_MS));
       return outcome;
     };
-    return folder ? baseCheckouts.with(resolvePath(folder), merge) : merge();
+    // Merges into one base checkout never overlap, whichever runs (or parallel schedule lanes) start them.
+    return folder ? withBaseCheckout(folder, merge) : merge();
   },
   async runAgentStage(node, context, onSession) {
     const error = await runTrustError(context.run);

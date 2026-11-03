@@ -8,6 +8,7 @@ import { commitPathsGit, getCurrentBranch, getGitStatus } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { preserveUncommittedWork, restoreWorktreeTo, runWorktreeKey } from './runWork';
+import { withBaseCheckout } from './baseCheckoutLock';
 
 /**
  * Per-run git worktree (FX-BE-024 / TASK-113).
@@ -106,7 +107,9 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
         throw new Error('Could not determine a base branch for this run (detached HEAD?).');
       }
 
-      const prepared = await manager.prepareDeliveryWorktree(
+      // Branched in turn with other writes to the base, so a ticket move or outcome comment being
+      // committed for another run is never mistaken for the person's uncommitted work.
+      const prepared = await withBaseCheckout(folder, () => manager.prepareDeliveryWorktree(
         { key: worktreeKeyFor(run), summary: run.definition.name } as Parameters<
           GitWorktreeManager['prepareDeliveryWorktree']
         >[0],
@@ -121,7 +124,7 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
           requireCleanBase: !run.uncommittedChanges,
           includeUncommitted: run.uncommittedChanges === 'include'
         }
-      );
+      ));
       return prepared.worktreePath;
     },
 
