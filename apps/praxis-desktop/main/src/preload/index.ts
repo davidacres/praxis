@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CodeIntelligenceRequest,
+  ConversationUpdate,
   SemanticModelStatus,
   SemanticModelProgressEvent,
   CheckFindings,
@@ -446,6 +447,20 @@ const praxis: PraxisIpc = {
     saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
     renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
     deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
+    submitTurn: (command: unknown) => ipcRenderer.invoke('assistant:submitTurn', command),
+    getConversation: (conversationId: string) => ipcRenderer.invoke('assistant:getConversation', conversationId),
+    subscribeConversation: (conversationId: string, listener: (update: ConversationUpdate) => void) => {
+      const handler = (_event: unknown, update: ConversationUpdate) => {
+        if (update && update.conversationId === conversationId) listener(update);
+      };
+      ipcRenderer.on('assistant:conversationUpdate', handler);
+      return () => {
+        ipcRenderer.removeListener('assistant:conversationUpdate', handler);
+      };
+    },
+    cancelTurn: (conversationId: string, turnId: string) => ipcRenderer.invoke('assistant:cancelTurn', conversationId, turnId),
+    retryParticipant: (conversationId: string, turnId: string, participantId: string) => ipcRenderer.invoke('assistant:retryParticipant', conversationId, turnId, participantId),
+    resolveAttempt: (conversationId: string, turnId: string, attemptId: string, resolution: string) => ipcRenderer.invoke('assistant:resolveAttempt', conversationId, turnId, attemptId, resolution),
     onChatsChanged: (listener: () => void) => {
       const handler = () => listener();
       ipcRenderer.on('assistant:chatsChanged', handler);

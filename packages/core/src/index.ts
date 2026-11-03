@@ -52,6 +52,7 @@ export * from './ai/assistant/assistantTypes';
 export * from './ai/assistant/assistantPersonas';
 export * from './ai/assistant/assistantEngine';
 export * from './ai/assistant/teamChatStore';
+export * from './ai/assistant/teamChatCoordinator';
 export * from './ai/ticketContext';
 export * from './ai/mcp/mcpServerConfig';
 export * from './ai/mcp/mcpToolBridge';

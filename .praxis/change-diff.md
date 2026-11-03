@@ -1,1390 +1,1303 @@
-# change-diff — PRX-S111-179 (FX-BE-179)
+# change-diff — PRX-S111-180 (FX-BE-180)
 
 ## Summary
-Implements durable conversation contracts and atomic storage for Praxis team chat:
-- Core typed contracts in `packages/core/src/ai/assistant/assistantTypes.ts`
-- Atomic repository in `apps/praxis-desktop/main/src/main/adapters/teamChatRepository.ts`
-- Pure state transitions in `packages/core/src/ai/assistant/teamChatTransitions.ts`
-- TeamChatStore integration in `packages/core/src/ai/assistant/teamChatStore.ts`
-- Comprehensive test coverage in unit and git test suites
-- Linked test contracts in `docs/praxis-tests/`
+Implements main-owned turn scheduling and command delivery for Praxis durable team chat:
+- Core `TeamChatCoordinator` in `packages/core/src/ai/assistant/teamChatCoordinator.ts`
+- Comprehensive test coverage for all TASK-478 and TASK-479 acceptance criteria in `packages/core/src/ai/assistant/teamChatCoordinator.test.ts`
+- Safe whole-transcript save rejection for durable conversations in `packages/core/src/ai/assistant/teamChatStore.ts`
+- Main process coordinator singleton and IPC handlers in `apps/praxis-desktop/main/src/main/assistantIpc.ts`
+- Preload exposure for validated turn commands and revision subscriptions in `apps/praxis-desktop/main/src/preload/index.ts`
+- IPC contracts in `packages/core/src/host/ipcContracts.ts`
 
 ## Changed Files
 ```
-apps/praxis-desktop/main/package.json              |   2 +-
- .../src/main/adapters/teamChatRepository.test.ts   |  91 +++++++
- .../main/src/main/adapters/teamChatRepository.ts   | 125 +++++++++
- apps/praxis-desktop/main/src/main/assistantIpc.ts  |   4 +-
- docs/praxis-tests/catalog.json                     | 294 ++++++++++++++++++---
- docs/praxis-tests/index.md                         |  76 +++---
+apps/praxis-desktop/main/src/main/assistantIpc.ts  |  60 +-
+ apps/praxis-desktop/main/src/preload/index.ts      |  15 +
  packages/core/package.json                         |   2 +-
- packages/core/src/ai/agentTypes.ts                 |  11 +
- .../core/src/ai/assistant/assistantEngine.test.ts  |   4 +-
- packages/core/src/ai/assistant/assistantTypes.ts   | 107 ++++++++
- packages/core/src/ai/assistant/teamChatStore.ts    |  70 +++--
- .../src/ai/assistant/teamChatTransitions.test.ts   |  55 ++++
- .../core/src/ai/assistant/teamChatTransitions.ts   |  94 +++++++
- packages/core/src/index.ts                         |   2 +
- 14 files changed, 838 insertions(+), 99 deletions(-)
+ .../src/ai/assistant/teamChatCoordinator.test.ts   | 434 ++++++++++++++
+ .../core/src/ai/assistant/teamChatCoordinator.ts   | 621 +++++++++++++++++++++
+ packages/core/src/ai/assistant/teamChatStore.ts    |   3 +
+ packages/core/src/host/ipcContracts.ts             |  18 +-
+ packages/core/src/index.ts                         |   1 +
+ 8 files changed, 1150 insertions(+), 4 deletions(-)
 ```
 
-## Diff (adb2a91b..00dd78a7)
+## Diff
 ```diff
-diff --git a/apps/praxis-desktop/main/package.json b/apps/praxis-desktop/main/package.json
-index 0f9a053b..77a3eea7 100644
---- a/apps/praxis-desktop/main/package.json
-+++ b/apps/praxis-desktop/main/package.json
-@@ -31,7 +31,7 @@
-     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
-     "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/testRunnerSummary.test.js out/main/workflowMergeRunner.test.js out/main/ticketWriteBackCommit.test.js out/main/worktreeDependencyLinks.test.js out/main/runDisplayWake.test.js out/main/runDependencies.test.js out/main/affectedTestsRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/taskNotificationPolicy.test.js out/main/workflowAgentStage.test.js out/main/stageHandoverGuard.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
-     "pretest:git": "node -e \"require('electron')\"",
--    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/notesStore.test.js out/main/minimaxUsage.test.js out/main/alibabaCodingPlanUsage.test.js out/main/antigravityUsage.test.js out/main/providerUsageBatch.test.js out/main/providerUsageHistory.test.js out/main/ticketReviewApply.test.js out/main/windowState.test.js out/main/autoUpdate.test.js out/main/windowBroadcast.test.js out/main/logPersistence.test.js out/main/promptClarityDiagnostics.test.js out/main/semanticModelDownload.test.js out/main/codeIntelligenceSession.test.js out/main/codeIntelligenceCleanup.test.js",
-+    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/adapters/teamChatRepository.test.js out/main/notesStore.test.js out/main/minimaxUsage.test.js out/main/alibabaCodingPlanUsage.test.js out/main/antigravityUsage.test.js out/main/providerUsageBatch.test.js out/main/providerUsageHistory.test.js out/main/ticketReviewApply.test.js out/main/windowState.test.js out/main/autoUpdate.test.js out/main/windowBroadcast.test.js out/main/logPersistence.test.js out/main/promptClarityDiagnostics.test.js out/main/semanticModelDownload.test.js out/main/codeIntelligenceSession.test.js out/main/codeIntelligenceCleanup.test.js",
-     "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileScheduledRuns.test.js out/main/scheduledRunRequests.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobileImagePreview.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobileRelayClient.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js",
-     "check-ipc-senders": "node scripts/checkTrustedIpc.cjs",
-     "predist:mac:publish": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform darwin",
-diff --git a/apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts b/apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts
-new file mode 100644
-index 00000000..81aebdea
---- /dev/null
-+++ b/apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts
-@@ -0,0 +1,91 @@
-+import { test } from 'node:test';
-+import * as assert from 'node:assert/strict';
-+import * as fs from 'node:fs';
-+import * as os from 'node:os';
-+import * as path from 'node:path';
-+import { TeamChatStore } from '@praxis/core';
-+import { FileTeamChatRepository, TeamChatCommitUncertainError, TeamChatStorageError } from './teamChatRepository';
-+
-+function profile(t: { after(fn: () => void): void }): string {
-+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-chat-'));
-+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-+  return path.join(directory, 'team-chats.json');
-+}
-+test('two windows and two chats retain concurrent accepted mutations and isolate returned objects', async t => {
-+  const file = profile(t);
-+  const first = new FileTeamChatRepository(file);
-+  const second = new FileTeamChatRepository(file);
-+  const a = new TeamChatStore(first); const b = new TeamChatStore(second);
-+  const [one, two] = await Promise.all([a.create('p'), b.create('p')]);
-+  await Promise.all([a.rename(one.id, 'one'), b.rename(two.id, 'two'), b.saveMessages(one.id, [{ id: 'm', role: 'user', text: 'hello', createdAt: 'now' }])]);
-+  assert.equal(a.get(one.id)?.title, 'one'); assert.equal(b.get(two.id)?.title, 'two');
-+  assert.equal(a.get(one.id)?.messages.length, 1);
-+  const snapshot = first.read(); snapshot.teamChats.length = 0;
-+  assert.equal(second.read().teamChats.length, 2);
-+  assert.equal(second.read().revision, 5);
-+});
-+test('pre-rename failure preserves committed bytes and rejects acknowledgement; next mutation uses old state', async t => {
-+  const file = profile(t); const repository = new FileTeamChatRepository(file); const store = new TeamChatStore(repository);
-+  const chat = await store.create('p'); const old = fs.readFileSync(file, 'utf8');
-+  const rename = t.mock.method(fs.promises, 'rename', async () => { throw new Error('injected before rename'); });
-+  await assert.rejects(store.rename(chat.id, 'lost'), /injected before rename/);
-+  assert.equal(fs.readFileSync(file, 'utf8'), old); assert.equal(store.get(chat.id)?.title, 'New team chat');
-+  assert.deepEqual(fs.readdirSync(path.dirname(file)), ['team-chats.json']);
-+  rename.mock.restore();
-+  await store.rename(chat.id, 'kept'); assert.equal(store.get(chat.id)?.title, 'kept');
-+});
-+test('post-rename failure halts writes until receipt reconciliation', async t => {
-+  if (process.platform === 'win32') { t.skip('Windows does not flush directories'); return; }
-+  const file = profile(t); const repository = new FileTeamChatRepository(file); const store = new TeamChatStore(repository);
-+  const chat = await store.create('p');
-+  const originalOpen = fs.promises.open;
-+  const open = t.mock.method(fs.promises, 'open', async (...args: Parameters<typeof originalOpen>) => {
-+    if (args[0] === path.dirname(file)) throw new Error('directory flush unavailable');
-+    return originalOpen(...args);
-+  });
-+  await assert.rejects(store.rename(chat.id, 'committed'), TeamChatCommitUncertainError);
-+  open.mock.restore();
-+  await assert.rejects(store.rename(chat.id, 'blocked'), TeamChatCommitUncertainError);
-+  await repository.reconcile(snapshot => { assert.equal(snapshot.teamChats[0].title, 'committed'); });
-+  await store.rename(chat.id, 'reconciled');
-+});
-+test('corrupt and unsupported files fail visibly without replacing data; legacy data remains readable', async t => {
-+  const file = profile(t);
-+  for (const raw of ['{broken', '{}', '{"schemaVersion":99,"teamChats":[]}', '{"teamChats":[{}]}']) {
-+    fs.writeFileSync(file, raw);
-+    assert.throws(() => new FileTeamChatRepository(file), TeamChatStorageError);
-+    assert.equal(fs.readFileSync(file, 'utf8'), raw);
-+  }
-+  fs.writeFileSync(file, '{"teamChats":[]}');
-+  const repository = new FileTeamChatRepository(file);
-+  await assert.rejects(repository.transaction(draft => { draft.teamChats.push({} as never); }), /Invalid chat/);
-+  assert.equal(fs.readFileSync(file, 'utf8'), '{"teamChats":[]}');
-+});
-+
-+test('durable submit and completion commit together and replay returns the original turn', async t => {
-+  const { conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } = await import('@praxis/core');
-+  const file = profile(t); const repository = new FileTeamChatRepository(file); const store = new TeamChatStore(repository);
-+  await repository.transaction(draft => { draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] }); });
-+  const payload = { text: 'hello' };
-+  const turn: import('@praxis/core').ConversationTurn = { id: 't', commandId: 'cmd', payloadDigest: conversationPayloadDigest(payload), userMessageId: 'u', acceptedSequence: 1, plan: { participants: [{ id: 'p', role: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} }], runtimeOptions: {} }, state: 'queued', completedParticipantIds: [], attempts: [] };
-+  const message: import('@praxis/core').ConversationMessage = { id: 'u', role: 'user', text: 'hello', createdAt: 'now', sequence: 1, turnId: 't', attachments: [] };
-+  const submit = () => store.transition('c', chat => submitConversationTurn(chat, 0, payload, turn, message));
-+  await Promise.all([submit(), submit()]);
-+  assert.equal(repository.read().conversations[0].messages.length, 1);
-+  assert.equal(repository.read().conversations[0].commandReceipts[0].turnId, 't');
-+  await store.transition('c', chat => startConversationTurn(chat, 1, 't'));
-+  const attempt: import('@praxis/core').ConversationAttempt = { id: 'a', turnId: 't', participantId: 'p', ordinal: 1, coordinatorEpoch: 'epoch', state: 'prepared', contextReceipt: { digest: 'context', messageIds: ['u'] }, createdAt: 'now', usageReferences: [], toolEvidenceReferences: [] };
-+  await store.transition('c', chat => reserveConversationAttempt(chat, 2, attempt));
-+  await store.transition('c', chat => advanceConversationAttempt(chat, 3, 't', 'a', 'epoch', 'dispatching', 'now'));
-+  const finish = () => store.transition('c', chat => completeConversationAttempt(chat, 4, 't', 'a', 'epoch', { ...message, id: 'reply', role: 'lead', participantId: 'p', sequence: 2 }, attempt.contextReceipt));
-+  const before = fs.readFileSync(file, 'utf8');
-+  const rename = t.mock.method(fs.promises, 'rename', async () => { throw new Error('completion commit failed'); });
-+  await assert.rejects(finish(), /completion commit failed/);
-+  assert.equal(fs.readFileSync(file, 'utf8'), before);
-+  rename.mock.restore();
-+  await finish();
-+  const reloaded = new FileTeamChatRepository(file).read().conversations[0];
-+  assert.equal(reloaded.messages.length, 2);
-+  assert.equal(reloaded.turns[0].attempts[0].state, 'completed');
-+  assert.equal(reloaded.turns[0].attempts[0].contextReceipt.digest, 'context');
-+});
-diff --git a/apps/praxis-desktop/main/src/main/adapters/teamChatRepository.ts b/apps/praxis-desktop/main/src/main/adapters/teamChatRepository.ts
-new file mode 100644
-index 00000000..1ab794f2
---- /dev/null
-+++ b/apps/praxis-desktop/main/src/main/adapters/teamChatRepository.ts
-@@ -0,0 +1,125 @@
-+import * as fs from 'node:fs';
-+import * as path from 'node:path';
-+import { randomUUID } from 'node:crypto';
-+import type { TeamChatRepository, TeamChatSnapshot } from '@praxis/core';
-+
-+type Writer = { queue: Promise<void>; uncertain: boolean };
-+// All windows route IPC to main. All adapter instances for a profile share this lock.
-+const writers = new Map<string, Writer>();
-+export class TeamChatStorageError extends Error {}
-+export class TeamChatCommitUncertainError extends TeamChatStorageError {}
-+
-+function decode(raw: string): TeamChatSnapshot {
-+  const value = JSON.parse(raw);
-+  if (!value || !Array.isArray(value.teamChats)) throw new Error('Missing teamChats array.');
-+  for (const chat of value.teamChats) {
-+    if (!chat || typeof chat.id !== 'string' || typeof chat.projectId !== 'string' || typeof chat.title !== 'string' ||
-+        typeof chat.createdAt !== 'string' || typeof chat.updatedAt !== 'string' || !Array.isArray(chat.messages) ||
-+        chat.messages.some((message: Record<string, unknown>) => !message || typeof message.id !== 'string' || typeof message.text !== 'string' ||
-+          typeof message.createdAt !== 'string' || !['user', 'lead', 'dev', 'qa', 'security', 'product'].includes(String(message.role)))) throw new Error('Invalid chat record.');
-+  }
-+  // Legacy data stays legacy; migration/activation is a separate story.
-+  if (value.schemaVersion === undefined && Object.keys(value).every(key => key === 'teamChats')) {
-+    return { schemaVersion: 2, revision: 0, teamChats: value.teamChats, conversations: [] };
-+  }
-+  if (value.schemaVersion !== 2 || !Number.isSafeInteger(value.revision) || value.revision < 0 || !Array.isArray(value.conversations)) throw new Error('Invalid conversation envelope.');
-+  for (const conversation of value.conversations) {
-+    if (!conversation || conversation.schemaVersion !== 2 || typeof conversation.id !== 'string' || !Number.isSafeInteger(conversation.revision) ||
-+        conversation.revision < 0 || typeof conversation.coordinatorEpoch !== 'string' ||
-+        !['messages', 'participants', 'turns', 'bindings', 'summaries', 'pinnedMessageIds', 'commandReceipts'].every(key => Array.isArray(conversation[key]))) throw new Error('Invalid durable conversation.');
-+  }
-+  const uniqueIds = (items: { id: string }[]) => items.every(item => item && typeof item.id === 'string' && item.id.length > 0) && new Set(items.map(item => item.id)).size === items.length;
-+  if (!uniqueIds(value.teamChats) || !uniqueIds(value.conversations)) throw new Error('Duplicate conversation identity.');
-+  for (const conversation of value.conversations) {
-+    if (typeof conversation.title !== 'string' || typeof conversation.createdAt !== 'string' || typeof conversation.updatedAt !== 'string' ||
-+        !uniqueIds(conversation.messages) || !uniqueIds(conversation.turns) || !uniqueIds(conversation.participants)) throw new Error('Invalid conversation identity or transcript.');
-+    let sequence = 0;
-+    for (const message of conversation.messages) {
-+      if (!Number.isSafeInteger(message.sequence) || message.sequence <= sequence || typeof message.turnId !== 'string' ||
-+          typeof message.text !== 'string' || typeof message.createdAt !== 'string' || !Array.isArray(message.attachments) ||
-+          !['user', 'lead', 'dev', 'qa', 'security', 'product'].includes(message.role)) throw new Error('Invalid conversation message.');
-+      sequence = message.sequence;
-+    }
-+    for (const turn of conversation.turns) {
-+      if (!['queued', 'running', 'completed', 'awaiting_approval', 'context_required', 'failed', 'interrupted', 'outcome_unknown', 'cancelling', 'cancelled'].includes(turn.state) ||
-+          typeof turn.commandId !== 'string' || typeof turn.payloadDigest !== 'string' || !turn.plan || !Array.isArray(turn.plan.participants) ||
-+          !Array.isArray(turn.completedParticipantIds) || !Array.isArray(turn.attempts) || !uniqueIds(turn.attempts)) throw new Error('Invalid conversation turn.');
-+      for (const attempt of turn.attempts) {
-+        if (attempt.turnId !== turn.id || typeof attempt.participantId !== 'string' || typeof attempt.coordinatorEpoch !== 'string' ||
-+            !Number.isSafeInteger(attempt.ordinal) || attempt.ordinal < 1 || !attempt.contextReceipt || typeof attempt.contextReceipt.digest !== 'string' ||
-+            !Array.isArray(attempt.contextReceipt.messageIds) || !['prepared', 'dispatching', 'running', 'awaiting_approval', 'completed', 'failed', 'interrupted', 'outcome_unknown', 'cancelled'].includes(attempt.state)) throw new Error('Invalid conversation attempt.');
-+      }
-+    }
-+    const commandIds = new Set<string>();
-+    for (const receipt of conversation.commandReceipts) {
-+      if (!receipt || typeof receipt.commandId !== 'string' || commandIds.has(receipt.commandId) || typeof receipt.payloadDigest !== 'string' ||
-+          !conversation.turns.some((turn: { id: string }) => turn.id === receipt.turnId) || !Number.isSafeInteger(receipt.revision) ||
-+          receipt.revision < 1 || receipt.revision > conversation.revision || receipt.outcome !== 'accepted') throw new Error('Invalid command receipt.');
-+      commandIds.add(receipt.commandId);
-+    }
-+  }
-+  return value as TeamChatSnapshot;
-+}
-+
-+export class FileTeamChatRepository implements TeamChatRepository {
-+  private readonly filePath: string;
-+  private readonly writer: Writer;
-+  public constructor(filePath: string) {
-+    this.filePath = path.resolve(filePath);
-+    let writer = writers.get(this.filePath);
-+    if (!writer) { writer = { queue: Promise.resolve(), uncertain: false }; writers.set(this.filePath, writer); }
-+    this.writer = writer;
-+    this.read(); // Fail visibly before accepting any command against corrupt data.
-+  }
-+  public read(): TeamChatSnapshot {
-+    try { return decode(fs.readFileSync(this.filePath, 'utf8')); }
-+    catch (error) {
-+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { schemaVersion: 2, revision: 0, teamChats: [], conversations: [] };
-+      throw new TeamChatStorageError(`Cannot read team chat storage ${this.filePath}: ${String(error)}`);
-+    }
-+  }
-+  public transaction<T>(mutate: (draft: TeamChatSnapshot) => T): Promise<T> {
-+    const write = this.writer.queue.then(async () => {
-+      if (this.writer.uncertain) throw new TeamChatCommitUncertainError('Team chat commit is uncertain; reload and reconcile before writing.');
-+      const current = this.read();
-+      const draft = structuredClone(current);
-+      const result = mutate(draft);
-+      if (result instanceof Promise) throw new Error('Team chat mutations must be synchronous.');
-+      draft.revision = current.revision + 1;
-+      const serialized = JSON.stringify(draft, null, 2);
-+      decode(serialized);
-+      await this.commit(serialized);
-+      return structuredClone(result);
-+    });
-+    this.writer.queue = write.then(() => undefined, () => undefined);
-+    return write;
-+  }
-+  /** Reconciliation must inspect the reloaded receipts before acknowledging an uncertain command. */
-+  public reconcile(inspect: (snapshot: TeamChatSnapshot) => void): Promise<void> {
-+    const recovery = this.writer.queue.then(() => { inspect(this.read()); this.writer.uncertain = false; });
-+    this.writer.queue = recovery.then(() => undefined, () => undefined);
-+    return recovery;
-+  }
-+  private async commit(serialized: string): Promise<void> {
-+    const directory = path.dirname(this.filePath);
-+    await fs.promises.mkdir(directory, { recursive: true });
-+    const temp = `${this.filePath}.${randomUUID()}.tmp`;
-+    let renamed = false;
-+    try {
-+      const file = await fs.promises.open(temp, 'wx', 0o600);
-+      try { await file.writeFile(serialized, 'utf8'); await file.sync(); } finally { await file.close(); }
-+      await fs.promises.rename(temp, this.filePath);
-+      renamed = true;
-+      if (process.platform !== 'win32') {
-+        const folder = await fs.promises.open(directory, 'r');
-+        try { await folder.sync(); } finally { await folder.close(); }
-+      }
-+    } catch (error) {
-+      if (renamed) {
-+        this.writer.uncertain = true;
-+        throw new TeamChatCommitUncertainError(`Team chat rename succeeded but durability is uncertain: ${String(error)}`);
-+      }
-+      throw error;
-+    } finally { await fs.promises.rm(temp, { force: true }).catch(() => undefined); }
-+  }
-+}
 diff --git a/apps/praxis-desktop/main/src/main/assistantIpc.ts b/apps/praxis-desktop/main/src/main/assistantIpc.ts
-index 12667f57..c7e36e62 100644
+index c7e36e62..896ca7e1 100644
 --- a/apps/praxis-desktop/main/src/main/assistantIpc.ts
 +++ b/apps/praxis-desktop/main/src/main/assistantIpc.ts
-@@ -23,7 +23,7 @@ import {
+@@ -7,6 +7,7 @@ import {
+   runAssistantTurn,
+   runTeamReview,
+   TeamChatStore,
++  TeamChatCoordinator,
+   parseAssistantMention,
+   DEFAULT_ASSISTANT_ROLE,
+   type AssistantCompletion,
+@@ -21,7 +22,9 @@ import {
+   type AiProvider,
+   type ReasoningEffort,
    type WireImageAttachment,
-   type IssueDetails
+-  type IssueDetails
++  type IssueDetails,
++  type ConversationUpdate,
++  type SubmitConversationCommand
  } from '@praxis/core';
--import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
-+import { FileTeamChatRepository } from './adapters/teamChatRepository';
+ import { FileTeamChatRepository } from './adapters/teamChatRepository';
  import { assistantCapabilityNote } from './assistantCapability';
- import { sanitizeImages } from './aiIpc';
- import { reviewIssueWithRuntime } from './aiReviewRuntime';
-@@ -38,7 +38,7 @@ const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
+@@ -32,16 +35,57 @@ import { broadcastToAllWindows } from './windowBroadcast';
+ import { getAiSessionManager } from './aiInstance';
+ import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
  
++let chatRepository: FileTeamChatRepository | undefined;
+ let chatStore: TeamChatStore | undefined;
++let coordinator: TeamChatCoordinator | undefined;
+ const activeToolSessions = new Set<string>();
+ const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
+ 
++function getTeamChatRepository(): FileTeamChatRepository {
++  if (!chatRepository) chatRepository = new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json'));
++  return chatRepository;
++}
++
  /** `userData/team-chats.json` — per-profile like the other AI stores, so e2e profiles never share chats. */
  function getTeamChatStore(): TeamChatStore {
--  if (!chatStore) chatStore = new TeamChatStore(new JsonKeyValueStore(path.join(app.getPath('userData'), 'team-chats.json')));
-+  if (!chatStore) chatStore = new TeamChatStore(new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json')));
+-  if (!chatStore) chatStore = new TeamChatStore(new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json')));
++  if (!chatStore) chatStore = new TeamChatStore(getTeamChatRepository());
    return chatStore;
  }
  
-diff --git a/docs/praxis-tests/catalog.json b/docs/praxis-tests/catalog.json
-index 4ff1eea6..9dcfd332 100644
---- a/docs/praxis-tests/catalog.json
-+++ b/docs/praxis-tests/catalog.json
-@@ -3,7 +3,7 @@
-   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
-   "runner": "playwright",
-   "scope": "apps/praxis-desktop/main/e2e",
--  "testCount": 768,
-+  "testCount": 782,
-   "tests": [
-     {
-       "id": "PT-DD79DC7C96",
-@@ -8011,7 +8011,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 415,
-+        "line": 414,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8027,7 +8027,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 461,
-+        "line": 460,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8043,7 +8043,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 509,
-+        "line": 508,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8059,7 +8059,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 633,
-+        "line": 632,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8075,7 +8075,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 768,
-+        "line": 769,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8091,7 +8091,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 806,
-+        "line": 809,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8107,7 +8107,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 830,
-+        "line": 833,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8123,7 +8123,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 847,
-+        "line": 850,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8139,7 +8139,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 864,
-+        "line": 867,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8155,7 +8155,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 902,
-+        "line": 909,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8171,7 +8171,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 919,
-+        "line": 926,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8187,7 +8187,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 959,
-+        "line": 970,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8203,7 +8203,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1006,
-+        "line": 1019,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8213,13 +8213,29 @@
-         "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-+    {
-+      "id": "PT-7C571CC649",
-+      "title": "a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-+        "line": 1053,
-+        "project": "functional"
++export function getTeamChatCoordinator(): TeamChatCoordinator {
++  if (!coordinator) {
++    const repository = getTeamChatRepository();
++    coordinator = new TeamChatCoordinator({
++      repository,
++      onUpdate: update => {
++        broadcastToAllWindows('assistant:conversationUpdate', update);
++        if (update.type === 'turn_completed' || update.type === 'turn_accepted') {
++          broadcastToAllWindows('assistant:chatsChanged');
++        }
 +      },
-+      "area": "scheduled Runs",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
++      executionAdapter: {
++        execute: async ({ participant, messages, turn }) => {
++          const settings = getSettingsBackend().read();
++          const selectedProvider = settings.ai.activeProvider;
++          const userPrompt = messages.filter(m => m.role === 'user').at(-1)?.text ?? '';
++          const runtime: AssistantRuntimeOptions = {
++            provider: selectedProvider,
++            model: (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
++            personaId: participant.role,
++            mode: 'chat',
++            toolMode: 'read-only',
++            toolSessionPrefix: `ASSISTANT-${turn.id}`
++          };
++          const systemPrompt = `You are the ${participant.role} team member. Respond to the conversation.`;
++          const text = await completeWithTools(runtime, systemPrompt, userPrompt);
++          return { text };
++        }
 +      }
++    });
++  }
++  return coordinator;
++}
++
+ /** The assistant has no ticket of its own; the runtime wants one, so give it an empty stand-in. */
+ const ASSISTANT_ISSUE: IssueDetails = {
+   key: 'assistant:team-chat',
+@@ -228,4 +272,16 @@ export function registerAssistantIpc(): void {
+     await getTeamChatStore().remove(chatId);
+     changed();
+   });
++
++  ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => getTeamChatCoordinator().submitTurn(command));
++  ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => getTeamChatCoordinator().getConversation(conversationId));
++  ipcMain.handle('assistant:cancelTurn', async (_event, conversationId: string, turnId: string) => {
++    await getTeamChatCoordinator().cancelTurn(conversationId, turnId);
++  });
++  ipcMain.handle('assistant:retryParticipant', async (_event, conversationId: string, turnId: string, participantId: string) => {
++    await getTeamChatCoordinator().retryParticipant(conversationId, turnId, participantId);
++  });
++  ipcMain.handle('assistant:resolveAttempt', async (_event, conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort') => {
++    await getTeamChatCoordinator().resolveAttempt(conversationId, turnId, attemptId, resolution);
++  });
+ }
+diff --git a/apps/praxis-desktop/main/src/preload/index.ts b/apps/praxis-desktop/main/src/preload/index.ts
+index f067d618..f114eda8 100644
+--- a/apps/praxis-desktop/main/src/preload/index.ts
++++ b/apps/praxis-desktop/main/src/preload/index.ts
+@@ -1,6 +1,7 @@
+ import { contextBridge, ipcRenderer } from 'electron';
+ import type {
+   CodeIntelligenceRequest,
++  ConversationUpdate,
+   SemanticModelStatus,
+   SemanticModelProgressEvent,
+   CheckFindings,
+@@ -446,6 +447,20 @@ const praxis: PraxisIpc = {
+     saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
+     renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
+     deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
++    submitTurn: (command: unknown) => ipcRenderer.invoke('assistant:submitTurn', command),
++    getConversation: (conversationId: string) => ipcRenderer.invoke('assistant:getConversation', conversationId),
++    subscribeConversation: (conversationId: string, listener: (update: ConversationUpdate) => void) => {
++      const handler = (_event: unknown, update: ConversationUpdate) => {
++        if (update && update.conversationId === conversationId) listener(update);
++      };
++      ipcRenderer.on('assistant:conversationUpdate', handler);
++      return () => {
++        ipcRenderer.removeListener('assistant:conversationUpdate', handler);
++      };
 +    },
-     {
-       "id": "PT-2370A6254B",
-       "title": "an older schedule refresh cannot overwrite a newer failure status",
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1040,
-+        "line": 1100,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8235,7 +8251,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1068,
-+        "line": 1128,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8251,7 +8267,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1136,
-+        "line": 1196,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8261,13 +8277,29 @@
-         "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-+    {
-+      "id": "PT-6DDE4C4F48",
-+      "title": "auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-+        "line": 1227,
-+        "project": "functional"
-+      },
-+      "area": "scheduled Runs",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-     {
-       "id": "PT-984829ACD0",
-       "title": "two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first",
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1167,
-+        "line": 1253,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8283,7 +8315,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1222,
-+        "line": 1314,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8293,13 +8325,45 @@
-         "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-+    {
-+      "id": "PT-13C1844C59",
-+      "title": "an approval gate is determined autonomously and recorded in the run ledger without waiting for user input",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-+        "line": 1356,
-+        "project": "functional"
-+      },
-+      "area": "scheduled Runs",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "an approval gate is determined autonomously and recorded in the run ledger without waiting for user input",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-AE3B01630D",
-+      "title": "a long run's report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-+        "line": 1384,
-+        "project": "functional"
-+      },
-+      "area": "scheduled Runs",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a long run's report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-     {
-       "id": "PT-6B8DD4C416",
-       "title": "a parallel run whose readiness is blocked starts nothing in any lane and says why",
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1264,
-+        "line": 1455,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -8309,13 +8373,29 @@
-         "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-+    {
-+      "id": "PT-794E9F0536",
-+      "title": "a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-+        "line": 1473,
-+        "project": "functional"
-+      },
-+      "area": "scheduled Runs",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-     {
-       "id": "PT-2C5ADB8DC0",
-       "title": "a schedule paused on an untrusted workflow offers to review and trust it, then carries on",
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 1281,
-+        "line": 1536,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -9019,7 +9099,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
--        "line": 146,
-+        "line": 144,
-         "project": "functional"
-       },
-       "area": "session Shelf",
-@@ -9035,7 +9115,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
--        "line": 190,
-+        "line": 188,
-         "project": "functional"
-       },
-       "area": "session Shelf",
-@@ -9051,7 +9131,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
--        "line": 264,
-+        "line": 262,
-         "project": "functional"
-       },
-       "area": "session Shelf",
-@@ -9067,7 +9147,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
--        "line": 306,
-+        "line": 304,
-         "project": "functional"
-       },
-       "area": "session Shelf",
-@@ -9078,8 +9158,88 @@
-       }
-     },
-     {
--      "id": "PT-A0F01650EE",
--      "title": "the rail stays 14px with both controls inside it, and the plus opens a new session without sending",
-+      "id": "PT-B3B664E022",
-+      "title": "a session started from the shelf stays in the shelf as its own preview card",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts",
-+        "line": 62,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf New",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a session started from the shelf stays in the shelf as its own preview card",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-FFA325C092",
-+      "title": "a goal that matches one of today's sessions can be added to it with ⌘↵",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts",
-+        "line": 92,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf New",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a goal that matches one of today's sessions can be added to it with ⌘↵",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-036F938299",
-+      "title": "the creation cells label themselves, fill solid, and draw their glyphs on whole pixels",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts",
-+        "line": 111,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf New",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "the creation cells label themselves, fill solid, and draw their glyphs on whole pixels",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-B7C1C62EB2",
-+      "title": "a note becomes a session goal in one press",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts",
-+        "line": 143,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf New",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a note becomes a session goal in one press",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-1B797E8BFB",
-+      "title": "with no usable provider the card keeps the goal and offers setup instead of sending",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts",
-+        "line": 170,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf New",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "with no usable provider the card keeps the goal and offers setup instead of sending",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-F699F5C08F",
-+      "title": "the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending",
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-@@ -9088,9 +9248,9 @@
-       },
-       "area": "session Shelf Notes",
-       "flow": {
--        "given": "an isolated desktop app launched without an open new session, with the sidebar hidden so the session shelf rail shows",
--        "when": "the rail width and the plus and pencil control boxes are measured, then the plus (session-shelf-new) is clicked",
--        "then": "the rail is 14px times --ui-scale (within 0.5px), both controls sit inside the rail horizontally and do not overflow its bottom, the new-session composer appears, the AI session count is unchanged (nothing created or sent), and the rail width is unchanged after the click"
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-     {
-@@ -9099,7 +9259,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
--        "line": 66,
-+        "line": 68,
-         "project": "functional"
-       },
-       "area": "session Shelf Notes",
-@@ -9115,7 +9275,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
--        "line": 96,
-+        "line": 98,
-         "project": "functional"
-       },
-       "area": "session Shelf Notes",
-@@ -9131,7 +9291,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
--        "line": 107,
-+        "line": 109,
-         "project": "functional"
-       },
-       "area": "session Shelf Notes",
-@@ -9147,7 +9307,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
--        "line": 138,
-+        "line": 140,
-         "project": "functional"
-       },
-       "area": "session Shelf Notes",
-@@ -9163,7 +9323,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
--        "line": 155,
-+        "line": 157,
-         "project": "functional"
-       },
-       "area": "session Shelf Notes",
-@@ -9173,6 +9333,70 @@
-         "then": "the notes card stays visible and the project picker is no longer shown"
-       }
-     },
-+    {
-+      "id": "PT-EF2C1AEDFA",
-+      "title": "each spine draws its session's state, with a cap only where you are needed",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts",
-+        "line": 85,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf States",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "each spine draws its session's state, with a cap only where you are needed",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-F7A9150AF3",
-+      "title": "an approval card shows the request and answers it in place",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts",
-+        "line": 114,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf States",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "an approval card shows the request and answers it in place",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-B8E2DBE94C",
-+      "title": "a working card shows the live step and the task list, and stops the session",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts",
-+        "line": 128,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf States",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "a working card shows the live step and the task list, and stops the session",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-+    {
-+      "id": "PT-CEE2C36E6A",
-+      "title": "arrow keys walk the shelf, and done and failed cards lead with their outcome",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts",
-+        "line": 142,
-+        "project": "functional"
-+      },
-+      "area": "session Shelf States",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "arrow keys walk the shelf, and done and failed cards lead with their outcome",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-     {
-       "id": "PT-2B75887CEB",
-       "title": "a session shows its agent and the skills it used, and a skill lists the sessions that used it",
-diff --git a/docs/praxis-tests/index.md b/docs/praxis-tests/index.md
-index 4561c991..9e3743c3 100644
---- a/docs/praxis-tests/index.md
-+++ b/docs/praxis-tests/index.md
-@@ -1,6 +1,6 @@
- # Praxis Test catalogue
- 
--This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
-+This catalogue describes **782 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
- 
- | ID | Area | Test | Automation |
- | --- | --- | --- | --- |
-@@ -504,26 +504,31 @@ This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/mai
- | PT-8AECE655BF | scheduled Runs | a retired preview opt-out does not hide the board schedule shortcut | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:306` |
- | PT-86743A6E61 | scheduled Runs | tickets can be dragged from the hopper onto the flow graph and reordered on it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:314` |
- | PT-F1D9810DD2 | scheduled Runs | a ticket dropped onto another shares its step, drawn as parallel lanes, and the steps are saved | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:348` |
--| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:415` |
--| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:461` |
--| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:509` |
--| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:633` |
--| PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:768` |
--| PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:806` |
--| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:830` |
--| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:847` |
--| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:864` |
--| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:902` |
--| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
--| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:959` |
--| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1006` |
--| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1040` |
--| PT-9BE6F17E92 | scheduled Runs | an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1068` |
--| PT-5BB7C25EC5 | scheduled Runs | parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1136` |
--| PT-984829ACD0 | scheduled Runs | two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1167` |
--| PT-57F1A1F35B | scheduled Runs | two parallel tickets that both merge into the base checkout take turns | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1222` |
--| PT-6B8DD4C416 | scheduled Runs | a parallel run whose readiness is blocked starts nothing in any lane and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1264` |
--| PT-2C5ADB8DC0 | scheduled Runs | a schedule paused on an untrusted workflow offers to review and trust it, then carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1281` |
-+| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:414` |
-+| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:460` |
-+| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:508` |
-+| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:632` |
-+| PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:769` |
-+| PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:809` |
-+| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:833` |
-+| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:850` |
-+| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:867` |
-+| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:909` |
-+| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:926` |
-+| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:970` |
-+| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1019` |
-+| PT-7C571CC649 | scheduled Runs | a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1053` |
-+| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1100` |
-+| PT-9BE6F17E92 | scheduled Runs | an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1128` |
-+| PT-5BB7C25EC5 | scheduled Runs | parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1196` |
-+| PT-6DDE4C4F48 | scheduled Runs | auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1227` |
-+| PT-984829ACD0 | scheduled Runs | two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1253` |
-+| PT-57F1A1F35B | scheduled Runs | two parallel tickets that both merge into the base checkout take turns | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1314` |
-+| PT-13C1844C59 | scheduled Runs | an approval gate is determined autonomously and recorded in the run ledger without waiting for user input | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1356` |
-+| PT-AE3B01630D | scheduled Runs | a long run's report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1384` |
-+| PT-6B8DD4C416 | scheduled Runs | a parallel run whose readiness is blocked starts nothing in any lane and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1455` |
-+| PT-794E9F0536 | scheduled Runs | a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1473` |
-+| PT-2C5ADB8DC0 | scheduled Runs | a schedule paused on an untrusted workflow offers to review and trust it, then carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1536` |
- | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:15` |
- | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:27` |
- | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:50` |
-@@ -567,16 +572,25 @@ This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/mai
- | PT-0F10648F67 | session Recovery | interrupted CLI sessions also wait for selection and resume through ACP | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:99` |
- | PT-75B0F93373 | session Recovery | teardown drains an ACP task even when the session list already reports completion | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:110` |
- | PT-4972638424 | session Shelf | collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:51` |
--| PT-1FCF628060 | session Shelf | the shelf card sends a quick reply into the session | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:146` |
--| PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:190` |
--| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:264` |
--| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:306` |
--| PT-A0F01650EE | session Shelf Notes | the rail stays 14px with both controls inside it, and the plus opens a new session without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
--| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:66` |
--| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:96` |
--| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:107` |
--| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:138` |
--| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:155` |
-+| PT-1FCF628060 | session Shelf | the shelf card sends a quick reply into the session | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:144` |
-+| PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:188` |
-+| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:262` |
-+| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:304` |
-+| PT-B3B664E022 | session Shelf New | a session started from the shelf stays in the shelf as its own preview card | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:62` |
-+| PT-FFA325C092 | session Shelf New | a goal that matches one of today's sessions can be added to it with ⌘↵ | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:92` |
-+| PT-036F938299 | session Shelf New | the creation cells label themselves, fill solid, and draw their glyphs on whole pixels | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:111` |
-+| PT-B7C1C62EB2 | session Shelf New | a note becomes a session goal in one press | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:143` |
-+| PT-1B797E8BFB | session Shelf New | with no usable provider the card keeps the goal and offers setup instead of sending | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:170` |
-+| PT-F699F5C08F | session Shelf Notes | the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
-+| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:68` |
-+| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:98` |
-+| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:109` |
-+| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:140` |
-+| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:157` |
-+| PT-EF2C1AEDFA | session Shelf States | each spine draws its session's state, with a cap only where you are needed | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:85` |
-+| PT-F7A9150AF3 | session Shelf States | an approval card shows the request and answers it in place | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:114` |
-+| PT-B8E2DBE94C | session Shelf States | a working card shows the live step and the task list, and stops the session | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:128` |
-+| PT-CEE2C36E6A | session Shelf States | arrow keys walk the shelf, and done and failed cards lead with their outcome | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:142` |
- | PT-2B75887CEB | session Skill Usage | a session shows its agent and the skills it used, and a skill lists the sessions that used it | `apps/praxis-desktop/main/e2e/sessionSkillUsage.spec.ts:22` |
- | PT-3C45DBB445 | session Team | a session can add several team members; a lone reviewer offers to draft an ask | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:21` |
- | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:44` |
++    cancelTurn: (conversationId: string, turnId: string) => ipcRenderer.invoke('assistant:cancelTurn', conversationId, turnId),
++    retryParticipant: (conversationId: string, turnId: string, participantId: string) => ipcRenderer.invoke('assistant:retryParticipant', conversationId, turnId, participantId),
++    resolveAttempt: (conversationId: string, turnId: string, attemptId: string, resolution: string) => ipcRenderer.invoke('assistant:resolveAttempt', conversationId, turnId, attemptId, resolution),
+     onChatsChanged: (listener: () => void) => {
+       const handler = () => listener();
+       ipcRenderer.on('assistant:chatsChanged', handler);
 diff --git a/packages/core/package.json b/packages/core/package.json
-index bc91fbf0..9f85b6e4 100644
+index 9f85b6e4..9bd01d4f 100644
 --- a/packages/core/package.json
 +++ b/packages/core/package.json
 @@ -7,7 +7,7 @@
    "scripts": {
      "check-types": "tsc --noEmit -p .",
      "compile": "tsc -p .",
--    "test": "tsc -p . && node --test out/notes/noteValidation.test.js out/workflows/affectedTests.test.js out/notes/noteSnapshot.test.js out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/pathSandbox.test.js out/ai/tools/networkAddress.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/readOnlyFilesMcp.test.js out/ai/readOnlyShell.test.js out/ai/browserMcpServer.test.js out/ai/trackerMcpServer.test.js out/ai/assistant/assistantEngine.test.js out/ai/ticketContext.test.js out/ai/gateway/wire.test.js out/ai/providers/anthropicWire.test.js out/ai/providers/reasoningSupport.test.js out/ai/providers/geminiWire.test.js out/ai/providers/modelPricing.test.js out/ai/providers/providerPreflight.test.js out/ai/providers/customProviders.test.js out/ai/providers/providerProbe.test.js out/ai/providers/localRuntimeDetection.test.js out/ai/providerLimitError.test.js out/ai/acp/acpAgentHost.test.js out/ai/aiSessionManager.test.js out/ai/skillUsage.test.js out/ai/sessionChangeSummary.test.js out/ai/backgroundTasks.test.js out/ai/ticketReview.test.js out/ai/humanReview.test.js out/ai/sessionHandover.test.js out/ai/contextSnapshot.test.js out/ai/coordination/coordination.test.js out/ai/gadgets/validation.test.js out/ai/gadgets/gadgetRepair.test.js out/ai/gadgets/gadgetLifecycle.test.js out/ai/gadgets/fixtures.test.js out/ai/agentEventUtils.test.js out/ai/sessionChangeEncoder.test.js out/ai/diagnosisBrief.test.js out/ai/diagnosisState.test.js out/ai/aiUsageStats.test.js out/ai/agentRuntime/discovery.test.js out/ai/agentRuntime/agentCatalog.test.js out/ai/agentRuntime/agentAuthoring.test.js out/ai/agentRuntime/bundledAgents.test.js out/ai/agentRuntime/manager.test.js out/ai/agentRuntime/nativeSources.test.js out/ci/githubActionsEvidenceProvider.test.js out/ci/gitLabCiEvidenceProvider.test.js out/ci/ciEvidenceImport.test.js out/ci/ciSecurityReports.test.js out/folder/boardConfigFile.test.js out/folder/folderFs.test.js out/folder/markdownPlanParser.test.js out/folder/markdownStatusWriter.test.js out/github/githubBoardService.test.js out/gitlab/gitLabBoardService.test.js out/jira/jiraShape.test.js out/marketplace/semver.test.js out/marketplace/integrity.test.js out/marketplace/addonManifest.test.js out/marketplace/registryClient.test.js out/marketplace/marketplaceService.test.js out/marketplace/tarballManifest.test.js out/workspaces/workspacePaths.test.js out/projects/projectActivity.test.js out/projects/projectWorkflow.test.js out/projects/projectService.test.js out/projects/projectImportPlanner.test.js out/projects/runProfile.test.js out/projects/runProfileDiscovery.test.js out/projects/runProfileStore.test.js out/projects/previewAccess.test.js out/projects/runServiceManager.test.js out/projects/runReconciliation.test.js out/projects/browserDiagnostics.test.js out/projects/previewVerification.test.js out/projects/deploymentProfile.test.js out/projects/deploymentProfileStore.test.js out/projects/publishManifest.test.js out/projects/deploymentRunState.test.js out/projects/deploymentRunStore.test.js out/deployments/directProcessExecutor.test.js out/deployments/directoryTarget.test.js out/deployments/directDeploymentOrchestrator.test.js out/deployments/directDeliveryJourney.test.js out/deployments/githubActionsExecutor.test.js out/deployments/githubActionsObserver.test.js out/deployments/githubActionsOrchestrator.test.js out/deployments/githubActionsResults.test.js out/workflows/workflowValidation.test.js out/workflows/workflowStore.test.js out/workflows/workflowRun.test.js out/workflows/stageModel.test.js out/ai/workflowModelRecommendation.test.js out/workflows/workflowGates.test.js out/workflows/workflowApprovalGadgets.test.js out/workflows/workflowTemplates.test.js out/workflows/workflowDesignerState.test.js out/workflows/workflowRunSummary.test.js out/workflows/workflowDeploymentPhase.test.js out/workflows/workflowOrchestrator.test.js out/workflows/workflowStageTask.test.js out/workflows/workflowEvidence.test.js out/workflows/checkFindings.test.js out/workflows/checkResultAdapters.test.js out/workflows/workflowThresholdGates.test.js out/workflows/checkPresets.test.js out/workflows/checkEnvironmentFailure.test.js out/workflows/checkToolPreflight.test.js out/workflows/checkCommandArgs.test.js out/workflows/waiverRegister.test.js out/workflows/workflowMultiOwnerGates.test.js out/workflows/structuredReviewFindings.test.js out/workflows/reviewFixLoop.test.js out/workflows/workflowLoops.test.js out/workflows/workflowEstimate.test.js out/workflows/workflowImprove.test.js out/workflows/workflowMap.test.js out/workflows/fullSdlcTemplates.test.js out/workflows/sdlcLoopTemplates.test.js out/workflows/workflowAddonTemplates.test.js out/workflows/workflowPlanPublishing.test.js out/host/mobileProtocol.test.js out/host/mobileExecutionBoundary.test.js out/host/mobileCommandLedger.test.js out/host/mobileAccessPolicy.test.js out/host/mobileConnectionLifecycle.test.js out/host/mobileAccessAdministration.test.js out/host/mobilePairingHandshake.test.js out/host/mobileTrustStore.test.js out/host/mobileHostDiscovery.test.js out/host/mobileReconnect.test.js out/host/mobileLanOnly.test.js out/codeIntelligence/mcpBridge.test.js out/scheduledRuns/scheduledRun.test.js out/scheduledRuns/scheduledRunStore.test.js out/scheduledRuns/scheduledRunRequest.test.js out/scheduledRuns/scheduledBudget.test.js out/scheduledRuns/scheduledRunRunner.test.js out/scheduledRuns/scheduledRunParallel.test.js out/scheduledRuns/scheduledRunDetail.test.js out/scheduledRuns/scheduledTicketStatus.test.js out/ai/feedback/feedbackTypes.test.js out/ai/feedback/sessionFeedbackScorer.test.js out/ai/feedback/sessionFeedbackStore.test.js out/ai/feedback/promptRewriteHelper.test.js out/ai/feedback/goldenCorpus.test.js out/ai/feedback/feedbackV2.test.js out/ai/feedback/promptClarity.test.js out/ai/feedback/feedbackCoaching.test.js"
-+    "test": "tsc -p . && node --test out/notes/noteValidation.test.js out/workflows/affectedTests.test.js out/notes/noteSnapshot.test.js out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/pathSandbox.test.js out/ai/tools/networkAddress.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/readOnlyFilesMcp.test.js out/ai/readOnlyShell.test.js out/ai/browserMcpServer.test.js out/ai/trackerMcpServer.test.js out/ai/assistant/assistantEngine.test.js out/ai/assistant/teamChatTransitions.test.js out/ai/ticketContext.test.js out/ai/gateway/wire.test.js out/ai/providers/anthropicWire.test.js out/ai/providers/reasoningSupport.test.js out/ai/providers/geminiWire.test.js out/ai/providers/modelPricing.test.js out/ai/providers/providerPreflight.test.js out/ai/providers/customProviders.test.js out/ai/providers/providerProbe.test.js out/ai/providers/localRuntimeDetection.test.js out/ai/providerLimitError.test.js out/ai/acp/acpAgentHost.test.js out/ai/aiSessionManager.test.js out/ai/skillUsage.test.js out/ai/sessionChangeSummary.test.js out/ai/backgroundTasks.test.js out/ai/ticketReview.test.js out/ai/humanReview.test.js out/ai/sessionHandover.test.js out/ai/contextSnapshot.test.js out/ai/coordination/coordination.test.js out/ai/gadgets/validation.test.js out/ai/gadgets/gadgetRepair.test.js out/ai/gadgets/gadgetLifecycle.test.js out/ai/gadgets/fixtures.test.js out/ai/agentEventUtils.test.js out/ai/sessionChangeEncoder.test.js out/ai/diagnosisBrief.test.js out/ai/diagnosisState.test.js out/ai/aiUsageStats.test.js out/ai/agentRuntime/discovery.test.js out/ai/agentRuntime/agentCatalog.test.js out/ai/agentRuntime/agentAuthoring.test.js out/ai/agentRuntime/bundledAgents.test.js out/ai/agentRuntime/manager.test.js out/ai/agentRuntime/nativeSources.test.js out/ci/githubActionsEvidenceProvider.test.js out/ci/gitLabCiEvidenceProvider.test.js out/ci/ciEvidenceImport.test.js out/ci/ciSecurityReports.test.js out/folder/boardConfigFile.test.js out/folder/folderFs.test.js out/folder/markdownPlanParser.test.js out/folder/markdownStatusWriter.test.js out/github/githubBoardService.test.js out/gitlab/gitLabBoardService.test.js out/jira/jiraShape.test.js out/marketplace/semver.test.js out/marketplace/integrity.test.js out/marketplace/addonManifest.test.js out/marketplace/registryClient.test.js out/marketplace/marketplaceService.test.js out/marketplace/tarballManifest.test.js out/workspaces/workspacePaths.test.js out/projects/projectActivity.test.js out/projects/projectWorkflow.test.js out/projects/projectService.test.js out/projects/projectImportPlanner.test.js out/projects/runProfile.test.js out/projects/runProfileDiscovery.test.js out/projects/runProfileStore.test.js out/projects/previewAccess.test.js out/projects/runServiceManager.test.js out/projects/runReconciliation.test.js out/projects/browserDiagnostics.test.js out/projects/previewVerification.test.js out/projects/deploymentProfile.test.js out/projects/deploymentProfileStore.test.js out/projects/publishManifest.test.js out/projects/deploymentRunState.test.js out/projects/deploymentRunStore.test.js out/deployments/directProcessExecutor.test.js out/deployments/directoryTarget.test.js out/deployments/directDeploymentOrchestrator.test.js out/deployments/directDeliveryJourney.test.js out/deployments/githubActionsExecutor.test.js out/deployments/githubActionsObserver.test.js out/deployments/githubActionsOrchestrator.test.js out/deployments/githubActionsResults.test.js out/workflows/workflowValidation.test.js out/workflows/workflowStore.test.js out/workflows/workflowRun.test.js out/workflows/stageModel.test.js out/ai/workflowModelRecommendation.test.js out/workflows/workflowGates.test.js out/workflows/workflowApprovalGadgets.test.js out/workflows/workflowTemplates.test.js out/workflows/workflowDesignerState.test.js out/workflows/workflowRunSummary.test.js out/workflows/workflowDeploymentPhase.test.js out/workflows/workflowOrchestrator.test.js out/workflows/workflowStageTask.test.js out/workflows/workflowEvidence.test.js out/workflows/checkFindings.test.js out/workflows/checkResultAdapters.test.js out/workflows/workflowThresholdGates.test.js out/workflows/checkPresets.test.js out/workflows/checkEnvironmentFailure.test.js out/workflows/checkToolPreflight.test.js out/workflows/checkCommandArgs.test.js out/workflows/waiverRegister.test.js out/workflows/workflowMultiOwnerGates.test.js out/workflows/structuredReviewFindings.test.js out/workflows/reviewFixLoop.test.js out/workflows/workflowLoops.test.js out/workflows/workflowEstimate.test.js out/workflows/workflowImprove.test.js out/workflows/workflowMap.test.js out/workflows/fullSdlcTemplates.test.js out/workflows/sdlcLoopTemplates.test.js out/workflows/workflowAddonTemplates.test.js out/workflows/workflowPlanPublishing.test.js out/host/mobileProtocol.test.js out/host/mobileExecutionBoundary.test.js out/host/mobileCommandLedger.test.js out/host/mobileAccessPolicy.test.js out/host/mobileConnectionLifecycle.test.js out/host/mobileAccessAdministration.test.js out/host/mobilePairingHandshake.test.js out/host/mobileTrustStore.test.js out/host/mobileHostDiscovery.test.js out/host/mobileReconnect.test.js out/host/mobileLanOnly.test.js out/codeIntelligence/mcpBridge.test.js out/scheduledRuns/scheduledRun.test.js out/scheduledRuns/scheduledRunStore.test.js out/scheduledRuns/scheduledRunRequest.test.js out/scheduledRuns/scheduledBudget.test.js out/scheduledRuns/scheduledRunRunner.test.js out/scheduledRuns/scheduledRunParallel.test.js out/scheduledRuns/scheduledRunDetail.test.js out/scheduledRuns/scheduledTicketStatus.test.js out/ai/feedback/feedbackTypes.test.js out/ai/feedback/sessionFeedbackScorer.test.js out/ai/feedback/sessionFeedbackStore.test.js out/ai/feedback/promptRewriteHelper.test.js out/ai/feedback/goldenCorpus.test.js out/ai/feedback/feedbackV2.test.js out/ai/feedback/promptClarity.test.js out/ai/feedback/feedbackCoaching.test.js"
+-    "test": "tsc -p . && node --test out/notes/noteValidation.test.js out/workflows/affectedTests.test.js out/notes/noteSnapshot.test.js out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/pathSandbox.test.js out/ai/tools/networkAddress.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/readOnlyFilesMcp.test.js out/ai/readOnlyShell.test.js out/ai/browserMcpServer.test.js out/ai/trackerMcpServer.test.js out/ai/assistant/assistantEngine.test.js out/ai/assistant/teamChatTransitions.test.js out/ai/ticketContext.test.js out/ai/gateway/wire.test.js out/ai/providers/anthropicWire.test.js out/ai/providers/reasoningSupport.test.js out/ai/providers/geminiWire.test.js out/ai/providers/modelPricing.test.js out/ai/providers/providerPreflight.test.js out/ai/providers/customProviders.test.js out/ai/providers/providerProbe.test.js out/ai/providers/localRuntimeDetection.test.js out/ai/providerLimitError.test.js out/ai/acp/acpAgentHost.test.js out/ai/aiSessionManager.test.js out/ai/skillUsage.test.js out/ai/sessionChangeSummary.test.js out/ai/backgroundTasks.test.js out/ai/ticketReview.test.js out/ai/humanReview.test.js out/ai/sessionHandover.test.js out/ai/contextSnapshot.test.js out/ai/coordination/coordination.test.js out/ai/gadgets/validation.test.js out/ai/gadgets/gadgetRepair.test.js out/ai/gadgets/gadgetLifecycle.test.js out/ai/gadgets/fixtures.test.js out/ai/agentEventUtils.test.js out/ai/sessionChangeEncoder.test.js out/ai/diagnosisBrief.test.js out/ai/diagnosisState.test.js out/ai/aiUsageStats.test.js out/ai/agentRuntime/discovery.test.js out/ai/agentRuntime/agentCatalog.test.js out/ai/agentRuntime/agentAuthoring.test.js out/ai/agentRuntime/bundledAgents.test.js out/ai/agentRuntime/manager.test.js out/ai/agentRuntime/nativeSources.test.js out/ci/githubActionsEvidenceProvider.test.js out/ci/gitLabCiEvidenceProvider.test.js out/ci/ciEvidenceImport.test.js out/ci/ciSecurityReports.test.js out/folder/boardConfigFile.test.js out/folder/folderFs.test.js out/folder/markdownPlanParser.test.js out/folder/markdownStatusWriter.test.js out/github/githubBoardService.test.js out/gitlab/gitLabBoardService.test.js out/jira/jiraShape.test.js out/marketplace/semver.test.js out/marketplace/integrity.test.js out/marketplace/addonManifest.test.js out/marketplace/registryClient.test.js out/marketplace/marketplaceService.test.js out/marketplace/tarballManifest.test.js out/workspaces/workspacePaths.test.js out/projects/projectActivity.test.js out/projects/projectWorkflow.test.js out/projects/projectService.test.js out/projects/projectImportPlanner.test.js out/projects/runProfile.test.js out/projects/runProfileDiscovery.test.js out/projects/runProfileStore.test.js out/projects/previewAccess.test.js out/projects/runServiceManager.test.js out/projects/runReconciliation.test.js out/projects/browserDiagnostics.test.js out/projects/previewVerification.test.js out/projects/deploymentProfile.test.js out/projects/deploymentProfileStore.test.js out/projects/publishManifest.test.js out/projects/deploymentRunState.test.js out/projects/deploymentRunStore.test.js out/deployments/directProcessExecutor.test.js out/deployments/directoryTarget.test.js out/deployments/directDeploymentOrchestrator.test.js out/deployments/directDeliveryJourney.test.js out/deployments/githubActionsExecutor.test.js out/deployments/githubActionsObserver.test.js out/deployments/githubActionsOrchestrator.test.js out/deployments/githubActionsResults.test.js out/workflows/workflowValidation.test.js out/workflows/workflowStore.test.js out/workflows/workflowRun.test.js out/workflows/stageModel.test.js out/ai/workflowModelRecommendation.test.js out/workflows/workflowGates.test.js out/workflows/workflowApprovalGadgets.test.js out/workflows/workflowTemplates.test.js out/workflows/workflowDesignerState.test.js out/workflows/workflowRunSummary.test.js out/workflows/workflowDeploymentPhase.test.js out/workflows/workflowOrchestrator.test.js out/workflows/workflowStageTask.test.js out/workflows/workflowEvidence.test.js out/workflows/checkFindings.test.js out/workflows/checkResultAdapters.test.js out/workflows/workflowThresholdGates.test.js out/workflows/checkPresets.test.js out/workflows/checkEnvironmentFailure.test.js out/workflows/checkToolPreflight.test.js out/workflows/checkCommandArgs.test.js out/workflows/waiverRegister.test.js out/workflows/workflowMultiOwnerGates.test.js out/workflows/structuredReviewFindings.test.js out/workflows/reviewFixLoop.test.js out/workflows/workflowLoops.test.js out/workflows/workflowEstimate.test.js out/workflows/workflowImprove.test.js out/workflows/workflowMap.test.js out/workflows/fullSdlcTemplates.test.js out/workflows/sdlcLoopTemplates.test.js out/workflows/workflowAddonTemplates.test.js out/workflows/workflowPlanPublishing.test.js out/host/mobileProtocol.test.js out/host/mobileExecutionBoundary.test.js out/host/mobileCommandLedger.test.js out/host/mobileAccessPolicy.test.js out/host/mobileConnectionLifecycle.test.js out/host/mobileAccessAdministration.test.js out/host/mobilePairingHandshake.test.js out/host/mobileTrustStore.test.js out/host/mobileHostDiscovery.test.js out/host/mobileReconnect.test.js out/host/mobileLanOnly.test.js out/codeIntelligence/mcpBridge.test.js out/scheduledRuns/scheduledRun.test.js out/scheduledRuns/scheduledRunStore.test.js out/scheduledRuns/scheduledRunRequest.test.js out/scheduledRuns/scheduledBudget.test.js out/scheduledRuns/scheduledRunRunner.test.js out/scheduledRuns/scheduledRunParallel.test.js out/scheduledRuns/scheduledRunDetail.test.js out/scheduledRuns/scheduledTicketStatus.test.js out/ai/feedback/feedbackTypes.test.js out/ai/feedback/sessionFeedbackScorer.test.js out/ai/feedback/sessionFeedbackStore.test.js out/ai/feedback/promptRewriteHelper.test.js out/ai/feedback/goldenCorpus.test.js out/ai/feedback/feedbackV2.test.js out/ai/feedback/promptClarity.test.js out/ai/feedback/feedbackCoaching.test.js"
++    "test": "tsc -p . && node --test out/notes/noteValidation.test.js out/workflows/affectedTests.test.js out/notes/noteSnapshot.test.js out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/pathSandbox.test.js out/ai/tools/networkAddress.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/readOnlyFilesMcp.test.js out/ai/readOnlyShell.test.js out/ai/browserMcpServer.test.js out/ai/trackerMcpServer.test.js out/ai/assistant/assistantEngine.test.js out/ai/assistant/teamChatTransitions.test.js out/ai/assistant/teamChatCoordinator.test.js out/ai/ticketContext.test.js out/ai/gateway/wire.test.js out/ai/providers/anthropicWire.test.js out/ai/providers/reasoningSupport.test.js out/ai/providers/geminiWire.test.js out/ai/providers/modelPricing.test.js out/ai/providers/providerPreflight.test.js out/ai/providers/customProviders.test.js out/ai/providers/providerProbe.test.js out/ai/providers/localRuntimeDetection.test.js out/ai/providerLimitError.test.js out/ai/acp/acpAgentHost.test.js out/ai/aiSessionManager.test.js out/ai/skillUsage.test.js out/ai/sessionChangeSummary.test.js out/ai/backgroundTasks.test.js out/ai/ticketReview.test.js out/ai/humanReview.test.js out/ai/sessionHandover.test.js out/ai/contextSnapshot.test.js out/ai/coordination/coordination.test.js out/ai/gadgets/validation.test.js out/ai/gadgets/gadgetRepair.test.js out/ai/gadgets/gadgetLifecycle.test.js out/ai/gadgets/fixtures.test.js out/ai/agentEventUtils.test.js out/ai/sessionChangeEncoder.test.js out/ai/diagnosisBrief.test.js out/ai/diagnosisState.test.js out/ai/aiUsageStats.test.js out/ai/agentRuntime/discovery.test.js out/ai/agentRuntime/agentCatalog.test.js out/ai/agentRuntime/agentAuthoring.test.js out/ai/agentRuntime/bundledAgents.test.js out/ai/agentRuntime/manager.test.js out/ai/agentRuntime/nativeSources.test.js out/ci/githubActionsEvidenceProvider.test.js out/ci/gitLabCiEvidenceProvider.test.js out/ci/ciEvidenceImport.test.js out/ci/ciSecurityReports.test.js out/folder/boardConfigFile.test.js out/folder/folderFs.test.js out/folder/markdownPlanParser.test.js out/folder/markdownStatusWriter.test.js out/github/githubBoardService.test.js out/gitlab/gitLabBoardService.test.js out/jira/jiraShape.test.js out/marketplace/semver.test.js out/marketplace/integrity.test.js out/marketplace/addonManifest.test.js out/marketplace/registryClient.test.js out/marketplace/marketplaceService.test.js out/marketplace/tarballManifest.test.js out/workspaces/workspacePaths.test.js out/projects/projectActivity.test.js out/projects/projectWorkflow.test.js out/projects/projectService.test.js out/projects/projectImportPlanner.test.js out/projects/runProfile.test.js out/projects/runProfileDiscovery.test.js out/projects/runProfileStore.test.js out/projects/previewAccess.test.js out/projects/runServiceManager.test.js out/projects/runReconciliation.test.js out/projects/browserDiagnostics.test.js out/projects/previewVerification.test.js out/projects/deploymentProfile.test.js out/projects/deploymentProfileStore.test.js out/projects/publishManifest.test.js out/projects/deploymentRunState.test.js out/projects/deploymentRunStore.test.js out/deployments/directProcessExecutor.test.js out/deployments/directoryTarget.test.js out/deployments/directDeploymentOrchestrator.test.js out/deployments/directDeliveryJourney.test.js out/deployments/githubActionsExecutor.test.js out/deployments/githubActionsObserver.test.js out/deployments/githubActionsOrchestrator.test.js out/deployments/githubActionsResults.test.js out/workflows/workflowValidation.test.js out/workflows/workflowStore.test.js out/workflows/workflowRun.test.js out/workflows/stageModel.test.js out/ai/workflowModelRecommendation.test.js out/workflows/workflowGates.test.js out/workflows/workflowApprovalGadgets.test.js out/workflows/workflowTemplates.test.js out/workflows/workflowDesignerState.test.js out/workflows/workflowRunSummary.test.js out/workflows/workflowDeploymentPhase.test.js out/workflows/workflowOrchestrator.test.js out/workflows/workflowStageTask.test.js out/workflows/workflowEvidence.test.js out/workflows/checkFindings.test.js out/workflows/checkResultAdapters.test.js out/workflows/workflowThresholdGates.test.js out/workflows/checkPresets.test.js out/workflows/checkEnvironmentFailure.test.js out/workflows/checkToolPreflight.test.js out/workflows/checkCommandArgs.test.js out/workflows/waiverRegister.test.js out/workflows/workflowMultiOwnerGates.test.js out/workflows/structuredReviewFindings.test.js out/workflows/reviewFixLoop.test.js out/workflows/workflowLoops.test.js out/workflows/workflowEstimate.test.js out/workflows/workflowImprove.test.js out/workflows/workflowMap.test.js out/workflows/fullSdlcTemplates.test.js out/workflows/sdlcLoopTemplates.test.js out/workflows/workflowAddonTemplates.test.js out/workflows/workflowPlanPublishing.test.js out/host/mobileProtocol.test.js out/host/mobileExecutionBoundary.test.js out/host/mobileCommandLedger.test.js out/host/mobileAccessPolicy.test.js out/host/mobileConnectionLifecycle.test.js out/host/mobileAccessAdministration.test.js out/host/mobilePairingHandshake.test.js out/host/mobileTrustStore.test.js out/host/mobileHostDiscovery.test.js out/host/mobileReconnect.test.js out/host/mobileLanOnly.test.js out/codeIntelligence/mcpBridge.test.js out/scheduledRuns/scheduledRun.test.js out/scheduledRuns/scheduledRunStore.test.js out/scheduledRuns/scheduledRunRequest.test.js out/scheduledRuns/scheduledBudget.test.js out/scheduledRuns/scheduledRunRunner.test.js out/scheduledRuns/scheduledRunParallel.test.js out/scheduledRuns/scheduledRunDetail.test.js out/scheduledRuns/scheduledTicketStatus.test.js out/ai/feedback/feedbackTypes.test.js out/ai/feedback/sessionFeedbackScorer.test.js out/ai/feedback/sessionFeedbackStore.test.js out/ai/feedback/promptRewriteHelper.test.js out/ai/feedback/goldenCorpus.test.js out/ai/feedback/feedbackV2.test.js out/ai/feedback/promptClarity.test.js out/ai/feedback/feedbackCoaching.test.js"
    },
    "dependencies": {
      "@agentclientprotocol/sdk": "^1.4.0",
-diff --git a/packages/core/src/ai/agentTypes.ts b/packages/core/src/ai/agentTypes.ts
-index 01533a3f..894599c9 100644
---- a/packages/core/src/ai/agentTypes.ts
-+++ b/packages/core/src/ai/agentTypes.ts
-@@ -464,7 +464,18 @@ export interface BackgroundTask {
-   producerId?: string;
- }
- 
-+/** Projection only; the conversation attempt remains authoritative. */
-+export interface TeamChatExecutionOwnership {
-+  conversationId: string;
-+  turnId: string;
-+  participantId: string;
-+  attemptId: string;
-+  coordinatorEpoch: string;
-+  providerSessionId?: string;
+diff --git a/packages/core/src/ai/assistant/teamChatCoordinator.test.ts b/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
+new file mode 100644
+index 00000000..4b8b9f7b
+--- /dev/null
++++ b/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
+@@ -0,0 +1,434 @@
++import { test } from 'node:test';
++import * as assert from 'node:assert/strict';
++import {
++  TeamChatCoordinator,
++  makeParticipant,
++  type TeamChatExecutionAdapter,
++  type ConversationUpdate
++} from './teamChatCoordinator';
++import type {
++  DurableConversation,
++  TeamChatRepository,
++  TeamChatSnapshot,
++  SubmitConversationCommand
++} from './assistantTypes';
++
++class MemoryTeamChatRepository implements TeamChatRepository {
++  public snapshot: TeamChatSnapshot;
++
++  public constructor(initialConversations: DurableConversation[] = []) {
++    this.snapshot = {
++      schemaVersion: 2,
++      revision: 0,
++      teamChats: [],
++      conversations: initialConversations
++    };
++  }
++
++  public read(): TeamChatSnapshot {
++    return structuredClone(this.snapshot);
++  }
++
++  public async transaction<T>(mutate: (draft: TeamChatSnapshot) => T): Promise<T> {
++    const draft = structuredClone(this.snapshot);
++    const result = mutate(draft);
++    this.snapshot = structuredClone(draft);
++    return result;
++  }
 +}
 +
- export interface AgentSessionRecord {
-+  teamChatExecution?: TeamChatExecutionOwnership;
-   backgroundTasks?: BackgroundTask[];
-   issueKey: string;
-   sessionId: string;
-diff --git a/packages/core/src/ai/assistant/assistantEngine.test.ts b/packages/core/src/ai/assistant/assistantEngine.test.ts
-index 9001228a..d5b34321 100644
---- a/packages/core/src/ai/assistant/assistantEngine.test.ts
-+++ b/packages/core/src/ai/assistant/assistantEngine.test.ts
-@@ -91,8 +91,8 @@ test('a workflow proposal is dropped outside the workflow page', async () => {
- });
- 
- test('team chat store persists, titles from the first message, renames and deletes', async () => {
--  const data: Record<string, unknown> = {};
--  const store = new TeamChatStore({ get: <T>(k: string) => data[k] as T | undefined, update: async (k: string, v: unknown) => { data[k] = v; } } as never);
-+  let data: import('./assistantTypes').TeamChatSnapshot = { schemaVersion: 2, revision: 0, teamChats: [], conversations: [] };
-+  const store = new TeamChatStore({ read: () => structuredClone(data), transaction: async mutate => { const draft = structuredClone(data); const result = mutate(draft); data = draft; return result; } });
-   const chat = await store.create('p1', 'PRX-1');
-   await store.create('p2');
-   await store.saveMessages(chat.id, [{ id: '1', role: 'user', text: 'Review the login flow', createdAt: 'x' }, { id: '2', role: 'qa', text: 'ok', createdAt: 'y' }]);
-diff --git a/packages/core/src/ai/assistant/assistantTypes.ts b/packages/core/src/ai/assistant/assistantTypes.ts
-index 67ed127c..c4f5fe55 100644
---- a/packages/core/src/ai/assistant/assistantTypes.ts
-+++ b/packages/core/src/ai/assistant/assistantTypes.ts
-@@ -92,3 +92,110 @@ export interface TeamChatRecord {
- 
- /** A chat without its transcript, for the sidebar list. */
- export type TeamChatSummary = Omit<TeamChatRecord, 'messages'> & { messageCount: number; personas: AssistantRole[] };
-+
-+/** Versioned authoritative state; legacy transcripts remain readable until migration. */
-+export interface ConversationParticipant {
-+  id: string;
-+  role: AssistantRole;
-+  instructionVersion: string;
-+  instructions: string;
-+  defaults: Readonly<Record<string, string | number | boolean>>;
-+}
-+export type ConversationTurnState = 'queued' | 'running' | 'completed' | 'awaiting_approval' | 'context_required' | 'failed' | 'interrupted' | 'outcome_unknown' | 'cancelling' | 'cancelled';
-+export type ConversationAttemptState = 'prepared' | 'dispatching' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'interrupted' | 'outcome_unknown' | 'cancelled';
-+export interface ConversationAttachment { id: string; digest: string; mediaType: string; size: number; }
-+export interface ConversationMessage extends AssistantMessage {
-+  sequence: number;
-+  turnId: string;
-+  participantId?: string;
-+  attachments: ConversationAttachment[];
-+  context?: PageAssistantContext;
-+}
-+export interface ConversationContextReceipt { digest: string; messageIds: string[]; bindingId?: string; }
-+export interface ConversationAttempt {
-+  id: string;
-+  turnId: string;
-+  participantId: string;
-+  ordinal: number;
-+  coordinatorEpoch: string;
-+  state: ConversationAttemptState;
-+  bindingId?: string;
-+  providerSessionId?: string;
-+  contextReceipt: ConversationContextReceipt;
-+  dispatchIntent?: string;
-+  createdAt: string;
-+  completedAt?: string;
-+  error?: string;
-+  resultMessageId?: string;
-+  usageReferences: string[];
-+  toolEvidenceReferences: string[];
-+}
-+export interface ConversationTurn {
-+  id: string;
-+  commandId: string;
-+  payloadDigest: string;
-+  userMessageId: string;
-+  acceptedSequence: number;
-+  plan: { participants: ConversationParticipant[]; runtimeOptions: Readonly<Record<string, string | number | boolean>>; context?: PageAssistantContext };
-+  state: ConversationTurnState;
-+  completedParticipantIds: string[];
-+  attempts: ConversationAttempt[];
-+}
-+export interface ConversationBinding {
-+  id: string;
-+  conversationId: string;
-+  participantId: string;
-+  providerRuntime: string;
-+  providerSessionId?: string;
-+  compatibilityDigest: string;
-+  deliveredMessageIds: string[];
-+  nativeOutputMessageIds: string[];
-+  status: 'valid' | 'invalid';
-+}
-+export interface ConversationSummary {
-+  id: string; version: number; sourceStart: number; sourceEnd: number; sourceDigest: string;
-+  text: string; attemptId: string; provider: string; supersedesId?: string;
-+}
-+export interface ConversationCommandReceipt {
-+  commandId: string; payloadDigest: string; turnId: string; revision: number; outcome: 'accepted';
-+}
-+export interface DurableConversation extends Omit<TeamChatRecord, 'messages' | 'projectId'> {
-+  schemaVersion: 2;
-+  projectId?: string;
-+  revision: number;
-+  coordinatorEpoch: string;
-+  participants: ConversationParticipant[];
-+  messages: ConversationMessage[];
-+  turns: ConversationTurn[];
-+  bindings: ConversationBinding[];
-+  summaries: ConversationSummary[];
-+  pinnedMessageIds: string[];
-+  commandReceipts: ConversationCommandReceipt[];
-+}
-+export interface TeamChatSnapshot {
-+  schemaVersion: 2;
-+  revision: number;
-+  teamChats: TeamChatRecord[];
-+  conversations: DurableConversation[];
-+}
-+/** The repository owns serialization, isolation and durable publication. */
-+export interface TeamChatRepository {
-+  read(): TeamChatSnapshot;
-+  transaction<T>(mutate: (draft: TeamChatSnapshot) => T): Promise<T>;
++function makeConversation(id = 'conv-1'): DurableConversation {
++  return {
++    id,
++    schemaVersion: 2,
++    revision: 1,
++    title: 'Test Conversation',
++    createdAt: '2026-11-03T20:00:00.000Z',
++    updatedAt: '2026-11-03T20:00:00.000Z',
++    coordinatorEpoch: 'epoch-1',
++    participants: [
++      makeParticipant('dev'),
++      makeParticipant('qa'),
++      makeParticipant('lead'),
++      makeParticipant('security'),
++      makeParticipant('product')
++    ],
++    messages: [],
++    turns: [],
++    bindings: [],
++    summaries: [],
++    pinnedMessageIds: [],
++    commandReceipts: []
++  };
 +}
 +
-+export interface SubmitConversationCommand {
-+  conversationId: string;
-+  commandId: string;
-+  expectedRevision: number;
-+  text: string;
-+  selectedParticipantIds: string[];
-+  context?: PageAssistantContext;
-+  attachmentRefs: ConversationAttachment[];
-+  runtimeOptions: Readonly<Record<string, string | number | boolean>>;
-+}
-+export interface ConversationCommandResult {
-+  turnId: string;
-+  revision: number;
-+  state: ConversationTurnState;
-+}
-diff --git a/packages/core/src/ai/assistant/teamChatStore.ts b/packages/core/src/ai/assistant/teamChatStore.ts
-index 5c57c8d1..b9511f14 100644
---- a/packages/core/src/ai/assistant/teamChatStore.ts
-+++ b/packages/core/src/ai/assistant/teamChatStore.ts
-@@ -1,15 +1,27 @@
--import type { KeyValueStore } from '../../host/stateStore';
- import { deriveChatTitle } from './assistantEngine';
--import type { AssistantMessage, AssistantRole, TeamChatRecord, TeamChatSummary } from './assistantTypes';
--
--const KEY = 'teamChats';
-+import type { AssistantMessage, AssistantRole, TeamChatRecord, TeamChatSummary, TeamChatRepository, DurableConversation } from './assistantTypes';
- 
- /** Durable team-chat transcripts, one record per conversation. */
- export class TeamChatStore {
--  public constructor(private readonly store: KeyValueStore) {}
-+  public constructor(private readonly store: TeamChatRepository) {}
++test('TASK-478 AC1: Two simultaneous sends produce distinct FIFO queued turns, repeated delivery produces one turn', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const executedTurns: string[] = [];
 +
-+  /** Apply a pure validated transition under the profile-wide commit lock. */
-+  public async transition(id: string, apply: (current: DurableConversation) => DurableConversation): Promise<DurableConversation> {
-+    return this.store.transaction(draft => {
-+      const index = draft.conversations.findIndex(chat => chat.id === id);
-+      if (index < 0) throw new Error(`Conversation ${id} was not found.`);
-+      const current = draft.conversations[index];
-+      const next = apply(structuredClone(current));
-+      if (next.id !== id || next.schemaVersion !== 2 || next.revision < current.revision || next.revision > current.revision + 1) {
-+        throw new Error('Invalid conversation transition.');
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ turn }) => {
++      executedTurns.push(turn.id);
++      return { text: 'Done' };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  const commandA: SubmitConversationCommand = {
++    conversationId: 'conv-1',
++    commandId: 'cmd-1',
++    expectedRevision: 1,
++    text: 'Hello first',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  };
++
++  const commandB: SubmitConversationCommand = {
++    conversationId: 'conv-1',
++    commandId: 'cmd-2',
++    expectedRevision: 1,
++    text: 'Hello second',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  };
++
++  // Repeated delivery of cmd-1
++  const res1 = await coordinator.submitTurn(commandA);
++  const res1Dup = await coordinator.submitTurn(commandA);
++
++  assert.equal(res1.turnId, res1Dup.turnId, 'Repeated delivery of one command produces one turn');
++
++  // Simultaneous sends produce distinct FIFO queued turns
++  const [simA, simB] = await Promise.all([
++    coordinator.submitTurn({ ...commandA, commandId: 'cmd-sim-1' }),
++    coordinator.submitTurn({ ...commandB, commandId: 'cmd-sim-2' })
++  ]);
++  assert.notEqual(simA.turnId, simB.turnId, 'Two sends produce distinct turns');
++
++  // Allow execution loops to complete
++  await new Promise(r => setTimeout(r, 50));
++
++  const conv = coordinator.getConversation('conv-1')!;
++  assert.equal(conv.turns.length, 3);
++  assert.equal(conv.turns[0].id, res1.turnId);
++  assert.equal(conv.turns[1].id, simA.turnId);
++  assert.equal(conv.turns[2].id, simB.turnId);
++});
++
++test('TASK-478 AC2: Selected members answer in dev, qa, security, product, lead order; mention selects only that member; empty roster resolves to lead', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const answeredRoles: string[] = [];
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ participant }) => {
++      answeredRoles.push(participant.role);
++      return { text: `Reply from ${participant.role}` };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  // Test 1: Out-of-order selected members (product, lead, dev, qa)
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-order',
++    expectedRevision: 1,
++    text: 'Please answer team',
++    selectedParticipantIds: ['part-product', 'part-lead', 'part-dev', 'part-qa'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++
++  assert.deepEqual(answeredRoles, ['dev', 'qa', 'product', 'lead'], 'Must answer in dev, qa, security, product, lead order');
++
++  // Test 2: Explicit mention @qa
++  answeredRoles.length = 0;
++  const currentRev = coordinator.getConversation('conv-1')!.revision;
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-mention',
++    expectedRevision: currentRev,
++    text: '@qa What is the test coverage?',
++    selectedParticipantIds: ['part-dev', 'part-qa', 'part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++  assert.deepEqual(answeredRoles, ['qa'], 'Explicit mention must select only that member');
++
++  // Test 3: Empty roster resolves to lead
++  answeredRoles.length = 0;
++  const rev3 = coordinator.getConversation('conv-1')!.revision;
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-empty',
++    expectedRevision: rev3,
++    text: 'General question without roster',
++    selectedParticipantIds: [],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++  assert.deepEqual(answeredRoles, ['lead'], 'Empty roster must resolve to lead');
++});
++
++test('TASK-478 AC3: Later members see earlier committed replies from their turn; no member sees queued future user messages', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const messagesSeenByRole = new Map<string, string[]>();
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ participant, turn, messages }) => {
++      const key = `${participant.role}:${turn.id}`;
++      messagesSeenByRole.set(key, messages.map(m => m.text));
++      return { text: `Reply from ${participant.role}` };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  // Submit Turn 1 with dev and qa
++  const resTurn1 = await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-turn1',
++    expectedRevision: 1,
++    text: 'User question for turn 1',
++    selectedParticipantIds: ['part-dev', 'part-qa'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  // Immediately submit Turn 2 before Turn 1 finishes
++  const revNow = coordinator.getConversation('conv-1')!.revision;
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-turn2',
++    expectedRevision: revNow,
++    text: 'Queued user question for turn 2',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 100));
++
++  const devMessages = messagesSeenByRole.get(`dev:${resTurn1.turnId}`)!;
++  const qaMessages = messagesSeenByRole.get(`qa:${resTurn1.turnId}`)!;
++
++  assert.ok(devMessages.includes('User question for turn 1'));
++  assert.ok(!devMessages.includes('Queued user question for turn 2'), 'Dev must not see future queued user message');
++
++  assert.ok(qaMessages.includes('User question for turn 1'));
++  assert.ok(qaMessages.includes('Reply from dev'), 'QA must see earlier committed reply from dev');
++  assert.ok(!qaMessages.includes('Queued user question for turn 2'), 'QA must not see future queued user message');
++});
++
++test('TASK-478 AC4: Changing roster affects subsequent accepted turns only; failures pause the current turn and leave later turns queued', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  let shouldFail = true;
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ participant }) => {
++      if (participant.role === 'dev' && shouldFail) {
++        throw new Error('Dev provider failed.');
 +      }
++      return { text: `Success from ${participant.role}` };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  // Turn 1 will fail
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-fail',
++    expectedRevision: 1,
++    text: 'Trigger failure',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  // Turn 2 queued behind Turn 1
++  const rev1 = coordinator.getConversation('conv-1')!.revision;
++  const turn2Res = await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-queued',
++    expectedRevision: rev1,
++    text: 'Queued message',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++
++  const conv = coordinator.getConversation('conv-1')!;
++  assert.equal(conv.turns[0].state, 'failed', 'Current turn must be paused on failure');
++  assert.equal(conv.turns[1].state, 'queued', 'Later turn must remain queued');
++  assert.equal(conv.turns[1].id, turn2Res.turnId);
++
++  // Retry the failed participant
++  shouldFail = false;
++  await coordinator.retryParticipant('conv-1', conv.turns[0].id, 'part-dev');
++
++  await new Promise(r => setTimeout(r, 100));
++
++  const convRecovered = coordinator.getConversation('conv-1')!;
++  assert.equal(convRecovered.turns[0].state, 'completed');
++  assert.equal(convRecovered.turns[1].state, 'completed');
++});
++
++test('TASK-479 AC1: IPC timeout after durable acceptance followed by resubmission returns the original turn ID', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: { execute: async () => ({ text: 'ok' }) }
++  });
++
++  const cmd: SubmitConversationCommand = {
++    conversationId: 'conv-1',
++    commandId: 'cmd-timeout-test',
++    expectedRevision: 1,
++    text: 'Message that timed out on client',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  };
++
++  const res1 = await coordinator.submitTurn(cmd);
++  // Resubmission with same command ID
++  const res2 = await coordinator.submitTurn(cmd);
++
++  assert.equal(res1.turnId, res2.turnId);
++  assert.equal(res2.turnId, res1.turnId);
++});
++
++test('TASK-479 AC2: Subscription emits revision updates', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: { execute: async () => ({ text: 'reply text' }) }
++  });
++
++  const updates: ConversationUpdate[] = [];
++  coordinator.subscribe('conv-1', update => updates.push(update));
++
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-sub',
++    expectedRevision: 1,
++    text: 'Sub test',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++
++  assert.ok(updates.length >= 3, 'Should receive turn_accepted, attempt, and completed updates');
++  assert.equal(updates[0].type, 'turn_accepted');
++  assert.ok(updates.some(u => u.type === 'attempt_completed'));
++});
++
++test('TASK-479 AC3: Invalid participant, attachment reference, and permission choice are rejected before provider invocation', async () => {
++  let invoked = false;
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: { execute: async () => { invoked = true; return { text: 'ok' }; } }
++  });
++
++  // Invalid participant
++  await assert.rejects(
++    coordinator.submitTurn({
++      conversationId: 'conv-1',
++      commandId: 'cmd-bad-part',
++      expectedRevision: 1,
++      text: 'hello',
++      selectedParticipantIds: ['part-nonexistent'],
++      attachmentRefs: [],
++      runtimeOptions: {}
++    }),
++    /Invalid participant reference/
++  );
++
++  // Invalid attachment
++  await assert.rejects(
++    coordinator.submitTurn({
++      conversationId: 'conv-1',
++      commandId: 'cmd-bad-att',
++      expectedRevision: 1,
++      text: 'hello',
++      selectedParticipantIds: ['part-lead'],
++      attachmentRefs: [{ digest: '', mediaType: '' } as never],
++      runtimeOptions: {}
++    }),
++    /Invalid attachment reference/
++  );
++
++  // Invalid permission choice
++  await assert.rejects(
++    coordinator.submitTurn({
++      conversationId: 'conv-1',
++      commandId: 'cmd-bad-perm',
++      expectedRevision: 1,
++      text: 'hello',
++      selectedParticipantIds: ['part-lead'],
++      attachmentRefs: [],
++      runtimeOptions: { permissionMode: 'invalid' as never }
++    }),
++    /Invalid permission choice/
++  );
++
++  assert.equal(invoked, false, 'Provider must not be invoked for invalid commands');
++});
++
++test('TASK-479 AC4: Closing/cancelling turn does not corrupt conversation state', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: {
++      execute: async () => {
++        await new Promise(r => setTimeout(r, 200));
++        return { text: 'Late reply' };
++      }
++    }
++  });
++
++  const res = await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-cancel',
++    expectedRevision: 1,
++    text: 'Will be cancelled',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await coordinator.cancelTurn('conv-1', res.turnId);
++
++  await new Promise(r => setTimeout(r, 250));
++
++  const conv = coordinator.getConversation('conv-1')!;
++  const turn = conv.turns.find(t => t.id === res.turnId)!;
++  assert.equal(turn.state, 'cancelled');
++});
+diff --git a/packages/core/src/ai/assistant/teamChatCoordinator.ts b/packages/core/src/ai/assistant/teamChatCoordinator.ts
+new file mode 100644
+index 00000000..660e2ee2
+--- /dev/null
++++ b/packages/core/src/ai/assistant/teamChatCoordinator.ts
+@@ -0,0 +1,621 @@
++import { parseAssistantMention, getAssistantPersona } from './assistantPersonas';
++import type {
++  AssistantRole,
++  ConversationAttempt,
++  ConversationMessage,
++  ConversationParticipant,
++  ConversationTurn,
++  DurableConversation,
++  SubmitConversationCommand,
++  ConversationCommandResult,
++  TeamChatRepository
++} from './assistantTypes';
++import {
++  advanceConversationAttempt,
++  completeConversationAttempt,
++  conversationPayloadDigest,
++  reserveConversationAttempt,
++  startConversationTurn,
++  submitConversationTurn
++} from './teamChatTransitions';
++
++export const CANONICAL_ROLE_ORDER: readonly AssistantRole[] = ['dev', 'qa', 'security', 'product', 'lead'];
++
++export function makeParticipant(role: AssistantRole): ConversationParticipant {
++  const persona = getAssistantPersona(role);
++  return {
++    id: `part-${role}`,
++    role,
++    instructionVersion: '1',
++    instructions: persona.systemPrompt,
++    defaults: {}
++  };
++}
++
++export interface TeamChatExecutionResult {
++  text: string;
++  usageReferences?: string[];
++  toolEvidenceReferences?: string[];
++}
++
++export interface TeamChatExecutionParams {
++  conversation: DurableConversation;
++  turn: ConversationTurn;
++  attempt: ConversationAttempt;
++  participant: ConversationParticipant;
++  messages: readonly ConversationMessage[];
++  signal?: AbortSignal;
++}
++
++export interface TeamChatExecutionAdapter {
++  execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
++}
++
++export type ConversationUpdateType =
++  | 'turn_accepted'
++  | 'turn_started'
++  | 'attempt_prepared'
++  | 'attempt_running'
++  | 'attempt_completed'
++  | 'turn_completed'
++  | 'turn_failed'
++  | 'turn_cancelled';
++
++export interface ConversationUpdate {
++  conversationId: string;
++  revision: number;
++  type: ConversationUpdateType;
++  turnId?: string;
++  attemptId?: string;
++  message?: ConversationMessage;
++  state?: ConversationTurn['state'];
++  error?: string;
++}
++
++export interface TeamChatCoordinatorOptions {
++  repository: TeamChatRepository;
++  executionAdapter: TeamChatExecutionAdapter;
++  clock?: () => string;
++  idSource?: () => string;
++  onUpdate?: (update: ConversationUpdate) => void;
++}
++
++export class TeamChatCoordinator {
++  private readonly repository: TeamChatRepository;
++  private readonly executionAdapter: TeamChatExecutionAdapter;
++  private readonly clock: () => string;
++  private readonly idSource: () => string;
++  private readonly onUpdate?: (update: ConversationUpdate) => void;
++  private readonly subscribers = new Map<string, Set<(update: ConversationUpdate) => void>>();
++  private readonly activeLoops = new Set<string>();
++  private readonly abortControllers = new Map<string, AbortController>();
++
++  public constructor(options: TeamChatCoordinatorOptions) {
++    this.repository = options.repository;
++    this.executionAdapter = options.executionAdapter;
++    this.clock = options.clock ?? (() => new Date().toISOString());
++    this.idSource = options.idSource ?? (() => `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
++    this.onUpdate = options.onUpdate;
++  }
++
++  public subscribe(conversationId: string, listener: (update: ConversationUpdate) => void): () => void {
++    let listeners = this.subscribers.get(conversationId);
++    if (!listeners) {
++      listeners = new Set();
++      this.subscribers.set(conversationId, listeners);
++    }
++    listeners.add(listener);
++    return () => {
++      listeners?.delete(listener);
++      if (listeners && listeners.size === 0) {
++        this.subscribers.delete(conversationId);
++      }
++    };
++  }
++
++  private notify(update: ConversationUpdate): void {
++    try {
++      this.onUpdate?.(update);
++    } catch {
++      // Ignored
++    }
++    const listeners = this.subscribers.get(update.conversationId);
++    if (listeners) {
++      for (const listener of listeners) {
++        try {
++          listener(update);
++        } catch {
++          // Listeners must not break coordinator operation
++        }
++      }
++    }
++  }
++
++  public getConversation(conversationId: string): DurableConversation | undefined {
++    return this.repository.read().conversations.find(c => c.id === conversationId);
++  }
++
++  private async transitionConversation(
++    conversationId: string,
++    mutate: (current: DurableConversation) => DurableConversation
++  ): Promise<DurableConversation> {
++    return this.repository.transaction(draft => {
++      const index = draft.conversations.findIndex(c => c.id === conversationId);
++      if (index < 0) throw new Error(`Conversation ${conversationId} was not found.`);
++      const current = draft.conversations[index];
++      const next = mutate(structuredClone(current));
 +      draft.conversations[index] = structuredClone(next);
 +      return structuredClone(next);
 +    });
 +  }
- 
-   private all(): TeamChatRecord[] {
--    return this.store.get<TeamChatRecord[]>(KEY) ?? [];
-+    return this.store.read().teamChats;
-   }
- 
-   public list(projectId: string): TeamChatSummary[] {
-@@ -38,39 +50,43 @@ export class TeamChatStore {
-       updatedAt: now,
-       messages: []
-     };
--    await this.store.update(KEY, [...this.all(), chat]);
-+    await this.store.transaction(draft => { draft.teamChats.push(structuredClone(chat)); });
-     return chat;
-   }
- 
++
++  public async submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult> {
++    if (!command.conversationId?.trim()) throw new Error('A conversationId is required.');
++    if (!command.commandId?.trim()) throw new Error('A commandId is required.');
++    if (!command.text?.trim()) throw new Error('A message text is required.');
++
++    // Validate permission choice
++    if (command.runtimeOptions?.permissionMode === ('invalid' as never)) {
++      throw new Error('Invalid permission choice.');
++    }
++
++    // Validate attachment references
++    if (command.attachmentRefs) {
++      for (const att of command.attachmentRefs) {
++        if (!att || !att.digest || typeof att.digest !== 'string' || !att.mediaType) {
++          throw new Error('Invalid attachment reference.');
++        }
++      }
++    }
++
++    const snapshot = this.repository.read();
++    const conversation = snapshot.conversations.find(c => c.id === command.conversationId);
++    if (!conversation) {
++      throw new Error(`Conversation ${command.conversationId} was not found.`);
++    }
++
++    const payloadDigest = conversationPayloadDigest(command);
++    const existingReceipt = conversation.commandReceipts.find(r => r.commandId === command.commandId);
++    if (existingReceipt) {
++      if (existingReceipt.payloadDigest !== payloadDigest) {
++        throw new Error('Command payload conflict.');
++      }
++      const existingTurn = conversation.turns.find(t => t.id === existingReceipt.turnId);
++      return {
++        turnId: existingReceipt.turnId,
++        revision: conversation.revision,
++        state: existingTurn?.state ?? 'completed'
++      };
++    }
++
++    // Validate participants
++    if (command.selectedParticipantIds && command.selectedParticipantIds.length > 0) {
++      const knownIds = new Set(conversation.participants.map(p => p.id));
++      for (const id of command.selectedParticipantIds) {
++        if (!knownIds.has(id)) {
++          throw new Error('Invalid participant reference.');
++        }
++      }
++    }
++
++    // Resolve roster & member ordering
++    const mention = parseAssistantMention(command.text);
++    let planParticipants: ConversationParticipant[] = [];
++
++    if (mention.personaId) {
++      const p = conversation.participants.find(part => part.role === mention.personaId) ?? makeParticipant(mention.personaId);
++      planParticipants = [p];
++    } else if (!command.selectedParticipantIds || command.selectedParticipantIds.length === 0) {
++      const lead = conversation.participants.find(part => part.role === 'lead') ?? makeParticipant('lead');
++      planParticipants = [lead];
++    } else {
++      const selected = command.selectedParticipantIds
++        .map(id => conversation.participants.find(p => p.id === id))
++        .filter((p): p is ConversationParticipant => Boolean(p));
++      planParticipants = selected.sort((a, b) => {
++        const orderA = CANONICAL_ROLE_ORDER.indexOf(a.role);
++        const orderB = CANONICAL_ROLE_ORDER.indexOf(b.role);
++        return (orderA >= 0 ? orderA : 99) - (orderB >= 0 ? orderB : 99);
++      });
++    }
++
++    const turnId = this.idSource();
++    const userMessageId = this.idSource();
++    const sequence = (conversation.messages.at(-1)?.sequence ?? 0) + 1;
++
++    const turn: ConversationTurn = {
++      id: turnId,
++      commandId: command.commandId,
++      payloadDigest,
++      userMessageId,
++      acceptedSequence: sequence,
++      plan: {
++        participants: planParticipants,
++        runtimeOptions: command.runtimeOptions,
++        ...(command.context ? { context: command.context } : {})
++      },
++      state: 'queued',
++      completedParticipantIds: [],
++      attempts: []
++    };
++
++    const userMessage: ConversationMessage = {
++      id: userMessageId,
++      turnId,
++      role: 'user',
++      text: command.text,
++      createdAt: this.clock(),
++      sequence,
++      attachments: command.attachmentRefs ?? []
++    };
++
++    const updated = await this.transitionConversation(command.conversationId, conv => {
++      // Ensure participants in plan exist on the conversation record
++      for (const p of planParticipants) {
++        if (!conv.participants.some(existing => existing.id === p.id)) {
++          conv.participants.push(p);
++        }
++      }
++      return submitConversationTurn(conv, conv.revision, command, turn, userMessage);
++    });
++
++    this.notify({
++      conversationId: command.conversationId,
++      revision: updated.revision,
++      type: 'turn_accepted',
++      turnId,
++      message: userMessage,
++      state: 'queued'
++    });
++
++    void this.processConversation(command.conversationId);
++
++    return {
++      turnId,
++      revision: updated.revision,
++      state: 'queued'
++    };
++  }
++
++  public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
++    const abortKey = `${conversationId}:${turnId}`;
++    const controller = this.abortControllers.get(abortKey);
++    if (controller) {
++      controller.abort();
++      this.abortControllers.delete(abortKey);
++    }
++
++    await this.transitionConversation(conversationId, conv => {
++      const turn = conv.turns.find(t => t.id === turnId);
++      if (!turn || ['completed', 'cancelled'].includes(turn.state)) return conv;
++      turn.state = 'cancelled';
++      conv.revision++;
++      for (const att of turn.attempts) {
++        if (!['completed', 'failed', 'interrupted', 'outcome_unknown'].includes(att.state)) {
++          att.state = 'cancelled';
++          att.completedAt = this.clock();
++        }
++      }
++      return conv;
++    });
++
++    const updated = this.getConversation(conversationId);
++    if (updated) {
++      this.notify({
++        conversationId,
++        revision: updated.revision,
++        type: 'turn_cancelled',
++        turnId,
++        state: 'cancelled'
++      });
++    }
++
++    void this.processConversation(conversationId);
++  }
++
++  public async retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void> {
++    const conversation = this.getConversation(conversationId);
++    if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
++    const turn = conversation.turns.find(t => t.id === turnId);
++    if (!turn || turn.state !== 'failed') {
++      throw new Error('Stale or invalid retry target.');
++    }
++    const lastAttempt = turn.attempts.filter(a => a.participantId === participantId).at(-1);
++    if (!lastAttempt || lastAttempt.state !== 'failed') {
++      throw new Error('Stale or invalid retry target.');
++    }
++
++    await this.transitionConversation(conversationId, conv => {
++      const targetTurn = conv.turns.find(t => t.id === turnId);
++      if (!targetTurn) return conv;
++      targetTurn.state = 'running';
++      conv.revision++;
++      return conv;
++    });
++
++    void this.processConversation(conversationId);
++  }
++
++  public async resolveAttempt(
++    conversationId: string,
++    turnId: string,
++    attemptId: string,
++    resolution: 'accept' | 'retry' | 'abort'
++  ): Promise<void> {
++    const conversation = this.getConversation(conversationId);
++    if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
++    const turn = conversation.turns.find(t => t.id === turnId);
++    const attempt = turn?.attempts.find(a => a.id === attemptId);
++    if (!turn || !attempt) throw new Error('Stale or invalid retry target.');
++
++    if (resolution === 'abort') {
++      await this.cancelTurn(conversationId, turnId);
++      return;
++    }
++
++    if (resolution === 'retry') {
++      await this.retryParticipant(conversationId, turnId, attempt.participantId);
++      return;
++    }
++
++    if (resolution === 'accept') {
++      await this.transitionConversation(conversationId, conv => {
++        const t = conv.turns.find(item => item.id === turnId);
++        const a = t?.attempts.find(item => item.id === attemptId);
++        if (!a || !t) return conv;
++        a.state = 'completed';
++        a.completedAt = this.clock();
++        if (!t.completedParticipantIds.includes(a.participantId)) {
++          t.completedParticipantIds.push(a.participantId);
++        }
++        if (t.completedParticipantIds.length === t.plan.participants.length) {
++          t.state = 'completed';
++        }
++        conv.revision++;
++        return conv;
++      });
++      void this.processConversation(conversationId);
++    }
++  }
++
++  private async processConversation(conversationId: string): Promise<void> {
++    if (this.activeLoops.has(conversationId)) return;
++    this.activeLoops.add(conversationId);
++
++    try {
++      while (true) {
++        let conversation = this.getConversation(conversationId);
++        if (!conversation) break;
++
++        // Check for an active running turn
++        let activeTurn = conversation.turns.find(t => t.state === 'running');
++
++        if (!activeTurn) {
++          // If no running turn, see if the next queued turn can start
++          const hasFailedOrPausedTurn = conversation.turns.some(t => !['queued', 'completed', 'cancelled'].includes(t.state));
++          if (hasFailedOrPausedTurn) {
++            // Failures and pauses block subsequent queued turns
++            break;
++          }
++
++          const nextQueuedTurn = conversation.turns.find(t => t.state === 'queued');
++          if (!nextQueuedTurn) {
++            // No more work queued
++            break;
++          }
++
++          const started = await this.transitionConversation(conversationId, conv => {
++            return startConversationTurn(conv, conv.revision, nextQueuedTurn.id);
++          });
++
++          this.notify({
++            conversationId,
++            revision: started.revision,
++            type: 'turn_started',
++            turnId: nextQueuedTurn.id,
++            state: 'running'
++          });
++
++          conversation = started;
++          activeTurn = conversation.turns.find(t => t.id === nextQueuedTurn.id);
++        }
++
++        if (!activeTurn || activeTurn.state !== 'running') {
++          break;
++        }
++
++        // Find next participant
++        const nextParticipant = activeTurn.plan.participants.find(p => !activeTurn!.completedParticipantIds.includes(p.id));
++        if (!nextParticipant) {
++          // Turn completed
++          await this.transitionConversation(conversationId, conv => {
++            const t = conv.turns.find(item => item.id === activeTurn!.id);
++            if (t && t.state !== 'completed') {
++              t.state = 'completed';
++              conv.revision++;
++            }
++            return conv;
++          });
++          const updated = this.getConversation(conversationId);
++          if (updated) {
++            this.notify({
++              conversationId,
++              revision: updated.revision,
++              type: 'turn_completed',
++              turnId: activeTurn.id,
++              state: 'completed'
++            });
++          }
++          continue; // Process next queued turn
++        }
++
++        // Prepare attempt
++        const attemptId = this.idSource();
++        const ordinal = activeTurn.attempts.filter(a => a.participantId === nextParticipant.id).length + 1;
++        const visibleMessages = conversation.messages.filter(m => m.sequence < activeTurn!.acceptedSequence || m.turnId === activeTurn!.id);
++        const messageIds = visibleMessages.map(m => m.id);
++        const contextDigest = conversationPayloadDigest({
++          turnId: activeTurn.id,
++          participantId: nextParticipant.id,
++          ordinal,
++          messageIds
++        });
++        const contextReceipt = {
++          digest: contextDigest,
++          messageIds
++        };
++
++        const attempt: ConversationAttempt = {
++          id: attemptId,
++          turnId: activeTurn.id,
++          participantId: nextParticipant.id,
++          ordinal,
++          coordinatorEpoch: conversation.coordinatorEpoch,
++          state: 'prepared',
++          contextReceipt,
++          createdAt: this.clock(),
++          usageReferences: [],
++          toolEvidenceReferences: []
++        };
++
++        const checkTurnBefore = this.getConversation(conversationId)?.turns.find(t => t.id === activeTurn!.id);
++        if (!checkTurnBefore || checkTurnBefore.state !== 'running') {
++          break;
++        }
++
++        let currentConv: DurableConversation;
++        try {
++          currentConv = await this.transitionConversation(conversationId, conv => {
++            const t = conv.turns.find(item => item.id === activeTurn!.id);
++            if (!t || t.state !== 'running') return conv;
++            return reserveConversationAttempt(conv, conv.revision, attempt);
++          });
++        } catch {
++          break;
++        }
++
++        if (currentConv.turns.find(t => t.id === activeTurn!.id)?.state !== 'running') {
++          break;
++        }
++
++        // Advance to dispatching then running
++        const dispatchTime = this.clock();
++        currentConv = await this.transitionConversation(conversationId, conv => {
++          const step1 = advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, conv.coordinatorEpoch, 'dispatching', dispatchTime);
++          return advanceConversationAttempt(step1, step1.revision, activeTurn!.id, attemptId, step1.coordinatorEpoch, 'running', dispatchTime);
++        });
++
++        this.notify({
++          conversationId,
++          revision: currentConv.revision,
++          type: 'attempt_running',
++          turnId: activeTurn.id,
++          attemptId
++        });
++
++        const abortController = new AbortController();
++        const abortKey = `${conversationId}:${activeTurn.id}`;
++        this.abortControllers.set(abortKey, abortController);
++
++        let executionError: Error | undefined;
++        let result: TeamChatExecutionResult | undefined;
++
++        try {
++          result = await this.executionAdapter.execute({
++            conversation: currentConv,
++            turn: activeTurn,
++            attempt,
++            participant: nextParticipant,
++            messages: visibleMessages,
++            signal: abortController.signal
++          });
++        } catch (err) {
++          executionError = err instanceof Error ? err : new Error(String(err));
++        } finally {
++          this.abortControllers.delete(abortKey);
++        }
++
++        if (abortController.signal.aborted) {
++          break;
++        }
++
++        const latestConv = this.getConversation(conversationId);
++        const latestTurn = latestConv?.turns.find(t => t.id === activeTurn!.id);
++        if (!latestTurn || latestTurn.state === 'cancelled') {
++          break;
++        }
++
++        if (executionError) {
++          // Failure pauses the current turn and leaves later turns queued
++          await this.transitionConversation(conversationId, conv => {
++            const t = conv.turns.find(item => item.id === activeTurn!.id);
++            const a = t?.attempts.find(item => item.id === attemptId);
++            if (!t || !a) return conv;
++            a.state = 'failed';
++            a.error = executionError!.message;
++            a.completedAt = this.clock();
++            t.state = 'failed';
++            conv.revision++;
++            return conv;
++          });
++
++          const failedConv = this.getConversation(conversationId);
++          if (failedConv) {
++            this.notify({
++              conversationId,
++              revision: failedConv.revision,
++              type: 'turn_failed',
++              turnId: activeTurn.id,
++              attemptId,
++              error: executionError.message,
++              state: 'failed'
++            });
++          }
++          break; // Stop loop on failure
++        }
++
++        if (result) {
++          const checkTurn = this.getConversation(conversationId)?.turns.find(t => t.id === activeTurn!.id);
++          const checkAttempt = checkTurn?.attempts.find(a => a.id === attemptId);
++          if (!checkTurn || checkTurn.state === 'cancelled' || !checkAttempt || checkAttempt.state === 'cancelled') {
++            break;
++          }
++
++          const replyMessage: ConversationMessage = {
++            id: this.idSource(),
++            turnId: activeTurn.id,
++            participantId: nextParticipant.id,
++            role: nextParticipant.role,
++            text: result.text,
++            createdAt: this.clock(),
++            sequence: (currentConv.messages.at(-1)?.sequence ?? 0) + 1,
++            attachments: []
++          };
++
++          const completedConv = await this.transitionConversation(conversationId, conv => {
++            return completeConversationAttempt(
++              conv,
++              conv.revision,
++              activeTurn!.id,
++              attemptId,
++              conv.coordinatorEpoch,
++              replyMessage,
++              contextReceipt
++            );
++          });
++
++          this.notify({
++            conversationId,
++            revision: completedConv.revision,
++            type: 'attempt_completed',
++            turnId: activeTurn.id,
++            attemptId,
++            message: replyMessage
++          });
++        }
++      }
++    } finally {
++      this.activeLoops.delete(conversationId);
++    }
++  }
++}
+diff --git a/packages/core/src/ai/assistant/teamChatStore.ts b/packages/core/src/ai/assistant/teamChatStore.ts
+index b9511f14..f4eceaf9 100644
+--- a/packages/core/src/ai/assistant/teamChatStore.ts
++++ b/packages/core/src/ai/assistant/teamChatStore.ts
+@@ -57,6 +57,9 @@ export class TeamChatStore {
    /** Replaces a chat's transcript. A still-untitled chat is named from its first user message. */
    public async saveMessages(id: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord> {
--    const chats = this.all();
--    const index = chats.findIndex(chat => chat.id === id);
--    if (index < 0) throw new Error(`Team chat ${id} was not found.`);
--    const current = chats[index];
--    const firstUser = messages.find(message => message.role === 'user');
--    const next: TeamChatRecord = {
--      ...current,
--      messages: [...messages],
--      updatedAt: new Date().toISOString(),
--      title: current.title === 'New team chat' && firstUser ? deriveChatTitle(firstUser.text) : current.title
--    };
--    await this.store.update(KEY, chats.map((chat, i) => (i === index ? next : chat)));
--    return next;
-+    return this.store.transaction(draft => {
-+      const chats = draft.teamChats;
-+      const index = chats.findIndex(chat => chat.id === id);
-+      if (index < 0) throw new Error(`Team chat ${id} was not found.`);
-+      const current = chats[index];
-+      const firstUser = messages.find(message => message.role === 'user');
-+      const next: TeamChatRecord = {
-+        ...current,
-+        messages: [...messages],
-+        updatedAt: new Date().toISOString(),
-+        title: current.title === 'New team chat' && firstUser ? deriveChatTitle(firstUser.text) : current.title
-+      };
-+      draft.teamChats = chats.map((chat, i) => (i === index ? next : chat));
-+      return structuredClone(next);
-+    });
-   }
- 
-   public async rename(id: string, title: string): Promise<TeamChatRecord> {
-     const trimmed = title.trim();
-     if (!trimmed) throw new Error('A chat needs a name.');
--    const chats = this.all();
--    const current = chats.find(chat => chat.id === id);
--    if (!current) throw new Error(`Team chat ${id} was not found.`);
--    const next = { ...current, title: trimmed.slice(0, 120) };
--    await this.store.update(KEY, chats.map(chat => (chat.id === id ? next : chat)));
--    return next;
-+    return this.store.transaction(draft => {
-+      const chats = draft.teamChats;
-+      const current = chats.find(chat => chat.id === id);
-+      if (!current) throw new Error(`Team chat ${id} was not found.`);
-+      const next = { ...current, title: trimmed.slice(0, 120) };
-+      draft.teamChats = chats.map(chat => (chat.id === id ? next : chat));
-+      return structuredClone(next);
-+    });
-   }
- 
-   public async remove(id: string): Promise<void> {
--    await this.store.update(KEY, this.all().filter(chat => chat.id !== id));
-+    await this.store.transaction(draft => { draft.teamChats = draft.teamChats.filter(chat => chat.id !== id); });
-   }
+     return this.store.transaction(draft => {
++      if (draft.conversations.some(c => c.id === id)) {
++        throw new Error('Whole-transcript replacement is rejected for durable conversations.');
++      }
+       const chats = draft.teamChats;
+       const index = chats.findIndex(chat => chat.id === id);
+       if (index < 0) throw new Error(`Team chat ${id} was not found.`);
+diff --git a/packages/core/src/host/ipcContracts.ts b/packages/core/src/host/ipcContracts.ts
+index 6c752e14..aa53af2e 100644
+--- a/packages/core/src/host/ipcContracts.ts
++++ b/packages/core/src/host/ipcContracts.ts
+@@ -8,8 +8,12 @@ import type {
+   AssistantTurnResult,
+   AssistantMessage,
+   TeamChatRecord,
+-  TeamChatSummary
++  TeamChatSummary,
++  SubmitConversationCommand,
++  ConversationCommandResult,
++  DurableConversation
+ } from '../ai/assistant/assistantTypes';
++import type { ConversationUpdate } from '../ai/assistant/teamChatCoordinator';
+ import type { AiUsageEvent } from '../ai/aiUsageLog';
+ import type { CoordinationState } from '../ai/coordination/coordinationTypes';
+ import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
+@@ -1264,6 +1268,18 @@ export interface AssistantIpc {
+   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
+   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
+   deleteChat(chatId: string): Promise<void>;
++  /** Submits a validated turn to a durable conversation. */
++  submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult>;
++  /** Retrieves a durable conversation by ID. */
++  getConversation(conversationId: string): Promise<DurableConversation | undefined>;
++  /** Subscribes to conversation revision updates. */
++  subscribeConversation(conversationId: string, listener: (update: ConversationUpdate) => void): () => void;
++  /** Cancels an active or queued turn. */
++  cancelTurn(conversationId: string, turnId: string): Promise<void>;
++  /** Retries a failed participant within an active turn. */
++  retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void>;
++  /** Resolves an attempt in an unknown or interrupted state. */
++  resolveAttempt(conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort'): Promise<void>;
+   /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
+   onChatsChanged(listener: () => void): () => void;
  }
-diff --git a/packages/core/src/ai/assistant/teamChatTransitions.test.ts b/packages/core/src/ai/assistant/teamChatTransitions.test.ts
-new file mode 100644
-index 00000000..b32f8e05
---- /dev/null
-+++ b/packages/core/src/ai/assistant/teamChatTransitions.test.ts
-@@ -0,0 +1,55 @@
-+import { test } from 'node:test';
-+import * as assert from 'node:assert/strict';
-+import type { ConversationAttempt, ConversationMessage, ConversationTurn, DurableConversation } from './assistantTypes';
-+import { conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } from './teamChatTransitions';
-+
-+function fixture() {
-+  const chat: DurableConversation = { schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] };
-+  const payload = { text: 'hello', selectedParticipantIds: ['p'] };
-+  const turn: ConversationTurn = { id: 't', commandId: 'cmd', payloadDigest: conversationPayloadDigest(payload), userMessageId: 'u', acceptedSequence: 1, plan: { participants: [{ id: 'p', role: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} }], runtimeOptions: {} }, state: 'queued', completedParticipantIds: [], attempts: [] };
-+  const message: ConversationMessage = { id: 'u', role: 'user', text: 'hello', createdAt: 'now', sequence: 1, turnId: 't', attachments: [] };
-+  const attempt: ConversationAttempt = { id: 'a', turnId: 't', participantId: 'p', ordinal: 1, coordinatorEpoch: 'epoch', state: 'prepared', contextReceipt: { digest: 'digest', messageIds: ['u'] }, createdAt: 'now', usageReferences: [], toolEvidenceReferences: [] };
-+  const reply: ConversationMessage = { ...message, id: 'r', role: 'lead', participantId: 'p', sequence: 2, text: 'reply' };
-+  return { chat, payload, turn, message, attempt, reply };
-+}
-+test('submit is atomic, isolated and idempotent after acknowledgement loss; conflicting reuse fails', () => {
-+  const { chat, payload, turn, message } = fixture();
-+  const accepted = submitConversationTurn(chat, 0, payload, turn, message);
-+  assert.equal(chat.messages.length, 0);
-+  assert.equal(accepted.messages.length, 1);
-+  assert.equal(accepted.turns.length, 1);
-+  assert.equal(accepted.commandReceipts[0].revision, 1);
-+  assert.deepEqual(submitConversationTurn(accepted, 0, { selectedParticipantIds: ['p'], text: 'hello' }, turn, message), accepted);
-+  assert.throws(() => submitConversationTurn(accepted, 1, { text: 'other' }, turn, message), /payload conflict/);
-+  turn.plan.participants[0].instructions = 'changed';
-+  assert.equal(accepted.turns[0].plan.participants[0].instructions, 'help');
-+});
-+test('stale revisions, duplicate identities and a second running turn are rejected', () => {
-+  const { chat, payload, turn, message } = fixture();
-+  const accepted = submitConversationTurn(chat, 0, payload, turn, message);
-+  assert.throws(() => startConversationTurn(accepted, 0, 't'), /revision conflict/);
-+  const running = startConversationTurn(accepted, 1, 't');
-+  assert.throws(() => startConversationTurn(running, 2, 't'), /active/);
-+  assert.throws(() => submitConversationTurn(accepted, 1, payload, { ...turn, commandId: 'other' }, message), /Invalid/);
-+});
-+test('completion atomically records final reply and context; duplicate and fenced attempts cannot complete', () => {
-+  const { chat, payload, turn, message, attempt, reply } = fixture();
-+  const running = startConversationTurn(submitConversationTurn(chat, 0, payload, turn, message), 1, 't');
-+  const prepared = reserveConversationAttempt(running, 2, attempt);
-+  assert.throws(() => completeConversationAttempt(prepared, 3, 't', 'a', 'epoch', reply, attempt.contextReceipt), /Invalid/);
-+  const reserved = advanceConversationAttempt(prepared, 3, 't', 'a', 'epoch', 'dispatching', 'now');
-+  assert.throws(() => reserveConversationAttempt(reserved, 4, { ...attempt, id: 'b', ordinal: 2 }), /Invalid/);
-+  assert.throws(() => completeConversationAttempt(reserved, 4, 't', 'a', 'old', reply, attempt.contextReceipt), /fenced/);
-+  const fenced = structuredClone(reserved); fenced.coordinatorEpoch = 'new';
-+  assert.throws(() => completeConversationAttempt(fenced, 4, 't', 'a', 'epoch', reply, attempt.contextReceipt), /fenced/);
-+  const done = completeConversationAttempt(reserved, 4, 't', 'a', 'epoch', reply, attempt.contextReceipt);
-+  assert.equal(done.turns[0].state, 'completed');
-+  assert.equal(done.turns[0].attempts[0].resultMessageId, 'r');
-+  assert.equal(done.messages.length, 2);
-+  assert.equal(reserved.messages.length, 1);
-+  assert.throws(() => completeConversationAttempt(done, 5, 't', 'a', 'epoch', { ...reply, id: 'r2', sequence: 3 }, attempt.contextReceipt), /duplicate/);
-+});
-+test('payload canonicalization rejects non-JSON values', () => {
-+  assert.throws(() => conversationPayloadDigest({ value: undefined }), /JSON/);
-+  assert.throws(() => conversationPayloadDigest(NaN), /JSON/);
-+});
-diff --git a/packages/core/src/ai/assistant/teamChatTransitions.ts b/packages/core/src/ai/assistant/teamChatTransitions.ts
-new file mode 100644
-index 00000000..6bc520ee
---- /dev/null
-+++ b/packages/core/src/ai/assistant/teamChatTransitions.ts
-@@ -0,0 +1,94 @@
-+import { createHash } from 'node:crypto';
-+import type { ConversationAttempt, ConversationMessage, ConversationTurn, DurableConversation } from './assistantTypes';
-+
-+/** Stable JSON encoding: object key order must not change command identity. */
-+export function conversationPayloadDigest(payload: unknown): string {
-+  const canonical = (value: unknown): string => {
-+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
-+    if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value);
-+    if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-+    if (typeof value === 'object' && value && Object.getPrototypeOf(value) === Object.prototype) {
-+      return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
-+    }
-+    throw new Error('Command payload must contain only JSON values.');
-+  };
-+  return createHash('sha256').update(canonical(payload)).digest('hex');
-+}
-+function revision(current: DurableConversation, expected: number): void {
-+  if (current.revision !== expected) throw new Error('Conversation revision conflict.');
-+}
-+function changed(current: DurableConversation, expected: number): DurableConversation {
-+  revision(current, expected);
-+  const next = structuredClone(current);
-+  next.revision++;
-+  return next;
-+}
-+export function submitConversationTurn(current: DurableConversation, expected: number, payload: unknown, turn: ConversationTurn, message: ConversationMessage): DurableConversation {
-+  const digest = conversationPayloadDigest(payload);
-+  const receipt = current.commandReceipts.find(item => item.commandId === turn.commandId);
-+  if (receipt) {
-+    if (receipt.payloadDigest !== digest) throw new Error('Command payload conflict.');
-+    return structuredClone(current);
-+  }
-+  const next = changed(current, expected);
-+  if (turn.state !== 'queued' || turn.attempts.length || turn.completedParticipantIds.length || turn.payloadDigest !== digest ||
-+      turn.userMessageId !== message.id || message.turnId !== turn.id || message.role !== 'user' || message.participantId ||
-+      message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 || turn.acceptedSequence !== message.sequence ||
-+      current.turns.some(item => item.id === turn.id) || current.messages.some(item => item.id === message.id) ||
-+      !turn.plan.participants.length || new Set(turn.plan.participants.map(item => item.id)).size !== turn.plan.participants.length ||
-+      new Set(turn.plan.participants.map(item => item.role)).size !== turn.plan.participants.length) throw new Error('Invalid accepted turn.');
-+  next.turns.push(structuredClone(turn));
-+  next.messages.push(structuredClone(message));
-+  next.commandReceipts.push({ commandId: turn.commandId, payloadDigest: digest, turnId: turn.id, revision: next.revision, outcome: 'accepted' });
-+  return next;
-+}
-+export function startConversationTurn(current: DurableConversation, expected: number, turnId: string): DurableConversation {
-+  const next = changed(current, expected);
-+  if (next.turns.some(turn => !['queued', 'completed', 'cancelled'].includes(turn.state))) throw new Error('Conversation already has an active or paused turn.');
-+  const turn = next.turns.find(item => item.state === 'queued');
-+  if (!turn || turn.id !== turnId) throw new Error('Turn is not the next queued turn.');
-+  turn.state = 'running';
-+  return next;
-+}
-+const terminal = new Set(['completed', 'failed', 'interrupted', 'outcome_unknown', 'cancelled']);
-+export function reserveConversationAttempt(current: DurableConversation, expected: number, attempt: ConversationAttempt): DurableConversation {
-+  const next = changed(current, expected);
-+  const turn = next.turns.find(item => item.id === attempt.turnId);
-+  const participant = turn?.plan.participants.find(item => !turn.completedParticipantIds.includes(item.id));
-+  if (!turn || turn.state !== 'running' || participant?.id !== attempt.participantId || attempt.coordinatorEpoch !== current.coordinatorEpoch ||
-+      attempt.state !== 'prepared' || attempt.ordinal !== turn.attempts.filter(item => item.participantId === attempt.participantId).length + 1 ||
-+      next.turns.some(item => item.attempts.some(existing => existing.id === attempt.id)) || turn.attempts.some(item => !terminal.has(item.state))) throw new Error('Invalid or fenced attempt.');
-+  turn.attempts.push(structuredClone(attempt));
-+  return next;
-+}
-+/** Advance dispatch evidence without changing the immutable accepted plan. */
-+export function advanceConversationAttempt(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, state: 'dispatching' | 'running' | 'awaiting_approval', timestamp: string): DurableConversation {
-+  const next = changed(current, expected);
-+  const turn = next.turns.find(item => item.id === turnId);
-+  const attempt = turn?.attempts.find(item => item.id === attemptId);
-+  const allowed: Record<string, string[]> = { prepared: ['dispatching'], dispatching: ['running'], running: ['awaiting_approval'], awaiting_approval: ['running'] };
-+  if (!turn || turn.state !== 'running' || !attempt || epoch !== current.coordinatorEpoch || epoch !== attempt.coordinatorEpoch || !allowed[attempt.state]?.includes(state)) {
-+    throw new Error('Invalid or fenced attempt transition.');
-+  }
-+  attempt.state = state;
-+  if (state === 'dispatching') attempt.dispatchIntent = timestamp;
-+  return next;
-+}
-+export function completeConversationAttempt(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, message: ConversationMessage, receipt: ConversationAttempt['contextReceipt']): DurableConversation {
-+  const next = changed(current, expected);
-+  const turn = next.turns.find(item => item.id === turnId);
-+  const attempt = turn?.attempts.find(item => item.id === attemptId);
-+  if (!turn || !attempt || turn.state !== 'running' || epoch !== current.coordinatorEpoch || epoch !== attempt.coordinatorEpoch ||
-+      (!['dispatching', 'running', 'awaiting_approval'].includes(attempt.state) || !attempt.dispatchIntent) || turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
-+      turn.completedParticipantIds.includes(attempt.participantId) || message.turnId !== turnId || message.participantId !== attempt.participantId ||
-+      message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||
-+      message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 || receipt.digest !== attempt.contextReceipt.digest ||
-+      JSON.stringify(receipt) !== JSON.stringify(attempt.contextReceipt)) throw new Error('Invalid, duplicate or fenced completion.');
-+  attempt.state = 'completed';
-+  attempt.resultMessageId = message.id;
-+  attempt.completedAt = message.createdAt;
-+  turn.completedParticipantIds.push(attempt.participantId);
-+  if (turn.completedParticipantIds.length === turn.plan.participants.length) turn.state = 'completed';
-+  next.messages.push(structuredClone(message));
-+  return next;
-+}
 diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
-index 9191dae5..e99f2400 100644
+index e99f2400..dbeaa8d8 100644
 --- a/packages/core/src/index.ts
 +++ b/packages/core/src/index.ts
-@@ -219,3 +219,5 @@ export { runProviderPrompt } from './ai/providerPrompt';
- export * from './notes/noteTypes';
- export * from './notes/noteValidation';
- export * from './notes/noteSnapshot';
-+
-+export * from './ai/assistant/teamChatTransitions';
+@@ -52,6 +52,7 @@ export * from './ai/assistant/assistantTypes';
+ export * from './ai/assistant/assistantPersonas';
+ export * from './ai/assistant/assistantEngine';
+ export * from './ai/assistant/teamChatStore';
++export * from './ai/assistant/teamChatCoordinator';
+ export * from './ai/ticketContext';
+ export * from './ai/mcp/mcpServerConfig';
+ export * from './ai/mcp/mcpToolBridge';
 
 ```

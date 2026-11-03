@@ -7,6 +7,7 @@ import {
   runAssistantTurn,
   runTeamReview,
   TeamChatStore,
+  TeamChatCoordinator,
   parseAssistantMention,
   DEFAULT_ASSISTANT_ROLE,
   type AssistantCompletion,
@@ -21,7 +22,9 @@ import {
   type AiProvider,
   type ReasoningEffort,
   type WireImageAttachment,
-  type IssueDetails
+  type IssueDetails,
+  type ConversationUpdate,
+  type SubmitConversationCommand
 } from '@praxis/core';
 import { FileTeamChatRepository } from './adapters/teamChatRepository';
 import { assistantCapabilityNote } from './assistantCapability';
@@ -32,14 +35,55 @@ import { broadcastToAllWindows } from './windowBroadcast';
 import { getAiSessionManager } from './aiInstance';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 
+let chatRepository: FileTeamChatRepository | undefined;
 let chatStore: TeamChatStore | undefined;
+let coordinator: TeamChatCoordinator | undefined;
 const activeToolSessions = new Set<string>();
 const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
 
+function getTeamChatRepository(): FileTeamChatRepository {
+  if (!chatRepository) chatRepository = new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json'));
+  return chatRepository;
+}
+
 /** `userData/team-chats.json` — per-profile like the other AI stores, so e2e profiles never share chats. */
 function getTeamChatStore(): TeamChatStore {
-  if (!chatStore) chatStore = new TeamChatStore(new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json')));
+  if (!chatStore) chatStore = new TeamChatStore(getTeamChatRepository());
   return chatStore;
+}
+
+export function getTeamChatCoordinator(): TeamChatCoordinator {
+  if (!coordinator) {
+    const repository = getTeamChatRepository();
+    coordinator = new TeamChatCoordinator({
+      repository,
+      onUpdate: update => {
+        broadcastToAllWindows('assistant:conversationUpdate', update);
+        if (update.type === 'turn_completed' || update.type === 'turn_accepted') {
+          broadcastToAllWindows('assistant:chatsChanged');
+        }
+      },
+      executionAdapter: {
+        execute: async ({ participant, messages, turn }) => {
+          const settings = getSettingsBackend().read();
+          const selectedProvider = settings.ai.activeProvider;
+          const userPrompt = messages.filter(m => m.role === 'user').at(-1)?.text ?? '';
+          const runtime: AssistantRuntimeOptions = {
+            provider: selectedProvider,
+            model: (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
+            personaId: participant.role,
+            mode: 'chat',
+            toolMode: 'read-only',
+            toolSessionPrefix: `ASSISTANT-${turn.id}`
+          };
+          const systemPrompt = `You are the ${participant.role} team member. Respond to the conversation.`;
+          const text = await completeWithTools(runtime, systemPrompt, userPrompt);
+          return { text };
+        }
+      }
+    });
+  }
+  return coordinator;
 }
 
 /** The assistant has no ticket of its own; the runtime wants one, so give it an empty stand-in. */
@@ -227,5 +271,17 @@ export function registerAssistantIpc(): void {
   ipcMain.handle('assistant:deleteChat', async (_event, chatId: string) => {
     await getTeamChatStore().remove(chatId);
     changed();
+  });
+
+  ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => getTeamChatCoordinator().submitTurn(command));
+  ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => getTeamChatCoordinator().getConversation(conversationId));
+  ipcMain.handle('assistant:cancelTurn', async (_event, conversationId: string, turnId: string) => {
+    await getTeamChatCoordinator().cancelTurn(conversationId, turnId);
+  });
+  ipcMain.handle('assistant:retryParticipant', async (_event, conversationId: string, turnId: string, participantId: string) => {
+    await getTeamChatCoordinator().retryParticipant(conversationId, turnId, participantId);
+  });
+  ipcMain.handle('assistant:resolveAttempt', async (_event, conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort') => {
+    await getTeamChatCoordinator().resolveAttempt(conversationId, turnId, attemptId, resolution);
   });
 }

@@ -5264,9 +5264,9 @@
       },
       "area": "easymode",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "in EasyMode selecting a session opens details in the center",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated EasyMode profile seeded with a completed session, ticket purpose, handover, user follow-up and assistant reply with telemetry and task markdown",
+        "when": "select the session and quote its opening goal",
+        "then": "Center details show ticket and conversation content, telemetry and task progress; quoting populates the composer; the last reply bottom is at or above the body bottom plus one pixel within 40 seconds. Width switches between full and compact, Back returns to the canvas, and selecting Recent Sessions reopens details. The scroll boundary alone does not prove the entire reply is visible."
       }
     },
     {
@@ -5296,9 +5296,9 @@
       },
       "area": "easymode",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "a long session list folds behind \"Show more\" and leaves the Runs section on screen",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an EasyMode project with one completed workflow run, fourteen completed sessions and one older running session",
+        "when": "expand and collapse the session list and exercise the sidebar at minimum window height with 150 percent zoom",
+        "then": "six cards are initially shown including the running session, expansion shows fifteen, and Runs stays within sidebar bounds; directly focusing the divider succeeds and Tab reaches the automation add control"
       }
     },
     {
