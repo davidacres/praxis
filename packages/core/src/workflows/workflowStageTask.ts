@@ -63,7 +63,12 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       ].join('\n')
     : undefined;
 
+  const isImplementation = context.expectedOutputs.some(output => output.kind === 'diff');
+  const isReview = context.expectedOutputs.some(output => output.kind === 'findings');
+  const kind = isImplementation ? ('implementation' as const) : isReview ? ('review' as const) : undefined;
+
   return {
+    ...(kind ? { kind } : {}),
     goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, packGuidance]
       .filter((line): line is string => Boolean(line))
       .join('\n\n'),
