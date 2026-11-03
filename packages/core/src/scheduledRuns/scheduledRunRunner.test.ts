@@ -568,3 +568,78 @@ test('hand-over moves on to a provider with room rather than back to the one lef
   assert.deepEqual(h.handovers, [{ from: 'claude', to: 'codex' }, { from: 'codex', to: 'copilot' }]);
   assert.equal(h.run.status, 'running');
 });
+
+test('an approval gate is determined autonomously and recorded without waiting for user input', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+
+  let decidedNodeId: string | undefined;
+  h.ports.decideGate = async (_workflowRunId, nodeId) => {
+    decidedNodeId = nodeId;
+    // Advancing the workflow after approval
+    h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+    return { decision: 'approved', reason: 'All QA and lint checks passed.' };
+  };
+
+  h.setWorkflow('T-1', { progress: { kind: 'gate', nodeId: 'qa-gate', label: 'QA sign-off' } });
+  await h.runner.tick();
+
+  assert.equal(decidedNodeId, 'qa-gate');
+  assert.equal(h.run.status, 'running', 'scheduled run must not pause waiting for user input');
+  assert.equal(h.run.pause, undefined);
+
+  const event = h.run.events.find(e => e.kind === 'gate-decided');
+  assert.ok(event);
+  assert.match(event.message, /T-1 gate "QA sign-off": approved — All QA and lint checks passed\./);
+  assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'gate-decided');
+  assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.message, event.message);
+});
+
+test('a gate rejection is determined autonomously and recorded', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+
+  h.ports.decideGate = async () => {
+    h.setWorkflow('T-1', { progress: { kind: 'failed', reason: 'Rejected: gates failed.' } });
+    return { decision: 'rejected', reason: 'QA gates failed.' };
+  };
+
+  h.setWorkflow('T-1', { progress: { kind: 'gate', nodeId: 'qa-gate', label: 'QA sign-off' } });
+  await h.runner.tick();
+
+  const decisionEvent = h.run.events.find(e => e.kind === 'gate-decided');
+  assert.ok(decisionEvent);
+  assert.match(decisionEvent.message, /rejected — QA gates failed\./);
+  assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'gate-decided');
+  // It paused on failure from the failed workflow, NOT waiting for approval
+  assert.equal(h.run.pause?.reason, 'failure');
+});
+
+test('a loop decision is determined autonomously and recorded without waiting for user input', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+
+  let decidedEdgeId: string | undefined;
+  h.ports.decideLoop = async (_workflowRunId, edgeId) => {
+    decidedEdgeId = edgeId;
+    h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+    return { decision: 'accept', reason: 'Accepted best iteration.' };
+  };
+
+  h.setWorkflow('T-1', {
+    progress: {
+      kind: 'stalled',
+      pauseReason: 'policy',
+      reason: 'Loop budget exhausted',
+      edgeId: 'loop-repair'
+    }
+  });
+  await h.runner.tick();
+
+  assert.equal(decidedEdgeId, 'loop-repair');
+  assert.equal(h.run.status, 'running', 'scheduled run must continue autonomously');
+  const event = h.run.events.find(e => e.kind === 'loop-decided');
+  assert.ok(event);
+  assert.match(event.message, /T-1 loop decision: accept — Accepted best iteration\./);
+  assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'loop-decided');
+});

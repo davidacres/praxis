@@ -70,6 +70,13 @@ export interface ScheduledEntryGate {
   since: string;
 }
 
+/** A decision determined autonomously or recorded for this queue entry. */
+export interface ScheduledEntryDecision {
+  at: string;
+  kind: ScheduledRunEventKind;
+  message: string;
+}
+
 /** What a ticket's run has cost so far; `estimated` marks a figure the provider did not report. */
 export interface ScheduledEntrySpend {
   tokens?: number;
@@ -96,6 +103,7 @@ export interface ScheduledEntryOutcome {
    */
   launchToken?: string;
   gate?: ScheduledEntryGate;
+  decisions?: ScheduledEntryDecision[];
   handovers?: ScheduledHandover[];
   spend?: ScheduledEntrySpend;
   /** First observed estimate, retained independently of actual spend. */
@@ -161,6 +169,8 @@ export type ScheduledRunEventKind =
   | 'entry-launching'
   | 'entry-started'
   | 'entry-gate'
+  | 'gate-decided'
+  | 'loop-decided'
   | 'entry-done'
   | 'entry-failed'
   | 'entry-skipped'

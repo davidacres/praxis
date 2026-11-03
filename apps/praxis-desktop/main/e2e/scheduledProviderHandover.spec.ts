@@ -79,11 +79,11 @@ test('scheduled allowance handover checkpoints and continues the active stage in
   expect(outcome.workflowRunId).toBe(original!.workflowRunId);
   expect(outcome.handovers![0].usedPercent).toBe(95);
   const checkpoint = outcome.handovers![0].checkpointRef!;
-  expect(execFileSync('git', ['show', `${checkpoint}:checkpoint.txt`], { cwd: original!.worktreePath!, encoding: 'utf8' })).toBe('work before handover\n');
+  expect(execFileSync('git', ['show', `${checkpoint}:checkpoint.txt`], { cwd: repo, encoding: 'utf8' })).toBe('work before handover\n');
   const replacement = await page.evaluate(async key => (await window.praxis.ai.listSessions()).find(session => session.issueKey === key), original!.issueKey);
   expect(replacement?.sessionId).toBe(original!.sessionId);
   expect(replacement?.provider).toBe('codex-cli');
   expect(replacement?.handoverBrief?.revision).toBeGreaterThan(0);
-  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.getRun(id), outcome.workflowRunId!))?.status, { timeout: 30000 }).toBe('awaiting-approval');
+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.getRun(id), outcome.workflowRunId!))?.status, { timeout: 30000 }).toBe('succeeded');
   await expect.poll(async () => (await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId))?.run.entries[0].outcome?.artifacts?.length).toBeGreaterThan(0);
 });

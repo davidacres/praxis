@@ -445,7 +445,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
                   </span>
                 </div>
               )}
-              <p className="schedule-policy"><strong>Approval gates always pause the run.</strong> Nothing is approved while you are away.</p>
+              <p className="schedule-policy"><strong>Approval gates and decisions are autonomous.</strong> The run evaluates gate conditions and records each decision in the ledger without waiting for input.</p>
               <p className="schedule-policy">
                 <strong>Provider allowance.</strong> At {handoverPercent}% of a provider&rsquo;s allowance the run records its status, commits a
                 checkpoint and hands over to the next provider, or pauses if none has room.
@@ -481,7 +481,7 @@ export function ScheduleComposer({ project, ticketHost, candidates, loadError, i
             <strong>{count} ticket{count === 1 ? '' : 's'}</strong>{stepCount !== count ? <> in <strong>{stepCount} step{stepCount === 1 ? '' : 's'}</strong></> : null} will run {lanes === '1' || stepCount === count ? 'one at a time' : <>up to <strong>{lanes} at once</strong> within a step</>}
             {startLabel ? <> starting <strong>{startLabel}</strong> <span className="schedule-summary-zone">({timezone})</span></> : null}.
           </p>
-          <p className="schedule-hint">Once only. Approval gates pause the run until you decide.</p>
+          <p className="schedule-hint">Once only. Gates and decisions are evaluated autonomously and recorded in the run ledger.</p>
         </div>
         <button
           type="button"

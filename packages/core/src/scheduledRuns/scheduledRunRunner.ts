@@ -42,6 +42,7 @@ import {
   pauseScheduledRun,
   recordBudgetCheck,
   recordProviderHandover,
+  recordScheduledDecision,
   resumeScheduledRun,
   retryScheduledEntry,
   skipScheduledEntry,
@@ -85,6 +86,16 @@ export interface ProviderUsageReading {
   used: Record<string, number | undefined>;
 }
 
+export interface ScheduledGateDecisionResult {
+  decision: 'approved' | 'rejected' | 'skipped';
+  reason: string;
+}
+
+export interface ScheduledLoopDecisionResult {
+  decision: 'accept' | 'stop' | 'grant';
+  reason: string;
+}
+
 export interface ScheduledRunnerPorts {
   store: {
     list(): ScheduledRun[];
@@ -110,6 +121,16 @@ export interface ScheduledRunnerPorts {
    * host handed to a different AI than `to` because `to` could not run the active stage.
    */
   handOver(request: { run: ScheduledRun; entry: ScheduledQueueEntry; workflowRunId: string; from: string; to: string; usedFraction: number }): Promise<{ checkpointRef?: string; provider?: string }>;
+  /**
+   * Evaluates an approval gate autonomously: checks readiness and policy, decides whether to approve,
+   * reject or skip, applies it to the workflow run, and returns the decision outcome.
+   */
+  decideGate?(workflowRunId: string, nodeId: string): Promise<ScheduledGateDecisionResult>;
+  /**
+   * Resolves a loop decision autonomously (e.g. when loop budget is exhausted), applies it to the workflow run,
+   * and returns the decision outcome.
+   */
+  decideLoop?(workflowRunId: string, edgeId: string): Promise<ScheduledLoopDecisionResult>;
   /** Approves the gate the entry is waiting at. */
   approveGate?(workflowRunId: string, nodeId: string): Promise<void>;
   /** A run was saved. */
@@ -304,9 +325,74 @@ export class ScheduledRunRunner {
     const workflowRunId = entry?.outcome?.workflowRunId;
     if (!entry || !workflowRunId) return run;
 
-    const observation = this.ports.observe(workflowRunId);
-    const at = this.ports.now();
-    const progress: EntryProgress = observation?.progress ?? { kind: 'failed', reason: 'Its workflow run could not be found.' };
+    let observation = this.ports.observe(workflowRunId);
+    let at = this.ports.now();
+    let progress: EntryProgress = observation?.progress ?? { kind: 'failed', reason: 'Its workflow run could not be found.' };
+
+    if (progress.kind === 'gate' && this.ports.decideGate) {
+      try {
+        const result = await this.ports.decideGate(workflowRunId, progress.nodeId);
+        at = this.ports.now();
+        const message = `${entry.ticket.issueKey} gate "${progress.label}": ${result.decision} — ${result.reason}`;
+        run = await this.save(
+          recordScheduledDecision(run, entry.id, {
+            kind: 'gate-decided',
+            at,
+            message
+          })
+        );
+        const updated = this.ports.observe(workflowRunId);
+        if (updated) {
+          observation = updated;
+          progress = updated.progress;
+        }
+      } catch {
+        // Fall through to regular progress handling
+      }
+    } else if (progress.kind === 'gate' && this.ports.approveGate) {
+      try {
+        await this.ports.approveGate(workflowRunId, progress.nodeId);
+        at = this.ports.now();
+        const message = `${entry.ticket.issueKey} gate "${progress.label}": approved autonomously.`;
+        run = await this.save(
+          recordScheduledDecision(run, entry.id, {
+            kind: 'gate-decided',
+            at,
+            message
+          })
+        );
+        const updated = this.ports.observe(workflowRunId);
+        if (updated) {
+          observation = updated;
+          progress = updated.progress;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    if (progress.kind === 'stalled' && progress.edgeId && this.ports.decideLoop) {
+      try {
+        const result = await this.ports.decideLoop(workflowRunId, progress.edgeId);
+        at = this.ports.now();
+        const message = `${entry.ticket.issueKey} loop decision: ${result.decision} — ${result.reason}`;
+        run = await this.save(
+          recordScheduledDecision(run, entry.id, {
+            kind: 'loop-decided',
+            at,
+            message
+          })
+        );
+        const updated = this.ports.observe(workflowRunId);
+        if (updated) {
+          observation = updated;
+          progress = updated.progress;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
     let next = applyEntryProgress(run, entry.id, progress, at);
     if (next !== run) next = await this.save(next);
 

@@ -15,6 +15,7 @@ import {
   isValidTimeZone,
   reconcileScheduledRunOnLaunch,
   renumberEntries,
+  type ScheduledEntryDecision,
   type ScheduledEntryOutcome,
   type ScheduledEntryStatus,
   type ScheduledHandover,
@@ -32,13 +33,23 @@ const RUN_STATUSES: ReadonlySet<string> = new Set(['draft', 'scheduled', 'missed
 const ENTRY_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'paused', 'done', 'failed', 'skipped']);
 const EVENT_KINDS: ReadonlySet<string> = new Set([
   'created', 'renamed', 'tickets-added', 'ticket-removed', 'reordered', 'rescheduled', 'armed', 'held', 'missed', 'start-now', 'skipped',
-  'workflow-changed', 'started', 'entry-launching', 'entry-started', 'entry-gate', 'entry-done', 'entry-failed', 'entry-skipped',
+  'workflow-changed', 'started', 'entry-launching', 'entry-started', 'entry-gate', 'gate-decided', 'loop-decided', 'entry-done', 'entry-failed', 'entry-skipped',
   'entry-retried', 'paused', 'resumed', 'budget-checked', 'provider-handover', 'completed', 'cancelled'
 ]);
 const PAUSE_REASONS: ReadonlySet<string> = new Set(['budget', 'approval', 'policy', 'trust', 'no-provider', 'failure', 'user', 'launch-interrupted']);
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
+}
+
+function normalizeDecision(value: unknown): ScheduledEntryDecision | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const at = text(raw.at);
+  const message = text(raw.message);
+  const kind = text(raw.kind);
+  if (!at || !message || !kind || !EVENT_KINDS.has(kind)) return undefined;
+  return { at, kind: kind as ScheduledEntryDecision['kind'], message };
 }
 
 function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
@@ -52,6 +63,7 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
     !!artifact && typeof artifact === 'object' && ['artifactId', 'contractId', 'nodeId', 'runId', 'kind', 'createdAt'].every(key => typeof artifact[key] === 'string'));
   const handovers = (Array.isArray(raw.handovers) ? raw.handovers : []).map(normalizeHandover).filter((h): h is ScheduledHandover => !!h);
   const exhausted = (Array.isArray(raw.exhausted) ? raw.exhausted : []).filter((value): value is string => typeof value === 'string' && !!value);
+  const decisions = (Array.isArray(raw.decisions) ? raw.decisions : []).map(normalizeDecision).filter((d): d is ScheduledEntryDecision => !!d);
   return {
     status,
     ...(text(raw.sessionId) ? { sessionId: text(raw.sessionId) } : {}),
@@ -62,6 +74,7 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
     ...(text(raw.provider) ? { provider: text(raw.provider) } : {}),
     ...(text(raw.launchToken) ? { launchToken: text(raw.launchToken) } : {}),
     ...(gate ? { gate } : {}),
+    ...(decisions.length > 0 ? { decisions } : {}),
     ...(handovers.length > 0 ? { handovers } : {}),
     ...(exhausted.length > 0 ? { exhausted: [...new Set(exhausted)] } : {}),
     ...(spend ? { spend } : {}),

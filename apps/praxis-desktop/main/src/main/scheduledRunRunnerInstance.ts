@@ -4,12 +4,20 @@ import {
   ScheduledLaunchError,
   ScheduledRunRunner,
   WorkflowRunStore,
+  applyWorkflowRunCommand,
+  approvalReadiness,
   approveStage,
   exhaustedProviders,
+  pendingLoop,
   providerCanRunStage,
+  rejectStage,
   resolveApprovalTarget,
+  skipApproval,
   type AiProvider,
-  type ScheduledRunnerPorts
+  type ScheduledGateDecisionResult,
+  type ScheduledLoopDecisionResult,
+  type ScheduledRunnerPorts,
+  type WorkflowRun
 } from '@praxis/core';
 import { handoverThreshold, observeWorkflowRun, readProviderUsage } from './scheduledRunLive';
 import { getScheduledRunStore, notifyScheduledRunsChanged } from './scheduledRunInstance';
@@ -142,13 +150,90 @@ function ports(): ScheduledRunnerPorts {
       return { ...(checkpointRef ? { checkpointRef } : {}), provider: target };
     },
     onChanged: run => notifyScheduledRunsChanged(run.projectId),
+    decideGate: async (workflowRunId, nodeId) => {
+      let decisionResult: ScheduledGateDecisionResult | undefined;
+      await getWorkflowOrchestrator().updateRun(workflowRunId, (current: WorkflowRun): WorkflowRun => {
+        const approval = resolveApprovalTarget(current, nodeId || undefined);
+        const policy = getWorkflowPolicyStore().effectiveForProject(current.projectId)?.profile;
+        const readiness = approvalReadiness(current, approval.id, policy);
+        const at = new Date().toISOString();
+        if (readiness.canApprove) {
+          const result = approveStage(
+            current,
+            approval.id,
+            { actor: 'Scheduled run (autonomous)', at },
+            policy
+          );
+          if (result.ok) {
+            decisionResult = {
+              decision: 'approved',
+              reason: readiness.gates.length === 0
+                ? 'Auto-approved (no required gates).'
+                : `Auto-approved: all required gates passed (${readiness.gates.map(g => `${g.gate}: passed`).join(', ')}).`
+            };
+            return result.run;
+          }
+        }
+        if (approval.optional) {
+          const skipResult = skipApproval(current, approval.id, {
+            actor: 'Scheduled run (autonomous)',
+            at
+          });
+          if (skipResult.ok) {
+            decisionResult = {
+              decision: 'skipped',
+              reason: `Optional approval stage skipped because gates were unmet (${readiness.blocking.map(g => `${g.gate}: ${g.detail}`).join(', ')}).`
+            };
+            return skipResult.run;
+          }
+        }
+        const rejectReason = `Gates unmet: ${readiness.blocking.map(g => `${g.gate} ${g.state} — ${g.detail}`).join('; ')}`;
+        const rejectedRun = rejectStage(current, approval.id, {
+          actor: 'Scheduled run (autonomous)',
+          reason: rejectReason,
+          at
+        });
+        decisionResult = {
+          decision: 'rejected',
+          reason: rejectReason
+        };
+        return rejectedRun;
+      });
+      await getWorkflowOrchestrator().step(workflowRunId);
+      return decisionResult ?? { decision: 'rejected', reason: 'Unable to evaluate approval stage.' };
+    },
+    decideLoop: async (workflowRunId, edgeId) => {
+      let decisionResult: ScheduledLoopDecisionResult | undefined;
+      await getWorkflowOrchestrator().updateRun(workflowRunId, current => {
+        const at = new Date().toISOString();
+        const pending = pendingLoop(current);
+        const targetEdgeId = edgeId || pending?.status.edge.id;
+        const edge = current.definition.edges.find(e => e.id === targetEdgeId);
+        const keepBest = edge?.loop?.keepBest;
+        const reason = keepBest
+          ? 'Autonomous decision: loop budget exhausted, accepted best iteration.'
+          : 'Autonomous decision: loop budget exhausted, accepted iteration to proceed.';
+        const next = applyWorkflowRunCommand(current, {
+          kind: 'loop-decided',
+          edgeId: edge?.id ?? targetEdgeId ?? '',
+          actor: 'Scheduled run (autonomous)',
+          decision: 'accept',
+          reason,
+          at
+        });
+        decisionResult = { decision: 'accept', reason };
+        return next;
+      });
+      await getWorkflowOrchestrator().step(workflowRunId);
+      return decisionResult ?? { decision: 'accept', reason: 'Autonomous decision: accepted loop.' };
+    },
     approveGate: async (workflowRunId, nodeId) => {
       await getWorkflowOrchestrator().updateRun(workflowRunId, current => {
         const approval = resolveApprovalTarget(current, nodeId || undefined);
         const result = approveStage(
           current,
           approval.id,
-          { actor: 'Scheduled run (approved by the user)', at: new Date().toISOString() },
+          { actor: 'Scheduled run (autonomous)', at: new Date().toISOString() },
           getWorkflowPolicyStore().effectiveForProject(current.projectId)?.profile
         );
         if (!result.ok) throw new Error(result.reason ?? 'Approval was refused.');

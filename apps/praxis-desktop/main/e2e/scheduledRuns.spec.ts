@@ -736,17 +736,19 @@ async function scheduleSoon(page: Page, projectId: string, name: string, count =
  * needs bundled skills a fresh profile has not installed, which would block every
  * launch before the check under test is reached.
  */
-async function saveApprovalWorkflow(page: Page, projectId: string): Promise<string> {
-  return page.evaluate(async id => {
+async function saveApprovalWorkflow(page: Page, projectId: string, holdSeconds = 0): Promise<string> {
+  return page.evaluate(async ({ id, holdSeconds }) => {
     const now = new Date().toISOString();
-    const workflowId = 'schedule-approval-only';
+    const workflowId = holdSeconds > 0 ? `schedule-hold-${holdSeconds}s` : 'schedule-approval-only';
+    const nodes = holdSeconds > 0
+      ? [{ type: 'check', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [], command: 'sleep', args: [String(holdSeconds)], successExitCodes: [0], outputs: [] }]
+      : [{ type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [], prompt: 'Approve?', requiredGates: [], allowBypass: false }];
     await window.praxis.workflows.save(id, {
       schemaVersion: 1, id: workflowId, name: 'Approval only', scope: 'project', projectId: id, version: 1,
-      entryNodeId: 'approve', createdAt: now, updatedAt: now, edges: [],
-      nodes: [{ type: 'approval', id: 'approve', name: 'Approve', x: 0, y: 0, inputs: [], prompt: 'Approve?', requiredGates: [], allowBypass: false }]
+      entryNodeId: 'approve', createdAt: now, updatedAt: now, edges: [], nodes
     } as never);
     return workflowId;
-  }, projectId);
+  }, { id: projectId, holdSeconds });
 }
 
 /**
@@ -957,13 +959,9 @@ test('an idle failed stage pauses the schedule and retries in the same workflow'
   await page.screenshot({ path: path.join(shots, 'scheduled-run-stage-failure.png') });
   fs.writeFileSync(marker, 'ready');
   await flight.getByTestId('schedule-retry').click();
-  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].status, { timeout: 10000 }).toBe('awaiting-approval');
-  await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'approval', { timeout: 10000 });
+  // Retried, Build passed on its second attempt, and the approval stage was determined autonomously to complete the run.
+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].status, { timeout: 10000 }).toBe('succeeded');
   await expect(page.getByTestId('schedule-stage-failure')).toHaveCount(0);
-  // Retried, Build passed on its second attempt and the approval now waits on the same card.
-  await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toHaveAttribute('data-lane', 'done');
-  await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toContainText('×2');
-  await expect(flight.getByTestId('schedule-approve')).toBeVisible();
   const after = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
   expect(after.map(run => run.runId)).toEqual(before.map(run => run.runId));
   expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(2);
@@ -1208,7 +1206,7 @@ test('auto-detect parallel button detects independent tasks and sets them as par
 test('two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first', async () => {
   const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
   const { page, projectId } = await launch({ env, titles: ['Lane one', 'Lane two', 'Lane three', 'After the step'] });
-  const workflowId = await saveApprovalWorkflow(page, projectId);
+  const workflowId = await saveApprovalWorkflow(page, projectId, 5);
   const { runId, keys } = await startParallelRun(page, projectId, 'Two at once', [[0, 1, 2], [3]], 2, workflowId);
 
   await expect.poll(async () => (await entriesOf(page, runId)).filter(entry => entry.workflowRunId).length, { timeout: 30000 }).toBe(2);
@@ -1250,7 +1248,7 @@ for (const [label, usage, expected] of [
   test(`${label} keeps the run to one lane and says why`, async () => {
     const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify(usage) };
     const { page, projectId } = await launch({ env, titles: ['Lane one', 'Lane two'] });
-    const workflowId = await saveApprovalWorkflow(page, projectId);
+    const workflowId = await saveApprovalWorkflow(page, projectId, 5);
     const { runId, keys } = await startParallelRun(page, projectId, 'Held lane', [[0, 1]], 2, workflowId);
     await expect.poll(async () => (await entriesOf(page, runId)).filter(entry => entry.workflowRunId).length, { timeout: 30000 }).toBe(1);
     await page.waitForTimeout(2500);
@@ -1308,42 +1306,32 @@ test('two parallel tickets that both merge into the base checkout take turns', a
   await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.status, runId)).toBe('completed');
 });
 
-test('an approval waits on its ticket\'s card, approving it there makes a receipt, and the report so far says what needed you', async () => {
+test('an approval gate is determined autonomously and recorded in the run ledger without waiting for user input', async () => {
   const env = { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) };
   const { page, projectId } = await launch({ env, titles: ['Approve me', 'Then me'] });
   const workflowId = await saveApprovalWorkflow(page, projectId);
-  const { runId, keys } = await startParallelRun(page, projectId, 'Gate on the card', [[0], [1]], 1, workflowId);
-  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.pause?.reason, runId), { timeout: 30000 }).toBe('approval');
+  const { runId, keys } = await startParallelRun(page, projectId, 'Autonomous gate run', [[0], [1]], 1, workflowId);
+
+  // The run does not pause for user approval; it determines the gate decision autonomously and advances.
+  await expect.poll(async () => (await entriesOf(page, runId)).map(entry => entry.status), { timeout: 30000 }).toEqual(['done', 'done']);
+  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.status, runId)).toBe('completed');
+
+  const run = await page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run, runId);
+  expect(run.pause).toBeUndefined();
+  const gateEvents = run.events.filter(e => e.kind === 'gate-decided');
+  expect(gateEvents.length).toBeGreaterThanOrEqual(2);
+  expect(gateEvents[0].message).toContain(`${keys[0]} gate "Approve": approved`);
+  expect(gateEvents[1].message).toContain(`${keys[1]} gate "Approve": approved`);
+  expect(run.entries[0].outcome?.decisions?.[0]?.kind).toBe('gate-decided');
 
   await openScheduleSidebar(page);
-  await page.getByTestId('schedule-card').filter({ hasText: 'Gate on the card' }).getByTestId('schedule-open').click();
-  const flight = page.locator(`[data-testid="schedule-flight-card"][data-issue="${keys[0]}"]`);
-  await expect(flight).toBeVisible();
-  // The workflow's one task is the approval, waiting; the decision is on this card, not elsewhere.
-  await expect(flight.getByTestId('schedule-task-row')).toHaveAttribute('data-lane', 'awaiting');
-  await expect(page.getByTestId('schedule-approve')).toHaveCount(1);
-  await expect(page.getByTestId('schedule-rail').locator(`[data-issue="${keys[0]}"]`)).toHaveAttribute('data-state', 'waiting');
-  await expect(page.locator(`[data-testid="schedule-deck-card"][data-issue="${keys[1]}"]`)).toBeVisible();
-  await page.waitForTimeout(700);
-  await page.screenshot({ path: path.join(shots, 'scheduled-run-spotlight-gate.png') });
-
-  await flight.getByTestId('schedule-approve').click();
-  await expect(page.locator(`[data-testid="schedule-receipt"][data-issue="${keys[0]}"]`)).toHaveAttribute('data-entry-status', 'done', { timeout: 30000 });
-  await expect(page.locator(`[data-testid="schedule-flight-card"][data-issue="${keys[1]}"]`)).toBeVisible({ timeout: 30000 });
-  await expect(page.getByTestId('schedule-rail').locator(`[data-issue="${keys[0]}"]`)).toHaveAttribute('data-state', 'done');
-  await page.waitForTimeout(700);
-  await page.screenshot({ path: path.join(shots, 'scheduled-run-spotlight-receipt.png') });
-
-  // The report so far: both tickets listed, the first with its task bar, and the approval it waited for.
-  await page.getByTestId('schedule-show-report').click();
+  await page.getByTestId('schedule-card').filter({ hasText: 'Autonomous gate run' }).getByTestId('schedule-open').click();
   await expect(page.getByTestId('schedule-report')).toBeVisible();
   await expect(page.getByTestId('schedule-report-table').locator('tbody tr')).toHaveCount(2);
-  await expect(page.getByTestId('schedule-report-table').locator(`tr[data-issue="${keys[0]}"]`).getByTestId('schedule-report-tasks').locator('.spot-bar')).toHaveCount(1);
-  await expect(page.getByTestId('schedule-report-needs')).toContainText('Approvals');
+  await expect(page.getByTestId('schedule-report-status')).toHaveText('Completed');
+
   await page.waitForTimeout(500);
-  await page.screenshot({ path: path.join(shots, 'scheduled-run-report-so-far.png') });
-  await page.getByTestId('schedule-report-back').click();
-  await expect(page.getByTestId('schedule-monitor')).toBeVisible();
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-autonomous-gate-report.png') });
 });
 
 test('a long run\'s report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket', async () => {

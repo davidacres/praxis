@@ -91,7 +91,7 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
     const stage = blocker;
     progress = { kind: 'stalled', pauseReason: 'failure', reason: `${stage.name} failed: ${stage.lastError ?? 'No error was reported.'} Retry the stage or open the workflow to review it.`, ...spendField, ...exhaustedField };
   } else if (summary.needsDecision) {
-    progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField, ...exhaustedField };
+    progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, edgeId: summary.needsDecision.edgeId, ...spendField, ...exhaustedField };
   } else {
     const live = summary.stages.find(stage => stage.lane === 'running') ?? [...summary.stages].reverse().find(stage => stage.provider);
     const session = live?.sessionId ? getAiSessionManager().listAgentSessionSummaries().find(session => session.sessionId === live.sessionId) : undefined;

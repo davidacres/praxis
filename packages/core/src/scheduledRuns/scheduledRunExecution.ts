@@ -17,6 +17,7 @@
 
 import {
   touch,
+  type ScheduledEntryDecision,
   type ScheduledEntryOutcome,
   type ScheduledEntrySpend,
   type ScheduledHandover,
@@ -24,6 +25,7 @@ import {
   type ScheduledQueueEntry,
   type ScheduledRun,
   type ScheduledRunEvent,
+  type ScheduledRunEventKind,
   type ScheduledRunTrigger
 } from './scheduledRun';
 import { newScheduledId, scheduledConcurrency, scheduledSteps } from './scheduledRun';
@@ -38,7 +40,7 @@ export type EntryProgress = Pick<ScheduledEntryOutcome, 'estimate' | 'artifacts'
   | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   /** Stopped on the provider's limit or a stage's tooling; waiting for the user. */
-  | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; edgeId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'succeeded'; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] });
@@ -336,6 +338,24 @@ export function recordProviderHandover(run: ScheduledRun, entryId: string, hando
 /** Records what a budget check decided, for the ledger. Does not change the run's state. */
 export function recordBudgetCheck(run: ScheduledRun, message: string, at: string, entryId?: string): ScheduledRun {
   return touch(run, at, { kind: 'budget-checked', message, ...(entryId ? { entryId } : {}) });
+}
+
+/** Records an autonomous decision (gate or loop) on the entry and ledger. Does not pause the run. */
+export function recordScheduledDecision(
+  run: ScheduledRun,
+  entryId: string,
+  event: { kind: ScheduledRunEventKind; at: string; message: string }
+): ScheduledRun {
+  const entry = findEntry(run, entryId);
+  const outcome = outcomeOf(entry);
+  const decision: ScheduledEntryDecision = {
+    at: event.at,
+    kind: event.kind,
+    message: event.message
+  };
+  const decisions = [...(outcome.decisions ?? []), decision];
+  const next = withOutcome(run, entryId, { ...outcome, decisions });
+  return touch(next, event.at, { kind: event.kind, message: event.message, entryId });
 }
 
 /** Puts a failed, stalled or interrupted ticket back at the front of the queue and lets the run continue. */
