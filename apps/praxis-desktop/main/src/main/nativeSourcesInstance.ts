@@ -74,9 +74,17 @@ export async function sessionInstructionsFor(runtime: string, workingDirectory?:
 }
 
 /** The working style every session carries, whichever AI runs it (Settings › Agent Runtime). */
-export function sessionWorkingStyle(): string | undefined {
+export function sessionWorkingStyle(autonomous?: boolean): string | undefined {
   const style = getSettingsBackend().read().ai.workingStyle;
-  return style.enabled ? style.text.trim() || DEFAULT_WORKING_STYLE : undefined;
+  if (!style.enabled) return undefined;
+  const raw = style.text.trim() || DEFAULT_WORKING_STYLE;
+  if (autonomous) {
+    return raw
+      .replace(/- Before anything that is hard to undo[^\n]*\n?/g, '- You have full autonomous execution authority in this isolated worktree. Proceed directly with all necessary edits, test executions, and commits without pausing to request approval.\n')
+      .replace(/- Before a multi-step change, state a short plan[^\n]*\n?/g, '- Proceed directly to implement all planned changes, run verification tests, and commit cleanly to git.\n')
+      .trim();
+  }
+  return raw;
 }
 
 export async function setNativeProjectApproval(projectRoot: string, approved: boolean): Promise<AgentRuntimeSnapshot> {

@@ -408,7 +408,7 @@ export async function runWorkflowAgentStage(
 
     dispatch.signal?.throwIfAborted();
     if (node.mutatesWorktree) {
-      taskDefinition.scope += '\n\nThis is an implementation stage. Implement all required modules, types, and logic specified in the plan and ticket. Do not refuse or declare blocked-environment because code or contracts need to be created from scratch: writing that code is the purpose of this stage.';
+      taskDefinition.scope += '\n\nThis is an implementation stage running autonomously in an isolated git worktree with full file editing and execution permissions. Implement all required modules, types, and logic specified in the plan and ticket. Do not refuse or declare blocked-environment because code or contracts need to be created from scratch: writing that code is the purpose of this stage. Do not end your turn with a preliminary plan or wait for approval; execute the file changes directly, run tests, and create a git commit before finishing.';
     }
     const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
     if (needsReviewFileTools) {
@@ -510,6 +510,36 @@ export async function runWorkflowAgentStage(
     } catch (error) {
       again.cancel();
       workflowLogSink.appendLine(`Could not continue ${context.stageName} after a refused command: ${error instanceof Error ? error.message : String(error)}`);
+      break;
+    }
+    finished = await again.promise;
+  }
+
+  // An implementation stage that completed its turn without committing anything made no changes.
+  // Prompt the agent to proceed with the file edits and commit rather than letting it immediately fail.
+  const requiresDiff = nodeOutputs(node).some(contract => contract.kind === 'diff' && contract.required);
+  for (let nudge = 0; nudge < 2 && prepared && node.mutatesWorktree && requiresDiff; nudge++) {
+    if (finished.state !== 'completed' || dispatch.signal?.aborted) break;
+    const currentHead = await headOf(worktreePath);
+    if (!startRef || currentHead !== startRef) break;
+    workflowLogSink.appendLine(`[workflow ${workflowRun.runId}] ${node.name}: agent completed its turn without changes; prompting continuation.`);
+    const again = waitForSession(issueKey, sessions.getAgentSession(issueKey)?.completedAt);
+    try {
+      await continueAgentTask(prepared, {
+        issueKey,
+        message: [
+          'You completed your turn without modifying files or committing; the branch is still at the initial commit.',
+          'You have full autonomous approval in this isolated worktree. Do not wait for approval or state what you plan to do.',
+          'Implement the required changes now, run verification tests, and create a git commit before finishing.'
+        ].join(' '),
+        ...(modelChoice.model ? { model: modelChoice.model } : {}),
+        workingDirectory: worktreePath,
+        toolMode,
+        ...(mcpServers ? { mcpServers } : {})
+      });
+    } catch (error) {
+      again.cancel();
+      workflowLogSink.appendLine(`Could not continue ${context.stageName} after no changes: ${error instanceof Error ? error.message : String(error)}`);
       break;
     }
     finished = await again.promise;
@@ -660,6 +690,11 @@ async function writeRunFile(worktreePath: string, name: string, text: string): P
  */
 async function writeDiffRunFile(worktreePath: string, contractId: string, ref: string, projectRoot: string | undefined): Promise<string | undefined> {
   try {
+    if (ref.endsWith('.md') || ref.includes('/') || ref.includes('\\')) {
+      const head = await headOf(worktreePath);
+      if (!head) return undefined;
+      ref = head;
+    }
     const baseBranch = (projectRoot ? await getCurrentBranch(projectRoot) : undefined)
       ?? (getSettingsBackend().read().delivery.defaultBaseBranch.trim() || undefined);
     const forkPoint = baseBranch

@@ -201,7 +201,8 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
   // Instruction files other AI tools keep in the project, minus the ones this
   // runtime already reads itself.
   const projectInstructions = await sessionInstructionsFor(effectiveRuntime(input.provider, prepared.plan), input.workingDirectory);
-  const workingStyle = sessionWorkingStyle();
+  const isAutonomous = Boolean(input.autoApprovePermissions || input.permissionMode === 'autopilot' || input.taskDefinition.kind === 'implementation');
+  const workingStyle = sessionWorkingStyle(isAutonomous);
   input = {
     ...input,
     taskDefinition: {
@@ -273,7 +274,9 @@ export async function continueAgentTask(
     input.issueKey,
     await sessionInstructionsFor(effectiveRuntime(provider, prepared.plan), input.workingDirectory)
   );
-  getAiSessionManager().setWorkingStyle(input.issueKey, sessionWorkingStyle());
+  const existing = getAiSessionManager().getAgentSession(input.issueKey);
+  const isAutonomous = Boolean(existing?.autoApprovePermissions || existing?.permissionMode === 'autopilot' || existing?.taskDefinition?.kind === 'implementation');
+  getAiSessionManager().setWorkingStyle(input.issueKey, sessionWorkingStyle(isAutonomous));
   if (prepared.plan.state === 'acp') {
     await getAcpAgentHost().continueTask(input.issueKey, input.message, {
       command: prepared.plan.command!,

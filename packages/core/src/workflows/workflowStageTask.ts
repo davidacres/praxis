@@ -127,6 +127,7 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
         'Implement the planned changes directly in this codebase.',
         'Even if surrounding components are missing, author the required types, interfaces, coordinators, adapters, or modules according to the plan.',
         'Never refuse or report blocked-environment because codebase components need to be created.',
+        'You are running autonomously with full tool and edit permissions in an isolated git worktree. Do not end your turn with a preliminary summary or wait for approval. Execute the edits, run local verification, and commit your changes in git before finishing.',
         `Before you finish, run the tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), including the end-to-end or UI tests for any UI you changed, and fix what fails.`,
         'Fix a failing test or check even when earlier, already-delivered work caused it: no other ticket will. Leave it only when a later ticket in the same plan explicitly covers it, and name that ticket.'
       ].join(' ')
@@ -174,6 +175,7 @@ export const STAGE_STATUS_INSTRUCTIONS = [
 
 // ACP may concatenate a progress message and the final reply without a newline, or wrap in markdown bold/backticks.
 const STAGE_BLOCKED_ENVIRONMENT = /(?:^|[.!?])\s*[*`_]*\s*Stage status:\s*blocked-environment\s*:?\s*([\s\S]*?)\s*[*`_]*$/im;
+const PSEUDO_ENVIRONMENT_BLOCKER = /\b(incomplete|in progress|not finished|cannot report a commit ref|can't report a commit ref|have not inspected|in this turn)\b/i;
 
 /** The reason a stage gave for being stopped by its environment, when it gave one. */
 export function readEnvironmentBlock(responseText: string | undefined): string | undefined {
@@ -182,6 +184,9 @@ export function readEnvironmentBlock(responseText: string | undefined): string |
   if (!last) return undefined;
   const match = STAGE_BLOCKED_ENVIRONMENT.exec(last);
   const reason = match?.[1]?.replace(/^[*`_]+|[*`_]+$/g, '').trim();
+  if (reason && PSEUDO_ENVIRONMENT_BLOCKER.test(reason)) {
+    return undefined;
+  }
   return reason || 'no reason given';
 }
 
@@ -308,13 +313,15 @@ export function stageOutcomeFromSession(
 
   const artifacts: NonNullable<StageOutcome['artifacts']> = [];
   for (const contract of nodeOutputs(node)) {
+    if (contract.kind === 'diff') {
+      if (session.snapshotRef) {
+        artifacts.push({ contractId: contract.id, kind: contract.kind, path: session.snapshotRef });
+      }
+      continue;
+    }
     const filePath = session.artifactPaths?.[contract.id];
     if (filePath) {
       artifacts.push({ contractId: contract.id, kind: contract.kind, path: filePath });
-      continue;
-    }
-    if (contract.kind === 'diff' && session.snapshotRef) {
-      artifacts.push({ contractId: contract.id, kind: contract.kind, path: session.snapshotRef });
       continue;
     }
     if (isNarrative(contract.kind) && session.responseText?.trim()) {

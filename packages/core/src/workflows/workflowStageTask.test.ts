@@ -331,6 +331,35 @@ test('a board-published plan is proven by its praxis-plan block, not the status 
   assert.doesNotMatch(task.definitionOfDone, /Plan status/);
 });
 
+test('readEnvironmentBlock rejects pseudo-blockers where the agent reports incomplete implementation', () => {
+  assert.equal(
+    readEnvironmentBlock('**Stage status: blocked-environment:** The implementation, verification, diff artifact, and commit are incomplete. I can’t report a commit ref until those steps are finished.'),
+    undefined
+  );
+  assert.equal(
+    readEnvironmentBlock('Stage status: blocked-environment: I have not inspected the checkout in this turn.'),
+    undefined
+  );
+});
+
+test('a written markdown file does not displace snapshotRef for diff contracts', () => {
+  const node = reviewNode({
+    id: 'implement',
+    name: 'Implement',
+    inputs: [],
+    outputs: [{ id: 'change-diff', kind: 'diff', required: true }]
+  });
+  const outcome = stageOutcomeFromSession(node, {
+    state: 'completed',
+    responseText: 'Implemented.',
+    snapshotRef: 'c0ffee1234567890',
+    artifactPaths: { 'change-diff': '.praxis/change-diff.md' }
+  });
+  assert.deepEqual(outcome.artifacts, [
+    { contractId: 'change-diff', kind: 'diff', path: 'c0ffee1234567890' }
+  ]);
+});
+
 test('a written file wins over the narrative fallback', () => {
   const outcome = stageOutcomeFromSession(reviewNode(), {
     state: 'completed',
