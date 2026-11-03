@@ -466,6 +466,7 @@ export interface BackgroundTask {
 
 /** Projection only; the conversation attempt remains authoritative. */
 export interface TeamChatExecutionOwnership {
+  bindingId?: string;
   conversationId: string;
   turnId: string;
   participantId: string;
@@ -475,6 +476,7 @@ export interface TeamChatExecutionOwnership {
 }
 
 export interface AgentSessionRecord {
+  teamChatContextDelivery?: 'native' | 'reconstruction';
   teamChatExecution?: TeamChatExecutionOwnership;
   backgroundTasks?: BackgroundTask[];
   issueKey: string;

@@ -878,3 +878,62 @@ test('the composer grows with its text up to the shared cap, then scrolls', asyn
   await input.fill('');
   expect((await input.boundingBox())!.height).toBeLessThanOrEqual(initial + 1);
 });
+
+test('durable no-tools API turns retain bounded history and usage without allocating agent sessions', async () => {
+  const win = await launch();
+  const core = await import('@praxis/core');
+  const file = path.join(app!.userDataDir, 'team-chats.json');
+  const snapshot = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { schemaVersion: 2, revision: 0, teamChats: [], conversations: [] };
+  snapshot.schemaVersion = 2;
+  snapshot.revision ??= 0;
+  snapshot.conversations ??= [];
+  snapshot.conversations.push({ id: 'durable-api', schemaVersion: 2, revision: 0, coordinatorEpoch: 'fixture', title: 'Durable API', createdAt: 'now', updatedAt: 'now', participants: [core.makeParticipant('lead')], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] });
+  fs.writeFileSync(file, JSON.stringify(snapshot));
+  const initialSessions = await win.evaluate(async () => (await window.praxis.ai.listSessions()).length);
+  for (const commandId of ['first', 'second']) {
+    await win.evaluate(async commandId => window.praxis.assistant.submitTurn({ conversationId: 'durable-api', commandId, expectedRevision: 0, text: commandId === 'first' ? 'Keep the early decision verbatim.' : 'Use the earlier decision.', selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: { toolMode: 'project-only' } }), commandId);
+    await expect.poll(async () => win.evaluate(async () => (await window.praxis.assistant.getConversation('durable-api'))?.turns.at(-1)?.state)).toBe('completed');
+    if (commandId === 'first') await win.evaluate(async () => {
+      const conversation = (await window.praxis.assistant.getConversation('durable-api'))!;
+      await window.praxis.assistant.pinDecision(conversation.id, conversation.messages[0].id);
+    });
+  }
+  const conversation = await win.evaluate(() => window.praxis.assistant.getConversation('durable-api'));
+  expect(conversation!.bindings).toHaveLength(1);
+  expect(conversation!.pinnedMessageIds).toHaveLength(1);
+  expect(conversation!.turns).toHaveLength(2);
+  for (const turn of conversation!.turns) {
+    expect(turn.attempts[0].usage?.totalTokens).toBe(25);
+    expect(turn.attempts[0].usageReferences).toHaveLength(1);
+  }
+  expect(await win.evaluate(async () => (await window.praxis.ai.listSessions()).length)).toBe(initialSessions);
+  const requests = mock!.requests.filter(r => r.url.endsWith('/chat/completions'));
+  const body = JSON.parse(requests.at(-1)!.body);
+  expect(body.messages[1].content).toContain('Keep the early decision verbatim.');
+  expect(body.messages[1].content).toContain('Use the earlier decision.');
+  expect(JSON.stringify(body)).not.toContain('Review this ticket');
+});
+
+test('durable tool members reuse two runtime sessions for four attempts and isolate another chat', async () => {
+  const win = await launch(0, true);
+  const core = await import('@praxis/core');
+  const file = path.join(app!.userDataDir, 'team-chats.json');
+  const snapshot = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { schemaVersion: 2, revision: 0, teamChats: [], conversations: [] };
+  snapshot.schemaVersion = 2;
+  snapshot.revision ??= 0;
+  snapshot.conversations ??= [];
+  for (const id of ['durable-tools', 'isolated-tools']) snapshot.conversations.push({ id, schemaVersion: 2, revision: 0, coordinatorEpoch: 'fixture', title: id, createdAt: 'now', updatedAt: 'now', participants: [core.makeParticipant('dev'), core.makeParticipant('qa')], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] });
+  fs.writeFileSync(file, JSON.stringify(snapshot));
+  for (const [conversationId, commandId] of [['durable-tools', 'first'], ['durable-tools', 'second'], ['isolated-tools', 'third']]) {
+    await win.evaluate(async ({ conversationId, commandId, folder }) => window.praxis.assistant.submitTurn({ conversationId, commandId, expectedRevision: 0, text: `Reply to ${commandId}.`, selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: { toolMode: 'read-only', workingDirectory: folder } }), { conversationId, commandId, folder: plansDir! });
+    await expect.poll(async () => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns.at(-1)?.state, conversationId), { timeout: 30000 }).toBe('completed');
+  }
+  const conversation = await win.evaluate(() => window.praxis.assistant.getConversation('durable-tools'));
+  expect(conversation!.turns.flatMap(turn => turn.attempts)).toHaveLength(4);
+  expect(conversation!.bindings).toHaveLength(2);
+  const sessions = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.teamChatExecution);
+  expect(sessions).toHaveLength(4);
+  expect(sessions.filter(session => session.teamChatExecution!.conversationId === 'durable-tools')).toHaveLength(2);
+  expect(new Set(sessions.map(session => session.sessionId)).size).toBe(4);
+  expect(conversation!.turns.every(turn => turn.attempts.every(attempt => attempt.providerSessionId && attempt.usageReferences.length === 1))).toBe(true);
+});

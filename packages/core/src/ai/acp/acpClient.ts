@@ -474,6 +474,8 @@ export class AcpClientWrapper {
     }
   }
 
+  public get didResumeSession(): boolean { return Boolean(this.resumedSessionId); }
+
   /** Provider-owned session id, available after session creation or successful native resume. */
   public get sessionId(): string | undefined {
     return this.resumedSessionId ?? this.session?.sessionId;

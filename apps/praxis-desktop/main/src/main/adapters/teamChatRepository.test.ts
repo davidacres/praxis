@@ -89,3 +89,25 @@ test('durable submit and completion commit together and replay returns the origi
   assert.equal(reloaded.turns[0].attempts[0].state, 'completed');
   assert.equal(reloaded.turns[0].attempts[0].contextReceipt.digest, 'context');
 });
+
+test('provider bindings, summary provenance, usage and decision corrections survive reload in isolation', async t => {
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  await repository.transaction(draft => {
+    draft.conversations.push({ schemaVersion: 2, id: 'durable', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [],
+      messages: [{ id: 'source', role: 'user', text: 'Original decision', createdAt: 'now', sequence: 1, turnId: 'old', attachments: [] }, { id: 'correction', role: 'user', text: 'Corrected decision', createdAt: 'now', sequence: 2, turnId: 'old', attachments: [] }], turns: [],
+      bindings: [{ id: 'binding', conversationId: 'durable', participantId: 'lead', providerRuntime: 'fixture', compatibilityDigest: 'safe-hash', deliveredMessageIds: ['source'], nativeOutputMessageIds: [], status: 'valid' }],
+      summaries: [{ id: 'summary', version: 1, sourceStart: 1, sourceEnd: 1, sourceMessageIds: ['source'], sourceDigest: 'source-hash', text: 'Summary', attemptId: 'summary-attempt', provider: 'fixture' }],
+      summaryAttempts: [{ id: 'summary-attempt', sourceDigest: 'source-hash', provider: 'fixture', state: 'completed', usage: { inputTokens: 10 } }],
+      pinnedMessageIds: ['source', 'correction'], decisionCorrections: [{ messageId: 'correction', supersedesMessageId: 'source' }], commandReceipts: [] });
+  });
+  const reloaded = new FileTeamChatRepository(file).read().conversations[0];
+  assert.equal(reloaded.bindings[0].deliveredMessageIds[0], 'source');
+  assert.equal(reloaded.summaryAttempts![0].usage?.inputTokens, 10);
+  assert.equal(reloaded.summaries[0].attemptId, 'summary-attempt');
+  assert.equal(reloaded.decisionCorrections![0].supersedesMessageId, 'source');
+  reloaded.bindings[0].status = 'invalid';
+  assert.equal(repository.read().conversations[0].bindings[0].status, 'valid');
+  await assert.rejects(repository.transaction(draft => { draft.conversations[0].pinnedMessageIds.push('missing'); }), /pinned source/);
+  await assert.rejects(repository.transaction(draft => { draft.conversations[0].summaryAttempts![0].state = 'invalid' as never; }), /summary attempt/);
+});

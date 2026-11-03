@@ -222,3 +222,7 @@ export * from './notes/noteValidation';
 export * from './notes/noteSnapshot';
 
 export * from './ai/assistant/teamChatTransitions';
+
+export * from './ai/assistant/teamChatBindings';
+export * from './ai/assistant/teamChatContext';
+export * from './ai/assistant/teamChatSummaries';

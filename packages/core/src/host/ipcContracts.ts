@@ -1268,6 +1268,8 @@ export interface AssistantIpc {
   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
   deleteChat(chatId: string): Promise<void>;
+  /** Pins immutable transcript sources and records an explicit correction relation. */
+  pinDecision(conversationId: string, messageId: string, supersedesMessageId?: string): Promise<void>;
   /** Submits a validated turn to a durable conversation. */
   submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult>;
   /** Retrieves a durable conversation by ID. */

@@ -1,3 +1,6 @@
+import { appendConversationSummary, latestValidConversationSummary, pinConversationDecision } from './teamChatSummaries';
+import { resolveTeamChatBinding, type TeamChatConfiguration } from './teamChatBindings';
+import { eligibleTeamChatMessages, prepareTeamChatContext, TeamChatContextRequired } from './teamChatContext';
 import { parseAssistantMention, getAssistantPersona } from './assistantPersonas';
 import type {
   AssistantRole,
@@ -32,8 +35,14 @@ export function makeParticipant(role: AssistantRole): ConversationParticipant {
   };
 }
 
+export class TeamChatAcceptanceUnknown extends Error {}
+
 export interface TeamChatExecutionResult {
   text: string;
+  contextDelivery?: 'native' | 'reconstruction';
+  providerSessionId?: string;
+  reportedCost?: { currency: string; amount: number };
+  usage?: import('../gateway/wire').TokenUsage;
   usageReferences?: string[];
   toolEvidenceReferences?: string[];
 }
@@ -44,10 +53,15 @@ export interface TeamChatExecutionParams {
   attempt: ConversationAttempt;
   participant: ConversationParticipant;
   messages: readonly ConversationMessage[];
+  onAccepted?: () => Promise<void>;
+  preparedPrompt?: string;
+  nativePrompt?: string;
   signal?: AbortSignal;
 }
 
 export interface TeamChatExecutionAdapter {
+  summarize?(prompt: string, params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant; signal?: AbortSignal }): Promise<TeamChatExecutionResult>;
+  prepare?(params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant }): Promise<TeamChatConfiguration>;
   execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
 }
 
@@ -59,7 +73,9 @@ export type ConversationUpdateType =
   | 'attempt_completed'
   | 'turn_completed'
   | 'turn_failed'
-  | 'turn_cancelled';
+  | 'turn_cancelled'
+  | 'context_required'
+  | 'decision_pinned';
 
 export interface ConversationUpdate {
   conversationId: string;
@@ -73,6 +89,7 @@ export interface ConversationUpdate {
 }
 
 export interface TeamChatCoordinatorOptions {
+  contextBudget?: { limit: number; reserved: number };
   repository: TeamChatRepository;
   executionAdapter: TeamChatExecutionAdapter;
   clock?: () => string;
@@ -81,6 +98,7 @@ export interface TeamChatCoordinatorOptions {
 }
 
 export class TeamChatCoordinator {
+  private readonly contextBudget?: { limit: number; reserved: number };
   private readonly repository: TeamChatRepository;
   private readonly executionAdapter: TeamChatExecutionAdapter;
   private readonly clock: () => string;
@@ -91,6 +109,7 @@ export class TeamChatCoordinator {
   private readonly abortControllers = new Map<string, AbortController>();
 
   public constructor(options: TeamChatCoordinatorOptions) {
+    this.contextBudget = options.contextBudget;
     this.repository = options.repository;
     this.executionAdapter = options.executionAdapter;
     this.clock = options.clock ?? (() => new Date().toISOString());
@@ -155,9 +174,11 @@ export class TeamChatCoordinator {
     if (!command.text?.trim()) throw new Error('A message text is required.');
 
     // Validate permission choice
-    if (command.runtimeOptions?.permissionMode === ('invalid' as never)) {
+    if (command.runtimeOptions?.permissionMode !== undefined && !['manual', 'auto', 'bypass', 'autopilot'].includes(String(command.runtimeOptions.permissionMode))) {
       throw new Error('Invalid permission choice.');
     }
+    if (command.runtimeOptions?.toolMode !== undefined && !['full', 'read-only', 'project-only'].includes(String(command.runtimeOptions.toolMode))) throw new Error('Invalid tool mode.');
+    if (command.runtimeOptions?.mode !== undefined && !['chat', 'analysis', 'review'].includes(String(command.runtimeOptions.mode))) throw new Error('Invalid execution mode.');
 
     // Validate attachment references
     if (command.attachmentRefs) {
@@ -275,6 +296,15 @@ export class TeamChatCoordinator {
       revision: updated.revision,
       state: 'queued'
     };
+  }
+
+  public async pinDecision(conversationId: string, messageId: string, supersedesMessageId?: string): Promise<void> {
+    const updated = await this.transitionConversation(conversationId, conv => {
+      pinConversationDecision(conv, messageId, supersedesMessageId);
+      conv.revision++;
+      return conv;
+    });
+    this.notify({ conversationId, revision: updated.revision, type: 'decision_pinned' });
   }
 
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
@@ -452,18 +482,94 @@ export class TeamChatCoordinator {
         // Prepare attempt
         const attemptId = this.idSource();
         const ordinal = activeTurn.attempts.filter(a => a.participantId === nextParticipant.id).length + 1;
-        const visibleMessages = conversation.messages.filter(m => m.sequence < activeTurn!.acceptedSequence || m.turnId === activeTurn!.id);
-        const messageIds = visibleMessages.map(m => m.id);
-        const contextDigest = conversationPayloadDigest({
-          turnId: activeTurn.id,
-          participantId: nextParticipant.id,
-          ordinal,
-          messageIds
-        });
-        const contextReceipt = {
-          digest: contextDigest,
-          messageIds
-        };
+        const visibleMessages = eligibleTeamChatMessages(conversation, activeTurn);
+        let prepared;
+        let nativePrepared;
+        let binding: import('./assistantTypes').ConversationBinding | undefined;
+        let contextLimit = this.contextBudget?.limit;
+        try {
+          if (this.executionAdapter.prepare) {
+            const configuration = await this.executionAdapter.prepare({ conversation, turn: activeTurn, participant: nextParticipant });
+            contextLimit = configuration.contextLimit ?? contextLimit;
+            conversation = await this.transitionConversation(conversationId, conv => {
+              binding = resolveTeamChatBinding(conv.bindings, configuration, this.idSource());
+              conv.revision++;
+              return conv;
+            });
+          }
+          prepared = prepareTeamChatContext(conversation, activeTurn, nextParticipant, binding, false, contextLimit, this.contextBudget?.reserved);
+          nativePrepared = binding?.deliveredMessageIds.length ? prepareTeamChatContext(conversation, activeTurn, nextParticipant, binding, true, contextLimit, this.contextBudget?.reserved) : prepared;
+        } catch (error) {
+          if (error instanceof TeamChatContextRequired && error.reason === 'budget' && this.executionAdapter.summarize && (conversation.summaryAttempts?.length ?? 0) < 8) {
+            const eligible = visibleMessages.filter(m => m.turnId !== activeTurn!.id && !conversation!.pinnedMessageIds.includes(m.id));
+            const previous = latestValidConversationSummary(conversation, new Set(visibleMessages.map(m => m.id)));
+            const summaryBudget = Math.min(16000, (contextLimit ?? 32768) - 8192 - 1024);
+            let prompt = previous ? `Previous summary:\n${previous.text}\n` : '';
+            let end = previous?.sourceEnd ?? 0;
+            for (const message of eligible.filter(m => m.sequence > end)) {
+              const next = `\n[${message.id}] ${message.role}: ${message.text}`;
+              if (Buffer.byteLength(prompt + next) > summaryBudget) break;
+              prompt += next;
+              end = message.sequence;
+            }
+            if (end > (previous?.sourceEnd ?? 0)) {
+              const source = visibleMessages.filter(m => m.turnId !== activeTurn!.id && m.sequence <= end &&
+                (!conversation!.pinnedMessageIds.includes(m.id) || previous?.sourceMessageIds?.includes(m.id)));
+              const sourceDigest = conversationPayloadDigest(source);
+              const summaryAttemptId = this.idSource();
+              const provider = binding?.providerRuntime ?? 'configured';
+              await this.transitionConversation(conversationId, conv => {
+                conv.summaryAttempts ??= [];
+                conv.summaryAttempts.push({ id: summaryAttemptId, provider, state: 'dispatching', sourceDigest });
+                conv.revision++;
+                return conv;
+              });
+              let reportedSummary: TeamChatExecutionResult | undefined;
+              const summaryAbort = new AbortController();
+              const summaryAbortKey = `${conversationId}:${activeTurn.id}`;
+              this.abortControllers.set(summaryAbortKey, summaryAbort);
+              try {
+                const summary = await this.executionAdapter.summarize(prompt, { conversation, turn: activeTurn, participant: nextParticipant, signal: summaryAbort.signal });
+                reportedSummary = summary;
+                if (!summary.text.trim() || Buffer.byteLength(summary.text) > 4000) throw new Error('Summary exceeded its bounded output budget.');
+                await this.transitionConversation(conversationId, conv => {
+                  const attempt = conv.summaryAttempts!.find(a => a.id === summaryAttemptId)!;
+                  attempt.state = 'completed';
+                  if (summary.usage) attempt.usage = summary.usage;
+                  appendConversationSummary(conv, { id: this.idSource(), version: (conv.summaries.at(-1)?.version ?? 0) + 1,
+                    sourceStart: source[0].sequence, sourceEnd: end, sourceMessageIds: source.map(m => m.id), sourceDigest, text: summary.text,
+                    attemptId: summaryAttemptId, provider, ...(previous ? { supersedesId: previous.id } : {}) });
+                  conv.revision++;
+                  return conv;
+                });
+                continue;
+              } catch (summaryError) {
+                await this.transitionConversation(conversationId, conv => {
+                  const attempt = conv.summaryAttempts!.find(a => a.id === summaryAttemptId)!;
+                  attempt.state = 'failed';
+                  if (reportedSummary?.usage) attempt.usage = reportedSummary.usage;
+                  attempt.error = String(summaryError);
+                  conv.revision++;
+                  return conv;
+                });
+              } finally {
+                if (this.abortControllers.get(summaryAbortKey) === summaryAbort) this.abortControllers.delete(summaryAbortKey);
+              }
+            }
+          }
+          const paused = await this.transitionConversation(conversationId, conv => {
+            const turn = conv.turns.find(t => t.id === activeTurn!.id)!;
+            if (turn.state !== 'running') return conv;
+            turn.state = 'context_required';
+            turn.contextRequiredReason = error instanceof Error ? error.message : String(error);
+            conv.revision++;
+            return conv;
+          });
+          if (paused.turns.find(t => t.id === activeTurn!.id)?.state === 'context_required') this.notify({ conversationId, revision: paused.revision, type: 'context_required', turnId: activeTurn.id,
+            state: 'context_required', error: error instanceof Error ? error.message : String(error) });
+          break;
+        }
+        const contextReceipt = prepared.receipt;
 
         const attempt: ConversationAttempt = {
           id: attemptId,
@@ -472,7 +578,9 @@ export class TeamChatCoordinator {
           ordinal,
           coordinatorEpoch: conversation.coordinatorEpoch,
           state: 'prepared',
+          ...(binding ? { bindingId: binding.id } : {}),
           contextReceipt,
+          nativeContextReceipt: nativePrepared.receipt,
           createdAt: this.clock(),
           usageReferences: [],
           toolEvidenceReferences: []
@@ -498,20 +606,23 @@ export class TeamChatCoordinator {
           break;
         }
 
-        // Advance to dispatching then running
+        // Intent is durable before sending; running requires provider acceptance evidence.
         const dispatchTime = this.clock();
-        currentConv = await this.transitionConversation(conversationId, conv => {
-          const step1 = advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, conv.coordinatorEpoch, 'dispatching', dispatchTime);
-          return advanceConversationAttempt(step1, step1.revision, activeTurn!.id, attemptId, step1.coordinatorEpoch, 'running', dispatchTime);
-        });
-
-        this.notify({
-          conversationId,
-          revision: currentConv.revision,
-          type: 'attempt_running',
-          turnId: activeTurn.id,
-          attemptId
-        });
+        currentConv = await this.transitionConversation(conversationId, conv =>
+          advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, conv.coordinatorEpoch, 'dispatching', dispatchTime));
+        let acceptance: Promise<void> | undefined;
+        const accepted = (): Promise<void> => {
+          acceptance ??= this.transitionConversation(conversationId, conv => {
+            const target = conv.turns.find(t => t.id === activeTurn!.id);
+            if (target?.state !== 'running' || target.attempts.find(a => a.id === attemptId)?.state !== 'dispatching') return conv;
+            return advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, conv.coordinatorEpoch, 'running', this.clock());
+          }).then(conv => {
+            if (conv.turns.find(t => t.id === activeTurn!.id)?.attempts.find(a => a.id === attemptId)?.state === 'running') {
+              this.notify({ conversationId, revision: conv.revision, type: 'attempt_running', turnId: activeTurn!.id, attemptId });
+            }
+          });
+          return acceptance;
+        };
 
         const abortController = new AbortController();
         const abortKey = `${conversationId}:${activeTurn.id}`;
@@ -523,12 +634,16 @@ export class TeamChatCoordinator {
         try {
           result = await this.executionAdapter.execute({
             conversation: currentConv,
+            onAccepted: accepted,
             turn: activeTurn,
             attempt,
             participant: nextParticipant,
             messages: visibleMessages,
+            preparedPrompt: prepared.prompt,
+            nativePrompt: nativePrepared.prompt,
             signal: abortController.signal
           });
+          await accepted();
         } catch (err) {
           executionError = err instanceof Error ? err : new Error(String(err));
         } finally {
@@ -551,10 +666,13 @@ export class TeamChatCoordinator {
             const t = conv.turns.find(item => item.id === activeTurn!.id);
             const a = t?.attempts.find(item => item.id === attemptId);
             if (!t || !a) return conv;
-            a.state = 'failed';
+            const uncertain = executionError instanceof TeamChatAcceptanceUnknown;
+            a.state = uncertain ? 'outcome_unknown' : 'failed';
+            const binding = conv.bindings.find(b => b.id === a.bindingId);
+            if (binding) binding.status = 'invalid';
             a.error = executionError!.message;
             a.completedAt = this.clock();
-            t.state = 'failed';
+            t.state = uncertain ? 'outcome_unknown' : 'failed';
             conv.revision++;
             return conv;
           });
@@ -568,7 +686,7 @@ export class TeamChatCoordinator {
               turnId: activeTurn.id,
               attemptId,
               error: executionError.message,
-              state: 'failed'
+              state: executionError instanceof TeamChatAcceptanceUnknown ? 'outcome_unknown' : 'failed'
             });
           }
           break; // Stop loop on failure
@@ -588,11 +706,12 @@ export class TeamChatCoordinator {
             role: nextParticipant.role,
             text: result.text,
             createdAt: this.clock(),
-            sequence: (currentConv.messages.at(-1)?.sequence ?? 0) + 1,
+            sequence: (latestConv!.messages.at(-1)?.sequence ?? 0) + 1,
             attachments: []
           };
 
           const completedConv = await this.transitionConversation(conversationId, conv => {
+            replyMessage.sequence = (conv.messages.at(-1)?.sequence ?? 0) + 1;
             return completeConversationAttempt(
               conv,
               conv.revision,
@@ -600,7 +719,8 @@ export class TeamChatCoordinator {
               attemptId,
               conv.coordinatorEpoch,
               replyMessage,
-              contextReceipt
+              result.contextDelivery === 'native' ? nativePrepared.receipt : contextReceipt,
+              result
             );
           });
 

@@ -44,6 +44,7 @@ export interface PreparedAgentLaunch {
 }
 
 export interface AgentTaskLaunchInput {
+  durableContext?: AcpAgentStartOptions['durableContext'];
   issue: IssueDetails;
   taskDefinition: AgentTaskDefinition;
   provider: AiProvider;
@@ -62,6 +63,7 @@ export interface AgentTaskLaunchInput {
 }
 
 export interface AgentTaskContinueInput {
+  durableContext?: AcpAgentStartOptions['durableContext'];
   issueKey: string;
   message: string;
   /** Images pasted/dropped into the composer, forwarded to the agent with the message. */
@@ -213,6 +215,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
   };
   if (prepared.plan.state === 'acp') {
     await getAcpAgentHost().startTask(input.issue, input.taskDefinition, input.provider, {
+      durableContext: input.durableContext,
       command: prepared.plan.command!,
       args: prepared.plan.args,
       workingDirectory: input.workingDirectory,
@@ -236,6 +239,7 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
   }
   assertCanRunAgentSession(input.provider);
   await getVercelAgentService().startTask(input.issue, input.taskDefinition, {
+    durableContext: input.durableContext,
     apiKey: connection.apiKey,
     gatewayUrl: connection.gatewayUrl,
     workingDirectory: input.workingDirectory,
@@ -279,6 +283,7 @@ export async function continueAgentTask(
   getAiSessionManager().setWorkingStyle(input.issueKey, sessionWorkingStyle(isAutonomous));
   if (prepared.plan.state === 'acp') {
     await getAcpAgentHost().continueTask(input.issueKey, input.message, {
+      durableContext: input.durableContext,
       command: prepared.plan.command!,
       args: prepared.plan.args,
       model: input.model,
@@ -303,6 +308,7 @@ export async function continueAgentTask(
   assertCanRunAgentSession(provider);
   await getVercelAgentService().resumeTask(input.issueKey, {
     provider,
+    durableContext: input.durableContext,
     apiKey: connection.apiKey,
     gatewayUrl: connection.gatewayUrl,
     model: input.model || connection.model,

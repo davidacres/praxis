@@ -107,6 +107,7 @@ export interface VercelAgentLogger {
 }
 
 export interface VercelAgentStartOptions {
+  durableContext?: { reconstruction: string; continuation: string };
   /** Images attached to the session's first user turn. */
   images?: WireImageAttachment[];
   apiKey?: string;
@@ -629,14 +630,14 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     const sessionId = randomUUID();
     const hasBrowserTools = options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false;
     const hasCodeIntelligence = hasCodeIntelligenceTools(options.toolExtension);
-    const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\n${
+    const systemPrompt = options.durableContext ? 'Respond to the prepared durable conversation. Honor the current tool and permission policy.' : `${buildSystemPrompt(taskDefinition, issue)}\n\n${
       toolMode === 'read-only'
         ? 'Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets.'
         : toolMode === 'project-only'
           ? 'Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user.'
           : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
     }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${hasCodeIntelligence ? `\n\n${CODE_INTELLIGENCE_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
-    const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
+    const userPrompt = options.durableContext?.reconstruction ?? this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
 
     const task: ActiveTask = {
       issueKey: issue.key,
@@ -742,8 +743,8 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     this.noteContextLimit(issueKey, provider, gateway, model);
     // Replay the prior turns as a plain text exchange — old tool output does not
     // need to travel back to the model on every follow-up.
-    const history = compactHistoryForReplay(this.sessionManager.getAgentConversationHistory(issueKey));
-    const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
+    const history = options.durableContext ? [] : compactHistoryForReplay(this.sessionManager.getAgentConversationHistory(issueKey));
+    const systemPrompt = options.durableContext ? 'Respond to the prepared durable conversation. Honor the current tool and permission policy.' : `${buildSystemPrompt(record.taskDefinition, {
       key: issueKey,
       summary: record.taskDefinition.goal,
       issueType: 'Task',
@@ -804,11 +805,11 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     // An image-only follow-up (no caption) sends exactly that — empty text,
     // the image alone — rather than being mistaken for "nothing new" and
     // getting the auto-continue filler text below.
-    const resumePrompt = hasFollowUp
+    const resumePrompt = options.durableContext?.reconstruction ?? (hasFollowUp
       ? followUp ?? ''
       : history.length === 0
         ? 'Continue the task from where you left off.'
-        : 'Continue the task. Use tools as needed and stop when the Definition of Done is met.';
+        : 'Continue the task. Use tools as needed and stop when the Definition of Done is met.');
 
     task.loopPromise = this.runLoopForIssue(issueKey, {
       systemPrompt,
