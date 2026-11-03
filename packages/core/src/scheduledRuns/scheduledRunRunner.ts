@@ -315,7 +315,7 @@ export class ScheduledRunRunner {
     if (run.status !== 'paused' || run.pause?.reason !== 'failure' || !run.pause.entryId) return run;
     const entry = run.entries.find(candidate => candidate.id === run.pause?.entryId);
     const workflowRunId = entry?.outcome?.workflowRunId;
-    if (!entry || entry.outcome?.status !== 'failed' || !workflowRunId) return run;
+    if (!entry || (entry.outcome?.status !== 'failed' && entry.outcome?.status !== 'paused') || !workflowRunId) return run;
     const progress = this.ports.observe(workflowRunId)?.progress;
     if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
     if (progress.kind === 'succeeded') run = await this.moveTicket(run, entry.id, 'done');

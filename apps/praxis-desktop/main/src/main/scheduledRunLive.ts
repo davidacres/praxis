@@ -78,10 +78,19 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
   else if (summary.status === 'cancelled') progress = { kind: 'cancelled', reason: summary.explanation, ...spendField, ...exhaustedField };
   else if (summary.paused) {
     const stuck = environmentPausedStage(summary, blocker);
+    const attempts = stuck?.attemptsThisRevision ?? stuck?.attempts ?? 1;
+    const maxAttempts = stuck?.maxAttempts ?? 1;
     progress = stuck
       // Name the stage and what stopped it, and offer the stage's retry: the general "could not run
       // in this environment" alone left a person guessing, with only Resume, which changed nothing.
-      ? { kind: 'stalled', pauseReason: 'failure', reason: `${stuck.name} could not run here: ${stuck.lastError ?? summary.explanation} Fix that, then retry the stage.`, ...spendField, ...exhaustedField }
+      ? {
+          kind: 'stalled',
+          pauseReason: 'failure',
+          reason: `${stuck.name} could not run here: ${stuck.lastError ?? summary.explanation} Fix that, then retry the stage.`,
+          recovery: { nodeId: stuck.nodeId, attempts, maxAttempts },
+          ...spendField,
+          ...exhaustedField
+        }
       : { kind: 'stalled', reason: summary.explanation, pauseReason: summary.pauseReason === 'provider-limit' ? 'budget' : 'policy', ...spendField, ...exhaustedField };
   } else if (summary.status === 'awaiting-approval') {
     let nodeId = '';
