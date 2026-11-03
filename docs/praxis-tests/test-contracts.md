@@ -1,14 +1,13 @@
 # test-contracts
 
 Ticket: PRX-S111-180 / FX-BE-180. Stage: WF-C2BF498E-test-contracts.
-Frozen implementation: `e5efa78513beb5f7bc9b7754e44bf86e1c864193`.
+Frozen implementation: `c7199a3d40b2835ef8057b710e3b13cf36f2989a`.
 
 ## Result and inventory
 
-HEAD equals the frozen implementation; the working tree was clean before this stage. Analysis inspected the supplied `.praxis/change-diff.md`, frozen coordinator, test fixtures/assertions, core test registration, store guard, main singleton/IPC, preload and renderer call sites. Code intelligence returned no coordinator symbol from its partial index, so current text was read from this frozen checkout.
+The working tree was clean before this catalog stage. Analysis inspected the generator, existing catalog and contracts, supplied change-diff, all eight coordinator test bodies, current renderer/main call sites and repair commit `2be4ebe2`. No code-intelligence tools are exposed in this session, so current checkout text is authoritative.
 
-The deterministic validator passes with **782 generated Playwright contracts across 171 source files**, zero duplicate IDs, and no stale identities or moved-line warnings. Generated identities and source locations already match the snapshot. This iteration reviews the three QA-named Playwright flows and enriches two without changing their IDs. This implementation adds **8 node:test registrations** in one coordinator test file, registered in the core test script. The prior stage supplied eight exact source-linked structured English contracts; this iteration retains them. The scoped inventory union is **790 entries: 782 generated Playwright + 8 coordinator Node contracts**. This is not the complete monorepo suite count or expanded runtime count; existing supplemental documents and other Node suites are excluded from this scoped union.
-
+The deterministic validator passes with **782 generated Playwright contracts across 171 source files**, zero duplicate IDs or source/title links, and no stale identities or moved-line warnings. This iteration clarifies the session-details scroll contract without changing its ID. The coordinator suite contributes **8 node:test registrations**, explicitly registered in the core test script, with eight supplemental contracts. The scoped union is **790 entries: 782 generated Playwright + 8 coordinator Node contracts**. This is not the complete monorepo suite or expanded runtime count; other Node suites and supplemental documents are excluded.
 Coverage links: [generated catalog](catalog.json), [automation index](index.md), [eight coordinator contracts](fx-be-180-coordinator.md), [predecessor storage/transition contracts](fx-be-179-conversations.md), [validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs).
 
 ## Acceptance coverage and ambiguities
@@ -28,39 +27,31 @@ All eight new tests use a cloned in-memory repository and stub execution adapter
 
 ## Uncovered integration contracts
 
-- Renderer handoff is not established: [AssistantProvider.tsx:181](../../apps/praxis-desktop/renderer/src/assistant/AssistantProvider.tsx#L181) still saves whole transcripts and lines 246/258 invoke the legacy turn API. No renderer source changed in the frozen implementation. Thus these tests do not prove UI sends reach the main coordinator or work continues after window closure.
+- Renderer handoff is not established: [AssistantProvider.tsx:181](../../apps/praxis-desktop/renderer/src/assistant/AssistantProvider.tsx#L181) still saves whole transcripts and lines 246/258 invoke the legacy turn API. The current renderer repair changes session-detail scrolling only; it does not migrate AssistantProvider. Thus these tests do not prove UI sends reach the main coordinator or work continues after window closure.
 - The [main execution adapter](../../apps/praxis-desktop/main/src/main/assistantIpc.ts#L56) reads current settings at execution and builds its prompt from the latest user text. It does not forward the tested messages array as full history or use the accepted plan's runtime options and participant instructions. Stub-level context/default guarantees cannot be claimed for that integration.
 - No new automated assertion covers the [durable whole-transcript save guard](../../packages/core/src/ai/assistant/teamChatStore.ts#L60), main singleton ownership, preload routing/filtering, durable chat CRUD/list integration, or resolveAttempt branches. Their source presence is not coverage.
 - Fixed sleeps of 50–250 ms underpin these tests. Passing this run does not establish deterministic completion under slower environments. File repository behavior has predecessor tests, but this new coordinator suite does not integrate that adapter.
 
 ## Catalog findings
 
-The previous report described FX-BE-179 at a different frozen revision; this report replaces that stale stage result. Historical ticket-specific contracts remain untouched. No duplicate or stale generated links were found.
+The prior report pointed at `e5efa785` and is stale for this snapshot; the supplemental snapshot reference is refreshed as well. Generated identities and source locations already match the current checkout. No duplicate IDs, duplicate source/title links or stale generated links were found.
 
-The generator inventories direct static `test(...)` calls in desktop e2e only. Dynamic template titles and modified calls such as `test.only(...)` are omitted, and all entries are labelled functional regardless of actual project. Generic generated Then prose is shape-checked, not semantically validated. Supplemental Node contracts are outside its validator; their exact titles, locations and IDs were independently checked. No claim is made that all 782 generated contracts were semantically reviewed or that 790 represents the complete automated suite.
+The generator inventories direct static `test(...)` calls in desktop e2e only. Dynamic template titles and modified calls such as `test.only(...)` are omitted, and all entries are labelled functional regardless of actual project. Generic generated Then prose is shape-checked, not semantically validated. Supplemental Node contracts are outside its validator; their exact titles, locations and IDs were independently checked. No claim is made that all 782 generated contracts were semantically reviewed or that 790 represents the complete automated suite. IDs use file and title hashes: line changes preserve identity, but file/title changes generate new IDs.
 
-## Prior iteration verification (historical, not rerun)
+## Iteration 3 QA disposition
 
-The previous iteration reported a core build and focused coordinator execution with 8 passed, 0 failed, 0 skipped. Those runtime checks were not rerun in this catalog-only iteration and are not fresh QA evidence.
+The supplied latest QA result is **59 passed, 1 failed out of 60**: [session details, line 980](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L980), with an Object.is equality failure. The full failure log is not available among the supplied local artifacts, so the exact failing assertion cannot be confirmed from the summary alone.
 
-## Iteration 2 QA disposition
+Commit `2be4ebe2`, included in this snapshot, sets the session body scrollTop to scrollHeight on mount in AgentDetailsPage.tsx:132 and extends the bottom-boundary poll from 20 to 40 seconds at easymode.spec.ts:1116. This targets the suspected scroll timing failure. The curated contract now states the actual bound checked: the last reply bottom is at or above the body bottom plus one pixel within 40 seconds. This does not prove the whole reply is visible, that it is above the body's top, or that mount scrolling alone fixes the failure. Runtime resolution remains unverified; increasing a timeout is not passing evidence.
 
-The supplied QA result is **57 passed, 3 failed out of 60**. The full QA log is not present among the supplied local artifacts; the summary does not identify which two tests had equality failures. No new runtime pass is claimed.
-
-| QA finding | Frozen-snapshot disposition |
-| --- | --- |
-| [Automation row actions, line 879](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L879) | No change in the repair commit. Existing curated contract retained: it describes the actual opacity, rename, archive and confirmed-delete assertions. The test checks the run action affordance but does not click it to prove run dispatch. Failure remains unverified; not fixed by this stage. |
-| [Session details, line 980](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L980) | No change in the repair commit. Contract enriched from seeded fixtures and asserted details, quote and scroll behavior. Failure remains unverified; not fixed by this stage. |
-| [Long session list, line 1377](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L1377) | Commit e5efa785 replaces Show more + Tab with direct divider focus at line 1510. This addresses the focus step only if the divider exists; it cannot repair a missing divider. It also removes proof that Tab from Show more reaches the divider. Divider-to-automation Tab remains asserted. No rerun proves the reported wait failure resolved. |
-
-The change-diff artifact describes the original implementation and omits the later one-line test repair; this report reconciles it with git show e5efa785. Product and test fixes are outside the frozen catalog scope and were not attempted.
+Historical iteration 1 reported 57/60 with three failures; iteration 2 reported 59/60. The earlier report named automation row actions, session details and long-list divider focus. Divider focus was repaired in `e5efa785`/`8f9d1248`; no fresh runtime claim is made for it or the unchanged row-actions test. The only latest named failure is session details. This catalog stage documents the existing repair and assertion boundary; it makes no product or test-source changes.
 
 ## Current changes and verification
 
-Updated this report, the supplemental document snapshot, and two curated catalog flows. Stable IDs, test sources, runtime code and workflow definitions are unchanged.
+Updated this required test-contracts report, the supplemental snapshot reference and the curated session-details flow. Stable IDs, test sources, runtime code and workflow definitions are unchanged.
 
 - npm run test:praxis-contracts before and after editing: exit 0; 782 linked Playwright tests, no warnings.
-- Independent inventory: 782 entries across 171 files, with 782 unique IDs; eight supplemental coordinator contracts retain exact source links and IDs.
+- Independent inventory: 782 entries across 171 files, 782 unique IDs and source/title links; eight supplemental coordinator titles, source lines and hash IDs checked.
 - git diff --check: passed.
 
-No desktop e2e, broad runtime suite or visual verification was performed in this documentation-only iteration. No screenshot was captured. Catalog validation does not establish runtime QA or release readiness. No other workflow stage was advanced or approved.
+No desktop e2e, broad runtime suite or visual verification was performed in this documentation-only stage. No screenshot was captured. Catalog validation does not establish runtime QA or release readiness. No other workflow stage was advanced or approved.

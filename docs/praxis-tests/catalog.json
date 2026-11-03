@@ -5266,7 +5266,7 @@
       "flow": {
         "given": "an isolated EasyMode profile seeded with a completed session, ticket purpose, handover, user follow-up and assistant reply with telemetry and task markdown",
         "when": "select the session and quote its opening goal",
-        "then": "center details show ticket and conversation content, telemetry and task progress; quoting populates the composer; the final message is within the scroll viewport"
+        "then": "Center details show ticket and conversation content, telemetry and task progress; quoting populates the composer; the last reply bottom is at or above the body bottom plus one pixel within 40 seconds. Width switches between full and compact, Back returns to the canvas, and selecting Recent Sessions reopens details. The scroll boundary alone does not prove the entire reply is visible."
       }
     },
     {
