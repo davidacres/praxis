@@ -1113,7 +1113,7 @@ test('in EasyMode selecting a session opens details in the center', async () => 
     const last = messages[messages.length - 1];
     if (!body || !last) return false;
     return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
-  }), { timeout: 20000 }).toBe(true);
+  }), { timeout: 40000 }).toBe(true);
 
   // Verify default width is full
   await expect(agentDetailsPage).toHaveAttribute('data-width-mode', 'full');

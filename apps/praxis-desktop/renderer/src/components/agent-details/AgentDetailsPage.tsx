@@ -129,6 +129,7 @@ export function AgentDetailsPage({
     const node = bodyRef.current;
     if (!node) return;
     followRef.current = true;
+    node.scrollTop = node.scrollHeight;
     let lastScrollTop = node.scrollTop;
     const onScroll = () => {
       const nearBottom = node.scrollHeight - node.clientHeight - node.scrollTop <= 64;
