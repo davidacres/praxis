@@ -179,6 +179,8 @@ export type ScheduledRunEventKind =
   | 'resumed'
   | 'budget-checked'
   | 'provider-handover'
+  /** The runner moved the ticket on its board (in progress at launch, done at the end). */
+  | 'ticket-status'
   | 'completed'
   | 'cancelled';
 

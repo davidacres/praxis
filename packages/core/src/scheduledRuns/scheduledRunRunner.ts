@@ -28,6 +28,7 @@
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
 import type { ScheduledPauseReason, ScheduledQueueEntry, ScheduledRun, ScheduledTicketRef } from './scheduledRun';
 import { dueScheduledRuns, startScheduledRunNow } from './scheduledRun';
+import type { ScheduledTicketPhase } from './scheduledTicketStatus';
 import { decideExtraLane, decideProviderForEntry, DEFAULT_HANDOVER_THRESHOLD } from './scheduledBudget';
 import { scheduledConcurrency, scheduledSteps } from './scheduledRun';
 import {
@@ -131,6 +132,12 @@ export interface ScheduledRunnerPorts {
    * and returns the decision outcome.
    */
   decideLoop?(workflowRunId: string, edgeId: string): Promise<ScheduledLoopDecisionResult>;
+  /**
+   * Moves the ticket on its board into `phase` — in flight when its workflow starts, done when
+   * it finishes — and returns the status it now has, or `undefined` when it did not move (already
+   * there, or the board has no such stage). Throws when the tracker refused; the run carries on.
+   */
+  moveTicket?(request: { run: ScheduledRun; entry: ScheduledQueueEntry; phase: ScheduledTicketPhase }): Promise<string | undefined>;
   /** Approves the gate the entry is waiting at. */
   approveGate?(workflowRunId: string, nodeId: string): Promise<void>;
   /** A run was saved. */
@@ -309,6 +316,7 @@ export class ScheduledRunRunner {
     if (!entry || entry.outcome?.status !== 'failed' || !workflowRunId) return run;
     const progress = this.ports.observe(workflowRunId)?.progress;
     if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    if (progress.kind === 'succeeded') run = await this.moveTicket(run, entry.id, 'done');
     return this.save(applyEntryProgress(run, entry.id, progress, this.ports.now()));
   }
 
@@ -393,6 +401,11 @@ export class ScheduledRunRunner {
       }
     }
 
+    // Moved before the finish is applied: finishing the last ticket completes the run, and the ledger ends there.
+    if (progress.kind === 'succeeded') {
+      run = await this.moveTicket(run, entry.id, 'done');
+      at = this.ports.now();
+    }
     let next = applyEntryProgress(run, entry.id, progress, at);
     if (next !== run) next = await this.save(next);
 
@@ -518,12 +531,14 @@ export class ScheduledRunRunner {
       try {
         const workflowRunId = await this.ports.launch({ run, entry, workflowId, token, provider: decision.provider });
         run = await this.save(bindEntryWorkflow(run, entry.id, workflowRunId, this.ports.now()));
+        run = await this.moveTicket(run, entry.id, 'indeterminate');
       } catch (error) {
         // The launch threw, but it may have got as far as creating the run: only a missing run is safe to retry.
         const found = this.ports.findByLaunchToken(token);
         const at = this.ports.now();
         if (found) {
           run = await this.save(bindEntryWorkflow(run, entry.id, found, at));
+          run = await this.moveTicket(run, entry.id, 'indeterminate');
         } else {
           const reason: ScheduledPauseReason = error instanceof ScheduledLaunchError ? error.reason : 'policy';
           const message = error instanceof Error ? error.message : String(error);
@@ -556,6 +571,24 @@ export class ScheduledRunRunner {
       lane,
       reason: extra.ok ? `runs alongside ${keys}; tickets in ${stepName} do not depend on each other. ${extra.reason}` : extra.reason
     };
+  }
+
+  /**
+   * Moves the ticket on its board and notes it in the ledger. Best-effort: a tracker that refuses
+   * is noted too, but never stops the run — the work itself is what the schedule is for.
+   */
+  private async moveTicket(run: ScheduledRun, entryId: string, phase: ScheduledTicketPhase): Promise<ScheduledRun> {
+    const entry = run.entries.find(candidate => candidate.id === entryId);
+    if (!entry || !this.ports.moveTicket) return run;
+    let message: string;
+    try {
+      const status = await this.ports.moveTicket({ run, entry, phase });
+      if (!status) return run;
+      message = `${entry.ticket.issueKey} moved to ${status} on the board.`;
+    } catch (error) {
+      message = `${entry.ticket.issueKey} could not be moved to ${phase === 'done' ? 'done' : 'in progress'} on the board: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    return this.save(recordScheduledDecision(run, entryId, { kind: 'ticket-status', at: this.ports.now(), message }));
   }
 
   /** Notes why a ticket is waiting, once: a tick every half-minute must not fill the ledger with the same line. */

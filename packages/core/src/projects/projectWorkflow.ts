@@ -196,6 +196,24 @@ export function resolveStatus(
   return fallback;
 }
 
+/**
+ * The category of a status a tracker reports, or `undefined` when it cannot be
+ * told: an exact stage name on `workflow` gives that stage's category, and a
+ * recognised synonym ("In Progress", "Closed") gives the synonym's. Unlike
+ * `resolveStatus` it never falls back to a position, so a caller deciding where
+ * to *move* a ticket is never sent to a column it only guessed at.
+ */
+export function categoryOfStatus(
+  raw: string | undefined,
+  workflow?: readonly ProjectWorkflowStage[]
+): ProjectWorkflowCategory | undefined {
+  const needle = comparable(raw ?? '');
+  if (!needle && !raw?.trim()) return undefined;
+  const exact = normalizeWorkflowStages(stagesOf(workflow)).find(stage => comparable(stage.name) === needle);
+  if (exact) return exact.category;
+  return SYNONYMS.find(entry => matchesSynonym(entry, raw ?? '', needle))?.category;
+}
+
 /** Rank used to order columns for a workflow, mirroring `jiraShape.statusCategoryRank`. */
 export function workflowCategoryRank(category: string | undefined): number {
   if (category === 'todo') return 0;

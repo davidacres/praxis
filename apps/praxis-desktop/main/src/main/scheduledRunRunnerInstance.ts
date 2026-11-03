@@ -8,10 +8,12 @@ import {
   approvalReadiness,
   approveStage,
   exhaustedProviders,
+  planStatusToMarkdown,
   pendingLoop,
   providerCanRunStage,
   rejectStage,
   resolveApprovalTarget,
+  scheduledTicketTransition,
   skipApproval,
   type AiProvider,
   type ScheduledGateDecisionResult,
@@ -31,6 +33,11 @@ import { getAiSessionManager, abortActiveTask } from './aiInstance';
 import { handoverSession } from './aiIpc';
 import { preserveUncommittedWork } from './runWork';
 import { stageCapableProvider } from './providerFallback';
+import { getProjectStore } from './projectStoreInstance';
+import { runAsAgent } from './projectActivityInstance';
+import { changedPaths, commitPraxisWrite } from './ticketWriteBackCommit';
+import { repositoryRoot } from './runWork';
+import { withBaseCheckout } from './baseCheckoutLock';
 
 /**
  * Wires the scheduled-run runner (FX-BF-047 / FX-BE-148) to the real app: the
@@ -98,6 +105,32 @@ function ports(): ScheduledRunnerPorts {
         const message = error instanceof Error ? error.message : String(error);
         throw new ScheduledLaunchError(message, launchReason(message));
       }
+    },
+    moveTicket: async ({ run, entry, phase }) => {
+      const { connectionId, issueKey } = entry.ticket;
+      const service = await getServiceForConnection(connectionId);
+      const [issue, transitions] = await Promise.all([service.getIssue(issueKey), service.getTransitions(issueKey)]);
+      const project = run.projectId ? getProjectStore().get(run.projectId) : undefined;
+      const transition = scheduledTicketTransition(issue.status, transitions, phase, project?.workflowStages);
+      if (!transition) return undefined;
+      const status = transition.toStatus ?? transition.name;
+      // A folder-backed ticket is a file in the repository: commit the new status, or the checkout
+      // reads as dirty and the schedule's next ticket refuses to start.
+      // Written and committed in one turn on the base checkout, so another lane never branches from it half-done.
+      const folder = project?.workspaceFolder?.trim();
+      const move = async () => {
+        const root = folder ? await repositoryRoot(folder) : undefined;
+        const before = root ? await changedPaths(root).catch(() => undefined) : undefined;
+        await runAsAgent(() => service.transitionIssue(issueKey, transition.id));
+        if (root && before) {
+          // A plan file records the status in its own words ("Done" is written "✅ Complete"): match what was written.
+          await commitPraxisWrite(root, before, planStatusToMarkdown(status), `Move ${issueKey} to ${status}`).catch(error =>
+            console.error(`Moved ${issueKey} to ${status} but could not commit it:`, error)
+          );
+        }
+      };
+      await (folder ? withBaseCheckout(folder, move) : move());
+      return status;
     },
     cancelWorkflow: async (workflowRunId, reason) => {
       await getWorkflowOrchestrator().cancel(workflowRunId, reason);

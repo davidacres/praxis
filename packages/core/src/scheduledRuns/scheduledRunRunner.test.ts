@@ -643,3 +643,52 @@ test('a loop decision is determined autonomously and recorded without waiting fo
   assert.match(event.message, /T-1 loop decision: accept — Accepted best iteration\./);
   assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'loop-decided');
 });
+
+test('each ticket moves on its board as it is worked: in progress at launch, done when it finishes', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  const moves: string[] = [];
+  h.ports.moveTicket = async ({ entry, phase }) => {
+    moves.push(`${entry.ticket.issueKey}:${phase}`);
+    return phase === 'done' ? 'Done' : 'In Progress';
+  };
+  await h.runner.tick();
+  assert.deepEqual(moves, ['T-1:indeterminate']);
+  // A tick that sees the same ticket still running moves nothing.
+  await h.runner.tick();
+  assert.deepEqual(moves, ['T-1:indeterminate']);
+  h.setWorkflow('T-1', { progress: { kind: 'succeeded' } });
+  await h.runner.tick();
+  assert.deepEqual(moves, ['T-1:indeterminate', 'T-1:done', 'T-2:indeterminate']);
+  h.setWorkflow('T-2', { progress: { kind: 'succeeded' } });
+  await h.runner.tick();
+  await h.runner.tick();
+  assert.deepEqual(moves, ['T-1:indeterminate', 'T-1:done', 'T-2:indeterminate', 'T-2:done']);
+  assert.equal(h.run.status, 'completed');
+  const ledger = h.run.events.filter(event => event.kind === 'ticket-status').map(event => event.message);
+  assert.deepEqual(ledger, ['T-1 moved to In Progress on the board.', 'T-1 moved to Done on the board.', 'T-2 moved to In Progress on the board.', 'T-2 moved to Done on the board.']);
+  assert.equal(h.run.entries[0].outcome?.decisions?.filter(decision => decision.kind === 'ticket-status').length, 2);
+  // The ledger ends with the run's own completion, after the last ticket's move.
+  assert.equal(h.run.events.at(-1)?.kind, 'completed');
+});
+
+test('a failed ticket stays in progress, and a tracker that refuses a move never stops the run', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  const moves: string[] = [];
+  h.ports.moveTicket = async ({ entry, phase }) => {
+    moves.push(`${entry.ticket.issueKey}:${phase}`);
+    if (entry.ticket.issueKey === 'T-2') throw new Error('permission denied');
+    return undefined;
+  };
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'failed', reason: 'boom' } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+  assert.deepEqual(moves, ['T-1:indeterminate']);
+  // Nothing moved for T-1, so nothing is written about it.
+  assert.equal(h.run.events.filter(event => event.kind === 'ticket-status').length, 0);
+  await h.runner.skipEntry(h.run.id, h.run.entries[0].id);
+  assert.deepEqual(moves, ['T-1:indeterminate', 'T-2:indeterminate']);
+  assert.equal(h.status('T-2'), 'running');
+  assert.equal(h.run.status, 'running');
+  assert.match(h.run.events.filter(event => event.kind === 'ticket-status').at(-1)!.message, /T-2 could not be moved to in progress on the board: permission denied/);
+});

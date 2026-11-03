@@ -34,7 +34,7 @@ const ENTRY_STATUSES: ReadonlySet<string> = new Set(['queued', 'running', 'pause
 const EVENT_KINDS: ReadonlySet<string> = new Set([
   'created', 'renamed', 'tickets-added', 'ticket-removed', 'reordered', 'rescheduled', 'armed', 'held', 'missed', 'start-now', 'skipped',
   'workflow-changed', 'started', 'entry-launching', 'entry-started', 'entry-gate', 'gate-decided', 'loop-decided', 'entry-done', 'entry-failed', 'entry-skipped',
-  'entry-retried', 'paused', 'resumed', 'budget-checked', 'provider-handover', 'completed', 'cancelled'
+  'entry-retried', 'paused', 'resumed', 'budget-checked', 'provider-handover', 'ticket-status', 'completed', 'cancelled'
 ]);
 const PAUSE_REASONS: ReadonlySet<string> = new Set(['budget', 'approval', 'policy', 'trust', 'no-provider', 'failure', 'user', 'launch-interrupted']);
 

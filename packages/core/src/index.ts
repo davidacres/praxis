@@ -117,6 +117,7 @@ export * from './scheduledRuns/scheduledRunRequest';
 export * from './scheduledRuns/scheduledRunRunner';
 export * from './scheduledRuns/scheduledRunStore';
 export * from './scheduledRuns/scheduledRunTime';
+export * from './scheduledRuns/scheduledTicketStatus';
 export * from './deployments/directProcessExecutor';
 export * from './deployments/directoryTarget';
 export * from './deployments/directDeploymentOrchestrator';
