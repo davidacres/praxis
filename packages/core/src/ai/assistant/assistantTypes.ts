@@ -92,3 +92,110 @@ export interface TeamChatRecord {
 
 /** A chat without its transcript, for the sidebar list. */
 export type TeamChatSummary = Omit<TeamChatRecord, 'messages'> & { messageCount: number; personas: AssistantRole[] };
+
+/** Versioned authoritative state; legacy transcripts remain readable until migration. */
+export interface ConversationParticipant {
+  id: string;
+  role: AssistantRole;
+  instructionVersion: string;
+  instructions: string;
+  defaults: Readonly<Record<string, string | number | boolean>>;
+}
+export type ConversationTurnState = 'queued' | 'running' | 'completed' | 'awaiting_approval' | 'context_required' | 'failed' | 'interrupted' | 'outcome_unknown' | 'cancelling' | 'cancelled';
+export type ConversationAttemptState = 'prepared' | 'dispatching' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'interrupted' | 'outcome_unknown' | 'cancelled';
+export interface ConversationAttachment { id: string; digest: string; mediaType: string; size: number; }
+export interface ConversationMessage extends AssistantMessage {
+  sequence: number;
+  turnId: string;
+  participantId?: string;
+  attachments: ConversationAttachment[];
+  context?: PageAssistantContext;
+}
+export interface ConversationContextReceipt { digest: string; messageIds: string[]; bindingId?: string; }
+export interface ConversationAttempt {
+  id: string;
+  turnId: string;
+  participantId: string;
+  ordinal: number;
+  coordinatorEpoch: string;
+  state: ConversationAttemptState;
+  bindingId?: string;
+  providerSessionId?: string;
+  contextReceipt: ConversationContextReceipt;
+  dispatchIntent?: string;
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+  resultMessageId?: string;
+  usageReferences: string[];
+  toolEvidenceReferences: string[];
+}
+export interface ConversationTurn {
+  id: string;
+  commandId: string;
+  payloadDigest: string;
+  userMessageId: string;
+  acceptedSequence: number;
+  plan: { participants: ConversationParticipant[]; runtimeOptions: Readonly<Record<string, string | number | boolean>>; context?: PageAssistantContext };
+  state: ConversationTurnState;
+  completedParticipantIds: string[];
+  attempts: ConversationAttempt[];
+}
+export interface ConversationBinding {
+  id: string;
+  conversationId: string;
+  participantId: string;
+  providerRuntime: string;
+  providerSessionId?: string;
+  compatibilityDigest: string;
+  deliveredMessageIds: string[];
+  nativeOutputMessageIds: string[];
+  status: 'valid' | 'invalid';
+}
+export interface ConversationSummary {
+  id: string; version: number; sourceStart: number; sourceEnd: number; sourceDigest: string;
+  text: string; attemptId: string; provider: string; supersedesId?: string;
+}
+export interface ConversationCommandReceipt {
+  commandId: string; payloadDigest: string; turnId: string; revision: number; outcome: 'accepted';
+}
+export interface DurableConversation extends Omit<TeamChatRecord, 'messages' | 'projectId'> {
+  schemaVersion: 2;
+  projectId?: string;
+  revision: number;
+  coordinatorEpoch: string;
+  participants: ConversationParticipant[];
+  messages: ConversationMessage[];
+  turns: ConversationTurn[];
+  bindings: ConversationBinding[];
+  summaries: ConversationSummary[];
+  pinnedMessageIds: string[];
+  commandReceipts: ConversationCommandReceipt[];
+}
+export interface TeamChatSnapshot {
+  schemaVersion: 2;
+  revision: number;
+  teamChats: TeamChatRecord[];
+  conversations: DurableConversation[];
+}
+/** The repository owns serialization, isolation and durable publication. */
+export interface TeamChatRepository {
+  read(): TeamChatSnapshot;
+  transaction<T>(mutate: (draft: TeamChatSnapshot) => T): Promise<T>;
+}
+
+export interface SubmitConversationCommand {
+  conversationId: string;
+  commandId: string;
+  expectedRevision: number;
+  text: string;
+  selectedParticipantIds: string[];
+  context?: PageAssistantContext;
+  attachmentRefs: ConversationAttachment[];
+  runtimeOptions: Readonly<Record<string, string | number | boolean>>;
+}
+export interface ConversationCommandResult {
+  turnId: string;
+  revision: number;
+  state: ConversationTurnState;
+}

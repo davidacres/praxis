@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **782 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -504,26 +504,31 @@ This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/mai
 | PT-8AECE655BF | scheduled Runs | a retired preview opt-out does not hide the board schedule shortcut | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:306` |
 | PT-86743A6E61 | scheduled Runs | tickets can be dragged from the hopper onto the flow graph and reordered on it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:314` |
 | PT-F1D9810DD2 | scheduled Runs | a ticket dropped onto another shares its step, drawn as parallel lanes, and the steps are saved | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:348` |
-| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:415` |
-| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:461` |
-| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:509` |
-| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:633` |
-| PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:768` |
-| PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:806` |
-| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:830` |
-| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:847` |
-| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:864` |
-| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:902` |
-| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
-| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:959` |
-| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1006` |
-| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1040` |
-| PT-9BE6F17E92 | scheduled Runs | an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1068` |
-| PT-5BB7C25EC5 | scheduled Runs | parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1136` |
-| PT-984829ACD0 | scheduled Runs | two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1167` |
-| PT-57F1A1F35B | scheduled Runs | two parallel tickets that both merge into the base checkout take turns | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1222` |
-| PT-6B8DD4C416 | scheduled Runs | a parallel run whose readiness is blocked starts nothing in any lane and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1264` |
-| PT-2C5ADB8DC0 | scheduled Runs | a schedule paused on an untrusted workflow offers to review and trust it, then carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1281` |
+| PT-273152A227 | scheduled Runs | dragging a group ticket from the scheduler sidebar adds its unfinished child tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:414` |
+| PT-8738E01F29 | scheduled Runs | capture the composer and lineup for visual review (opt-in) | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:460` |
+| PT-4FBFA8B98D | scheduled Runs | scheduled runs have a grouped sidebar and project tickets stay outside the main pane | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:508` |
+| PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:632` |
+| PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:769` |
+| PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:809` |
+| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:833` |
+| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:850` |
+| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:867` |
+| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:909` |
+| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:926` |
+| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:970` |
+| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1019` |
+| PT-7C571CC649 | scheduled Runs | a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1053` |
+| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1100` |
+| PT-9BE6F17E92 | scheduled Runs | an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1128` |
+| PT-5BB7C25EC5 | scheduled Runs | parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1196` |
+| PT-6DDE4C4F48 | scheduled Runs | auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1227` |
+| PT-984829ACD0 | scheduled Runs | two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1253` |
+| PT-57F1A1F35B | scheduled Runs | two parallel tickets that both merge into the base checkout take turns | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1314` |
+| PT-13C1844C59 | scheduled Runs | an approval gate is determined autonomously and recorded in the run ledger without waiting for user input | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1356` |
+| PT-AE3B01630D | scheduled Runs | a long run's report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1384` |
+| PT-6B8DD4C416 | scheduled Runs | a parallel run whose readiness is blocked starts nothing in any lane and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1455` |
+| PT-794E9F0536 | scheduled Runs | a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1473` |
+| PT-2C5ADB8DC0 | scheduled Runs | a schedule paused on an untrusted workflow offers to review and trust it, then carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1536` |
 | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:15` |
 | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:27` |
 | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:50` |
@@ -567,16 +572,25 @@ This catalogue describes **768 Playwright tests** under `apps/praxis-desktop/mai
 | PT-0F10648F67 | session Recovery | interrupted CLI sessions also wait for selection and resume through ACP | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:99` |
 | PT-75B0F93373 | session Recovery | teardown drains an ACP task even when the session list already reports completion | `apps/praxis-desktop/main/e2e/sessionRecovery.spec.ts:110` |
 | PT-4972638424 | session Shelf | collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:51` |
-| PT-1FCF628060 | session Shelf | the shelf card sends a quick reply into the session | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:146` |
-| PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:190` |
-| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:264` |
-| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:306` |
-| PT-A0F01650EE | session Shelf Notes | the rail stays 14px with both controls inside it, and the plus opens a new session without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
-| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:66` |
-| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:96` |
-| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:107` |
-| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:138` |
-| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:155` |
+| PT-1FCF628060 | session Shelf | the shelf card sends a quick reply into the session | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:144` |
+| PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:188` |
+| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:262` |
+| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:304` |
+| PT-B3B664E022 | session Shelf New | a session started from the shelf stays in the shelf as its own preview card | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:62` |
+| PT-FFA325C092 | session Shelf New | a goal that matches one of today's sessions can be added to it with ⌘↵ | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:92` |
+| PT-036F938299 | session Shelf New | the creation cells label themselves, fill solid, and draw their glyphs on whole pixels | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:111` |
+| PT-B7C1C62EB2 | session Shelf New | a note becomes a session goal in one press | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:143` |
+| PT-1B797E8BFB | session Shelf New | with no usable provider the card keeps the goal and offers setup instead of sending | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:170` |
+| PT-F699F5C08F | session Shelf Notes | the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
+| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:68` |
+| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:98` |
+| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:109` |
+| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:140` |
+| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:157` |
+| PT-EF2C1AEDFA | session Shelf States | each spine draws its session's state, with a cap only where you are needed | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:85` |
+| PT-F7A9150AF3 | session Shelf States | an approval card shows the request and answers it in place | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:114` |
+| PT-B8E2DBE94C | session Shelf States | a working card shows the live step and the task list, and stops the session | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:128` |
+| PT-CEE2C36E6A | session Shelf States | arrow keys walk the shelf, and done and failed cards lead with their outcome | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:142` |
 | PT-2B75887CEB | session Skill Usage | a session shows its agent and the skills it used, and a skill lists the sessions that used it | `apps/praxis-desktop/main/e2e/sessionSkillUsage.spec.ts:22` |
 | PT-3C45DBB445 | session Team | a session can add several team members; a lone reviewer offers to draft an ask | `apps/praxis-desktop/main/e2e/sessionTeam.spec.ts:21` |
 | PT-1EF3C80135 | session Usage Quota | composer usage panel draws provider quota windows as bars with a collapsed meter | `apps/praxis-desktop/main/e2e/sessionUsageQuota.spec.ts:44` |

@@ -91,8 +91,8 @@ test('a workflow proposal is dropped outside the workflow page', async () => {
 });
 
 test('team chat store persists, titles from the first message, renames and deletes', async () => {
-  const data: Record<string, unknown> = {};
-  const store = new TeamChatStore({ get: <T>(k: string) => data[k] as T | undefined, update: async (k: string, v: unknown) => { data[k] = v; } } as never);
+  let data: import('./assistantTypes').TeamChatSnapshot = { schemaVersion: 2, revision: 0, teamChats: [], conversations: [] };
+  const store = new TeamChatStore({ read: () => structuredClone(data), transaction: async mutate => { const draft = structuredClone(data); const result = mutate(draft); data = draft; return result; } });
   const chat = await store.create('p1', 'PRX-1');
   await store.create('p2');
   await store.saveMessages(chat.id, [{ id: '1', role: 'user', text: 'Review the login flow', createdAt: 'x' }, { id: '2', role: 'qa', text: 'ok', createdAt: 'y' }]);

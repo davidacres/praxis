@@ -23,7 +23,7 @@ import {
   type WireImageAttachment,
   type IssueDetails
 } from '@praxis/core';
-import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
+import { FileTeamChatRepository } from './adapters/teamChatRepository';
 import { assistantCapabilityNote } from './assistantCapability';
 import { sanitizeImages } from './aiIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
@@ -38,7 +38,7 @@ const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
 
 /** `userData/team-chats.json` — per-profile like the other AI stores, so e2e profiles never share chats. */
 function getTeamChatStore(): TeamChatStore {
-  if (!chatStore) chatStore = new TeamChatStore(new JsonKeyValueStore(path.join(app.getPath('userData'), 'team-chats.json')));
+  if (!chatStore) chatStore = new TeamChatStore(new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json')));
   return chatStore;
 }
 
