@@ -589,3 +589,46 @@ for await (const line of createInterface({ input: process.stdin })) {
     await rm(folder, { recursive: true, force: true });
   }
 });
+
+test('durable ACP continuation sends only prepared context on native resume and reconstruction fallback', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'praxis-durable-acp-'));
+  const fixture = join(folder, 'agent.mjs');
+  const promptFile = join(folder, 'prompt.txt');
+  await writeFile(fixture, `
+import { createInterface } from 'node:readline';
+import { writeFileSync } from 'node:fs';
+const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: process.env.NATIVE === '1' ? { sessionCapabilities: { resume: true } } : {} } });
+  else if (request.method === 'session/new') send({ id: request.id, result: { sessionId: 'fresh' } });
+  else if (request.method === 'session/prompt') {
+    writeFileSync(process.env.PROMPT_FILE, request.params.prompt[0].text);
+    send({ method: 'session/update', params: { sessionId: request.params.sessionId, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Durable answer' } } } });
+    send({ id: request.id, result: { stopReason: 'end_turn' } });
+  } else if (request.id !== undefined) send({ id: request.id, result: {} });
+}
+`);
+  try {
+    for (const native of [true, false]) {
+      const record = { state: 'completed', sessionId: 'owner', runtimeSessionId: 'prior', provider: 'codex-cli', model: 'fixture', toolMode: 'read-only', permissionMode: 'manual', events: [{ type: 'message', timestamp: 'now', summary: 'Old native output', detail: 'MUST NOT APPEND LEGACY HISTORY' }], taskDefinition: { kind: 'general', goal: 'OLD INITIAL PROMPT', scope: 'fixture', definitionOfDone: 'reply' }, teamChatContextDelivery: '' };
+      const manager = {
+        getAgentSession: () => record,
+        appendAgentEvents: (_key: string, events: AgentEventSummary[]) => record.events.push(...events as typeof record.events),
+        updateAgentState: (_key: string, state: string) => { record.state = state; },
+        updateAgentOutput: (_key: string, value: object) => Object.assign(record, value),
+        updateAgentRuntime: (_key: string, value: object) => Object.assign(record, value),
+        refreshHandoverBrief: async () => {}
+      };
+      const agentHost = new AcpAgentHost(manager as never, { appendLine: () => {} });
+      await agentHost.continueTask('durable', 'current', { command: process.execPath, args: [fixture], env: { NATIVE: native ? '1' : '0', PROMPT_FILE: promptFile }, durableContext: { reconstruction: 'FULL PREPARED HISTORY ONCE', continuation: 'MISSING SHARED MESSAGES ONCE' } });
+      for (let i = 0; i < 200 && agentHost.hasActiveTask('durable'); i++) await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(agentHost.hasActiveTask('durable'), false);
+      assert.equal(record.state, 'completed');
+      assert.equal(await readFile(promptFile, 'utf8'), native ? 'MISSING SHARED MESSAGES ONCE' : 'FULL PREPARED HISTORY ONCE');
+      assert.equal(record.teamChatContextDelivery, native ? 'native' : 'reconstruction');
+    }
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+});

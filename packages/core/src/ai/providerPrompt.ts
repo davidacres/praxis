@@ -35,6 +35,7 @@ export async function runProviderPrompt(
     apiKey: string;
     baseUrl?: string;
     systemPrompt: string;
+    reasoningEffort?: import('./providers/reasoningSupport').ReasoningEffort;
     timeoutMs?: number;
     streamIdleTimeoutMs?: number;
     onUpdate?: (content: string) => void;
@@ -67,6 +68,7 @@ export async function runProviderPrompt(
       { role: 'user', content: prompt }
     ],
     maxTokens: 8192,
+    reasoningEffort: options.reasoningEffort,
     streamUsage: gateway.streamUsage,
     gatewayCaching: gateway.gatewayCaching
   });

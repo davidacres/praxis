@@ -74,7 +74,7 @@ export function advanceConversationAttempt(current: DurableConversation, expecte
   if (state === 'dispatching') attempt.dispatchIntent = timestamp;
   return next;
 }
-export function completeConversationAttempt(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, message: ConversationMessage, receipt: ConversationAttempt['contextReceipt']): DurableConversation {
+export function completeConversationAttempt(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, message: ConversationMessage, receipt: ConversationAttempt['contextReceipt'], evidence?: { reportedCost?: { currency: string; amount: number }; providerSessionId?: string; usage?: import('../gateway/wire').TokenUsage; usageReferences?: string[]; toolEvidenceReferences?: string[] }): DurableConversation {
   const next = changed(current, expected);
   const turn = next.turns.find(item => item.id === turnId);
   const attempt = turn?.attempts.find(item => item.id === attemptId);
@@ -82,8 +82,26 @@ export function completeConversationAttempt(current: DurableConversation, expect
       (!['dispatching', 'running', 'awaiting_approval'].includes(attempt.state) || !attempt.dispatchIntent) || turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
       turn.completedParticipantIds.includes(attempt.participantId) || message.turnId !== turnId || message.participantId !== attempt.participantId ||
       message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||
-      message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 || receipt.digest !== attempt.contextReceipt.digest ||
-      JSON.stringify(receipt) !== JSON.stringify(attempt.contextReceipt)) throw new Error('Invalid, duplicate or fenced completion.');
+      message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 ||
+      ![attempt.contextReceipt, attempt.nativeContextReceipt].some(candidate => candidate && JSON.stringify(receipt) === JSON.stringify(candidate))) throw new Error('Invalid, duplicate or fenced completion.');
+  attempt.contextReceipt = structuredClone(receipt);
+  if (evidence?.reportedCost) attempt.reportedCost = structuredClone(evidence.reportedCost);
+  if (evidence?.usage) attempt.usage = structuredClone(evidence.usage);
+  attempt.usageReferences = [...new Set(evidence?.usageReferences ?? [])];
+  attempt.toolEvidenceReferences = [...new Set(evidence?.toolEvidenceReferences ?? [])];
+  const binding = next.bindings.find(b => b.id === attempt.bindingId && b.status === 'valid');
+  if (evidence?.providerSessionId) attempt.providerSessionId = evidence.providerSessionId;
+  if (binding) {
+    if (evidence?.providerSessionId) binding.providerSessionId = evidence.providerSessionId;
+    binding.deliveredMessageIds = [...new Set([...binding.deliveredMessageIds, ...receipt.messageIds])];
+    binding.nativeOutputMessageIds.push(message.id);
+    if (receipt.summaryId) {
+      const summary = next.summaries.find(s => s.id === receipt.summaryId);
+      if (!summary) throw new Error('Missing delivered summary provenance.');
+      binding.summaryId = summary.id;
+      binding.summarizedMessageIds = [...new Set([...(binding.summarizedMessageIds ?? []), ...(summary.sourceMessageIds ?? next.messages.filter(m => m.sequence >= summary.sourceStart && m.sequence <= summary.sourceEnd).map(m => m.id))])];
+    }
+  }
   attempt.state = 'completed';
   attempt.resultMessageId = message.id;
   attempt.completedAt = message.createdAt;

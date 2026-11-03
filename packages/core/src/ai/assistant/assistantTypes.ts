@@ -111,7 +111,7 @@ export interface ConversationMessage extends AssistantMessage {
   attachments: ConversationAttachment[];
   context?: PageAssistantContext;
 }
-export interface ConversationContextReceipt { digest: string; messageIds: string[]; bindingId?: string; }
+export interface ConversationContextReceipt { digest: string; messageIds: string[]; bindingId?: string; instructionVersion?: string; summaryId?: string; budget?: { limit: number; reserved: number; estimated: number; method: string }; }
 export interface ConversationAttempt {
   id: string;
   turnId: string;
@@ -121,12 +121,15 @@ export interface ConversationAttempt {
   state: ConversationAttemptState;
   bindingId?: string;
   providerSessionId?: string;
+  nativeContextReceipt?: ConversationContextReceipt;
   contextReceipt: ConversationContextReceipt;
   dispatchIntent?: string;
   createdAt: string;
   completedAt?: string;
   error?: string;
   resultMessageId?: string;
+  reportedCost?: { currency: string; amount: number };
+  usage?: import('../gateway/wire').TokenUsage;
   usageReferences: string[];
   toolEvidenceReferences: string[];
 }
@@ -138,6 +141,7 @@ export interface ConversationTurn {
   acceptedSequence: number;
   plan: { participants: ConversationParticipant[]; runtimeOptions: Readonly<Record<string, string | number | boolean>>; context?: PageAssistantContext };
   state: ConversationTurnState;
+  contextRequiredReason?: string;
   completedParticipantIds: string[];
   attempts: ConversationAttempt[];
 }
@@ -150,9 +154,12 @@ export interface ConversationBinding {
   compatibilityDigest: string;
   deliveredMessageIds: string[];
   nativeOutputMessageIds: string[];
+  summarizedMessageIds?: string[];
+  summaryId?: string;
   status: 'valid' | 'invalid';
 }
 export interface ConversationSummary {
+  sourceMessageIds?: string[];
   id: string; version: number; sourceStart: number; sourceEnd: number; sourceDigest: string;
   text: string; attemptId: string; provider: string; supersedesId?: string;
 }
@@ -169,6 +176,8 @@ export interface DurableConversation extends Omit<TeamChatRecord, 'messages' | '
   turns: ConversationTurn[];
   bindings: ConversationBinding[];
   summaries: ConversationSummary[];
+  summaryAttempts?: { id: string; provider: string; state: 'dispatching' | 'completed' | 'failed'; sourceDigest: string; usage?: import('../gateway/wire').TokenUsage; error?: string }[];
+  decisionCorrections?: { messageId: string; supersedesMessageId: string }[];
   pinnedMessageIds: string[];
   commandReceipts: ConversationCommandReceipt[];
 }

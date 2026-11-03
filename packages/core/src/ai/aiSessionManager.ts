@@ -237,6 +237,8 @@ export class AiSessionManager {
         AgentSessionRecord,
         | 'workingDirectory'
         | 'toolMode'
+        | 'teamChatContextDelivery'
+        | 'teamChatExecution'
         | 'runtimeSessionId'
         | 'providerCapabilities'
         | 'providerVersion'
@@ -276,6 +278,8 @@ export class AiSessionManager {
       const open = record.runtimeEpochs?.find(epoch => !epoch.endedAt);
       if (open) open.runtimeSessionId = runtime.runtimeSessionId;
     }
+    if (runtime.teamChatContextDelivery !== undefined) record.teamChatContextDelivery = runtime.teamChatContextDelivery;
+    if (runtime.teamChatExecution !== undefined) record.teamChatExecution = structuredClone(runtime.teamChatExecution);
     if (runtime.providerCapabilities !== undefined) record.providerCapabilities = runtime.providerCapabilities;
     if (runtime.providerVersion !== undefined) record.providerVersion = runtime.providerVersion.trim() || undefined;
     if (runtime.runtimeLaunch !== undefined) record.runtimeLaunch = runtime.runtimeLaunch;

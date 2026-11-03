@@ -432,3 +432,90 @@ test('TASK-479 AC4: Closing/cancelling turn does not corrupt conversation state'
   const turn = conv.turns.find(t => t.id === res.turnId)!;
   assert.equal(turn.state, 'cancelled');
 });
+
+async function settled(coordinator: TeamChatCoordinator, conversationId: string): Promise<DurableConversation> {
+  for (let i = 0; i < 100; i++) {
+    const conversation = coordinator.getConversation(conversationId)!;
+    if (conversation.turns.length && conversation.turns.every(t => !['queued', 'running'].includes(t.state))) return conversation;
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
+  throw new Error('Coordinator did not settle.');
+}
+
+test('compatible members retain one binding each across turns and chats remain isolated; usage commits once', async () => {
+  const repo = new MemoryTeamChatRepository([makeConversation(), makeConversation('other')]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
+    prepare: async ({ conversation, participant }) => ({ conversationId: conversation.id, participantId: participant.id, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: participant.instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat', toolPolicy: 'read-only', permissionPolicy: 'manual' }),
+    execute: async ({ attempt }) => ({ text: 'Reply', usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] })
+  } });
+  for (const [conversationId, commandId] of [['conv-1', 'first'], ['conv-1', 'second'], ['other', 'third']]) {
+    await coordinator.submitTurn({ conversationId, commandId, expectedRevision: 1, text: 'Hello', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
+    await settled(coordinator, conversationId);
+  }
+  const conversation = coordinator.getConversation('conv-1')!;
+  assert.equal(conversation.turns.flatMap(t => t.attempts).length, 4);
+  assert.equal(conversation.bindings.length, 2);
+  assert.equal(new Set([...conversation.bindings, ...coordinator.getConversation('other')!.bindings].map(b => b.id)).size, 4);
+  for (const attempt of conversation.turns.flatMap(t => t.attempts)) {
+    assert.equal(attempt.usage?.inputTokens, 2);
+    assert.deepEqual(attempt.usageReferences, [attempt.id]);
+    assert.ok(conversation.bindings.find(b => b.id === attempt.bindingId)?.nativeOutputMessageIds.includes(attempt.resultMessageId!));
+  }
+});
+
+test('context overflow pauses before any main provider attempt', async () => {
+  let dispatches = 0;
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: { execute: async () => { dispatches++; return { text: 'unexpected' }; } } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'large', expectedRevision: 1, text: 'x'.repeat(40000), selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+  const conversation = await settled(coordinator, 'conv-1');
+  assert.equal(conversation.turns[0].state, 'context_required');
+  assert.equal(conversation.turns[0].attempts.length, 0);
+  assert.equal(dispatches, 0);
+});
+
+test('uncertain acceptance invalidates the binding and never automatically resends', async () => {
+  const coordinatorModule = require('./teamChatCoordinator') as typeof import('./teamChatCoordinator');
+  const conversation = makeConversation();
+  conversation.bindings.push({ id: 'binding', conversationId: conversation.id, participantId: 'part-lead', providerRuntime: 'fixture', compatibilityDigest: '', deliveredMessageIds: [], nativeOutputMessageIds: [], status: 'valid' });
+  let calls = 0;
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([conversation]), executionAdapter: {
+    execute: async () => { calls++; throw new coordinatorModule.TeamChatAcceptanceUnknown('transport closed after send'); }
+  } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'unknown', expectedRevision: 1, text: 'Hello', selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+  const result = await settled(coordinator, 'conv-1');
+  assert.equal(result.turns[0].state, 'outcome_unknown');
+  assert.equal(calls, 1);
+  await assert.rejects(coordinator.retryParticipant('conv-1', result.turns[0].id, 'part-lead'), /invalid retry/);
+});
+
+test('bounded summarization has separate provenance and usage; summary failure dispatches no main prompt', async () => {
+  for (const fail of [false, true]) {
+    const conversation = makeConversation();
+    conversation.messages = Array.from({ length: 18 }, (_, i) => ({ id: `old-${i}`, turnId: 'old', role: 'user' as const, text: `Source ${i} ${'x'.repeat(1000)}`, createdAt: 'now', sequence: i + 1, attachments: [] }));
+    conversation.pinnedMessageIds = ['old-0'];
+    let dispatches = 0;
+    const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([conversation]), executionAdapter: {
+      summarize: async prompt => {
+        assert.ok(Buffer.byteLength(prompt) <= 16000);
+        if (fail) throw new Error('summary unavailable');
+        return { text: 'Bounded summary with source IDs.', usage: { inputTokens: 100, outputTokens: 8 } };
+      },
+      execute: async ({ preparedPrompt }) => {
+        dispatches++;
+        assert.ok(preparedPrompt!.includes('Source 0'));
+        return { text: 'Main reply', usage: { inputTokens: 200 } };
+      }
+    } });
+    await coordinator.submitTurn({ conversationId: conversation.id, commandId: 'large-history', expectedRevision: 1, text: 'Current request ' + 'y'.repeat(12000), selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+    const result = await settled(coordinator, conversation.id);
+    assert.equal(dispatches, fail ? 0 : 1);
+    assert.equal(result.turns[0].state, fail ? 'context_required' : 'completed');
+    assert.equal(result.summaryAttempts![0].state, fail ? 'failed' : 'completed');
+    if (!fail) {
+      assert.equal(result.summaryAttempts![0].usage?.inputTokens, 100);
+      assert.equal(result.summaries[0].attemptId, result.summaryAttempts![0].id);
+      assert.ok(result.summaries[0].sourceMessageIds?.length);
+      assert.equal(result.turns[0].attempts[0].usage?.inputTokens, 200);
+    }
+  }
+});

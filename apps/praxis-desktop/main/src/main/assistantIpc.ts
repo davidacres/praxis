@@ -1,9 +1,11 @@
+import { createProductionTeamChatExecutionAdapter, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { app } from 'electron';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
+  conversationPayloadDigest,
   runAssistantTurn,
   runTeamReview,
   TeamChatStore,
@@ -15,13 +17,9 @@ import {
   type AssistantTeamReviewRequest,
   type AssistantTurnRequest,
   type AssistantRole,
-  type AgentPermissionMode,
-  type AgentToolMode,
   type AgentSessionRecord,
   type AgentTaskDefinition,
   type AiProvider,
-  type ReasoningEffort,
-  type WireImageAttachment,
   type IssueDetails,
   type ConversationUpdate,
   type SubmitConversationCommand
@@ -32,7 +30,7 @@ import { sanitizeImages } from './aiIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { broadcastToAllWindows } from './windowBroadcast';
-import { getAiSessionManager } from './aiInstance';
+import { getAiSessionManager, abortActiveTask, resolveConnectionOptions } from './aiInstance';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 
 let chatRepository: FileTeamChatRepository | undefined;
@@ -63,24 +61,13 @@ export function getTeamChatCoordinator(): TeamChatCoordinator {
           broadcastToAllWindows('assistant:chatsChanged');
         }
       },
-      executionAdapter: {
-        execute: async ({ participant, messages, turn }) => {
-          const settings = getSettingsBackend().read();
-          const selectedProvider = settings.ai.activeProvider;
-          const userPrompt = messages.filter(m => m.role === 'user').at(-1)?.text ?? '';
-          const runtime: AssistantRuntimeOptions = {
-            provider: selectedProvider,
-            model: (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
-            personaId: participant.role,
-            mode: 'chat',
-            toolMode: 'read-only',
-            toolSessionPrefix: `ASSISTANT-${turn.id}`
-          };
-          const systemPrompt = `You are the ${participant.role} team member. Respond to the conversation.`;
-          const text = await completeWithTools(runtime, systemPrompt, userPrompt);
-          return { text };
+      executionAdapter: createProductionTeamChatExecutionAdapter({
+        settings: () => getSettingsBackend().read(), resolveConnectionOptions, completeWithTools,
+        resolveRuntimeConfiguration: async provider => {
+          const prepared = await prepareAgentLaunch({ provider });
+          return `${provider}:${conversationPayloadDigest(JSON.parse(JSON.stringify(prepared)))}`;
         }
-      }
+      })
     });
   }
   return coordinator;
@@ -103,7 +90,7 @@ function stripReviewHeading(reply: string): string {
   return reply.replace(/^## AI Review by [^\n]*\n+/, '');
 }
 
-type AssistantRuntimeOptions = { provider?: AiProvider; model?: string; reasoningEffort?: ReasoningEffort; permissionMode?: AgentPermissionMode; mode?: 'chat' | 'analysis' | 'review'; toolMode?: AgentToolMode; workingDirectory?: string; toolSessionPrefix?: string; personaId?: AssistantRole; images?: WireImageAttachment[] };
+type AssistantRuntimeOptions = TeamChatRuntimeOptions;
 
 function toolSessionKey(runtime: AssistantRuntimeOptions): string {
   // Reuse one execution per chat and persona. A changed runtime or permission
@@ -150,16 +137,26 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
   const completed = new Promise<AgentSessionRecord>(resolve => {
     subscription = manager.onDidChangeAgentSession(record => {
       if (record.issueKey !== issue.key) return;
-      if (!['completed', 'failed', 'aborted'].includes(record.state)) started = true;
+      if (!['completed', 'failed', 'aborted'].includes(record.state)) {
+        started = true;
+        if (record.responseText || record.state === 'awaiting_approval') runtime.onAccepted?.();
+      }
       // Continuation preparation also emits the previous completed record.
-      else if (started) resolve(record);
+      else if (started && (!runtime.ownership || record.teamChatExecution?.attemptId === runtime.ownership.attemptId)) resolve(record);
     });
   });
+  const onAbort = () => {
+    void abortActiveTask(issue.key);
+  };
+  runtime.signal?.addEventListener('abort', onAbort, { once: true });
   try {
+    if (runtime.signal?.aborted) throw new Error('Team chat execution cancelled.');
     const prepared = await prepareAgentLaunch({ provider });
+    if (runtime.signal?.aborted) throw new Error('Team chat execution cancelled.');
     if (existing) {
       await continueAgentTask(prepared, {
         issueKey: issue.key,
+        durableContext: runtime.durableContext,
         message: userPrompt,
         model: runtime.model,
         workingDirectory,
@@ -169,6 +166,7 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
     } else await launchAgentTask(prepared, {
       issue,
       taskDefinition,
+      durableContext: runtime.durableContext,
       provider,
       model: runtime.model?.trim() || undefined,
       workingDirectory,
@@ -178,12 +176,16 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
       reasoningEffort: runtime.reasoningEffort,
       ...((runtime.permissionMode === 'bypass' || runtime.permissionMode === 'autopilot') ? { autoApprovePermissions: true } : {})
     });
+    if (runtime.ownership) manager.updateAgentRuntime(issue.key, { teamChatExecution: runtime.ownership });
+    if (runtime.signal?.aborted) onAbort();
     const record = await completed;
+    runtime.onTerminal?.(record);
     if (record.state !== 'completed') throw new Error(record.lastError ?? `Assistant tool turn ${record.state}.`);
     const reply = [...record.events].reverse().find(event => event.type === 'message')?.detail ?? record.responseText;
     if (!reply?.trim()) throw new Error('The assistant tool turn returned no reply.');
     return reply.trim();
   } finally {
+    runtime.signal?.removeEventListener('abort', onAbort);
     subscription?.dispose();
   }
 }
@@ -273,6 +275,7 @@ export function registerAssistantIpc(): void {
     changed();
   });
 
+  ipcMain.handle('assistant:pinDecision', (_event, conversationId: string, messageId: string, supersedesMessageId?: string) => getTeamChatCoordinator().pinDecision(conversationId, messageId, supersedesMessageId));
   ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => getTeamChatCoordinator().submitTurn(command));
   ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => getTeamChatCoordinator().getConversation(conversationId));
   ipcMain.handle('assistant:cancelTurn', async (_event, conversationId: string, turnId: string) => {

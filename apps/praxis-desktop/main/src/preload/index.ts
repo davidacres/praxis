@@ -447,6 +447,7 @@ const praxis: PraxisIpc = {
     saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
     renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
     deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
+    pinDecision: (conversationId: string, messageId: string, supersedesMessageId?: string) => ipcRenderer.invoke('assistant:pinDecision', conversationId, messageId, supersedesMessageId),
     submitTurn: (command: unknown) => ipcRenderer.invoke('assistant:submitTurn', command),
     getConversation: (conversationId: string) => ipcRenderer.invoke('assistant:getConversation', conversationId),
     subscribeConversation: (conversationId: string, listener: (update: ConversationUpdate) => void) => {

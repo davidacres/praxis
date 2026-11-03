@@ -592,3 +592,16 @@ test('tool calls that load a skill are recorded on the session as detected skill
   ]);
   assert.deepEqual(mgr.getAgentSession('SESSION-abc')?.detectedSkills?.map(use => use.skillId), ['praxis-scheduled-runs', 'plan-authoring']);
 });
+
+test('durable ownership and negotiated context delivery persist without aliasing the caller', async () => {
+  const storage = storeWith({ 'SESSION-abc': baseRecord('completed') });
+  const manager = new AiSessionManager(storage);
+  const ownership = { conversationId: 'conversation', turnId: 'turn', participantId: 'member', attemptId: 'attempt', bindingId: 'binding', coordinatorEpoch: 'epoch' };
+  manager.updateAgentRuntime('SESSION-abc', { teamChatExecution: ownership, teamChatContextDelivery: 'native' });
+  ownership.attemptId = 'mutated';
+  assert.equal(manager.getAgentSession('SESSION-abc')?.teamChatExecution?.attemptId, 'attempt');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const restored = new AiSessionManager(storage).getAgentSession('SESSION-abc');
+  assert.equal(restored?.teamChatExecution?.bindingId, 'binding');
+  assert.equal(restored?.teamChatContextDelivery, 'native');
+});

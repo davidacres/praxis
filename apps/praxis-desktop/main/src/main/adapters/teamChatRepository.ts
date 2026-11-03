@@ -50,6 +50,31 @@ function decode(raw: string): TeamChatSnapshot {
             !Array.isArray(attempt.contextReceipt.messageIds) || !['prepared', 'dispatching', 'running', 'awaiting_approval', 'completed', 'failed', 'interrupted', 'outcome_unknown', 'cancelled'].includes(attempt.state)) throw new Error('Invalid conversation attempt.');
       }
     }
+    const messageIds = new Set(conversation.messages.map((message: { id: string }) => message.id));
+    if (!uniqueIds(conversation.bindings) || !uniqueIds(conversation.summaries) ||
+        conversation.pinnedMessageIds.some((id: string) => !messageIds.has(id))) throw new Error('Invalid binding, summary or pinned source.');
+    const currentParticipants = new Set<string>();
+    for (const binding of conversation.bindings) {
+      if (binding.conversationId !== conversation.id || typeof binding.participantId !== 'string' ||
+          typeof binding.compatibilityDigest !== 'string' || typeof binding.providerRuntime !== 'string' ||
+          !['valid', 'invalid'].includes(binding.status) || !Array.isArray(binding.deliveredMessageIds) || !Array.isArray(binding.nativeOutputMessageIds) ||
+          [...binding.deliveredMessageIds, ...binding.nativeOutputMessageIds, ...(binding.summarizedMessageIds ?? [])].some(id => !messageIds.has(id))) throw new Error('Invalid provider binding.');
+      if (binding.status === 'valid') {
+        if (currentParticipants.has(binding.participantId)) throw new Error('Multiple current participant bindings.');
+        currentParticipants.add(binding.participantId);
+      }
+    }
+    for (const summary of conversation.summaries) {
+      if (!Number.isSafeInteger(summary.version) || summary.version < 1 || typeof summary.text !== 'string' ||
+          typeof summary.sourceDigest !== 'string' || typeof summary.attemptId !== 'string' || typeof summary.provider !== 'string' ||
+          (summary.sourceMessageIds && (!Array.isArray(summary.sourceMessageIds) || summary.sourceMessageIds.some((id: string) => !messageIds.has(id))))) throw new Error('Invalid summary provenance.');
+    }
+    if (conversation.summaryAttempts !== undefined && (!Array.isArray(conversation.summaryAttempts) || !uniqueIds(conversation.summaryAttempts) ||
+        conversation.summaryAttempts.some((attempt: { provider: unknown; sourceDigest: unknown; state: string }) => typeof attempt.provider !== 'string' || typeof attempt.sourceDigest !== 'string' || !['dispatching', 'completed', 'failed'].includes(attempt.state)))) throw new Error('Invalid summary attempt.');
+    if (conversation.decisionCorrections !== undefined && !Array.isArray(conversation.decisionCorrections)) throw new Error('Invalid decision corrections.');
+    for (const correction of conversation.decisionCorrections ?? []) {
+      if (!messageIds.has(correction.messageId) || !messageIds.has(correction.supersedesMessageId)) throw new Error('Invalid decision correction.');
+    }
     const commandIds = new Set<string>();
     for (const receipt of conversation.commandReceipts) {
       if (!receipt || typeof receipt.commandId !== 'string' || commandIds.has(receipt.commandId) || typeof receipt.payloadDigest !== 'string' ||

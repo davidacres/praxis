@@ -56,6 +56,8 @@ export interface AcpAgentLogger {
 }
 
 export interface AcpAgentStartOptions {
+  /** Coordinator-prepared context; bypass the legacy transcript replay. */
+  durableContext?: { reconstruction: string; continuation: string };
   /** Executable to spawn — e.g. `claude-agent-acp`, `codex-acp`, `agent`. */
   command: string;
   args?: string[];
@@ -871,9 +873,9 @@ export class AcpAgentHost {
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
     // its own persona, so the task's own instructions travel as one prompt.
-    const combinedPrompt = taskDefinition.sessionMode === 'chat'
+    const combinedPrompt = options.durableContext?.reconstruction ?? (taskDefinition.sessionMode === 'chat'
       ? `${systemPrompt}\n\nRespond directly to the user's request. Do not start a ticket analysis or inspect a ticket unless explicitly asked.`
-      : `${systemPrompt}\n\nExecute the task described above.\n\nIssue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}`;
+      : `${systemPrompt}\n\nExecute the task described above.\n\nIssue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}`);
 
     const client = new AcpClientWrapper({
       command: options.command,
@@ -1133,8 +1135,8 @@ export class AcpAgentHost {
         : ''
     }${record.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}${options.conversationContext ? `\n\n${options.conversationContext}` : ''}`;
     const currentTurn = `${options.internalConversationTurn ? 'Conversation routing instruction' : 'User follow-up'}:\n${followUp}`;
-    const resumedPrompt = [systemPrompt, currentTurn].join('\n\n');
-    const prompt = [
+    const resumedPrompt = options.durableContext?.continuation ?? [systemPrompt, currentTurn].join('\n\n');
+    const prompt = options.durableContext?.reconstruction ?? [
       systemPrompt,
       this.buildConversationTranscript(record.events),
       currentTurn
@@ -1200,6 +1202,7 @@ export class AcpAgentHost {
       // Cancelled while the agent was still starting: the request is never sent.
       if (task.ending) return;
       const response = await client.prompt(prompt, followUpImages, resumedPrompt);
+      if (options.durableContext) this.sessionManager.updateAgentRuntime(issueKey, { teamChatContextDelivery: client.didResumeSession ? 'native' : 'reconstruction' });
       if (client.sessionId) {
         this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
       }

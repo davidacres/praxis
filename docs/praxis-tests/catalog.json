@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 782,
+  "testCount": 784,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -3266,6 +3266,38 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "the composer grows with its text up to the shared cap, then scrolls",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-31EBA5B105",
+      "title": "durable no-tools API turns retain bounded history and usage without allocating agent sessions",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
+        "line": 882,
+        "project": "functional"
+      },
+      "area": "assistant",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "durable no-tools API turns retain bounded history and usage without allocating agent sessions",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-691B8EDBF3",
+      "title": "durable tool members reuse two runtime sessions for four attempts and isolate another chat",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
+        "line": 917,
+        "project": "functional"
+      },
+      "area": "assistant",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "durable tool members reuse two runtime sessions for four attempts and isolate another chat",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
