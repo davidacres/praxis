@@ -1,5 +1,5 @@
 ---
-**Status:** To Do
+**Status:** 🔄 In Progress
 **Created:** 2026-10-26
 **Type:** Story
 **Priority:** High
