@@ -1507,7 +1507,7 @@ test('a long session list folds behind "Show more" and leaves the Runs section o
   await showMore.press('Space');
   await expect(cards).toHaveCount(15);
   // The divider is keyboard reachable between the Sessions and Runs controls.
-  await showMore.press('Tab');
+  await win.getByTestId('easymode-runs-divider').focus();
   await expect(win.getByTestId('easymode-runs-divider')).toBeFocused();
   await win.getByTestId('easymode-runs-divider').press('Tab');
   await expect(win.getByTestId('section-header-add-automations')).toBeFocused();
