@@ -354,7 +354,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through to regular progress handling
@@ -374,7 +378,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through
@@ -396,7 +404,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through
@@ -418,7 +430,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through
