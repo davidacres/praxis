@@ -1,49 +1,52 @@
 # test-contracts
 
-Ticket: PRX-S111-179 / FX-BE-179. Stage: WF-F71C404F-test-contracts.
-Frozen implementation: `00dd78a725701a2ff24e786e7b3ecb26dc0926d5`.
+Ticket: PRX-S111-180 / FX-BE-180. Stage: WF-C2BF498E-test-contracts.
+Frozen implementation: `bc1fff5e6f6429c9a1b6e9f10522951e108fceba`.
 
 ## Result and inventory
 
-The checkout HEAD equals the frozen implementation. Before edits, tracked source and catalog files matched that snapshot; the supplied `.praxis/change-diff.md` was already modified and was left untouched. No live-main-checkout index or code-intelligence tools were available, so analysis used local frozen source, its references, and the supplied diff.
+HEAD equals the frozen implementation; the working tree was clean before this stage. Analysis inspected the supplied `.praxis/change-diff.md`, frozen coordinator, test fixtures/assertions, core test registration, store guard, main singleton/IPC, preload and renderer call sites. Code intelligence returned no coordinator symbol from its partial index, so current text was read from this frozen checkout.
 
-The deterministic validator passes: **782 Playwright contracts across 171 source files**. Independent inventory inspection found **zero duplicate generated IDs**. No stale identities, missing generated entries or moved-line warnings were reported. The implementation had already refreshed `catalog.json` and `index.md`; neither required another edit.
+The deterministic validator passes with **782 generated Playwright contracts across 171 source files**, zero duplicate IDs, and no stale identities or moved-line warnings. Generated files already match the snapshot and remain unchanged. This implementation adds **8 node:test registrations** in one coordinator test file, registered in the core test script. This stage adds eight exact source-linked structured English contracts. The scoped inventory union is **790 entries: 782 generated Playwright + 8 coordinator Node contracts**. This is not the complete monorepo suite count or expanded runtime count; existing supplemental documents and other Node suites are excluded from this scoped union.
 
-This story adds **9 node:test registrations**: four pure-transition tests and five file-repository tests. It also updates the fixture of one existing store regression. This stage authored **10 supplemental contracts**, each with stable generated ID, runner, exact file, line, title and Given/When/Then prose. Thus the documented union here is **792 entries: 782 generated Playwright + 10 supplemental Node contracts**. This is not a complete monorepo runtime test count: other Node suites and dynamic Playwright cases are outside this count. On Windows one of the five repository tests skips.
+Coverage links: [generated catalog](catalog.json), [automation index](index.md), [eight coordinator contracts](fx-be-180-coordinator.md), [predecessor storage/transition contracts](fx-be-179-conversations.md), [validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs).
 
-Coverage: [generated contracts](catalog.json), [automation index](index.md), [ten supplemental contracts](fx-be-179-conversations.md), [deterministic validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs).
+## Acceptance coverage and ambiguities
 
-## Acceptance evidence
+All eight new tests use a cloned in-memory repository and stub execution adapter, not file storage, Electron IPC or real providers.
 
-| Requirement | Exact automation coverage | Limits |
+| Requirement | Automation | Assertion boundary / finding |
 | --- | --- | --- |
-| Identical submit replay and conflicting payload rejection | [transition tests, line 15](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L15); [repository integration, line 65](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L65) | Lost acknowledgement is simulated by calling submit again, not by interrupting IPC. Integration checks message count and original receipt turn ID. |
-| Stale revision and active-turn rejection | [transition tests, line 27](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L27) | Active-turn assertion starts the same running turn again; no distinct second queued turn is constructed. |
-| Duplicate completion and epoch fencing | [transition tests, line 35](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L35) | One participant and one attempt; duplicate completion also encounters completed turn state. Does not isolate every rejection predicate. |
-| Explicit execution ownership | [ownership type](../../packages/core/src/ai/agentTypes.ts#L468), [conversation types](../../packages/core/src/ai/assistant/assistantTypes.ts#L96) | Separate named fields are present, all typed as strings; no ownership-specific automated assertion or negative compile test. No proof that runtime associations avoid title/event parsing. |
-| Concurrent changes across chats/windows | [repository tests, line 14](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L14) | Two adapter/store instances in one Node process, two chats; no Electron windows or IPC exercised. Writer coordination is process-local. |
-| Failure before rename preserves commit | [repository tests, line 27](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L27), [completion rollback, line 65](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L65) | Injected rename exceptions, not process-kill or power-loss experiments. |
-| Uncertain commit blocks until reconciliation | [repository tests, line 37](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L37) | Non-Windows only; callback checks title rather than command receipts. Final rename is awaited but not independently reloaded/asserted. |
-| Corruption errors and legacy compatibility | [repository tests, line 52](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L52) | Four bad fixtures and empty legacy snapshot; populated legacy migration and broad malformed nested records are not tested here. |
-| Existing store behavior | [existing regression, line 93](../../packages/core/src/ai/assistant/assistantEngine.test.ts#L93) | In-memory repository verifies naming, filtering, personas, rename and delete; title's “persists” does not prove disk/restart persistence. |
+| FIFO and command replay | [TASK-478 AC1, line 65](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L65) | Checks stored turn order, distinct concurrent IDs and sequential replay identity. The recorded executedTurns array is never asserted; simultaneous duplicate delivery and maximum active execution are not proved. |
+| Role order, mention, fallback | [TASK-478 AC2, line 124](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L124) | Asserts dev, qa, product, lead; security exists in the fixture but is not selected. Tests @qa only and empty selection on a populated conversation, not a truly empty participant roster. |
+| Context visibility | [TASK-478 AC3, line 188](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L188) | Checks messages supplied to the stub: first question visible, future question excluded, earlier dev reply visible to qa. Does not establish actual provider prompt content. |
+| Frozen roster/defaults; failure pauses queue | [TASK-478 AC4, line 241](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L241) | Asserts failed/queued states and both completed after retry. Despite its title, it never mutates roster or runtime defaults and does not verify plan immutability. |
+| Timeout and resubmission | [TASK-479 AC1, line 300](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L300) | Calls submit twice after awaiting success; no IPC timeout, lost acknowledgement, restart or disk durability is induced. |
+| Snapshot and newer revisions | [TASK-479 AC2, line 325](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L325) | Checks update count and event types only. No revision values/order, snapshot hydration, stale-event rejection, unsubscribe or new window is exercised. The supplied ticket's final acceptance bullet ends at “newer rev”; no further requirement is inferred. |
+| Invalid commands | [TASK-479 AC3, line 352](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L352) | Checks one unknown participant, one empty attachment reference and literal permissionMode invalid; no provider invocation. Does not prove a complete permission allowlist or attachment existence validation. |
+| Cancellation/window closure | [TASK-479 AC4, line 405](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L405) | Checks cancelled turn state after waiting beyond a delayed reply. No window closes; no assertions on message/attempt integrity or queued successor progress. |
 
-## Stale and ambiguous contracts
+## Uncovered integration contracts
 
-1. The previous `test-contracts.md` described TASK-502 at snapshot `202bb056` and 766 generated entries. This report replaces that stale stage result; historical ticket-specific note files remain untouched.
-2. Generated inventory is Playwright-only, despite the broader catalog goal. Nine new tests would have no structured contract without the supplemental document. The existing validator checks generated inventory shape and identity, not supplemental prose or actual assertion strength.
-3. The generator skips dynamic template titles and recognizes only direct `test(...)` calls; modified calls such as `test.only(...)` are not inventoried. It assigns every entry `project: functional`, including tests run by other projects. Therefore 782 is the exact supported static inventory count, not the full suite's expanded runtime count.
-4. Generic generated Then prose says assertions pass rather than naming observable results. Validation cannot establish that this prose accurately explains each journey. No claim of complete semantic review of all 782 contracts is made.
-5. Story test titles overstate some proof: “two windows” means stores in one process; “second running turn” retries the same turn; “context” completion checks a digest and result identity rather than every context field. Supplemental prose deliberately states only exercised assertions.
-6. No new UI, actual process restart, provider/session association, cross-process writer coordination, or standalone-session ownership regression is established by these nine tests. These are coverage boundaries, not claimed implementation failures; migration and runtime activation are separate stories per source comments.
+- Renderer handoff is not established: [AssistantProvider.tsx:181](../../apps/praxis-desktop/renderer/src/assistant/AssistantProvider.tsx#L181) still saves whole transcripts and lines 246/258 invoke the legacy turn API. No renderer source changed in the frozen implementation. Thus these tests do not prove UI sends reach the main coordinator or work continues after window closure.
+- The [main execution adapter](../../apps/praxis-desktop/main/src/main/assistantIpc.ts#L56) reads current settings at execution and builds its prompt from the latest user text. It does not forward the tested messages array as full history or use the accepted plan's runtime options and participant instructions. Stub-level context/default guarantees cannot be claimed for that integration.
+- No new automated assertion covers the [durable whole-transcript save guard](../../packages/core/src/ai/assistant/teamChatStore.ts#L60), main singleton ownership, preload routing/filtering, durable chat CRUD/list integration, or resolveAttempt branches. Their source presence is not coverage.
+- Fixed sleeps of 50–250 ms underpin these tests. Passing this run does not establish deterministic completion under slower environments. File repository behavior has predecessor tests, but this new coordinator suite does not integrate that adapter.
+
+## Catalog findings
+
+The previous report described FX-BE-179 at a different frozen revision; this report replaces that stale stage result. Historical ticket-specific contracts remain untouched. No duplicate or stale generated links were found.
+
+The generator inventories direct static `test(...)` calls in desktop e2e only. Dynamic template titles and modified calls such as `test.only(...)` are omitted, and all entries are labelled functional regardless of actual project. Generic generated Then prose is shape-checked, not semantically validated. Supplemental Node contracts are outside its validator; their exact titles, locations and IDs were independently checked. No claim is made that all 782 generated contracts were semantically reviewed or that 790 represents the complete automated suite.
 
 ## Changes and verification
 
-Only `docs/praxis-tests/fx-be-179-conversations.md` (new structured contracts) and this report were authored. No runtime code, workflow definitions, generated IDs or automation files changed.
+Only this report and `fx-be-180-coordinator.md` were authored. Runtime source, test source, generated identities and workflow definitions remain unchanged.
 
-- `npm run test:praxis-contracts` before editing: exit 0, `Praxis Tests: 782 Playwright tests catalogued and linked.` No warnings.
-- Catalog inspection: 782 entries, 171 files, zero duplicate IDs.
-- Supplemental source/title/line/hash/link checks: ten contracts match frozen automation; nine new and one existing registration. All IDs are unique and do not collide with the generated inventory.
-- `npm run test:praxis-contracts` after editing: exit 0, same 782 count, no warnings.
-- `git diff --check -- docs/praxis-tests/test-contracts.md`: passed. Whole-tree `git diff --check` reports pre-existing trailing whitespace only in the supplied `.praxis/change-diff.md`; that input was not edited.
+- `npm run test:praxis-contracts` before and after authoring: exit 0; 782 linked Playwright tests, no warnings.
+- `npm run build:core`: exit 0.
+- `node --test packages/core/out/ai/assistant/teamChatCoordinator.test.js`: exit 0; **8 passed, 0 failed, 0 skipped**.
+- Independent supplemental source/title/line/SHA1 and duplicate-ID checks: passed for all eight contracts.
+- `git diff --check`: passed.
 
-Runtime suites were not executed in this documentation-only stage; inventory validation is not runtime QA. No UI was changed, no visual verification was performed, and no screenshot was captured. No other workflow stage was advanced or approved.
+No broad runtime suite or desktop e2e was run in this documentation-only stage. No UI changed, no visual verification was performed, and no screenshot was captured. Catalog validation and focused Node proof do not establish release readiness. No other workflow stage was advanced or approved.
