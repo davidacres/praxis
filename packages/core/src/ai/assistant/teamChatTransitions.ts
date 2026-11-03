@@ -110,3 +110,26 @@ export function completeConversationAttempt(current: DurableConversation, expect
   next.messages.push(structuredClone(message));
   return next;
 }
+
+/** Start a new durable coordinator generation and classify attempts conservatively. */
+export function beginConversationEpoch(current: DurableConversation, expected: number, epoch: string, timestamp: string): DurableConversation {
+  const next = changed(current, expected);
+  if (!epoch || epoch === current.coordinatorEpoch) throw new Error('A fresh coordinator epoch is required.');
+  next.coordinatorEpoch = epoch;
+  for (const turn of next.turns) {
+    for (const attempt of turn.attempts) {
+      if (['prepared', 'dispatching', 'running', 'awaiting_approval'].includes(attempt.state)) {
+        const wasDispatched = Boolean(attempt.dispatchIntent);
+        const toolCapable = attempt.recoveryEvidence?.some(item => item.kind === 'runtime_identity' && item.data?.toolCapable !== false) ?? true;
+        attempt.state = wasDispatched && toolCapable ? 'outcome_unknown' : 'interrupted';
+        attempt.completedAt = timestamp;
+        attempt.recoveryEvidence ??= [];
+        attempt.recoveryEvidence.push({ id: `recovery:${epoch}:${attempt.id}`, conversationId: current.id, turnId: turn.id,
+          participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
+          kind: 'reconciliation', observedAt: timestamp, provenance: 'coordinator-startup', data: { dispatched: wasDispatched, toolCapable } });
+        turn.state = attempt.state === 'outcome_unknown' ? 'outcome_unknown' : 'interrupted';
+      }
+    }
+  }
+  return next;
+}

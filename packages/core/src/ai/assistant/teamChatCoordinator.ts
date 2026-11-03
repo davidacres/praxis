@@ -16,6 +16,7 @@ import type {
 import {
   advanceConversationAttempt,
   completeConversationAttempt,
+  beginConversationEpoch,
   conversationPayloadDigest,
   reserveConversationAttempt,
   startConversationTurn,
@@ -107,6 +108,7 @@ export class TeamChatCoordinator {
   private readonly subscribers = new Map<string, Set<(update: ConversationUpdate) => void>>();
   private readonly activeLoops = new Set<string>();
   private readonly abortControllers = new Map<string, AbortController>();
+  private initialization?: Promise<void>;
 
   public constructor(options: TeamChatCoordinatorOptions) {
     this.contextBudget = options.contextBudget;
@@ -115,6 +117,24 @@ export class TeamChatCoordinator {
     this.clock = options.clock ?? (() => new Date().toISOString());
     this.idSource = options.idSource ?? (() => `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     this.onUpdate = options.onUpdate;
+  }
+
+  /** Persist a new generation once before accepting scheduling work. */
+  public initialize(): Promise<void> {
+    this.initialization ??= (async () => {
+      const epoch = this.idSource();
+      const snapshot = this.repository.read();
+      for (const conversation of snapshot.conversations) {
+        const updated = await this.transitionConversation(conversation.id, current =>
+          beginConversationEpoch(current, current.revision, epoch, this.clock()));
+        if (updated.turns.some(turn => ['interrupted', 'outcome_unknown'].includes(turn.state))) {
+          this.notify({ conversationId: updated.id, revision: updated.revision, type: 'turn_failed',
+            turnId: updated.turns.find(turn => ['interrupted', 'outcome_unknown'].includes(turn.state))?.id,
+            state: updated.turns.find(turn => ['interrupted', 'outcome_unknown'].includes(turn.state))?.state });
+        }
+      }
+    })();
+    return this.initialization;
   }
 
   public subscribe(conversationId: string, listener: (update: ConversationUpdate) => void): () => void {
@@ -169,6 +189,7 @@ export class TeamChatCoordinator {
   }
 
   public async submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult> {
+    await this.initialize();
     if (!command.conversationId?.trim()) throw new Error('A conversationId is required.');
     if (!command.commandId?.trim()) throw new Error('A commandId is required.');
     if (!command.text?.trim()) throw new Error('A message text is required.');
@@ -308,6 +329,7 @@ export class TeamChatCoordinator {
   }
 
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
+    await this.initialize();
     const abortKey = `${conversationId}:${turnId}`;
     const controller = this.abortControllers.get(abortKey);
     if (controller) {
@@ -344,6 +366,7 @@ export class TeamChatCoordinator {
   }
 
   public async retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void> {
+    await this.initialize();
     const conversation = this.getConversation(conversationId);
     if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
     const turn = conversation.turns.find(t => t.id === turnId);
@@ -392,17 +415,10 @@ export class TeamChatCoordinator {
       await this.transitionConversation(conversationId, conv => {
         const t = conv.turns.find(item => item.id === turnId);
         const a = t?.attempts.find(item => item.id === attemptId);
-        if (!a || !t) return conv;
-        a.state = 'completed';
-        a.completedAt = this.clock();
-        if (!t.completedParticipantIds.includes(a.participantId)) {
-          t.completedParticipantIds.push(a.participantId);
+        if (!a || !t || !a.recoveryEvidence?.some(item => item.kind === 'final_result' && item.data?.text)) {
+          throw new Error('Cannot accept an attempt without a recovered final result.');
         }
-        if (t.completedParticipantIds.length === t.plan.participants.length) {
-          t.state = 'completed';
-        }
-        conv.revision++;
-        return conv;
+        throw new Error('Recovered result import is required before accepting an attempt.');
       });
       void this.processConversation(conversationId);
     }
