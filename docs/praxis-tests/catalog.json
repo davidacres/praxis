@@ -3280,9 +3280,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "durable no-tools API turns retain bounded history and usage without allocating agent sessions",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated durable conversation and mocked API with reported usage",
+        "when": "submit two no-tools turns through preload IPC and pin the first user message",
+        "then": "one binding and pin, two turns with 25 total tokens and one usage reference each, unchanged agent-session count, both user texts in the last API prompt, and no Review this ticket framing"
       }
     },
     {
@@ -3296,9 +3296,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "durable tool members reuse two runtime sessions for four attempts and isolate another chat",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "two isolated durable conversations with dev and qa and a mocked tool runtime",
+        "when": "submit two turns to the first conversation and one to the other",
+        "then": "four attempts and two bindings in the first chat, four distinct owned runtime sessions overall with two belonging to the first chat, and provider-session IDs and one usage reference on every first-chat attempt"
       }
     },
     {
