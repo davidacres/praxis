@@ -1,6 +1,6 @@
 # FX-BE-180 supplemental Praxis Test contracts
 
-Frozen implementation: `bc1fff5e6f6429c9a1b6e9f10522951e108fceba`. These eight Node contracts supplement the Playwright-only generated catalog. IDs follow SHA1(file + newline + exact title), truncated to ten uppercase hex digits. The generated validator does not validate supplemental contracts.
+Frozen implementation: `e5efa78513beb5f7bc9b7754e44bf86e1c864193`. These eight Node contracts supplement the Playwright-only generated catalog. IDs follow SHA1(file + newline + exact title), truncated to ten uppercase hex digits. The generated validator does not validate supplemental contracts.
 
 Runner: **node:test**. Registered in `packages/core/package.json` under `test` (root `npm run test:core`). Focused execution: `npm run build:core` followed by `node --test packages/core/out/ai/assistant/teamChatCoordinator.test.js`. All fixtures use an in-memory repository and stub execution adapter.
 

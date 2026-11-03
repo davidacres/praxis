@@ -1,13 +1,13 @@
 # test-contracts
 
 Ticket: PRX-S111-180 / FX-BE-180. Stage: WF-C2BF498E-test-contracts.
-Frozen implementation: `bc1fff5e6f6429c9a1b6e9f10522951e108fceba`.
+Frozen implementation: `e5efa78513beb5f7bc9b7754e44bf86e1c864193`.
 
 ## Result and inventory
 
 HEAD equals the frozen implementation; the working tree was clean before this stage. Analysis inspected the supplied `.praxis/change-diff.md`, frozen coordinator, test fixtures/assertions, core test registration, store guard, main singleton/IPC, preload and renderer call sites. Code intelligence returned no coordinator symbol from its partial index, so current text was read from this frozen checkout.
 
-The deterministic validator passes with **782 generated Playwright contracts across 171 source files**, zero duplicate IDs, and no stale identities or moved-line warnings. Generated files already match the snapshot and remain unchanged. This implementation adds **8 node:test registrations** in one coordinator test file, registered in the core test script. This stage adds eight exact source-linked structured English contracts. The scoped inventory union is **790 entries: 782 generated Playwright + 8 coordinator Node contracts**. This is not the complete monorepo suite count or expanded runtime count; existing supplemental documents and other Node suites are excluded from this scoped union.
+The deterministic validator passes with **782 generated Playwright contracts across 171 source files**, zero duplicate IDs, and no stale identities or moved-line warnings. Generated identities and source locations already match the snapshot. This iteration reviews the three QA-named Playwright flows and enriches two without changing their IDs. This implementation adds **8 node:test registrations** in one coordinator test file, registered in the core test script. The prior stage supplied eight exact source-linked structured English contracts; this iteration retains them. The scoped inventory union is **790 entries: 782 generated Playwright + 8 coordinator Node contracts**. This is not the complete monorepo suite count or expanded runtime count; existing supplemental documents and other Node suites are excluded from this scoped union.
 
 Coverage links: [generated catalog](catalog.json), [automation index](index.md), [eight coordinator contracts](fx-be-180-coordinator.md), [predecessor storage/transition contracts](fx-be-179-conversations.md), [validator](../../apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs).
 
@@ -39,14 +39,28 @@ The previous report described FX-BE-179 at a different frozen revision; this rep
 
 The generator inventories direct static `test(...)` calls in desktop e2e only. Dynamic template titles and modified calls such as `test.only(...)` are omitted, and all entries are labelled functional regardless of actual project. Generic generated Then prose is shape-checked, not semantically validated. Supplemental Node contracts are outside its validator; their exact titles, locations and IDs were independently checked. No claim is made that all 782 generated contracts were semantically reviewed or that 790 represents the complete automated suite.
 
-## Changes and verification
+## Prior iteration verification (historical, not rerun)
 
-Only this report and `fx-be-180-coordinator.md` were authored. Runtime source, test source, generated identities and workflow definitions remain unchanged.
+The previous iteration reported a core build and focused coordinator execution with 8 passed, 0 failed, 0 skipped. Those runtime checks were not rerun in this catalog-only iteration and are not fresh QA evidence.
 
-- `npm run test:praxis-contracts` before and after authoring: exit 0; 782 linked Playwright tests, no warnings.
-- `npm run build:core`: exit 0.
-- `node --test packages/core/out/ai/assistant/teamChatCoordinator.test.js`: exit 0; **8 passed, 0 failed, 0 skipped**.
-- Independent supplemental source/title/line/SHA1 and duplicate-ID checks: passed for all eight contracts.
-- `git diff --check`: passed.
+## Iteration 2 QA disposition
 
-No broad runtime suite or desktop e2e was run in this documentation-only stage. No UI changed, no visual verification was performed, and no screenshot was captured. Catalog validation and focused Node proof do not establish release readiness. No other workflow stage was advanced or approved.
+The supplied QA result is **57 passed, 3 failed out of 60**. The full QA log is not present among the supplied local artifacts; the summary does not identify which two tests had equality failures. No new runtime pass is claimed.
+
+| QA finding | Frozen-snapshot disposition |
+| --- | --- |
+| [Automation row actions, line 879](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L879) | No change in the repair commit. Existing curated contract retained: it describes the actual opacity, rename, archive and confirmed-delete assertions. The test checks the run action affordance but does not click it to prove run dispatch. Failure remains unverified; not fixed by this stage. |
+| [Session details, line 980](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L980) | No change in the repair commit. Contract enriched from seeded fixtures and asserted details, quote and scroll behavior. Failure remains unverified; not fixed by this stage. |
+| [Long session list, line 1377](../../apps/praxis-desktop/main/e2e/easymode.spec.ts#L1377) | Commit e5efa785 replaces Show more + Tab with direct divider focus at line 1510. This addresses the focus step only if the divider exists; it cannot repair a missing divider. It also removes proof that Tab from Show more reaches the divider. Divider-to-automation Tab remains asserted. No rerun proves the reported wait failure resolved. |
+
+The change-diff artifact describes the original implementation and omits the later one-line test repair; this report reconciles it with git show e5efa785. Product and test fixes are outside the frozen catalog scope and were not attempted.
+
+## Current changes and verification
+
+Updated this report, the supplemental document snapshot, and two curated catalog flows. Stable IDs, test sources, runtime code and workflow definitions are unchanged.
+
+- npm run test:praxis-contracts before and after editing: exit 0; 782 linked Playwright tests, no warnings.
+- Independent inventory: 782 entries across 171 files, with 782 unique IDs; eight supplemental coordinator contracts retain exact source links and IDs.
+- git diff --check: passed.
+
+No desktop e2e, broad runtime suite or visual verification was performed in this documentation-only iteration. No screenshot was captured. Catalog validation does not establish runtime QA or release readiness. No other workflow stage was advanced or approved.
