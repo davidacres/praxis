@@ -162,7 +162,8 @@ export const STAGE_STATUS_INSTRUCTIONS = [
   'End your response with this line on its own instead: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
 ].join(' ');
 
-const STAGE_BLOCKED_ENVIRONMENT = /^\s*Stage status:\s*blocked-environment\s*:?\s*(.*)$/im;
+// ACP may concatenate a progress message and the final reply without a newline.
+const STAGE_BLOCKED_ENVIRONMENT = /(?:^|[.!?])\s*Stage status:\s*blocked-environment\s*:?\s*(.*)$/im;
 
 /** The reason a stage gave for being stopped by its environment, when it gave one. */
 export function readEnvironmentBlock(responseText: string | undefined): string | undefined {
@@ -186,6 +187,7 @@ export const FINDINGS_BLOCK_INSTRUCTIONS = [
  * not read the repository and said so was recorded as having planned, and implementation began.
  */
 export const PLAN_STATUS_INSTRUCTIONS = [
+  'Deliver the complete markdown plan in your final response. Praxis captures that response as the plan artifact; do not create or write a plan file, and no writable artifact tool is needed.',
   'Confirm a plan output with this line on its own, after the plan itself (and before any fenced block the response must end with): `Plan status: ready`.',
   'If you could not produce the plan, do not present a partial one as finished: write `Plan status: blocked: <why>` in its place.'
 ].join('\n');

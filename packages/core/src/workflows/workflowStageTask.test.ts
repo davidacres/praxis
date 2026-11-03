@@ -283,8 +283,20 @@ test('readPlanStatus takes the last status line and tolerates markdown around it
   assert.deepEqual(readPlanStatus('plan status: Blocked \u2014 no access'), { ready: false, reason: 'it reported itself blocked: no access' });
 });
 
+test('a concatenated ACP progress message does not hide a final environment block', () => {
+  const outcome = stageOutcomeFromSession(planNode(), {
+    state: 'completed',
+    responseText: 'I will inspect the source first.Stage status: blocked-environment: required file tools are unavailable; enable them.'
+  });
+  assert.equal(outcome.pause, 'environment');
+  assert.match(outcome.error ?? '', /required file tools are unavailable/);
+  assert.deepEqual(outcome.artifacts ?? [], []);
+});
+
 test('a plan stage is told how to confirm its plan', () => {
   const task = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'plan-doc', kind: 'plan', required: true }] }));
+  assert.match(task.definitionOfDone, /captures that response as the plan artifact/);
+  assert.match(task.definitionOfDone, /no writable artifact tool is needed/);
   assert.match(task.definitionOfDone, /Plan status: ready/);
   assert.match(task.definitionOfDone, /Plan status: blocked: <why>/);
   assert.doesNotMatch(buildStageTaskDefinition(context()).definitionOfDone, /Plan status/);

@@ -409,7 +409,7 @@ export async function runWorkflowAgentStage(
     dispatch.signal?.throwIfAborted();
     const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
     if (needsReviewFileTools) {
-      taskDefinition.scope += '\n\nUse the praxis-review-files MCP read_file and list_dir tools to inspect this working folder and .praxis-run artifacts. These tools are read-only. Shell commands that only read (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n) are allowed. Anything else is refused, and a refused command can end your turn before you have answered, so do not try to run tests, builds or scripts.';
+      taskDefinition.scope += '\n\nUse the praxis-review-files MCP read_file and list_dir tools to inspect this working folder and any input artifact paths listed above. Praxis creates .praxis-run only when it supplies file inputs; its absence when no file inputs are listed is expected and does not block this stage. Do not substitute artifacts from .praxis or another task. These tools are read-only. Shell commands that only read (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n) are allowed. Anything else is refused, and a refused command can end your turn before you have answered, so do not try to run tests, builds or scripts.';
     }
     if (needsReviewFileTools) {
       mcpServers = [{
