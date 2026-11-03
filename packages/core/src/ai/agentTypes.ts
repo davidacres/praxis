@@ -464,7 +464,18 @@ export interface BackgroundTask {
   producerId?: string;
 }
 
+/** Projection only; the conversation attempt remains authoritative. */
+export interface TeamChatExecutionOwnership {
+  conversationId: string;
+  turnId: string;
+  participantId: string;
+  attemptId: string;
+  coordinatorEpoch: string;
+  providerSessionId?: string;
+}
+
 export interface AgentSessionRecord {
+  teamChatExecution?: TeamChatExecutionOwnership;
   backgroundTasks?: BackgroundTask[];
   issueKey: string;
   sessionId: string;

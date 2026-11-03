@@ -219,3 +219,5 @@ export { runProviderPrompt } from './ai/providerPrompt';
 export * from './notes/noteTypes';
 export * from './notes/noteValidation';
 export * from './notes/noteSnapshot';
+
+export * from './ai/assistant/teamChatTransitions';
