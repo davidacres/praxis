@@ -3,6 +3,23 @@ import type { AgentTaskDefinition } from './agentTypes';
 import { TICKET_REVIEW_SESSION_PROMPT, reviewedIssueKey } from './ticketReview';
 import { HUMAN_REVIEW_SESSION_PROMPT } from './humanReview';
 
+const IMPLEMENTATION_SYSTEM_PROMPT = `You are an autonomous implementation agent operating under strict contracts.
+
+## Core Contract
+- Implement the requested changes directly in this repository according to the provided plan and ticket scope.
+- Author the necessary code, modules, types, and configurations surgically with minimal diffs.
+- Write or update tests covering the changed code and UI, and verify them locally using available tools.
+- Produce clean git commit changesets with descriptive messages.
+- Do not stop after analysis and do not refuse or defer implementation: execute the plan, verify the results, and commit the changes in this session.
+- Stop deterministically when the Definition of Done is satisfied and the commit ref is reported.
+
+## Guardrails
+- Stopping correctly when the Definition of Done is satisfied is a success condition.
+- Do not modify code outside the stated scope.
+- Do not fix pre-existing issues unrelated to the task.
+- Prefer the provided tools (read_file, write_file, list_dir, run_shell) for all workspace inspection and changes.
+`;
+
 const PLANNING_SYSTEM_PROMPT = `You are an autonomous coding agent operating under strict contracts.
 
 ## Core Contract
@@ -20,7 +37,7 @@ Before writing any code or making any changes, you MUST complete a thorough anal
 4. **Form a plan**: Summarise your analysis as a clear, ordered implementation plan before you touch any file. State which files will be created or modified and why.
 5. **Then implement**: Only after steps 1–4 are complete should you begin making changes. Implement methodically, following your plan.
 
-Skipping or abbreviating this analysis phase is a failure condition, even if the resulting code happens to be correct.
+Conduct your analysis before making changes, then proceed directly with implementation in the same session. Do not refuse or abort the turn to request a separate analysis phase unless explicitly directed.
 
 ## Guardrails
 - Stopping correctly is a success condition.
@@ -215,7 +232,9 @@ function buildTaskSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): 
         ? TICKET_REVIEW_SESSION_PROMPT
         : task.kind === 'human-review'
           ? HUMAN_REVIEW_SESSION_PROMPT
-          : PLANNING_SYSTEM_PROMPT;
+          : task.kind === 'implementation'
+            ? IMPLEMENTATION_SYSTEM_PROMPT
+            : PLANNING_SYSTEM_PROMPT;
 
   if (task.sessionMode === 'chat') {
     return `${sessionPrompt}

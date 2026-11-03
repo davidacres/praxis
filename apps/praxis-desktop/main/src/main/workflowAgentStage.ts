@@ -407,6 +407,9 @@ export async function runWorkflowAgentStage(
     if (prepared.binding) taskDefinition.goal += `\n\n${await getAgentRuntimeManager().bindingContext(prepared.binding)}`;
 
     dispatch.signal?.throwIfAborted();
+    if (node.mutatesWorktree) {
+      taskDefinition.scope += '\n\nThis is an implementation stage. Implement all required modules, types, and logic specified in the plan and ticket. Do not refuse or declare blocked-environment because code or contracts need to be created from scratch: writing that code is the purpose of this stage.';
+    }
     const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
     if (needsReviewFileTools) {
       taskDefinition.scope += '\n\nInspect this working folder and any input artifact paths listed above using either the praxis-review-files MCP read_file and list_dir tools (if available) or read-only shell commands (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n). If praxis-review-files tools are not exposed in your toolset, use the allowed read-only shell commands to inspect the repository, git commits, frozen snapshot, and diff artifacts directly. Do not report blocked-environment for missing MCP tools when read-only shell commands are available. Praxis creates .praxis-run only when it supplies file inputs; its absence when no file inputs are listed is expected and does not block this stage. Do not substitute artifacts from .praxis or another task. Shell commands that only read are allowed; anything modifying files or running builds/tests is refused, so do not try to run tests, builds or scripts.';

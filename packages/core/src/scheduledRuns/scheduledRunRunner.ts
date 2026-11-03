@@ -315,7 +315,7 @@ export class ScheduledRunRunner {
     if (run.status !== 'paused' || run.pause?.reason !== 'failure' || !run.pause.entryId) return run;
     const entry = run.entries.find(candidate => candidate.id === run.pause?.entryId);
     const workflowRunId = entry?.outcome?.workflowRunId;
-    if (!entry || entry.outcome?.status !== 'failed' || !workflowRunId) return run;
+    if (!entry || (entry.outcome?.status !== 'failed' && entry.outcome?.status !== 'paused') || !workflowRunId) return run;
     const progress = this.ports.observe(workflowRunId)?.progress;
     if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
     if (progress.kind === 'succeeded') run = await this.moveTicket(run, entry.id, 'done');
@@ -354,7 +354,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through to regular progress handling
@@ -374,7 +378,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through
@@ -396,7 +404,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through
@@ -418,7 +430,11 @@ export class ScheduledRunRunner {
         const updated = this.ports.observe(workflowRunId);
         if (updated) {
           observation = updated;
-          progress = updated.progress;
+          progress = updated.progress.kind === 'stalled'
+            ? { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) }
+            : updated.progress;
+        } else {
+          progress = { kind: 'running', provider: entry.outcome?.provider, ...(entry.outcome?.spend ? { spend: entry.outcome.spend } : {}) };
         }
       } catch {
         // Fall through

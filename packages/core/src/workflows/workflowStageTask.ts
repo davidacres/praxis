@@ -63,7 +63,12 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       ].join('\n')
     : undefined;
 
+  const isImplementation = context.expectedOutputs.some(output => output.kind === 'diff');
+  const isReview = context.expectedOutputs.some(output => output.kind === 'findings');
+  const kind = isImplementation ? ('implementation' as const) : isReview ? ('review' as const) : undefined;
+
   return {
+    ...(kind ? { kind } : {}),
     goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, packGuidance]
       .filter((line): line is string => Boolean(line))
       .join('\n\n'),
@@ -119,6 +124,9 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
   if (outputs.some(output => output.kind === 'diff')) {
     rules.push(
       [
+        'Implement the planned changes directly in this codebase.',
+        'Even if surrounding components are missing, author the required types, interfaces, coordinators, adapters, or modules according to the plan.',
+        'Never refuse or report blocked-environment because codebase components need to be created.',
         `Before you finish, run the tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), including the end-to-end or UI tests for any UI you changed, and fix what fails.`,
         'Fix a failing test or check even when earlier, already-delivered work caused it: no other ticket will. Leave it only when a later ticket in the same plan explicitly covers it, and name that ticket.'
       ].join(' ')
@@ -159,7 +167,9 @@ export const PLANNED_TESTS_INSTRUCTIONS = [
  */
 export const STAGE_STATUS_INSTRUCTIONS = [
   'If something outside your control stops you doing this stage (a missing tool, service, credential or dependency you may not provide), do not present a report of that as the stage\'s result.',
-  'End your response with this line on its own instead: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
+  'Do not report blocked-environment for missing code, types, coordinators, IPC handlers, or features that are part of this ticket\'s work to build. Implementing missing parts is this stage\'s objective.',
+  'Do not report blocked-environment due to shell output truncation: read files in smaller slices or use targeted searches instead.',
+  'End your response with this line on its own only when a genuine environment blocker prevents execution: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
 ].join(' ');
 
 // ACP may concatenate a progress message and the final reply without a newline, or wrap in markdown bold/backticks.

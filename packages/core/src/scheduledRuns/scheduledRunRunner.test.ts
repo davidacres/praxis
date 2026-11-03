@@ -672,6 +672,30 @@ test('a failed stage with attempts remaining is retried autonomously and recorde
   assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'entry-retried');
 });
 
+test('a paused scheduled run whose entry was paused on an environment block resumes when the workflow recovers', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+
+  // The entry stalled with no attempts remaining or paused
+  h.setWorkflow('T-1', {
+    progress: {
+      kind: 'stalled',
+      pauseReason: 'failure',
+      reason: 'Implement could not run here: missing tool'
+    }
+  });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+  assert.equal(h.run.entries[0].outcome?.status, 'paused');
+
+  // The workflow run recovers (e.g. stage is running again)
+  h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+  await h.runner.tick();
+
+  assert.equal(h.run.status, 'running', 'scheduled run must resume when workflow recovers from paused');
+  assert.equal(h.run.entries[0].outcome?.status, 'running');
+});
+
 test('each ticket moves on its board as it is worked: in progress at launch, done when it finishes', async () => {
   const h = new Harness(['T-1', 'T-2']);
   const moves: string[] = [];
