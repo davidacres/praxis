@@ -77,7 +77,12 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
   else if (summary.status === 'failed') progress = { kind: 'failed', reason: failing?.lastError || summary.explanation, ...spendField, ...exhaustedField };
   else if (summary.status === 'cancelled') progress = { kind: 'cancelled', reason: summary.explanation, ...spendField, ...exhaustedField };
   else if (summary.paused) {
-    progress = { kind: 'stalled', reason: summary.explanation, pauseReason: summary.pauseReason === 'provider-limit' ? 'budget' : 'policy', ...spendField, ...exhaustedField };
+    const stuck = environmentPausedStage(summary, blocker);
+    progress = stuck
+      // Name the stage and what stopped it, and offer the stage's retry: the general "could not run
+      // in this environment" alone left a person guessing, with only Resume, which changed nothing.
+      ? { kind: 'stalled', pauseReason: 'failure', reason: `${stuck.name} could not run here: ${stuck.lastError ?? summary.explanation} Fix that, then retry the stage.`, ...spendField, ...exhaustedField }
+      : { kind: 'stalled', reason: summary.explanation, pauseReason: summary.pauseReason === 'provider-limit' ? 'budget' : 'policy', ...spendField, ...exhaustedField };
   } else if (summary.status === 'awaiting-approval') {
     let nodeId = '';
     try {
@@ -107,13 +112,22 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
   return { progress: { ...progress, estimate: { tokens: estimate.tokens, spend: estimate.spend, notEstimable: estimate.notEstimable, basedOnSessions: estimate.basedOnSessions }, artifacts: Object.values(run.nodes).flatMap(node => node.artifacts) } };
 }
 
+/**
+ * The stage a run is held at because of its environment (a missing tool, a working copy that
+ * could not be set up), when nothing has failed outright: that is the stage to retry.
+ */
+function environmentPausedStage(summary: ReturnType<typeof summarize>, blocker: ReturnType<typeof scheduledWorkflowBlocker>) {
+  if (blocker || !summary.paused || summary.pauseReason !== 'environment') return undefined;
+  return summary.stages.find(stage => stage.lane === 'paused' && stage.pause === 'environment');
+}
+
 /** A run's progress through its stages, for the live view. */
 export function stageProgressFor(workflowRunId: string): Pick<ScheduledRunLive, 'stageLabel' | 'stageIndex' | 'stageCount' | 'provider' | 'recovery'> | undefined {
   const run = runStore().get(workflowRunId);
   if (!run) return undefined;
   const summary = summarize(run);
   const stages = summary.stages;
-  const blocker = scheduledWorkflowBlocker(summary);
+  const blocker = scheduledWorkflowBlocker(summary) ?? environmentPausedStage(summary, undefined);
   // When the run is stuck, the stage it is stuck on leads: the label, the error and
   // Retry must all name the same stage, not a paused one beside it.
   const current = blocker ?? stages.find(stage => stage.lane === 'running' || stage.lane === 'awaiting' || stage.lane === 'paused') ?? stages.find(stage => stage.lane === 'failed');

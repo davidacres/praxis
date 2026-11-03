@@ -317,7 +317,23 @@ export class WorkflowOrchestrator {
 
     // The worktree is acquired lazily, on the first stage that needs one, so a
     // run that never dispatches anything never branches a tree.
-    run = await this.ensureWorkspace(run);
+    try {
+      run = await this.ensureWorkspace(run);
+    } catch (error) {
+      // Nothing would ever step this run again (its launch does not wait for the step), so a
+      // throw here used to strand the stage at `ready` with no word of why. Put the reason on
+      // the stage that could not start and pause it: the cause is the checkout, not the stage's
+      // own work, so it does not spend an attempt, and a retry tries the worktree again.
+      const nodeId = launchable[0];
+      const at = this.now;
+      const message = error instanceof Error ? error.message : String(error);
+      run = await this.persist(applyWorkflowRunCommand(run, { kind: 'node-started', nodeId, at }));
+      await this.persist(applyWorkflowRunCommand(run, {
+        kind: 'node-failed', nodeId, at, pause: 'environment',
+        error: `Could not set up this run's working copy: ${message}`
+      }));
+      return;
+    }
 
     for (const nodeId of launchable) {
       const node = run.definition.nodes.find(candidate => candidate.id === nodeId);

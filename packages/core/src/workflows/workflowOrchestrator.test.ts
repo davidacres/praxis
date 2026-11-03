@@ -387,6 +387,49 @@ test('the run worktree is acquired once and handed to every stage', async () => 
   assert.equal(runs.get('run-1')?.worktreePath, '/tmp/worktrees/run-1');
 });
 
+test('a worktree that cannot be set up pauses the stage with the reason, and a retry tries again', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  seed(runs, def);
+  const fake = fakeDispatcher();
+  let refuse: string | undefined = '1 uncommitted file in this project is not in the last commit (src/a.ts).';
+  const acquired: string[] = [];
+  const workspace: WorkflowWorkspaceProvider = {
+    async acquire(run) {
+      acquired.push(run.runId);
+      if (refuse) throw new Error(refuse);
+      return `/tmp/worktrees/${run.runId}`;
+    },
+    async release() {}
+  };
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, workspace, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+  // Before, the throw was only logged and the stage sat at ready forever.
+  const paused = runs.get('run-1')!;
+  assert.equal(paused.status, 'running');
+  assert.equal(paused.nodes.implement.outcome, 'failed');
+  const attempt = paused.nodes.implement.attempts.at(-1)!;
+  assert.equal(attempt.pause, 'environment');
+  assert.match(attempt.error ?? '', /Could not set up this run's working copy: 1 uncommitted file/);
+  assert.deepEqual(fake.started, [], 'nothing ran without a working copy');
+  assert.equal(paused.worktreePath, undefined);
+
+  // Stepping again does not spin: the paused stage waits for a person.
+  await orchestrator.step('run-1');
+  await settleAll();
+  assert.deepEqual(acquired, ['run-1']);
+
+  // The cause is fixed and the stage retried: the worktree is set up and the stage runs.
+  refuse = undefined;
+  await runs.save(applyWorkflowRunCommand(runs.get('run-1')!, { kind: 'node-retry', nodeId: 'implement', at: now() }));
+  await orchestrator.step('run-1');
+  await settleAll();
+  assert.deepEqual(fake.started, ['implement']);
+  assert.equal(runs.get('run-1')?.worktreePath, '/tmp/worktrees/run-1');
+});
+
 test('a settled run releases its worktree and clears the path', async () => {
   const runs = memoryRuns();
   const def = definition();

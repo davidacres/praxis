@@ -1050,6 +1050,53 @@ test('a workflow whose check stage needs a tool that is not installed is refused
   await page.screenshot({ path: path.join(shots, 'scheduled-run-missing-tool.png') });
 });
 
+test('a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on', async () => {
+  // A run's worktree is created after its launch returns. When that failed, the error was only
+  // logged: the first stage sat at "ready" and an unattended schedule waited forever, saying nothing.
+  const { page, projectId, repo } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'custom:mock': 0.1 }) } });
+  // A committed file where the worktrees folder goes: the base is clean, but no worktree can be made.
+  fs.writeFileSync(path.join(repo, '.worktrees'), 'not a folder\n');
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=E2E', ...args], { cwd: repo, stdio: 'ignore' });
+  git('add', '.worktrees');
+  git('commit', '-qm', 'block worktrees');
+  const workflowId = await page.evaluate(async id => {
+    const now = new Date().toISOString();
+    await window.praxis.workflows.save(id, {
+      schemaVersion: 1, id: 'schedule-needs-worktree', name: 'Needs a worktree', scope: 'project', projectId: id, version: 1,
+      entryNodeId: 'build', createdAt: now, updatedAt: now, edges: [],
+      nodes: [{ type: 'check', id: 'build', name: 'Build', x: 0, y: 0, inputs: [], command: 'true', args: [], successExitCodes: [0], outputs: [] }]
+    } as never);
+    return 'schedule-needs-worktree';
+  }, projectId);
+  const scheduleId = await scheduleSoon(page, projectId, 'No working copy', 1, 120, workflowId);
+  await page.evaluate(id => window.praxis.scheduledRuns.startNow(id), scheduleId);
+
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'No working copy' });
+  await expect(card.getByTestId('schedule-status')).toHaveText('Paused', { timeout: 30000 });
+  const [workflowRun] = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
+  const build = workflowRun.stages.find(stage => stage.nodeId === 'build');
+  expect(build?.lane).toBe('paused');
+  expect(build?.lastError).toContain("Could not set up this run's working copy");
+  await card.getByTestId('schedule-open').click();
+  // The banner says which stage and what stopped it, and the ticket offers that stage's retry.
+  const banner = page.getByTestId('schedule-pause-banner');
+  await expect(banner).toHaveAttribute('data-reason', 'failure');
+  await expect(banner).toContainText("Build could not run here: Could not set up this run's working copy");
+  const flight = page.getByTestId('schedule-flight-card');
+  await expect(flight.getByTestId('schedule-task-row')).toHaveAttribute('data-lane', 'paused');
+  await expect(flight.getByTestId('schedule-stage-failure')).toContainText("Could not set up this run's working copy");
+  await expect(flight.getByTestId('schedule-retry')).toHaveText('Retry stage');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(shots, 'scheduled-run-no-working-copy.png') });
+
+  // Clear the cause and retry: the worktree is made and the ticket finishes.
+  git('rm', '-q', '.worktrees');
+  git('commit', '-qm', 'unblock worktrees');
+  await flight.getByTestId('schedule-retry').click();
+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.getRun(id), workflowRun.runId))?.status, { timeout: 30000 }).toBe('succeeded');
+  await expect.poll(async () => page.evaluate(async id => (await window.praxis.scheduledRuns.get(id))!.run.status, scheduleId), { timeout: 30000 }).toBe('completed');
+});
+
 test('an older schedule refresh cannot overwrite a newer failure status', async () => {
   const { page, projectId } = await launch();
   await scheduleSoon(page, projectId, 'Refresh ordering', 1, 120);
