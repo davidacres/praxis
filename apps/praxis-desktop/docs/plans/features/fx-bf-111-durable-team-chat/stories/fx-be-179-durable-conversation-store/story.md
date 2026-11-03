@@ -94,3 +94,21 @@ Status: Failed · Duration: 39s
 - ⏳ Structured code review: pending
 
 Required stage "plan" failed.
+
+**PRX-S111-179** — 2026-11-03T19:26:29.787Z
+**Workflow run failed: Full SDLC — FX-BE-179: Durable conversation contracts and atomic storage**
+
+Status: Failed · Duration: 9m 7s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Install dependencies: running
+- ⏳ Build: pending
+- ⏳ Type check: pending
+- ⏳ Unit tests: pending
+- ⏳ SAST scan: running
+- ⏳ Secret scan: running
+- ❌ SCA scan: failed
+- ⏳ Structured code review: running
+
+Required stage "sca" failed.
