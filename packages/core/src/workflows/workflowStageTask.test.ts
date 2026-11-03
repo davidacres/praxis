@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStageTaskDefinition, formatUpstreamReports, readPlanStatus, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
+import { buildStageTaskDefinition, formatUpstreamReports, readEnvironmentBlock, readPlanStatus, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
 import type { WorkflowStageContext } from './workflowStageSession';
 import type { WorkflowAgentTaskNode } from './workflowTypes';
 
@@ -281,6 +281,27 @@ test('readPlanStatus takes the last status line and tolerates markdown around it
   assert.deepEqual(readPlanStatus('Plan status: blocked: x\n\nNow done.\n`Plan status: ready`'), { ready: true });
   assert.deepEqual(readPlanStatus('Plan status: blocked'), { ready: false, reason: 'it reported itself blocked' });
   assert.deepEqual(readPlanStatus('plan status: Blocked \u2014 no access'), { ready: false, reason: 'it reported itself blocked: no access' });
+});
+
+test('readEnvironmentBlock tolerates markdown formatting and concatenated ACP output', () => {
+  assert.equal(
+    readEnvironmentBlock('**Stage status: blocked-environment: the feature design is missing.**'),
+    'the feature design is missing.'
+  );
+  assert.equal(
+    readEnvironmentBlock('Sentence. `Stage status: blocked-environment: missing tool`'),
+    'missing tool'
+  );
+  assert.equal(
+    readEnvironmentBlock('*Stage status: blocked-environment: no network*'),
+    'no network'
+  );
+  const outcome = stageOutcomeFromSession(planNode(), {
+    state: 'completed',
+    responseText: 'I cannot begin implementation.\n\n**Stage status: blocked-environment: the design is missing from this worktree.**'
+  });
+  assert.equal(outcome.pause, 'environment');
+  assert.match(outcome.error ?? '', /the design is missing from this worktree/);
 });
 
 test('a concatenated ACP progress message does not hide a final environment block', () => {

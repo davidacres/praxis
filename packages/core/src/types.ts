@@ -271,6 +271,8 @@ export interface IssueSummary {
    */
   childSeq?: number;
   origin?: IssueOrigin;
+  /** Path on disk for folder-backed issues; absent for remote trackers. */
+  sourcePath?: string;
   raw?: unknown;
 }
 

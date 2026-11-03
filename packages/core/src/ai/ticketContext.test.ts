@@ -27,6 +27,7 @@ test('resolveTicketContext includes main ticket details, description, and commen
     issueType: 'Story',
     status: 'To Do',
     priority: 'High',
+    sourcePath: 'apps/praxis-desktop/docs/plans/features/feature-1/story.md',
     assignee: 'Alice',
     description: 'When the access token expires, use the refresh token to get a new one.',
     comments: [
@@ -40,6 +41,7 @@ test('resolveTicketContext includes main ticket details, description, and commen
   assert.match(context, /## Active Ticket: PROJ-101 — Implement OAuth refresh token/);
   assert.match(context, /- Status: To Do/);
   assert.match(context, /- Priority: High/);
+  assert.match(context, /- Plan file: apps\/praxis-desktop\/docs\/plans\/features\/feature-1\/story\.md/);
   assert.match(context, /- Assignee: Alice/);
   assert.match(context, /When the access token expires/);
   assert.match(context, /Ensure we rotate refresh tokens on each use/);

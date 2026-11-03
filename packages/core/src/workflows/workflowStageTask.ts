@@ -162,15 +162,17 @@ export const STAGE_STATUS_INSTRUCTIONS = [
   'End your response with this line on its own instead: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
 ].join(' ');
 
-// ACP may concatenate a progress message and the final reply without a newline.
-const STAGE_BLOCKED_ENVIRONMENT = /(?:^|[.!?])\s*Stage status:\s*blocked-environment\s*:?\s*(.*)$/im;
+// ACP may concatenate a progress message and the final reply without a newline, or wrap in markdown bold/backticks.
+const STAGE_BLOCKED_ENVIRONMENT = /(?:^|[.!?])\s*[*`_]*\s*Stage status:\s*blocked-environment\s*:?\s*([\s\S]*?)\s*[*`_]*$/im;
 
 /** The reason a stage gave for being stopped by its environment, when it gave one. */
 export function readEnvironmentBlock(responseText: string | undefined): string | undefined {
   const lines = (responseText ?? '').split('\n').filter(line => STAGE_BLOCKED_ENVIRONMENT.test(line));
   const last = lines[lines.length - 1];
   if (!last) return undefined;
-  return STAGE_BLOCKED_ENVIRONMENT.exec(last)?.[1]?.trim() || 'no reason given';
+  const match = STAGE_BLOCKED_ENVIRONMENT.exec(last);
+  const reason = match?.[1]?.replace(/^[*`_]+|[*`_]+$/g, '').trim();
+  return reason || 'no reason given';
 }
 
 /** How a stage delivers a `findings` output: the block `parseReviewFindings` reads. */

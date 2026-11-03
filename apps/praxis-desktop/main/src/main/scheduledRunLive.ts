@@ -94,7 +94,16 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
     progress = { kind: 'gate', nodeId, label: stage?.name ?? 'Approval', ...spendField, ...exhaustedField };
   } else if (blocker) {
     const stage = blocker;
-    progress = { kind: 'stalled', pauseReason: 'failure', reason: `${stage.name} failed: ${stage.lastError ?? 'No error was reported.'} Retry the stage or open the workflow to review it.`, ...spendField, ...exhaustedField };
+    const attempts = stage.attemptsThisRevision ?? stage.attempts;
+    const maxAttempts = stage.maxAttempts ?? 1;
+    progress = {
+      kind: 'stalled',
+      pauseReason: 'failure',
+      reason: `${stage.name} failed: ${stage.lastError ?? 'No error was reported.'} Retry the stage or open the workflow to review it.`,
+      recovery: { nodeId: stage.nodeId, attempts, maxAttempts },
+      ...spendField,
+      ...exhaustedField
+    };
   } else if (summary.needsDecision) {
     progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, edgeId: summary.needsDecision.edgeId, ...spendField, ...exhaustedField };
   } else {

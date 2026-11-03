@@ -644,6 +644,34 @@ test('a loop decision is determined autonomously and recorded without waiting fo
   assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'loop-decided');
 });
 
+test('a failed stage with attempts remaining is retried autonomously and recorded without pausing for user input', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+
+  let retriedNodeId: string | undefined;
+  h.ports.retryStage = async (_workflowRunId, nodeId) => {
+    retriedNodeId = nodeId;
+    h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+  };
+
+  h.setWorkflow('T-1', {
+    progress: {
+      kind: 'stalled',
+      pauseReason: 'failure',
+      reason: 'Implement failed: compile error. Retry the stage or open the workflow to review it.',
+      recovery: { nodeId: 'implement', attempts: 1, maxAttempts: 2 }
+    }
+  });
+  await h.runner.tick();
+
+  assert.equal(retriedNodeId, 'implement');
+  assert.equal(h.run.status, 'running', 'scheduled run must not pause when attempts remain');
+  const event = h.run.events.find(e => e.kind === 'entry-retried');
+  assert.ok(event);
+  assert.match(event.message, /T-1 implement failed \(attempt 1 of 2\): retrying autonomously\./);
+  assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'entry-retried');
+});
+
 test('each ticket moves on its board as it is worked: in progress at launch, done when it finishes', async () => {
   const h = new Harness(['T-1', 'T-2']);
   const moves: string[] = [];

@@ -93,6 +93,7 @@ export async function resolveTicketContext(options: ResolveTicketContextOptions)
     issue.priority ? `- Priority: ${issue.priority}` : undefined,
     issue.assignee ? `- Assignee: ${issue.assignee}` : undefined,
     issue.branch ? `- Branch: ${issue.branch}` : undefined,
+    issue.sourcePath ? `- Plan file: ${issue.sourcePath}` : undefined,
     '',
     '### Description',
     issue.description?.trim() ? issue.description.trim() : '*(No description provided)*'

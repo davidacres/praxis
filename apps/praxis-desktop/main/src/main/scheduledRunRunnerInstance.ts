@@ -274,6 +274,12 @@ function ports(): ScheduledRunnerPorts {
       });
       await getWorkflowOrchestrator().step(workflowRunId);
     },
+    retryStage: async (workflowRunId, nodeId) => {
+      await getWorkflowOrchestrator().updateRun(workflowRunId, current =>
+        applyWorkflowRunCommand(current, { kind: 'node-retry', nodeId, at: new Date().toISOString() })
+      );
+      await getWorkflowOrchestrator().step(workflowRunId);
+    },
   };
 }
 

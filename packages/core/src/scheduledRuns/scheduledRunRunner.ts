@@ -140,6 +140,8 @@ export interface ScheduledRunnerPorts {
   moveTicket?(request: { run: ScheduledRun; entry: ScheduledQueueEntry; phase: ScheduledTicketPhase }): Promise<string | undefined>;
   /** Approves the gate the entry is waiting at. */
   approveGate?(workflowRunId: string, nodeId: string): Promise<void>;
+  /** Retries a failed stage whose attempt budget has attempts remaining. */
+  retryStage?(workflowRunId: string, nodeId: string): Promise<void>;
   /** A run was saved. */
   onChanged?(run: ScheduledRun): void;
   /** Share of an allowance (0–1) at which a provider is handed over. Read at every decision so a settings change applies at once. */
@@ -387,6 +389,28 @@ export class ScheduledRunRunner {
         run = await this.save(
           recordScheduledDecision(run, entry.id, {
             kind: 'loop-decided',
+            at,
+            message
+          })
+        );
+        const updated = this.ports.observe(workflowRunId);
+        if (updated) {
+          observation = updated;
+          progress = updated.progress;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    if (progress.kind === 'stalled' && progress.recovery && progress.recovery.attempts < progress.recovery.maxAttempts && this.ports.retryStage) {
+      try {
+        await this.ports.retryStage(workflowRunId, progress.recovery.nodeId);
+        at = this.ports.now();
+        const message = `${entry.ticket.issueKey} ${progress.recovery.nodeId} failed (attempt ${progress.recovery.attempts} of ${progress.recovery.maxAttempts}): retrying autonomously.`;
+        run = await this.save(
+          recordScheduledDecision(run, entry.id, {
+            kind: 'entry-retried',
             at,
             message
           })
