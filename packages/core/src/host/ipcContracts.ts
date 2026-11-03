@@ -8,8 +8,12 @@ import type {
   AssistantTurnResult,
   AssistantMessage,
   TeamChatRecord,
-  TeamChatSummary
+  TeamChatSummary,
+  SubmitConversationCommand,
+  ConversationCommandResult,
+  DurableConversation
 } from '../ai/assistant/assistantTypes';
+import type { ConversationUpdate } from '../ai/assistant/teamChatCoordinator';
 import type { AiUsageEvent } from '../ai/aiUsageLog';
 import type { CoordinationState } from '../ai/coordination/coordinationTypes';
 import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
@@ -1264,6 +1268,18 @@ export interface AssistantIpc {
   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
   deleteChat(chatId: string): Promise<void>;
+  /** Submits a validated turn to a durable conversation. */
+  submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult>;
+  /** Retrieves a durable conversation by ID. */
+  getConversation(conversationId: string): Promise<DurableConversation | undefined>;
+  /** Subscribes to conversation revision updates. */
+  subscribeConversation(conversationId: string, listener: (update: ConversationUpdate) => void): () => void;
+  /** Cancels an active or queued turn. */
+  cancelTurn(conversationId: string, turnId: string): Promise<void>;
+  /** Retries a failed participant within an active turn. */
+  retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void>;
+  /** Resolves an attempt in an unknown or interrupted state. */
+  resolveAttempt(conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort'): Promise<void>;
   /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
   onChatsChanged(listener: () => void): () => void;
 }

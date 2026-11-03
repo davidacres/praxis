@@ -57,6 +57,9 @@ export class TeamChatStore {
   /** Replaces a chat's transcript. A still-untitled chat is named from its first user message. */
   public async saveMessages(id: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord> {
     return this.store.transaction(draft => {
+      if (draft.conversations.some(c => c.id === id)) {
+        throw new Error('Whole-transcript replacement is rejected for durable conversations.');
+      }
       const chats = draft.teamChats;
       const index = chats.findIndex(chat => chat.id === id);
       if (index < 0) throw new Error(`Team chat ${id} was not found.`);
