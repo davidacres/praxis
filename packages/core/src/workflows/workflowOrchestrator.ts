@@ -162,6 +162,8 @@ export class WorkflowOrchestrator {
   private readonly executions = new Map<string, { controller: AbortController; completion: Promise<StageOutcome> }>();
   /** Per-run promise chain; see the "one step at a time" invariant. */
   private readonly chains = new Map<string, Promise<void>>();
+  private suspending = false;
+  private suspension?: Promise<void>;
 
   public constructor(private readonly options: WorkflowOrchestratorOptions) {}
 
@@ -199,6 +201,40 @@ export class WorkflowOrchestrator {
   /** Stages this orchestrator currently has launched, for diagnostics/tests. */
   public inFlightStages(): string[] {
     return [...this.inFlight].sort();
+  }
+
+  /** Persist interruption before stopping processes, so graceful quit cannot become a code failure. */
+  public suspend(): Promise<void> {
+    if (this.suspension) return this.suspension;
+    this.suspending = true;
+    this.suspension = this.suspendActiveStages().catch(error => {
+      this.suspending = false;
+      this.suspension = undefined;
+      throw error;
+    });
+    return this.suspension;
+  }
+
+  private async suspendActiveStages(): Promise<void> {
+    // Drain steps already setting up a workspace. The checks in stepOnce prevent new dispatch.
+    await Promise.all([...this.chains.values()]);
+    const active = [...this.chains.keys()].flatMap(runId => {
+      const run = this.options.runs.get(runId);
+      if (!run || isRunSettled(run)) return [];
+      const nodeIds = Object.values(run.nodes).filter(node => node.outcome === 'running').map(node => node.nodeId);
+      return nodeIds.length ? [{ runId, nodeIds }] : [];
+    });
+    // If persistence fails, leave processes running and let the host refuse the quit.
+    for (const { runId, nodeIds } of active) {
+      await this.updateRun(runId, run => nodeIds.reduce((current, nodeId) =>
+        applyWorkflowRunCommand(current, { kind: 'node-interrupted', nodeId, at: this.now }), run));
+    }
+    for (const { runId, nodeIds } of active) {
+      const run = this.options.runs.get(runId);
+      if (run) await Promise.all(nodeIds.map(nodeId => this.stopStage(run, nodeId)));
+    }
+    // Late abort results settle behind the interruption and cannot replace its pause.
+    await Promise.all([...this.chains.values()]);
   }
 
   /**
@@ -266,6 +302,7 @@ export class WorkflowOrchestrator {
   // ── The loop ───────────────────────────────────────────────────────────
 
   private async stepOnce(runId: string): Promise<void> {
+    if (this.suspending) return;
     let run = this.options.runs.get(runId);
     if (!run) return;
 
@@ -336,6 +373,7 @@ export class WorkflowOrchestrator {
     }
 
     for (const nodeId of launchable) {
+      if (this.suspending) return;
       const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
       if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node) && !isMapNode(node))) continue;
 
@@ -350,6 +388,10 @@ export class WorkflowOrchestrator {
         throw error;
       }
 
+      if (this.suspending) {
+        this.inFlight.delete(this.key(runId, nodeId));
+        return;
+      }
       // Fire and forget: the completion handler re-enters the loop.
       void this.dispatch(runId, node, run);
     }

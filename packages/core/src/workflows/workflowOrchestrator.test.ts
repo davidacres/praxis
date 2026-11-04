@@ -829,3 +829,55 @@ test('stop: the run ends, naming the AI and the stage; switching later picks it 
   assert.deepEqual(run.stageProviders, { implement: 'claude-code-cli' });
   assert.deepEqual(fake.started, ['implement', 'implement']);
 });
+
+test('graceful shutdown persists interruption before abort and never converts it into a repair verdict', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  def.edges.push({ id: 'qa-repair', from: 'qa', to: 'implement', on: 'failure', required: false, loop: { maxIterations: 2 } });
+  seed(runs, def);
+  const fake = fakeDispatcher();
+  const cancel = fake.dispatcher.cancelStage!;
+  fake.dispatcher.cancelStage = async (nodeId, context) => {
+    assert.equal(runs.get('run-1')!.nodes[nodeId].attempts.at(-1)?.pause, 'environment', 'interruption is durable before cancellation');
+    await cancel(nodeId, context);
+  };
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', { status: 'succeeded', snapshotRef: 'delivered', artifacts: outputsFor(def, 'implement') });
+  await settleAll();
+  const implementation = runs.get('run-1')!.nodes.implement;
+  assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
+  await orchestrator.suspend();
+  await orchestrator.suspend();
+  await orchestrator.step('run-1');
+  await settleAll();
+  const run = runs.get('run-1')!;
+  assert.equal(run.status, 'running');
+  assert.equal(run.nodes.implement, implementation);
+  assert.deepEqual(fake.cancelled.sort(), ['qa', 'security']);
+  assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
+  assert.equal(run.loopHistory?.length ?? 0, 0);
+  assert.deepEqual(orchestrator.inFlightStages(), []);
+});
+
+test('shutdown refuses to abort a stage when recording its interruption fails', async () => {
+  const runs = memoryRuns();
+  seed(runs);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  const save = runs.save.bind(runs);
+  runs.save = async run => {
+    if (run.nodes.implement.attempts.at(-1)?.pause === 'environment') throw new Error('disk unavailable');
+    return save(run);
+  };
+  await assert.rejects(orchestrator.suspend(), /disk unavailable/);
+  assert.deepEqual(fake.cancelled, []);
+  assert.equal(runs.get('run-1')!.nodes.implement.outcome, 'running');
+  runs.save = save;
+  await orchestrator.suspend();
+  assert.deepEqual(fake.cancelled, ['implement']);
+  assert.equal(runs.get('run-1')!.nodes.implement.attempts.at(-1)?.pause, 'environment');
+});
