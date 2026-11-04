@@ -28,7 +28,7 @@ export function AssistantActionCard({ action, applied, disabled, onApply }: Assi
         {applied ? (
           <span className="assistant-action-done"><Icon name="check" size={12} /> {applied}</span>
         ) : (
-          <button type="button" className="btn btn-primary btn-sm" data-testid="assistant-action-apply" disabled={disabled} onClick={onApply}>{action.label}</button>
+          <button type="button" className="btn btn-primary btn-sm" data-testid="assistant-action-apply" disabled={disabled || !previewing} onClick={onApply}>{action.label}</button>
         )}
       </div>
       {previewing && (

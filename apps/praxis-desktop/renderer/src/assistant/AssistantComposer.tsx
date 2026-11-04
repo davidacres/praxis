@@ -14,7 +14,7 @@ interface AssistantComposerProps {
   busy: boolean;
   activeTurnStartedAt?: number;
   tokenCount?: number;
-  onSend: (images: WireImageAttachment[]) => void;
+  onSend: (images: WireImageAttachment[]) => Promise<boolean>;
   sendLabel: string;
   /** Bumped by the shell to pull focus into the box (on open). */
   focusSignal: number;
@@ -67,15 +67,17 @@ export function AssistantComposer({ value, onChange, busy, activeTurnStartedAt, 
     if (files.length === 0 || !files.every(file => file.type.toLowerCase().startsWith('image/'))) return;
     void stageImages(collectImageFiles(files));
   };
-  const send = () => {
-    onSend(images);
-    setImages([]);
-    setImageError(undefined);
+  const send = async () => {
+    const captured = images;
+    if (await onSend(captured)) {
+      setImages(current => current.filter(image => !captured.includes(image)));
+      setImageError(undefined);
+    }
   };
 
   return (
     <SessionComposerCard
-      className={`assistant-composer${dragOver ? ' is-drag-over' : ''}${busy ? ' is-collapsed is-running' : ''}`}
+      className={`assistant-composer${dragOver ? ' is-drag-over' : ''}${busy ? ' is-running' : ''}`}
       data-testid="assistant-composer"
       onPaste={handlePaste}
       onDragOver={event => {
@@ -90,8 +92,8 @@ export function AssistantComposer({ value, onChange, busy, activeTurnStartedAt, 
       onDrop={handleDrop}
     >
       {busy && <SessionComposerActivityOrbit testId="assistant-composer-activity-orbit" />}
-      {!busy && <SessionComposerHeader data-testid="assistant-mode-panel">{headerOptions}</SessionComposerHeader>}
-      {!busy && images.length > 0 && (
+      {<SessionComposerHeader data-testid="assistant-mode-panel">{headerOptions}</SessionComposerHeader>}
+      {images.length > 0 && (
         <div className="session-image-attachments" data-testid="assistant-image-attachments">
           {images.map((image, index) => (
             <span className="session-image-chip" key={`${index}-${image.dataBase64.length}`} data-testid="assistant-image-chip">
@@ -125,11 +127,11 @@ export function AssistantComposer({ value, onChange, busy, activeTurnStartedAt, 
       <SessionComposerInput
         ref={ref}
         value={value}
-        collapsed={busy}
+        collapsed={false}
         placeholder="Ask selected members… or @mention a member"
         aria-label="Message the virtual team"
         data-testid="assistant-input"
-        disabled={busy}
+        disabled={false}
         onChange={event => { onChange(event.target.value); setCaret(event.target.selectionStart); }}
         onSelect={event => setCaret(event.currentTarget.selectionStart)}
         onKeyDown={event => {
@@ -142,17 +144,17 @@ export function AssistantComposer({ value, onChange, busy, activeTurnStartedAt, 
           }
           if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            if (value.trim() && !busy) send();
+            if (value.trim()) send();
           }
         }}
       />
       <SessionComposerToolbar>
         {busy ? <LiveTurnActivityIndicator variant="composer" testId="assistant-composer-activity-chip" startedAt={activeTurnStartedAt} tokenCount={tokenCount} statusText="The team is thinking…" /> : composerOptions}
         <span className="spacer" />
-        {!busy && <span className="session-context-chip" data-testid="assistant-context-indicator" title="Context usage is not reported for Virtual Team chat" role="img" aria-label="Context usage unavailable">
+        {<span className="session-context-chip" data-testid="assistant-context-indicator" title="Context usage is not reported for Virtual Team chat" role="img" aria-label="Context usage unavailable">
           <SessionContextRing percent={0} />
         </span>}
-        {!busy && <button type="button" className="composer-send" aria-label={sendLabel} title={sendLabel} data-testid="assistant-send" disabled={!value.trim()} onClick={send}>
+        {<button type="button" className="composer-send" aria-label={sendLabel} title={sendLabel} data-testid="assistant-send" disabled={!value.trim()} onClick={send}>
           <Icon name="arrow-up" size={15} />
         </button>}
       </SessionComposerToolbar>

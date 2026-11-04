@@ -24,6 +24,7 @@ export interface AssistantPersona {
 /** What the page the user is looking at advertises to the assistant. */
 export interface PageAssistantContext {
   pageType: AssistantPageType;
+  entityId?: string;
   /** Short label for the context pill, e.g. "Issue PRX-12". */
   title: string;
   /** One or two lines the model reads first. */
@@ -105,6 +106,7 @@ export type ConversationTurnState = 'queued' | 'running' | 'completed' | 'awaiti
 export type ConversationAttemptState = 'prepared' | 'dispatching' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'interrupted' | 'outcome_unknown' | 'cancelled';
 export interface ConversationAttachment { id: string; digest: string; mediaType: string; size: number; }
 export interface ConversationMessage extends AssistantMessage {
+  provenance?: 'imported' | 'imported-unknown';
   sequence: number;
   turnId: string;
   participantId?: string;
@@ -197,9 +199,13 @@ export interface DurableConversation extends Omit<TeamChatRecord, 'messages' | '
   summaryAttempts?: { id: string; provider: string; state: 'dispatching' | 'completed' | 'failed'; sourceDigest: string; usage?: import('../gateway/wire').TokenUsage; error?: string }[];
   decisionCorrections?: { messageId: string; supersedesMessageId: string }[];
   pinnedMessageIds: string[];
+  controlReceipts?: { commandId: string; payloadDigest: string; revision: number }[];
   commandReceipts: ConversationCommandReceipt[];
 }
 export interface TeamChatSnapshot {
+  /** Unprovable legacy associations stay available for forward repair, never dispatched. */
+  legacyDiagnostics?: { id: string; completedAt: string; context?: PageAssistantContext; messages: AssistantMessage[] }[];
+  activation?: { version: 1; acceptedNewTurns: boolean };
   schemaVersion: 2;
   revision: number;
   teamChats: TeamChatRecord[];
@@ -225,4 +231,17 @@ export interface ConversationCommandResult {
   turnId: string;
   revision: number;
   state: ConversationTurnState;
+}
+
+export interface ConversationControlCommand {
+  conversationId: string;
+  commandId: string;
+  expectedRevision: number;
+  action: 'cancel' | 'retry' | 'pin' | 'unpin' | 'resume-context' | 'reconcile';
+  turnId?: string;
+  attemptId?: string;
+  messageId?: string;
+  acknowledgeDuplicateActionRisk?: boolean;
+  reconciliationEvidenceId?: string;
+  reconciliationNote?: string;
 }

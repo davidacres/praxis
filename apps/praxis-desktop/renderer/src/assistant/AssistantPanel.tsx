@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { WireImageAttachment, AgentPermissionMode, AgentToolMode, AiProvider, AiProviderStatus, ModelOptions, ReasoningEffort } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
@@ -14,8 +14,16 @@ import { isProviderUsable } from '../ai/providerAvailability';
 import { AssistantComposer } from './AssistantComposer';
 import { AssistantContextBanner } from './AssistantContextBanner';
 import { AssistantMessageCard } from './AssistantMessageCard';
-import { useAssistant } from './AssistantProvider';
+import { useAssistant, type AssistantComposerPreferences, type AssistantController } from './AssistantProvider';
 import { PERSONAS } from './personaMeta';
+
+function useRuntimePreference<K extends keyof AssistantComposerPreferences>(assistant: AssistantController, key: K): [AssistantComposerPreferences[K], Dispatch<SetStateAction<AssistantComposerPreferences[K]>>] {
+  const set = useCallback<Dispatch<SetStateAction<AssistantComposerPreferences[K]>>>(value => {
+    assistant.setRuntimePreferences(current => ({ ...current, [key]: typeof value === 'function'
+      ? (value as (current: AssistantComposerPreferences[K]) => AssistantComposerPreferences[K])(current[key]) : value }));
+  }, [assistant.setRuntimePreferences, key]);
+  return [assistant.runtimePreferences[key], set];
+}
 
 const GENERAL_PROMPTS = ['What should I work on next?', 'Explain how Praxis governs a workflow'];
 
@@ -24,14 +32,16 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
   const a = useAssistant();
   const { settings } = useSettings();
   const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
-  const [provider, setProvider] = useState<AiProvider>();
+  const [provider, setProvider] = useRuntimePreference(a, 'provider');
   const [modelOptions, setModelOptions] = useState<ModelOptions>();
-  const [model, setModel] = useState('');
-  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('medium');
-  const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>('manual');
-  const [mode, setMode] = useState<'chat' | 'analysis' | 'review'>('chat');
-  const [toolMode, setToolMode] = useState<AgentToolMode>('project-only');
-  const [workingDirectory, setWorkingDirectory] = useState('');
+  const [model, setModel] = useRuntimePreference(a, 'model');
+  const [reasoningEffort, setReasoningEffort] = useRuntimePreference(a, 'reasoningEffort');
+  const [permissionMode, setPermissionMode] = useRuntimePreference(a, 'permissionMode');
+  const [mode, setMode] = useRuntimePreference(a, 'mode');
+  const [toolMode, setToolMode] = useRuntimePreference(a, 'toolMode');
+  const [workingDirectory, setWorkingDirectory] = useRuntimePreference(a, 'workingDirectory');
+  const [reconciliationNotes, setReconciliationNotes] = useState<Record<string, string>>({});
+  const [acknowledged, setAcknowledged] = useState(false);
   const [toolError, setToolError] = useState<string>();
   const scrollRef = useRef<HTMLDivElement>(null);
   const stuckToBottom = useRef(true);
@@ -60,8 +70,6 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
     }
     let cancelled = false;
     setModelOptions(undefined);
-    setModel('');
-    setReasoningEffort('medium');
     void Promise.all([fetchModelOptions(provider, false), window.praxis.settings.get()]).then(([options, currentSettings]) => {
       if (cancelled) return;
       const curated = options && applyEnabledModelCuration(options, currentSettings.ai.providers[provider]?.enabledModelIds);
@@ -72,8 +80,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         : curated?.currentValue && curated.options.some(option => option.value === curated.currentValue)
           ? curated.currentValue
           : curated?.options[0]?.value ?? '';
-      setModel(selected);
-      setReasoningEffort((selected && currentSettings.ai.providers[provider]?.modelReasoningDefaults?.[selected]) || 'medium');
+      setModel(current => current && curated?.options.some(option => option.value === current) ? current : selected);
     }).catch(() => { if (!cancelled) setModelOptions(undefined); });
     return () => { cancelled = true; };
   }, [provider]);
@@ -97,17 +104,16 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
     }
     return undefined;
   };
-  const send = (text: string, images: WireImageAttachment[] = []) => {
+  const send = async (text: string, images: WireImageAttachment[] = []) => {
     // Images need an agent turn, so a chat that would otherwise be tool-less runs read-only.
     const effectiveToolMode = mode === 'chat' ? toolMode : 'read-only';
     const turnToolMode = images.length > 0 && effectiveToolMode === 'project-only' ? 'read-only' : effectiveToolMode;
     if (turnToolMode !== 'project-only' && !workingDirectory) {
       setToolError(images.length > 0 ? 'Choose a working folder before sending images.' : 'Choose a working folder before using assistant tools.');
-      return;
+      return false;
     }
     setToolError(undefined);
-    a.setDraft('');
-    void a.send(text, a.teamMembers, { provider, model: model || undefined, reasoningEffort, permissionMode, mode, toolMode: turnToolMode, workingDirectory: workingDirectory || undefined, ...(images.length ? { images } : {}) });
+    return a.send(text, a.teamMembers, { provider, model: model || undefined, reasoningEffort, permissionMode, mode, toolMode: turnToolMode, workingDirectory: workingDirectory || undefined, ...(images.length ? { images } : {}) });
   };
   const sendLabel = a.teamMembers.length === 0
     ? 'Send general chat'
@@ -130,7 +136,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
                 aria-pressed={a.teamMembers.includes(persona.id)}
                 title={`${a.teamMembers.includes(persona.id) ? 'Included' : 'Excluded'} — ${persona.name} (@${persona.id})`}
                 data-testid={`assistant-member-${persona.id}`}
-                disabled={a.busy}
+                disabled={false}
                 onClick={() => a.toggleTeamMember(persona.id)}
               >
                 <Icon name={persona.icon} size={11} />
@@ -179,6 +185,33 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         ))}
       </div>
 
+      {a.conversation?.turns.filter(turn => !['completed', 'cancelled'].includes(turn.state)).map((turn, index) => {
+        const attempt = turn.attempts.at(-1);
+        const member = turn.plan.participants.find(p => !turn.completedParticipantIds.includes(p.id));
+        const control = (action: import('@praxis/core').ConversationControlCommand['action']) => {
+          void window.praxis.assistant.control({ conversationId: a.conversation!.id, commandId: crypto.randomUUID(),
+            expectedRevision: a.conversation!.revision, action, turnId: turn.id,
+            ...(attempt ? { attemptId: attempt.id } : {}),
+            ...(turn.state === 'outcome_unknown' ? { acknowledgeDuplicateActionRisk: acknowledged,
+              ...(attempt?.recoveryEvidence?.find(e => e.kind === 'reconciliation') ? { reconciliationEvidenceId: attempt.recoveryEvidence.find(e => e.kind === 'reconciliation')!.id } : {}),
+              reconciliationNote: reconciliationNotes[turn.id] ?? '' } : {})
+          }).catch(error => setToolError(String(error)));
+        };
+        return <div key={turn.id} className="assistant-action-card" data-testid="assistant-turn-status">
+          <strong>{turn.state === 'queued' ? `Queued ${index + 1}` : `${member?.role ?? 'Team'}: ${turn.state.replaceAll('_', ' ')}`}</strong>
+          {attempt?.error && <p role="alert">{attempt.error}</p>}
+          {turn.contextRequiredReason && <p role="alert">{turn.contextRequiredReason}</p>}
+          {turn.state === 'outcome_unknown' && <div>
+            <label>What did you check before retrying?<input value={reconciliationNotes[turn.id] ?? ''} onChange={event => setReconciliationNotes(current => ({ ...current, [turn.id]: event.target.value }))} /></label>
+            <button className="btn btn-sm" disabled={!reconciliationNotes[turn.id]?.trim()} onClick={() => control('reconcile')}>Record reconciliation</button>
+          </div>}
+          {turn.state === 'outcome_unknown' && <label><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />Retry may repeat external actions. I accept this risk.</label>}
+          {['failed', 'interrupted', 'outcome_unknown'].includes(turn.state) && <button className="btn btn-sm" disabled={turn.state === 'outcome_unknown' && (!acknowledged || !attempt?.recoveryEvidence?.some(e => e.kind === 'reconciliation'))} onClick={() => control('retry')}>Retry {member?.role}</button>}
+          {turn.state === 'context_required' && <button className="btn btn-sm" onClick={() => control('resume-context')}>Recheck context</button>}
+          <button className="btn btn-sm" disabled={turn.state === 'cancelling'} onClick={() => control('cancel')}>{turn.state === 'queued' ? 'Cancel queued turn' : turn.state === 'cancelling' ? 'Stopping…' : 'Stop'}</button>
+        </div>;
+      })}
+
       {a.error && <div className="error-banner assistant-error" role="alert">{a.error}</div>}
       {toolError && <div className="error-banner assistant-error" role="alert">{toolError}</div>}
       {a.activeToolSession?.state === 'awaiting_approval' && (() => {
@@ -199,13 +232,17 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         detached={a.contextDetached}
         onToggleDetached={() => a.setContextDetached(!a.contextDetached)}
         prompts={prompts}
-        busy={a.busy}
+        busy={false}
         onPrompt={send}
       />
 
       <div className="assistant-composer-area">
       <div className="session-usage-wrapper">
-        <SessionUsageSummary session={a.activeToolSession ?? a.lastToolSession} usageSessions={a.toolUsageSessions} sessions={a.toolUsageSessions} spendLimit={settings?.ai.spendLimit ?? 0} draftProvider={provider} draftModel={model} activityLabel={a.toolUsageSessions.length ? 'Tool runtime totals only; team chat usage is not reported' : 'Team chat usage unavailable'} />
+        <SessionUsageSummary usageContributions={a.conversation?.turns.flatMap(turn => turn.attempts.map(attempt => ({
+          provider: String(turn.plan.runtimeOptions.provider ?? provider ?? settings?.ai.activeProvider ?? 'vercel-gateway') as AiProvider,
+          ...(typeof turn.plan.runtimeOptions.model === 'string' ? { model: turn.plan.runtimeOptions.model } : {}),
+          tokens: attempt.usage?.totalTokens, cost: attempt.reportedCost
+        })))} session={a.activeToolSession ?? a.lastToolSession} usageSessions={a.toolUsageSessions} sessions={a.toolUsageSessions} spendLimit={settings?.ai.spendLimit ?? 0} draftProvider={provider} draftModel={model} activityLabel={a.conversation?.turns.some(turn => turn.attempts.length) ? 'Reported usage across conversation attempts' : 'No conversation usage recorded yet'} />
       </div>
       <AssistantComposer
         value={a.draft}
@@ -229,7 +266,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
             <div className="session-mode-panel-meta">
               <ChipSelect variant="plain" className="session-runtime-chip" data-testid="assistant-tool-mode"
                 ariaLabel="Tool access" icon={mode === 'chat' && toolMode === 'full' ? 'tools' : 'search'}
-                value={mode === 'chat' ? toolMode : 'read-only'} disabled={a.busy || mode !== 'chat'}
+                value={mode === 'chat' ? toolMode : 'read-only'} disabled={false || mode !== 'chat'}
                 onChange={value => {
                   const next = value as AgentToolMode;
                   if (next === 'full' && !workingDirectory) {
@@ -242,7 +279,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
                   { value: 'project-only', label: 'Project only', description: 'Chat without local file or shell tools', icon: 'folder' }
                 ]} />
               <button type="button" className="composer-chip session-runtime-chip" data-testid="assistant-working-directory"
-                disabled={a.busy} title={workingDirectory || 'Choose a working folder for Virtual Team tools'} onClick={() => void pickWorkingDirectory()}>
+                disabled={false} title={workingDirectory || 'Choose a working folder for Virtual Team tools'} onClick={() => void pickWorkingDirectory()}>
                 <Icon name="folder" size={14} /><span className="session-runtime-chip-label">{workingDirectory.split(/[\\/]/).filter(Boolean).at(-1) || 'Attach folder…'}</span>
               </button>
             </div>
@@ -250,24 +287,24 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         )}
         composerOptions={(
           <div className="assistant-composer-options" data-testid="assistant-composer-options">
-            <ChipSelect variant="plain" ariaLabel="AI provider" data-testid="assistant-provider" value={provider ?? ''} placeholder="Provider" icon={provider ? <ProviderBrandLogo provider={provider} size={13} decorative /> : 'globe'} disabled={a.busy} onChange={value => setProvider(value as AiProvider)} options={providerStatuses.filter(isProviderUsable).map(status => ({ value: status.provider, label: status.label, icon: <ProviderBrandLogo provider={status.provider} size={13} decorative /> }))} />
-            <ChipSelect variant="plain" ariaLabel="AI model" data-testid="assistant-model" value={model} placeholder={provider && hasModelCatalog(provider) ? 'Choose model…' : 'Default model'} icon="sparkles" disabled={a.busy || !provider || !modelOptions?.options.length} onChange={setModel} options={modelOptions?.options.map(option => ({ value: option.value, label: option.name || option.value, description: option.description })) ?? []} />
-            {supportsReasoningEffort(provider, model) && <ReasoningEffortSlider value={reasoningEffort} onChange={setReasoningEffort} disabled={a.busy} testId="assistant-reasoning" />}
+            <ChipSelect variant="plain" ariaLabel="AI provider" data-testid="assistant-provider" value={provider ?? ''} placeholder="Provider" icon={provider ? <ProviderBrandLogo provider={provider} size={13} decorative /> : 'globe'} disabled={false} onChange={value => setProvider(value as AiProvider)} options={providerStatuses.filter(isProviderUsable).map(status => ({ value: status.provider, label: status.label, icon: <ProviderBrandLogo provider={status.provider} size={13} decorative /> }))} />
+            <ChipSelect variant="plain" ariaLabel="AI model" data-testid="assistant-model" value={model} placeholder={provider && hasModelCatalog(provider) ? 'Choose model…' : 'Default model'} icon="sparkles" disabled={false || !provider || !modelOptions?.options.length} onChange={setModel} options={modelOptions?.options.map(option => ({ value: option.value, label: option.name || option.value, description: option.description })) ?? []} />
+            {supportsReasoningEffort(provider, model) && <ReasoningEffortSlider value={reasoningEffort} onChange={setReasoningEffort} disabled={false} testId="assistant-reasoning" />}
           </div>
         )}
       />
       <div className="session-composer-footer" title="Virtual Team chat is read-only; permission mode is included as context for the assistant.">
-        <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="assistant" disabled={a.busy} />
+        <SessionPermissionModeControl value={permissionMode} onChange={setPermissionMode} testId="assistant" disabled={false} />
         <SessionGitBranchControl
           workingDirectory={workingDirectory || undefined}
           testId="assistant"
-          disabled={a.busy}
+          disabled={false}
         />
         <SessionCodeIntelControl
           workingDirectory={workingDirectory || undefined}
           provider={provider}
           testId="assistant"
-          disabled={a.busy}
+          disabled={false}
         />
       </div>
       </div>

@@ -115,7 +115,7 @@ test('saving a live folder connection auto-tracks its board', async () => {
     await expect(trackedRow).toContainText('folder-e2el');
 
     // …and the board itself is listed.
-    expect((await listedBoards(window)).some(name => name.includes('E2E Live'))).toBe(true);
+    await expect.poll(async () => (await listedBoards(window)).some(name => name.includes('E2E Live'))).toBe(true);
   } finally {
     // Stop the live folder watcher before deleting the tree it watches.
     await closeApp();

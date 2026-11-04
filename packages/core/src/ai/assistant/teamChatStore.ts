@@ -1,3 +1,4 @@
+import { importLegacyTeamChat } from './teamChatMigration';
 import { deriveChatTitle } from './assistantEngine';
 import type { AssistantMessage, AssistantRole, TeamChatRecord, TeamChatSummary, TeamChatRepository, DurableConversation } from './assistantTypes';
 
@@ -21,7 +22,8 @@ export class TeamChatStore {
   }
 
   private all(): TeamChatRecord[] {
-    return this.store.read().teamChats;
+    const snapshot = this.store.read();
+    return snapshot.activation ? snapshot.conversations.map(({ id, projectId, title, issueKey, createdAt, updatedAt, messages }) => ({ id, projectId: projectId ?? '', title, ...(issueKey ? { issueKey } : {}), createdAt, updatedAt, messages })) : snapshot.teamChats;
   }
 
   public list(projectId: string): TeamChatSummary[] {
@@ -50,14 +52,17 @@ export class TeamChatStore {
       updatedAt: now,
       messages: []
     };
-    await this.store.transaction(draft => { draft.teamChats.push(structuredClone(chat)); });
+    await this.store.transaction(draft => {
+      if (draft.activation) draft.conversations.push(importLegacyTeamChat(chat));
+      else draft.teamChats.push(structuredClone(chat));
+    });
     return chat;
   }
 
   /** Replaces a chat's transcript. A still-untitled chat is named from its first user message. */
   public async saveMessages(id: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord> {
     return this.store.transaction(draft => {
-      if (draft.conversations.some(c => c.id === id)) {
+      if (draft.activation || draft.conversations.some(c => c.id === id)) {
         throw new Error('Whole-transcript replacement is rejected for durable conversations.');
       }
       const chats = draft.teamChats;
@@ -80,6 +85,13 @@ export class TeamChatStore {
     const trimmed = title.trim();
     if (!trimmed) throw new Error('A chat needs a name.');
     return this.store.transaction(draft => {
+      if (draft.activation) {
+        const current = draft.conversations.find(chat => chat.id === id);
+        if (!current) throw new Error(`Conversation ${id} was not found.`);
+        current.title = trimmed.slice(0, 120);
+        current.revision++;
+        return { ...structuredClone(current), projectId: current.projectId ?? '' };
+      }
       const chats = draft.teamChats;
       const current = chats.find(chat => chat.id === id);
       if (!current) throw new Error(`Team chat ${id} was not found.`);
@@ -90,6 +102,7 @@ export class TeamChatStore {
   }
 
   public async remove(id: string): Promise<void> {
-    await this.store.transaction(draft => { draft.teamChats = draft.teamChats.filter(chat => chat.id !== id); });
+    await this.store.transaction(draft => { draft.teamChats = draft.teamChats.filter(chat => chat.id !== id);
+      draft.conversations = draft.conversations.filter(chat => chat.id !== id); });
   }
 }

@@ -1076,7 +1076,10 @@ export function App() {
     const unsubscribeChanged = onSessionChanged(record => {
       // The assistant subscribes separately for tool permissions and usage.
       // Its per-persona runtime records must never become navigable chats.
-      if (isAssistantToolSession(record)) return;
+      if (isAssistantToolSession(record)) {
+        setAgentSessions(current => current.filter(session => session.issueKey !== record.issueKey));
+        return;
+      }
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
         const targetKey = activeTargetSessionKeyRef.current;

@@ -1,6 +1,7 @@
+import { assistantCapabilityNote } from './assistantCapability';
 import { realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { getProviderDescriptor, getKnownContextLength, runProviderPrompt, TeamChatAcceptanceUnknown, type AiProvider, type AgentSessionRecord, type AgentToolMode, type AgentPermissionMode, type ReasoningEffort, type AssistantRole, type WireImageAttachment } from '@praxis/core';
+import { actionAllowedOn, PROTOCOL_PROMPT, parseAssistantReply, getProviderDescriptor, getKnownContextLength, runProviderPrompt, TeamChatAcceptanceUnknown, type AiProvider, type AgentSessionRecord, type AgentToolMode, type AgentPermissionMode, type ReasoningEffort, type AssistantRole, type WireImageAttachment } from '@praxis/core';
 import { conversationPayloadDigest } from '@praxis/core';
 import type { TeamChatExecutionAdapter, TeamChatExecutionParams, TeamChatExecutionResult } from '@praxis/core';
 
@@ -41,12 +42,18 @@ export interface TeamChatRuntimeOptions {
 }
 
 export function createProductionTeamChatExecutionAdapter(dependencies: {
+  resolveAttachments?: (id: string, refs: readonly import('@praxis/core').ConversationAttachment[]) => Promise<WireImageAttachment[]>;
   resolveRuntimeConfiguration: (provider: AiProvider) => Promise<string>;
   settings: () => import('@praxis/core').AppSettings;
   resolveConnectionOptions: (provider: AiProvider) => Promise<{ apiKey?: string; gatewayUrl?: string; model?: string }>;
   completeWithTools: (runtime: TeamChatRuntimeOptions, systemPrompt: string, prompt: string) => Promise<string>;
 }): TeamChatExecutionAdapter {
-  return createTeamChatExecutionAdapter(async ({ conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence }, preparedPrompt) => {
+  const adapter = createTeamChatExecutionAdapter(async ({ messages, conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence }, preparedPrompt) => {
+    const parsedReply = (text: string) => {
+      const parsed = parseAssistantReply(text);
+      if (parsed.proposedAction && !actionAllowedOn(parsed.proposedAction, turn.plan.context)) delete parsed.proposedAction;
+      return parsed;
+    };
     const settings = dependencies.settings();
     const options = { ...participant.defaults, ...turn.plan.runtimeOptions };
     const selectedProvider = (options.provider as AiProvider | undefined) ?? settings.ai.activeProvider;
@@ -68,26 +75,31 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
         attemptId: attempt.id, bindingId: attempt.bindingId, coordinatorEpoch: attempt.coordinatorEpoch },
       signal
     };
+    const refs = (messages ?? conversation.messages ?? []).flatMap(m => m.attachments);
+    if (refs.length) {
+      if (!dependencies.resolveAttachments || runtime.toolMode === 'project-only') throw new Error('This provider path does not support images. Choose a runtime with image support.');
+      runtime.images = await dependencies.resolveAttachments(conversation.id, refs);
+    }
     await onEvidence?.({ kind: 'runtime_identity', provenance: 'production-adapter',
       data: { toolCapable: !(runtime.toolMode === 'project-only' && getProviderDescriptor(selectedProvider).kind === 'api'),
         provider: selectedProvider } });
-    const systemPrompt = `You are the ${participant.role} team member. Respond to the conversation.`;
+    const systemPrompt = `${participant.instructions}\n\n${PROTOCOL_PROMPT}\n\n${assistantCapabilityNote({ toolMode: runtime.toolMode ?? 'project-only', mode: runtime.mode ?? 'chat', workingDirectory: runtime.workingDirectory })}`;
     if (runtime.toolMode === 'project-only' && getProviderDescriptor(selectedProvider).kind === 'api') {
       const connection = await dependencies.resolveConnectionOptions(selectedProvider);
       let usage: import('@praxis/core').TokenUsage | undefined;
       const result = await runProviderPrompt(selectedProvider, userPrompt, {
         apiKey: connection.apiKey ?? '', baseUrl: connection.gatewayUrl, model: runtime.model,
-        systemPrompt: 'Respond to the prepared durable conversation below.', signal, reasoningEffort: runtime.reasoningEffort,
+        systemPrompt, signal, reasoningEffort: runtime.reasoningEffort,
         onUpdate: noteAccepted, onUsage: reported => { usage = reported; }
       });
-      return { text: result.text, usage, usageReferences: usage ? [`attempt:${attempt.id}`] : [] };
+      return { ...parsedReply(result.text), usage, usageReferences: usage ? [`attempt:${attempt.id}`] : [] };
     }
     let terminal: AgentSessionRecord | undefined;
     runtime.onTerminal = record => { terminal = record; };
     try {
       const text = await dependencies.completeWithTools(runtime, systemPrompt, userPrompt);
       const reply = terminal && [...terminal.events].reverse().find(event => event.type === 'message');
-      return { text, contextDelivery: terminal?.teamChatContextDelivery ?? 'reconstruction', providerSessionId: terminal?.runtimeSessionId ?? terminal?.sessionId,
+      return { ...parsedReply(text), contextDelivery: terminal?.teamChatContextDelivery ?? 'reconstruction', providerSessionId: terminal?.runtimeSessionId ?? terminal?.sessionId,
         reportedCost: reply?.cost, usage: reply?.tokenUsage, usageReferences: reply?.tokenUsage ? [`attempt:${attempt.id}`] : [],
         toolEvidenceReferences: terminal ? [`session:${terminal.sessionId}:attempt:${attempt.id}`] : [] };
     } catch (error) {
@@ -131,4 +143,10 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
       onUsage: reported => { usage = reported; } });
     return { text: result.text, usage };
   });
+  adapter.validateAttachments = async (id, messages) => {
+    const refs = messages.flatMap(m => m.attachments);
+    if (!dependencies.resolveAttachments) throw new Error('Attachment storage is unavailable.');
+    await dependencies.resolveAttachments(id, refs);
+  };
+  return adapter;
 }

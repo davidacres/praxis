@@ -439,6 +439,9 @@ const praxis: PraxisIpc = {
   },
   activity: { list: (projectId: string) => ipcRenderer.invoke('activity:list', projectId) },
   assistant: {
+    sessionTurn: (request: unknown) => ipcRenderer.invoke('assistant:sessionTurn', request),
+    control: (command: unknown) => ipcRenderer.invoke('assistant:control', command),
+    stageAttachments: (id: string, images: unknown) => ipcRenderer.invoke('assistant:stageAttachments', id, images),
     turn: (request: unknown) => ipcRenderer.invoke('assistant:turn', request),
     teamReview: (request: unknown) => ipcRenderer.invoke('assistant:teamReview', request),
     listChats: (projectId: string) => ipcRenderer.invoke('assistant:listChats', projectId),
@@ -447,7 +450,6 @@ const praxis: PraxisIpc = {
     saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
     renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
     deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
-    pinDecision: (conversationId: string, messageId: string, supersedesMessageId?: string) => ipcRenderer.invoke('assistant:pinDecision', conversationId, messageId, supersedesMessageId),
     submitTurn: (command: unknown) => ipcRenderer.invoke('assistant:submitTurn', command),
     getConversation: (conversationId: string) => ipcRenderer.invoke('assistant:getConversation', conversationId),
     subscribeConversation: (conversationId: string, listener: (update: ConversationUpdate) => void) => {
@@ -459,9 +461,6 @@ const praxis: PraxisIpc = {
         ipcRenderer.removeListener('assistant:conversationUpdate', handler);
       };
     },
-    cancelTurn: (conversationId: string, turnId: string) => ipcRenderer.invoke('assistant:cancelTurn', conversationId, turnId),
-    retryParticipant: (conversationId: string, turnId: string, participantId: string) => ipcRenderer.invoke('assistant:retryParticipant', conversationId, turnId, participantId),
-    resolveAttempt: (conversationId: string, turnId: string, attemptId: string, resolution: string, options?: { acknowledgeDuplicateActionRisk: boolean; reconciliationEvidenceId: string }) => ipcRenderer.invoke('assistant:resolveAttempt', conversationId, turnId, attemptId, resolution, options),
     onChatsChanged: (listener: () => void) => {
       const handler = () => listener();
       ipcRenderer.on('assistant:chatsChanged', handler);

@@ -202,18 +202,21 @@ test('assistant composer selects provider, model, reasoning, and permission mode
   await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-runtime-controls.png') });
   await win.getByTestId('assistant-pin').click();
   await expect(win.getByTestId('assistant-docked')).toBeVisible();
+  await expect(win.getByTestId('assistant-reasoning')).toHaveAttribute('data-value', 'high');
+  await expect(win.getByTestId('assistant-mode-analysis')).toHaveAttribute('aria-pressed', 'true');
+  await expect(win.getByTestId('assistant-permission-chip')).toContainText('Auto');
   expect((await win.getByTestId('assistant-docked').boundingBox())!.width).toBeGreaterThanOrEqual(500);
   await win.getByTestId('assistant-docked').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-wide-docked.png') });
 });
 
-test('assistant composer collapses and animates its border while the team replies', async () => {
+test('assistant composer accepts queued turns and animates its border while the team replies', async () => {
   const win = await launch(4000);
   await win.getByTestId('titlebar-assistant').click();
   const composer = win.getByTestId('assistant-composer');
   const expandedHeight = (await composer.boundingBox())!.height;
   await win.getByTestId('assistant-input').fill('Check the running state');
   await win.getByTestId('assistant-send').click();
-  await expect(composer).toHaveClass(/is-collapsed/);
+  await expect(composer).not.toHaveClass(/is-collapsed/);
   await expect(composer).toHaveClass(/is-running/);
   await expect(win.getByTestId('assistant-composer-activity-orbit')).toBeVisible();
   const capsule = win.getByTestId('assistant-composer-activity-orbit').locator('[data-activity-capsule="true"]');
@@ -230,8 +233,8 @@ test('assistant composer collapses and animates its border while the team replie
   await win.getByTestId('assistant-pin').click();
   await expect(win.getByTestId('assistant-docked')).toBeVisible();
   expect(parseFloat(await timer.innerText())).toBeGreaterThanOrEqual(timeBeforePin);
-  await expect(win.getByTestId('assistant-send')).toHaveCount(0);
-  await expect.poll(async () => (await composer.boundingBox())!.height).toBeLessThan(expandedHeight - 12);
+  await expect(win.getByTestId('assistant-send')).toBeVisible();
+  expect((await composer.boundingBox())!.height).toBeGreaterThanOrEqual(expandedHeight - 12);
   await composer.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-composer-running.png') });
   await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
   await expect(composer).not.toHaveClass(/is-collapsed/);
@@ -306,7 +309,7 @@ test('assistant full tools uses the selected working folder through an agent ses
   const latestRequest = JSON.parse(mock!.requests.filter(request => request.url.endsWith('/chat/completions')).at(-1)!.body);
   const latestUser = latestRequest.messages.filter((message: { role: string }) => message.role === 'user').at(-1);
   expect(latestUser.content).toContain('Continue with the same team member.');
-  expect(latestUser.content).not.toContain('Inspect the working folder and answer.');
+  expect(latestUser.content.split('Inspect the working folder and answer.')).toHaveLength(2); // reconstruction contains each accepted message once
   await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-full-tools.png') });
   await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
   // Exercise the initial list as well as live pushes: existing records remain hidden after reload.
@@ -326,7 +329,7 @@ test('assistant full tools uses the selected working folder through an agent ses
   const reopened = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
   expect(reopened).toHaveLength(1);
   expect(reopened[0].sessionId).toBe(toolTurn!.sessionId);
-  // Permissions are a session boundary; returning to Full resumes its prior execution.
+  // A policy change invalidates the binding; returning to Full reconstructs a fresh execution.
   await chooseOption(win.getByTestId('assistant-tool-mode'), 'read-only');
   replyText = 'Read-only answer checkpoint sentinel';
   await win.getByTestId('assistant-input').fill('Answer with read-only tools.');
@@ -338,35 +341,39 @@ test('assistant full tools uses the selected working folder through an agent ses
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(5);
   const returned = (await win.evaluate(() => window.praxis.ai.listSessions())).filter(session => session.issueKey.startsWith('ASSISTANT-'));
-  expect(returned).toHaveLength(2);
-  expect(returned.find(session => session.toolMode === 'full')!.sessionId).toBe(toolTurn!.sessionId);
+  expect(returned).toHaveLength(3);
+  expect(returned.filter(session => session.toolMode === 'full')).toHaveLength(2);
+  expect(returned[0].sessionId).not.toBe(toolTurn!.sessionId);
   const returnedRequest = JSON.parse(mock!.requests.filter(request => request.url.endsWith('/chat/completions')).at(-1)!.body);
   expect(returnedRequest.messages.filter((message: { role: string }) => message.role === 'user').at(-1).content).toContain('Read-only answer checkpoint sentinel');
   await win.screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'team-chat-navigation.png') });
 });
 
-test('CLI team-chat replies continue the same execution session', async () => {
+test('CLI team-chat reconstructs when account identity cannot be proved', async () => {
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } } } }, undefined, undefined, { openNewSession: false });
   const win = app.window;
-  const folder = app.userDataDir;
-  const first = await win.evaluate(folder => window.praxis.assistant.turn({
-    message: 'First CLI team-chat question.', personaId: 'dev',
-    provider: 'claude-code-cli', toolMode: 'read-only', workingDirectory: folder,
-    toolSessionPrefix: 'ASSISTANT-cli-continuation'
-  } as Parameters<typeof window.praxis.assistant.turn>[0]), folder);
-  expect(first.messages[0].error).toBeUndefined();
-  const original = (await win.evaluate(() => window.praxis.ai.listSessions()))[0];
-  const next = await win.evaluate(({ folder, history }) => window.praxis.assistant.turn({
-    message: 'DISTINCT_FOLLOW_UP', personaId: 'dev', history,
-    provider: 'claude-code-cli', toolMode: 'read-only', workingDirectory: folder,
-    toolSessionPrefix: 'ASSISTANT-cli-continuation'
-  } as Parameters<typeof window.praxis.assistant.turn>[0]), { folder, history: first.messages });
-  expect(next.messages[0].error).toBeUndefined();
+  const id = await win.evaluate(async folder => {
+    const chat = await window.praxis.assistant.createChat('');
+    const snapshot = await window.praxis.assistant.getConversation(chat.id);
+    await window.praxis.assistant.submitTurn({ conversationId: chat.id, commandId: crypto.randomUUID(), expectedRevision: snapshot!.revision,
+      text: 'First CLI team-chat question.', selectedParticipantIds: ['part-dev'], attachmentRefs: [],
+      runtimeOptions: { provider: 'claude-code-cli', toolMode: 'read-only', workingDirectory: folder } });
+    return chat.id;
+  }, app.userDataDir);
+  await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns[0].state, id)).toBe('completed');
+  await win.evaluate(async ({ id, folder }) => {
+    const snapshot = await window.praxis.assistant.getConversation(id);
+    await window.praxis.assistant.submitTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot!.revision,
+      text: 'DISTINCT_FOLLOW_UP', selectedParticipantIds: ['part-dev'], attachmentRefs: [],
+      runtimeOptions: { provider: 'claude-code-cli', toolMode: 'read-only', workingDirectory: folder } });
+  }, { id, folder: app.userDataDir });
+  await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns[1].state, id)).toBe('completed');
+  const snapshot = await win.evaluate(id => window.praxis.assistant.getConversation(id), id);
+  expect(snapshot!.messages).toHaveLength(4);
+  expect(snapshot!.bindings.filter(b => b.status === 'valid')).toHaveLength(1);
   const sessions = await win.evaluate(() => window.praxis.ai.listSessions());
-  expect(sessions).toHaveLength(1);
-  expect(sessions[0].sessionId).toBe(original.sessionId);
-  const record = await win.evaluate(key => window.praxis.ai.getSession(key), original.issueKey);
-  expect(record!.events.filter(event => event.type === 'message')).toHaveLength(2);
+  expect(sessions).toHaveLength(2);
+  expect(sessions.every(s => s.teamChatExecution?.conversationId === id)).toBe(true);
 });
 
 test('team members reuse their own sessions and a new chat gets separate sessions', async () => {
@@ -411,16 +418,16 @@ test('an @mention routes to that persona and transcript suggestions are read-onl
   expect(mock!.requests.some(request => request.url.endsWith('/chat/completions') && request.body.includes('cannot apply changes from this chat'))).toBe(true);
   await expect(win.locator('.persona-badge--qa').first()).toBeVisible();
   await expect(win.getByTestId('assistant-message-suggestions')).toHaveText('Suggestions: Go deeper');
-  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Hand the plan to an agent');
-  await expect(win.getByTestId('assistant-message-qa').getByRole('button')).toHaveCount(0);
-  await expect(win.getByTestId('assistant-feed').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Hand the plan to an agent');
+  await expect(win.getByTestId('assistant-action-preview')).toBeVisible();
+  await expect(win.getByTestId('assistant-action-apply')).toBeDisabled();
   await expect(win.getByTestId('assistant-member-dev')).toHaveAttribute('aria-pressed', 'true');
   await expect(win.getByTestId('assistant-send')).toBeVisible();
   const chat = mock!.requests.filter(r => r.url.endsWith('/chat/completions')).at(-1)!;
   expect(chat.body).toContain('QA SPECIALIST');
   await win.getByTestId('assistant-panel').screenshot({ path: path.resolve(process.cwd(), '..', '.praxis', 'session-artifacts', 'assistant-chat-no-message-buttons.png') });
 
-  await expect(win.getByTestId('assistant-message-qa').getByText('Open as Coding Session')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-message-qa').getByText('Open as Coding Session')).toBeVisible();
   await win.getByTestId('assistant-input').fill('go deeper');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-user').last()).toHaveText('go deeper');
@@ -538,7 +545,7 @@ async function openIssue(win: Page): Promise<void> {
 
 const action = (value: unknown) => `Here is a proposal.\n\`\`\`praxis-assistant\n${JSON.stringify({ action: value })}\n\`\`\``;
 
-test('an update-ticket proposal is informational and has no transcript controls', async () => {
+test('an update-ticket proposal requires Preview Changes before applying', async () => {
   const win = await launch();
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-pin').click();
@@ -547,8 +554,9 @@ test('an update-ticket proposal is informational and has no transcript controls'
   await win.getByTestId('assistant-input').fill('add acceptance criteria');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-action-card')).toBeVisible();
-  await expect(win.getByTestId('assistant-message-dev').getByRole('button')).toHaveCount(0);
-  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Add acceptance criteria');
+  await expect(win.getByTestId('assistant-action-preview')).toBeVisible();
+  await expect(win.getByTestId('assistant-action-apply')).toBeDisabled();
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Add acceptance criteria');
 
   const key = /Issue (\S+)/.exec((await win.getByTestId('assistant-context-pill').textContent()) ?? '')![1];
   const description = await win.evaluate(async issueKey => (await window.praxis.issue.get(issueKey, 'team-board')).description, key);
@@ -563,13 +571,14 @@ test('a create-subtask proposal does not create a task without a composer send',
   replyText = action({ kind: 'create-subtask', label: 'Create Subtask', summary: 'Add a regression test task', title: 'Add login regression test', description: 'Cover the broken login path.' });
   await win.getByTestId('assistant-input').fill('make a test task');
   await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Add a regression test task');
-  await expect(win.getByTestId('assistant-message-dev').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Add a regression test task');
+  await expect(win.getByTestId('assistant-action-preview')).toBeVisible();
+  await expect(win.getByTestId('assistant-action-apply')).toBeDisabled();
   const featureDir = path.join(plansDir!, 'features', 'feature-01-demo');
   expect(fs.readdirSync(featureDir).filter(name => name.startsWith('task-'))).toHaveLength(1);
 });
 
-test('an update-workflow proposal is informational and leaves the workflow unchanged', async () => {
+test('an update-workflow proposal previews before changing the designer', async () => {
   const win = await launch();
   const { projectId, workflow } = await win.evaluate(async () => {
     const project = (await window.praxis.projects.list())[0];
@@ -595,8 +604,8 @@ test('an update-workflow proposal is informational and leaves the workflow uncha
   replyText = action({ kind: 'update-workflow', label: 'Apply Workflow Changes', summary: 'Rename the workflow', workflow: { ...workflow, name: 'Renamed by the team' } });
   await win.getByTestId('assistant-input').fill('rename it');
   await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-action-card')).toContainText('Suggested action: Rename the workflow');
-  await expect(win.getByTestId('assistant-message-lead').getByRole('button')).toHaveCount(0);
+  await expect(win.getByTestId('assistant-action-card')).toContainText('Rename the workflow');
+  await expect(win.getByTestId('assistant-action-preview')).toBeVisible();
   await expect(win.getByTestId('assistant-context-pill')).toContainText('Workflow Original flow');
   expect(await win.evaluate(async id => (await window.praxis.workflows.get(id, 'assistant-wf'))?.name, projectId)).toBe('Original flow');
 
@@ -604,7 +613,7 @@ test('an update-workflow proposal is informational and leaves the workflow uncha
   replyText = action({ kind: 'update-workflow', label: 'Apply Workflow Changes', summary: 'Wrong one', workflow: { ...workflow, id: 'someone-else' } });
   await win.getByTestId('assistant-input').fill('change another');
   await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-action-card').last()).toContainText('Suggested action: Wrong one');
+  await expect(win.getByTestId('assistant-action-card').last()).toContainText('Wrong one');
   await expect(win.getByRole('alert')).toHaveCount(0);
 });
 
@@ -667,23 +676,14 @@ test('a chat can be renamed, survives an app restart, and the docked width persi
   await expect(again.getByTestId('assistant-message-dev')).toBeVisible();
 });
 
-test('the assistant IPC reports a missing provider as an error message, not a crash', async () => {
+test('durable activation rejects stale legacy turns and transcript writers', async () => {
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli' } }, undefined, undefined, { openNewSession: false });
-  const result = await app.window.evaluate(async () => window.praxis.assistant.turn({ message: 'hello' }));
-  expect(result.messages).toHaveLength(1);
-  expect(result.messages[0]).toMatchObject({ role: 'lead', error: true });
-  await expect(app.window.evaluate(async () => window.praxis.assistant.turn({ message: '   ' }))).rejects.toThrow(/Ask the team/);
-  const chat = await app.window.evaluate(async () => {
-    const created = await window.praxis.assistant.createChat('p1');
-    await window.praxis.assistant.saveChat(created.id, [{ id: 'm1', role: 'user', text: 'First question here', createdAt: new Date().toISOString() }]);
-    const listed = await window.praxis.assistant.listChats('p1');
-    const other = await window.praxis.assistant.listChats('p2');
-    await window.praxis.assistant.deleteChat(created.id);
-    return { listed, other, after: await window.praxis.assistant.getChat(created.id) };
-  });
-  expect(chat.listed[0]).toMatchObject({ title: 'First question here', messageCount: 1 });
-  expect(chat.other).toHaveLength(0);
-  expect(chat.after).toBeUndefined();
+  const win = app.window;
+  const chat = await win.evaluate(() => window.praxis.assistant.createChat('p1'));
+  await expect(win.evaluate(() => window.praxis.assistant.turn({ message: 'hello' }))).rejects.toThrow(/Legacy/);
+  await expect(win.evaluate(id => window.praxis.assistant.saveChat(id, []), chat.id)).rejects.toThrow(/Legacy|replacement/);
+  await win.evaluate(id => window.praxis.assistant.deleteChat(id), chat.id);
+  expect(await win.evaluate(id => window.praxis.assistant.getChat(id), chat.id)).toBeUndefined();
 });
 
 test('every persona renders with its own distinct colour and a readable badge', async () => {
@@ -895,7 +895,7 @@ test('durable no-tools API turns retain bounded history and usage without alloca
     await expect.poll(async () => win.evaluate(async () => (await window.praxis.assistant.getConversation('durable-api'))?.turns.at(-1)?.state)).toBe('completed');
     if (commandId === 'first') await win.evaluate(async () => {
       const conversation = (await window.praxis.assistant.getConversation('durable-api'))!;
-      await window.praxis.assistant.pinDecision(conversation.id, conversation.messages[0].id);
+      await window.praxis.assistant.control({ conversationId: conversation.id, commandId: crypto.randomUUID(), expectedRevision: conversation.revision, action: 'pin', messageId: conversation.messages[0].id });
     });
   }
   const conversation = await win.evaluate(() => window.praxis.assistant.getConversation('durable-api'));

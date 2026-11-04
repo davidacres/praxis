@@ -632,3 +632,51 @@ test('startup imports a prepared attempt result without dispatching the provider
   assert.deepEqual(current.turns[0].attempts[0].usageReferences, ['paid-once']);
   assert.equal(current.turns[0].attempts[0].dispatchIntent, undefined);
 });
+
+test('revisioned controls reject stale targets and persist idempotent command outcomes', async () => {
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: { execute: async () => ({ text: 'Done' }) } });
+  await coordinator.initialize();
+  const current = coordinator.getConversation('conv-1')!;
+  current.messages.push({ id: 'decision', turnId: 'imported', role: 'dev', text: 'Keep this', createdAt: 'now', attachments: [], sequence: 1 });
+  repo.snapshot.conversations[0] = current;
+  const command = { conversationId: current.id, commandId: 'pin-1', expectedRevision: current.revision, action: 'pin' as const, messageId: 'decision' };
+  const pinned = await coordinator.control(command);
+  assert.deepEqual(pinned.pinnedMessageIds, ['decision']);
+  const repeat = await coordinator.control(command);
+  assert.equal(repeat.revision, pinned.revision);
+  assert.equal(repeat.controlReceipts?.length, 1);
+  await assert.rejects(coordinator.control({ ...command, messageId: 'other' }), /payload conflict/);
+  const stale = await coordinator.control({ ...command, commandId: 'stale', action: 'unpin' });
+  assert.deepEqual(stale.pinnedMessageIds, ['decision']);
+  const unpinned = await coordinator.control({ ...command, commandId: 'unpin', expectedRevision: pinned.revision, action: 'unpin' });
+  assert.deepEqual(unpinned.pinnedMessageIds, []);
+});
+
+test('deletion during dispatch fences late results and never recreates a conversation', async () => {
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  let release!: (result: { text: string }) => void;
+  let entered!: () => void;
+  const executing = new Promise<void>(resolve => { entered = resolve; });
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: { execute: async () => {
+    entered(); return new Promise(resolve => { release = resolve; });
+  } } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'delete-race', expectedRevision: 1, text: 'Original', selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: {} });
+  await executing;
+  await coordinator.removeConversation('conv-1');
+  release({ text: 'Late answer' });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(coordinator.getConversation('conv-1'), undefined);
+  assert.equal(repo.read().conversations.length, 0);
+});
+
+test('a structured execution result and original page identity survive completion', async () => {
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: { execute: async () => ({ text: 'Proposal', choices: [{ label: 'Next', prompt: 'Continue' }], proposedAction: { kind: 'update-ticket', label: 'Apply', summary: 'Details', description: 'New body' } }) } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'structured', expectedRevision: 1, text: 'Original', selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: {}, context: { pageType: 'issue', title: 'Issue P-1', issueKey: 'P-1', summary: 'Original' } });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  const message = coordinator.getConversation('conv-1')!.messages.at(-1)!;
+  assert.equal(message.context?.issueKey, 'P-1');
+  assert.equal(message.proposedAction?.kind, 'update-ticket');
+  assert.equal(message.choices?.[0].prompt, 'Continue');
+});

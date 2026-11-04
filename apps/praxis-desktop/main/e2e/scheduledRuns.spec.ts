@@ -923,7 +923,7 @@ test('quitting with a schedule pending asks first, and offers to minimise instea
   expect(await page.evaluate(() => window.praxis.scheduledRuns.list().then(list => list.length))).toBe(1);
 });
 
-test('an idle failed stage pauses the schedule and retries in the same workflow', async () => {
+test('an exhausted failed stage pauses the schedule and retries in the same workflow', async () => {
   const { page, projectId, repo } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500' } });
   const marker = path.join(repo, 'retry-ready');
   const workflowId = await page.evaluate(async ({ projectId, marker }) => {
@@ -950,7 +950,7 @@ test('an idle failed stage pauses the schedule and retries in the same workflow'
   await expect(flight).toHaveCount(1);
   await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toHaveAttribute('data-lane', 'failed');
   await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Build — needs attention');
-  await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Attempt 1 of 3');
+  await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Attempt 3 of 3');
   await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'failure');
   await expect(flight.getByTestId('schedule-review-workflow')).toBeVisible();
   await expect(page.getByTestId('schedule-deck-card')).toHaveCount(1);
@@ -959,12 +959,12 @@ test('an idle failed stage pauses the schedule and retries in the same workflow'
   await page.screenshot({ path: path.join(shots, 'scheduled-run-stage-failure.png') });
   fs.writeFileSync(marker, 'ready');
   await flight.getByTestId('schedule-retry').click();
-  // Retried, Build passed on its second attempt, and the approval stage was determined autonomously to complete the run.
+  // Retried explicitly after the autonomous budget, Build passed on its fourth attempt, and the approval stage was determined autonomously to complete the run.
   await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].status, { timeout: 10000 }).toBe('succeeded');
   await expect(page.getByTestId('schedule-stage-failure')).toHaveCount(0);
   const after = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
   expect(after.map(run => run.runId)).toEqual(before.map(run => run.runId));
-  expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(2);
+  expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(4);
 });
 
 test('the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script', async () => {

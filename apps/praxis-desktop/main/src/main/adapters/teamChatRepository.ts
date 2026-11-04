@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { TeamChatRepository, TeamChatSnapshot } from '@praxis/core';
+import { migrateTeamChats, type TeamChatRepository, type TeamChatSnapshot } from '@praxis/core';
 
 type Writer = { queue: Promise<void>; uncertain: boolean };
 // All windows route IPC to main. All adapter instances for a profile share this lock.
@@ -28,6 +28,9 @@ function decode(raw: string): TeamChatSnapshot {
         conversation.revision < 0 || typeof conversation.coordinatorEpoch !== 'string' ||
         !['messages', 'participants', 'turns', 'bindings', 'summaries', 'pinnedMessageIds', 'commandReceipts'].every(key => Array.isArray(conversation[key]))) throw new Error('Invalid durable conversation.');
   }
+  if (value.activation !== undefined && (value.activation?.version !== 1 || typeof value.activation.acceptedNewTurns !== 'boolean' || value.teamChats.length)) throw new Error('Invalid activation state.');
+  if (value.legacyDiagnostics !== undefined && (!Array.isArray(value.legacyDiagnostics) || value.legacyDiagnostics.some((item: Record<string, unknown>) =>
+      !item || typeof item.id !== 'string' || typeof item.completedAt !== 'string' || !Array.isArray(item.messages)))) throw new Error('Invalid legacy diagnostic.');
   const uniqueIds = (items: { id: string }[]) => items.every(item => item && typeof item.id === 'string' && item.id.length > 0) && new Set(items.map(item => item.id)).size === items.length;
   if (!uniqueIds(value.teamChats) || !uniqueIds(value.conversations)) throw new Error('Duplicate conversation identity.');
   for (const conversation of value.conversations) {
@@ -83,6 +86,10 @@ function decode(raw: string): TeamChatSnapshot {
     for (const correction of conversation.decisionCorrections ?? []) {
       if (!messageIds.has(correction.messageId) || !messageIds.has(correction.supersedesMessageId)) throw new Error('Invalid decision correction.');
     }
+    if (conversation.controlReceipts !== undefined && (!Array.isArray(conversation.controlReceipts) ||
+        new Set(conversation.controlReceipts.map((receipt: { commandId: string }) => receipt.commandId)).size !== conversation.controlReceipts.length ||
+        conversation.controlReceipts.some((receipt: { commandId: unknown; payloadDigest: unknown; revision: number }) => !receipt || typeof receipt.commandId !== 'string' ||
+          typeof receipt.payloadDigest !== 'string' || !Number.isSafeInteger(receipt.revision) || receipt.revision < 1 || receipt.revision > conversation.revision))) throw new Error('Invalid control receipt.');
     const commandIds = new Set<string>();
     for (const receipt of conversation.commandReceipts) {
       if (!receipt || typeof receipt.commandId !== 'string' || commandIds.has(receipt.commandId) || typeof receipt.payloadDigest !== 'string' ||
@@ -126,6 +133,50 @@ export class FileTeamChatRepository implements TeamChatRepository {
     });
     this.writer.queue = write.then(() => undefined, () => undefined);
     return write;
+  }
+  /** Backup and cutover share the writer lock with every transcript save. */
+  public activate(): Promise<void> {
+    const activation = this.writer.queue.then(async () => {
+      if (this.writer.uncertain) throw new TeamChatCommitUncertainError('Reconcile before activation.');
+      const current = this.read();
+      if (current.activation?.version === 1) return;
+      const candidate = migrateTeamChats(current);
+      candidate.revision++;
+      const serialized = JSON.stringify(candidate, null, 2);
+      decode(serialized);
+      const original = await fs.promises.readFile(this.filePath, 'utf8').catch(error => {
+        if (error.code === 'ENOENT') return JSON.stringify({ teamChats: [] });
+        throw error;
+      });
+      const backupPath = `${this.filePath}.v1-backup`;
+      const backup = JSON.stringify({ version: 1, original });
+      await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
+      try {
+        const file = await fs.promises.open(backupPath, 'wx', 0o600);
+        try { await file.writeFile(backup); await file.sync(); } finally { await file.close(); }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      if (await fs.promises.readFile(backupPath, 'utf8') !== backup) throw new Error('Legacy backup does not match source.');
+      decode(JSON.parse(backup).original);
+      await this.commit(serialized);
+    });
+    this.writer.queue = activation.then(() => undefined, () => undefined);
+    return activation;
+  }
+  /** Forward repair is mandatory once any durable turn has been accepted. */
+  public restoreBeforeAcceptance(): Promise<void> {
+    const restore = this.writer.queue.then(async () => {
+      if (this.writer.uncertain) throw new TeamChatCommitUncertainError('Reconcile before restoration.');
+      const current = this.read();
+      if (current.activation?.acceptedNewTurns || current.conversations.some(c => c.turns.length)) throw new Error('Durable turns have been accepted; use forward repair.');
+      const backup = JSON.parse(await fs.promises.readFile(`${this.filePath}.v1-backup`, 'utf8'));
+      if (backup.version !== 1 || typeof backup.original !== 'string') throw new Error('Invalid backup version.');
+      decode(backup.original);
+      await this.commit(backup.original);
+    });
+    this.writer.queue = restore.then(() => undefined, () => undefined);
+    return restore;
   }
   /** Reconciliation must inspect the reloaded receipts before acknowledging an uncertain command. */
   public reconcile(inspect: (snapshot: TeamChatSnapshot) => void): Promise<void> {

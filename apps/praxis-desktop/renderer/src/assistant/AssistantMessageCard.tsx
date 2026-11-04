@@ -1,3 +1,5 @@
+import { useAssistant } from './AssistantProvider';
+import { AssistantActionCard } from './AssistantActionCard';
 import type { AssistantMessage } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { Markdown } from '../ui/Markdown';
@@ -13,6 +15,7 @@ function formatTime(iso: string): string {
 }
 
 export function AssistantMessageCard({ message }: AssistantMessageCardProps) {
+  const a = useAssistant();
   if (message.role === 'user') {
     return (
       <div className="assistant-message is-user" data-testid="assistant-message-user">
@@ -22,6 +25,7 @@ export function AssistantMessageCard({ message }: AssistantMessageCardProps) {
   }
   const persona = personaMeta(message.role);
   const action = message.proposedAction;
+  const owned = a.conversation?.messages.some(item => item.id === message.id);
   return (
     <article
       className={`assistant-message is-persona persona-${persona.id}${message.error ? ' is-error' : ''}`}
@@ -41,14 +45,12 @@ export function AssistantMessageCard({ message }: AssistantMessageCardProps) {
           Suggestions: {message.choices.map(choice => choice.label).join(' · ')}
         </p>
       )}
-      {action && (
-        <div className="assistant-action-card" data-testid="assistant-action-card">
-          <div className="assistant-action-summary">
-            <Icon name="sparkles" size={13} />
-            <span>Suggested action: {action.summary}</span>
-          </div>
-        </div>
-      )}
+      {action && owned && <AssistantActionCard action={action} applied={a.appliedActions[message.id]} disabled={false} onApply={() => void a.applyAction(message.id, action)} />}
+      {action && !owned && <div className="assistant-action-card"><div className="assistant-action-summary">Suggested action: {action.summary}</div></div>}
+      {owned && a.conversation && <button className="btn btn-sm" aria-pressed={a.conversation.pinnedMessageIds.includes(message.id)} onClick={() => {
+        void window.praxis.assistant.control({ conversationId: a.conversation!.id, commandId: crypto.randomUUID(), expectedRevision: a.conversation!.revision,
+          action: a.conversation!.pinnedMessageIds.includes(message.id) ? 'unpin' : 'pin', messageId: message.id });
+      }}>{a.conversation.pinnedMessageIds.includes(message.id) ? 'Unpin decision' : 'Pin decision'}</button>}
     </article>
   );
 }

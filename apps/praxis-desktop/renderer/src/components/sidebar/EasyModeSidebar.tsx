@@ -135,7 +135,7 @@ export function EasyModeSidebar({
     return list;
   }, [projects, runsByProjectId]);
 
-  const teamChats = useProjectsTeamChats(generalConversations ? [] : projects.map(project => project.id));
+  const teamChats = useProjectsTeamChats(generalConversations ? [''] : projects.map(project => project.id));
 
   const rootSessions = useMemo(() => {
     return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);

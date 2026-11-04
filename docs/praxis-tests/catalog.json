@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 784,
+  "testCount": 790,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -2966,18 +2966,18 @@
       }
     },
     {
-      "id": "PT-99F1FB5440",
-      "title": "assistant composer collapses and animates its border while the team replies",
+      "id": "PT-8306C7A150",
+      "title": "assistant composer accepts queued turns and animates its border while the team replies",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 209,
+        "line": 212,
         "project": "functional"
       },
       "area": "assistant",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "assistant composer collapses and animates its border while the team replies",
+        "when": "assistant composer accepts queued turns and animates its border while the team replies",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -2987,7 +2987,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 241,
+        "line": 244,
         "project": "functional"
       },
       "area": "assistant",
@@ -3003,7 +3003,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 271,
+        "line": 274,
         "project": "functional"
       },
       "area": "assistant",
@@ -3014,18 +3014,18 @@
       }
     },
     {
-      "id": "PT-6AF261DEFF",
-      "title": "CLI team-chat replies continue the same execution session",
+      "id": "PT-682AE3DBE7",
+      "title": "CLI team-chat reconstructs when account identity cannot be proved",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 348,
+        "line": 352,
         "project": "functional"
       },
       "area": "assistant",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "CLI team-chat replies continue the same execution session",
+        "when": "CLI team-chat reconstructs when account identity cannot be proved",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -3035,7 +3035,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 372,
+        "line": 379,
         "project": "functional"
       },
       "area": "assistant",
@@ -3051,7 +3051,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 398,
+        "line": 405,
         "project": "functional"
       },
       "area": "assistant",
@@ -3067,7 +3067,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 430,
+        "line": 437,
         "project": "functional"
       },
       "area": "assistant",
@@ -3083,7 +3083,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 452,
+        "line": 459,
         "project": "functional"
       },
       "area": "assistant",
@@ -3099,7 +3099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 464,
+        "line": 471,
         "project": "functional"
       },
       "area": "assistant",
@@ -3110,18 +3110,18 @@
       }
     },
     {
-      "id": "PT-9ADE9F9E42",
-      "title": "an update-ticket proposal is informational and has no transcript controls",
+      "id": "PT-8EF93BBA0B",
+      "title": "an update-ticket proposal requires Preview Changes before applying",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 541,
+        "line": 548,
         "project": "functional"
       },
       "area": "assistant",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an update-ticket proposal is informational and has no transcript controls",
+        "when": "an update-ticket proposal requires Preview Changes before applying",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -3131,7 +3131,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 558,
+        "line": 566,
         "project": "functional"
       },
       "area": "assistant",
@@ -3142,18 +3142,18 @@
       }
     },
     {
-      "id": "PT-B8B9837347",
-      "title": "an update-workflow proposal is informational and leaves the workflow unchanged",
+      "id": "PT-497E7C3D84",
+      "title": "an update-workflow proposal previews before changing the designer",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 572,
+        "line": 581,
         "project": "functional"
       },
       "area": "assistant",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an update-workflow proposal is informational and leaves the workflow unchanged",
+        "when": "an update-workflow proposal previews before changing the designer",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -3163,7 +3163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 611,
+        "line": 620,
         "project": "functional"
       },
       "area": "assistant",
@@ -3179,7 +3179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 631,
+        "line": 640,
         "project": "functional"
       },
       "area": "assistant",
@@ -3190,18 +3190,18 @@
       }
     },
     {
-      "id": "PT-5E8DFAD0E8",
-      "title": "the assistant IPC reports a missing provider as an error message, not a crash",
+      "id": "PT-1B219DB70F",
+      "title": "durable activation rejects stale legacy turns and transcript writers",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 670,
+        "line": 679,
         "project": "functional"
       },
       "area": "assistant",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "the assistant IPC reports a missing provider as an error message, not a crash",
+        "when": "durable activation rejects stale legacy turns and transcript writers",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -5058,6 +5058,102 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "an unreachable connection is skipped instead of blanking the board list",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-592434CA9B",
+      "title": "two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 12,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D8BE3D65EB",
+      "title": "subscription buffers a racing revision and discards responses after selection changes",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 67,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "subscription buffers a racing revision and discards responses after selection changes",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-C44D501ACA",
+      "title": "unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 98,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-EA127A3852",
+      "title": "a migrated chat continues from imported history without reusing unproved runtime identity",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 139,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a migrated chat continues from imported history without reusing unproved runtime identity",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-829EB33638",
+      "title": "keyboard cancellation preserves accepted messages and cancels only the selected queued turn",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 170,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "keyboard cancellation preserves accepted messages and cancels only the selected queued turn",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-204ED6FAA3",
+      "title": "an unconfirmed submission retries its original command after both acknowledgements are lost",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 198,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an unconfirmed submission retries its original command after both acknowledgements are lost",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -8198,8 +8294,8 @@
       }
     },
     {
-      "id": "PT-7600A815C3",
-      "title": "an idle failed stage pauses the schedule and retries in the same workflow",
+      "id": "PT-3348476BDF",
+      "title": "an exhausted failed stage pauses the schedule and retries in the same workflow",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
@@ -8209,7 +8305,7 @@
       "area": "scheduled Runs",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an idle failed stage pauses the schedule and retries in the same workflow",
+        "when": "an exhausted failed stage pauses the schedule and retries in the same workflow",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -9275,7 +9371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 43,
+        "line": 47,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9291,7 +9387,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 68,
+        "line": 72,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9307,7 +9403,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 98,
+        "line": 102,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9323,7 +9419,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 109,
+        "line": 113,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9339,7 +9435,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 140,
+        "line": 144,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9355,7 +9451,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 157,
+        "line": 161,
         "project": "functional"
       },
       "area": "session Shelf Notes",

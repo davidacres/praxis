@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -189,21 +189,21 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-396814BC61 | assistant | ⌘J summons the floating assistant; pin docks it, keeping the conversation | `apps/praxis-desktop/main/e2e/assistant.spec.ts:79` |
 | PT-DA3DC9B1D8 | assistant | floating assistant drags by its header and resizes from its corner | `apps/praxis-desktop/main/e2e/assistant.spec.ts:106` |
 | PT-161D626D8D | assistant | assistant composer selects provider, model, reasoning, and permission mode for the next turn | `apps/praxis-desktop/main/e2e/assistant.spec.ts:136` |
-| PT-99F1FB5440 | assistant | assistant composer collapses and animates its border while the team replies | `apps/praxis-desktop/main/e2e/assistant.spec.ts:209` |
-| PT-6BF3BFEE6B | assistant | an image can be dropped or pasted into the assistant composer and is sent with the turn | `apps/praxis-desktop/main/e2e/assistant.spec.ts:241` |
-| PT-B21CE8C307 | assistant | assistant full tools uses the selected working folder through an agent session | `apps/praxis-desktop/main/e2e/assistant.spec.ts:271` |
-| PT-6AF261DEFF | assistant | CLI team-chat replies continue the same execution session | `apps/praxis-desktop/main/e2e/assistant.spec.ts:348` |
-| PT-DE00E5757D | assistant | team members reuse their own sessions and a new chat gets separate sessions | `apps/praxis-desktop/main/e2e/assistant.spec.ts:372` |
-| PT-567A553B13 | assistant | an @mention routes to that persona and transcript suggestions are read-only | `apps/praxis-desktop/main/e2e/assistant.spec.ts:398` |
-| PT-746D1BA14C | assistant | selected team members reply in order, then the selected lead synthesises | `apps/praxis-desktop/main/e2e/assistant.spec.ts:430` |
-| PT-3412C6D2C6 | assistant | deselecting every seat sends a general chat to the Tech Lead | `apps/praxis-desktop/main/e2e/assistant.spec.ts:452` |
-| PT-450D784024 | assistant | page context follows navigation, can be detached, and chats persist in the tree | `apps/praxis-desktop/main/e2e/assistant.spec.ts:464` |
-| PT-9ADE9F9E42 | assistant | an update-ticket proposal is informational and has no transcript controls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:541` |
-| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:558` |
-| PT-B8B9837347 | assistant | an update-workflow proposal is informational and leaves the workflow unchanged | `apps/praxis-desktop/main/e2e/assistant.spec.ts:572` |
-| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:611` |
-| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:631` |
-| PT-5E8DFAD0E8 | assistant | the assistant IPC reports a missing provider as an error message, not a crash | `apps/praxis-desktop/main/e2e/assistant.spec.ts:670` |
+| PT-8306C7A150 | assistant | assistant composer accepts queued turns and animates its border while the team replies | `apps/praxis-desktop/main/e2e/assistant.spec.ts:212` |
+| PT-6BF3BFEE6B | assistant | an image can be dropped or pasted into the assistant composer and is sent with the turn | `apps/praxis-desktop/main/e2e/assistant.spec.ts:244` |
+| PT-B21CE8C307 | assistant | assistant full tools uses the selected working folder through an agent session | `apps/praxis-desktop/main/e2e/assistant.spec.ts:274` |
+| PT-682AE3DBE7 | assistant | CLI team-chat reconstructs when account identity cannot be proved | `apps/praxis-desktop/main/e2e/assistant.spec.ts:352` |
+| PT-DE00E5757D | assistant | team members reuse their own sessions and a new chat gets separate sessions | `apps/praxis-desktop/main/e2e/assistant.spec.ts:379` |
+| PT-567A553B13 | assistant | an @mention routes to that persona and transcript suggestions are read-only | `apps/praxis-desktop/main/e2e/assistant.spec.ts:405` |
+| PT-746D1BA14C | assistant | selected team members reply in order, then the selected lead synthesises | `apps/praxis-desktop/main/e2e/assistant.spec.ts:437` |
+| PT-3412C6D2C6 | assistant | deselecting every seat sends a general chat to the Tech Lead | `apps/praxis-desktop/main/e2e/assistant.spec.ts:459` |
+| PT-450D784024 | assistant | page context follows navigation, can be detached, and chats persist in the tree | `apps/praxis-desktop/main/e2e/assistant.spec.ts:471` |
+| PT-8EF93BBA0B | assistant | an update-ticket proposal requires Preview Changes before applying | `apps/praxis-desktop/main/e2e/assistant.spec.ts:548` |
+| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:566` |
+| PT-497E7C3D84 | assistant | an update-workflow proposal previews before changing the designer | `apps/praxis-desktop/main/e2e/assistant.spec.ts:581` |
+| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:620` |
+| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:640` |
+| PT-1B219DB70F | assistant | durable activation rejects stale legacy turns and transcript writers | `apps/praxis-desktop/main/e2e/assistant.spec.ts:679` |
 | PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:689` |
 | PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:706` |
 | PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:770` |
@@ -320,6 +320,12 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:148` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:31` |
+| PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:12` |
+| PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:67` |
+| PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:98` |
+| PT-EA127A3852 | durable Team Chat | a migrated chat continues from imported history without reusing unproved runtime identity | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:139` |
+| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:170` |
+| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:198` |
 | PT-5D69F1868B | easymode | EasyMode exposes the shared sidebar material through its feed and header | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
 | PT-E4A060174B | easymode | legacy enableEasyMode false still uses the sole sidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:69` |
 | PT-D7A1079D36 | easymode | Preview omits retired switches and the sole sidebar stays active | `apps/praxis-desktop/main/e2e/easymode.spec.ts:79` |
@@ -516,7 +522,7 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:850` |
 | PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:867` |
 | PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:909` |
-| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:926` |
+| PT-3348476BDF | scheduled Runs | an exhausted failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:926` |
 | PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:970` |
 | PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1019` |
 | PT-7C571CC649 | scheduled Runs | a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1053` |
@@ -583,12 +589,12 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-036F938299 | session Shelf New | the creation cells label themselves, fill solid, and draw their glyphs on whole pixels | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:111` |
 | PT-B7C1C62EB2 | session Shelf New | a note becomes a session goal in one press | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:143` |
 | PT-1B797E8BFB | session Shelf New | with no usable provider the card keeps the goal and offers setup instead of sending | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:170` |
-| PT-F699F5C08F | session Shelf Notes | the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
-| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:68` |
-| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:98` |
-| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:109` |
-| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:140` |
-| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:157` |
+| PT-F699F5C08F | session Shelf Notes | the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:47` |
+| PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:72` |
+| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:102` |
+| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:113` |
+| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:144` |
+| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:161` |
 | PT-EF2C1AEDFA | session Shelf States | each spine draws its session's state, with a cap only where you are needed | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:85` |
 | PT-F7A9150AF3 | session Shelf States | an approval card shows the request and answers it in place | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:114` |
 | PT-B8E2DBE94C | session Shelf States | a working card shows the live step and the task list, and stops the session | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:128` |

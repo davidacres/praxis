@@ -1,6 +1,13 @@
 import type { AgentSessionRecord, AiProvider, AiUsageEvent } from '@praxis/core';
 import { isLimitNoticeReply } from './sessionNav';
 
+export interface SessionUsageContribution {
+  provider: AiProvider;
+  model?: string;
+  tokens?: number;
+  cost?: NonNullable<AgentSessionRecord['cost']>;
+}
+
 type Cost = NonNullable<AgentSessionRecord['cost']>;
 export interface SessionModelUsage {
   provider: AiProvider;
@@ -53,7 +60,8 @@ export function sessionUsageData(
   records: AgentSessionRecord[],
   selectedProvider: AiProvider | undefined,
   selectedModel: string | undefined,
-  events: AiUsageEvent[]
+  events: AiUsageEvent[],
+  attemptContributions: readonly SessionUsageContribution[] = []
 ) {
   const models = new Map<string, SessionModelUsage>();
   const contributions = new Map<string, Array<number | undefined>>();
@@ -90,6 +98,11 @@ export function sessionUsageData(
     for (const participant of record.conversation?.participants ?? []) ensure(participant.provider, participant.model);
     if (record.provider) ensure(record.provider, record.model);
   }
+  for (const item of attemptContributions) {
+    const key = ensure(item.provider, item.model);
+    contributions.set(key, [...(contributions.get(key) ?? []), item.tokens]);
+    if (item.cost) costContributions.set(key, [...(costContributions.get(key) ?? []), item.cost]);
+  }
   if (selectedProvider) ensure(selectedProvider, selectedModel);
   for (const [key, model] of models) {
     Object.assign(model, sumTokens(contributions.get(key) ?? [undefined]));
@@ -106,7 +119,7 @@ export function sessionUsageData(
   }
   for (const provider of providers) {
     // A provider can have several models even if an old record only reports its overall total.
-    const allRecordsHere = records.length > 0 && records.every(record => record.provider === provider.provider
+    const allRecordsHere = attemptContributions.length === 0 && records.length > 0 && records.every(record => record.provider === provider.provider
       && (record.runtimeEpochs ?? []).every(epoch => epoch.provider === provider.provider));
     Object.assign(provider, sumTokens(allRecordsHere ? records.map(record => record.tokenUsage?.totalTokens) : provider.models.map(model => model.tokens)));
     // Missing model attribution does not make a known whole-provider total incomplete.
@@ -117,6 +130,6 @@ export function sessionUsageData(
     providers,
     models: [...models.values()],
     current: selectedProvider ? models.get(keyOf(selectedProvider, selectedModel)) : undefined,
-    total: { ...sumTokens(records.map(record => record.tokenUsage?.totalTokens)), costs: sumCosts(records.map(record => record.cost)) }
+    total: { ...sumTokens([...records.map(record => record.tokenUsage?.totalTokens), ...attemptContributions.map(item => item.tokens)]), costs: sumCosts([...records.map(record => record.cost), ...attemptContributions.map(item => item.cost)]) }
   };
 }
