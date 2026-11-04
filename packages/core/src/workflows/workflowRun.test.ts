@@ -4,6 +4,7 @@ import {
   allowAiMergeResolution,
   applyWorkflowRunCommand,
   canRetry,
+  attemptsSpent,
   exhaustedProviders,
   stageProvider,
   stageModel,
@@ -20,6 +21,7 @@ import { advanceJoins, deriveRunStatus, scheduleWorkflowRun } from './workflowSc
 import { findTimedOutNodes, nextActions, recoverWorkflowRun } from './workflowRecovery';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
 import { summarizeWorkflowRun } from './workflowRunSummary';
+import { pendingLoop } from './workflowEdges';
 import { stageOutcomeFromSession } from './workflowStageTask';
 
 const T = (minutes: number): string => new Date(Date.UTC(2026, 8, 2, 9, minutes)).toISOString();
@@ -538,6 +540,8 @@ test('recovery closes the in-flight attempt and leaves completed stages alone', 
   assert.equal(recovered.run.nodes.plan.attempts.length, 1, 'and is not re-attempted');
   assert.equal(recovered.run.nodes.implement.outcome, 'failed');
   assert.match(recovered.run.nodes.implement.attempts[0].error ?? '', /Interrupted/);
+  assert.equal(recovered.run.nodes.implement.attempts[0].pause, 'environment');
+  assert.equal(attemptsSpent(recovered.run.nodes.implement), 0);
 });
 
 test('recovery is idempotent — recovering twice changes nothing further', () => {
@@ -1105,4 +1109,23 @@ test('a merge stopped on a conflict offers "Let AI resolve", which covers only t
   other = applyWorkflowRunCommand(other, { kind: 'node-failed', nodeId: 'merge', at: T(2), error: 'Target checkout contains uncommitted changes.' });
   assert.equal(nextActions(other).some(action => action.kind === 'resolve-merge-with-ai'), false);
   assert.equal(allowAiMergeResolution(other, 'merge', T(3)), other);
+});
+
+
+test('restart-interrupted QA cannot fire a failure repair loop or invalidate completed implementation', () => {
+  const def = definition();
+  def.edges.push({ id: 'qa-repair', from: 'qa', to: 'implement', on: 'failure', required: false, loop: { maxIterations: 2 } });
+  let run = succeed(newRun(def), 'plan', 1);
+  run = succeed(run, 'implement', 3);
+  const implemented = run.nodes.implement;
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'qa', at: T(5) });
+  const recovered = recoverWorkflowRun(run, T(10)).run;
+  assert.equal(recovered.nodes.implement, implemented);
+  assert.equal(recovered.nodes.qa.attempts[0].pause, 'environment');
+  assert.equal(attemptsSpent(recovered.nodes.qa), 0);
+  assert.equal(pendingLoop(recovered), undefined);
+  assert.equal(canRetry(recovered, 'qa'), true);
+  const retried = applyWorkflowRunCommand(recovered, { kind: 'node-retry', nodeId: 'qa', at: T(11) });
+  assert.equal(retried.nodes.qa.outcome, 'pending');
+  assert.equal(retried.nodes.implement, implemented);
 });

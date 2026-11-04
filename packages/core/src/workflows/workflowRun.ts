@@ -1030,7 +1030,9 @@ function interruptNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRu
     ...attempts[attempts.length - 1],
     outcome: 'failed',
     endedAt: at,
-    error: 'Interrupted — the app stopped while this stage was running.'
+    error: 'Interrupted — the app stopped while this stage was running. Inspect its state, then retry the stage.',
+    // Restart is not a verdict on the work: it must not consume attempts or fire failure loops.
+    pause: 'environment'
   };
 
   const next = withNode(run, { ...clearPhase(state), outcome: 'failed', attempts });
