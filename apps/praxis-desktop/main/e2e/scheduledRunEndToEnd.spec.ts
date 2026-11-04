@@ -72,6 +72,8 @@ for (const storage of ['app', 'folder'] as const) test(`a mixed serial and paral
     PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'vercel-gateway': 0.1 })
   }, { openNewSession: false });
   const page = app.window;
+  let mainStderr = '';
+  app.electronApp.process().stderr?.on('data', chunk => { mainStderr = (mainStderr + String(chunk)).slice(-65536); });
 
   const { projectId, runId, keys, startAt } = await page.evaluate(async ({ repo, titles, storage }) => {
     const workspace = (await window.praxis.workspaces.list())[0];
@@ -170,6 +172,7 @@ for (const storage of ['app', 'folder'] as const) test(`a mixed serial and paral
     // Say where it got stuck: each ticket, its workflow run's stages, and the tail of the ledger.
     const run = await getRun();
     const workflows = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
+    await test.info().attach('main-stderr', { body: mainStderr, contentType: 'text/plain' });
     const stuck = JSON.stringify({
       entries: run.entries.map(entry => [entry.ticket.issueKey, entry.outcome?.status, entry.outcome?.reason]),
       workflows: workflows.map(workflow => [workflow.runId, workflow.status, workflow.explanation, workflow.stages.map(stage => [stage.nodeId, stage.lane, stage.lastError])]),

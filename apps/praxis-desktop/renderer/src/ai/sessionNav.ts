@@ -39,7 +39,7 @@ export function isTicketReviewKey(issueKey: string): boolean {
  * lives in TeamChatStore. Listing each persona's tool turn as a chat duplicates
  * that transcript and exposes the internal persona prompt as its title. */
 export function isAssistantToolSession(session: AgentSessionRecord): boolean {
-  return session.issueKey.startsWith('ASSISTANT-');
+  return Boolean(session.teamChatExecution) || session.issueKey.startsWith('ASSISTANT-');
 }
 
 /**

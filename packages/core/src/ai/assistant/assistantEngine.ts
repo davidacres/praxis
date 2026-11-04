@@ -18,7 +18,7 @@ export const MAX_HISTORY_MESSAGES = 12;
 const MAX_HISTORY_CHARS = 3_000;
 export const MAX_ASSISTANT_MESSAGE_CHARS = 4_000;
 
-const PROTOCOL_PROMPT = `Optional structured footer: after your answer you MAY add ONE fenced block tagged praxis-assistant containing JSON:
+export const PROTOCOL_PROMPT = `Optional structured footer: after your answer you MAY add ONE fenced block tagged praxis-assistant containing JSON:
 {"choices":[{"label":"short button text","prompt":"what the user would say next"}],"action":{...}}
 - "choices": at most 3 follow-up options, only when the user has a real decision to make.
 - "action" (optional, only when the user clearly asked for it): one of
@@ -91,7 +91,7 @@ function messageId(): string {
   return `msg-${Date.now().toString(36)}-${counter}`;
 }
 
-function actionAllowedOn(action: AssistantProposedAction, context: PageAssistantContext | undefined): boolean {
+export function actionAllowedOn(action: AssistantProposedAction, context: PageAssistantContext | undefined): boolean {
   if (action.kind === 'update-workflow') return context?.pageType === 'workflow';
   if (action.kind === 'update-ticket' || action.kind === 'create-subtask') return context?.pageType === 'issue';
   return true;

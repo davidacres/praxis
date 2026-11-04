@@ -3,12 +3,12 @@ import type { AgentToolMode } from '@praxis/core';
 /**
  * What the Virtual Team may do on this turn, spelled out for the model. The
  * personas' base prompt says they can only advise and propose, and proposed
- * actions are read-only text in the transcript, so without this note a persona
+ * actions require a compatible page and user preview, so without this note a persona
  * with real tools still just advises and never asks whether to proceed.
  */
 export function assistantCapabilityNote(input: { toolMode: AgentToolMode | undefined; mode: 'chat' | 'analysis' | 'review'; workingDirectory?: string }): string {
   const toolMode = input.mode === 'chat' ? input.toolMode : 'read-only';
-  const noFooter = 'Do not add a praxis-assistant "action" footer: it cannot be applied from this chat.';
+  const noFooter = 'You may propose a structured action for the captured page. The user must preview it and explicitly apply it on the same entity; a proposal does not execute anything.';
   if (toolMode === 'full') {
     return [
       `Capability for this turn: you HAVE working tools in ${input.workingDirectory ?? 'the selected folder'} (file edits and commands; the user approves sensitive steps). The rule above that you can only advise does not apply to this turn.`,

@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { WireImageAttachment, AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
+import { subscribeConversation } from './conversationSubscription';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import type { DurableConversation, SubmitConversationCommand, WireImageAttachment, AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
 import { onSessionChanged } from '../ai/sessionChangeStream';
 
 export interface AssistantRuntimeOptions {
@@ -12,6 +13,16 @@ export interface AssistantRuntimeOptions {
   workingDirectory?: string;
   /** Pasted or dropped images; the text-only chat path cannot carry them, so they ride an agent tool turn. */
   images?: WireImageAttachment[];
+}
+
+export interface AssistantComposerPreferences {
+  provider?: AiProvider;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+  permissionMode: AgentPermissionMode;
+  mode: 'chat' | 'analysis' | 'review';
+  toolMode: AgentToolMode;
+  workingDirectory: string;
 }
 
 /** A page's own handler for an action the assistant proposed on it. Returns a short outcome line. */
@@ -38,6 +49,9 @@ const DOCKED_KEY = 'tm-assistant-docked';
 const OPEN_KEY = 'tm-assistant-open';
 
 export interface AssistantController {
+  runtimePreferences: AssistantComposerPreferences;
+  setRuntimePreferences: Dispatch<SetStateAction<AssistantComposerPreferences>>;
+  conversation?: DurableConversation;
   open: boolean;
   setOpen: (open: boolean) => void;
   toggle: () => void;
@@ -63,7 +77,7 @@ export interface AssistantController {
   projectId?: string;
   setProjectId: (projectId: string | undefined) => void;
   chatId?: string;
-  send: (text: string, members?: readonly AssistantRole[], runtime?: AssistantRuntimeOptions) => Promise<void>;
+  send: (text: string, members?: readonly AssistantRole[], runtime?: AssistantRuntimeOptions) => Promise<boolean>;
   newChat: () => void;
   loadChat: (chatId: string) => Promise<void>;
   /** Called after a chat is deleted elsewhere (the sidebar) so an open transcript can reset. */
@@ -78,8 +92,6 @@ export interface AssistantController {
 
 const AssistantContext = createContext<AssistantController | undefined>(undefined);
 
-let idCounter = 0;
-const newMessageId = () => `user-${Date.now().toString(36)}-${(idCounter += 1)}`;
 
 function readBool(key: string, fallback: boolean): boolean {
   const raw = localStorage.getItem(key);
@@ -87,17 +99,20 @@ function readBool(key: string, fallback: boolean): boolean {
 }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
+  const [runtimePreferences, setRuntimePreferences] = useState<AssistantComposerPreferences>({ model: '', reasoningEffort: 'medium', permissionMode: 'manual', mode: 'chat', toolMode: 'project-only', workingDirectory: '' });
+  const pendingSubmissions = useRef(new Map<string, SubmitConversationCommand>());
   const [open, setOpenState] = useState(() => readBool(OPEN_KEY, false));
   const [docked, setDockedState] = useState(() => readBool(DOCKED_KEY, false));
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [conversation, setConversation] = useState<DurableConversation>();
+  const busy = Boolean(conversation?.turns.some(t => ['running', 'cancelling', 'awaiting_approval'].includes(t.state)));
   const [activeTurnStartedAt, setActiveTurnStartedAt] = useState<number>();
   const [activeToolSession, setActiveToolSession] = useState<AgentSessionRecord>();
   const [lastToolSession, setLastToolSession] = useState<AgentSessionRecord>();
   const [toolUsageSessions, setToolUsageSessions] = useState<AgentSessionRecord[]>([]);
   const activeToolPrefix = useRef<string>();
   useEffect(() => onSessionChanged(record => {
-    if (activeToolPrefix.current && record.issueKey.startsWith(`${activeToolPrefix.current}-`)) {
+    if (activeToolPrefix.current && record.teamChatExecution?.conversationId === activeToolPrefix.current) {
       setActiveToolSession(record);
       setToolUsageSessions(current => current.some(item => item.sessionId === record.sessionId)
         ? current.map(item => item.sessionId === record.sessionId ? record : item) : [...current, record]);
@@ -115,9 +130,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const messagesRef = useRef<AssistantMessage[]>([]);
   const chatIdRef = useRef<string | undefined>();
-  const toolConversationId = useRef(crypto.randomUUID());
+  const generation = useRef(0);
+  const creation = useRef<Promise<string>>();
   const projectIdRef = useRef<string | undefined>();
-  const persistQueue = useRef<Promise<void>>(Promise.resolve());
+
   const delegateRef = useRef<((prompt: string) => void) | undefined>();
   const registrationsRef = useRef<Registration[]>([]);
   registrationsRef.current = registrations;
@@ -163,35 +179,45 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setDetachedTitle(detached ? activeRef.current?.context.title : undefined);
   }, []);
 
-  /** Saves the transcript, creating the chat on first use. Serialised so two quick turns cannot both create one. */
-  const persist = useCallback((next: AssistantMessage[]) => {
-    messagesRef.current = next;
-    setMessages(next);
-    const project = projectIdRef.current;
-    if (!project || next.length === 0) return;
-    persistQueue.current = persistQueue.current.then(async () => {
-      try {
-        let id = chatIdRef.current;
-        if (!id) {
-          const chat = await window.praxis.assistant.createChat(project, pageContextRef.current?.issueKey);
-          id = chat.id;
-          chatIdRef.current = id;
-          setChatId(id);
-        }
-        await window.praxis.assistant.saveChat(id, messagesRef.current);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    });
-  }, []);
+  useEffect(() => {
+    if (!chatId) return;
+    activeToolPrefix.current = chatId;
+    return subscribeConversation(window.praxis.assistant, chatId, snapshot => {
+      setConversation(snapshot);
+      messagesRef.current = snapshot?.messages ?? [];
+      setMessages(snapshot?.messages ?? []);
+      const active = snapshot?.turns.find(t => !['completed', 'cancelled', 'queued'].includes(t.state));
+      setActiveTurnStartedAt(active ? Date.parse(snapshot!.messages.find(m => m.id === active.userMessageId)?.createdAt ?? '') : undefined);
+    }, error => setError(String(error)));
+  }, [chatId]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    let disposed = false;
+    void window.praxis.ai.listSessions().then(async sessions => {
+      const owned = sessions.filter(record => record.teamChatExecution?.conversationId === chatId);
+      const loaded = await Promise.all(owned.map(record => window.praxis.ai.getSession(record.issueKey)));
+      if (disposed) return;
+      const records = loaded.filter((record): record is AgentSessionRecord => Boolean(record));
+      setToolUsageSessions(current => [...current, ...records.filter(record => !current.some(item => item.sessionId === record.sessionId))]);
+      const active = records.find(record => !['completed', 'failed', 'aborted'].includes(record.state));
+      if (active) setActiveToolSession(active);
+      else if (records.length) setLastToolSession(records.at(-1));
+    }).catch(error => { if (!disposed) setError(String(error)); });
+    return () => { disposed = true; };
+  }, [chatId]);
 
   const reset = useCallback(() => {
-    toolConversationId.current = crypto.randomUUID();
+    generation.current++;
+    creation.current = undefined;
+    setConversation(undefined);
+    activeToolPrefix.current = undefined;
     messagesRef.current = [];
     chatIdRef.current = undefined;
     setMessages([]);
     setChatId(undefined);
     setError(undefined);
+    setActiveToolSession(undefined);
     setLastToolSession(undefined);
     setToolUsageSessions([]);
     setAppliedActions({});
@@ -210,82 +236,64 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const send = useCallback(async (raw: string, members: readonly AssistantRole[] = teamMembers, runtime?: AssistantRuntimeOptions) => {
     const text = raw.trim();
-    if (!text) return;
-    const context = pageContextRef.current;
-    // A deliberate @mention remains a direct one-to-one override of the selected roster.
-    const mention = /(?:^|\s)@(lead|dev|qa|security|product)\b/i.exec(text)?.[1]?.toLowerCase() as AssistantRole | undefined;
-    const selected = mention ? [mention] : [...members];
-    // "Detach" lasts one message: the page context re-attaches itself for the next turn.
-    setDetachedTitle(undefined);
-    const userMessage: AssistantMessage = {
-      id: newMessageId(),
-      role: 'user',
-      text,
-      createdAt: new Date().toISOString(),
-      ...(context ? { contextTitle: context.title } : {})
-    };
-    const history = messagesRef.current;
-    persist([...history, userMessage]);
-    setError(undefined);
-    setActiveTurnStartedAt(Date.now());
-    setBusy(true);
+    if (!text) return false;
+    const selectedGeneration = generation.current;
+    const context = pageContextRef.current && structuredClone(pageContextRef.current);
+    const project = projectIdRef.current;
+    const capturedRuntime = structuredClone(runtime ?? {});
+    const selected = [...members];
     try {
-      // Wait for first-use chat creation so the execution identity survives reloads.
-      await persistQueue.current;
-      const toolSessionPrefix = runtime?.toolMode && runtime.toolMode !== 'project-only'
-        ? `ASSISTANT-${chatIdRef.current ?? toolConversationId.current}` : undefined;
-      activeToolPrefix.current = toolSessionPrefix;
-      setActiveToolSession(undefined);
-      const selectedRuntime = { ...runtime, ...(toolSessionPrefix ? { toolSessionPrefix } : {}) };
-      if (selected.length > 1) {
-        // Run only the selected seats. Keep the lead last when selected so it can
-        // synthesise the earlier replies; the UI default is a one-to-one with Dev.
-        const order: AssistantRole[] = ['dev', 'qa', 'security', 'product', 'lead'];
-        const produced: AssistantMessage[] = [];
-        for (const personaId of order.filter(role => selected.includes(role))) {
-          const result = await window.praxis.assistant.turn({
-            message: text,
-            personaId,
-            context,
-            history: [...history, ...produced],
-            ...selectedRuntime
-          } as Parameters<typeof window.praxis.assistant.turn>[0]);
-          produced.push(...result.messages);
-          persist([...messagesRef.current, ...result.messages]);
-          if (result.messages.some(message => message.error)) break;
+      let id = chatIdRef.current;
+      if (!id) {
+        creation.current ??= window.praxis.assistant.createChat(project ?? '', context?.issueKey).then(chat => chat.id);
+        id = await creation.current;
+        if (generation.current === selectedGeneration) {
+          chatIdRef.current = id;
+          setChatId(id);
         }
-      } else {
-        const result = await window.praxis.assistant.turn({
-          message: text,
-          ...(selected[0] ? { personaId: selected[0] } : {}),
-          context,
-          history,
-          ...selectedRuntime
-        } as Parameters<typeof window.praxis.assistant.turn>[0]);
-        persist([...messagesRef.current, ...result.messages]);
       }
+      const snapshot = await window.praxis.assistant.getConversation(id);
+      if (!snapshot) throw new Error('Conversation was deleted.');
+      const pendingKey = `${id}:${text}`;
+      const pending = pendingSubmissions.current.get(pendingKey);
+      const attachmentRefs = pending?.attachmentRefs ?? (capturedRuntime.images?.length ? await window.praxis.assistant.stageAttachments(id, capturedRuntime.images) : []);
+      const { images: _images, ...options } = capturedRuntime;
+      const command: SubmitConversationCommand = pending ?? {
+        conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot.revision, text,
+        selectedParticipantIds: selected.map(role => `part-${role}`), attachmentRefs,
+        ...(context ? { context } : {}),
+        runtimeOptions: Object.fromEntries(Object.entries(options).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+      };
+      pendingSubmissions.current.set(pendingKey, command);
+      // One transport retry, with exactly the same command identity and payload.
+      try { await window.praxis.assistant.submitTurn(command); }
+      catch { await window.praxis.assistant.submitTurn(command); }
+      pendingSubmissions.current.delete(pendingKey);
+      if (generation.current === selectedGeneration) {
+        setDraft(current => current.trim() === text ? '' : current);
+        setDetachedTitle(undefined);
+        setError(undefined);
+      }
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-      activeToolPrefix.current = undefined;
-      setActiveToolSession(undefined);
+      if (generation.current === selectedGeneration) setError(err instanceof Error ? err.message : String(err));
+      return false;
     }
-  }, [persist, teamMembers]);
+  }, [teamMembers]);
 
   const loadChat = useCallback(async (id: string) => {
-    const chat = await window.praxis.assistant.getChat(id);
-    if (!chat) return;
-    if (chatIdRef.current !== id) {
-      setLastToolSession(undefined);
-      setToolUsageSessions([]);
-    }
-    messagesRef.current = chat.messages;
-    chatIdRef.current = chat.id;
-    setMessages(chat.messages);
-    setChatId(chat.id);
+    generation.current++;
+    creation.current = undefined;
+    chatIdRef.current = id;
+    setChatId(id);
+    setConversation(undefined);
+    setMessages([]);
+    messagesRef.current = [];
     setError(undefined);
     setAppliedActions({});
+    setActiveToolSession(undefined);
+    setLastToolSession(undefined);
+    setToolUsageSessions([]);
     setOpen(true);
   }, [setOpen]);
 
@@ -295,6 +303,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const applyAction = useCallback(async (messageId: string, action: AssistantProposedAction) => {
     try {
+      const source = messagesRef.current.find(message => message.id === messageId) as import('@praxis/core').ConversationMessage | undefined;
+      const origin = source?.context;
+      const current = activeRef.current?.context;
+      if (!origin || !current || origin.pageType !== current.pageType || origin.projectId !== current.projectId ||
+          origin.issueKey !== current.issueKey || origin.entityId !== current.entityId || origin.title !== current.title) throw new Error('Return to the originating page to apply this proposal.');
       let outcome: string | void;
       if (action.kind === 'delegate-session') {
         if (!delegateRef.current) throw new Error('Starting a coding session is not available here.');
@@ -319,15 +332,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   useEffect(() => window.praxis.assistant.onChatsChanged(() => {
     const id = chatIdRef.current;
     if (!id) return;
-    void window.praxis.assistant.getChat(id).then(chat => { if (!chat) reset(); });
+    void window.praxis.assistant.getChat(id).then(chat => { if (!chat && chatIdRef.current === id) reset(); });
   }), [reset]);
 
   const value = useMemo<AssistantController>(() => ({
-    open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, setDraft, teamMembers, toggleTeamMember,
+    runtimePreferences, setRuntimePreferences, conversation, open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, setDraft, teamMembers, toggleTeamMember,
     pageContext, availableContext, contextDetached, setContextDetached,
     projectId, setProjectId, chatId, send, newChat: reset, loadChat, chatDeleted,
     applyAction, appliedActions, register, unregister, setSessionDelegate
-  }), [open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, pageContext, availableContext, contextDetached,
+  }), [runtimePreferences, conversation, open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, pageContext, availableContext, contextDetached,
     setContextDetached, projectId, setProjectId, chatId, send, reset, loadChat, chatDeleted, applyAction,
     teamMembers, toggleTeamMember,
     appliedActions, register, unregister, setSessionDelegate]);

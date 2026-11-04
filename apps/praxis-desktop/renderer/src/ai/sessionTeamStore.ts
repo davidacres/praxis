@@ -68,7 +68,7 @@ export async function askSessionTeamMember(session: AgentSessionRecord, role: As
   const user: AssistantMessage = { id: crypto.randomUUID(), role: 'user', text: request, createdAt: new Date().toISOString() };
   update(key, state => ({ ...state, busy: true, messages: [...state.messages, user] }));
   try {
-    const result = await window.praxis.assistant.turn({
+    const result = await window.praxis.assistant.sessionTurn({
       message: request,
       personaId: role,
       context,
@@ -76,7 +76,7 @@ export async function askSessionTeamMember(session: AgentSessionRecord, role: As
       provider: session.provider,
       model: session.model,
       permissionMode: session.permissionMode
-    } as Parameters<typeof window.praxis.assistant.turn>[0]);
+    } as Parameters<typeof window.praxis.assistant.sessionTurn>[0]);
     update(key, state => ({ ...state, messages: [...state.messages, ...result.messages] }));
   } finally {
     update(key, state => ({ ...state, busy: false }));

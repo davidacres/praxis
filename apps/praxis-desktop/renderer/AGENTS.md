@@ -434,3 +434,18 @@ whole suite at the configured worker count. It correlates with long unattended r
 the code — `timeout: 30000, retries: 0` makes a multi-minute test impossible unless the
 worker was descheduled. Don't chase it. Related: full-suite runs launched in the background
 have twice been killed mid-flight with no output; smaller batches complete reliably.
+
+## Durable Virtual Team conversations
+
+Main owns scheduling, accepted messages, attachment storage and attempt recovery.
+`AssistantProvider` retains drafts and page registrations, subscribes before loading
+snapshots through `conversationSubscription.ts`, and ignores superseded loads.
+Closing, docking or navigating the renderer never cancels main-owned work.
+
+Use revisioned `assistant.control` commands with a UUID and exact target attempt;
+transport retries reuse the entire command. `saveChat` and legacy `turn` are fenced
+after activation. Navigation hides typed `teamChatExecution` records, with only
+the narrow `ASSISTANT-` legacy fallback. Titles never establish ownership.
+
+Proposals require Preview Changes and an explicit apply on the captured entity.
+Workflow context includes its identity even when two workflows share a name.

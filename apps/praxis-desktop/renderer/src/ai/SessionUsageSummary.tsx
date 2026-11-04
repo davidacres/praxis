@@ -140,7 +140,7 @@ function LimitChart({ windows, provider, now, unavailable, loading = false }: {
   </span>;
 }
 
-export function SessionUsageSummary({ session, sessions, usageSessions, spendLimit, onHide, draftProvider, draftModel, activityLabel }: {
+export function SessionUsageSummary({ session, sessions, usageSessions, spendLimit, onHide, draftProvider, draftModel, activityLabel, usageContributions }: {
   session?: AgentSessionRecord;
   sessions: AgentSessionRecord[];
   /** Several runtime sessions can belong to one assistant conversation. */
@@ -150,6 +150,7 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
   draftProvider?: AiProvider;
   draftModel?: string;
   activityLabel?: string;
+  usageContributions?: readonly import('./sessionUsageData').SessionUsageContribution[];
 }) {
   const speaker = session?.conversation?.state === 'running'
     ? session.conversation.participants.find(item => item.id === session.conversation?.currentSpeakerId) : undefined;
@@ -159,7 +160,7 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
     .map(record => [record.sessionId, record])).values()], [session, usageSessions]);
   const recordsKey = JSON.stringify(records.map(record => [record.sessionId, record.cost, record.tokenUsage, record.runtimeEpochs]));
   const [ledger, setLedger] = useState<{ key: string; events: AiUsageEvent[] }>();
-  const data = sessionUsageData(records, selectedProvider, selectedModel, ledger?.key === recordsKey ? ledger.events : []);
+  const data = sessionUsageData(usageContributions ? [] : records, selectedProvider, selectedModel, ledger?.key === recordsKey ? ledger.events : [], usageContributions);
   const providerKey = JSON.stringify(data.providers.map(item => item.provider));
   const [accounts, setAccounts] = useState<{ key: string; snapshots: ProviderUsageSnapshot[] }>();
   const accountsLoaded = accounts?.key === providerKey;
@@ -209,7 +210,7 @@ export function SessionUsageSummary({ session, sessions, usageSessions, spendLim
   }, [open]);
 
   // Before the first turn there is no session record: it has used nothing, which is not the same as unreported.
-  const notStarted = records.length === 0;
+  const notStarted = usageContributions ? usageContributions.length === 0 : records.length === 0;
   const tokens = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? (notStarted ? '0 tok' : '–') : `${formatTokenCompact(value.tokens)}${value.partial ? '+' : ''} tok`;
   const tokenTitle = (value: { tokens?: number; partial: boolean }) => value.tokens === undefined ? (notStarted ? 'No tokens used in this session yet' : 'Token count not available from this provider')
     : `${Math.round(value.tokens).toLocaleString()} session tokens${value.partial ? ' reported; some runtime usage is unavailable' : ''}`;

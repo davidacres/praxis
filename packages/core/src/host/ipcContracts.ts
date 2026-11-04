@@ -1258,6 +1258,11 @@ export interface GadgetSubmitRequest {
 
 /** The app-wide Virtual Team Assistant: persona turns, team reviews and persisted chats. */
 export interface AssistantIpc {
+  /** Bounded read-only consultation owned by a standalone session. */
+  sessionTurn(request: AssistantTurnRequest): Promise<AssistantTurnResult>;
+  /** State-sensitive commands carry revision, command and attempt identity. */
+  control(command: import('../ai/assistant/assistantTypes').ConversationControlCommand): Promise<DurableConversation>;
+  stageAttachments(id: string, images: import('../ai/gateway/wire').WireImageAttachment[]): Promise<import('../ai/assistant/assistantTypes').ConversationAttachment[]>;
   /** One persona answers; an `@mention` in the message picks the persona. */
   turn(request: AssistantTurnRequest): Promise<AssistantTurnResult>;
   /** Dev → QA → Security → Lead pass over the supplied page context. */
@@ -1268,20 +1273,12 @@ export interface AssistantIpc {
   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
   deleteChat(chatId: string): Promise<void>;
-  /** Pins immutable transcript sources and records an explicit correction relation. */
-  pinDecision(conversationId: string, messageId: string, supersedesMessageId?: string): Promise<void>;
   /** Submits a validated turn to a durable conversation. */
   submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult>;
   /** Retrieves a durable conversation by ID. */
   getConversation(conversationId: string): Promise<DurableConversation | undefined>;
   /** Subscribes to conversation revision updates. */
   subscribeConversation(conversationId: string, listener: (update: ConversationUpdate) => void): () => void;
-  /** Cancels an active or queued turn. */
-  cancelTurn(conversationId: string, turnId: string): Promise<void>;
-  /** Retries a failed participant within an active turn. */
-  retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void>;
-  /** Resolves an attempt in an unknown or interrupted state. */
-  resolveAttempt(conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort'): Promise<void>;
   /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
   onChatsChanged(listener: () => void): () => void;
 }

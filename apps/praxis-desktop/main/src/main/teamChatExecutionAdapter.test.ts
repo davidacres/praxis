@@ -38,7 +38,7 @@ test('effective capability evidence is durable before runtime dispatch; evidence
     completeWithTools: async () => { launches++; return 'reply'; }
   });
   const params = {
-    conversation: { id: 'c', bindings: [] },
+    conversation: { id: 'c', bindings: [], messages: [] },
     participant: { id: 'p', role: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
     turn: { id: 't', plan: { runtimeOptions: { provider: 'claude-code-cli', toolMode: 'read-only' } } },
     attempt: { id: 'a', bindingId: 'b', coordinatorEpoch: 'epoch' },

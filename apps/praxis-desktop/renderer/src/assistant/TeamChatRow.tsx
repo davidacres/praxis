@@ -23,8 +23,8 @@ export function useProjectsTeamChats(projectIds: string[]): TeamChatSummary[] {
       const groups = await Promise.all(ids.map(id => window.praxis.assistant.listChats(id).catch(() => [])));
       if (!disposed && current === revision) setResult({ key, chats: groups.flat() });
     };
-    void refresh();
     const unsubscribe = window.praxis.assistant.onChatsChanged(() => { void refresh(); });
+    void refresh();
     return () => { disposed = true; unsubscribe(); };
   }, [key]);
   return result.key === key ? result.chats : [];

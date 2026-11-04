@@ -11,7 +11,7 @@ test.afterEach(async () => {
 });
 
 async function createProject(page: Page): Promise<string> {
-  return page.evaluate(async () => {
+  const id = await page.evaluate(async () => {
     const workspace = (await window.praxis.workspaces.list())[0];
     return (await window.praxis.projects.create({
       name: 'Shelf Notes', key: 'SHN', type: 'product', purpose: '', brief: {}, startingPoint: 'app-storage',
@@ -19,6 +19,10 @@ async function createProject(page: Page): Promise<string> {
       starterTickets: [{ summary: 'Seed', description: '', issueType: 'Task', status: 'To do' }]
     } as never, workspace.id)).id;
   });
+  // Creation through IPC persists the project; reload the renderer's workspace list.
+  await page.reload();
+  await expect(page.getByTestId('startup-splash')).toHaveCount(0);
+  return id;
 }
 
 /** Hides the sidebar so the shelf shows, then picks the note's project if the shelf has none. */

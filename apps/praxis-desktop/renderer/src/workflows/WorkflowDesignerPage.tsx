@@ -373,6 +373,7 @@ export function WorkflowDesignerPage({
     definition
       ? {
           pageType: 'workflow',
+          entityId: definition.id,
           title: `Workflow ${definition.name}`,
           summary: `Workflow "${definition.name}" (${definition.nodes.length} nodes). ${feedback ? (feedback.valid ? 'Currently valid.' : `${feedback.errors.length} validation errors.`) : ''}`.trim(),
           data: [

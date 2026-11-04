@@ -1,3 +1,5 @@
+import { TeamChatActivation } from './teamChatActivation';
+import { TeamChatAttachments } from './teamChatAttachments';
 import { createProductionTeamChatExecutionAdapter, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -5,6 +7,7 @@ import { stat } from 'node:fs/promises';
 import { app } from 'electron';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import {
+  PROTOCOL_PROMPT,
   conversationPayloadDigest,
   runAssistantTurn,
   runTeamReview,
@@ -30,9 +33,12 @@ import { sanitizeImages } from './aiIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { broadcastToAllWindows } from './windowBroadcast';
-import { getAiSessionManager, abortActiveTask, resolveConnectionOptions } from './aiInstance';
+import { getAiSessionManager, abortActiveTask, resolveConnectionOptions, assertCanRunAgentSession } from './aiInstance';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 
+const activation = new TeamChatActivation(process.env.PRAXIS_DURABLE_TEAM_CHAT !== '0');
+const activate = () => activation.activate(() => getTeamChatRepository().activate());
+const attachments = () => new TeamChatAttachments(path.join(app.getPath('userData'), 'team-chat-attachments'));
 let chatRepository: FileTeamChatRepository | undefined;
 let chatStore: TeamChatStore | undefined;
 let coordinator: TeamChatCoordinator | undefined;
@@ -55,14 +61,21 @@ export function getTeamChatCoordinator(): TeamChatCoordinator {
     const repository = getTeamChatRepository();
     coordinator = new TeamChatCoordinator({
       repository,
+      captureRuntimeOptions: options => {
+        const settings = getSettingsBackend().read();
+        const provider = String(options.provider ?? settings.ai.activeProvider) as AiProvider;
+        const model = options.model || (provider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[provider]?.defaultModel);
+        return { ...options, provider, ...(model ? { model } : {}),
+          toolMode: options.toolMode ?? 'project-only',
+          workingDirectory: options.workingDirectory ?? settings.ai.workingDirectory };
+      },
       onUpdate: update => {
         broadcastToAllWindows('assistant:conversationUpdate', update);
-        if (update.type === 'turn_completed' || update.type === 'turn_accepted') {
-          broadcastToAllWindows('assistant:chatsChanged');
-        }
+        broadcastToAllWindows('assistant:chatsChanged');
       },
       executionAdapter: createProductionTeamChatExecutionAdapter({
         settings: () => getSettingsBackend().read(), resolveConnectionOptions, completeWithTools,
+        resolveAttachments: (id, refs) => attachments().resolve(id, refs),
         resolveRuntimeConfiguration: async provider => {
           const prepared = await prepareAgentLaunch({ provider });
           return `${provider}:${conversationPayloadDigest(JSON.parse(JSON.stringify(prepared)))}`;
@@ -120,6 +133,11 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
   const mode = runtime.mode ?? 'chat';
   const toolMode = mode === 'chat' ? runtime.toolMode ?? 'read-only' : 'read-only';
   const issue = { ...ASSISTANT_ISSUE, key: toolSessionKey(runtime), summary: 'Virtual Team conversation' };
+  const durablePrefix = `${MODE_INSTRUCTIONS[mode]}\n\n${PROTOCOL_PROMPT}\n\n${assistantCapabilityNote({ toolMode, mode, workingDirectory })}`;
+  const durableContext = runtime.durableContext ? {
+    reconstruction: `${durablePrefix}\n\n${runtime.durableContext.reconstruction}`,
+    continuation: `${durablePrefix}\n\n${runtime.durableContext.continuation}`
+  } : undefined;
   const taskDefinition: AgentTaskDefinition = {
     kind: mode === 'chat' ? 'general' : mode,
     sessionMode: mode,
@@ -156,7 +174,7 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
     if (existing) {
       await continueAgentTask(prepared, {
         issueKey: issue.key,
-        durableContext: runtime.durableContext,
+        durableContext,
         message: userPrompt,
         model: runtime.model,
         workingDirectory,
@@ -166,7 +184,7 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
     } else await launchAgentTask(prepared, {
       issue,
       taskDefinition,
-      durableContext: runtime.durableContext,
+      durableContext,
       provider,
       model: runtime.model?.trim() || undefined,
       workingDirectory,
@@ -216,7 +234,8 @@ function completionFor(runtime: AssistantRuntimeOptions): AssistantCompletion {
 export function registerAssistantIpc(): void {
   const changed = () => broadcastToAllWindows('assistant:chatsChanged');
 
-  ipcMain.handle('assistant:turn', async (_event, rawRequest: AssistantTurnRequest & AssistantRuntimeOptions) => {
+  ipcMain.handle('assistant:turn', async (_event, rawRequest: AssistantTurnRequest & AssistantRuntimeOptions) => activation.legacy(async () => {
+    if (getTeamChatRepository().read().activation) throw new Error('Legacy assistant turns are disabled.');
     const { provider, model, reasoningEffort, permissionMode, mode, toolMode, workingDirectory, toolSessionPrefix, images, ...request } = rawRequest;
     const settings = getSettingsBackend().read();
     const selectedProvider = provider ?? settings.ai.activeProvider;
@@ -242,6 +261,12 @@ export function registerAssistantIpc(): void {
       const previousReply = checkpoint ? history?.findIndex(message => message.id === checkpoint) ?? -1 : -1;
       if (previousReply >= 0) history = history?.slice(previousReply + 1);
       const result = await runAssistantTurn({ ...request, personaId, history }, completionFor(runtime));
+      // An old text-only client may have no conversation identity. Persist its
+      // result before releasing the activation fence, without guessing a chat.
+      await getTeamChatRepository().transaction(draft => {
+        (draft.legacyDiagnostics ??= []).push({ id: randomUUID(), completedAt: new Date().toISOString(),
+          ...(request.context ? { context: request.context } : {}), messages: result.messages });
+      });
       const reply = result.messages.find(message => !message.error);
       if (sessionKey && reply) {
         manager.appendAgentEvents(sessionKey, [{ type: 'info', timestamp: new Date().toISOString(), summary: TRANSCRIPT_CHECKPOINT, detail: reply.id }]);
@@ -250,41 +275,53 @@ export function registerAssistantIpc(): void {
     } finally {
       if (sessionKey) activeToolSessions.delete(sessionKey);
     }
+  }));
+  ipcMain.handle('assistant:sessionTurn', (_event, raw: AssistantTurnRequest & AssistantRuntimeOptions) => {
+    const { provider, model, reasoningEffort, permissionMode, ...request } = raw;
+    return runAssistantTurn(request, completionFor({ provider, model, reasoningEffort, permissionMode, toolMode: 'project-only' }));
   });
   ipcMain.handle('assistant:teamReview', (_event, request: AssistantTeamReviewRequest) => runTeamReview(request, completionFor({})));
 
-  ipcMain.handle('assistant:listChats', (_event, projectId: string) => getTeamChatStore().list(projectId));
-  ipcMain.handle('assistant:getChat', (_event, chatId: string) => getTeamChatStore().get(chatId));
+  ipcMain.handle('assistant:listChats', async (_event, projectId: string) => { await activate(); return getTeamChatStore().list(projectId); });
+  ipcMain.handle('assistant:getChat', async (_event, chatId: string) => { await activate(); return getTeamChatStore().get(chatId); });
   ipcMain.handle('assistant:createChat', async (_event, projectId: string, issueKey?: string) => {
+    await activate();
     const chat = await getTeamChatStore().create(projectId, issueKey);
     changed();
     return chat;
   });
   ipcMain.handle('assistant:saveChat', async (_event, chatId: string, messages: AssistantMessage[]) => {
-    const chat = await getTeamChatStore().saveMessages(chatId, messages);
+    const chat = await activation.legacy(() => getTeamChatStore().saveMessages(chatId, messages));
     changed();
     return chat;
   });
   ipcMain.handle('assistant:renameChat', async (_event, chatId: string, title: string) => {
+    await activate();
     const chat = await getTeamChatStore().rename(chatId, title);
     changed();
     return chat;
   });
   ipcMain.handle('assistant:deleteChat', async (_event, chatId: string) => {
-    await getTeamChatStore().remove(chatId);
+    await activate();
+    await getTeamChatCoordinator().removeConversation(chatId);
     changed();
   });
 
-  ipcMain.handle('assistant:pinDecision', (_event, conversationId: string, messageId: string, supersedesMessageId?: string) => getTeamChatCoordinator().pinDecision(conversationId, messageId, supersedesMessageId));
-  ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => getTeamChatCoordinator().submitTurn(command));
-  ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => getTeamChatCoordinator().getConversation(conversationId));
-  ipcMain.handle('assistant:cancelTurn', async (_event, conversationId: string, turnId: string) => {
-    await getTeamChatCoordinator().cancelTurn(conversationId, turnId);
+  ipcMain.handle('assistant:control', (_event, command: import('@praxis/core').ConversationControlCommand) => getTeamChatCoordinator().control(command));
+  ipcMain.handle('assistant:stageAttachments', async (_event, id: string, images: import('@praxis/core').WireImageAttachment[]) => {
+    await activate();
+    if (!getTeamChatStore().get(id)) throw new Error('Conversation was not found.');
+    return attachments().stage(id, images);
   });
-  ipcMain.handle('assistant:retryParticipant', async (_event, conversationId: string, turnId: string, participantId: string) => {
-    await getTeamChatCoordinator().retryParticipant(conversationId, turnId, participantId);
+  ipcMain.handle('assistant:submitTurn', async (_event, command: SubmitConversationCommand) => {
+    await activate();
+    await attachments().resolve(command.conversationId, command.attachmentRefs);
+    if (command.attachmentRefs.length) {
+      const options = command.runtimeOptions;
+      if ((options.mode ?? 'chat') === 'chat' && (options.toolMode ?? 'project-only') === 'project-only') throw new Error('Choose an image-capable agent runtime before attaching images.');
+      assertCanRunAgentSession(String(options.provider ?? getSettingsBackend().read().ai.activeProvider) as AiProvider);
+    }
+    return getTeamChatCoordinator().submitTurn(command);
   });
-  ipcMain.handle('assistant:resolveAttempt', async (_event, conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort', options?: { acknowledgeDuplicateActionRisk: boolean; reconciliationEvidenceId: string }) => {
-    await getTeamChatCoordinator().resolveAttempt(conversationId, turnId, attemptId, resolution, options);
-  });
+  ipcMain.handle('assistant:getConversation', async (_event, conversationId: string) => { await activate(); await getTeamChatCoordinator().initialize(); return getTeamChatCoordinator().getConversation(conversationId); });
 }

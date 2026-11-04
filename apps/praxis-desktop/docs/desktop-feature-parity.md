@@ -184,3 +184,19 @@ Closed since the previous audit (FX-BF-017, 2026-09-05): command palette issue
 index, ACP available-commands/current-mode surfacing, the AI spend report,
 workflow ticket-triggering with outcome write-back, and workflow failures
 wired into the Output tab's log bus. See `PLAN_MAP.md`.
+
+### Durable Virtual Team ownership (FX-BE-183)
+
+Virtual Team uses main-owned conversations, revision subscriptions, FIFO turns,
+immutable attachment references, typed internal execution ownership and explicit
+queue/recovery controls. The renderer retains drafts and next-turn selections.
+Standalone conversations and bounded session teams retain their existing engines.
+
+Activation fences legacy turns and saves before waiting for in-flight work. Under
+the profile writer lock it validates and preserves exact source bytes in a
+versioned `team-chats.json.v1-backup`, validates the complete converted envelope,
+and atomically replaces the authoritative document. Imported history has no
+invented attempts or inferred runtime bindings; subsequent turns reconstruct
+context. Repeated activation is a no-op. An uncertain commit requires repository
+reconciliation before another write. Backup restoration is permitted only before
+v2 accepts a new turn; afterwards both backup and v2 data remain for forward repair.

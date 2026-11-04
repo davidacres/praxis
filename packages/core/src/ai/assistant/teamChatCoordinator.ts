@@ -40,6 +40,9 @@ export class TeamChatAcceptanceUnknown extends Error {}
 
 export interface TeamChatExecutionResult {
   text: string;
+  choices?: import('./assistantTypes').AssistantChoiceOption[];
+  proposedAction?: import('./assistantTypes').AssistantProposedAction;
+  error?: boolean;
   contextDelivery?: 'native' | 'reconstruction';
   providerSessionId?: string;
   reportedCost?: { currency: string; amount: number };
@@ -62,6 +65,7 @@ export interface TeamChatExecutionParams {
 }
 
 export interface TeamChatExecutionAdapter {
+  validateAttachments?(conversationId: string, messages: readonly ConversationMessage[]): Promise<void>;
   summarize?(prompt: string, params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant; signal?: AbortSignal }): Promise<TeamChatExecutionResult>;
   prepare?(params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant }): Promise<TeamChatConfiguration>;
   execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
@@ -91,6 +95,7 @@ export interface ConversationUpdate {
 }
 
 export interface TeamChatCoordinatorOptions {
+  captureRuntimeOptions?: (options: Readonly<Record<string, string | number | boolean>>) => Readonly<Record<string, string | number | boolean>>;
   contextBudget?: { limit: number; reserved: number };
   repository: TeamChatRepository;
   executionAdapter: TeamChatExecutionAdapter;
@@ -100,6 +105,7 @@ export interface TeamChatCoordinatorOptions {
 }
 
 export class TeamChatCoordinator {
+  private readonly captureRuntimeOptions?: TeamChatCoordinatorOptions['captureRuntimeOptions'];
   private readonly contextBudget?: { limit: number; reserved: number };
   private readonly repository: TeamChatRepository;
   private readonly executionAdapter: TeamChatExecutionAdapter;
@@ -112,6 +118,7 @@ export class TeamChatCoordinator {
   private initialization?: Promise<void>;
 
   public constructor(options: TeamChatCoordinatorOptions) {
+    this.captureRuntimeOptions = options.captureRuntimeOptions;
     this.contextBudget = options.contextBudget;
     this.repository = options.repository;
     this.executionAdapter = options.executionAdapter;
@@ -193,12 +200,15 @@ export class TeamChatCoordinator {
       if (index < 0) throw new Error(`Conversation ${conversationId} was not found.`);
       const current = draft.conversations[index];
       const next = mutate(structuredClone(current));
+      if (next.revision > current.revision) next.updatedAt = this.clock();
+      if (draft.activation && next.turns.length > current.turns.length) draft.activation.acceptedNewTurns = true;
       draft.conversations[index] = structuredClone(next);
       return structuredClone(next);
     });
   }
 
   public async submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult> {
+    command = structuredClone(command);
     await this.initialize();
     if (!command.conversationId?.trim()) throw new Error('A conversationId is required.');
     if (!command.commandId?.trim()) throw new Error('A commandId is required.');
@@ -283,7 +293,7 @@ export class TeamChatCoordinator {
       acceptedSequence: sequence,
       plan: {
         participants: planParticipants,
-        runtimeOptions: command.runtimeOptions,
+        runtimeOptions: this.captureRuntimeOptions?.(command.runtimeOptions) ?? command.runtimeOptions,
         ...(command.context ? { context: command.context } : {})
       },
       state: 'queued',
@@ -298,7 +308,8 @@ export class TeamChatCoordinator {
       text: command.text,
       createdAt: this.clock(),
       sequence,
-      attachments: command.attachmentRefs ?? []
+      attachments: command.attachmentRefs ?? [],
+      ...(command.context ? { context: command.context, contextTitle: command.context.title } : {})
     };
 
     const updated = await this.transitionConversation(command.conversationId, conv => {
@@ -308,24 +319,28 @@ export class TeamChatCoordinator {
           conv.participants.push(p);
         }
       }
+      // Appending does not target a mutable attempt; concurrent windows may enqueue.
+      if (conv.title === 'New team chat') conv.title = command.text.trim().slice(0, 80);
       return submitConversationTurn(conv, conv.revision, command, turn, userMessage);
     });
 
+    const acceptedTurn = updated.turns.find(t => t.id === updated.commandReceipts.find(r => r.commandId === command.commandId)!.turnId)!;
+    const acceptedMessage = updated.messages.find(m => m.id === acceptedTurn.userMessageId)!;
     this.notify({
       conversationId: command.conversationId,
       revision: updated.revision,
       type: 'turn_accepted',
-      turnId,
-      message: userMessage,
+      turnId: acceptedTurn.id,
+      message: acceptedMessage,
       state: 'queued'
     });
 
     void this.processConversation(command.conversationId);
 
     return {
-      turnId,
+      turnId: acceptedTurn.id,
       revision: updated.revision,
-      state: 'queued'
+      state: acceptedTurn.state
     };
   }
 
@@ -336,6 +351,77 @@ export class TeamChatCoordinator {
       return conv;
     });
     this.notify({ conversationId, revision: updated.revision, type: 'decision_pinned' });
+  }
+
+  /** Revision and target fencing plus the command receipt commit in one transaction. */
+  public async control(command: import('./assistantTypes').ConversationControlCommand): Promise<DurableConversation> {
+    command = structuredClone(command);
+    await this.initialize();
+    if (!['cancel', 'retry', 'pin', 'unpin', 'resume-context', 'reconcile'].includes(command.action)) throw new Error('Invalid conversation control.');
+    const digest = conversationPayloadDigest(command);
+    let applied = false;
+    const updated = await this.transitionConversation(command.conversationId, conv => {
+      const receipt = conv.controlReceipts?.find(r => r.commandId === command.commandId);
+      if (receipt) {
+        if (receipt.payloadDigest !== digest) throw new Error('Command payload conflict.');
+        return conv;
+      }
+      if (conv.revision !== command.expectedRevision) return conv;
+      if (!command.commandId.trim()) throw new Error('Command ID required.');
+      const turn = conv.turns.find(t => t.id === command.turnId);
+      const attempt = turn?.attempts.at(-1);
+      if (command.attemptId && attempt?.id !== command.attemptId) return conv;
+      if (command.action === 'pin') pinConversationDecision(conv, command.messageId!);
+      else if (command.action === 'unpin') conv.pinnedMessageIds = conv.pinnedMessageIds.filter(id => id !== command.messageId);
+      else {
+        if (!turn) throw new Error('Turn not found.');
+        if (command.action === 'cancel') {
+          if (['completed', 'cancelled'].includes(turn.state)) return conv;
+          const active = attempt && ['dispatching', 'running', 'awaiting_approval'].includes(attempt.state);
+          turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
+          turn.skippedParticipantIds = turn.plan.participants.filter(p => !turn.completedParticipantIds.includes(p.id) && p.id !== (active ? attempt.participantId : undefined)).map(p => p.id);
+          if (attempt?.state === 'prepared') attempt.state = 'cancelled';
+        } else if (command.action === 'reconcile') {
+          if (turn.state !== 'outcome_unknown' || !attempt || attempt.id !== command.attemptId || !command.reconciliationNote?.trim()) throw new Error('Describe the reconciliation for the unknown attempt.');
+          (attempt.recoveryEvidence ??= []).push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
+            participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
+            kind: 'reconciliation', observedAt: this.clock(), provenance: 'user', data: { note: command.reconciliationNote.trim() } });
+        } else if (command.action === 'resume-context') {
+          if (turn.state !== 'context_required') return conv;
+          turn.state = 'running';
+          delete turn.contextRequiredReason;
+        } else if (command.action === 'retry') {
+          if (!attempt || attempt.id !== command.attemptId || !['failed', 'interrupted', 'outcome_unknown'].includes(turn.state)) return conv;
+          if (turn.state === 'outcome_unknown') {
+            if (!command.acknowledgeDuplicateActionRisk || !attempt.recoveryEvidence?.some(e => e.id === command.reconciliationEvidenceId && e.kind === 'reconciliation')) throw new Error('Acknowledge duplicate-action risk after reconciliation.');
+            attempt.recoveryEvidence.push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
+              participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
+              kind: 'decision', observedAt: this.clock(), provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: command.reconciliationEvidenceId! } });
+          }
+          const binding = conv.bindings.find(b => b.id === attempt.bindingId);
+          if (binding) binding.status = 'invalid';
+          turn.state = 'running';
+        }
+      }
+      conv.revision++;
+      (conv.controlReceipts ??= []).push({ commandId: command.commandId, payloadDigest: digest, revision: conv.revision });
+      applied = true;
+      return conv;
+    });
+    if (applied) {
+      if (command.action === 'cancel') this.abortControllers.get(`${command.conversationId}:${command.turnId}`)?.abort();
+      this.notify({ conversationId: updated.id, revision: updated.revision, type: 'turn_accepted' });
+      void this.processConversation(updated.id);
+    }
+    return updated;
+  }
+
+  public async removeConversation(conversationId: string): Promise<void> {
+    for (const [key, controller] of this.abortControllers) if (key.startsWith(`${conversationId}:`)) controller.abort();
+    await this.repository.transaction(draft => {
+      draft.conversations = draft.conversations.filter(c => c.id !== conversationId);
+      draft.teamChats = draft.teamChats.filter(c => c.id !== conversationId);
+    });
   }
 
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
@@ -451,7 +537,11 @@ export class TeamChatCoordinator {
       return completeConversationAttempt(conv, conv.revision, turnId, attemptId, a.coordinatorEpoch,
         { id: this.idSource(), turnId, participantId: a.participantId,
           role: t.plan.participants.find(p => p.id === a.participantId)!.role,
-          text: result.text, createdAt: this.clock(), sequence: (conv.messages.at(-1)?.sequence ?? 0) + 1, attachments: [] },
+          text: result.text,
+            ...(result.choices ? { choices: result.choices } : {}),
+            ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+            ...(result.error ? { error: true } : {}),
+          ...(t.plan.context ? { context: t.plan.context } : {}), createdAt: this.clock(), sequence: (conv.messages.at(-1)?.sequence ?? 0) + 1, attachments: [] },
         result.contextDelivery === 'native' ? a.nativeContextReceipt! : a.contextReceipt, result, evidence.id);
       });
   }
@@ -545,8 +635,9 @@ export class TeamChatCoordinator {
               return conv;
             });
           }
-          prepared = prepareTeamChatContext(conversation, activeTurn, nextParticipant, binding, false, contextLimit, this.contextBudget?.reserved);
-          nativePrepared = binding?.deliveredMessageIds.length ? prepareTeamChatContext(conversation, activeTurn, nextParticipant, binding, true, contextLimit, this.contextBudget?.reserved) : prepared;
+          if (visibleMessages.some(m => m.attachments.length)) await this.executionAdapter.validateAttachments?.(conversationId, visibleMessages);
+          prepared = prepareTeamChatContext(conversation, activeTurn, nextParticipant, binding, false, contextLimit, this.contextBudget?.reserved, Boolean(this.executionAdapter.validateAttachments));
+          nativePrepared = binding?.deliveredMessageIds.length ? prepareTeamChatContext(conversation, activeTurn, nextParticipant, binding, true, contextLimit, this.contextBudget?.reserved, Boolean(this.executionAdapter.validateAttachments)) : prepared;
         } catch (error) {
           if (error instanceof TeamChatContextRequired && error.reason === 'budget' && this.executionAdapter.summarize && (conversation.summaryAttempts?.length ?? 0) < 8) {
             const eligible = visibleMessages.filter(m => m.turnId !== activeTurn!.id && !conversation!.pinnedMessageIds.includes(m.id));
@@ -718,19 +809,23 @@ export class TeamChatCoordinator {
             if (!t || !a || t.state !== 'cancelling' || a.coordinatorEpoch !== attempt.coordinatorEpoch ||
                 conv.coordinatorEpoch !== attempt.coordinatorEpoch) return conv;
             a.recoveryEvidence ??= [];
+            const textOnly = a.recoveryEvidence.some(e => e.kind === 'runtime_identity' && e.data?.toolCapable === false);
             a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId: t.id, participantId: a.participantId,
               attemptId, coordinatorEpoch: a.coordinatorEpoch, kind: 'reconciliation', observedAt: this.clock(),
-              provenance: 'execution-settled-after-abort', data: { executionSettled: true, externalOutcomeUnknown: true } });
+              provenance: 'execution-settled-after-abort', data: { executionSettled: true, externalOutcomeUnknown: !textOnly } });
             if (result) a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId: t.id,
               participantId: a.participantId, attemptId, coordinatorEpoch: a.coordinatorEpoch,
               kind: 'final_result', observedAt: this.clock(), provenance: 'execution-adapter-after-abort', result });
-            a.state = 'outcome_unknown';
+            a.state = textOnly && !result ? 'cancelled' : 'outcome_unknown';
             a.completedAt = this.clock();
-            t.state = 'outcome_unknown';
+            t.state = a.state;
             conv.revision++;
             return conv;
           });
           if (result) await this.importRecoveredResult(conversationId, activeTurn.id, attemptId);
+          const settled = this.getConversation(conversationId);
+          if (settled) this.notify({ conversationId, revision: settled.revision, type: 'turn_cancelled', turnId: activeTurn.id,
+            state: settled.turns.find(t => t.id === activeTurn!.id)?.state });
           break;
         }
 
@@ -786,9 +881,13 @@ export class TeamChatCoordinator {
             participantId: nextParticipant.id,
             role: nextParticipant.role,
             text: result.text,
+            ...(result.choices ? { choices: result.choices } : {}),
+            ...(result.proposedAction ? { proposedAction: result.proposedAction } : {}),
+            ...(result.error ? { error: true } : {}),
             createdAt: this.clock(),
             sequence: (latestConv!.messages.at(-1)?.sequence ?? 0) + 1,
-            attachments: []
+            attachments: [],
+            ...(activeTurn.plan.context ? { context: activeTurn.plan.context } : {})
           };
 
           await this.transitionConversation(conversationId, conv => {
@@ -825,6 +924,9 @@ export class TeamChatCoordinator {
           });
         }
       }
+    } catch (error) {
+      // Deletion removes the authoritative identity; callbacks may only drain.
+      if (this.getConversation(conversationId)) throw error;
     } finally {
       this.activeLoops.delete(conversationId);
     }

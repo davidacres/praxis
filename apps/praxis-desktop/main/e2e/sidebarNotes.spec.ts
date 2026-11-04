@@ -56,8 +56,8 @@ test('notes created in the sidebar tree show in the shelf editor, and groups lin
   // A group; a note in two groups; the notes stay in one place.
   await menu(page, 'Actions for note Alpha', 'Add to new group…');
   await page.getByLabel('Group name').fill('Ideas');
-  await page.getByRole('button', { name: 'Create' }).click();
-  const group = section.getByRole('button', { name: /Ideas/ });
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
+  const group = section.getByRole('button', { name: /^Ideas \d+$/ });
   await expect(group).toHaveAttribute('aria-expanded', 'true');
   await menu(page, 'Actions for note Beta', 'Add to Ideas');
   await expect(section.getByTestId('notes-tree').getByRole('listitem').filter({ hasText: 'Beta' })).toHaveCount(1);
@@ -90,7 +90,7 @@ test('deleting an open note asks first, resets the editor and removes it from gr
   await addNote(page, 'Doomed', 'bye');
   await menu(page, 'Actions for note Doomed', 'Add to new group…');
   await page.getByLabel('Group name').fill('Temp');
-  await page.getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('button', { name: 'Create', exact: true }).click();
 
   await menu(page, 'Actions for note Doomed', 'Delete note');
   await page.getByRole('button', { name: 'Cancel' }).click();
