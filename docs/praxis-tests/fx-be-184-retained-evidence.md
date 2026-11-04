@@ -422,19 +422,16 @@ The retained record below includes the actual attempt IDs, epochs, delivered mes
     "A late rename can leave stale references to **heron-cogr7** in build scripts, artifact names, tags, and docs, which breaks pipelines or confuses people at release time.",
     "heron-cogr7"
   ]
-}```
+}
+```
 
 ## Screenshot inventory
 
-These images remain session artifacts and are not committed. Hashes identify the current retained captures, which may have been overwritten by later test reruns. They do not prove a hand-driven verification session.
+These images remain session artifacts and are not committed. Hashes below were refreshed during the recovery pass against the current retained captures; later test reruns had overwritten the earlier images. They do not prove a hand-driven verification session.
 
 | Artifact | Bytes | SHA256 |
 | --- | --- | --- |
-
-| `.praxis/session-artifacts/durable-team-chat-two-windows.png` | 459470 | `e86f66543c4f0bc11cf186a597c57aaf802428e89e785a06c74929d4fc2cca0b` |
-
-| `.praxis/session-artifacts/durable-team-chat-queue.png` | 452171 | `1d89c8390ede4eb06815f747f2a909b7836bc7b6e6ca7d3052782eced3b0b313` |
-
-| `.praxis/session-artifacts/fx-be-184-restart-interrupted.png` | 536289 | `04363347384b68f90ab7b50836f00886a333ab576b03111de088e5f8e9c9d6b9` |
-
-| `.praxis/session-artifacts/fx-be-184-storage-failure.png` | 499991 | `52cce55ccf20fc3c369ea4ca8984fad02b114082f6d7020fac5714b3bd583035` |
+| `.praxis/session-artifacts/durable-team-chat-two-windows.png` | 458782 | `db380fa5ed2c428e0a65b6425603365afb2bf034c69b0e1ba5f01b3a2f2bf03d` |
+| `.praxis/session-artifacts/durable-team-chat-queue.png` | 451413 | `20647e07f3cbd4e6ce1ce72c1b29123fe42761f305722aef4cdd28b94ef031a7` |
+| `.praxis/session-artifacts/fx-be-184-restart-interrupted.png` | 536614 | `09989f419a2e7d387b3033e571e10cab1abe986e25d30553c8d7bf3e827c3132` |
+| `.praxis/session-artifacts/fx-be-184-storage-failure.png` | 499763 | `0ab061a193e7b5a48739103ef11854e631117858a5fbef366aa1adc10c50220d` |

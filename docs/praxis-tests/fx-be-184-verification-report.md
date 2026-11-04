@@ -160,3 +160,23 @@ repeated in this handover audit; their retained results above remain separate.
 The medium finding requested populated deterministic, real-provider, full-suite and visual sections. All four now have an auditable evidence index with retained output tails and hashes, and the CLI record preserves full context receipts and attempt IDs. AC results distinguish deterministic passes from unresolved release proof. No placeholder is used as a passing result.
 
 Not run again in this documentation-only repair: builds, unit suites, focused/full Electron suites, themes and live providers. Their earlier results are explicitly inherited above; repeating execution was unnecessary to validate a provenance/documentation change. No new manual visual session was performed. The planned manual light/dark checklist is unresolved: the earlier automated captures cover only selected light-theme states, and there is no retained hand-driven interaction record for all required surfaces. Real API proof remains blocked by missing credentials, real CLI session reuse remains unproved, and the first-attempt functional gate remains failed. These requirements remain open under TASK-487; this repair does not approve release or advance workflow stages.
+
+## Recovery evidence refresh
+
+The supplied iteration-3 finding is addressed by the populated deterministic,
+real-provider, full-suite and visual sections above and the linked retained
+evidence index. This recovery pass corrected the CLI JSON code fence and
+screenshot table formatting, and refreshed image sizes and SHA256 values against
+the artifacts currently on disk. Screenshots were overwritten by subsequent
+automated runs, so the earlier hashes must not be used to identify the current
+files. No new visual verification or manual interaction is claimed.
+
+The iteration-2 QA stage stopped when the app exited. That stage has no completed
+QA result and is not counted as a pass. Retained command results above describe
+individual executions, not completion of the interrupted QA stage. This
+documentation repair does not resolve the open TASK-487 release requirements or
+advance QA.
+
+Fresh validation for this evidence refresh: `npm run test:praxis-contracts`
+exited 0 with 800 catalogued and linked Playwright tests; `git diff --check`
+passed. No runtime or test code changed, so runtime suites were not repeated.
