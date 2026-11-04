@@ -58,3 +58,20 @@ Both tasks satisfy every acceptance criterion, results are linked here and in th
 
 
 ## Comments
+
+
+**PRX-S111-184** — 2026-11-04T14:56:26.059Z
+**Workflow run failed: Governed delivery — FX-BE-184: Durable team-chat release verification**
+
+Status: Failed · Duration: 3h 23m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
