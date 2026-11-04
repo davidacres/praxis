@@ -373,6 +373,7 @@ export class TeamChatCoordinator {
     await this.transitionConversation(conversationId, conv => {
       const targetTurn = conv.turns.find(t => t.id === turnId);
       const lastAttempt = targetTurn?.attempts.at(-1);
+      if (targetTurn?.state === 'outcome_unknown') throw new Error('Unknown outcome: use resolveAttempt with reconciliation evidence and duplicate-risk acknowledgement.');
       if (!targetTurn || !['failed', 'interrupted'].includes(targetTurn.state) ||
           !lastAttempt || lastAttempt.participantId !== participantId ||
           !['failed', 'interrupted'].includes(lastAttempt.state)) throw new Error('Stale or invalid retry target.');
@@ -729,6 +730,7 @@ export class TeamChatCoordinator {
             conv.revision++;
             return conv;
           });
+          if (result) await this.importRecoveredResult(conversationId, activeTurn.id, attemptId);
           break;
         }
 

@@ -131,7 +131,8 @@ test('startup evidence and recovered reply survive repeated durable epoch change
   await repository.transaction(draft => {
     const conv = draft.conversations[0], turn = conv.turns[0], attempt = turn.attempts[0];
     turn.state = 'running';
-    attempt.state = 'running';
+    attempt.state = 'prepared';
+    delete attempt.dispatchIntent;
     attempt.recoveryEvidence = [{ id: 'result', conversationId: conv.id, turnId: turn.id,
       participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
       kind: 'final_result', observedAt: 'now', provenance: 'adapter', result: { text: 'recovered', usageReferences: ['once'] } }];
@@ -144,6 +145,9 @@ test('startup evidence and recovered reply survive repeated durable epoch change
     const conv = new FileTeamChatRepository(file).read().conversations[0];
     assert.equal(conv.messages.filter(m => m.text === 'recovered').length, 1);
     assert.equal(conv.turns[0].attempts[0].recoveryEvidence![0].coordinatorEpoch, conv.turns[0].attempts[0].coordinatorEpoch);
+    const reconciliation = conv.turns[0].attempts[0].recoveryEvidence!.find(e => e.kind === 'reconciliation')!;
+    assert.equal(typeof reconciliation.observingEpoch, 'string');
+    assert.notEqual(reconciliation.observingEpoch, reconciliation.coordinatorEpoch);
     assert.equal(conv.turns[0].state, 'completed');
   }
 });

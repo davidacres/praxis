@@ -83,7 +83,7 @@ export function completeConversationAttempt(current: DurableConversation, expect
     item.turnId === turnId && item.attemptId === attemptId && item.participantId === attempt.participantId &&
     item.coordinatorEpoch === attempt.coordinatorEpoch && (item.result?.text ?? item.data?.text) === message.text);
   if (!turn || !attempt || (recovered && !['interrupted', 'outcome_unknown', 'failed'].includes(turn.state)) || (!recovered && (turn.state !== 'running' || epoch !== current.coordinatorEpoch || epoch !== attempt.coordinatorEpoch)) ||
-      (!(recovered ? ['interrupted', 'outcome_unknown', 'failed'] : ['dispatching', 'running', 'awaiting_approval']).includes(attempt.state) || !attempt.dispatchIntent) || turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
+      (!(recovered ? ['interrupted', 'outcome_unknown', 'failed'] : ['dispatching', 'running', 'awaiting_approval']).includes(attempt.state) || (!recovered && !attempt.dispatchIntent)) || turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
       turn.completedParticipantIds.includes(attempt.participantId) || message.turnId !== turnId || message.participantId !== attempt.participantId ||
       message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||
       message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 ||
@@ -131,7 +131,7 @@ export function beginConversationEpoch(current: DurableConversation, expected: n
         attempt.recoveryEvidence ??= [];
         attempt.recoveryEvidence.push({ id: `recovery:${epoch}:${attempt.id}`, conversationId: current.id, turnId: turn.id,
           participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
-          kind: 'reconciliation', observedAt: timestamp, provenance: 'coordinator-startup', data: { dispatched: wasDispatched, toolCapable, observingEpoch: epoch } });
+          observingEpoch: epoch, kind: 'reconciliation', observedAt: timestamp, provenance: 'coordinator-startup', data: { dispatched: wasDispatched, toolCapable } });
         turn.state = attempt.state === 'outcome_unknown' ? 'outcome_unknown' : 'interrupted';
       }
     }

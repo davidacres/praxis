@@ -142,6 +142,8 @@ export interface ConversationRecoveryEvidence {
   participantId: string;
   attemptId: string;
   coordinatorEpoch: string;
+  /** Epoch observing this evidence; coordinatorEpoch always identifies the originating attempt. */
+  observingEpoch?: string;
   result?: import('./teamChatCoordinator').TeamChatExecutionResult;
   kind: 'partial_output' | 'tool_activity' | 'final_result' | 'runtime_identity' | 'reconciliation' | 'decision';
   observedAt: string;

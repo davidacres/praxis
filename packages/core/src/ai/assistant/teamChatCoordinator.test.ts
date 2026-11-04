@@ -485,7 +485,7 @@ test('uncertain acceptance invalidates the binding and never automatically resen
   const result = await settled(coordinator, 'conv-1');
   assert.equal(result.turns[0].state, 'outcome_unknown');
   assert.equal(calls, 1);
-  await assert.rejects(coordinator.retryParticipant('conv-1', result.turns[0].id, 'part-lead'), /invalid retry/);
+  await assert.rejects(coordinator.retryParticipant('conv-1', result.turns[0].id, 'part-lead'), /use resolveAttempt/);
 });
 
 test('bounded summarization has separate provenance and usage; summary failure dispatches no main prompt', async () => {
@@ -584,7 +584,8 @@ test('active cancellation remains cancelling until execution settles and records
   for (let i = 0; i < 100 && coordinator.getConversation('conv-1')!.turns[0].state === 'cancelling'; i++)
     await new Promise(resolve => setTimeout(resolve, 5));
   const turn = coordinator.getConversation('conv-1')!.turns[0];
-  assert.equal(turn.state, 'outcome_unknown');
+  assert.equal(turn.state, 'completed');
+  assert.equal(coordinator.getConversation('conv-1')!.messages.filter(m => m.text === 'uncommitted').length, 1);
   assert.ok(turn.attempts[0].recoveryEvidence!.some(e => e.provenance === 'execution-settled-after-abort'));
 });
 
@@ -600,4 +601,11 @@ test('startup imports durable results once across repeated coordinator replaceme
   assert.equal(invocations, 0);
   assert.equal(repo.read().conversations[0].messages.filter(m => m.text === 'restart result').length, 1);
   assert.equal(repo.read().conversations[0].turns.find(t => t.id === turn.id)!.state, 'completed');
+});
+
+test('direct unknown-outcome retry requires informed resolution without dispatch', async () => {
+  const { coordinator, turn, repo } = await recoveryFixture('outcome_unknown');
+  const before = repo.read();
+  await assert.rejects(coordinator.retryParticipant('conv-1', turn.id, 'part-lead'), /use resolveAttempt.*duplicate-risk acknowledgement/);
+  assert.deepEqual(repo.read(), before);
 });

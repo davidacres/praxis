@@ -63,7 +63,7 @@ test('repeated startup retains originating attempt epoch and observation provena
   const second = beginConversationEpoch(first, 5, 'again', 'later');
   assert.equal(second.turns[0].attempts[0].coordinatorEpoch, 'epoch');
   assert.equal(second.turns[0].attempts[0].recoveryEvidence![0].coordinatorEpoch, 'epoch');
-  assert.equal(second.turns[0].attempts[0].recoveryEvidence![0].data!.observingEpoch, 'next');
+  assert.equal(second.turns[0].attempts[0].recoveryEvidence![0].observingEpoch, 'next');
   assert.equal(second.turns[0].state, 'outcome_unknown');
 });
 
@@ -81,4 +81,19 @@ test('recovered imports reject foreign identity and retain cancellation fences',
   a.recoveryEvidence!.at(-1)!.conversationId = 'c';
   recovered.turns[0].state = 'cancelled';
   assert.throws(() => completeConversationAttempt(recovered, 5, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /fenced/);
+});
+
+test('pre-dispatch recovery requires exact durable result and imports only once', () => {
+  const { chat, payload, turn, message, attempt, reply } = fixture();
+  const running = startConversationTurn(submitConversationTurn(chat, 0, payload, turn, message), 1, 't');
+  const prepared = reserveConversationAttempt(running, 2, attempt);
+  assert.throws(() => completeConversationAttempt(prepared, 3, 't', 'a', 'epoch', reply, attempt.contextReceipt), /fenced/);
+  const recovered = beginConversationEpoch(prepared, 3, 'observer', 'later');
+  const a = recovered.turns[0].attempts[0];
+  a.recoveryEvidence!.push({ id: 'result', conversationId: 'c', turnId: 't', participantId: 'p',
+    attemptId: 'a', coordinatorEpoch: 'epoch', kind: 'final_result', observedAt: 'now', provenance: 'adapter',
+    result: { text: reply.text } });
+  const completed = completeConversationAttempt(recovered, 4, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result');
+  assert.equal(completed.turns[0].attempts[0].state, 'completed');
+  assert.throws(() => completeConversationAttempt(completed, 5, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /duplicate|fenced/);
 });
