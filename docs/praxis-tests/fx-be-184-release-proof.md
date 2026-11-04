@@ -1,6 +1,6 @@
 # FX-BE-184 release-proof node:test contracts
 
-Runner: **node:test**. These **25 supplemental cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. No new id collides with a catalog id or an earlier FX-BE supplement.
+Runner: **node:test**. These **25 supplemental source contracts, representing 32 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
 
 ### PT-C2406CA182
 
@@ -198,7 +198,7 @@ Title: **interrupted activation reuses a validated backup and uncertain commit r
 
 **Given** a validated backup and a rename that fails once, then a directory flush that fails after a later rename.
 **When** activation retries, then a rename commits with an unflushed directory.
-**Then** activation completes from the backup; the uncertain commit throws TeamChatCommitUncertainError, later writes and activation are refused, the renamed bytes are on disk, and writes resume only after reconcile.
+**Then** activation completes from the backup; on non-Windows platforms the uncertain commit throws TeamChatCommitUncertainError, later writes and activation are refused, the renamed bytes are on disk, and writes resume only after reconcile.
 
 ### PT-159068A7D0
 
@@ -226,3 +226,21 @@ Title: **activation failure leaves durable dispatch disabled**.
 **Given** a legacy file with a mismatched interrupted backup, and separately the activation switch off.
 **When** submitTurn is called through the services.
 **Then** every submit rejects, the provider is never called and the source is unchanged; after the bad backup is removed, activation and one dispatch succeed.
+
+## Exact parameterized automation links
+
+The two template ids above are stable source-group identities, not exact runtime-title ids. The following seven additional expansions (nine runtime cases replacing two source groups) explain the difference between 25 source contracts and 32 runtime cases. Every row inherits its group’s Given/When/Then and exact source line. These runtime ids are supplemental and are not validated by the Playwright-only generator.
+
+| Runtime id | Source group / automation | Exact runtime title |
+| --- | --- | --- |
+| PT-6807379342 | PT-E4314C935F · [teamChatCrashBoundaries.test.ts:101](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L101) | crash after dispatch intent marks text-only attempts interrupted and tool-capable or opaque attempts outcome_unknown: text |
+| PT-C1EFAE92A6 | PT-E4314C935F · [teamChatCrashBoundaries.test.ts:101](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L101) | crash after dispatch intent marks text-only attempts interrupted and tool-capable or opaque attempts outcome_unknown: tools |
+| PT-F8EA47ECD7 | PT-E4314C935F · [teamChatCrashBoundaries.test.ts:101](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L101) | crash after dispatch intent marks text-only attempts interrupted and tool-capable or opaque attempts outcome_unknown: opaque |
+| PT-631B008FED | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at open |
+| PT-17C2DF639D | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at writeFile |
+| PT-054023CB11 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at sync |
+| PT-3207E3F7EE | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at open |
+| PT-88A2B4C4A4 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at writeFile |
+| PT-5B98C84232 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at sync |
+
+Registration: core contracts run through `packages/core/package.json` → `test` (root `test:core`); main contracts through `apps/praxis-desktop/main/package.json` → `test:git` (root `test:desktop:git`). The directory-flush/reconciliation assertions in PT-4485239A20 return early on Windows; its activation-retry assertions still run there. Internal scenario loops (four binding changes, four malformed files, two approval projections) are assertion scenarios within one test each, not extra runtime test registrations.

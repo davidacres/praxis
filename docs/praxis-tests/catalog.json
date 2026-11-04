@@ -5137,7 +5137,7 @@
       "area": "durable Team Chat",
       "flow": {
         "given": "a mock OpenAI-compatible provider delays each reply by 1.5 s, a folder project owns one durable team chat, and a second BrowserWindow is opened on the same renderer URL",
-        "when": "both windows open the chat, window one sends an answered question and a second question that queues, then starts a new chat in window one; window two replays a stale cancel against the replaced revision, reloads, and pins then unpins a decision by keyboard",
+        "when": "both windows open the chat, window one sends an answered question and a second question that queues, then starts a new chat in window one; window two replays a stale cancel against the replaced revision, reloads, and pins a decision with Enter then unpins it by clicking",
         "then": "window two shows each accepted user message, the active member as \"dev: running\" while window one's reply is in flight, one Queued status and exactly one team-chat row; both replies land in the original chat after window one navigates away; the stale cancel leaves every turn completed; after reload the two replies and a 50 tok usage summary remain, and Pin/Unpin decision toggles by accessible name. Dock/float execution identity and queued attachments are not asserted here"
       }
     },
