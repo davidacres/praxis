@@ -1,6 +1,6 @@
 # FX-BE-182 interruption and recovery contracts
 
-Frozen snapshot: `567a7300`. Runner: **node:test**. These **19 supplemental cases** comprise six expanded matrix cases, seven coordinator cases, three transition cases, two file repository cases and one production adapter case. They are outside the Playwright-only generator. IDs use SHA1(file + newline + exact runtime title), matching the existing catalog convention; the six matrix titles expand the source loop at line 7. Existing identities are preserved.
+Frozen snapshot: `f4d13b336867a7a097537de2d29ab0dfdc958e43`. Runner: **node:test**. These **19 supplemental cases** comprise six expanded matrix cases, seven coordinator cases, three transition cases, two file repository cases and one production adapter case. They are outside the Playwright-only generator. IDs use SHA1(file + newline + exact runtime title), matching the existing catalog convention; the six matrix titles expand the source loop at line 7. Existing identities are preserved.
 
 ## PT-1987AF34D2
 

@@ -1,11 +1,11 @@
 # test-contracts
 
 Ticket: **PRX-S111-182 / FX-BE-182**. Stage: **WF-CB8E1255-test-contracts**.
-Frozen implementation: `5843c95e9b813738de067dbd6fa87dd92755200b`. HEAD matched that revision and the worktree was clean before authoring. Inspected the tracked [change-diff](../../.praxis/change-diff.md), frozen source and recovery tests. Code intelligence returned stale matches, so source inspection used this worktree. Only catalog documentation is changed in this stage.
+Frozen implementation: `f4d13b336867a7a097537de2d29ab0dfdc958e43`. HEAD matched that revision and the worktree was clean before authoring. Inspected the tracked [change-diff](../../.praxis/change-diff.md), frozen source and recovery tests. Code intelligence returned stale matches, so source inspection used this worktree. Only catalog documentation is changed in this stage.
 
 ## Exact inventory and coverage links
 
-The deterministic inventory contains **784 Playwright contracts across 171 source files**. There are **zero duplicate IDs or file/title links**, no stale identities and no moved-line warnings. The generated [catalog](catalog.json) and [automation index](index.md) are already current; two Given/When/Then flows are enriched and retain their generated identities.
+The deterministic inventory contains **784 Playwright contracts across 171 source files**. There are **zero duplicate IDs or file/title links**, no stale identities and no moved-line warnings. The generated [catalog](catalog.json) and [automation index](index.md) are current, with **43 curated Given/When/Then flows** carried over (including enriched contracts for `PT-31EBA5B105`, `PT-691B8EDBF3`, `PT-F1D9810DD2` and `PT-2EE0F7086B`) while retaining their generated identities.
 
 Added [19 supplemental Node contracts](fx-be-182-interruption-recovery.md), each with exact runner, source file, line, runtime title, stable generated ID and Given/When/Then assertions. These cover six expanded recovery matrix cases, seven coordinator cases, three transition cases, two repository cases and one adapter case. The scoped union is **803 contracts: 784 generated Playwright + 19 selected Node cases**. This is not the complete monorepo automated suite or an expanded Playwright execution count; historical supplemental documents and other Node suites are excluded. No source test was renamed or renumbered.
 
@@ -25,12 +25,12 @@ Existing [assistant no-tools:882](../../apps/praxis-desktop/main/e2e/assistant.s
 
 ## Stale and ambiguous contracts
 
-- Refreshed the stale report snapshot and split its obsolete startup-import title into the two exact runtime titles (nonempty and empty reply). Three transition links moved by one line and are refreshed without changing IDs. The old unsuffixed ID is retired because that runtime title no longer exists. Scheduler ID PT-F574E99346 is retained; its prior title-derived ID PT-7600A815C3 was replaced in the frozen implementation when the asserted retry behavior changed. Historical supplemental documents retain their own snapshot provenance; they are not current execution results.
+- Refreshed the frozen snapshot provenance to `f4d13b336867a7a097537de2d29ab0dfdc958e43`, retained the split startup-import runtime titles (nonempty and empty reply) and the two additional prepared-attempt/epoch-validation contracts (`PT-E116B00BE3` and `PT-853EBCDC9F`), and restored baseline scheduler ID `PT-7600A815C3` (`scheduledRuns.spec.ts:926`) after the out-of-scope E2E edits were reverted to `main`. Enriched the curated flows for `PT-F1D9810DD2` ([scheduledRuns.spec.ts:348](../../apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts#L348)) and `PT-2EE0F7086B` ([sessionShelf.spec.ts:304](../../apps/praxis-desktop/main/e2e/sessionShelf.spec.ts#L304)). Historical supplemental documents retain their own snapshot provenance; they are not current execution results.
 - The title “recovered result imports atomically once with usage and original epoch” overstates its assertions: one reply, completion and usage references are checked, but no injected atomic-write failure or token totals. The new contract states the narrow proof.
 - “active cancellation remains cancelling until execution settles and records evidence” ends completed after importing a post-abort result. It does not prove terminal cancellation. The older cancellation assertion accepts either cancelled or outcome_unknown.
 - “uncertain acceptance invalidates the binding” does not assert binding status or cursor invalidation. “startup evidence and recovered reply survive repeated durable epoch changes” seeds final-result evidence; it is not a real provider crash/reconciliation experiment.
 - The generator scans direct static `test(...)` calls in desktop E2E only. Dynamic titles and modified test calls are omitted, and every entry is labelled functional even for other project routing. Generic generated prose is shape-checked, not behavior-checked. Thus a passing catalog is not full-suite QA.
-- The repository validator does not validate supplemental Node contracts, duplicate IDs or index consistency comprehensively. Independent checks validate these 17 source/title/line/hash links, including six expanded matrix titles, uniqueness against the catalog, and catalog/index links. IDs use SHA1(file + newline + title): line movement preserves identity; source/title renames change it.
+- The repository validator does not validate supplemental Node contracts, duplicate IDs or index consistency comprehensively. Independent checks validate these 19 source/title/line/hash links, including six expanded matrix titles, uniqueness against the catalog, and catalog/index links. IDs use SHA1(file + newline + title): line movement preserves identity; source/title renames change it.
 
 ## Verification
 
@@ -41,8 +41,8 @@ Existing [assistant no-tools:882](../../apps/praxis-desktop/main/e2e/assistant.s
 - `npm run test:praxis-contracts`: passed, **784 linked Playwright tests**, no warnings.
 - Independent supplemental identity/source/line/title and generated catalog/index checks: passed. `git diff --check`: passed.
 
-**44 focused Node tests passed**, including all 19 supplemental cases.
+**44 focused Node tests passed**, including all 19 supplemental cases. No Playwright, full-suite, live-provider or visual run was performed in this documentation-only stage; no screenshots were captured. No other workflow stage was advanced or approved. The coverage gaps above remain review/QA findings.
 
-## Returned QA finding
+## Returned QA findings
 
-Out-of-scope E2E test edits (`marketplace.spec.ts`, `scheduledRuns.spec.ts`, `scheduledRunEndToEnd.spec.ts`, `sessionShelf.spec.ts`, `sessionShelfNotes.spec.ts`, `sidebarNotes.spec.ts`) were reverted to `main` so that `selectAffectedTests` scopes QA runs strictly to the assistant/team-chat recovery suites, while both previously reported specs (`scheduledRuns.spec.ts:348` and `sessionShelf.spec.ts`) were verified green against the unmodified baseline.
+- **Iteration 1 (1 of 55 failed) and Iteration 2 (2 of 93 failed — `e2e/scheduledRuns.spec.ts:348` waiting for `schedule-flow-step` and `e2e/sessionShelf.spec.ts:304` waiting for `session-shelf-card`):** In the frozen implementation (`f8a472f9` / `f4d13b33`), out-of-scope E2E spec edits (`marketplace.spec.ts`, `scheduledRuns.spec.ts`, `scheduledRunEndToEnd.spec.ts`, `sessionShelf.spec.ts`, `sessionShelfNotes.spec.ts`, `sidebarNotes.spec.ts`) were reverted to `main` so that `selectAffectedTests` scopes QA runs strictly to the assistant/team-chat recovery suites rather than pulling unrelated drag/hover UI specs into contended parallel runs, and both reported specs (`scheduledRuns.spec.ts:348` and `sessionShelf.spec.ts:304`) were verified green in the implementation stage. In this catalog stage, `PT-F1D9810DD2` (`scheduledRuns.spec.ts:348`) and `PT-2EE0F7086B` (`sessionShelf.spec.ts:304`) are enriched with exact Given/When/Then contracts matching their baseline source assertions.

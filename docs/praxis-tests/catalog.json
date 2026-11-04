@@ -8032,9 +8032,9 @@
       },
       "area": "scheduled Runs",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "a ticket dropped onto another shares its step, drawn as parallel lanes, and the steps are saved",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated Scheduled Runs editor with three hopper tickets (Fix pager bug, Add export CSV, and Log retention) added as three sequential flow steps",
+        "when": "Log retention is dragged onto Add export CSV to share step 2, split out and rejoined via keyboard controls, Fix pager bug is dragged over Log retention to preview and join step 2 then split back to step 1, and the draft Flow graph run is saved and reopened",
+        "then": "shared steps render is-together (data-size 2, Step 2 · 2 side by side, sequences 2a and 2b, summary 3 tickets in 2 steps), mid-drag hover shows Share step 2 without shifting the target card bounding box, and persisted entries retain withPrevious flags with two steps when reopened"
       }
     },
     {
@@ -9184,9 +9184,9 @@
       },
       "area": "session Shelf",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "shelf books follow spines, retain drafts, delay hover and distinguish selection",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated desktop app with five seeded shelf sessions, the sidebar collapsed to expose the session shelf, and SESSION-earlier0 transitioned to awaiting_input",
+        "when": "a brief pointer pass crosses the first spine without dwelling, spines 0 and 4 are hovered to reveal their preview cards, separate reply drafts are typed across Escape, sidebar toggles, reduced-motion emulation and a 480px short window, and session 4 is opened",
+        "then": "one attention indicator and Awaiting input description appear, the brief pass opens no card, hovered cards align within 2px of their spine centres and stay within [40, 480] in a short window, per-session drafts persist across switches and toggles, only the selected spine carries an edge-line boxShadow when another spine is expanded, and reducedMotion sets transition-duration to 0.001s"
       }
     },
     {
