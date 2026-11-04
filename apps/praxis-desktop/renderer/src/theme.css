@@ -8839,6 +8839,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .session-permission-tool:hover::after,
+.session-permission-tool:focus::after,
 .session-permission-tool:focus-visible::after {
   opacity: 1;
   transform: translateY(0);

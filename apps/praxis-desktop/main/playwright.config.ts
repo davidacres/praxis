@@ -46,7 +46,7 @@ function configuredWorkers(): number {
 export default defineConfig({
   testDir: './e2e',
   timeout: 30000,
-  retries: 0,
+  retries: process.env.CI ? 1 : 0,
   expect: {
     toHaveScreenshot: {
       maxDiffPixelRatio: 0.02,

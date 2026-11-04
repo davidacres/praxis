@@ -63,7 +63,7 @@ export function spawnCheck(
         ...Object.fromEntries(['PATH', 'Path', 'HOME', 'USERPROFILE', 'TMPDIR', 'TMP', 'TEMP', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL', 'PRAXIS_E2E_WORKERS'].flatMap(key => process.env[key] === undefined ? [] : [[key, process.env[key]]])),
         CI: inheritedCi ?? '1',
         ...(inheritedCi === undefined && process.env.PRAXIS_E2E_WORKERS === undefined
-          ? { PRAXIS_E2E_WORKERS: '4' }
+          ? { PRAXIS_E2E_WORKERS: node.id === 'affected-tests' ? '1' : '4' }
           : {})
       }
     });
