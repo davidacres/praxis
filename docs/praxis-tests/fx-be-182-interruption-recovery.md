@@ -1,6 +1,6 @@
 # FX-BE-182 interruption and recovery contracts
 
-Frozen snapshot: `5843c95e9b813738de067dbd6fa87dd92755200b`. Runner: **node:test**. These **17 supplemental cases** comprise six expanded matrix cases, six coordinator cases, three transition cases, one file repository case and one production adapter case. They are outside the Playwright-only generator. IDs use SHA1(file + newline + exact runtime title), matching the existing catalog convention; the six matrix titles expand the source loop at line 7. Existing identities are preserved.
+Frozen snapshot: `567a7300`. Runner: **node:test**. These **19 supplemental cases** comprise six expanded matrix cases, seven coordinator cases, three transition cases, two file repository cases and one production adapter case. They are outside the Playwright-only generator. IDs use SHA1(file + newline + exact runtime title), matching the existing catalog convention; the six matrix titles expand the source loop at line 7. Existing identities are preserved.
 
 ## PT-1987AF34D2
 
@@ -155,18 +155,18 @@ Title: **effective capability evidence is durable before runtime dispatch; evide
 **When** first fail the runtime-identity evidence callback, then record evidence and execute again.
 **Then** failed evidence prevents launch; successful callback observes toolCapable true before any launch, followed by exactly one tools invocation. Physical disk durability is supplied by the callback contract, not exercised here.
 
-## Prepared-result startup integration
+## PT-E116B00BE3
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:613](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L613).
 Title: **startup imports a prepared attempt result without dispatching the provider**.
 
 **Given** a prepared attempt with no dispatch intent and a durable final result with usage attribution.
-**When** initialize two replacement coordinators against the same repository.
+**When** initialize two replacement coordinators against the same repository and invoke idempotent accept resolution.
 **Then** exactly one reply and its usage reference are committed, dispatch intent remains absent and the provider is never invoked.
 
-## Originating and observing epoch validation
+## PT-853EBCDC9F
 
-Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts).
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:155](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L155).
 Title: **repository validates observation epochs separately from immutable attempt epochs**.
 
 **Given** persisted reconciliation evidence whose observing epoch differs from its attempt's originating epoch.

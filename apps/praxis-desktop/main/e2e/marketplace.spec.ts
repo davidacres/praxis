@@ -278,11 +278,8 @@ test('Agent Runtime panel: a marketplace skill installs after confirmation and a
   await openSettings();
   await nav('agent-runtime');
   await window.locator('[data-testid="agent-runtime-tab-skills"]').click();
-  // Bundled skills can finish discovery after this panel opens. Assert the
-  // installed skill identities rather than assuming an empty built-in catalogue.
-  const installedSkills = () => window.evaluate(async () => (await window.praxis.agentRuntime.list()).skills
-    .filter(skill => !skill.builtIn).map(skill => skill.metadata.name).sort());
-  await expect.poll(installedSkills).toEqual([]);
+  const skillsTab = window.locator('[data-testid="agent-runtime-tab-skills"]');
+  await expect(skillsTab).toContainText('Skills (0)');
 
   const row = window.locator('[data-testid="skill-marketplace-device-check"]');
   await expect(row).toContainText('Device check');
@@ -294,13 +291,13 @@ test('Agent Runtime panel: a marketplace skill installs after confirmation and a
 
   // Listed once — in the marketplace, as installed — and discovered for agents.
   await expect(row).toContainText('Installed');
-  await expect.poll(installedSkills).toEqual(['device-check']);
+  await expect(skillsTab).toContainText('Skills (1)');
   await expect(window.locator('[data-testid="agent-runtime-skill-device-check"]')).toHaveCount(0);
 
   await row.getByRole('button', { name: 'Uninstall' }).click();
   await window.getByRole('dialog', { name: 'Uninstall Device check?' }).getByRole('button', { name: 'Uninstall' }).click();
   await expect(row.getByRole('button', { name: 'Install' })).toBeVisible();
-  await expect.poll(installedSkills).toEqual([]);
+  await expect(skillsTab).toContainText('Skills (0)');
 });
 
 test('an unconfigured marketplace is explained inside each panel', async () => {

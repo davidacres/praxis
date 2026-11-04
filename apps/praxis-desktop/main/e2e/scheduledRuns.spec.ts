@@ -923,12 +923,9 @@ test('quitting with a schedule pending asks first, and offers to minimise instea
   expect(await page.evaluate(() => window.praxis.scheduledRuns.list().then(list => list.length))).toBe(1);
 });
 
-test('an exhausted stage pauses the schedule and retrying the ticket preserves its failed workflow', async () => {
-  const { page, projectId } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500' } });
-  // Keep the barrier outside Git: retrying a ticket correctly refuses a dirty base.
-  const markerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-retry-marker-'));
-  tempDirs.push(markerDir);
-  const marker = path.join(markerDir, 'retry-ready');
+test('an idle failed stage pauses the schedule and retries in the same workflow', async () => {
+  const { page, projectId, repo } = await launch({ env: { PRAXIS_E2E_SCHEDULE_TICK_MS: '500' } });
+  const marker = path.join(repo, 'retry-ready');
   const workflowId = await page.evaluate(async ({ projectId, marker }) => {
     const now = new Date().toISOString();
     const id = 'schedule-retry-stage';
@@ -952,10 +949,8 @@ test('an exhausted stage pauses the schedule and retrying the ticket preserves i
   const flight = page.getByTestId('schedule-flight-card');
   await expect(flight).toHaveCount(1);
   await expect(flight.locator('[data-testid="schedule-task-row"][data-node="build"]')).toHaveAttribute('data-lane', 'failed');
-  // The scheduler retries autonomously until the stage budget is exhausted.
-  await expect(flight.locator('[data-node="build"]')).toContainText('×3');
-  await expect(flight.getByTestId('schedule-stage-failure')).toHaveCount(0);
-  await expect(flight.getByTestId('schedule-retry')).toHaveText('Retry ticket');
+  await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Build — needs attention');
+  await expect(flight.getByTestId('schedule-stage-failure')).toContainText('Attempt 1 of 3');
   await expect(page.getByTestId('schedule-pause-banner')).toHaveAttribute('data-reason', 'failure');
   await expect(flight.getByTestId('schedule-review-workflow')).toBeVisible();
   await expect(page.getByTestId('schedule-deck-card')).toHaveCount(1);
@@ -964,16 +959,12 @@ test('an exhausted stage pauses the schedule and retrying the ticket preserves i
   await page.screenshot({ path: path.join(shots, 'scheduled-run-stage-failure.png') });
   fs.writeFileSync(marker, 'ready');
   await flight.getByTestId('schedule-retry').click();
-  // A terminal failure remains auditable; ticket retry launches a fresh workflow.
-  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId)).filter(run => run.status === 'succeeded').length, { timeout: 10000 }).toBeGreaterThan(0);
+  // Retried, Build passed on its second attempt, and the approval stage was determined autonomously to complete the run.
+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId))[0].status, { timeout: 10000 }).toBe('succeeded');
   await expect(page.getByTestId('schedule-stage-failure')).toHaveCount(0);
   const after = await page.evaluate(id => window.praxis.workflows.listRuns(id), projectId);
-  const original = after.find(run => run.runId === before[0].runId)!;
-  expect(original.status).toBe('failed');
-  expect(original.stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(3);
-  const retried = after.find(run => run.runId !== original.runId && run.status === 'succeeded')!;
-  expect(retried).toBeDefined();
-  expect(retried.stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(1);
+  expect(after.map(run => run.runId)).toEqual(before.map(run => run.runId));
+  expect(after[0].stages.find(stage => stage.nodeId === 'build')?.attempts).toBe(2);
 });
 
 test('the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script', async () => {

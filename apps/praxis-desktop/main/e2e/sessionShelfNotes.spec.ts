@@ -70,7 +70,6 @@ test('the notes pencil opens the editor with focus in the title; typing saves; E
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await createProject(page);
-  await page.reload();
   const shelf = await openShelf(page);
   const pencil = shelf.getByTestId('session-shelf-notes');
   await pencil.focus();
@@ -101,7 +100,6 @@ test('activating the pencil with the keyboard puts focus in the note title', asy
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await createProject(page);
-  await page.reload();
   const shelf = await openShelf(page);
   await shelf.getByTestId('session-shelf-notes').focus();
   await page.keyboard.press('Enter');
@@ -113,7 +111,6 @@ test('a failed save keeps the draft, flags the pencil and recovers on Retry', as
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await createProject(page);
-  await page.reload();
   const shelf = await openShelf(page);
   const card = await openNotes(page);
   await card.getByTestId('note-body').fill('first line');
@@ -145,7 +142,6 @@ test('Escape closes the project picker before it closes the notes card', async (
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await createProject(page);
-  await page.reload();
   const shelf = await openShelf(page);
   await shelf.getByTestId('session-shelf-notes').click();
   const card = page.getByTestId('session-shelf-notes-card');
@@ -163,7 +159,6 @@ test('picking a project with the mouse keeps the notes card open', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
   const page = app.window;
   await createProject(page);
-  await page.reload();
   const shelf = await openShelf(page);
   await shelf.getByTestId('session-shelf-notes').click();
   const card = page.getByTestId('session-shelf-notes-card');

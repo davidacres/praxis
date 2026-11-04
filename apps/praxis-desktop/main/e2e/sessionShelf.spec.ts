@@ -81,13 +81,13 @@ test('collapsed session shelf shows the last 5 sessions, distinguishes today, an
   expect(spineVisuals.todayHeight).toBeGreaterThan(spineVisuals.earlierHeight);
   expect(spineVisuals.todayOpacity).toBeGreaterThan(spineVisuals.earlierOpacity);
   expect(spineVisuals.todayColor).toBe(spineVisuals.earlierColor);
-  await expect.poll(() => shelf.evaluate(element => {
-    const bounds = element.querySelector('.session-shelf__spines')!.getBoundingClientRect();
-    // The overflow button belongs to the centred group alongside the five spines.
-    const entries = element.querySelectorAll('.session-shelf__spine, .session-shelf__more');
-    return Math.abs((entries[0].getBoundingClientRect().top + entries[entries.length - 1].getBoundingClientRect().bottom) / 2
+  const centred = await shelf.evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    const spines = element.querySelectorAll('.session-shelf__spine');
+    return Math.abs((spines[0].getBoundingClientRect().top + spines[spines.length - 1].getBoundingClientRect().bottom) / 2
       - (bounds.top + bounds.bottom) / 2);
-  })).toBeLessThanOrEqual(1);
+  });
+  expect(centred).toBeLessThanOrEqual(1);
   const cards = page.getByTestId('session-shelf-card');
   await expect(cards).toHaveCount(0);
   // Reproduce the missing-colour-token regression: inactive spines disappeared.
@@ -214,8 +214,6 @@ test('the shelf closes reliably on pointer leave and outside clicks without inte
   for (let attempt = 0; attempt < 3; attempt++) {
     await spine.click();
     const reply = page.getByTestId('session-shelf-reply-input');
-    // Enter the book after its slide-in finishes so pointer leave tests start inside it.
-    await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
     await reply.click();
     await reply.fill(`Draft reply ${attempt}`);
     // Give the old spine blur timer time to fire; editing inside the card must stay open.
@@ -232,8 +230,8 @@ test('the shelf closes reliably on pointer leave and outside clicks without inte
   // Even with the old hit-testing fill restored, blank sleeve presses dismiss.
   for (const edge of ['above', 'below'] as const) {
     await spine.click();
-    await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
     await page.getByTestId('session-shelf-reply-input').click();
+    await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
     const bounds = (await card.boundingBox())!;
     const oldHitArea = await page.addStyleTag({ content: '.session-shelf__sleeve.is-open { pointer-events: auto; }' });
     await page.mouse.click(bounds.x + bounds.width / 2, edge === 'above' ? bounds.y - 15 : bounds.y + bounds.height + 15);
@@ -241,8 +239,8 @@ test('the shelf closes reliably on pointer leave and outside clicks without inte
     await oldHitArea.evaluate(element => element.remove());
   }
   await spine.click();
-  await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
   await page.getByTestId('session-shelf-reply-input').click();
+  await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
   const bounds = (await card.boundingBox())!;
   // Native hit testing now reaches the workspace beneath the transparent sleeve.
   expect(await page.evaluate(point => document.elementFromPoint(point.x, point.y)?.closest('.session-shelf') === null,

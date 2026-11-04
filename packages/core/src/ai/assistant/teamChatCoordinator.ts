@@ -130,7 +130,7 @@ export class TeamChatCoordinator {
           beginConversationEpoch(current, current.revision, epoch, this.clock()));
         for (const turn of updated.turns) {
           const attempt = turn.attempts.at(-1);
-          if (attempt && ['interrupted', 'outcome_unknown'].includes(attempt.state) &&
+          if (attempt && ['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed'].includes(attempt.state) &&
               attempt.recoveryEvidence?.some(e => e.kind === 'final_result' && typeof (e.result?.text ?? e.data?.text) === 'string')) {
             await this.importRecoveredResult(updated.id, turn.id, attempt.id);
           }
@@ -373,7 +373,7 @@ export class TeamChatCoordinator {
     await this.transitionConversation(conversationId, conv => {
       const targetTurn = conv.turns.find(t => t.id === turnId);
       const lastAttempt = targetTurn?.attempts.at(-1);
-      if (targetTurn?.state === 'outcome_unknown') throw new Error('Unknown outcome: use resolveAttempt with reconciliation evidence and duplicate-risk acknowledgement.');
+      if (targetTurn?.state === 'outcome_unknown' || lastAttempt?.state === 'outcome_unknown') throw new Error('Unknown outcome: use resolveAttempt with reconciliation evidence and duplicate-risk acknowledgement.');
       if (!targetTurn || !['failed', 'interrupted'].includes(targetTurn.state) ||
           !lastAttempt || lastAttempt.participantId !== participantId ||
           !['failed', 'interrupted'].includes(lastAttempt.state)) throw new Error('Stale or invalid retry target.');
@@ -417,7 +417,7 @@ export class TeamChatCoordinator {
             throw new Error('Unknown outcome retry requires reconciliation evidence and duplicate-action risk acknowledgement.');
           }
           a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId, participantId: a.participantId,
-            attemptId, coordinatorEpoch: a.coordinatorEpoch, kind: 'decision', observedAt: this.clock(),
+            attemptId, coordinatorEpoch: a.coordinatorEpoch, observingEpoch: conv.coordinatorEpoch, kind: 'decision', observedAt: this.clock(),
             provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: options.reconciliationEvidenceId } });
           const binding = conv.bindings.find(b => b.id === a.bindingId);
           if (binding) binding.status = 'invalid';

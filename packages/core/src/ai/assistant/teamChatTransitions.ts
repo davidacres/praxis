@@ -74,18 +74,23 @@ export function advanceConversationAttempt(current: DurableConversation, expecte
   if (state === 'dispatching') attempt.dispatchIntent = timestamp;
   return next;
 }
+const ACTIVE_ATTEMPT_STATES = new Set(['dispatching', 'running', 'awaiting_approval']);
+const RECOVERABLE_TURN_STATES = new Set(['running', 'cancelling', 'interrupted', 'outcome_unknown', 'failed']);
+const RECOVERABLE_ATTEMPT_STATES = new Set(['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed']);
 export function completeConversationAttempt(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, message: ConversationMessage, receipt: ConversationAttempt['contextReceipt'], evidence?: { reportedCost?: { currency: string; amount: number }; providerSessionId?: string; usage?: import('../gateway/wire').TokenUsage; usageReferences?: string[]; toolEvidenceReferences?: string[] }, recoveredResultId?: string): DurableConversation {
   const next = changed(current, expected);
   const turn = next.turns.find(item => item.id === turnId);
   const attempt = turn?.attempts.find(item => item.id === attemptId);
-  const recovered = recoveredResultId && attempt?.recoveryEvidence?.some(item =>
+  const recovered = recoveredResultId !== undefined && Boolean(attempt?.recoveryEvidence?.some(item =>
     item.id === recoveredResultId && item.kind === 'final_result' && item.conversationId === current.id &&
     item.turnId === turnId && item.attemptId === attemptId && item.participantId === attempt.participantId &&
-    item.coordinatorEpoch === attempt.coordinatorEpoch && (item.result?.text ?? item.data?.text) === message.text);
+    item.coordinatorEpoch === attempt.coordinatorEpoch && (item.result?.text ?? item.data?.text) === message.text));
   // Recovery uses the immutable originating epoch, even after startup advances the coordinator.
   // A durable result is sufficient without dispatch intent; ordinary callbacks still require it.
-  if (!turn || !attempt || epoch !== attempt.coordinatorEpoch || (recoveredResultId !== undefined && !recovered) || (recovered && !['interrupted', 'outcome_unknown', 'failed'].includes(turn.state)) || (!recovered && (turn.state !== 'running' || epoch !== current.coordinatorEpoch)) ||
-      (!(recovered ? ['interrupted', 'outcome_unknown', 'failed'] : ['dispatching', 'running', 'awaiting_approval']).includes(attempt.state) || (!recovered && !attempt.dispatchIntent)) || turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
+  if (!turn || !attempt || epoch !== attempt.coordinatorEpoch || (recoveredResultId !== undefined && !recovered) ||
+      (recovered ? !RECOVERABLE_TURN_STATES.has(turn.state) || !RECOVERABLE_ATTEMPT_STATES.has(attempt.state)
+        : turn.state !== 'running' || epoch !== current.coordinatorEpoch || !ACTIVE_ATTEMPT_STATES.has(attempt.state) || !attempt.dispatchIntent) ||
+      turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
       turn.completedParticipantIds.includes(attempt.participantId) || message.turnId !== turnId || message.participantId !== attempt.participantId ||
       message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||
       message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 ||

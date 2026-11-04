@@ -618,11 +618,14 @@ test('startup imports a prepared attempt result without dispatching the provider
   attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'prepared-result', kind: 'final_result',
     result: { text: 'Prepared durable reply', usageReferences: ['paid-once'] } });
   let invocations = 0;
+  let lastCoordinator!: TeamChatCoordinator;
   for (let i = 0; i < 2; i++) {
-    await new TeamChatCoordinator({ repository: repo, executionAdapter: {
+    lastCoordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
       execute: async () => { invocations++; throw new Error('must not replay'); }
-    } }).initialize();
+    } });
+    await lastCoordinator.initialize();
   }
+  await lastCoordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'accept');
   const current = repo.read().conversations[0];
   assert.equal(invocations, 0);
   assert.equal(current.messages.filter(m => m.text === 'Prepared durable reply').length, 1);

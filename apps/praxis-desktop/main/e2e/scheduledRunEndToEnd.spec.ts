@@ -71,8 +71,6 @@ for (const storage of ['app', 'folder'] as const) test(`a mixed serial and paral
     AI_GATEWAY_API_KEY: 'e2e-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_AI_GATEWAY_URL: undefined,
     PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'vercel-gateway': 0.1 })
   }, { openNewSession: false });
-  const runtimeErrors: string[] = [];
-  app.electronApp.process().stderr?.on('data', chunk => { runtimeErrors.push(String(chunk)); fs.appendFileSync(path.join(os.tmpdir(), 'fx182-runtime-errors.log'), String(chunk)); });
   const page = app.window;
 
   const { projectId, runId, keys, startAt } = await page.evaluate(async ({ repo, titles, storage }) => {
@@ -177,7 +175,7 @@ for (const storage of ['app', 'folder'] as const) test(`a mixed serial and paral
       workflows: workflows.map(workflow => [workflow.runId, workflow.status, workflow.explanation, workflow.stages.map(stage => [stage.nodeId, stage.lane, stage.lastError])]),
       events: run.events.slice(-12).map(event => event.message)
     }, null, 1);
-    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${stuck}\n${runtimeErrors.slice(-30).join('')}`);
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${stuck}`);
   } finally {
     finished = true;
     await sampler;
@@ -236,8 +234,7 @@ for (const storage of ['app', 'folder'] as const) test(`a mixed serial and paral
   if (storage === 'folder') {
     // Every move and outcome comment was committed: the plans end as clean as they started.
     // (Praxis's own metadata — `.praxis/`, `project.praxis.md` — may stay uncommitted; it never blocks a run.)
-    // Outcome comments are written asynchronously after terminal state; include their commit settlement.
-    await expect.poll(() => execFileSync('git', ['status', '--porcelain', '--', 'docs'], { cwd: repo, encoding: 'utf8' })).toBe('');
+    expect(execFileSync('git', ['status', '--porcelain', '--', 'docs'], { cwd: repo, encoding: 'utf8' })).toBe('');
     for (const title of titles) {
       const dir = fs.readdirSync(path.join(repo, 'docs', 'plans', 'features')).find(name => name.endsWith(title.toLowerCase().replace(/\s+/g, '-')))!;
       expect(fs.readFileSync(path.join(repo, 'docs', 'plans', 'features', dir, 'feature.md'), 'utf8')).toContain('**Status:** ✅ Complete');
