@@ -48,6 +48,14 @@ function decode(raw: string): TeamChatSnapshot {
         if (attempt.turnId !== turn.id || typeof attempt.participantId !== 'string' || typeof attempt.coordinatorEpoch !== 'string' ||
             !Number.isSafeInteger(attempt.ordinal) || attempt.ordinal < 1 || !attempt.contextReceipt || typeof attempt.contextReceipt.digest !== 'string' ||
             !Array.isArray(attempt.contextReceipt.messageIds) || !['prepared', 'dispatching', 'running', 'awaiting_approval', 'completed', 'failed', 'interrupted', 'outcome_unknown', 'cancelled'].includes(attempt.state)) throw new Error('Invalid conversation attempt.');
+        if (attempt.recoveryEvidence !== undefined && (!Array.isArray(attempt.recoveryEvidence) || attempt.recoveryEvidence.some((evidence: Record<string, unknown>) =>
+          !evidence || typeof evidence.id !== 'string' || evidence.conversationId !== conversation.id || evidence.turnId !== turn.id ||
+          evidence.participantId !== attempt.participantId || evidence.attemptId !== attempt.id || evidence.coordinatorEpoch !== attempt.coordinatorEpoch ||
+          (evidence.observingEpoch !== undefined && (typeof evidence.observingEpoch !== 'string' || !evidence.observingEpoch)) ||
+          typeof evidence.observedAt !== 'string' || typeof evidence.provenance !== 'string' ||
+          (evidence.result !== undefined && (!evidence.result || typeof evidence.result !== 'object' ||
+            typeof (evidence.result as { text?: unknown }).text !== 'string')) ||
+          !['partial_output', 'tool_activity', 'final_result', 'runtime_identity', 'reconciliation', 'decision'].includes(String(evidence.kind))))) throw new Error('Invalid recovery evidence.');
       }
     }
     const messageIds = new Set(conversation.messages.map((message: { id: string }) => message.id));

@@ -16,6 +16,7 @@ import type {
 import {
   advanceConversationAttempt,
   completeConversationAttempt,
+  beginConversationEpoch,
   conversationPayloadDigest,
   reserveConversationAttempt,
   startConversationTurn,
@@ -54,6 +55,7 @@ export interface TeamChatExecutionParams {
   participant: ConversationParticipant;
   messages: readonly ConversationMessage[];
   onAccepted?: () => Promise<void>;
+  onEvidence?: (evidence: Pick<import('./assistantTypes').ConversationRecoveryEvidence, 'kind' | 'provenance' | 'data'>) => Promise<void>;
   preparedPrompt?: string;
   nativePrompt?: string;
   signal?: AbortSignal;
@@ -107,6 +109,7 @@ export class TeamChatCoordinator {
   private readonly subscribers = new Map<string, Set<(update: ConversationUpdate) => void>>();
   private readonly activeLoops = new Set<string>();
   private readonly abortControllers = new Map<string, AbortController>();
+  private initialization?: Promise<void>;
 
   public constructor(options: TeamChatCoordinatorOptions) {
     this.contextBudget = options.contextBudget;
@@ -115,6 +118,33 @@ export class TeamChatCoordinator {
     this.clock = options.clock ?? (() => new Date().toISOString());
     this.idSource = options.idSource ?? (() => `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
     this.onUpdate = options.onUpdate;
+  }
+
+  /** Persist a new generation once before accepting scheduling work. */
+  public initialize(): Promise<void> {
+    this.initialization ??= (async () => {
+      const epoch = this.idSource();
+      const snapshot = this.repository.read();
+      for (const conversation of snapshot.conversations) {
+        let updated = await this.transitionConversation(conversation.id, current =>
+          beginConversationEpoch(current, current.revision, epoch, this.clock()));
+        for (const turn of updated.turns) {
+          const attempt = turn.attempts.at(-1);
+          if (attempt && ['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed'].includes(attempt.state) &&
+              attempt.recoveryEvidence?.some(e => e.kind === 'final_result' && typeof (e.result?.text ?? e.data?.text) === 'string')) {
+            await this.importRecoveredResult(updated.id, turn.id, attempt.id);
+          }
+        }
+        updated = this.getConversation(updated.id)!;
+        if (updated.turns.some(turn => ['interrupted', 'outcome_unknown'].includes(turn.state))) {
+          this.notify({ conversationId: updated.id, revision: updated.revision, type: 'turn_failed',
+            turnId: updated.turns.find(turn => ['interrupted', 'outcome_unknown'].includes(turn.state))?.id,
+            state: updated.turns.find(turn => ['interrupted', 'outcome_unknown'].includes(turn.state))?.state });
+        }
+      }
+      for (const conversation of this.repository.read().conversations) void this.processConversation(conversation.id);
+    })();
+    return this.initialization;
   }
 
   public subscribe(conversationId: string, listener: (update: ConversationUpdate) => void): () => void {
@@ -169,6 +199,7 @@ export class TeamChatCoordinator {
   }
 
   public async submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult> {
+    await this.initialize();
     if (!command.conversationId?.trim()) throw new Error('A conversationId is required.');
     if (!command.commandId?.trim()) throw new Error('A commandId is required.');
     if (!command.text?.trim()) throw new Error('A message text is required.');
@@ -308,57 +339,47 @@ export class TeamChatCoordinator {
   }
 
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
+    await this.initialize();
     const abortKey = `${conversationId}:${turnId}`;
-    const controller = this.abortControllers.get(abortKey);
-    if (controller) {
-      controller.abort();
-      this.abortControllers.delete(abortKey);
-    }
-
-    await this.transitionConversation(conversationId, conv => {
+    // Persist the intent before signalling the runtime. An abort request is not
+    // evidence that an external tool did not execute.
+    const updated = await this.transitionConversation(conversationId, conv => {
       const turn = conv.turns.find(t => t.id === turnId);
       if (!turn || ['completed', 'cancelled'].includes(turn.state)) return conv;
-      turn.state = 'cancelled';
-      conv.revision++;
-      for (const att of turn.attempts) {
-        if (!['completed', 'failed', 'interrupted', 'outcome_unknown'].includes(att.state)) {
-          att.state = 'cancelled';
-          att.completedAt = this.clock();
-        }
+      const queuedOnly = turn.state === 'queued';
+      turn.skippedParticipantIds = turn.plan.participants.filter(p => !turn.completedParticipantIds.includes(p.id) &&
+        !turn.attempts.some(a => a.participantId === p.id && ['dispatching', 'running', 'awaiting_approval', 'outcome_unknown'].includes(a.state))).map(p => p.id);
+      const active = turn.attempts.find(a => ['dispatching', 'running', 'awaiting_approval'].includes(a.state));
+      turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
+      for (const a of turn.attempts) if (a.state === 'prepared') {
+        a.state = 'cancelled';
+        a.completedAt = this.clock();
       }
+      if (!queuedOnly) for (const queued of conv.turns) if (queued.state === 'queued') {
+        queued.state = 'cancelled';
+        queued.skippedParticipantIds = queued.plan.participants.map(p => p.id);
+      }
+      conv.revision++;
       return conv;
     });
-
-    const updated = this.getConversation(conversationId);
-    if (updated) {
-      this.notify({
-        conversationId,
-        revision: updated.revision,
-        type: 'turn_cancelled',
-        turnId,
-        state: 'cancelled'
-      });
-    }
-
+    this.abortControllers.get(abortKey)?.abort();
+    this.notify({ conversationId, revision: updated.revision, type: 'turn_cancelled', turnId,
+      state: updated.turns.find(t => t.id === turnId)?.state });
     void this.processConversation(conversationId);
   }
 
   public async retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void> {
-    const conversation = this.getConversation(conversationId);
-    if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
-    const turn = conversation.turns.find(t => t.id === turnId);
-    if (!turn || turn.state !== 'failed') {
-      throw new Error('Stale or invalid retry target.');
-    }
-    const lastAttempt = turn.attempts.filter(a => a.participantId === participantId).at(-1);
-    if (!lastAttempt || lastAttempt.state !== 'failed') {
-      throw new Error('Stale or invalid retry target.');
-    }
-
+    await this.initialize();
     await this.transitionConversation(conversationId, conv => {
       const targetTurn = conv.turns.find(t => t.id === turnId);
-      if (!targetTurn) return conv;
+      const lastAttempt = targetTurn?.attempts.at(-1);
+      if (targetTurn?.state === 'outcome_unknown' || lastAttempt?.state === 'outcome_unknown') throw new Error('Unknown outcome: use resolveAttempt with reconciliation evidence and duplicate-risk acknowledgement.');
+      if (!targetTurn || !['failed', 'interrupted'].includes(targetTurn.state) ||
+          !lastAttempt || lastAttempt.participantId !== participantId ||
+          !['failed', 'interrupted'].includes(lastAttempt.state)) throw new Error('Stale or invalid retry target.');
       targetTurn.state = 'running';
+      const binding = conv.bindings.find(b => b.id === lastAttempt.bindingId);
+      if (binding) binding.status = 'invalid';
       conv.revision++;
       return conv;
     });
@@ -370,13 +391,15 @@ export class TeamChatCoordinator {
     conversationId: string,
     turnId: string,
     attemptId: string,
-    resolution: 'accept' | 'retry' | 'abort'
+    resolution: 'accept' | 'retry' | 'abort',
+    options?: { acknowledgeDuplicateActionRisk: boolean; reconciliationEvidenceId: string }
   ): Promise<void> {
+    await this.initialize();
     const conversation = this.getConversation(conversationId);
     if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
     const turn = conversation.turns.find(t => t.id === turnId);
     const attempt = turn?.attempts.find(a => a.id === attemptId);
-    if (!turn || !attempt) throw new Error('Stale or invalid retry target.');
+    if (!turn || !attempt || (resolution === 'retry' && turn.attempts.at(-1)?.id !== attemptId)) throw new Error('Stale or invalid retry target.');
 
     if (resolution === 'abort') {
       await this.cancelTurn(conversationId, turnId);
@@ -384,28 +407,53 @@ export class TeamChatCoordinator {
     }
 
     if (resolution === 'retry') {
+      if (attempt.state === 'outcome_unknown') {
+        await this.transitionConversation(conversationId, conv => {
+          const t = conv.turns.find(item => item.id === turnId);
+          const a = t?.attempts.at(-1);
+          if (!t || t.state !== 'outcome_unknown' || a?.id !== attemptId ||
+              !options?.acknowledgeDuplicateActionRisk || !a.recoveryEvidence?.some(e =>
+                e.id === options.reconciliationEvidenceId && e.kind === 'reconciliation' && e.attemptId === a.id)) {
+            throw new Error('Unknown outcome retry requires reconciliation evidence and duplicate-action risk acknowledgement.');
+          }
+          a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId, participantId: a.participantId,
+            attemptId, coordinatorEpoch: a.coordinatorEpoch, observingEpoch: conv.coordinatorEpoch, kind: 'decision', observedAt: this.clock(),
+            provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: options.reconciliationEvidenceId } });
+          const binding = conv.bindings.find(b => b.id === a.bindingId);
+          if (binding) binding.status = 'invalid';
+          t.state = 'running';
+          conv.revision++;
+          return conv;
+        });
+        void this.processConversation(conversationId);
+        return;
+      }
       await this.retryParticipant(conversationId, turnId, attempt.participantId);
       return;
     }
 
     if (resolution === 'accept') {
-      await this.transitionConversation(conversationId, conv => {
-        const t = conv.turns.find(item => item.id === turnId);
-        const a = t?.attempts.find(item => item.id === attemptId);
-        if (!a || !t) return conv;
-        a.state = 'completed';
-        a.completedAt = this.clock();
-        if (!t.completedParticipantIds.includes(a.participantId)) {
-          t.completedParticipantIds.push(a.participantId);
-        }
-        if (t.completedParticipantIds.length === t.plan.participants.length) {
-          t.state = 'completed';
-        }
-        conv.revision++;
-        return conv;
-      });
+      await this.importRecoveredResult(conversationId, turnId, attemptId);
       void this.processConversation(conversationId);
     }
+  }
+
+  private async importRecoveredResult(conversationId: string, turnId: string, attemptId: string): Promise<void> {
+    await this.transitionConversation(conversationId, conv => {
+      const t = conv.turns.find(item => item.id === turnId);
+      const a = t?.attempts.find(item => item.id === attemptId);
+      if (a?.state === 'completed' && a.resultMessageId) return conv;
+      const evidence = a?.recoveryEvidence?.find(item => item.kind === 'final_result' && typeof (item.result?.text ?? item.data?.text) === 'string');
+      if (!a || !t || !evidence) {
+        throw new Error('Cannot accept an attempt without a recovered final result.');
+      }
+      const result = evidence.result ?? { text: String(evidence.data!.text) };
+      return completeConversationAttempt(conv, conv.revision, turnId, attemptId, a.coordinatorEpoch,
+        { id: this.idSource(), turnId, participantId: a.participantId,
+          role: t.plan.participants.find(p => p.id === a.participantId)!.role,
+          text: result.text, createdAt: this.clock(), sequence: (conv.messages.at(-1)?.sequence ?? 0) + 1, attachments: [] },
+        result.contextDelivery === 'native' ? a.nativeContextReceipt! : a.contextReceipt, result, evidence.id);
+      });
   }
 
   private async processConversation(conversationId: string): Promise<void> {
@@ -455,7 +503,7 @@ export class TeamChatCoordinator {
         }
 
         // Find next participant
-        const nextParticipant = activeTurn.plan.participants.find(p => !activeTurn!.completedParticipantIds.includes(p.id));
+        const nextParticipant = activeTurn.plan.participants.find(p => !activeTurn!.completedParticipantIds.includes(p.id) && !activeTurn!.skippedParticipantIds?.includes(p.id));
         if (!nextParticipant) {
           // Turn completed
           await this.transitionConversation(conversationId, conv => {
@@ -615,7 +663,7 @@ export class TeamChatCoordinator {
           acceptance ??= this.transitionConversation(conversationId, conv => {
             const target = conv.turns.find(t => t.id === activeTurn!.id);
             if (target?.state !== 'running' || target.attempts.find(a => a.id === attemptId)?.state !== 'dispatching') return conv;
-            return advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, conv.coordinatorEpoch, 'running', this.clock());
+            return advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, attempt.coordinatorEpoch, 'running', this.clock());
           }).then(conv => {
             if (conv.turns.find(t => t.id === activeTurn!.id)?.attempts.find(a => a.id === attemptId)?.state === 'running') {
               this.notify({ conversationId, revision: conv.revision, type: 'attempt_running', turnId: activeTurn!.id, attemptId });
@@ -635,6 +683,19 @@ export class TeamChatCoordinator {
           result = await this.executionAdapter.execute({
             conversation: currentConv,
             onAccepted: accepted,
+            onEvidence: async evidence => {
+              await this.transitionConversation(conversationId, conv => {
+                const t = conv.turns.find(t => t.id === activeTurn!.id);
+                const a = t?.attempts.find(a => a.id === attemptId);
+                if (!a || t?.state !== 'running' || conv.coordinatorEpoch !== attempt.coordinatorEpoch ||
+                    a.coordinatorEpoch !== attempt.coordinatorEpoch || t.attempts.at(-1)?.id !== attemptId) throw new Error('Fenced runtime evidence.');
+                a.recoveryEvidence ??= [];
+                a.recoveryEvidence.push({ ...evidence, id: this.idSource(), conversationId, turnId: t.id,
+                  participantId: a.participantId, attemptId, coordinatorEpoch: a.coordinatorEpoch, observedAt: this.clock() });
+                conv.revision++;
+                return conv;
+              });
+            },
             turn: activeTurn,
             attempt,
             participant: nextParticipant,
@@ -651,6 +712,25 @@ export class TeamChatCoordinator {
         }
 
         if (abortController.signal.aborted) {
+          await this.transitionConversation(conversationId, conv => {
+            const t = conv.turns.find(t => t.id === activeTurn!.id);
+            const a = t?.attempts.find(a => a.id === attemptId);
+            if (!t || !a || t.state !== 'cancelling' || a.coordinatorEpoch !== attempt.coordinatorEpoch ||
+                conv.coordinatorEpoch !== attempt.coordinatorEpoch) return conv;
+            a.recoveryEvidence ??= [];
+            a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId: t.id, participantId: a.participantId,
+              attemptId, coordinatorEpoch: a.coordinatorEpoch, kind: 'reconciliation', observedAt: this.clock(),
+              provenance: 'execution-settled-after-abort', data: { executionSettled: true, externalOutcomeUnknown: true } });
+            if (result) a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId: t.id,
+              participantId: a.participantId, attemptId, coordinatorEpoch: a.coordinatorEpoch,
+              kind: 'final_result', observedAt: this.clock(), provenance: 'execution-adapter-after-abort', result });
+            a.state = 'outcome_unknown';
+            a.completedAt = this.clock();
+            t.state = 'outcome_unknown';
+            conv.revision++;
+            return conv;
+          });
+          if (result) await this.importRecoveredResult(conversationId, activeTurn.id, attemptId);
           break;
         }
 
@@ -665,7 +745,8 @@ export class TeamChatCoordinator {
           await this.transitionConversation(conversationId, conv => {
             const t = conv.turns.find(item => item.id === activeTurn!.id);
             const a = t?.attempts.find(item => item.id === attemptId);
-            if (!t || !a) return conv;
+            if (!t || !a || t.state !== 'running' || a.coordinatorEpoch !== attempt.coordinatorEpoch ||
+                conv.coordinatorEpoch !== attempt.coordinatorEpoch || t.attempts.at(-1)?.id !== attemptId) return conv;
             const uncertain = executionError instanceof TeamChatAcceptanceUnknown;
             a.state = uncertain ? 'outcome_unknown' : 'failed';
             const binding = conv.bindings.find(b => b.id === a.bindingId);
@@ -710,6 +791,16 @@ export class TeamChatCoordinator {
             attachments: []
           };
 
+          await this.transitionConversation(conversationId, conv => {
+            const a = conv.turns.find(t => t.id === activeTurn!.id)?.attempts.find(a => a.id === attemptId);
+            if (!a || conv.coordinatorEpoch !== attempt.coordinatorEpoch || a.coordinatorEpoch !== attempt.coordinatorEpoch) throw new Error('Fenced result.');
+            a.recoveryEvidence ??= [];
+            a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId: activeTurn!.id,
+              participantId: a.participantId, attemptId, coordinatorEpoch: a.coordinatorEpoch,
+              kind: 'final_result', observedAt: this.clock(), provenance: 'execution-adapter', result });
+            conv.revision++;
+            return conv;
+          });
           const completedConv = await this.transitionConversation(conversationId, conv => {
             replyMessage.sequence = (conv.messages.at(-1)?.sequence ?? 0) + 1;
             return completeConversationAttempt(
@@ -717,7 +808,7 @@ export class TeamChatCoordinator {
               conv.revision,
               activeTurn!.id,
               attemptId,
-              conv.coordinatorEpoch,
+              attempt.coordinatorEpoch,
               replyMessage,
               result.contextDelivery === 'native' ? nativePrepared.receipt : contextReceipt,
               result

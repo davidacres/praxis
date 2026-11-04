@@ -402,7 +402,7 @@ test('TASK-479 AC3: Invalid participant, attachment reference, and permission ch
   assert.equal(invoked, false, 'Provider must not be invoked for invalid commands');
 });
 
-test('TASK-479 AC4: Closing/cancelling turn does not corrupt conversation state', async () => {
+test('TASK-479 AC4: cancellation preserves unresolved execution as unknown', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
   const coordinator = new TeamChatCoordinator({
     repository: repo,
@@ -430,7 +430,7 @@ test('TASK-479 AC4: Closing/cancelling turn does not corrupt conversation state'
 
   const conv = coordinator.getConversation('conv-1')!;
   const turn = conv.turns.find(t => t.id === res.turnId)!;
-  assert.equal(turn.state, 'cancelled');
+  assert.ok(['cancelled', 'outcome_unknown'].includes(turn.state));
 });
 
 async function settled(coordinator: TeamChatCoordinator, conversationId: string): Promise<DurableConversation> {
@@ -485,7 +485,7 @@ test('uncertain acceptance invalidates the binding and never automatically resen
   const result = await settled(coordinator, 'conv-1');
   assert.equal(result.turns[0].state, 'outcome_unknown');
   assert.equal(calls, 1);
-  await assert.rejects(coordinator.retryParticipant('conv-1', result.turns[0].id, 'part-lead'), /invalid retry/);
+  await assert.rejects(coordinator.retryParticipant('conv-1', result.turns[0].id, 'part-lead'), /use resolveAttempt/);
 });
 
 test('bounded summarization has separate provenance and usage; summary failure dispatches no main prompt', async () => {
@@ -518,4 +518,117 @@ test('bounded summarization has separate provenance and usage; summary failure d
       assert.equal(result.turns[0].attempts[0].usage?.inputTokens, 200);
     }
   }
+});
+
+async function recoveryFixture(state: 'interrupted' | 'outcome_unknown') {
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: { execute: async () => { throw new Error('fixture'); } } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'recovery', expectedRevision: 1,
+    text: 'recover', selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  await settled(coordinator, 'conv-1');
+  const turn = repo.snapshot.conversations[0].turns[0];
+  turn.state = state;
+  const attempt = turn.attempts[0];
+  attempt.state = state;
+  attempt.recoveryEvidence = [{ id: 'observation', conversationId: 'conv-1', turnId: turn.id,
+    participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
+    kind: 'reconciliation', observedAt: 'now', provenance: 'test' }];
+  return { repo, coordinator, turn, attempt };
+}
+
+test('recovered result imports atomically once with usage and original epoch', async () => {
+  const { repo, coordinator, turn, attempt } = await recoveryFixture('outcome_unknown');
+  repo.snapshot.conversations[0].coordinatorEpoch = 'replacement';
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'result', kind: 'final_result',
+    result: { text: 'Recovered reply', usageReferences: ['paid-once'] } });
+  await coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'accept');
+  await coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'accept');
+  const current = coordinator.getConversation('conv-1')!;
+  assert.equal(current.messages.filter(m => m.text === 'Recovered reply').length, 1);
+  assert.equal(current.turns[0].state, 'completed');
+  assert.deepEqual(current.turns[0].attempts[0].usageReferences, ['paid-once']);
+});
+
+test('interrupted retry preserves predecessor and unknown retry requires informed evidence', async () => {
+  for (const state of ['interrupted', 'outcome_unknown'] as const) {
+    const { coordinator, turn, attempt } = await recoveryFixture(state);
+    if (state === 'outcome_unknown') {
+      await assert.rejects(coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'retry'), /acknowledgement/);
+      await assert.rejects(coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'retry',
+        { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: 'wrong' }), /acknowledgement/);
+    }
+    await coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'retry',
+      { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: 'observation' });
+    await settled(coordinator, 'conv-1');
+    const attempts = coordinator.getConversation('conv-1')!.turns[0].attempts;
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[0].state, state);
+    if (state === 'outcome_unknown') assert.ok(attempts[0].recoveryEvidence!.some(e => e.kind === 'decision'));
+  }
+});
+
+test('active cancellation remains cancelling until execution settles and records evidence', async () => {
+  let finish!: (result: { text: string }) => void;
+  let started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
+    execute: async () => { started(); return new Promise(resolve => { finish = resolve; }); }
+  } });
+  const result = await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'cancel-barrier',
+    expectedRevision: 1, text: 'cancel', selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  await ready;
+  await coordinator.cancelTurn('conv-1', result.turnId);
+  assert.equal(coordinator.getConversation('conv-1')!.turns[0].state, 'cancelling');
+  finish({ text: 'uncommitted' });
+  for (let i = 0; i < 100 && coordinator.getConversation('conv-1')!.turns[0].state === 'cancelling'; i++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  const turn = coordinator.getConversation('conv-1')!.turns[0];
+  assert.equal(turn.state, 'completed');
+  assert.equal(coordinator.getConversation('conv-1')!.messages.filter(m => m.text === 'uncommitted').length, 1);
+  assert.ok(turn.attempts[0].recoveryEvidence!.some(e => e.provenance === 'execution-settled-after-abort'));
+});
+
+for (const text of ['restart result', '']) test('startup imports durable results once across repeated coordinator replacements: ' + JSON.stringify(text), async () => {
+  const { repo, turn, attempt } = await recoveryFixture('outcome_unknown');
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'final', kind: 'final_result', result: { text } });
+  let invocations = 0;
+  for (let i = 0; i < 2; i++) {
+    const coordinator = new TeamChatCoordinator({ repository: repo, idSource: () => 'epoch-' + i,
+      executionAdapter: { execute: async () => { invocations++; return { text: 'unexpected' }; } } });
+    await coordinator.initialize();
+  }
+  assert.equal(invocations, 0);
+  assert.equal(repo.read().conversations[0].messages.filter(m => m.role === 'lead' && m.text === text).length, 1);
+  assert.equal(repo.read().conversations[0].turns.find(t => t.id === turn.id)!.state, 'completed');
+});
+
+test('direct unknown-outcome retry requires informed resolution without dispatch', async () => {
+  const { coordinator, turn, repo } = await recoveryFixture('outcome_unknown');
+  const before = repo.read();
+  await assert.rejects(coordinator.retryParticipant('conv-1', turn.id, 'part-lead'), /use resolveAttempt.*duplicate-risk acknowledgement/);
+  assert.deepEqual(repo.read(), before);
+});
+
+test('startup imports a prepared attempt result without dispatching the provider', async () => {
+  const { repo, turn, attempt } = await recoveryFixture('interrupted');
+  turn.state = 'running';
+  attempt.state = 'prepared';
+  delete attempt.dispatchIntent;
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'prepared-result', kind: 'final_result',
+    result: { text: 'Prepared durable reply', usageReferences: ['paid-once'] } });
+  let invocations = 0;
+  let lastCoordinator!: TeamChatCoordinator;
+  for (let i = 0; i < 2; i++) {
+    lastCoordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
+      execute: async () => { invocations++; throw new Error('must not replay'); }
+    } });
+    await lastCoordinator.initialize();
+  }
+  await lastCoordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'accept');
+  const current = repo.read().conversations[0];
+  assert.equal(invocations, 0);
+  assert.equal(current.messages.filter(m => m.text === 'Prepared durable reply').length, 1);
+  assert.deepEqual(current.turns[0].attempts[0].usageReferences, ['paid-once']);
+  assert.equal(current.turns[0].attempts[0].dispatchIntent, undefined);
 });

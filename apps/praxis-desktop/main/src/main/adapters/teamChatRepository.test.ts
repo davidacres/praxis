@@ -111,3 +111,70 @@ test('provider bindings, summary provenance, usage and decision corrections surv
   await assert.rejects(repository.transaction(draft => { draft.conversations[0].pinnedMessageIds.push('missing'); }), /pinned source/);
   await assert.rejects(repository.transaction(draft => { draft.conversations[0].summaryAttempts![0].state = 'invalid' as never; }), /summary attempt/);
 });
+
+test('startup evidence and recovered reply survive repeated durable epoch changes', async t => {
+  const { TeamChatCoordinator, makeParticipant } = await import('@praxis/core');
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  await repository.transaction(draft => {
+    draft.conversations.push({ schemaVersion: 2, id: 'recover', title: 'chat', createdAt: 'now', updatedAt: 'now',
+      revision: 1, coordinatorEpoch: 'original', participants: [makeParticipant('lead')], messages: [], turns: [],
+      bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] });
+  });
+  const coordinator = new TeamChatCoordinator({ repository, executionAdapter: {
+    execute: async () => { throw new Error('interruption'); }
+  } });
+  await coordinator.submitTurn({ conversationId: 'recover', commandId: 'submit', expectedRevision: 1,
+    text: 'hello', selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  for (let i = 0; i < 100 && !repository.read().conversations[0].turns[0]?.attempts[0]?.completedAt; i++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  await repository.transaction(draft => {
+    const conv = draft.conversations[0], turn = conv.turns[0], attempt = turn.attempts[0];
+    turn.state = 'running';
+    attempt.state = 'prepared';
+    delete attempt.dispatchIntent;
+    attempt.recoveryEvidence = [{ id: 'result', conversationId: conv.id, turnId: turn.id,
+      participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
+      kind: 'final_result', observedAt: 'now', provenance: 'adapter', result: { text: 'recovered', usageReferences: ['once'] } }];
+  });
+  for (let i = 0; i < 2; i++) {
+    const reloaded = new FileTeamChatRepository(file);
+    await new TeamChatCoordinator({ repository: reloaded, executionAdapter: {
+      execute: async () => { throw new Error('must not replay'); }
+    } }).initialize();
+    const conv = new FileTeamChatRepository(file).read().conversations[0];
+    assert.equal(conv.messages.filter(m => m.text === 'recovered').length, 1);
+    assert.equal(conv.turns[0].attempts[0].recoveryEvidence![0].coordinatorEpoch, conv.turns[0].attempts[0].coordinatorEpoch);
+    const reconciliation = conv.turns[0].attempts[0].recoveryEvidence!.find(e => e.kind === 'reconciliation')!;
+    assert.equal(typeof reconciliation.observingEpoch, 'string');
+    assert.notEqual(reconciliation.observingEpoch, reconciliation.coordinatorEpoch);
+    assert.equal(conv.turns[0].state, 'completed');
+  }
+});
+
+test('repository validates observation epochs separately from immutable attempt epochs', async t => {
+  const { makeParticipant } = await import('@praxis/core');
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  await repository.transaction(draft => {
+    draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now',
+      revision: 0, coordinatorEpoch: 'observer', participants: [makeParticipant('lead')], messages: [],
+      bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [], turns: [{
+        id: 't', commandId: 'cmd', payloadDigest: 'digest', userMessageId: 'u', acceptedSequence: 1,
+        plan: { participants: [makeParticipant('lead')], runtimeOptions: {} }, state: 'interrupted',
+        completedParticipantIds: [], attempts: [{ id: 'a', turnId: 't', participantId: 'part-lead', ordinal: 1,
+          coordinatorEpoch: 'origin', state: 'interrupted', createdAt: 'now', contextReceipt: { digest: 'd', messageIds: [] },
+          usageReferences: [], toolEvidenceReferences: [], recoveryEvidence: [{ id: 'e', conversationId: 'c', turnId: 't',
+            participantId: 'part-lead', attemptId: 'a', coordinatorEpoch: 'origin', observingEpoch: 'observer',
+            kind: 'reconciliation', observedAt: 'now', provenance: 'startup' }] }] }] });
+  });
+  const snapshot = new FileTeamChatRepository(file).read();
+  const evidence = snapshot.conversations[0].turns[0].attempts[0].recoveryEvidence![0];
+  assert.equal(evidence.coordinatorEpoch, 'origin');
+  assert.equal(evidence.observingEpoch, 'observer');
+  for (const invalid of [{ ...evidence, observingEpoch: '' }, { ...evidence, coordinatorEpoch: 'observer' }]) {
+    snapshot.conversations[0].turns[0].attempts[0].recoveryEvidence![0] = invalid;
+    fs.writeFileSync(file, JSON.stringify(snapshot));
+    assert.throws(() => new FileTeamChatRepository(file), /Invalid recovery evidence/);
+  }
+});

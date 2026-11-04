@@ -46,7 +46,7 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
   resolveConnectionOptions: (provider: AiProvider) => Promise<{ apiKey?: string; gatewayUrl?: string; model?: string }>;
   completeWithTools: (runtime: TeamChatRuntimeOptions, systemPrompt: string, prompt: string) => Promise<string>;
 }): TeamChatExecutionAdapter {
-  return createTeamChatExecutionAdapter(async ({ conversation, participant, turn, attempt, nativePrompt, signal, onAccepted }, preparedPrompt) => {
+  return createTeamChatExecutionAdapter(async ({ conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence }, preparedPrompt) => {
     const settings = dependencies.settings();
     const options = { ...participant.defaults, ...turn.plan.runtimeOptions };
     const selectedProvider = (options.provider as AiProvider | undefined) ?? settings.ai.activeProvider;
@@ -68,6 +68,9 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
         attemptId: attempt.id, bindingId: attempt.bindingId, coordinatorEpoch: attempt.coordinatorEpoch },
       signal
     };
+    await onEvidence?.({ kind: 'runtime_identity', provenance: 'production-adapter',
+      data: { toolCapable: !(runtime.toolMode === 'project-only' && getProviderDescriptor(selectedProvider).kind === 'api'),
+        provider: selectedProvider } });
     const systemPrompt = `You are the ${participant.role} team member. Respond to the conversation.`;
     if (runtime.toolMode === 'project-only' && getProviderDescriptor(selectedProvider).kind === 'api') {
       const connection = await dependencies.resolveConnectionOptions(selectedProvider);

@@ -132,6 +132,23 @@ export interface ConversationAttempt {
   usage?: import('../gateway/wire').TokenUsage;
   usageReferences: string[];
   toolEvidenceReferences: string[];
+  /** Durable observations gathered for recovery; absence is never proof of non-execution. */
+  recoveryEvidence?: ConversationRecoveryEvidence[];
+}
+export interface ConversationRecoveryEvidence {
+  id: string;
+  conversationId: string;
+  turnId: string;
+  participantId: string;
+  attemptId: string;
+  coordinatorEpoch: string;
+  /** Epoch observing this evidence; coordinatorEpoch always identifies the originating attempt. */
+  observingEpoch?: string;
+  result?: import('./teamChatCoordinator').TeamChatExecutionResult;
+  kind: 'partial_output' | 'tool_activity' | 'final_result' | 'runtime_identity' | 'reconciliation' | 'decision';
+  observedAt: string;
+  provenance: string;
+  data?: Readonly<Record<string, string | number | boolean>>;
 }
 export interface ConversationTurn {
   id: string;
@@ -143,6 +160,7 @@ export interface ConversationTurn {
   state: ConversationTurnState;
   contextRequiredReason?: string;
   completedParticipantIds: string[];
+  skippedParticipantIds?: string[];
   attempts: ConversationAttempt[];
 }
 export interface ConversationBinding {

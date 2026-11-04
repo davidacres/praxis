@@ -284,7 +284,7 @@ export function registerAssistantIpc(): void {
   ipcMain.handle('assistant:retryParticipant', async (_event, conversationId: string, turnId: string, participantId: string) => {
     await getTeamChatCoordinator().retryParticipant(conversationId, turnId, participantId);
   });
-  ipcMain.handle('assistant:resolveAttempt', async (_event, conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort') => {
-    await getTeamChatCoordinator().resolveAttempt(conversationId, turnId, attemptId, resolution);
+  ipcMain.handle('assistant:resolveAttempt', async (_event, conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort', options?: { acknowledgeDuplicateActionRisk: boolean; reconciliationEvidenceId: string }) => {
+    await getTeamChatCoordinator().resolveAttempt(conversationId, turnId, attemptId, resolution, options);
   });
 }

@@ -461,7 +461,7 @@ const praxis: PraxisIpc = {
     },
     cancelTurn: (conversationId: string, turnId: string) => ipcRenderer.invoke('assistant:cancelTurn', conversationId, turnId),
     retryParticipant: (conversationId: string, turnId: string, participantId: string) => ipcRenderer.invoke('assistant:retryParticipant', conversationId, turnId, participantId),
-    resolveAttempt: (conversationId: string, turnId: string, attemptId: string, resolution: string) => ipcRenderer.invoke('assistant:resolveAttempt', conversationId, turnId, attemptId, resolution),
+    resolveAttempt: (conversationId: string, turnId: string, attemptId: string, resolution: string, options?: { acknowledgeDuplicateActionRisk: boolean; reconciliationEvidenceId: string }) => ipcRenderer.invoke('assistant:resolveAttempt', conversationId, turnId, attemptId, resolution, options),
     onChatsChanged: (listener: () => void) => {
       const handler = () => listener();
       ipcRenderer.on('assistant:chatsChanged', handler);
