@@ -1,6 +1,6 @@
 # FX-BE-182 interruption and recovery contracts
 
-Frozen snapshot: `7de011ad86cb8ae95288d416765130255af2307c`. Runner: **node:test**. These **16 supplemental cases** comprise six expanded matrix cases, five coordinator cases, three transition cases, one file repository case and one production adapter case. They are outside the Playwright-only generator. IDs use SHA1(file + newline + exact runtime title), matching the existing catalog convention; the six matrix titles expand the source loop at line 7. Existing identities are preserved.
+Frozen snapshot: `5843c95e9b813738de067dbd6fa87dd92755200b`. Runner: **node:test**. These **17 supplemental cases** comprise six expanded matrix cases, six coordinator cases, three transition cases, one file repository case and one production adapter case. They are outside the Playwright-only generator. IDs use SHA1(file + newline + exact runtime title), matching the existing catalog convention; the six matrix titles expand the source loop at line 7. Existing identities are preserved.
 
 ## PT-1987AF34D2
 
@@ -83,14 +83,23 @@ Title: **active cancellation remains cancelling until execution settles and reco
 **When** cancel the turn, then settle the adapter with uncommitted text.
 **Then** the turn is cancelling before settlement, then completed with one reply and execution-settled-after-abort evidence. This does not prove a terminal cancelled state or actual runtime termination.
 
-## PT-C4D73B79B8
+## PT-EFAC0E337F
 
 Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:592](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L592).
-Title: **startup imports durable results once across repeated coordinator replacements**.
+Title: **startup imports durable results once across repeated coordinator replacements: "restart result"**.
 
-**Given** an outcome_unknown attempt with a durable final-result observation.
+**Given** an outcome_unknown attempt with a durable final-result observation containing "restart result".
 **When** initialize two replacement coordinators on the same in-memory repository.
-**Then** provider invocation count stays zero, one restart result message exists and the turn completes.
+**Then** provider invocation count stays zero, exactly one lead message with that text exists and the turn completes.
+
+## PT-9C568AE082
+
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:592](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L592).
+Title: **startup imports durable results once across repeated coordinator replacements: ""**.
+
+**Given** an outcome_unknown attempt with a durable final-result observation containing "".
+**When** initialize two replacement coordinators on the same in-memory repository.
+**Then** provider invocation count stays zero, exactly one lead message with that text exists and the turn completes.
 
 ## PT-804A2C0AC4
 
@@ -103,7 +112,7 @@ Title: **direct unknown-outcome retry requires informed resolution without dispa
 
 ## PT-485FAE251E
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:57](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L57).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:58](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L58).
 Title: **repeated startup retains originating attempt epoch and observation provenance**.
 
 **Given** a dispatched attempt from epoch epoch.
@@ -112,7 +121,7 @@ Title: **repeated startup retains originating attempt epoch and observation prov
 
 ## PT-064522325E
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:70](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L70).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:71](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L71).
 Title: **recovered imports reject foreign identity and retain cancellation fences**.
 
 **Given** a recovered dispatched attempt with final-result evidence naming a foreign conversation.
@@ -121,11 +130,11 @@ Title: **recovered imports reject foreign identity and retain cancellation fence
 
 ## PT-D03716DB85
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:86](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L86).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:87](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L87).
 Title: **pre-dispatch recovery requires exact durable result and imports only once**.
 
 **Given** a prepared attempt without dispatch intent.
-**When** reject ordinary completion, begin a replacement epoch, add exact final-result evidence, import and try importing again.
+**When** reject ordinary completion, begin a replacement epoch, add exact final-result evidence, reject foreign conversation, turn, participant, attempt and epoch identities, import and try importing again.
 **Then** the imported attempt completes and the second import throws duplicate or fenced; ordinary prepared completion is fenced.
 
 ## PT-0ECEA64537

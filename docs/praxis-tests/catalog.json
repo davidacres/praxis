@@ -8208,9 +8208,9 @@
       },
       "area": "scheduled Runs",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an exhausted stage pauses the schedule and retrying the ticket preserves its failed workflow",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "A scheduled workflow whose build stage fails until an external temporary marker exists.",
+        "when": "Allow all three stage attempts to fail, create the marker, and choose Retry ticket.",
+        "then": "The schedule pauses for failure. The original workflow stays failed with three build attempts; a distinct replacement workflow succeeds with one build attempt."
       }
     },
     {
@@ -9120,9 +9120,9 @@
       },
       "area": "session Shelf",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "Six completed sessions: two active today and four on earlier days, with the sidebar collapsed.",
+        "when": "Inspect the five shelf spines and overflow button, preview by hover and focus, dismiss with Escape, and open an earlier session.",
+        "then": "The oldest session is omitted; today uses taller, stronger spines with the same state colour. The complete spine and overflow group is centred within one pixel. Preview cards clip at and sit flush against the rail, remain visible on card hover, dismiss correctly, and open the selected session."
       }
     },
     {
