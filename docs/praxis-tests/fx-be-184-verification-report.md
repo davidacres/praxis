@@ -1,7 +1,9 @@
 # FX-BE-184 durable team-chat release verification report
 
 Ticket: **PRX-S111-184 / FX-BE-184** (TASK-486, TASK-487). Feature: **FX-BF-111**. Base: `c6e81e86`.
-Node:test contracts: [fx-be-184-release-proof.md](fx-be-184-release-proof.md). Playwright contracts: [catalog.json](catalog.json) (799 tests, curated flows for every new id).
+Node:test contracts: [fx-be-184-release-proof.md](fx-be-184-release-proof.md). Playwright contracts: [catalog.json](catalog.json) (800 tests, curated flows for every new id).
+
+**Release gate remains open:** real API continuation has no credential, the planned hand-driven dark-theme session is incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
 
 Each section below is evidence of one kind; they are not merged. A skipped test is listed as skipped, never as passed.
 
@@ -9,31 +11,31 @@ Each section below is evidence of one kind; they are not merged. A skipped test 
 
 | # | Defect | Found by | Fix |
 | --- | --- | --- | --- |
-| F1 | Startup recovery was lazy: interrupted attempts were reconciled and queued turns resumed only when some window called `assistant:getConversation`. | `teamChatIpcRecovery.test.ts:35`, `durableTeamChat.spec.ts:290` | `teamChatServices.ts` (`recoverOnStartup`), called from `index.ts` after `registerAssistantIpc`. A profile that never activated durable chat is left untouched. |
+| F1 | Startup recovery was lazy: interrupted attempts were reconciled and queued turns resumed only when some window called `assistant:getConversation`. | `teamChatIpcRecovery.test.ts:35`, `durableTeamChat.spec.ts:288` | `teamChatServices.ts` (`recoverOnStartup`), called from `index.ts` after `registerAssistantIpc`. A profile that never activated durable chat is left untouched. |
 | D1 | A late callback fenced by a newer epoch, or any storage fault inside the detached coordinator loop, escaped as an unhandled rejection and nobody was told the turn stopped. | `teamChatCrashBoundaries.test.ts:207`, `:265` | `teamChatCoordinator.ts` `processConversation`: a fenced loop drains silently; any other error is logged and published as `turn_failed` with the message. What already committed stays for startup recovery. |
 | D1b | After such a fault, a later submit in the same process re-entered the loop, which stopped silently: reservation correctly refuses a second attempt while the faulted one is still `running`, but nothing told the user why their accepted turn never started. | `teamChatCrashBoundaries.test.ts:297` (fails without the fix: the halt is not re-reported; the provider call count stays 1 either way, so no double dispatch was possible) | Dispatch for that conversation halts in-process until startup recovery reconciles it under a new epoch. **Decision:** later queued turns stay `queued`. They were accepted and never ran, so failing them would discard accepted input and retrying them here would race the unknown attempt; startup recovery dispatches them in order. New commands still commit, and each one re-publishes `turn_failed` ("Restart Praxis to recover this team chat."). Reporting is wrapped so a throwing listener or logger cannot escape the detached loop. |
-| D2 | Re-opening the already-open team chat from the sidebar blanked its transcript (`loadChat` cleared state that the subscription only re-reads on a new id). The first fix short-circuited on the id alone, so a chat whose first load had failed could never be re-read. | `assistant.spec.ts:590`; `durableTeamChat.spec.ts:358` (fails on the id-only short-circuit: the transcript stays empty) | `AssistantProvider.tsx` `loadChat` keeps the transcript only when the subscription has delivered a snapshot for that id; otherwise it re-subscribes (a `chatLoad` counter, since setting the same id does not re-run the effect). A chat changed by another window is already kept live by the subscription. |
+| D2 | Re-opening the already-open team chat from the sidebar blanked its transcript (`loadChat` cleared state that the subscription only re-reads on a new id). The first fix short-circuited on the id alone, so a chat whose first load had failed could never be re-read. | `assistant.spec.ts:590`; `durableTeamChat.spec.ts:356` (fails on the id-only short-circuit: the transcript stays empty) | `AssistantProvider.tsx` `loadChat` keeps the transcript only when the subscription has delivered a snapshot for that id; otherwise it re-subscribes (a `chatLoad` counter, since setting the same id does not re-run the effect). A chat changed by another window is already kept live by the subscription. |
 | F3 | The renderer unit suite (including `conversationSubscription.test.ts`) was registered but never executed by root `test`/`test:full`. | plan analysis | root `test:renderer`, run by `test` and `test:full`; AGENTS.md updated. |
 | F7 | No team-chat spec was in the smoke set, so governed runs never exercised the feature. | plan analysis | `durableTeamChat` added to `SMOKE_SPECS` (it uses no hover, mouse, drag or `toHaveScreenshot`). |
 
-**Recorded deviation (F2, not changed):** the coordinator never projects `awaiting_approval` onto the durable attempt; the runtime session holds it. A crash during a permission prompt is therefore recovered from a dispatched `running` attempt and classified `outcome_unknown` for a tool-capable member, where the design's matrix row says `interrupted`. Both states refuse automatic replay. The safety property, that the approval is never reused by a replacement attempt, is asserted (`teamChatCrashBoundaries.test.ts:171`, `durableTeamChat.spec.ts:393`).
+**Recorded deviation (F2, not changed):** the coordinator never projects `awaiting_approval` onto the durable attempt; the runtime session holds it. A crash during a permission prompt is therefore recovered from a dispatched `running` attempt and classified `outcome_unknown` for a tool-capable member, where the design's matrix row says `interrupted`. Both states refuse automatic replay. The safety property, that the approval is never reused by a replacement attempt, is asserted (`teamChatCrashBoundaries.test.ts:171`, `durableTeamChat.spec.ts:391`).
 
 ## AC1–AC12 → named assertions and artifacts
 
 | AC | Assertions (file:line) | Artifacts | Result |
 | --- | --- | --- | --- |
-| AC1 one turn per command; ordered concurrent sends | `teamChatCoordinator.test.ts:65`, `:300`; `teamChatCrashBoundaries.test.ts:237` (3 submits → 1 turn, 1 receipt, 1 execution); `teamChatRepository.test.ts:14`, `:242` (20 interleaved writes from two instances, none lost); `durableTeamChat.spec.ts:201` (both acknowledgements lost) | — | pass |
+| AC1 one turn per command; ordered concurrent sends | `teamChatCoordinator.test.ts:65`, `:300`; `teamChatCrashBoundaries.test.ts:237` (3 submits → 1 turn, 1 receipt, 1 execution); `teamChatRepository.test.ts:14`, `:242` (20 interleaved writes from two instances, none lost); `durableTeamChat.spec.ts:199` (both acknowledgements lost) | — | pass |
 | AC2 four attempts, two reusable sessions; isolation; no synthetic session for no-tools API | `assistant.spec.ts:975`, `:940`; `teamChatCoordinator.test.ts:445` | live CLI evidence (below) | pass (deterministic). The real CLI did **not** reuse its session: see real-provider results |
-| AC3 window close/reload preserves execution; another window reconstructs | `durableTeamChat.spec.ts:13` (second window shows each message, the active member "dev: running", queue status; replies land after window one navigates away); `durableTeamChat.spec.ts:254` (process killed mid-reply, relaunch reconciles before the chat opens); `assistant.spec.ts:698` | `durable-team-chat-two-windows.png`, `durable-team-chat-queue.png`, `fx-be-184-restart-interrupted.png` | pass |
-| AC4 every recovery boundary injected; no auto-repeat; no double-commit | `teamChatCrashBoundaries.test.ts:67` (accepted, no dispatch), `:83` (prepared), `:101` ×3 (dispatched text/tools/opaque), `:118` (persisted final result), `:135` (tool ran, no reply), `:154` (committed reply, ack lost), `:171` (pending approval), `:207` (late callback), `:265` (fault between reserve and complete), `:297` (a later turn after a loop fault stays queued and runs only after startup recovery); `teamChatRecovery.test.ts` (6-case matrix); `teamChatIpcRecovery.test.ts:35`; `durableTeamChat.spec.ts:254`, `:290`, `:101` | — | pass, with the F2 state-name deviation above |
-| AC5 replacement reconstructs pinned decision, correction, other members; excludes queued input | `teamChatContext.test.ts:55`; `teamChatBindings.test.ts:86`; `durableTeamChat.spec.ts:429` (scripted ACP without resume: second prompt carries the first turn); `durableTeamChat.spec.ts:142` | `durable-team-chat-live-cli.json` (real CLI recalled the pinned codename after restart from a reconstructed context) | pass |
-| AC6 permission/folder/provider changes invalidate bindings; never widen tools; approval stays with its attempt | `teamChatBindings.test.ts:7`, `:51`; `teamChatCrashBoundaries.test.ts:171`; `durableTeamChat.spec.ts:393` (runtime session's `teamChatExecution.attemptId` equals the durable attempt id; after SIGKILL no session is left awaiting approval and the agent gets no second prompt) | — | pass |
+| AC3 window close/reload preserves execution; another window reconstructs | `durableTeamChat.spec.ts:13` (second window shows each message, the active member "dev: running", queue status; replies land after window one navigates away); `durableTeamChat.spec.ts:252` (process killed mid-reply, relaunch reconciles before the chat opens); `assistant.spec.ts:698` | `durable-team-chat-two-windows.png`, `durable-team-chat-queue.png`, `fx-be-184-restart-interrupted.png` | pass |
+| AC4 every recovery boundary injected; no auto-repeat; no double-commit | `teamChatCrashBoundaries.test.ts:67` (accepted, no dispatch), `:83` (prepared), `:101` ×3 (dispatched text/tools/opaque), `:118` (persisted final result), `:135` (tool ran, no reply), `:154` (committed reply, ack lost), `:171` (pending approval), `:207` (late callback), `:265` (fault between reserve and complete), `:297` (a later turn after a loop fault stays queued and runs only after startup recovery); `teamChatRecovery.test.ts` (6-case matrix); `teamChatIpcRecovery.test.ts:35`; `durableTeamChat.spec.ts:252`, `:290`, `:101` | — | pass, with the F2 state-name deviation above |
+| AC5 replacement reconstructs pinned decision, correction, other members; excludes queued input | `teamChatContext.test.ts:55`; `teamChatBindings.test.ts:86`; `durableTeamChat.spec.ts:427` (scripted ACP without resume: second prompt carries the first turn); `durableTeamChat.spec.ts:142` | `durable-team-chat-live-cli.json` (real CLI recalled the pinned codename after restart from a reconstructed context) | pass |
+| AC6 permission/folder/provider changes invalidate bindings; never widen tools; approval stays with its attempt | `teamChatBindings.test.ts:7`, `:51`; `teamChatCrashBoundaries.test.ts:171`; `durableTeamChat.spec.ts:391` (runtime session's `teamChatExecution.attemptId` equals the durable attempt id; after SIGKILL no session is left awaiting approval and the agent gets no second prompt) | — | pass |
 | AC7 migration lossless, no title merge, one writer, idempotent | `teamChatMigration.test.ts:13`, `:29` (inputs unchanged after each throw), `:46` (title-only match never merges), `:60` (synthetic session key never becomes a binding), `:71`; `teamChatActivation.test.ts:18`, `:30`, `:76`; `durableTeamChat.spec.ts:142` | — | pass. A *provable* legacy association cannot be tested: legacy chats never recorded one (see gaps) |
 | AC8 one row per conversation; standalone sessions navigable | `assistant.spec.ts:590` (one team-chat row in the project feed, standalone card under General conversations, both re-open); `assistant.spec.ts:471`; `durableTeamChat.spec.ts:13` | — | pass for Easy Mode. "Both sidebar modes" no longer applies: the classic project-tree sidebar was removed on purpose (f977690f) |
 | AC9 cancel/queue/retry/failure/context-required actionable across windows and restart | `durableTeamChat.spec.ts:173`, `:101`, `:254` (Retry dev enabled after restart); `teamChatCoordinator.test.ts:466`, `:552`, `:570`; `assistant.spec.ts:212` | `fx-be-184-restart-interrupted.png` | pass |
-| AC10 storage errors visible; nothing accepted lost; ambiguous commits halt; corrupt files kept | `durableTeamChat.spec.ts:321` (ENOSPC alert, draft kept, transcript and file bytes unchanged, retry lands); `teamChatRepository.test.ts:27`, `:37`, `:52`, `:193` ×6 (ENOSPC/EACCES at open/write/fsync), `:219` (truncated, invalid JSON, wrong schema, duplicate id); `teamChatActivation.test.ts:76` (uncertain commit refuses writes and activation until reconciled); `teamChatCrashBoundaries.test.ts:265`, `:297`; `durableTeamChat.spec.ts:358` (a failed transcript read is shown, and re-opening the same chat re-reads it) | `fx-be-184-storage-failure.png` | pass |
+| AC10 storage errors visible; nothing accepted lost; ambiguous commits halt; corrupt files kept | `durableTeamChat.spec.ts:319` (ENOSPC alert, draft kept, transcript and file bytes unchanged, retry lands); `teamChatRepository.test.ts:27`, `:37`, `:52`, `:193` ×6 (ENOSPC/EACCES at open/write/fsync), `:219` (truncated, invalid JSON, wrong schema, duplicate id); `teamChatActivation.test.ts:76` (uncertain commit refuses writes and activation until reconciled); `teamChatCrashBoundaries.test.ts:265`, `:297`; `durableTeamChat.spec.ts:356` (a failed transcript read is shown, and re-opening the same chat re-reads it) | `fx-be-184-storage-failure.png` | pass |
 | AC11 mentions, page-context detach, previews, dock/float, usage without double count | `assistant.spec.ts:405`, `:471`, `:566` (Preview then Apply; refused on Git graph page), `:79` (pin/unpin keeps the conversation); `teamChatCrashBoundaries.test.ts:237` (token totals counted once); `durableTeamChat.spec.ts:13` (50 tok) | — | pass. Dock/float keeps the conversation; it does not compare session/attempt identity (none is created by a dock switch) |
-| AC12 evidence recorded separately; suites registered and executed | this report; `packages/core/package.json` (`teamChatCrashBoundaries`), `apps/praxis-desktop/main/package.json` `test:git` (`teamChatIpcRecovery`), root `test:renderer`, `SMOKE_SPECS` | catalog + supplement | pass |
+| AC12 evidence recorded separately; suites registered and executed | this report; `packages/core/package.json` (`teamChatCrashBoundaries`), `apps/praxis-desktop/main/package.json` `test:git` (`teamChatIpcRecovery`), root `test:renderer`, `SMOKE_SPECS` | catalog + supplement | partial: deterministic coverage recorded; real API and manual dark-theme evidence unresolved |
 
 ## Gaps recorded by earlier stages — disposition
 
@@ -48,7 +50,7 @@ Each section below is evidence of one kind; they are not merged. A skipped test 
 
 ## Deterministic results
 
-Run on 2026-11-04 from the repository root, at the revision this report is committed with (macOS, display kept awake with `caffeinate`). First-attempt results; no harness retry was used.
+Run on 2026-11-04 from the repository root, in the inherited handover run (retained `/tmp/fx184/summary.log` and per-command logs inspected during recovery) (macOS, display kept awake with `caffeinate`). First-attempt results; no harness retry was used.
 
 | Command | Result |
 | --- | --- |
@@ -91,7 +93,7 @@ The third reply was `heron-cogr7`: the member continued correctly after the rest
 | `scheduledRunEndToEnd.spec.ts:53` mixed serial/parallel schedule runs to completion | its own temp repo had one uncommitted file when Review started | passed (2 tests, 2.3 min) |
 | `sessionShelf.spec.ts:262` only the revealed spine glows | glow attribute stayed `false` within 5 s | passed (8.3 s) |
 
-These are load-dependent flakes under the full parallel run, not regressions from this story. None of the 14 skips is in a team-chat spec: the focused team-chat run above had 0 skips, so the skips are other specs' own conditional skips.
+Each failure passed alone, which is evidence of intermittent behavior; it does not prove that the first-run failures are unrelated to this story. The first-run full-suite gate remains failed. None of the 14 skips is in a team-chat spec: the focused team-chat run above had 0 skips, so the skips are other specs' own conditional skips.
 
 **`npm run test:desktop:themes` (themes + theme-regressions): 47 passed, 0 failed, 0 skipped** (1.9 min).
 
@@ -122,3 +124,31 @@ Restoring the `.v1-backup` is possible only before the first durable turn is acc
 ## User-data safety
 
 Every new test uses a `mkdtemp` profile, repository and coordination root (`launchTestApp`, `profile()` helpers); prompt logs are temp files removed in `finally`. No test points a Praxis write path at the working tree; `journey.spec.ts`'s fingerprint guard runs in the full suite. Artifacts are written only to `.praxis/session-artifacts/`, which is git-ignored.
+
+## Handover recovery audit
+
+The handover checkpoint `3d52716f` already contained the guarded loop reporting,
+halted-conversation policy, loaded-snapshot guard and their regression tests.
+This pass inspected those implementations and the retained command logs rather
+than reapplying the fixes. The report now explicitly keeps the release gate open
+and does not infer absence of regressions from isolated rerun passes.
+
+Fresh recovery validation: core build, all-workspace type checks, renderer build,
+renderer copy and desktop build exited 0. Core: 1,939 passed, 2 skipped, 0 failed;
+main: 139 passed, 0 skipped/failed; renderer: 33 passed, 0 skipped/failed;
+catalog: 800 linked tests, exit 0. Initial sandboxed runs failed on localhost
+`listen EPERM`; unchanged commands were rerun with permitted access. These are
+separate from the inherited full-suite and real-provider results above.
+
+Fresh focused Electron run: **44 passed, 1 failed, 0 skipped** (2.9 min).
+The failed case was keyboard queued cancellation: the queued row remained after
+Enter. It passed unchanged alone (1/1, 3.6 s). The test now uses the button's
+`locator.press('Enter')` instead of separate focus and page-keyboard calls;
+this retains keyboard activation and all cancellation/transcript assertions
+while reducing the gap between focus and input. This rerun does not erase the
+first-run failure. No production change was made for this intermittent result.
+
+Final durable-team-chat suite after the keyboard harness change: **12 passed,
+0 failed, 0 skipped** (1.1 min). Final catalog validation: exit 0, 800 linked
+Playwright tests. Full functional/themes and live-provider checks were not
+repeated in this handover audit; their retained results above remain separate.

@@ -182,12 +182,10 @@ test('keyboard cancellation preserves accepted messages and cancels only the sel
   await win.getByTestId('assistant-send').click();
   const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
   await expect(queued).toHaveCount(1);
-  await queued.getByRole('button', { name: 'Cancel queued turn' }).focus();
-  await win.keyboard.press('Enter');
+  await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
   await expect(queued).toHaveCount(0);
   await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
-  await win.getByRole('button', { name: 'Stop', exact: true }).focus();
-  await win.keyboard.press('Enter');
+  await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
   await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
   await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);

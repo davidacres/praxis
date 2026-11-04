@@ -5211,7 +5211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 201,
+        "line": 199,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5227,7 +5227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 254,
+        "line": 252,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5243,7 +5243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 290,
+        "line": 288,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5259,7 +5259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 321,
+        "line": 319,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5275,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 358,
+        "line": 356,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5291,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 393,
+        "line": 391,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5307,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 429,
+        "line": 427,
         "project": "functional"
       },
       "area": "durable Team Chat",
