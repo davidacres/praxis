@@ -296,6 +296,7 @@ export function registerAssistantIpc(): void {
     return chat;
   });
   ipcMain.handle('assistant:renameChat', async (_event, chatId: string, title: string) => {
+    await activate();
     const chat = await getTeamChatStore().rename(chatId, title);
     changed();
     return chat;

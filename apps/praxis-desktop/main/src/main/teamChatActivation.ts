@@ -14,10 +14,12 @@ export class TeamChatActivation {
   public activate(commit: () => Promise<void>): Promise<void> {
     if (!this.enabled) return Promise.reject(new Error('Durable team chat activation is disabled.'));
     this.fenced = true;
+    // The fence holds only while activation is pending or after it succeeds; a failed
+    // commit never migrated anything, so legacy work must be able to resume.
     this.activation ??= (async () => {
       await Promise.allSettled([...this.pending]);
       await commit();
-    })().catch(error => { this.activation = undefined; throw error; });
+    })().catch(error => { this.activation = undefined; this.fenced = false; throw error; });
     return this.activation;
   }
 }

@@ -93,3 +93,13 @@ test('disabled activation never commits or fences unrelated legacy work', async 
   assert.equal(committed, false);
   assert.equal(await activation.legacy(async () => 'legacy'), 'legacy');
 });
+
+test('a failed commit lifts the fence so legacy work resumes and activation can retry', async () => {
+  const activation = new TeamChatActivation();
+  await assert.rejects(activation.activate(async () => { throw new Error('disk full'); }), /disk full/);
+  assert.equal(await activation.legacy(async () => 'legacy'), 'legacy');
+  let committed = false;
+  await activation.activate(async () => { committed = true; });
+  assert.equal(committed, true);
+  await assert.rejects(activation.legacy(async () => undefined), /disabled/);
+});
