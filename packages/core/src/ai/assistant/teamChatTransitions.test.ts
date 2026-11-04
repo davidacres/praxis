@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import type { ConversationAttempt, ConversationMessage, ConversationTurn, DurableConversation } from './assistantTypes';
-import { conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } from './teamChatTransitions';
+import { beginConversationEpoch, conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } from './teamChatTransitions';
 
 function fixture() {
   const chat: DurableConversation = { schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] };
@@ -52,4 +52,33 @@ test('completion atomically records final reply and context; duplicate and fence
 test('payload canonicalization rejects non-JSON values', () => {
   assert.throws(() => conversationPayloadDigest({ value: undefined }), /JSON/);
   assert.throws(() => conversationPayloadDigest(NaN), /JSON/);
+});
+
+test('repeated startup retains originating attempt epoch and observation provenance', () => {
+  const { chat, payload, turn, message, attempt } = fixture();
+  const running = startConversationTurn(submitConversationTurn(chat, 0, payload, turn, message), 1, 't');
+  const prepared = reserveConversationAttempt(running, 2, attempt);
+  const dispatched = advanceConversationAttempt(prepared, 3, 't', 'a', 'epoch', 'dispatching', 'now');
+  const first = beginConversationEpoch(dispatched, 4, 'next', 'now');
+  const second = beginConversationEpoch(first, 5, 'again', 'later');
+  assert.equal(second.turns[0].attempts[0].coordinatorEpoch, 'epoch');
+  assert.equal(second.turns[0].attempts[0].recoveryEvidence![0].coordinatorEpoch, 'epoch');
+  assert.equal(second.turns[0].attempts[0].recoveryEvidence![0].data!.observingEpoch, 'next');
+  assert.equal(second.turns[0].state, 'outcome_unknown');
+});
+
+test('recovered imports reject foreign identity and retain cancellation fences', () => {
+  const { chat, payload, turn, message, attempt, reply } = fixture();
+  const running = startConversationTurn(submitConversationTurn(chat, 0, payload, turn, message), 1, 't');
+  const prepared = reserveConversationAttempt(running, 2, attempt);
+  const dispatched = advanceConversationAttempt(prepared, 3, 't', 'a', 'epoch', 'dispatching', 'now');
+  const recovered = beginConversationEpoch(dispatched, 4, 'new', 'later');
+  const a = recovered.turns[0].attempts[0];
+  a.recoveryEvidence!.push({ id: 'result', conversationId: 'foreign', turnId: 't', participantId: 'p',
+    attemptId: 'a', coordinatorEpoch: 'epoch', kind: 'final_result', observedAt: 'now', provenance: 'adapter',
+    result: { text: reply.text } });
+  assert.throws(() => completeConversationAttempt(recovered, 5, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /fenced/);
+  a.recoveryEvidence!.at(-1)!.conversationId = 'c';
+  recovered.turns[0].state = 'cancelled';
+  assert.throws(() => completeConversationAttempt(recovered, 5, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /fenced/);
 });

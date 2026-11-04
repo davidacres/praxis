@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import type { TeamChatExecutionParams } from '@praxis/core';
-import { createTeamChatExecutionAdapter } from './teamChatExecutionAdapter';
+import { createTeamChatExecutionAdapter, createProductionTeamChatExecutionAdapter } from './teamChatExecutionAdapter';
 
 test('dispatch consumes prepared context unchanged and preserves attempt usage', async () => {
   const adapter = createTeamChatExecutionAdapter(async (_params, prompt) => {
@@ -26,4 +26,37 @@ test('current policy is revalidated immediately before provider dispatch', async
   const adapter = createTeamChatExecutionAdapter(async () => { calls++; return { text: 'unexpected' }; }, async () => ({ conversationId: 'chat', participantId: 'lead', providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: '1', canonicalFolder: '/fixture', executionMode: 'chat', toolPolicy: 'project-only', permissionPolicy: 'manual' }));
   await assert.rejects(adapter.execute({ conversation: { bindings: [{ id: 'binding', status: 'valid', compatibilityDigest: 'old-full-access-policy' }] }, attempt: { bindingId: 'binding' }, preparedPrompt: 'ready' } as TeamChatExecutionParams), /policy changed/);
   assert.equal(calls, 0);
+});
+
+test('effective capability evidence is durable before runtime dispatch; evidence failure prevents launch', async () => {
+  const { DEFAULT_APP_SETTINGS, conversationPayloadDigest } = await import('@praxis/core');
+  let launches = 0;
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({}),
+    completeWithTools: async () => { launches++; return 'reply'; }
+  });
+  const params = {
+    conversation: { id: 'c', bindings: [] },
+    participant: { id: 'p', role: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
+    turn: { id: 't', plan: { runtimeOptions: { provider: 'claude-code-cli', toolMode: 'read-only' } } },
+    attempt: { id: 'a', bindingId: 'b', coordinatorEpoch: 'epoch' },
+    preparedPrompt: 'prepared',
+    onEvidence: async () => { throw new Error('evidence write failed'); }
+  } as unknown as TeamChatExecutionParams;
+  const configuration = await adapter.prepare!(params);
+  params.conversation.bindings.push({ id: 'b', status: 'valid', compatibilityDigest: conversationPayloadDigest(configuration) } as never);
+  await assert.rejects(adapter.execute(params), /evidence write failed/);
+  assert.equal(launches, 0);
+  let observed = false;
+  params.onEvidence = async evidence => {
+    assert.equal(evidence.kind, 'runtime_identity');
+    assert.equal(evidence.data?.toolCapable, true);
+    assert.equal(launches, 0);
+    observed = true;
+  };
+  await adapter.execute(params);
+  assert.equal(observed, true);
+  assert.equal(launches, 1);
 });

@@ -142,6 +142,7 @@ export interface ConversationRecoveryEvidence {
   participantId: string;
   attemptId: string;
   coordinatorEpoch: string;
+  result?: import('./teamChatCoordinator').TeamChatExecutionResult;
   kind: 'partial_output' | 'tool_activity' | 'final_result' | 'runtime_identity' | 'reconciliation' | 'decision';
   observedAt: string;
   provenance: string;
@@ -157,6 +158,7 @@ export interface ConversationTurn {
   state: ConversationTurnState;
   contextRequiredReason?: string;
   completedParticipantIds: string[];
+  skippedParticipantIds?: string[];
   attempts: ConversationAttempt[];
 }
 export interface ConversationBinding {

@@ -519,3 +519,85 @@ test('bounded summarization has separate provenance and usage; summary failure d
     }
   }
 });
+
+async function recoveryFixture(state: 'interrupted' | 'outcome_unknown') {
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: { execute: async () => { throw new Error('fixture'); } } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'recovery', expectedRevision: 1,
+    text: 'recover', selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  await settled(coordinator, 'conv-1');
+  const turn = repo.snapshot.conversations[0].turns[0];
+  turn.state = state;
+  const attempt = turn.attempts[0];
+  attempt.state = state;
+  attempt.recoveryEvidence = [{ id: 'observation', conversationId: 'conv-1', turnId: turn.id,
+    participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
+    kind: 'reconciliation', observedAt: 'now', provenance: 'test' }];
+  return { repo, coordinator, turn, attempt };
+}
+
+test('recovered result imports atomically once with usage and original epoch', async () => {
+  const { repo, coordinator, turn, attempt } = await recoveryFixture('outcome_unknown');
+  repo.snapshot.conversations[0].coordinatorEpoch = 'replacement';
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'result', kind: 'final_result',
+    result: { text: 'Recovered reply', usageReferences: ['paid-once'] } });
+  await coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'accept');
+  await coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'accept');
+  const current = coordinator.getConversation('conv-1')!;
+  assert.equal(current.messages.filter(m => m.text === 'Recovered reply').length, 1);
+  assert.equal(current.turns[0].state, 'completed');
+  assert.deepEqual(current.turns[0].attempts[0].usageReferences, ['paid-once']);
+});
+
+test('interrupted retry preserves predecessor and unknown retry requires informed evidence', async () => {
+  for (const state of ['interrupted', 'outcome_unknown'] as const) {
+    const { coordinator, turn, attempt } = await recoveryFixture(state);
+    if (state === 'outcome_unknown') {
+      await assert.rejects(coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'retry'), /acknowledgement/);
+      await assert.rejects(coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'retry',
+        { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: 'wrong' }), /acknowledgement/);
+    }
+    await coordinator.resolveAttempt('conv-1', turn.id, attempt.id, 'retry',
+      { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: 'observation' });
+    await settled(coordinator, 'conv-1');
+    const attempts = coordinator.getConversation('conv-1')!.turns[0].attempts;
+    assert.equal(attempts.length, 2);
+    assert.equal(attempts[0].state, state);
+    if (state === 'outcome_unknown') assert.ok(attempts[0].recoveryEvidence!.some(e => e.kind === 'decision'));
+  }
+});
+
+test('active cancellation remains cancelling until execution settles and records evidence', async () => {
+  let finish!: (result: { text: string }) => void;
+  let started!: () => void;
+  const ready = new Promise<void>(resolve => { started = resolve; });
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
+    execute: async () => { started(); return new Promise(resolve => { finish = resolve; }); }
+  } });
+  const result = await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'cancel-barrier',
+    expectedRevision: 1, text: 'cancel', selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  await ready;
+  await coordinator.cancelTurn('conv-1', result.turnId);
+  assert.equal(coordinator.getConversation('conv-1')!.turns[0].state, 'cancelling');
+  finish({ text: 'uncommitted' });
+  for (let i = 0; i < 100 && coordinator.getConversation('conv-1')!.turns[0].state === 'cancelling'; i++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  const turn = coordinator.getConversation('conv-1')!.turns[0];
+  assert.equal(turn.state, 'outcome_unknown');
+  assert.ok(turn.attempts[0].recoveryEvidence!.some(e => e.provenance === 'execution-settled-after-abort'));
+});
+
+test('startup imports durable results once across repeated coordinator replacements', async () => {
+  const { repo, turn, attempt } = await recoveryFixture('outcome_unknown');
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'final', kind: 'final_result', result: { text: 'restart result' } });
+  let invocations = 0;
+  for (let i = 0; i < 2; i++) {
+    const coordinator = new TeamChatCoordinator({ repository: repo, idSource: () => 'epoch-' + i,
+      executionAdapter: { execute: async () => { invocations++; return { text: 'unexpected' }; } } });
+    await coordinator.initialize();
+  }
+  assert.equal(invocations, 0);
+  assert.equal(repo.read().conversations[0].messages.filter(m => m.text === 'restart result').length, 1);
+  assert.equal(repo.read().conversations[0].turns.find(t => t.id === turn.id)!.state, 'completed');
+});

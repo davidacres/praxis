@@ -52,6 +52,8 @@ function decode(raw: string): TeamChatSnapshot {
           !evidence || typeof evidence.id !== 'string' || evidence.conversationId !== conversation.id || evidence.turnId !== turn.id ||
           evidence.participantId !== attempt.participantId || evidence.attemptId !== attempt.id || evidence.coordinatorEpoch !== attempt.coordinatorEpoch ||
           typeof evidence.observedAt !== 'string' || typeof evidence.provenance !== 'string' ||
+          (evidence.result !== undefined && (!evidence.result || typeof evidence.result !== 'object' ||
+            typeof (evidence.result as { text?: unknown }).text !== 'string')) ||
           !['partial_output', 'tool_activity', 'final_result', 'runtime_identity', 'reconciliation', 'decision'].includes(String(evidence.kind))))) throw new Error('Invalid recovery evidence.');
       }
     }
