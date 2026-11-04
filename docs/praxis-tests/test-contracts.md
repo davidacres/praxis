@@ -1,11 +1,17 @@
 # test-contracts
 
 Ticket: **PRX-S111-184 / FX-BE-184**. Stage: **WF-C10627E5-test-contracts**.
-Frozen implementation: `66b759f966743bef5b70f582723b0df23d7a573e`. HEAD matched this revision and the tree was clean before authoring. The supplied snapshot includes the implementation and retained release evidence. This stage changes catalog documentation only.
+Frozen implementation: `5e2266f63cabbc2dbddd7e7985ce66cbab49dbd5`. HEAD matched this revision and the tree was clean before authoring. The supplied snapshot includes the implementation and retained release evidence. This stage changes catalog documentation only.
+
+## Iteration 2 recovery and snapshot provenance
+
+The returned finding was **“Interrupted — the app stopped while this stage was running.”** This retry completed a fresh deterministic catalog validation and source/hash audit against the requested frozen implementation. The interruption is addressed by completing and committing this report; it is not evidence of an application defect or a passing runtime test. Earlier contract edits are retained, and no interrupted execution is counted as a pass.
+
+The supplied `.praxis/change-diff.md` identifies PRX-S111-180 / FX-BE-180, so it is stale context for this ticket. The requested commit and its tracked source are authoritative for this inventory. The commit itself updates retained evidence and the verification report; no test source differs from the previously inventoried snapshot. The prior stage report named `66b759f966743bef5b70f582723b0df23d7a573e`; its snapshot reference is refreshed here. Historical implementation evidence remains inherited, including its release limitations.
 
 ## Exact inventory and result
 
-- **800 generated Playwright contracts across 173 spec files**, including **67 curated flows**. The catalog was already current at entry. Regeneration preserved all 800 ids and flows; one flow was corrected to distinguish keyboard Pin from clicked Unpin.
+- **800 generated Playwright contracts across 173 spec files**, including **67 curated flows**. The catalog was already current at entry. Regeneration preserved all 800 ids and flows. The inherited keyboard Pin versus clicked Unpin correction remains accurate; no further flow change is needed in this retry.
 - **25 scoped supplemental Node source contracts, representing 32 runtime cases**, in [release-proof contracts](fx-be-184-release-proof.md). Two templates expand to three capability cases and six filesystem-fault cases. Exact runtime titles and derived ids are now linked there, alongside the stable template-group ids.
 - **825 source contracts = 800 Playwright + 25 selected Node contracts**. Expanded scoped inventory: **832 cases = 800 statically discovered Playwright + 32 selected Node runtime cases**. Neither figure is a complete monorepo runtime count: the generator excludes Node, dynamic titles and non-direct `test(...)` declarations. Earlier Node supplements and unrelated unit suites are not included in these totals.
 - Fresh deterministic validator: `npm run test:praxis-contracts` **exit 0**, 800 catalogued and linked, no warnings, both before and after `--write`.
@@ -53,6 +59,8 @@ The focused durable-team-chat files contain **14 Playwright contracts**: 12 in t
 7. **Legacy association ambiguity.** Legacy records do not prove a runtime-session association; the tests verify no synthetic association is invented. This is not evidence that a provable association was imported. The removed classic sidebar has no independent surface to verify.
 
 ## Verification performed by this stage
+
+Fresh retry checks ran with HEAD at the frozen revision above and a clean entry tree. The source/hash audit parsed test declarations and matched all 825 documented source titles, declaration lines and derived ids, with zero mismatches or duplicate ids. Counts remain 800 Playwright entries across 173 files, 67 curated flows and 25 scoped Node definitions.
 
 `npm run test:praxis-contracts -- --write` and the subsequent validator passed (800 entries; all 800 existing contracts carried over). A separate source/hash audit verified all 800 catalog links and 25 Node source links and found no mismatches or collisions. `git diff --check` passed.
 
