@@ -1,5 +1,5 @@
 import { stageHandoverGuard } from './stageHandoverGuard';
-import type { AcpMcpServer, AgentSessionRecord, BackgroundTask } from '@praxis/core';
+import type { AcpMcpServer, AgentEventSummary, AgentSessionRecord, BackgroundTask } from '@praxis/core';
 import { runAsAgent } from './projectActivityInstance';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import {
   buildStageContext,
+  hasRepositoryInspection,
   buildStageTaskDefinition,
   discoverWorkspaceAgentWorkflows,
   extractProviderLimitMessage,
@@ -412,6 +413,10 @@ export async function runWorkflowAgentStage(
     }
     const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
     if (needsReviewFileTools) {
+      // Workflows copied from an older template tell the reviewer "Do not run shell commands", which
+      // contradicts the read-only shell access below; a Codex reviewer took it literally and paused the run.
+      taskDefinition.goal = taskDefinition.goal.replace(/\s*Do not run (?:any )?shell commands\.?/gi, ' Run only shell commands that read.');
+      taskDefinition.scope += '\n\nSome runtimes (Codex) list MCP tools in a searchable tool registry rather than the visible toolset: search it for praxis-review-files before deciding the tools are missing.';
       taskDefinition.scope += '\n\nInspect this working folder and any input artifact paths listed above using either the praxis-review-files MCP read_file and list_dir tools (if available) or read-only shell commands (git status, log, diff and show; ls, cat, head, grep, rg, find without -exec; sed -n). If praxis-review-files tools are not exposed in your toolset, use the allowed read-only shell commands to inspect the repository, git commits, frozen snapshot, and diff artifacts directly. Do not report blocked-environment for missing MCP tools when read-only shell commands are available. Praxis creates .praxis-run only when it supplies file inputs; its absence when no file inputs are listed is expected and does not block this stage. Do not substitute artifacts from .praxis or another task. Shell commands that only read are allowed; anything modifying files or running builds/tests is refused, so do not try to run tests, builds or scripts.';
     }
     if (needsReviewFileTools) {
@@ -515,6 +520,55 @@ export async function runWorkflowAgentStage(
     finished = await again.promise;
   }
 
+  let inspectionEvents = (await sessions.ensureSessionTranscript(issueKey))?.events ?? [];
+  const requiresRepositoryInspection = canReadRunFiles && nodeOutputs(node).some(contract => contract.kind === 'findings') &&
+    stageContext.inputs.some(input => input.kind === 'diff' && Boolean(input.path));
+
+  // A provider can claim tools are absent without attempting discovery. Give that specific
+  // read-only failure one chance to inspect the exposed registry; real tool failures still pause.
+  if (prepared && mcpServers?.some(server => server.name === 'praxis-review-files') &&
+      !dispatch.signal?.aborted && shouldContinueReadOnlyDiscovery(node, toolMode, finished, inspectionEvents, requiresRepositoryInspection)) {
+    workflowLogSink.appendLine(`[workflow ${workflowRun.runId}] ${node.name}: no successful repository inspection was observed; trying discovery once.`);
+    // An automatic tier choice may need a more capable model to use tools. Preserve exact
+    // model overrides and reviewer-independence rules; otherwise use the existing retry ladder.
+    if (!switchedModel && !node.independentOf) {
+      const recoveryModel = chooseStageModel({
+        node: !switched && (!ownProvider || ownProvider === provider) ? node : { ...node, model: undefined },
+        provider,
+        tiers: settings.ai.modelTiers,
+        runModel: provider === runProvider ? workflowRun.aiModel : undefined,
+        attemptsSpent: failedAttempts + 1
+      });
+      if (recoveryModel.model && recoveryModel.model !== modelChoice.model) {
+        dispatch.reportProgress?.(`Retrying repository inspection on ${recoveryModel.model}: ${recoveryModel.reason}.`);
+        sessions.transitionAgentRuntime(issueKey, {
+          model: recoveryModel.model,
+          reason: 'model_change',
+          eventSummary: 'Repository inspection recovery',
+          eventDetail: `No successful source read was observed; ${recoveryModel.reason}.`
+        });
+        modelChoice = recoveryModel;
+      }
+    }
+    const again = waitForSession(issueKey, sessions.getAgentSession(issueKey)?.completedAt);
+    try {
+      await continueAgentTask(prepared, {
+        issueKey,
+        message: 'No successful repository read was observed in your last turn. A review that only repeats the supplied prior findings is not accepted. Read the frozen patch and current source files, then reassess every finding against what you read. This read-only stage supplies praxis-review-files. Discover and try the available reader before deciding it is unavailable. If this runtime uses functions.exec, call text(ALL_TOOLS.filter(t => /read_file|exec_command/.test(t.name))) there, then invoke the discovered reader through tools. You may also use tools.exec_command for read-only shell inspection. Do not edit files or run builds/tests. If an actual tool call fails, report the observed error as blocked-environment; otherwise complete the original stage and its required outputs.',
+        ...(modelChoice.model ? { model: modelChoice.model } : {}),
+        workingDirectory: worktreePath,
+        toolMode,
+        mcpServers
+      });
+      finished = await again.promise;
+    } catch (error) {
+      again.cancel();
+      workflowLogSink.appendLine(`Could not continue ${context.stageName} for tool discovery: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  inspectionEvents = (await sessions.ensureSessionTranscript(issueKey))?.events ?? [];
+
   // An implementation stage that completed its turn without committing anything made no changes.
   // Prompt the agent to proceed with the file edits and commit rather than letting it immediately fail.
   const requiresDiff = nodeOutputs(node).some(contract => contract.kind === 'diff' && contract.required);
@@ -551,6 +605,7 @@ export async function runWorkflowAgentStage(
 
   let outcome = stageOutcomeFromSession(node, {
     ...finished,
+    ...(requiresRepositoryInspection ? { repositoryInspectionRequired: true, repositoryInspectionObserved: hasRepositoryInspection(inspectionEvents) } : {}),
     ...(snapshotRef ? { snapshotRef } : {}),
     ...(startRef ? { startRef } : {})
   });
@@ -753,6 +808,24 @@ export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' 
   const unresolved = tasks.find(task => task.state !== 'completed' && !seenDuringTurn(task));
   if (unresolved) return { state: 'failed', error: `Background task "${unresolved.label}" ${unresolved.state === 'unknown' ? 'has no confirmed result' : `ended ${unresolved.state}`}. ${unresolved.detail ?? ''} A later foreground success does not confirm this background job. Inspect its result, then retry the workflow stage.`.trim() };
   return { state: 'completed' };
+}
+
+/** Retry only an untested file-access claim, never a demonstrated tool or account failure. */
+export function shouldContinueReadOnlyDiscovery(
+  node: WorkflowAgentTaskNode,
+  toolMode: AgentToolMode,
+  finished: FinishedStageSession,
+  events: AgentEventSummary[],
+  requiresRepositoryInspection = false
+): boolean {
+  if (toolMode !== 'read-only' || node.mutatesWorktree || finished.state !== 'completed') return false;
+  if (events.some(event => event.type === 'tool_complete' && event.data?.ok === false)) return false;
+  const outcome = stageOutcomeFromSession(node, finished);
+  const accessBlock = outcome.status === 'failed' && outcome.pause === 'environment' && /tools?|file access|read.only|shell|inspect/i.test(outcome.error ?? '');
+  if (requiresRepositoryInspection && !hasRepositoryInspection(events)) {
+    return outcome.status === 'succeeded' || accessBlock;
+  }
+  return accessBlock && !events.some(event => event.type === 'tool_start' || event.type === 'tool_complete');
 }
 
 const MAX_REFUSAL_CONTINUATIONS = 2;

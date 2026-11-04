@@ -632,3 +632,80 @@ for await (const line of createInterface({ input: process.stdin })) {
     await rm(folder, { recursive: true, force: true });
   }
 });
+
+test('read-only launch and continuation authorize inspection in the actual ACP prompt', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'praxis-acp-review-prompt-'));
+  const fixture = join(folder, 'agent.mjs');
+  const promptFile = join(folder, 'prompt.txt');
+  await writeFile(fixture, `
+import { createInterface } from 'node:readline';
+import { writeFileSync } from 'node:fs';
+const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: {} } });
+  else if (request.method === 'session/new') send({ id: request.id, result: { sessionId: 'review' } });
+  else if (request.method === 'session/prompt') {
+    writeFileSync(process.env.PROMPT_FILE, request.params.prompt[0].text);
+    send({ id: request.id, result: { stopReason: 'end_turn' } });
+  } else if (request.id !== undefined) send({ id: request.id, result: {} });
+}
+`);
+  const record = { state: 'completed', sessionId: 'owner', provider: 'codex-cli', toolMode: 'read-only', events: [] as AgentEventSummary[], taskDefinition: { kind: 'general', goal: 'Review the frozen patch', scope: 'Read .praxis-run/change-diff.patch', definitionOfDone: 'Report findings' } };
+  const manager = {
+    getAgentSession: () => record,
+    createAgentSession: (_key: string, sessionId: string) => { record.sessionId = sessionId; },
+    appendAgentEvents: (_key: string, events: AgentEventSummary[]) => record.events.push(...events),
+    updateAgentState: (_key: string, state: string) => { record.state = state; },
+    updateAgentOutput: (_key: string, value: object) => Object.assign(record, value),
+    updateAgentRuntime: (_key: string, value: object) => Object.assign(record, value),
+    refreshHandoverBrief: async () => {}
+  };
+  const host = new AcpAgentHost(manager as never, { appendLine: () => {} });
+  const options = { command: process.execPath, args: [fixture], workingDirectory: folder, toolMode: 'read-only' as const, env: { PROMPT_FILE: promptFile } };
+  try {
+    for (const continuation of [false, true]) {
+      if (continuation) await host.continueTask('review', 'Recheck the patch', options);
+      else await host.startTask({ key: 'review', summary: 'Review', issueType: 'Task', status: 'In progress' } as never, record.taskDefinition as never, 'codex-cli', options);
+      for (let i = 0; i < 300 && host.hasActiveTask('review'); i++) await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(host.hasActiveTask('review'), false);
+      assert.equal(record.state, 'completed');
+      const prompt = await readFile(promptFile, 'utf8');
+      assert.match(prompt, /You may inspect files using file tools or read-only shell commands/);
+      assert.match(prompt, /Do not edit files, run builds or tests/);
+      assert.match(prompt, /functions\.exec.*ALL_TOOLS.*tools\.exec_command/);
+      assert.doesNotMatch(prompt, /Do not edit files, execute commands, or mutate/);
+    }
+  } finally {
+    await host.abortTask('review');
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test('read-only ACP shell inspection remains permitted while writes and test execution stay denied', async () => {
+  for (const autoApprove of [false, true]) {
+    const { agentHost } = permissionHost('read-only', autoApprove);
+    const host = agentHost as unknown as { requestPermission(key: string, request: unknown): Promise<string> };
+    for (const [command, expected] of [
+      ['git status --short', 'allow_always'],
+      ['cat .praxis-run/change-diff.patch', 'allow_always'],
+      ['git show HEAD:package.json', 'allow_always'],
+      ['npm test', 'deny'],
+      ['git reset --hard', 'deny'],
+      ['echo changed > package.json', 'deny']
+    ]) {
+      assert.equal(await host.requestPermission('permission-test', { toolCallId: command, title: 'Shell', kind: 'execute', rawInput: { command: ['bash', '-lc', command] }, options: [] }), expected, command);
+    }
+  }
+});
+
+test('ACP preserves read arguments so workflow inspection is attributable to the completed tool call', () => {
+  const events: AgentEventSummary[] = [];
+  const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'patch-read', name: 'read_file', kind: 'read', status: 'in_progress', rawInput: { path: '.praxis-run/change-diff.patch' } }, task('review'));
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'patch-read', status: 'completed' }, task('review'));
+  assert.deepEqual(events[0].data?.args, { path: '.praxis-run/change-diff.patch' });
+  assert.equal(events[1].data?.callId, events[0].data?.callId);
+  assert.equal(events[1].data?.ok, true);
+});

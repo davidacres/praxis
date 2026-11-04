@@ -203,7 +203,8 @@ export async function launchAgentTask(prepared: PreparedAgentLaunch, input: Agen
   // Instruction files other AI tools keep in the project, minus the ones this
   // runtime already reads itself.
   const projectInstructions = await sessionInstructionsFor(effectiveRuntime(input.provider, prepared.plan), input.workingDirectory);
-  const isAutonomous = Boolean(input.autoApprovePermissions || input.permissionMode === 'autopilot' || input.taskDefinition.kind === 'implementation');
+  // Auto-approving read access does not authorize implementation, tests, or commits.
+  const isAutonomous = input.toolMode === 'full' && Boolean(input.autoApprovePermissions || input.permissionMode === 'autopilot' || input.taskDefinition.kind === 'implementation');
   const workingStyle = sessionWorkingStyle(isAutonomous);
   input = {
     ...input,

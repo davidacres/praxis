@@ -13,7 +13,8 @@
  * implementer's chat is reviewing an argument rather than the change.
  */
 
-import type { AgentTaskDefinition } from '../ai/agentTypes';
+import { isReadOnlyShellCommand, shellCommandOf } from '../ai/readOnlyShell';
+import type { AgentEventSummary, AgentTaskDefinition } from '../ai/agentTypes';
 import { isProviderLimitError, extractProviderLimitMessage } from '../ai/providerLimitError';
 import { nodeOutputs, type CheckFindings, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
 import { parseReviewFindings } from '../ai/aiReviewService';
@@ -222,7 +223,31 @@ export function readPlanStatus(responseText: string | undefined): { ready: true 
 }
 
 /** What the desktop app reports about a session that has stopped. */
+/** A verdict needs an observed successful source read, not just a model's claim of inspection. */
+export function hasRepositoryInspection(events: readonly AgentEventSummary[]): boolean {
+  const starts = new Map(events.filter(event => event.type === 'tool_start' && event.data?.callId).map(event => [event.data!.callId!, event.data!]));
+  return events.some(event => {
+    if (event.type !== 'tool_complete' || event.data?.ok !== true) return false;
+    const start = event.data.callId ? starts.get(event.data.callId) : undefined;
+    const rawArgs = event.data.args ?? start?.args;
+    // Codex wraps MCP arguments in { server, tool, arguments }; native tools are flat.
+    const args = rawArgs?.arguments && typeof rawArgs.arguments === 'object' && !Array.isArray(rawArgs.arguments)
+      ? rawArgs.arguments as Record<string, unknown>
+      : rawArgs;
+    const name = event.data.toolName ?? start?.toolName ?? '';
+    const kind = event.data.kind === 'other' ? start?.kind : event.data.kind ?? start?.kind;
+    if ((kind === 'read' || /(?:^|[._])read_file$|^Read$/.test(name)) &&
+        [args?.path, args?.file_path, args?.filePath].some(path => typeof path === 'string' && path.trim())) return true;
+    const command = shellCommandOf(args);
+    return command !== undefined && isReadOnlyShellCommand(command) &&
+      /\b(cat|head|tail|sed|rg|grep)\b|\bgit\b.*\b(show|diff|grep)\b/.test(command) && !/\brg\s+--files\b/.test(command);
+  });
+}
+
 export interface FinishedStageSession {
+  /** The host requires successful repository inspection for this verdict. */
+  repositoryInspectionRequired?: boolean;
+  repositoryInspectionObserved?: boolean;
   /** Terminal agent state. */
   state: 'completed' | 'failed' | 'aborted';
   /** The session's final response, used as the report body for a report stage. */
@@ -288,6 +313,10 @@ export function stageOutcomeFromSession(
   const blocked = readEnvironmentBlock(session.responseText);
   if (blocked) {
     return { status: 'failed', pause: 'environment', error: `${node.name} was blocked by its environment: ${blocked}` };
+  }
+
+  if (session.repositoryInspectionRequired && !session.repositoryInspectionObserved) {
+    return { status: 'failed', pause: 'environment', error: `${node.name} produced a verdict without an observed successful repository read. No findings or gate result were accepted. The agent must inspect the supplied snapshot and files before completing this stage.` };
   }
 
   // A diff that is the commit the stage started on is not a change. Recording it as one let an

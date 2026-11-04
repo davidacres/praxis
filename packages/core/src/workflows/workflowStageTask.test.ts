@@ -414,3 +414,41 @@ test('formatUpstreamReports inlines each report, capped with head and tail, and 
   assert.doesNotMatch(out, /"empty"/);
   assert.equal(formatUpstreamReports([{ contractId: 'a', stageName: 'A', text: '' }]), undefined);
 });
+
+test('repository reviews cannot accept plausible findings without observed inspection', () => {
+  const node = reviewNode();
+  const responseText = '{"summary":"Prior finding fixed", "findings":[]}';
+  const missing = stageOutcomeFromSession(node, { state: 'completed', responseText, repositoryInspectionRequired: true });
+  assert.equal(missing.status, 'failed');
+  assert.equal(missing.pause, 'environment');
+  assert.match(missing.error ?? '', /without an observed successful repository read/);
+  assert.equal(missing.artifacts?.length ?? 0, 0);
+  assert.equal(stageOutcomeFromSession(node, { state: 'completed', responseText, repositoryInspectionRequired: true, repositoryInspectionObserved: true }).status, 'succeeded');
+});
+
+test('repository inspection requires a completed source read, not discovery, listing or an attempted read', async () => {
+  const { hasRepositoryInspection } = await import('./workflowStageTask.js');
+  const event = (type: 'tool_start' | 'tool_complete', data: import('../ai/agentTypes').AgentToolEventData): import('../ai/agentTypes').AgentEventSummary => ({ type, data, timestamp: 'now', summary: 'tool' });
+  for (const events of [
+    [],
+    [event('tool_start', { callId: 'read', kind: 'read', args: { path: 'source.ts' } })],
+    [event('tool_complete', { ok: false, kind: 'read', args: { path: 'source.ts' } })],
+    [event('tool_complete', { ok: true, toolName: 'list_dir', args: { path: '.' } })],
+    [event('tool_complete', { ok: true, toolName: 'exec_command', args: { cmd: 'pwd' } })],
+    [event('tool_complete', { ok: true, toolName: 'exec_command', args: { cmd: 'rg --files' } })],
+    [event('tool_complete', { ok: true, toolName: 'exec_command', args: { cmd: 'npm test' } })]
+  ]) assert.equal(hasRepositoryInspection(events), false);
+  assert.equal(hasRepositoryInspection([event('tool_complete', { ok: true, toolName: 'mcp.praxis-review-files.read_file', args: { path: '.praxis-run/change-diff.patch' } })]), true);
+  assert.equal(hasRepositoryInspection([
+    event('tool_start', { callId: 'mcp', kind: 'shell', toolName: 'mcp.praxis-review-files.read_file', args: { server: 'praxis-review-files', tool: 'read_file', arguments: { path: '.praxis-run/change-diff.patch' } } }),
+    event('tool_complete', { callId: 'mcp', kind: 'other', ok: true })
+  ]), true);
+  assert.equal(hasRepositoryInspection([
+    event('tool_start', { callId: 'read', kind: 'read', toolName: 'Read', args: { file_path: 'source.ts' } }),
+    event('tool_complete', { callId: 'read', kind: 'other', ok: true })
+  ]), true);
+  assert.equal(hasRepositoryInspection([
+    event('tool_start', { callId: 'shell', toolName: 'exec_command', args: { command: ['bash', '-lc', 'cat .praxis-run/change-diff.patch'] } }),
+    event('tool_complete', { callId: 'shell', ok: true })
+  ]), true);
+});

@@ -1,4 +1,4 @@
-import { stageSessionCompletion } from './workflowAgentStage';
+import { stageSessionCompletion, shouldContinueReadOnlyDiscovery } from './workflowAgentStage';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { IssueDetails, IssueTrackerService } from '@praxis/core';
@@ -165,4 +165,26 @@ test('an unknown background job from a superseded runtime epoch before provider 
     ]
   });
   assert.equal(result?.state, 'completed');
+});
+
+test('an untested read-only tool-access block gets discovery recovery, but observed failures and other stages do not', () => {
+  const node: import('@praxis/core').WorkflowAgentTaskNode = {
+    id: 'review', type: 'agent-task', name: 'Review', x: 0, y: 0,
+    agent: { agentId: 'reviewer', scope: 'global', toolMode: 'read-only' },
+    instructions: 'Review the patch', inputs: ['change-diff'], outputs: [{ id: 'findings', kind: 'findings', required: true }], mutatesWorktree: false
+  };
+  const blocked: import('@praxis/core').FinishedStageSession = {
+    state: 'completed', responseText: 'Stage status: blocked-environment: Read-only file access to `.praxis-run/change-diff.patch` and snapshot files is unavailable; provide the Praxis review-files tools or authorize read-only shell inspection.'
+  };
+  assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', blocked, []), true);
+  for (const type of ['tool_start', 'tool_complete'] as const) {
+    assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', blocked, [{ type, timestamp: 'now', summary: 'Read failed', data: { ok: false } }, { type: 'tool_complete', timestamp: 'now', summary: 'Read failed', data: { ok: false } }]), false);
+  }
+  for (const toolMode of ['full', 'project-only'] as const) assert.equal(shouldContinueReadOnlyDiscovery(node, toolMode, blocked, []), false);
+  assert.equal(shouldContinueReadOnlyDiscovery({ ...node, mutatesWorktree: true }, 'read-only', blocked, []), false);
+  for (const state of ['failed', 'aborted'] as const) assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { ...blocked, state }, []), false);
+  assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'completed', responseText: 'Stage status: blocked-environment: npm registry unavailable.' }, []), false);
+  assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'failed', lastError: 'Rate limit exceeded' }, []), false);
+  assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'completed', responseText: '{"summary":"Reviewed", "findings":[], "metrics":{"filesReviewed":1,"issuesFound":0}}' }, [], true), true);
+  assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'completed', responseText: '{"summary":"Reviewed supplied plan", "findings":[]}' }, []), false);
 });

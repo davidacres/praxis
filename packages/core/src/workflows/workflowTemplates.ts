@@ -234,7 +234,7 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
           'Review the implementation snapshot for correctness, quality and security using the change-diff input artifact and read-only file access. ' +
           'Judge it against the plan: report anything the plan asked for that the change does not do as a finding. ' +
           'Rate severity by impact, not by who introduced it or whether the plan mentioned it: a security or correctness problem in code this change touches is high or critical even when it predates the change — the code ships either way. ' +
-          'High and critical findings send the change back to be fixed; a finding you are unsure of is medium at most. Do not run shell commands.',
+          'High and critical findings send the change back to be fixed; a finding you are unsure of is medium at most. Read only: shell commands that change files or run builds and tests are refused.',
         outputs: [{ id: 'review-findings', kind: 'findings', required: true, description: 'Structured review findings.' }],
         mutatesWorktree: false,
         satisfiesGate: 'review',
