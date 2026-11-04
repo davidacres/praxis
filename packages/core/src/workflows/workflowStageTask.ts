@@ -176,6 +176,7 @@ export const STAGE_STATUS_INSTRUCTIONS = [
 // ACP may concatenate a progress message and the final reply without a newline, or wrap in markdown bold/backticks.
 const STAGE_BLOCKED_ENVIRONMENT = /(?:^|[.!?])\s*[*`_]*\s*Stage status:\s*blocked-environment\s*:?\s*([\s\S]*?)\s*[*`_]*$/im;
 const PSEUDO_ENVIRONMENT_BLOCKER = /\b(incomplete|in progress|not finished|cannot report a commit ref|can't report a commit ref|have not inspected|in this turn)\b/i;
+const INCOMPLETE_IMPLEMENTATION = /\b(?:i did not (?:complete|implement|finish)|did not complete the plan|no commit ref (?:is available|to report)|there is no commit ref)\b/i;
 
 /** The reason a stage gave for being stopped by its environment, when it gave one. */
 export function readEnvironmentBlock(responseText: string | undefined): string | undefined {
@@ -298,6 +299,12 @@ export function stageOutcomeFromSession(
       error: `${node.name} made no changes: the branch is still at ${session.startRef.slice(0, 8)}, so there is no "${diffContract.id}" to verify.${
         session.responseText?.trim() ? ` It said: ${firstLine(lastParagraph(session.responseText))}` : ''
       }`
+    };
+  }
+  if (diffContract && session.responseText && INCOMPLETE_IMPLEMENTATION.test(lastParagraph(session.responseText))) {
+    return {
+      status: 'failed',
+      error: `${node.name} reported that it did not complete the implementation: ${firstLine(lastParagraph(session.responseText))}`
     };
   }
 

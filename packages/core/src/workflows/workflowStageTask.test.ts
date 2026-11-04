@@ -360,6 +360,23 @@ test('a written markdown file does not displace snapshotRef for diff contracts',
   ]);
 });
 
+test('an implementation stage that states it did not complete the plan fails even if dirty files were frozen', () => {
+  const node = reviewNode({
+    id: 'implement',
+    name: 'Implement',
+    inputs: [],
+    outputs: [{ id: 'change-diff', kind: 'diff', required: true }]
+  });
+  const outcome = stageOutcomeFromSession(node, {
+    state: 'completed',
+    startRef: '89f1c6e2',
+    snapshotRef: '65ea87c0',
+    responseText: 'The only working-tree change is sessionNav.ts. I did not complete the plan, run verification, create the required change-diff artifact, or commit the change. No commit ref is available.'
+  });
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error ?? '', /did not complete the implementation/i);
+});
+
 test('a written file wins over the narrative fallback', () => {
   const outcome = stageOutcomeFromSession(reviewNode(), {
     state: 'completed',

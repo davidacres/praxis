@@ -554,6 +554,11 @@ export async function runWorkflowAgentStage(
     ...(snapshotRef ? { snapshotRef } : {}),
     ...(startRef ? { startRef } : {})
   });
+  if (node.mutatesWorktree && outcome.status === 'failed' && !outcome.pause && startRef && snapshotRef && snapshotRef !== startRef) {
+    await restoreWorktreeTo(worktreePath, startRef, `Reset ${context.stageName} after incomplete attempt`).catch(error => {
+      workflowLogSink.appendLine(`Could not reset ${context.stageName} worktree to ${startRef}: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
 
   // A stage held to its tests may not reach its goal by weakening them: read what it changed,
   // and undo an attempt that did (as a new commit, so it stays inspectable).

@@ -59,7 +59,7 @@
       ],
       "mutatesWorktree": true,
       "maxAttempts": 2,
-      "modelTier": "standard"
+      "modelTier": "strong"
     },
     {
       "id": "test-contracts",
@@ -366,6 +366,16 @@
       "when": {
         "severity": "medium"
       },
+      "loop": {
+        "maxIterations": 2
+      }
+    },
+    {
+      "id": "e-build-fix",
+      "from": "build",
+      "to": "implement",
+      "on": "failure",
+      "required": false,
       "loop": {
         "maxIterations": 2
       }
