@@ -133,3 +133,36 @@ test('a job that fails after the turn ended, or has no known result, still fails
   const unknown = stageSessionCompletion({ ...turn, backgroundTasks: [{ ...job, state: 'unknown', updatedAt: '2026-10-24T21:05:00.000Z' }] });
   assert.equal(unknown?.state, 'failed', 'an unconfirmed result is never treated as seen');
 });
+
+test('an unknown background job from a superseded runtime epoch before provider handover does not fail the stage', () => {
+  const result = stageSessionCompletion({
+    state: 'completed',
+    completedAt: '2026-11-04T09:26:36.977Z',
+    runtimeEpochs: [
+      { id: 'e1', provider: 'codex-cli', startedAt: '2026-11-04T08:01:44.000Z', endedAt: '2026-11-04T09:19:22.561Z', reason: 'started' },
+      { id: 'e2', provider: 'claude-code-cli', startedAt: '2026-11-04T09:19:22.561Z', reason: 'provider_handover' }
+    ],
+    backgroundTasks: [
+      {
+        id: 'provider:1:exec-pre-handover',
+        source: 'provider',
+        producerId: '1',
+        label: 'npx playwright test',
+        state: 'unknown',
+        startedAt: '2026-11-04T09:19:21.436Z',
+        updatedAt: '2026-11-04T09:19:21.787Z'
+      },
+      {
+        id: 'provider:2:post-handover',
+        source: 'provider',
+        producerId: '2',
+        label: 'Run full functional and theme e2e suites',
+        state: 'completed',
+        startedAt: '2026-11-04T09:26:16.549Z',
+        updatedAt: '2026-11-04T09:47:42.933Z',
+        completedAt: '2026-11-04T09:47:42.933Z'
+      }
+    ]
+  });
+  assert.equal(result?.state, 'completed');
+});

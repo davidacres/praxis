@@ -276,6 +276,31 @@ test('provider handover clears native ACP state', () => {
   assert.equal(next.events.at(-1)?.type, 'provider_handover');
 });
 
+test('provider handover marks unsettled outgoing provider background tasks as stopped', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', {
+    kind: 'general', goal: 'do a thing', scope: '', definitionOfDone: ''
+  }, 'codex-cli', 'gpt-6.1-sol');
+  mgr.updateBackgroundTask('SESSION-abc', {
+    id: 'provider:1:exec-1',
+    source: 'provider',
+    producerId: '1',
+    label: 'npx playwright test',
+    state: 'unknown',
+    startedAt: '2026-11-04T09:19:21.436Z',
+    updatedAt: '2026-11-04T09:19:21.787Z',
+    detail: 'The provider connection ended before a completion result arrived. The outcome is unknown.'
+  });
+  mgr.updateAgentState('SESSION-abc', 'aborted');
+  const next = mgr.transitionAgentRuntime('SESSION-abc', {
+    provider: 'claude-code-cli',
+    reason: 'provider_handover',
+    eventSummary: 'Handed over to Claude Code (local)'
+  });
+  assert.equal(next.backgroundTasks?.[0].state, 'stopped');
+  assert.ok(next.backgroundTasks?.[0].completedAt);
+});
+
 test('a provider handover clears a stale limit flag from the old provider', () => {
   const mgr = new AiSessionManager(storeWith({}));
   mgr.createAgentSession('SESSION-abc', 's1', {

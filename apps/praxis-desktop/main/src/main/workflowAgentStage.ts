@@ -733,15 +733,21 @@ export async function cancelWorkflowAgentStage(runId: string, nodeId: string): P
  * reason to fail the stage. A job that ended after the turn, or whose result is unknown,
  * was never seen by anyone, so it still fails the stage.
  */
-export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks' | 'completedAt'>): { state: FinishedStageSession['state']; error?: string } | undefined {
+export function stageSessionCompletion(record: Pick<AgentSessionRecord, 'state' | 'backgroundTasks' | 'completedAt' | 'runtimeEpochs'>): { state: FinishedStageSession['state']; error?: string } | undefined {
   if (record.state === 'failed' || record.state === 'aborted') return { state: record.state };
   if (record.state !== 'completed') return;
   const tasks = (record.backgroundTasks ?? []).filter(task => task.source === 'provider');
   if (tasks.some(task => task.state === 'running' || task.state === 'paused')) return;
   const turnEnded = record.completedAt ? Date.parse(record.completedAt) : NaN;
+  const activeEpochStart = record.runtimeEpochs && record.runtimeEpochs.length > 1
+    ? Date.parse(record.runtimeEpochs.at(-1)!.startedAt)
+    : NaN;
   const seenDuringTurn = (task: BackgroundTask): boolean => {
-    if (task.state !== 'failed' && task.state !== 'stopped') return false;
     const ended = Date.parse(task.completedAt ?? task.updatedAt);
+    if (task.state === 'unknown' && Number.isFinite(activeEpochStart) && Number.isFinite(ended) && ended <= activeEpochStart) {
+      return true;
+    }
+    if (task.state !== 'failed' && task.state !== 'stopped') return false;
     return Number.isFinite(turnEnded) && Number.isFinite(ended) && ended <= turnEnded;
   };
   const unresolved = tasks.find(task => task.state !== 'completed' && !seenDuringTurn(task));

@@ -1214,6 +1214,14 @@ export class AiSessionManager {
     record.providerLimitReached = undefined;
     if (clearNative) {
       Object.assign(record, nativeRuntimeClearedPatch());
+      if (record.backgroundTasks?.length) {
+        const now = new Date().toISOString();
+        record.backgroundTasks = record.backgroundTasks.map(task =>
+          task.source === 'provider' && (task.state === 'running' || task.state === 'paused' || task.state === 'unknown')
+            ? { ...task, state: 'stopped' as const, updatedAt: now, completedAt: task.completedAt ?? now }
+            : task
+        );
+      }
     }
     record.events.push({
       timestamp: new Date().toISOString(),
