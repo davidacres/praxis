@@ -151,3 +151,30 @@ test('startup evidence and recovered reply survive repeated durable epoch change
     assert.equal(conv.turns[0].state, 'completed');
   }
 });
+
+test('repository validates observation epochs separately from immutable attempt epochs', async t => {
+  const { makeParticipant } = await import('@praxis/core');
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  await repository.transaction(draft => {
+    draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now',
+      revision: 0, coordinatorEpoch: 'observer', participants: [makeParticipant('lead')], messages: [],
+      bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [], turns: [{
+        id: 't', commandId: 'cmd', payloadDigest: 'digest', userMessageId: 'u', acceptedSequence: 1,
+        plan: { participants: [makeParticipant('lead')], runtimeOptions: {} }, state: 'interrupted',
+        completedParticipantIds: [], attempts: [{ id: 'a', turnId: 't', participantId: 'part-lead', ordinal: 1,
+          coordinatorEpoch: 'origin', state: 'interrupted', createdAt: 'now', contextReceipt: { digest: 'd', messageIds: [] },
+          usageReferences: [], toolEvidenceReferences: [], recoveryEvidence: [{ id: 'e', conversationId: 'c', turnId: 't',
+            participantId: 'part-lead', attemptId: 'a', coordinatorEpoch: 'origin', observingEpoch: 'observer',
+            kind: 'reconciliation', observedAt: 'now', provenance: 'startup' }] }] }] });
+  });
+  const snapshot = new FileTeamChatRepository(file).read();
+  const evidence = snapshot.conversations[0].turns[0].attempts[0].recoveryEvidence![0];
+  assert.equal(evidence.coordinatorEpoch, 'origin');
+  assert.equal(evidence.observingEpoch, 'observer');
+  for (const invalid of [{ ...evidence, observingEpoch: '' }, { ...evidence, coordinatorEpoch: 'observer' }]) {
+    snapshot.conversations[0].turns[0].attempts[0].recoveryEvidence![0] = invalid;
+    fs.writeFileSync(file, JSON.stringify(snapshot));
+    assert.throws(() => new FileTeamChatRepository(file), /Invalid recovery evidence/);
+  }
+});

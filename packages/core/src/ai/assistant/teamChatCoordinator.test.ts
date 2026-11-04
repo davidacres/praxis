@@ -609,3 +609,23 @@ test('direct unknown-outcome retry requires informed resolution without dispatch
   await assert.rejects(coordinator.retryParticipant('conv-1', turn.id, 'part-lead'), /use resolveAttempt.*duplicate-risk acknowledgement/);
   assert.deepEqual(repo.read(), before);
 });
+
+test('startup imports a prepared attempt result without dispatching the provider', async () => {
+  const { repo, turn, attempt } = await recoveryFixture('interrupted');
+  turn.state = 'running';
+  attempt.state = 'prepared';
+  delete attempt.dispatchIntent;
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'prepared-result', kind: 'final_result',
+    result: { text: 'Prepared durable reply', usageReferences: ['paid-once'] } });
+  let invocations = 0;
+  for (let i = 0; i < 2; i++) {
+    await new TeamChatCoordinator({ repository: repo, executionAdapter: {
+      execute: async () => { invocations++; throw new Error('must not replay'); }
+    } }).initialize();
+  }
+  const current = repo.read().conversations[0];
+  assert.equal(invocations, 0);
+  assert.equal(current.messages.filter(m => m.text === 'Prepared durable reply').length, 1);
+  assert.deepEqual(current.turns[0].attempts[0].usageReferences, ['paid-once']);
+  assert.equal(current.turns[0].attempts[0].dispatchIntent, undefined);
+});

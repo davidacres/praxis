@@ -214,6 +214,8 @@ test('the shelf closes reliably on pointer leave and outside clicks without inte
   for (let attempt = 0; attempt < 3; attempt++) {
     await spine.click();
     const reply = page.getByTestId('session-shelf-reply-input');
+    // Enter the book after its slide-in finishes so pointer leave tests start inside it.
+    await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
     await reply.click();
     await reply.fill(`Draft reply ${attempt}`);
     // Give the old spine blur timer time to fire; editing inside the card must stay open.
@@ -230,8 +232,8 @@ test('the shelf closes reliably on pointer leave and outside clicks without inte
   // Even with the old hit-testing fill restored, blank sleeve presses dismiss.
   for (const edge of ['above', 'below'] as const) {
     await spine.click();
-    await page.getByTestId('session-shelf-reply-input').click();
     await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+    await page.getByTestId('session-shelf-reply-input').click();
     const bounds = (await card.boundingBox())!;
     const oldHitArea = await page.addStyleTag({ content: '.session-shelf__sleeve.is-open { pointer-events: auto; }' });
     await page.mouse.click(bounds.x + bounds.width / 2, edge === 'above' ? bounds.y - 15 : bounds.y + bounds.height + 15);
@@ -239,8 +241,8 @@ test('the shelf closes reliably on pointer leave and outside clicks without inte
     await oldHitArea.evaluate(element => element.remove());
   }
   await spine.click();
-  await page.getByTestId('session-shelf-reply-input').click();
   await expect(card).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  await page.getByTestId('session-shelf-reply-input').click();
   const bounds = (await card.boundingBox())!;
   // Native hit testing now reaches the workspace beneath the transparent sleeve.
   expect(await page.evaluate(point => document.elementFromPoint(point.x, point.y)?.closest('.session-shelf') === null,

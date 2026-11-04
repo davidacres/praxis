@@ -82,7 +82,9 @@ export function completeConversationAttempt(current: DurableConversation, expect
     item.id === recoveredResultId && item.kind === 'final_result' && item.conversationId === current.id &&
     item.turnId === turnId && item.attemptId === attemptId && item.participantId === attempt.participantId &&
     item.coordinatorEpoch === attempt.coordinatorEpoch && (item.result?.text ?? item.data?.text) === message.text);
-  if (!turn || !attempt || (recoveredResultId !== undefined && !recovered) || (recovered && !['interrupted', 'outcome_unknown', 'failed'].includes(turn.state)) || (!recovered && (turn.state !== 'running' || epoch !== current.coordinatorEpoch || epoch !== attempt.coordinatorEpoch)) ||
+  // Recovery uses the immutable originating epoch, even after startup advances the coordinator.
+  // A durable result is sufficient without dispatch intent; ordinary callbacks still require it.
+  if (!turn || !attempt || epoch !== attempt.coordinatorEpoch || (recoveredResultId !== undefined && !recovered) || (recovered && !['interrupted', 'outcome_unknown', 'failed'].includes(turn.state)) || (!recovered && (turn.state !== 'running' || epoch !== current.coordinatorEpoch)) ||
       (!(recovered ? ['interrupted', 'outcome_unknown', 'failed'] : ['dispatching', 'running', 'awaiting_approval']).includes(attempt.state) || (!recovered && !attempt.dispatchIntent)) || turn.attempts.filter(item => item.participantId === attempt.participantId).at(-1)?.id !== attemptId ||
       turn.completedParticipantIds.includes(attempt.participantId) || message.turnId !== turnId || message.participantId !== attempt.participantId ||
       message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||

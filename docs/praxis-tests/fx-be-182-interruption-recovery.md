@@ -134,7 +134,7 @@ Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.t
 Title: **pre-dispatch recovery requires exact durable result and imports only once**.
 
 **Given** a prepared attempt without dispatch intent.
-**When** reject ordinary completion, begin a replacement epoch, add exact final-result evidence, reject foreign conversation, turn, participant, attempt and epoch identities, import and try importing again.
+**When** reject ordinary completion, begin a replacement epoch, add exact final-result evidence, reject foreign conversation, turn, participant, attempt and epoch identities, reject the observing epoch as the import epoch, import with the originating epoch and try importing again.
 **Then** the imported attempt completes and the second import throws duplicate or fenced; ordinary prepared completion is fenced.
 
 ## PT-0ECEA64537
@@ -154,3 +154,21 @@ Title: **effective capability evidence is durable before runtime dispatch; evide
 **Given** a production adapter with a scripted CLI tools runtime and prepared matching policy binding.
 **When** first fail the runtime-identity evidence callback, then record evidence and execute again.
 **Then** failed evidence prevents launch; successful callback observes toolCapable true before any launch, followed by exactly one tools invocation. Physical disk durability is supplied by the callback contract, not exercised here.
+
+## Prepared-result startup integration
+
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts).
+Title: **startup imports a prepared attempt result without dispatching the provider**.
+
+**Given** a prepared attempt with no dispatch intent and a durable final result with usage attribution.
+**When** initialize two replacement coordinators against the same repository.
+**Then** exactly one reply and its usage reference are committed, dispatch intent remains absent and the provider is never invoked.
+
+## Originating and observing epoch validation
+
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts).
+Title: **repository validates observation epochs separately from immutable attempt epochs**.
+
+**Given** persisted reconciliation evidence whose observing epoch differs from its attempt's originating epoch.
+**When** reopen the repository, then separately corrupt the observing epoch and replace the originating epoch with the observer.
+**Then** the valid record reloads with both epochs intact, while both corrupt records fail decoding.

@@ -576,8 +576,8 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-4972638424 | session Shelf | collapsed session shelf shows the last 5 sessions, distinguishes today, and reveals cards on hover and focus | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:51` |
 | PT-1FCF628060 | session Shelf | the shelf card sends a quick reply into the session | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:144` |
 | PT-90617ED6C8 | session Shelf | the shelf closes reliably on pointer leave and outside clicks without interrupting replies | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:188` |
-| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:262` |
-| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:304` |
+| PT-FFEA37801D | session Shelf | only the revealed spine glows when moving across all five sessions | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:264` |
+| PT-2EE0F7086B | session Shelf | shelf books follow spines, retain drafts, delay hover and distinguish selection | `apps/praxis-desktop/main/e2e/sessionShelf.spec.ts:306` |
 | PT-B3B664E022 | session Shelf New | a session started from the shelf stays in the shelf as its own preview card | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:62` |
 | PT-FFA325C092 | session Shelf New | a goal that matches one of today's sessions can be added to it with ⌘↵ | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:92` |
 | PT-036F938299 | session Shelf New | the creation cells label themselves, fill solid, and draw their glyphs on whole pixels | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:111` |

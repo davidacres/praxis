@@ -9163,7 +9163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
-        "line": 262,
+        "line": 264,
         "project": "functional"
       },
       "area": "session Shelf",
@@ -9179,7 +9179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelf.spec.ts",
-        "line": 304,
+        "line": 306,
         "project": "functional"
       },
       "area": "session Shelf",

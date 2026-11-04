@@ -99,6 +99,7 @@ test('pre-dispatch recovery requires exact durable result and imports only once'
     foreign.turns[0].attempts[0].recoveryEvidence!.at(-1)![field] = 'foreign';
     assert.throws(() => completeConversationAttempt(foreign, 4, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /fenced/);
   }
+  assert.throws(() => completeConversationAttempt(recovered, 4, 't', 'a', 'observer', reply, a.contextReceipt, {}, 'result'), /fenced/);
   const completed = completeConversationAttempt(recovered, 4, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result');
   assert.equal(completed.turns[0].attempts[0].state, 'completed');
   assert.throws(() => completeConversationAttempt(completed, 5, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /duplicate|fenced/);
