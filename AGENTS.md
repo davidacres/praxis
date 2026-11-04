@@ -271,6 +271,7 @@ npm run desktop:copy-renderer   # REQUIRED before e2e
 npm run build:desktop
 
 npm run test:core             # node:test
+npm run test:renderer         # renderer node:test units (run by test and test:full)
 npm run test:desktop          # Playwright e2e, full functional suite
 npm run test:desktop:smoke    # Playwright e2e, smoke set (~185 tests)
 npm run test:desktop:git      # gitService unit tests

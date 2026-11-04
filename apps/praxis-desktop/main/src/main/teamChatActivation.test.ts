@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { TeamChatStore } from '@praxis/core';
-import { FileTeamChatRepository } from './adapters/teamChatRepository';
+import { FileTeamChatRepository, TeamChatCommitUncertainError } from './adapters/teamChatRepository';
 import { TeamChatActivation } from './teamChatActivation';
 import { TeamChatAttachments } from './teamChatAttachments';
 
@@ -84,6 +84,22 @@ test('interrupted activation reuses a validated backup and uncertain commit requ
   await repository.activate();
   assert.equal(repository.read().conversations[0].id, 'old');
   assert.equal(repository.read().teamChats.length, 0);
+  if (process.platform === 'win32') return; // Windows does not flush directories
+  // After the rename, a failed directory flush leaves the commit uncertain: writes halt until reconciled.
+  const originalOpen = fs.promises.open;
+  const open = t.mock.method(fs.promises, 'open', async (...args: Parameters<typeof originalOpen>) => {
+    if (args[0] === path.dirname(file)) throw new Error('directory flush unavailable');
+    return originalOpen(...args);
+  });
+  const store = new TeamChatStore(repository);
+  await assert.rejects(store.rename('old', 'uncertain'), TeamChatCommitUncertainError);
+  open.mock.restore();
+  await assert.rejects(store.rename('old', 'refused'), TeamChatCommitUncertainError);
+  await assert.rejects(repository.activate(), TeamChatCommitUncertainError);
+  assert.equal(repository.read().conversations[0].title, 'uncertain', 'the renamed bytes did land');
+  await repository.reconcile(snapshot => assert.equal(snapshot.conversations[0].title, 'uncertain'));
+  await store.rename('old', 'reconciled');
+  assert.equal(new FileTeamChatRepository(file).read().conversations[0].title, 'reconciled');
 });
 
 test('disabled activation never commits or fences unrelated legacy work', async () => {

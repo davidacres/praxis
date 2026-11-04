@@ -5,7 +5,9 @@ import * as assert from 'node:assert/strict';
 import { prepareTeamChatContext, TeamChatContextRequired } from './teamChatContext';
 import type { DurableConversation, ConversationTurn, ConversationMessage } from './assistantTypes';
 import { makeParticipant } from './teamChatCoordinator';
+import { resolveTeamChatBinding, type TeamChatConfiguration } from './teamChatBindings';
 const participant = makeParticipant('lead');
+const replacementConfig: TeamChatConfiguration = { conversationId: 'chat', participantId: participant.id, providerRuntime: 'acp', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: '1', canonicalFolder: '/project', executionMode: 'chat', toolPolicy: 'read-only', permissionPolicy: 'manual' };
 const turn: ConversationTurn = { id: 'turn', commandId: 'command', payloadDigest: '', userMessageId: 'current', acceptedSequence: 20, plan: { participants: [participant], runtimeOptions: {} }, state: 'running', completedParticipantIds: [], attempts: [] };
 function fixture(): DurableConversation {
   const messages: ConversationMessage[] = Array.from({ length: 19 }, (_, i) => ({ id: `m${i}`, turnId: 'old', role: 'user', text: i === 0 ? 'Early decision ' + 'x'.repeat(4000) : 'history', createdAt: '', sequence: i + 1, attachments: [] }));
@@ -48,4 +50,30 @@ test('an earlier turn reply committed after a queued input remains eligible', ()
   const prepared = prepareTeamChatContext(conversation, turn, participant);
   assert.ok(prepared.receipt.messageIds.includes('late-prior-reply'));
   assert.ok(!prepared.receipt.messageIds.includes('future'));
+});
+
+test('provider replacement reconstructs an early pinned decision, its later correction and other members\' replies, excluding queued future input', () => {
+  const conversation = fixture();
+  conversation.participants.push(makeParticipant('qa'));
+  // m0 is the early pinned decision; m5 corrects it; m7 is another member's reply.
+  conversation.messages[5] = { ...conversation.messages[5], role: 'dev', text: 'Correction: use the second option' };
+  conversation.messages[7] = { ...conversation.messages[7], role: 'qa', text: 'QA reply on the decision' };
+  pinConversationDecision(conversation, 'm5', 'm0');
+  const old = resolveTeamChatBinding(conversation.bindings, { ...replacementConfig, providerRuntime: 'old-cli' }, 'old');
+  old.deliveredMessageIds = conversation.messages.slice(0, 19).map(m => m.id);
+  const replacement = resolveTeamChatBinding(conversation.bindings, { ...replacementConfig, providerRuntime: 'new-api' }, 'new');
+  assert.equal(old.status, 'invalid');
+  assert.deepEqual(replacement.deliveredMessageIds, []);
+  // A fresh binding has delivered nothing, so even a native-resume prompt is a full reconstruction.
+  for (const nativeResume of [false, true]) {
+    const prepared = prepareTeamChatContext(conversation, turn, participant, replacement, nativeResume);
+    for (const id of ['m0', 'm5', 'm7', 'current']) assert.ok(prepared.receipt.messageIds.includes(id), id);
+    assert.ok(!prepared.receipt.messageIds.includes('future'));
+    assert.ok(prepared.prompt.includes('Early decision'));
+    assert.ok(prepared.prompt.includes('Correction: use the second option'));
+    assert.ok(prepared.prompt.includes('QA reply on the decision'));
+    assert.ok(prepared.prompt.includes('supersedesMessageId'));
+    assert.ok(!prepared.prompt.includes('Queued input'));
+    assert.equal(prepared.receipt.bindingId, 'new');
+  }
 });

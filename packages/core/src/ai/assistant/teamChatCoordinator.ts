@@ -549,6 +549,7 @@ export class TeamChatCoordinator {
   private async processConversation(conversationId: string): Promise<void> {
     if (this.activeLoops.has(conversationId)) return;
     this.activeLoops.add(conversationId);
+    const loopEpoch = this.getConversation(conversationId)?.coordinatorEpoch;
 
     try {
       while (true) {
@@ -925,8 +926,16 @@ export class TeamChatCoordinator {
         }
       }
     } catch (error) {
-      // Deletion removes the authoritative identity; callbacks may only drain.
-      if (this.getConversation(conversationId)) throw error;
+      // Deletion removes the authoritative identity, and a newer epoch fences this
+      // loop's attempt; in both cases late callbacks may only drain.
+      const current = this.getConversation(conversationId);
+      if (!current || current.coordinatorEpoch !== loopEpoch) return;
+      // This loop runs detached, so a storage fault must be reported, not left as an
+      // unhandled rejection. What did commit stays durable for startup recovery.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Team chat ${conversationId} stopped: ${message}`);
+      const turn = current.turns.find(t => !['queued', 'completed', 'cancelled'].includes(t.state));
+      this.notify({ conversationId, revision: current.revision, type: 'turn_failed', ...(turn ? { turnId: turn.id, state: turn.state } : {}), error: message });
     } finally {
       this.activeLoops.delete(conversationId);
     }

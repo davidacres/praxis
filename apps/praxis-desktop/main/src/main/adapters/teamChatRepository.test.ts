@@ -178,3 +178,103 @@ test('repository validates observation epochs separately from immutable attempt 
     assert.throws(() => new FileTeamChatRepository(file), /Invalid recovery evidence/);
   }
 });
+
+function durable(id: string, messages = 0): import('@praxis/core').DurableConversation {
+  return { schemaVersion: 2, id, title: id, createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [],
+    messages: Array.from({ length: messages }, (_, i) => ({ id: `${id}-m${i}`, role: i % 2 ? 'lead' as const : 'user' as const,
+      text: `message ${i} ${'x'.repeat(200)}`, createdAt: 'now', sequence: i + 1, turnId: `${id}-t${Math.floor(i / 2)}`, attachments: [] })),
+    turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] };
+}
+function errno(code: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`${code}: injected`), { code });
+}
+
+for (const code of ['ENOSPC', 'EACCES']) for (const stage of ['open', 'writeFile', 'sync'] as const) {
+  test(`ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ${code} at ${stage}`, async t => {
+    const file = profile(t); const repository = new FileTeamChatRepository(file);
+    await repository.transaction(draft => { draft.conversations.push(durable('c', 2)); });
+    const committed = fs.readFileSync(file, 'utf8');
+    const originalOpen = fs.promises.open;
+    const open = t.mock.method(fs.promises, 'open', async (...args: Parameters<typeof originalOpen>) => {
+      if (!String(args[0]).endsWith('.tmp')) return originalOpen(...args);
+      if (stage === 'open') throw errno(code);
+      const handle = await originalOpen(...args);
+      return new Proxy(handle, { get(target, key) {
+        if (key === stage) return async () => { throw errno(code); };
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+    });
+    await assert.rejects(repository.transaction(draft => { draft.conversations[0].title = 'lost'; }), new RegExp(code));
+    open.mock.restore();
+    assert.equal(fs.readFileSync(file, 'utf8'), committed, 'committed bytes are untouched');
+    assert.deepEqual(fs.readdirSync(path.dirname(file)), ['team-chats.json'], 'no temp file is left behind');
+    assert.equal(repository.read().conversations[0].title, 'c');
+    // A pre-rename fault is certain: the next write proceeds from the committed state.
+    await repository.transaction(draft => { draft.conversations[0].title = 'kept'; });
+    assert.equal(new FileTeamChatRepository(file).read().conversations[0].title, 'kept');
+  });
+}
+
+test('a truncated file, invalid JSON, wrong schemaVersion and a duplicate conversation id each fail load without rewriting', async t => {
+  const file = profile(t);
+  const valid = JSON.stringify({ schemaVersion: 2, revision: 1, teamChats: [], conversations: [durable('c', 2)] }, null, 2);
+  const variants = {
+    truncated: valid.slice(0, Math.floor(valid.length / 2)),
+    invalidJson: valid.replace('"conversations"', 'conversations'),
+    wrongSchema: valid.replace('"schemaVersion": 2,\n  "revision"', '"schemaVersion": 3,\n  "revision"'),
+    duplicateConversation: JSON.stringify({ schemaVersion: 2, revision: 1, teamChats: [], conversations: [durable('c'), durable('c')] })
+  };
+  for (const [name, raw] of Object.entries(variants)) {
+    assert.notEqual(raw, valid, name);
+    fs.writeFileSync(file, raw);
+    assert.throws(() => new FileTeamChatRepository(file), TeamChatStorageError, name);
+    assert.equal(fs.readFileSync(file, 'utf8'), raw, `${name} is never rewritten`);
+  }
+  // Corruption that appears after load is refused by the next transaction, not overwritten.
+  fs.writeFileSync(file, valid);
+  const repository = new FileTeamChatRepository(file);
+  fs.writeFileSync(file, variants.truncated);
+  await assert.rejects(repository.transaction(draft => { draft.conversations[0].title = 'over corrupt'; }), TeamChatStorageError);
+  assert.equal(fs.readFileSync(file, 'utf8'), variants.truncated);
+});
+
+test('two repository instances over one file are refused or serialized', async t => {
+  const file = profile(t);
+  const windows = [new FileTeamChatRepository(file), new FileTeamChatRepository(file)];
+  await windows[0].transaction(draft => { draft.conversations.push(durable('shared')); });
+  // 20 interleaved mutations from two windows: every one lands, none is lost.
+  await Promise.all(Array.from({ length: 20 }, (_, i) => windows[i % 2].transaction(draft => {
+    const chat = draft.conversations[0];
+    chat.messages.push({ id: `w${i}`, role: 'user', text: `from window ${i % 2}`, createdAt: 'now', sequence: (chat.messages.at(-1)?.sequence ?? 0) + 1, turnId: `t${i}`, attachments: [] });
+    chat.revision++;
+  })));
+  const reloaded = new FileTeamChatRepository(file).read();
+  assert.equal(reloaded.conversations[0].messages.length, 20);
+  assert.deepEqual(reloaded.conversations[0].messages.map(m => m.sequence), Array.from({ length: 20 }, (_, i) => i + 1));
+  assert.equal(reloaded.conversations[0].revision, 20);
+  assert.equal(reloaded.revision, 21);
+});
+
+test('a 10,000-message conversation commits under concurrent mutation of another chat within a recorded bound', async t => {
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  const other = new FileTeamChatRepository(file);
+  await repository.transaction(draft => { draft.conversations.push(durable('large', 10_000), durable('small')); });
+  const timings: number[] = [];
+  await Promise.all(Array.from({ length: 5 }, async (_, i) => {
+    const started = performance.now();
+    await repository.transaction(draft => { draft.conversations[0].title = `large ${i}`; draft.conversations[0].revision++; });
+    timings.push(performance.now() - started);
+    await other.transaction(draft => { draft.conversations[1].title = `small ${i}`; draft.conversations[1].revision++; });
+  }));
+  const bytes = fs.statSync(file).size;
+  const slowest = Math.max(...timings);
+  t.diagnostic(`team-chats.json ${bytes} bytes; large-chat commits ${timings.map(ms => ms.toFixed(0)).join(', ')} ms (queued behind concurrent writes)`);
+  const reloaded = new FileTeamChatRepository(file).read();
+  assert.equal(reloaded.conversations[0].messages.length, 10_000);
+  assert.equal(reloaded.conversations[0].revision, 5);
+  assert.equal(reloaded.conversations[1].revision, 5);
+  // A ceiling to record the cost, not a speed gate.
+  assert.ok(slowest < 5_000 * 5, `slowest commit ${slowest.toFixed(0)} ms`);
+});
