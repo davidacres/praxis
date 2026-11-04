@@ -331,34 +331,47 @@ export class TeamChatCoordinator {
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
     await this.initialize();
     const abortKey = `${conversationId}:${turnId}`;
+    // Persist the intent before signalling the runtime. An abort request is not
+    // evidence that an external tool did not execute.
+    const intent = await this.transitionConversation(conversationId, conv => {
+      const turn = conv.turns.find(t => t.id === turnId);
+      if (!turn || ['completed', 'cancelled'].includes(turn.state)) return conv;
+      turn.state = 'cancelling';
+      conv.revision++;
+      return conv;
+    });
     const controller = this.abortControllers.get(abortKey);
     if (controller) {
       controller.abort();
-      this.abortControllers.delete(abortKey);
     }
 
-    await this.transitionConversation(conversationId, conv => {
+    const updated = await this.transitionConversation(conversationId, conv => {
       const turn = conv.turns.find(t => t.id === turnId);
-      if (!turn || ['completed', 'cancelled'].includes(turn.state)) return conv;
-      turn.state = 'cancelled';
+      if (!turn || turn.state !== 'cancelling') return conv;
+      const active = turn.attempts.find(att => !['completed', 'failed', 'interrupted', 'outcome_unknown', 'cancelled'].includes(att.state));
+      turn.state = active ? 'outcome_unknown' : 'cancelled';
       conv.revision++;
       for (const att of turn.attempts) {
-        if (!['completed', 'failed', 'interrupted', 'outcome_unknown'].includes(att.state)) {
+        if (att.state === 'prepared') {
           att.state = 'cancelled';
           att.completedAt = this.clock();
         }
       }
+      if (active) {
+        active.state = 'outcome_unknown';
+        active.completedAt = this.clock();
+      }
+      for (const queued of conv.turns) if (queued.state === 'queued') queued.state = 'cancelled';
       return conv;
     });
-
-    const updated = this.getConversation(conversationId);
+    this.abortControllers.delete(abortKey);
     if (updated) {
       this.notify({
         conversationId,
         revision: updated.revision,
         type: 'turn_cancelled',
         turnId,
-        state: 'cancelled'
+        state: updated.turns.find(t => t.id === turnId)?.state
       });
     }
 
