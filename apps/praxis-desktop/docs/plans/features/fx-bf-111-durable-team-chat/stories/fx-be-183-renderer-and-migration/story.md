@@ -60,3 +60,20 @@ Both tasks satisfy every acceptance criterion, results are linked here and in th
 
 
 ## Comments
+
+
+**PRX-S111-183** — 2026-11-04T07:49:19.462Z
+**Workflow run failed: Governed delivery — FX-BE-183: Renderer subscription, single navigation entry, and legacy migration**
+
+Status: Failed · Duration: 6m 32s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ❌ Build: failed
+- ⏳ QA: pending
+- ✅ Security scan: succeeded
+
+Required stage "build" failed.
