@@ -69,10 +69,10 @@ test('allowing a pending permission lets the session continue to completion', as
   await expect(toolHint).toHaveAttribute('data-tooltip', 'Tool: read_file');
   await expect(toolHint).toHaveAttribute('tabindex', '0');
   await expect(toolHint).toHaveAttribute('aria-label', 'Tool: read_file');
-  await toolHint.hover();
-  await expect.poll(() => toolHint.evaluate(element => getComputedStyle(element, '::after').opacity)).toBe('1');
   await toolHint.focus();
   await expect(toolHint).toBeFocused();
+  await toolHint.hover();
+  await expect.poll(() => toolHint.evaluate(element => getComputedStyle(element, '::after').opacity)).toBe('1');
   await expect(card).not.toContainText('permission-request-7e4a9f2c1d8b6e5a');
   // What the user actually sees while the agent is blocked on a decision: the
   // tool it wants to run, and Deny / Always allow / Allow, docked above the

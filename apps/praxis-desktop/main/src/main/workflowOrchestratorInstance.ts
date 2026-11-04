@@ -28,7 +28,7 @@ import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
 import { getAiSessionManager } from './aiInstance';
 import { spawnCheck } from './workflowCheckProcess';
-import { ensureRunDependencies } from './runDependencies';
+import { ensureRunDependencies, installStageOf } from './runDependencies';
 import { runWorkflowMerge, type MergeConflictResolver } from './workflowMergeRunner';
 import { changedPaths, commitPraxisWrite } from './ticketWriteBackCommit';
 import { withBaseCheckout } from './baseCheckoutLock';
@@ -240,6 +240,16 @@ const dispatcher: StageDispatcher = {
   async runCheck(node, context) {
     const error = await runTrustError(context.run);
     if (error) return { status: 'failed' as const, error };
+    if (context.worktreePath && installStageOf(context.run.definition)?.id !== node.id) {
+      const installError = await ensureRunDependencies(context.run.definition, context.worktreePath, {
+        spawn: spawnCheck,
+        report: message => {
+          context.reportProgress?.(message);
+          workflowLogSink.appendLine(`[workflow ${context.run.runId}] ${node.name}: ${message}`);
+        }
+      }, context.signal);
+      if (installError) return { status: 'failed' as const, error: installError };
+    }
     return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot(), { planText: runPlanText });
   },
   async runMerge(node, context, onSession) {

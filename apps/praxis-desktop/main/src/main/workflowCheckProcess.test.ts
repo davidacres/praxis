@@ -27,6 +27,14 @@ test('local workflow checks use unattended CI semantics with parallel desktop wo
     const result = await spawnCheck(check("process.stdout.write(JSON.stringify({ ci: process.env.CI, workers: process.env.PRAXIS_E2E_WORKERS }))"), tmpdir());
     assert.equal(result.code, 0);
     assert.deepEqual(JSON.parse(result.output), { ci: '1', workers: '4' });
+
+    const affectedNode: WorkflowCheckNode = {
+      ...check("process.stdout.write(JSON.stringify({ ci: process.env.CI, workers: process.env.PRAXIS_E2E_WORKERS }))"),
+      id: 'affected-tests'
+    };
+    const affectedResult = await spawnCheck(affectedNode, tmpdir());
+    assert.equal(affectedResult.code, 0);
+    assert.deepEqual(JSON.parse(affectedResult.output), { ci: '1', workers: '1' });
   } finally {
     if (previous === undefined) delete process.env.CI;
     else process.env.CI = previous;
