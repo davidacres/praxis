@@ -114,6 +114,8 @@ export class TeamChatCoordinator {
   private readonly onUpdate?: (update: ConversationUpdate) => void;
   private readonly subscribers = new Map<string, Set<(update: ConversationUpdate) => void>>();
   private readonly activeLoops = new Set<string>();
+  /** Conversations whose loop stopped on a storage fault; see `processConversation`. */
+  private readonly haltedLoops = new Map<string, string>();
   private readonly abortControllers = new Map<string, AbortController>();
   private initialization?: Promise<void>;
 
@@ -548,6 +550,12 @@ export class TeamChatCoordinator {
 
   private async processConversation(conversationId: string): Promise<void> {
     if (this.activeLoops.has(conversationId)) return;
+    const halted = this.haltedLoops.get(conversationId);
+    if (halted !== undefined) {
+      // Commands still commit; only dispatch waits for startup recovery.
+      this.reportLoopStop(conversationId, halted);
+      return;
+    }
     this.activeLoops.add(conversationId);
     const loopEpoch = this.getConversation(conversationId)?.coordinatorEpoch;
 
@@ -932,12 +940,32 @@ export class TeamChatCoordinator {
       if (!current || current.coordinatorEpoch !== loopEpoch) return;
       // This loop runs detached, so a storage fault must be reported, not left as an
       // unhandled rejection. What did commit stays durable for startup recovery.
+      //
+      // A fault can leave an attempt `running` with an unknown outcome. Only startup
+      // recovery (a new epoch) may reconcile it: re-entering the loop here cannot make
+      // progress, because reservation refuses a second attempt while one is open, and it
+      // would stop silently. So dispatch halts and every later command is told why.
+      // Later queued turns stay queued: they were accepted and never ran, so they are
+      // neither failed nor retried here, and startup recovery dispatches them in order.
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Team chat ${conversationId} stopped: ${message}`);
-      const turn = current.turns.find(t => !['queued', 'completed', 'cancelled'].includes(t.state));
-      this.notify({ conversationId, revision: current.revision, type: 'turn_failed', ...(turn ? { turnId: turn.id, state: turn.state } : {}), error: message });
+      this.haltedLoops.set(conversationId, message);
+      this.reportLoopStop(conversationId, message);
     } finally {
       this.activeLoops.delete(conversationId);
+    }
+  }
+
+  /** Tell subscribers dispatch stopped; never throws, because the loop runs detached. */
+  private reportLoopStop(conversationId: string, message: string): void {
+    try {
+      console.error(`Team chat ${conversationId} stopped: ${message}`);
+      const current = this.getConversation(conversationId);
+      if (!current) return;
+      const turn = current.turns.find(t => !['queued', 'completed', 'cancelled'].includes(t.state));
+      this.notify({ conversationId, revision: current.revision, type: 'turn_failed', ...(turn ? { turnId: turn.id, state: turn.state } : {}),
+        error: `${message} Restart Praxis to recover this team chat.` });
+    } catch {
+      // Reporting is best effort; the committed state is what startup recovery reads.
     }
   }
 }

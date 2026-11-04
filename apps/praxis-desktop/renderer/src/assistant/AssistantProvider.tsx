@@ -124,6 +124,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [teamMembers, setTeamMembers] = useState<AssistantRole[]>(['dev']);
   const [projectId, setProjectIdState] = useState<string | undefined>();
   const [chatId, setChatId] = useState<string | undefined>();
+  // Bumped to re-read the open chat when the same id is opened again without a loaded transcript.
+  const [chatLoad, setChatLoad] = useState(0);
+  /** The chat id whose snapshot the subscription last delivered successfully. */
+  const loadedChatIdRef = useRef<string | undefined>();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [detachedTitle, setDetachedTitle] = useState<string | undefined>();
   const [appliedActions, setAppliedActions] = useState<Record<string, string>>({});
@@ -182,14 +186,16 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!chatId) return;
     activeToolPrefix.current = chatId;
+    loadedChatIdRef.current = undefined;
     return subscribeConversation(window.praxis.assistant, chatId, snapshot => {
+      loadedChatIdRef.current = snapshot ? chatId : undefined;
       setConversation(snapshot);
       messagesRef.current = snapshot?.messages ?? [];
       setMessages(snapshot?.messages ?? []);
       const active = snapshot?.turns.find(t => !['completed', 'cancelled', 'queued'].includes(t.state));
       setActiveTurnStartedAt(active ? Date.parse(snapshot!.messages.find(m => m.id === active.userMessageId)?.createdAt ?? '') : undefined);
-    }, error => setError(String(error)));
-  }, [chatId]);
+    }, error => { loadedChatIdRef.current = undefined; setError(String(error)); });
+  }, [chatId, chatLoad]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -282,8 +288,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [teamMembers]);
 
   const loadChat = useCallback(async (id: string) => {
-    // Re-opening the open chat keeps its transcript: the subscription only re-reads on a new id.
-    if (chatIdRef.current === id) { setOpen(true); return; }
+    // Re-opening the open chat keeps its transcript while its subscription holds a
+    // loaded snapshot (it stays live across windows). Otherwise reload it, bumping
+    // `chatLoad` because setting the same id would not re-run the subscription.
+    if (chatIdRef.current === id && loadedChatIdRef.current === id) { setOpen(true); return; }
+    if (chatIdRef.current === id) setChatLoad(n => n + 1);
     generation.current++;
     creation.current = undefined;
     chatIdRef.current = id;

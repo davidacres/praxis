@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 799,
+  "testCount": 800,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5270,12 +5270,28 @@
       }
     },
     {
+      "id": "PT-2467F68DB7",
+      "title": "re-opening a team chat whose first load failed reads its transcript again",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 358,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "a project team chat with an answered turn, then the next assistant:getConversation call in main fails once and the window reloads",
+        "when": "the user opens the team-chat row (the load fails), then opens the same row again",
+        "then": "the first open shows the read failure and no transcript; the second open re-reads the same chat and shows the user message and the reply instead of treating the failed load as already open"
+      }
+    },
+    {
       "id": "PT-0DD1738998",
       "title": "a tool member's pending permission is attached to its attempt and a restart never reuses the approval",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 358,
+        "line": 393,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5291,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 394,
+        "line": 429,
         "project": "functional"
       },
       "area": "durable Team Chat",

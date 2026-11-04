@@ -291,5 +291,34 @@ test('a fault between reserve and complete leaves the snapshot at the prior comm
   assert.equal(calls + replays.length, 1, 'the provider ran exactly once across the fault and restart');
   assert.equal(conv(restarted.snapshot).messages.filter(m => m.text === 'Durable answer').length, 1);
   assert.deepEqual(rejections, [], 'the detached loop reports the fault instead of rejecting unhandled');
-  assert.deepEqual(failures, ['Injected commit fault.'], 'subscribers are told the turn stopped');
+  assert.deepEqual(failures, ['Injected commit fault. Restart Praxis to recover this team chat.'], 'subscribers are told the turn stopped');
+});
+
+test('after a loop fault, later queued turns stay queued and never re-dispatch the unknown attempt until startup recovery', async () => {
+  const repo = new CrashableRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  repo.fault = draft => conv(draft).turns[0]?.attempts[0]?.state === 'completed';
+  let calls = 0;
+  const failures: (string | undefined)[] = [];
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('halt'),
+    executionAdapter: { execute: async params => { calls++; await params.onAccepted!(); return { text: `Answer ${calls}` }; } } });
+  coordinator.subscribe('conv', update => {
+    if (update.type === 'turn_failed') failures.push(update.error);
+    // A throwing listener must not escape the detached loop.
+    if (update.type === 'turn_failed') throw new Error('listener broke');
+  });
+  await coordinator.submitTurn(command());
+  await until(() => failures.length === 1, 'the loop fault');
+  repo.fault = undefined;
+  // Storage works again; the command commits but dispatch stays halted in this process.
+  await coordinator.submitTurn(command({ commandId: 'cmd-2', expectedRevision: conv(repo.snapshot).revision, text: 'And then?' }));
+  await tick(20);
+  assert.equal(calls, 1, 'the running attempt with an unknown outcome was not dispatched again');
+  assert.equal(conv(repo.snapshot).turns[0].state, 'running');
+  assert.equal(conv(repo.snapshot).turns[1].state, 'queued', 'the later turn is kept, not failed');
+  assert.equal(failures.length, 2, 'the halted conversation reports again when new work arrives');
+  const { repo: restarted, coordinator: next, calls: replays } = restart(repo.read(), async params => ({ text: `After restart ${params.turn.id}` }));
+  await next.initialize();
+  await until(() => conv(restarted.snapshot).turns[1]?.state === 'completed', 'the queued turn after restart');
+  assert.equal(conv(restarted.snapshot).turns[0].state === 'running', false, 'startup reconciled the faulted turn');
+  assert.equal(replays.filter(p => p.turn.id === conv(restarted.snapshot).turns[0].id).length, 0, 'the faulted turn was never replayed');
 });

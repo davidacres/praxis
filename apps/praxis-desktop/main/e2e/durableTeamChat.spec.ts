@@ -355,6 +355,41 @@ test('a storage write failure is shown and the accepted transcript remains', asy
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
 });
 
+test('re-opening a team chat whose first load failed reads its transcript again', async () => {
+  mock = await startMockOpenAiCompatibleServer({ reply: 'Kept on disk' });
+  app = await launchTestApp(mockSettings(mock), undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  await win.evaluate(async folderPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create({ name: 'Reload project', key: 'RLD', type: 'product', purpose: '', brief: {}, startingPoint: 'existing-folder', folderPath, planningMode: 'files', workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], starterTickets: [], defaultAiToolMode: 'project-only' }, workspace.id);
+    localStorage.setItem(`praxis-last-workspace-route:${workspace.id}`, JSON.stringify({ projectId: project.id }));
+    await window.praxis.assistant.createChat(project.id);
+  }, app.userDataDir);
+  await win.reload();
+  const row = win.getByTestId('team-chat-row').locator('.team-chat-main');
+  await row.click();
+  await win.getByTestId('assistant-input').fill('Remember this');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toContainText('Kept on disk');
+  // The next transcript read fails once, as a transient IPC or disk fault would.
+  await app.electronApp.evaluate(({ ipcMain }) => {
+    const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: unknown[]) => unknown> })._invokeHandlers;
+    const original = handlers.get('assistant:getConversation')!;
+    handlers.set('assistant:getConversation', async () => {
+      handlers.set('assistant:getConversation', original);
+      throw new Error('Transient read failure');
+    });
+  });
+  await win.reload();
+  await row.click();
+  await expect(win.getByRole('alert')).toContainText('Transient read failure');
+  await expect(win.getByTestId('assistant-message-user')).toHaveCount(0);
+  // Same id again: a failed load must not be mistaken for an open transcript.
+  await row.click();
+  await expect(win.getByTestId('assistant-message-user')).toHaveText('Remember this');
+  await expect(win.getByTestId('assistant-message-dev')).toContainText('Kept on disk');
+});
+
 test('a tool member\'s pending permission is attached to its attempt and a restart never reuses the approval', async () => {
   const promptLog = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-acp-prompts-')), 'prompts.jsonl');
   const env = { FAKE_ACP_PROMPT_LOG: promptLog };

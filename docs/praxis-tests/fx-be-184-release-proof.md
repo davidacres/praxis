@@ -1,6 +1,6 @@
 # FX-BE-184 release-proof node:test contracts
 
-Runner: **node:test**. These **24 supplemental cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. No new id collides with a catalog id or an earlier FX-BE supplement.
+Runner: **node:test**. These **25 supplemental cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. No new id collides with a catalog id or an earlier FX-BE supplement.
 
 ### PT-C2406CA182
 
@@ -91,6 +91,15 @@ Title: **a fault between reserve and complete leaves the snapshot at the prior c
 **Given** a repository that refuses the commit that completes the attempt.
 **When** the turn runs, then a new coordinator initializes over the bytes.
 **Then** the snapshot equals the last committed one (final_result evidence, no reply), subscribers get turn_failed with the fault and there is no unhandled rejection; after restart the result imports once and the provider ran once in total.
+
+### PT-E9377A7326
+
+Automation: **node:test**, [teamChatCrashBoundaries.test.ts:297](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L297).
+Title: **after a loop fault, later queued turns stay queued and never re-dispatch the unknown attempt until startup recovery**.
+
+**Given** a repository that refuses the commit completing the first attempt, and a subscriber that throws on `turn_failed`.
+**When** storage recovers and the user submits a second turn in the same process, then a new coordinator initializes over the bytes.
+**Then** the provider is not called again, the faulted turn stays `running`, the second turn stays `queued` (neither failed nor dispatched) and the halt is reported again; after restart the faulted turn is reconciled without replay and the queued turn completes.
 
 ### PT-56DCDF45E2
 
