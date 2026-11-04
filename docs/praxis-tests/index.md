@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **799 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -199,17 +199,19 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-3412C6D2C6 | assistant | deselecting every seat sends a general chat to the Tech Lead | `apps/praxis-desktop/main/e2e/assistant.spec.ts:459` |
 | PT-450D784024 | assistant | page context follows navigation, can be detached, and chats persist in the tree | `apps/praxis-desktop/main/e2e/assistant.spec.ts:471` |
 | PT-8EF93BBA0B | assistant | an update-ticket proposal requires Preview Changes before applying | `apps/praxis-desktop/main/e2e/assistant.spec.ts:548` |
-| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:566` |
-| PT-497E7C3D84 | assistant | an update-workflow proposal previews before changing the designer | `apps/praxis-desktop/main/e2e/assistant.spec.ts:581` |
-| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:620` |
-| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:640` |
-| PT-1B219DB70F | assistant | durable activation rejects stale legacy turns and transcript writers | `apps/praxis-desktop/main/e2e/assistant.spec.ts:679` |
-| PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:689` |
-| PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:706` |
-| PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:770` |
-| PT-C34A6897DE | assistant | the composer grows with its text up to the shared cap, then scrolls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:861` |
-| PT-31EBA5B105 | assistant | durable no-tools API turns retain bounded history and usage without allocating agent sessions | `apps/praxis-desktop/main/e2e/assistant.spec.ts:882` |
-| PT-691B8EDBF3 | assistant | durable tool members reuse two runtime sessions for four attempts and isolate another chat | `apps/praxis-desktop/main/e2e/assistant.spec.ts:917` |
+| PT-402505393F | assistant | Preview then Apply updates the ticket; Apply is refused on an incompatible page | `apps/praxis-desktop/main/e2e/assistant.spec.ts:566` |
+| PT-631104B8EE | assistant | a standalone chat stays navigable beside the single team-chat row | `apps/praxis-desktop/main/e2e/assistant.spec.ts:590` |
+| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:624` |
+| PT-497E7C3D84 | assistant | an update-workflow proposal previews before changing the designer | `apps/praxis-desktop/main/e2e/assistant.spec.ts:639` |
+| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:678` |
+| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:698` |
+| PT-1B219DB70F | assistant | durable activation rejects stale legacy turns and transcript writers | `apps/praxis-desktop/main/e2e/assistant.spec.ts:737` |
+| PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:747` |
+| PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:764` |
+| PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:828` |
+| PT-C34A6897DE | assistant | the composer grows with its text up to the shared cap, then scrolls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:919` |
+| PT-31EBA5B105 | assistant | durable no-tools API turns retain bounded history and usage without allocating agent sessions | `apps/praxis-desktop/main/e2e/assistant.spec.ts:940` |
+| PT-691B8EDBF3 | assistant | durable tool members reuse two runtime sessions for four attempts and isolate another chat | `apps/praxis-desktop/main/e2e/assistant.spec.ts:975` |
 | PT-0000309442 | auto Update | an unpackaged build reports that updates are unsupported and offers no check | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:22` |
 | PT-24D162FA28 | auto Update | shows download progress, then offers a restart once the update is ready | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:32` |
 | PT-92B7424B04 | auto Update | an update this build cannot install links to the release page | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:48` |
@@ -320,12 +322,19 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:148` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:31` |
-| PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:12` |
-| PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:67` |
-| PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:98` |
-| PT-EA127A3852 | durable Team Chat | a migrated chat continues from imported history without reusing unproved runtime identity | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:139` |
-| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:170` |
-| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:198` |
+| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:96` |
+| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:109` |
+| PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:13` |
+| PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:70` |
+| PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:101` |
+| PT-EA127A3852 | durable Team Chat | a migrated chat continues from imported history without reusing unproved runtime identity | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:142` |
+| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:173` |
+| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:201` |
+| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:254` |
+| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:290` |
+| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:321` |
+| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:358` |
+| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:394` |
 | PT-5D69F1868B | easymode | EasyMode exposes the shared sidebar material through its feed and header | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
 | PT-E4A060174B | easymode | legacy enableEasyMode false still uses the sole sidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:69` |
 | PT-D7A1079D36 | easymode | Preview omits retired switches and the sole sidebar stays active | `apps/praxis-desktop/main/e2e/easymode.spec.ts:79` |

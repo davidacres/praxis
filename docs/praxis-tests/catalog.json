@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 790,
+  "testCount": 799,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -3126,12 +3126,44 @@
       }
     },
     {
+      "id": "PT-402505393F",
+      "title": "Preview then Apply updates the ticket; Apply is refused on an incompatible page",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
+        "line": 566,
+        "project": "functional"
+      },
+      "area": "assistant",
+      "flow": {
+        "given": "the docked assistant is open on the Fix login bug ticket of a folder board and the mock provider replies with an update-ticket proposal",
+        "when": "the user asks for acceptance criteria, opens Preview Changes, navigates to the project's Git graph and presses Apply, then returns to the ticket and presses Apply again",
+        "then": "Apply is enabled only after Preview; on the Git graph page Apply shows \"Return to the originating page\" and the ticket description stays \"Users cannot log in.\"; back on the ticket Apply writes the new description with its Acceptance criteria heading"
+      }
+    },
+    {
+      "id": "PT-631104B8EE",
+      "title": "a standalone chat stays navigable beside the single team-chat row",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
+        "line": 590,
+        "project": "functional"
+      },
+      "area": "assistant",
+      "flow": {
+        "given": "Easy Mode on a folder project with a mock API provider, and one answered team-chat turn",
+        "when": "the user starts a standalone conversation from the command palette, then switches the sidebar between General conversations and the project and opens each chat",
+        "then": "General conversations lists the standalone session card; the project feed lists exactly one team-chat row and no standalone card; re-opening the team chat shows its transcript and opening the card shows the standalone thread; there is one team chat and one standalone session in total"
+      }
+    },
+    {
       "id": "PT-E27C5BEA0C",
       "title": "a create-subtask proposal does not create a task without a composer send",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 566,
+        "line": 624,
         "project": "functional"
       },
       "area": "assistant",
@@ -3147,7 +3179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 581,
+        "line": 639,
         "project": "functional"
       },
       "area": "assistant",
@@ -3163,7 +3195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 620,
+        "line": 678,
         "project": "functional"
       },
       "area": "assistant",
@@ -3179,7 +3211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 640,
+        "line": 698,
         "project": "functional"
       },
       "area": "assistant",
@@ -3195,7 +3227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 679,
+        "line": 737,
         "project": "functional"
       },
       "area": "assistant",
@@ -3211,7 +3243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 689,
+        "line": 747,
         "project": "functional"
       },
       "area": "assistant",
@@ -3227,7 +3259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 706,
+        "line": 764,
         "project": "functional"
       },
       "area": "assistant",
@@ -3243,7 +3275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 770,
+        "line": 828,
         "project": "functional"
       },
       "area": "assistant",
@@ -3259,7 +3291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 861,
+        "line": 919,
         "project": "functional"
       },
       "area": "assistant",
@@ -3275,7 +3307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 882,
+        "line": 940,
         "project": "functional"
       },
       "area": "assistant",
@@ -3291,7 +3323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 917,
+        "line": 975,
         "project": "functional"
       },
       "area": "assistant",
@@ -5062,19 +5094,51 @@
       }
     },
     {
+      "id": "PT-1D3CF0B299",
+      "title": "real CLI member continues a durable team chat across an app restart",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
+        "line": 96,
+        "project": "functional"
+      },
+      "area": "durable Team Chat.live",
+      "flow": {
+        "given": "PRAXIS_LIVE_AGENT=1 and a signed-in claude-agent-acp on PATH (skipped with a reason otherwise)",
+        "when": "one dev member acknowledges a pinned codename decision, answers a second question, the app restarts, and it is asked for the codename",
+        "then": "three completed attempts with distinct ids, the third under a new coordinator epoch whose context covers the pinned decision; the final reply contains the codename; attempt, session and receipt evidence is written to durable-team-chat-live-cli.json"
+      }
+    },
+    {
+      "id": "PT-75844A4FF6",
+      "title": "real API member continues a durable team chat across an app restart",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
+        "line": 109,
+        "project": "functional"
+      },
+      "area": "durable Team Chat.live",
+      "flow": {
+        "given": "PRAXIS_LIVE_AGENT=1, PRAXIS_LIVE_API_PROVIDER and PRAXIS_LIVE_API_KEY (skipped with a reason otherwise; never substituted by a mock)",
+        "when": "the same pinned-decision, restart and recall sequence runs against the real API provider in project-only mode",
+        "then": "the same assertions as the CLI check, with evidence written to durable-team-chat-live-api.json"
+      }
+    },
+    {
       "id": "PT-592434CA9B",
       "title": "two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 12,
+        "line": 13,
         "project": "functional"
       },
       "area": "durable Team Chat",
       "flow": {
         "given": "a mock OpenAI-compatible provider delays each reply by 1.5 s, a folder project owns one durable team chat, and a second BrowserWindow is opened on the same renderer URL",
         "when": "both windows open the chat, window one sends an answered question and a second question that queues, then starts a new chat in window one; window two replays a stale cancel against the replaced revision, reloads, and pins then unpins a decision by keyboard",
-        "then": "window two shows each accepted user message, one Queued status and exactly one team-chat row; both replies land in the original chat after window one navigates away; the stale cancel leaves every turn completed; after reload the two replies and a 50 tok usage summary remain, and Pin/Unpin decision toggles by accessible name. Dock/float switching, the active member and queued attachments are not asserted here"
+        "then": "window two shows each accepted user message, the active member as \"dev: running\" while window one's reply is in flight, one Queued status and exactly one team-chat row; both replies land in the original chat after window one navigates away; the stale cancel leaves every turn completed; after reload the two replies and a 50 tok usage summary remain, and Pin/Unpin decision toggles by accessible name. Dock/float execution identity and queued attachments are not asserted here"
       }
     },
     {
@@ -5083,7 +5147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 67,
+        "line": 70,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5099,7 +5163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 98,
+        "line": 101,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5115,7 +5179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 139,
+        "line": 142,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5131,7 +5195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 170,
+        "line": 173,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5147,7 +5211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 198,
+        "line": 201,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5155,6 +5219,86 @@
         "given": "the main-process assistant:submitTurn handler is wrapped to commit the command but throw a lost-acknowledgement error on its first two calls",
         "when": "the user sends one message, sees the error, then presses Send again",
         "then": "the alert stays visible and the draft is retained until the retry succeeds; the reply arrives once; the draft and alert then clear; the conversation has one turn, one command receipt and one user message"
+      }
+    },
+    {
+      "id": "PT-2B5E9C8D8A",
+      "title": "an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 254,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "a project team chat whose mock API reply is held for 60 s",
+        "when": "the user sends a question, the app process is killed with SIGKILL while dev is running, and the app is relaunched on the same profile",
+        "then": "before the chat is opened, team-chats.json shows the turn interrupted with a coordinator-startup reconciliation record; the mock receives no second request; re-opening the row shows the question, \"dev: interrupted\" and an enabled Retry dev button"
+      }
+    },
+    {
+      "id": "PT-E29A82FCB9",
+      "title": "a queued turn resumes after restart before any chat is opened",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 290,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "a profile whose team-chats.json holds a durably accepted, never-dispatched queued turn (the bytes a crash leaves right after acceptance)",
+        "when": "the app is relaunched and nothing in the UI asks for the chat",
+        "then": "the mock provider receives exactly one request carrying the queued text, and on disk the turn completes with one attempt and the transcript reads question then reply"
+      }
+    },
+    {
+      "id": "PT-F202472C30",
+      "title": "a storage write failure is shown and the accepted transcript remains",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 321,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "an answered team-chat turn, then every team-chat temp-file open in main fails with ENOSPC",
+        "when": "the user sends a second message, then the fault is removed and the user sends again",
+        "then": "an alert shows ENOSPC, the composer keeps the draft, the earlier question and reply stay visible, team-chats.json is byte-identical and no temp file remains; after the fault clears the retried send lands as the second user message with a second reply"
+      }
+    },
+    {
+      "id": "PT-0DD1738998",
+      "title": "a tool member's pending permission is attached to its attempt and a restart never reuses the approval",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 358,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the scripted ACP fixture as the Claude Code CLI with a prompt log, and a read-only manual-permission dev turn that requests a file-read permission",
+        "when": "the runtime session reaches awaiting_approval, the app is killed with SIGKILL and relaunched on the same profile",
+        "then": "the pending runtime session's teamChatExecution names the chat and the durable attempt id; after restart the turn and its single attempt are outcome_unknown on disk, the fixture receives no second prompt and no session is left awaiting approval"
+      }
+    },
+    {
+      "id": "PT-2633FBDC53",
+      "title": "a CLI member without resume capability reconstructs context on its second turn",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 394,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the scripted ACP fixture advertising no session resume, with a prompt log",
+        "when": "the dev member answers FIRST_TURN_SENTINEL and then SECOND_TURN in one team chat",
+        "then": "the fixture's second prompt contains both SECOND_TURN and FIRST_TURN_SENTINEL, and the second attempt's context receipt lists both first-turn message ids"
       }
     },
     {

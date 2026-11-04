@@ -282,6 +282,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [teamMembers]);
 
   const loadChat = useCallback(async (id: string) => {
+    // Re-opening the open chat keeps its transcript: the subscription only re-reads on a new id.
+    if (chatIdRef.current === id) { setOpen(true); return; }
     generation.current++;
     creation.current = undefined;
     chatIdRef.current = id;

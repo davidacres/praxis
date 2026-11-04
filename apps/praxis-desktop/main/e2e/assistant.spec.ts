@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { openBoard, openProjectPage } from './navigation';
+import { openBoard, openFromPalette, openProjectPage } from './navigation';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import * as path from 'node:path';
@@ -561,6 +561,64 @@ test('an update-ticket proposal requires Preview Changes before applying', async
   const key = /Issue (\S+)/.exec((await win.getByTestId('assistant-context-pill').textContent()) ?? '')![1];
   const description = await win.evaluate(async issueKey => (await window.praxis.issue.get(issueKey, 'team-board')).description, key);
   expect(description).toBe('Users cannot log in.');
+});
+
+test('Preview then Apply updates the ticket; Apply is refused on an incompatible page', async () => {
+  const win = await launch();
+  await win.getByTestId('titlebar-assistant').click();
+  await win.getByTestId('assistant-pin').click();
+  await openIssue(win);
+  const key = /Issue (\S+)/.exec((await win.getByTestId('assistant-context-pill').textContent()) ?? '')![1];
+  replyText = action({ kind: 'update-ticket', label: 'Apply to Ticket', summary: 'Add acceptance criteria', description: 'Users cannot log in.\n\n## Acceptance criteria\n- Login works' });
+  await win.getByTestId('assistant-input').fill('add acceptance criteria');
+  await win.getByTestId('assistant-send').click();
+  await win.getByTestId('assistant-action-preview').click();
+  await expect(win.getByTestId('assistant-action-apply')).toBeEnabled();
+  // Away from the ticket the proposal was made for, Apply refuses and changes nothing.
+  await openProjectPage(win, 'Team Project', 'Git graph');
+  await expect(win.getByTestId('assistant-context-pill').filter({ hasText: key })).toHaveCount(0);
+  await win.getByTestId('assistant-action-apply').click();
+  await expect(win.getByRole('alert')).toContainText('Return to the originating page');
+  expect(await win.evaluate(async issueKey => (await window.praxis.issue.get(issueKey, 'team-board')).description, key)).toBe('Users cannot log in.');
+  // Back on the originating ticket, the previewed change applies.
+  await openIssue(win);
+  if (!(await win.getByTestId('assistant-action-apply').isEnabled())) await win.getByTestId('assistant-action-preview').click();
+  await win.getByTestId('assistant-action-apply').click();
+  await expect.poll(() => win.evaluate(async issueKey => (await window.praxis.issue.get(issueKey, 'team-board')).description, key)).toContain('## Acceptance criteria');
+});
+
+test('a standalone chat stays navigable beside the single team-chat row', async () => {
+  const win = await launch();
+  await win.getByTestId('titlebar-assistant').click();
+  await win.getByTestId('assistant-pin').click();
+  await win.getByTestId('assistant-input').fill('Team chat beside a standalone one');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-message-dev')).toBeVisible();
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+  await openFromPalette(win, 'New conversation');
+  await win.getByPlaceholder('Ask anything, brainstorm, or get something done…').fill('Standalone beside team chat');
+  await win.getByTestId('new-session-submit').click();
+  const standaloneSession = async () => (await win.evaluate(() => window.praxis.ai.listSessions())).find(s => !s.teamChatExecution && !s.issueKey.startsWith('ASSISTANT-'));
+  await expect.poll(async () => (await standaloneSession())?.state).toBe('completed');
+  const standalone = (await standaloneSession())!;
+  const card = win.getByTestId(`easymode-session-card-${standalone.issueKey}`);
+  // A standalone chat lives under General conversations; the project's team chat is one row in its own feed.
+  await expect(win.getByTestId('sidebar-project-select')).toContainText('General conversations');
+  await expect(card).toBeVisible();
+  await chooseOption(win.getByTestId('sidebar-project-select'), { label: 'Team Project' });
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+  await expect(card).toHaveCount(0);
+  await win.getByTestId('team-chat-row').locator('.team-chat-main').click();
+  await expect(win.getByTestId('assistant-message-user')).toHaveText('Team chat beside a standalone one');
+  await chooseOption(win.getByTestId('sidebar-project-select'), 'conversations');
+  await card.click();
+  await expect(win.getByTestId('session-chat-thread')).toContainText('Standalone beside team chat');
+  // Neither chat absorbed the other: one team chat, one standalone session, no extra sessions.
+  expect((await win.evaluate(() => window.praxis.assistant.listChats(''))).length + (await win.evaluate(async () => {
+    const chats = await window.praxis.assistant.listChats((await window.praxis.projects.list())[0].id);
+    return chats.length;
+  }))).toBe(1);
+  expect((await win.evaluate(() => window.praxis.ai.listSessions())).filter(s => !s.teamChatExecution && !s.issueKey.startsWith('ASSISTANT-'))).toHaveLength(1);
 });
 
 test('a create-subtask proposal does not create a task without a composer send', async () => {
