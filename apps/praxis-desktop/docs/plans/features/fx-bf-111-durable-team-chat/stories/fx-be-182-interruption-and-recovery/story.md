@@ -58,3 +58,20 @@ Both tasks satisfy every acceptance criterion, results are linked here and in th
 
 
 ## Comments
+
+
+**PRX-S111-182** — 2026-11-04T03:16:45.800Z
+**Workflow run failed: Governed delivery — FX-BE-182: Interruption, cancellation, and tool-outcome recovery**
+
+Status: Failed · Duration: 3h 22m
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ✅ Praxis Test contracts: succeeded
+- ✅ Review: succeeded
+- ✅ Install dependencies: succeeded
+- ✅ Build: succeeded
+- ❌ QA: failed
+- ✅ Security scan: succeeded
+
+Required stage "qa" failed.
