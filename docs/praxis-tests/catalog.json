@@ -8198,8 +8198,8 @@
       }
     },
     {
-      "id": "PT-7600A815C3",
-      "title": "an idle failed stage pauses the schedule and retries in the same workflow",
+      "id": "PT-F574E99346",
+      "title": "an exhausted stage pauses the schedule and retrying the ticket preserves its failed workflow",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
@@ -8209,7 +8209,7 @@
       "area": "scheduled Runs",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an idle failed stage pauses the schedule and retries in the same workflow",
+        "when": "an exhausted stage pauses the schedule and retrying the ticket preserves its failed workflow",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -8219,7 +8219,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 970,
+        "line": 979,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8235,7 +8235,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1019,
+        "line": 1028,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8251,7 +8251,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1053,
+        "line": 1062,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8267,7 +8267,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1100,
+        "line": 1109,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8283,7 +8283,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1128,
+        "line": 1137,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8299,7 +8299,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1196,
+        "line": 1205,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8315,7 +8315,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1227,
+        "line": 1236,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8331,7 +8331,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1253,
+        "line": 1262,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8347,7 +8347,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1314,
+        "line": 1323,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8363,7 +8363,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1356,
+        "line": 1365,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8379,7 +8379,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1384,
+        "line": 1393,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8395,7 +8395,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1455,
+        "line": 1464,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8411,7 +8411,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1473,
+        "line": 1482,
         "project": "functional"
       },
       "area": "scheduled Runs",
@@ -8427,7 +8427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-        "line": 1536,
+        "line": 1545,
         "project": "functional"
       },
       "area": "scheduled Runs",

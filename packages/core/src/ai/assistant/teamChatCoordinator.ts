@@ -131,7 +131,7 @@ export class TeamChatCoordinator {
         for (const turn of updated.turns) {
           const attempt = turn.attempts.at(-1);
           if (attempt && ['interrupted', 'outcome_unknown'].includes(attempt.state) &&
-              attempt.recoveryEvidence?.some(e => e.kind === 'final_result' && (e.result?.text ?? e.data?.text))) {
+              attempt.recoveryEvidence?.some(e => e.kind === 'final_result' && typeof (e.result?.text ?? e.data?.text) === 'string')) {
             await this.importRecoveredResult(updated.id, turn.id, attempt.id);
           }
         }
@@ -443,7 +443,7 @@ export class TeamChatCoordinator {
       const t = conv.turns.find(item => item.id === turnId);
       const a = t?.attempts.find(item => item.id === attemptId);
       if (a?.state === 'completed' && a.resultMessageId) return conv;
-      const evidence = a?.recoveryEvidence?.find(item => item.kind === 'final_result' && (item.result?.text ?? item.data?.text));
+      const evidence = a?.recoveryEvidence?.find(item => item.kind === 'final_result' && typeof (item.result?.text ?? item.data?.text) === 'string');
       if (!a || !t || !evidence) {
         throw new Error('Cannot accept an attempt without a recovered final result.');
       }

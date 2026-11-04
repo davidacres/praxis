@@ -81,13 +81,13 @@ test('collapsed session shelf shows the last 5 sessions, distinguishes today, an
   expect(spineVisuals.todayHeight).toBeGreaterThan(spineVisuals.earlierHeight);
   expect(spineVisuals.todayOpacity).toBeGreaterThan(spineVisuals.earlierOpacity);
   expect(spineVisuals.todayColor).toBe(spineVisuals.earlierColor);
-  const centred = await shelf.evaluate(element => {
+  await expect.poll(() => shelf.evaluate(element => {
     const bounds = element.querySelector('.session-shelf__spines')!.getBoundingClientRect();
-    const spines = element.querySelectorAll('.session-shelf__spine');
-    return Math.abs((spines[0].getBoundingClientRect().top + spines[spines.length - 1].getBoundingClientRect().bottom) / 2
+    // The overflow button belongs to the centred group alongside the five spines.
+    const entries = element.querySelectorAll('.session-shelf__spine, .session-shelf__more');
+    return Math.abs((entries[0].getBoundingClientRect().top + entries[entries.length - 1].getBoundingClientRect().bottom) / 2
       - (bounds.top + bounds.bottom) / 2);
-  });
-  expect(centred).toBeLessThanOrEqual(1);
+  })).toBeLessThanOrEqual(1);
   const cards = page.getByTestId('session-shelf-card');
   await expect(cards).toHaveCount(0);
   // Reproduce the missing-colour-token regression: inactive spines disappeared.

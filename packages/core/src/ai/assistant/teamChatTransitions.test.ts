@@ -42,6 +42,7 @@ test('completion atomically records final reply and context; duplicate and fence
   assert.throws(() => completeConversationAttempt(reserved, 4, 't', 'a', 'old', reply, attempt.contextReceipt), /fenced/);
   const fenced = structuredClone(reserved); fenced.coordinatorEpoch = 'new';
   assert.throws(() => completeConversationAttempt(fenced, 4, 't', 'a', 'epoch', reply, attempt.contextReceipt), /fenced/);
+  assert.throws(() => completeConversationAttempt(reserved, 4, 't', 'a', 'epoch', reply, attempt.contextReceipt, {}, 'missing-result'), /fenced/);
   const done = completeConversationAttempt(reserved, 4, 't', 'a', 'epoch', reply, attempt.contextReceipt);
   assert.equal(done.turns[0].state, 'completed');
   assert.equal(done.turns[0].attempts[0].resultMessageId, 'r');
@@ -93,6 +94,11 @@ test('pre-dispatch recovery requires exact durable result and imports only once'
   a.recoveryEvidence!.push({ id: 'result', conversationId: 'c', turnId: 't', participantId: 'p',
     attemptId: 'a', coordinatorEpoch: 'epoch', kind: 'final_result', observedAt: 'now', provenance: 'adapter',
     result: { text: reply.text } });
+  for (const field of ['conversationId', 'turnId', 'participantId', 'attemptId', 'coordinatorEpoch'] as const) {
+    const foreign = structuredClone(recovered);
+    foreign.turns[0].attempts[0].recoveryEvidence!.at(-1)![field] = 'foreign';
+    assert.throws(() => completeConversationAttempt(foreign, 4, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /fenced/);
+  }
   const completed = completeConversationAttempt(recovered, 4, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result');
   assert.equal(completed.turns[0].attempts[0].state, 'completed');
   assert.throws(() => completeConversationAttempt(completed, 5, 't', 'a', 'epoch', reply, a.contextReceipt, {}, 'result'), /duplicate|fenced/);

@@ -589,9 +589,9 @@ test('active cancellation remains cancelling until execution settles and records
   assert.ok(turn.attempts[0].recoveryEvidence!.some(e => e.provenance === 'execution-settled-after-abort'));
 });
 
-test('startup imports durable results once across repeated coordinator replacements', async () => {
+for (const text of ['restart result', '']) test('startup imports durable results once across repeated coordinator replacements: ' + JSON.stringify(text), async () => {
   const { repo, turn, attempt } = await recoveryFixture('outcome_unknown');
-  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'final', kind: 'final_result', result: { text: 'restart result' } });
+  attempt.recoveryEvidence!.push({ ...attempt.recoveryEvidence![0], id: 'final', kind: 'final_result', result: { text } });
   let invocations = 0;
   for (let i = 0; i < 2; i++) {
     const coordinator = new TeamChatCoordinator({ repository: repo, idSource: () => 'epoch-' + i,
@@ -599,7 +599,7 @@ test('startup imports durable results once across repeated coordinator replaceme
     await coordinator.initialize();
   }
   assert.equal(invocations, 0);
-  assert.equal(repo.read().conversations[0].messages.filter(m => m.text === 'restart result').length, 1);
+  assert.equal(repo.read().conversations[0].messages.filter(m => m.role === 'lead' && m.text === text).length, 1);
   assert.equal(repo.read().conversations[0].turns.find(t => t.id === turn.id)!.state, 'completed');
 });
 

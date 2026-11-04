@@ -516,21 +516,21 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:850` |
 | PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:867` |
 | PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:909` |
-| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:926` |
-| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:970` |
-| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1019` |
-| PT-7C571CC649 | scheduled Runs | a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1053` |
-| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1100` |
-| PT-9BE6F17E92 | scheduled Runs | an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1128` |
-| PT-5BB7C25EC5 | scheduled Runs | parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1196` |
-| PT-6DDE4C4F48 | scheduled Runs | auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1227` |
-| PT-984829ACD0 | scheduled Runs | two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1253` |
-| PT-57F1A1F35B | scheduled Runs | two parallel tickets that both merge into the base checkout take turns | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1314` |
-| PT-13C1844C59 | scheduled Runs | an approval gate is determined autonomously and recorded in the run ledger without waiting for user input | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1356` |
-| PT-AE3B01630D | scheduled Runs | a long run's report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1384` |
-| PT-6B8DD4C416 | scheduled Runs | a parallel run whose readiness is blocked starts nothing in any lane and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1455` |
-| PT-794E9F0536 | scheduled Runs | a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1473` |
-| PT-2C5ADB8DC0 | scheduled Runs | a schedule paused on an untrusted workflow offers to review and trust it, then carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1536` |
+| PT-F574E99346 | scheduled Runs | an exhausted stage pauses the schedule and retrying the ticket preserves its failed workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:926` |
+| PT-5153FD33AA | scheduled Runs | the stage-failure panel names the stage it shows, beside a stage paused for a missing tool or script | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:979` |
+| PT-EB1C51515B | scheduled Runs | a workflow whose check stage needs a tool that is not installed is refused before the run starts | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1028` |
+| PT-7C571CC649 | scheduled Runs | a ticket whose working copy cannot be set up pauses the schedule with the reason instead of hanging, and a retry carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1062` |
+| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1109` |
+| PT-9BE6F17E92 | scheduled Runs | an agent request file becomes an ordered draft while Praxis is running, and the skill that explains it is installed | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1137` |
+| PT-5BB7C25EC5 | scheduled Runs | parallel lanes are a deliberate choice in the editor: a budget warning shows, and the choice survives saving | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1205` |
+| PT-6DDE4C4F48 | scheduled Runs | auto-detect parallel button detects independent tasks and sets them as parallel using the selected parallel number | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1236` |
+| PT-984829ACD0 | scheduled Runs | two independent tickets run at once within the cap, a third waits for a lane and the next step waits for the first | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1262` |
+| PT-57F1A1F35B | scheduled Runs | two parallel tickets that both merge into the base checkout take turns | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1323` |
+| PT-13C1844C59 | scheduled Runs | an approval gate is determined autonomously and recorded in the run ledger without waiting for user input | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1365` |
+| PT-AE3B01630D | scheduled Runs | a long run's report folds repeats: stops by kind, a bouncing hand-over once, one row per ticket | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1393` |
+| PT-6B8DD4C416 | scheduled Runs | a parallel run whose readiness is blocked starts nothing in any lane and says why | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1464` |
+| PT-794E9F0536 | scheduled Runs | a schedule whose workflow needs trust can be reviewed and trusted from its row and from the editor | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1482` |
+| PT-2C5ADB8DC0 | scheduled Runs | a schedule paused on an untrusted workflow offers to review and trust it, then carries on | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:1545` |
 | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:15` |
 | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:27` |
 | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:50` |
