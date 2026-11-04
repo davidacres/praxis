@@ -399,9 +399,9 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-E53CD33CCE | marketplace | Surfaces panel: the marketplace section installs a pack, and it can be removed from the gallery | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:216` |
 | PT-50545241D6 | marketplace | Agent Runtime panel: installing an agent asks first, then it can be uninstalled | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:239` |
 | PT-7639917547 | marketplace | Agent Runtime panel: a marketplace skill installs after confirmation and agents can load it | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:271` |
-| PT-213CF51606 | marketplace | an unconfigured marketplace is explained inside each panel | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:303` |
-| PT-B98611683A | marketplace | Themes marketplace filter toggle shows All and Installed views with screenshots | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:334` |
-| PT-2C5A984D24 | marketplace | Marketplace loads real GitHub packages with token configured | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:375` |
+| PT-213CF51606 | marketplace | an unconfigured marketplace is explained inside each panel | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:306` |
+| PT-B98611683A | marketplace | Themes marketplace filter toggle shows All and Installed views with screenshots | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:337` |
+| PT-2C5A984D24 | marketplace | Marketplace loads real GitHub packages with token configured | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:378` |
 | PT-4EE82C7277 | mobile Access | mobile access pairing controls stay off until the listener is enabled | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:24` |
 | PT-95E35930BA | mobile Access | creating a pairing code shows a single-use token and never a private key | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:33` |
 | PT-C909B8DB44 | mobile Access | resetting the host key asks for confirmation in-app | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:48` |
@@ -585,10 +585,10 @@ This catalogue describes **784 Playwright tests** under `apps/praxis-desktop/mai
 | PT-1B797E8BFB | session Shelf New | with no usable provider the card keeps the goal and offers setup instead of sending | `apps/praxis-desktop/main/e2e/sessionShelfNew.spec.ts:170` |
 | PT-F699F5C08F | session Shelf Notes | the rail stays 14px with both controls inside it, and the new-session cell opens its card without sending | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:43` |
 | PT-062E28E533 | session Shelf Notes | the notes pencil opens the editor with focus in the title; typing saves; Escape returns focus and reopening keeps the text | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:68` |
-| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:98` |
-| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:109` |
-| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:140` |
-| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:157` |
+| PT-773AA26797 | session Shelf Notes | activating the pencil with the keyboard puts focus in the note title | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:99` |
+| PT-B4FF318316 | session Shelf Notes | a failed save keeps the draft, flags the pencil and recovers on Retry | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:111` |
+| PT-F5F522F4DD | session Shelf Notes | Escape closes the project picker before it closes the notes card | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:143` |
+| PT-6109A0FF71 | session Shelf Notes | picking a project with the mouse keeps the notes card open | `apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts:161` |
 | PT-EF2C1AEDFA | session Shelf States | each spine draws its session's state, with a cap only where you are needed | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:85` |
 | PT-F7A9150AF3 | session Shelf States | an approval card shows the request and answers it in place | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:114` |
 | PT-B8E2DBE94C | session Shelf States | a working card shows the live step and the task list, and stops the session | `apps/praxis-desktop/main/e2e/sessionShelfStates.spec.ts:128` |

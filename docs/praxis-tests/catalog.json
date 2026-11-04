@@ -6331,7 +6331,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/marketplace.spec.ts",
-        "line": 303,
+        "line": 306,
         "project": "functional"
       },
       "area": "marketplace",
@@ -6347,7 +6347,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/marketplace.spec.ts",
-        "line": 334,
+        "line": 337,
         "project": "functional"
       },
       "area": "marketplace",
@@ -6363,7 +6363,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/marketplace.spec.ts",
-        "line": 375,
+        "line": 378,
         "project": "functional"
       },
       "area": "marketplace",
@@ -9307,7 +9307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 98,
+        "line": 99,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9323,7 +9323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 109,
+        "line": 111,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9339,7 +9339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 140,
+        "line": 143,
         "project": "functional"
       },
       "area": "session Shelf Notes",
@@ -9355,7 +9355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/sessionShelfNotes.spec.ts",
-        "line": 157,
+        "line": 161,
         "project": "functional"
       },
       "area": "session Shelf Notes",

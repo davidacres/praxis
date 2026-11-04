@@ -82,7 +82,7 @@ test('collapsed session shelf shows the last 5 sessions, distinguishes today, an
   expect(spineVisuals.todayOpacity).toBeGreaterThan(spineVisuals.earlierOpacity);
   expect(spineVisuals.todayColor).toBe(spineVisuals.earlierColor);
   const centred = await shelf.evaluate(element => {
-    const bounds = element.getBoundingClientRect();
+    const bounds = element.querySelector('.session-shelf__spines')!.getBoundingClientRect();
     const spines = element.querySelectorAll('.session-shelf__spine');
     return Math.abs((spines[0].getBoundingClientRect().top + spines[spines.length - 1].getBoundingClientRect().bottom) / 2
       - (bounds.top + bounds.bottom) / 2);
