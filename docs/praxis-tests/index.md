@@ -405,9 +405,9 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-E53CD33CCE | marketplace | Surfaces panel: the marketplace section installs a pack, and it can be removed from the gallery | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:216` |
 | PT-50545241D6 | marketplace | Agent Runtime panel: installing an agent asks first, then it can be uninstalled | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:239` |
 | PT-7639917547 | marketplace | Agent Runtime panel: a marketplace skill installs after confirmation and agents can load it | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:271` |
-| PT-213CF51606 | marketplace | an unconfigured marketplace is explained inside each panel | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:303` |
-| PT-B98611683A | marketplace | Themes marketplace filter toggle shows All and Installed views with screenshots | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:334` |
-| PT-2C5A984D24 | marketplace | Marketplace loads real GitHub packages with token configured | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:375` |
+| PT-213CF51606 | marketplace | an unconfigured marketplace is explained inside each panel | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:307` |
+| PT-B98611683A | marketplace | Themes marketplace filter toggle shows All and Installed views with screenshots | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:338` |
+| PT-2C5A984D24 | marketplace | Marketplace loads real GitHub packages with token configured | `apps/praxis-desktop/main/e2e/marketplace.spec.ts:379` |
 | PT-4EE82C7277 | mobile Access | mobile access pairing controls stay off until the listener is enabled | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:24` |
 | PT-95E35930BA | mobile Access | creating a pairing code shows a single-use token and never a private key | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:33` |
 | PT-C909B8DB44 | mobile Access | resetting the host key asks for confirmation in-app | `apps/praxis-desktop/main/e2e/mobileAccess.spec.ts:48` |

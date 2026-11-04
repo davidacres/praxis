@@ -2976,9 +2976,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "assistant composer accepts queued turns and animates its border while the team replies",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a mock provider that waits 4 s before replying",
+        "when": "the user sends a message, then pins the floating assistant into the dock while the reply runs",
+        "then": "the composer stays expanded and shows the running border and activity orbit; Send remains visible after docking so another turn can queue; the elapsed timer keeps counting across the dock switch and the reply arrives"
       }
     },
     {
@@ -3024,9 +3024,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "CLI team-chat reconstructs when account identity cannot be proved",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "the fake ACP CLI agent is the active claude-code-cli provider, whose account identity cannot be proved",
+        "when": "two read-only turns are submitted to one durable chat over IPC",
+        "then": "both turns complete with four messages and one valid binding, and two runtime sessions exist, both typed to this conversation: the second reply reconstructs instead of resuming the first session"
       }
     },
     {
@@ -3120,9 +3120,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an update-ticket proposal requires Preview Changes before applying",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "the docked assistant on an issue page, with the mock reply carrying an update-ticket action",
+        "when": "the user sends a message that returns the proposal",
+        "then": "the action card shows Preview Changes with Apply disabled, and the issue description is unchanged. Applying after preview, and refusal on an incompatible page, are not asserted"
       }
     },
     {
@@ -3152,9 +3152,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an update-workflow proposal previews before changing the designer",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "the docked assistant on the workflow designer for \"Original flow\", with update-workflow action replies",
+        "when": "the user receives a rename proposal, then a proposal targeting a different workflow id",
+        "then": "the first card offers Preview Changes and the stored workflow keeps its name; the mismatched proposal renders without an error alert. Apply itself is not clicked"
       }
     },
     {
@@ -3200,9 +3200,9 @@
       },
       "area": "assistant",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "durable activation rejects stale legacy turns and transcript writers",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a fresh app with durable team chat active",
+        "when": "the renderer calls the legacy assistant.turn and saveChat IPC, then deletes the chat",
+        "then": "both legacy calls are rejected as Legacy / replacement writers, and the deleted chat can no longer be read"
       }
     },
     {
@@ -5072,9 +5072,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a mock OpenAI-compatible provider delays each reply by 1.5 s, a folder project owns one durable team chat, and a second BrowserWindow is opened on the same renderer URL",
+        "when": "both windows open the chat, window one sends an answered question and a second question that queues, then starts a new chat in window one; window two replays a stale cancel against the replaced revision, reloads, and pins then unpins a decision by keyboard",
+        "then": "window two shows each accepted user message, one Queued status and exactly one team-chat row; both replies land in the original chat after window one navigates away; the stale cancel leaves every turn completed; after reload the two replies and a 50 tok usage summary remain, and Pin/Unpin decision toggles by accessible name. Dock/float switching, the active member and queued attachments are not asserted here"
       }
     },
     {
@@ -5088,9 +5088,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "subscription buffers a racing revision and discards responses after selection changes",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "subscribeConversation runs against an in-test bridge whose first getConversation read is held open",
+        "when": "a revision-5 update arrives before the revision-3 read resolves, an older revision-4 update follows, and a second subscription is disposed before its read resolves",
+        "then": "revisions 3 then 5 are published in order, the older update triggers no extra read, dispose unsubscribes, and the disposed selection never publishes. This is a transport unit check run under Playwright; no app window is launched"
       }
     },
     {
@@ -5104,9 +5104,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a mock provider, and a main-process execution adapter patched to throw TeamChatAcceptanceUnknown once",
+        "when": "the user sends a message, records a reconciliation note, ticks the duplicate-action acknowledgement and retries the dev member with Enter",
+        "then": "the turn shows outcome unknown; Retry dev stays disabled until both the reconciliation is recorded and the risk checkbox is checked; the retry commits the Recovered answer with one user message, two attempts, and a decision evidence entry carrying acknowledgeDuplicateActionRisk"
       }
     },
     {
@@ -5120,9 +5120,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "a migrated chat continues from imported history without reusing unproved runtime identity",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a closed app whose team-chats.json holds a legacy v1 chat with an error-flagged orphan reply and a user message, and no v1 backup",
+        "when": "the app relaunches, then a turn is submitted to the migrated chat over IPC and the window reloads",
+        "then": "the chat keeps its id, has no turns or bindings, and marks the orphan imported-unknown; the new turn completes with one attempt and four messages; the provider request contains both legacy texts; the v1 backup holds the exact original bytes; after reload exactly one chat is listed. Session-record association import is not exercised"
       }
     },
     {
@@ -5136,9 +5136,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "keyboard cancellation preserves accepted messages and cancels only the selected queued turn",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a mock provider that waits 5 s, with one running turn and a second queued turn in the floating assistant",
+        "when": "the user focuses Cancel queued turn and presses Enter, then focuses Stop and presses Enter",
+        "then": "only the queued status disappears while dev keeps running; Stop clears every status; both user messages remain in order, no dev reply is shown, and both durable turns are cancelled"
       }
     },
     {
@@ -5152,9 +5152,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an unconfirmed submission retries its original command after both acknowledgements are lost",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "the main-process assistant:submitTurn handler is wrapped to commit the command but throw a lost-acknowledgement error on its first two calls",
+        "when": "the user sends one message, sees the error, then presses Send again",
+        "then": "the alert stays visible and the draft is retained until the retry succeeds; the reply arrives once; the draft and alert then clear; the conversation has one turn, one command receipt and one user message"
       }
     },
     {
@@ -6427,7 +6427,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/marketplace.spec.ts",
-        "line": 303,
+        "line": 307,
         "project": "functional"
       },
       "area": "marketplace",
@@ -6443,7 +6443,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/marketplace.spec.ts",
-        "line": 334,
+        "line": 338,
         "project": "functional"
       },
       "area": "marketplace",
@@ -6459,7 +6459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/marketplace.spec.ts",
-        "line": 375,
+        "line": 379,
         "project": "functional"
       },
       "area": "marketplace",
@@ -8304,9 +8304,9 @@
       },
       "area": "scheduled Runs",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an exhausted failed stage pauses the schedule and retries in the same workflow",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a scheduled workflow whose build stage fails until a marker file exists, with a 500 ms schedule tick",
+        "when": "the build exhausts its autonomous attempts, then the marker is created and the user presses Retry",
+        "then": "the flight shows \"Build — needs attention\" and \"Attempt 3 of 3\", the schedule pauses for failure, and after Retry the same workflow run succeeds with the build on its fourth attempt"
       }
     },
     {
