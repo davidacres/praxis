@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 801,
+  "testCount": 802,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5286,12 +5286,28 @@
       }
     },
     {
+      "id": "PT-68979E242A",
+      "title": "a malformed team-chat file is shown as a recoverable error and never replaced",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 431,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "a project with one durable team chat whose row is visible, after which team-chats.json in the temporary profile is overwritten with malformed JSON ({broken) and the window reloaded",
+        "when": "the sidebar loads team chats, the user then sends a message from the assistant, and finally the file is restored to its valid bytes and the storage alert Retry is clicked",
+        "then": "the sidebar shows a team-chat-storage-error alert (\"Team chats can't be read. The file was left unchanged.\" plus the storage error) and zero chat rows rather than an empty list; the send is refused with an alert carrying the same storage error (raised while creating the chat) and no user message appears; the malformed bytes are unchanged and no temp, backup or replacement file is written beside them; after repair, Retry clears the alert and the chat row returns without a restart"
+      }
+    },
+    {
       "id": "PT-0DD1738998",
       "title": "a tool member's pending permission is attached to its attempt and a restart never reuses the approval",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 430,
+        "line": 472,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5307,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 466,
+        "line": 508,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5323,7 +5339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 494,
+        "line": 536,
         "project": "functional"
       },
       "area": "durable Team Chat",

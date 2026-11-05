@@ -1,6 +1,6 @@
 # FX-BE-179 supplemental Praxis Test contracts
 
-Frozen source: `00dd78a725701a2ff24e786e7b3ecb26dc0926d5`, refreshed for TASK-476 at `3edbca0772bdc589e42fff742423ee6c24caf1e5`. Nine added Node tests plus one existing store regression, then five TASK-476 contracts (see [TASK-476 additions](#task-476-additions-prx-t111-476)). These supplement the Playwright-only catalog; they are not validated by its generator. IDs use its SHA1(file + newline + title) convention.
+Frozen source: `00dd78a725701a2ff24e786e7b3ecb26dc0926d5`, refreshed for TASK-476 at `3edbca0772bdc589e42fff742423ee6c24caf1e5` and for TASK-477 at `d15874efacfb1159c74e1ddee1fa97e0235de4be`. Nine added Node tests plus one existing store regression, then five TASK-476 contracts (see [TASK-476 additions](#task-476-additions-prx-t111-476)) and four TASK-477 contracts (see [TASK-477 additions](#task-477-additions-prx-t111-477)). These supplement the Playwright-only catalog; they are not validated by its generator. IDs use its SHA1(file + newline + title) convention.
 
 Runners: core contracts use `npm run test:core`; adapter contracts use `npm run test:desktop:git`. Registration was verified in the respective package scripts. These commands were not executed in this contract-authoring stage.
 
@@ -81,9 +81,9 @@ Title: **corrupt and unsupported files fail visibly without replacing data; lega
 Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:65](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L65).
 Title: **durable submit and completion commit together and replay returns the original turn**.
 
-**Given** an empty durable conversation in a temporary repository.
-**When** submit concurrently twice, start and dispatch one attempt, fail completion rename, then retry completion and read from a new repository.
-**Then** one user message and the original turn receipt remain; failed completion preserves prior bytes; retry reloads two messages, a completed attempt and its context digest.
+**Given** an empty durable conversation with one valid provider binding `b` in a temporary repository.
+**When** fail the submit rename, submit concurrently twice, start and dispatch one attempt bound to `b`, fail the completion rename, then retry completion and read from a new repository.
+**Then** the failed submit leaves bytes and snapshot revision unchanged with zero messages, turns and receipts; the accepted submit lands one message, the frozen response plan and a receipt stamped with the commit revision; the failed completion leaves bytes and revision unchanged, no reply, the attempt `dispatching`, no completed participant and empty binding delivery/output lists; the retried completion lands in exactly one revision (+1) with messages `[u, reply]`, attempt `completed` with `resultMessageId: reply`, turn `completed`, participant `p` completed, the context digest, and binding `b` recording `u` delivered and `reply` as native output. Strengthened for TASK-477.
 
 ## PT-BC77C20B69
 
@@ -142,3 +142,43 @@ Title: **provider session identity survives ownership persistence**.
 **Given** ownership carrying conversation, turn, participant, attempt, epoch and an optional provider session ID.
 **When** store it, mutate the caller's provider session ID and reload a fresh manager.
 **Then** the restored ownership deeply equals the original, including `providerSessionId: 'provider-session'`.
+
+## TASK-477 additions (PRX-T111-477)
+
+Frozen source: `d15874efacfb1159c74e1ddee1fa97e0235de4be`. Runner: `npm run test:desktop:git` (`teamChatIpcRecovery.test.js` is in its explicit list). These tests drive the real `createTeamChatServices`, `FileTeamChatRepository` and `TeamChatCoordinator` over a temporary profile file with a scripted provider. Executed in this stage: 24 of 24 passed across `teamChatRepository.test.js` and `teamChatIpcRecovery.test.js`. The matching Playwright contract is PT-68979E242A in the generated [catalog](index.md) (a malformed file is shown as a recoverable error and never replaced).
+
+## PT-3B6907BAE3
+
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts:119](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L119).
+Title: **a pre-rename submit failure emits no acceptance and invokes no provider; the same command then succeeds once**.
+
+**Given** durable chat activated with one conversation `c`, and `fs.promises.rename` injected to fail.
+**When** submit command `cmd`, wait, restore rename, then submit the same command again and wait for completion.
+**Then** the first submit rejects; the file bytes equal the old committed snapshot; no `turn_accepted` update is emitted and the provider is not called. The retry produces exactly one turn (the returned turn id), one receipt, one `turn_accepted` and one provider call.
+
+## PT-EC587520ED
+
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts:140](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L140).
+Title: **an uncertain submit commit is not acknowledged; reconciliation returns the original turn for the same command id**.
+
+**Given** durable chat with conversation `c` and a provider that never returns, on a non-Windows platform, with the directory flush after rename injected to fail.
+**When** submit command `uncertain`, submit a different command, reconcile from disk, then resubmit `uncertain`.
+**Then** the first submit rejects with `TeamChatCommitUncertainError`, with no `turn_accepted` and no provider call; the next write is refused with the same error until reconciliation; reconciliation finds the receipt on disk; the replay returns that receipt's turn id, and the file holds one turn and one user message. Skipped on Windows.
+
+## PT-E8F72FF1BC
+
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts:169](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L169).
+Title: **an uncertain commit while reserving an attempt halts dispatch and reports reload**.
+
+**Given** durable chat with conversation `c` on a non-Windows platform, with the directory flush failed once, only for the first commit whose bytes carry a reserved attempt.
+**When** submit, wait for `turn_failed`, attempt a further write, reconcile, then start a second services instance (new epoch) and run startup recovery.
+**Then** the provider is never called; the halt update's error matches "Restart Praxis to recover this team chat."; the stranded attempt is `prepared` with no dispatch intent; writes stay refused until reconciliation, which sees the same attempt; after restart the attempt is classified `interrupted` (same id) and is never dispatched. Skipped on Windows.
+
+## PT-EA0DBBC504
+
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts:207](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L207).
+Title: **two windows over two chats retain every accepted submit**.
+
+**Given** durable services over chats `x` and `y`, plus a second `FileTeamChatRepository` on the same file standing in for another window.
+**When** concurrently submit to `x` and `y` through the services while the second repository renames both chats, wait for both turns, then submit again to `x`.
+**Then** `x` holds receipts `[x1, x2]` and `y` holds `[y1]`, each first turn id matching its acknowledgement; both renames survive; `x`'s message sequences are contiguous from 1; each of the four concurrent commits observed a distinct snapshot revision; and no receipt revision exceeds its conversation revision.

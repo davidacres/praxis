@@ -121,7 +121,7 @@ Title: **current policy is revalidated immediately before provider dispatch**.
 
 ## PT-ABE894C263
 
-Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:93](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L93).
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:124](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L124).
 Title: **provider bindings, summary provenance, usage and decision corrections survive reload in isolation**.
 
 **Given** a temporary file repository containing bindings, sources, summary provenance and a decision correction.

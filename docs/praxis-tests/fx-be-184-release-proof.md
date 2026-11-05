@@ -157,7 +157,7 @@ Title: **a legacy runtime session key is never treated as a provable association
 
 ### PT-020116C43E
 
-Automation: **node:test**, [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193).
+Automation: **node:test**, [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224).
 Title: **ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ${code} at ${stage}**.
 
 **Given** a committed durable chat; six cases (ENOSPC/EACCES at temp open, writeFile or sync) from one template title.
@@ -166,7 +166,7 @@ Title: **ENOSPC and EACCES on temp write or fsync reject the acknowledgement and
 
 ### PT-DF4DDACEB9
 
-Automation: **node:test**, [teamChatRepository.test.ts:219](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L219).
+Automation: **node:test**, [teamChatRepository.test.ts:250](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L250).
 Title: **a truncated file, invalid JSON, wrong schemaVersion and a duplicate conversation id each fail load without rewriting**.
 
 **Given** four malformed variants of a valid file, and a valid file truncated after load.
@@ -175,7 +175,7 @@ Title: **a truncated file, invalid JSON, wrong schemaVersion and a duplicate con
 
 ### PT-315DCCA855
 
-Automation: **node:test**, [teamChatRepository.test.ts:242](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L242).
+Automation: **node:test**, [teamChatRepository.test.ts:273](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L273).
 Title: **two repository instances over one file are refused or serialized**.
 
 **Given** two repository instances (two windows) over one file.
@@ -184,7 +184,7 @@ Title: **two repository instances over one file are refused or serialized**.
 
 ### PT-ED8AC5EE8A
 
-Automation: **node:test**, [teamChatRepository.test.ts:259](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L259).
+Automation: **node:test**, [teamChatRepository.test.ts:290](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L290).
 Title: **a 10,000-message conversation commits under concurrent mutation of another chat within a recorded bound**.
 
 **Given** a 10,000-message chat and a small chat in one file.
@@ -202,7 +202,7 @@ Title: **interrupted activation reuses a validated backup and uncertain commit r
 
 ### PT-159068A7D0
 
-Automation: **node:test**, [teamChatIpcRecovery.test.ts:35](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L35).
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:38](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L38).
 Title: **startup recovery reconciles a running attempt and resumes a queued turn before any chat is opened**.
 
 **Given** bytes holding one chat crashed mid-dispatch and another with a durably accepted queued turn.
@@ -211,7 +211,7 @@ Title: **startup recovery reconciles a running attempt and resumes a queued turn
 
 ### PT-57FD906F86
 
-Automation: **node:test**, [teamChatIpcRecovery.test.ts:69](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L69).
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:72](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L72).
 Title: **startup recovery leaves a profile that never activated durable chat untouched**.
 
 **Given** no file, then a legacy file, then the activation switch off.
@@ -220,7 +220,7 @@ Title: **startup recovery leaves a profile that never activated durable chat unt
 
 ### PT-7231E7679E
 
-Automation: **node:test**, [teamChatIpcRecovery.test.ts:83](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L83).
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:86](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L86).
 Title: **activation failure leaves durable dispatch disabled**.
 
 **Given** a legacy file with a mismatched interrupted backup, and separately the activation switch off.
@@ -236,12 +236,12 @@ The two template ids above are stable source-group identities, not exact runtime
 | PT-6807379342 | PT-E4314C935F · [teamChatCrashBoundaries.test.ts:101](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L101) | crash after dispatch intent marks text-only attempts interrupted and tool-capable or opaque attempts outcome_unknown: text |
 | PT-C1EFAE92A6 | PT-E4314C935F · [teamChatCrashBoundaries.test.ts:101](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L101) | crash after dispatch intent marks text-only attempts interrupted and tool-capable or opaque attempts outcome_unknown: tools |
 | PT-F8EA47ECD7 | PT-E4314C935F · [teamChatCrashBoundaries.test.ts:101](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L101) | crash after dispatch intent marks text-only attempts interrupted and tool-capable or opaque attempts outcome_unknown: opaque |
-| PT-631B008FED | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at open |
-| PT-17C2DF639D | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at writeFile |
-| PT-054023CB11 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at sync |
-| PT-3207E3F7EE | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at open |
-| PT-88A2B4C4A4 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at writeFile |
-| PT-5B98C84232 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at sync |
+| PT-631B008FED | PT-020116C43E · [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at open |
+| PT-17C2DF639D | PT-020116C43E · [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at writeFile |
+| PT-054023CB11 | PT-020116C43E · [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ENOSPC at sync |
+| PT-3207E3F7EE | PT-020116C43E · [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at open |
+| PT-88A2B4C4A4 | PT-020116C43E · [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at writeFile |
+| PT-5B98C84232 | PT-020116C43E · [teamChatRepository.test.ts:224](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L224) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at sync |
 
 Registration: core contracts run through `packages/core/package.json` → `test` (root `test:core`); main contracts through `apps/praxis-desktop/main/package.json` → `test:git` (root `test:desktop:git`). The directory-flush/reconciliation assertions in PT-4485239A20 return early on Windows; its activation-retry assertions still run there. Internal scenario loops (four binding changes, four malformed files, two approval projections) are assertion scenarios within one test each, not extra runtime test registrations.
 
@@ -276,7 +276,7 @@ Title: **production API compatibility follows credentials, model and policy with
 
 ### PT-EE0AB4E23D
 
-Automation: **Playwright**, [durableTeamChat.spec.ts:494](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L494).
+Automation: **Playwright**, [durableTeamChat.spec.ts:536](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L536).
 Title: **queued page context and staged image reach the provider after navigation and composer replacement**.
 
 **Given** a temporary profile, coordination root, attachment store and scripted ACP provider, with the first dispatch held at a barrier.

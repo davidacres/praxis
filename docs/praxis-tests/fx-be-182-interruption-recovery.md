@@ -139,7 +139,7 @@ Title: **pre-dispatch recovery requires exact durable result and imports only on
 
 ## PT-0ECEA64537
 
-Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:115](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L115).
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:146](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L146).
 Title: **startup evidence and recovered reply survive repeated durable epoch changes**.
 
 **Given** a temporary file repository seeded with a prepared attempt, no dispatch intent and an exact durable final result.
@@ -166,7 +166,7 @@ Title: **startup imports a prepared attempt result without dispatching the provi
 
 ## PT-853EBCDC9F
 
-Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:155](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L155).
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:186](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L186).
 Title: **repository validates observation epochs separately from immutable attempt epochs**.
 
 **Given** persisted reconciliation evidence whose observing epoch differs from its attempt's originating epoch.
