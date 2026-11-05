@@ -172,6 +172,33 @@ test('the entry stage is dispatched and recorded running before it starts', asyn
   assert.equal(runs.get('run-1')?.nodes.implement.outcome, 'running');
 });
 
+test('a deferred merge is skipped after the other stages without changing the approved definition', async () => {
+  const runs = memoryRuns();
+  const def = {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'd', name: 'D', scope: 'project', projectId: 'p1', version: 1,
+    entryNodeId: 'check', createdAt: now(), updatedAt: now(),
+    nodes: [
+      { type: 'check', id: 'check', name: 'Check', x: 0, y: 0, inputs: [], command: 'true', args: [], successExitCodes: [0], outputs: [] },
+      { type: 'merge', id: 'merge', name: 'Merge', x: 0, y: 0, inputs: [], target: 'main' }
+    ],
+    edges: [{ id: 'e-check-merge', from: 'check', to: 'merge', on: 'success', required: true }]
+  } as unknown as WorkflowDefinition;
+  const run = createWorkflowRun({ runId: 'run-1', projectId: 'p1', definition: def, at: now(), deferMerge: true });
+  void runs.save(run);
+  const fake = fakeDispatcher(nodeId => ({ status: 'succeeded', artifacts: outputsFor(def, nodeId) }));
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, workspace: fakeWorkspace().provider, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+
+  const saved = runs.get('run-1');
+  assert.deepEqual(fake.started, ['check']);
+  assert.equal(saved?.definition.nodes.some(node => node.id === 'merge'), true);
+  assert.equal(saved?.nodes.merge.outcome, 'skipped');
+  assert.equal(saved?.status, 'succeeded');
+});
+
 test('a stage is never dispatched twice, however often the loop is entered', async () => {
   const runs = memoryRuns();
   seed(runs);

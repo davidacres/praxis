@@ -342,6 +342,24 @@ export class WorkflowOrchestrator {
     }
 
     const schedule = scheduleWorkflowRun(run);
+    if (run.deferMerge) {
+      const mergeNodeId = schedule.ready.find(nodeId =>
+        run?.definition.nodes.some(node => node.id === nodeId && isMergeNode(node))
+      );
+      if (mergeNodeId) {
+        const skipped = applyWorkflowRunCommand(run, {
+          kind: 'node-skipped',
+          nodeId: mergeNodeId,
+          at: this.now,
+          reason: 'Merge is deferred until the final ticket in this sequential schedule.'
+        });
+        if (skipped !== run) {
+          await this.persist(skipped);
+          await this.stepOnce(runId);
+          return;
+        }
+      }
+    }
     const current = run;
     const launchable = schedule.ready
       .filter(nodeId => !this.inFlight.has(this.key(runId, nodeId)))

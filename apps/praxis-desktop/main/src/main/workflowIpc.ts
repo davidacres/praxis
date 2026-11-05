@@ -37,7 +37,6 @@ import {
   summarizeWorkflowRun,
   validateWorkflow,
   resolveRunParameters,
-  workflowForScheduledEntry,
   type CheckFindings,
   estimateWorkflowRun,
   stageUsageSample,
@@ -474,13 +473,14 @@ export async function startWorkflowRun(input: {
     runId: randomUUID(),
     projectId,
     definition: {
-      ...workflowForScheduledEntry(definition, options?.deferMerge !== true),
+      ...definition,
       name: `${definition.name} — ${taskTitle}`.trim()
     },
     at: new Date().toISOString(),
     ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {}),
     ...(scheduledLaunchToken ? { scheduledLaunchToken } : {}),
     ...(typeof options?.sharedDeliveryBranch === 'string' && options.sharedDeliveryBranch ? { sharedDeliveryBranch: options.sharedDeliveryBranch } : {}),
+    ...(options?.deferMerge === true ? { deferMerge: true } : {}),
     ...(controller ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId } : {}),
     ...(planInput ? { planInput } : {}),
     ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),

@@ -326,6 +326,15 @@ export class ScheduledRunRunner {
     if (!progress || progress.kind === 'cancelled') return run;
     const isIntermediateSequentialEntry = run.policy.mode === 'sequential' && run.entries.at(-1)?.id !== entry.id;
     if (progress.kind === 'failed') {
+      const trustFailure = /needs local workspace trust/i.test(progress.reason);
+      if (isIntermediateSequentialEntry && trustFailure && run.deliveryBranchName && (entry.outcome?.retries ?? 0) <= 1) {
+        const retried = retryScheduledEntry(run, entry.id, this.ports.now());
+        return this.save(recordScheduledDecision(retried, entry.id, {
+          kind: 'entry-retried',
+          at: this.ports.now(),
+          message: `${entry.ticket.issueKey} is restarting after the workflow trust check was repaired, on ${run.deliveryBranchName}.`
+        }));
+      }
       if (isIntermediateSequentialEntry && progress.nodeId === 'merge' && this.ports.deliveryBranchForWorkflow) {
         const deliveryBranchName = await this.ports.deliveryBranchForWorkflow(workflowRunId);
         if (!deliveryBranchName) return run;

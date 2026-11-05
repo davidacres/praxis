@@ -336,6 +336,8 @@ export interface WorkflowRun {
   scheduledLaunchToken?: string;
   /** Shared branch used by all tickets in one sequential scheduled run. */
   sharedDeliveryBranch?: string;
+  /** Keep merge stages pending until the final ticket in a sequential schedule. */
+  deferMerge?: boolean;
   /**
    * Set once the terminal outcome has been written back to `issueKey` as a
    * comment. An idempotency marker only — set directly by the host after a
@@ -449,6 +451,7 @@ export function createWorkflowRun(input: {
   issueConnectionId?: string;
   scheduledLaunchToken?: string;
   sharedDeliveryBranch?: string;
+  deferMerge?: boolean;
   controllerSessionKey?: string;
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
@@ -480,6 +483,7 @@ export function createWorkflowRun(input: {
     ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {}),
     ...(input.scheduledLaunchToken ? { scheduledLaunchToken: input.scheduledLaunchToken } : {}),
     ...(input.sharedDeliveryBranch ? { sharedDeliveryBranch: input.sharedDeliveryBranch } : {}),
+    ...(input.deferMerge === true ? { deferMerge: true } : {}),
     ...(input.controllerSessionKey ? { controllerSessionKey: input.controllerSessionKey } : {}),
     ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
     ...(input.planInput ? { planInput: input.planInput } : {}),
@@ -1676,6 +1680,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
     ...(typeof raw.scheduledLaunchToken === 'string' ? { scheduledLaunchToken: raw.scheduledLaunchToken } : {}),
     ...(typeof raw.sharedDeliveryBranch === 'string' ? { sharedDeliveryBranch: raw.sharedDeliveryBranch } : {}),
+    ...(raw.deferMerge === true ? { deferMerge: true } : {}),
     ...normalizeRevisionFindings(raw.revisionFindings),
     ...(raw.mergeAiAttempt && typeof raw.mergeAiAttempt === 'object' && !Array.isArray(raw.mergeAiAttempt)
       ? {

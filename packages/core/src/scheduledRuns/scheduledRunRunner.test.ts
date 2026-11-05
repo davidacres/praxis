@@ -533,6 +533,31 @@ test('an intermediate sequential merge failure retries on its delivery branch an
   assert.ok(h.run.events.some(event => /merge was deferred to the final ticket/.test(event.message)));
 });
 
+test('an intermediate sequential trust failure retries once on the persisted delivery branch', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  h.saved.set(h.run.id, { ...h.run, deliveryBranchName: 'WF-CURRENT-SCHEDULE' });
+  await h.runner.tick();
+  h.setWorkflow('T-1', { progress: { kind: 'failed', nodeId: 'plan', reason: 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.' } });
+  await h.runner.tick();
+
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.entries[0].outcome?.retries, 1);
+  assert.equal(h.launches.length, 2);
+  assert.equal(h.launches[1].deliveryBranchName, 'WF-CURRENT-SCHEDULE');
+  assert.ok(h.run.events.some(event => /trust check was repaired/.test(event.message)));
+
+  h.setWorkflow('T-1', { progress: { kind: 'failed', nodeId: 'plan', reason: 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.' } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.entries[0].outcome?.retries, 2);
+  assert.equal(h.launches.length, 3);
+
+  h.setWorkflow('T-1', { progress: { kind: 'failed', nodeId: 'plan', reason: 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.' } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused', 'a repeated trust failure is left for review instead of looping');
+  assert.equal(h.launches.length, 3);
+});
+
 test('only an idle failed workflow needs manual scheduled recovery', () => {
   const failed = { nodeId: 'implement', outcome: 'failed', lane: 'failed' };
   const summary = { status: 'running', stages: [failed], loops: [] } as unknown as Parameters<typeof scheduledWorkflowBlocker>[0];
