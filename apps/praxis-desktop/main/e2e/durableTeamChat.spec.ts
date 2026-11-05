@@ -185,9 +185,12 @@ test('keyboard cancellation preserves accepted messages and cancels only the sel
     await win.getByTestId('assistant-send').click();
     const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
     await expect(queued).toHaveCount(1);
+    // Electron's native keyboard target can belong to another concurrently launched window.
+    await win.bringToFront();
     await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
     await expect(queued).toHaveCount(0);
     await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
+    await win.bringToFront();
     await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
     await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
     await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);

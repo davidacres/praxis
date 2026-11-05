@@ -5211,7 +5211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 203,
+        "line": 206,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5227,7 +5227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 256,
+        "line": 259,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5243,7 +5243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 292,
+        "line": 295,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5259,7 +5259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 323,
+        "line": 326,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5275,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 392,
+        "line": 395,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5291,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 427,
+        "line": 430,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5307,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 463,
+        "line": 466,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5323,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 491,
+        "line": 494,
         "project": "functional"
       },
       "area": "durable Team Chat",

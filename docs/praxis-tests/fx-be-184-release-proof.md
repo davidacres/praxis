@@ -276,7 +276,7 @@ Title: **production API compatibility follows credentials, model and policy with
 
 ### PT-EE0AB4E23D
 
-Automation: **Playwright**, [durableTeamChat.spec.ts:491](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L491).
+Automation: **Playwright**, [durableTeamChat.spec.ts:494](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L494).
 Title: **queued page context and staged image reach the provider after navigation and composer replacement**.
 
 **Given** a temporary profile, coordination root, attachment store and scripted ACP provider, with the first dispatch held at a barrier.
