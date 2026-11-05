@@ -188,14 +188,20 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
       {a.conversation?.turns.filter(turn => !['completed', 'cancelled'].includes(turn.state)).map((turn, index) => {
         const attempt = turn.attempts.at(-1);
         const member = turn.plan.participants.find(p => !turn.completedParticipantIds.includes(p.id));
-        const control = (action: import('@praxis/core').ConversationControlCommand['action']) => {
-          void window.praxis.assistant.control({ conversationId: a.conversation!.id, commandId: crypto.randomUUID(),
-            expectedRevision: a.conversation!.revision, action, turnId: turn.id,
-            ...(attempt ? { attemptId: attempt.id } : {}),
-            ...(turn.state === 'outcome_unknown' ? { acknowledgeDuplicateActionRisk: acknowledged,
-              ...(attempt?.recoveryEvidence?.find(e => e.kind === 'reconciliation') ? { reconciliationEvidenceId: attempt.recoveryEvidence.find(e => e.kind === 'reconciliation')!.id } : {}),
-              reconciliationNote: reconciliationNotes[turn.id] ?? '' } : {})
-          }).catch(error => setToolError(String(error)));
+        // Each click is one command ID against the revision on screen. A stale command answers
+        // `conflict` with fresh state, which the conversation subscription already shows.
+        const control = (action: 'cancel' | 'retry' | 'resume-context' | 'reconcile') => {
+          const assistant = window.praxis.assistant;
+          const fence = { conversationId: a.conversation!.id, commandId: crypto.randomUUID(), expectedRevision: a.conversation!.revision, turnId: turn.id };
+          const reconciliation = attempt?.recoveryEvidence?.find(e => e.kind === 'reconciliation');
+          const sent: Promise<unknown> =
+            action === 'cancel' ? assistant.cancelTurn({ ...fence, ...(attempt ? { attemptId: attempt.id } : {}) })
+            : action === 'reconcile' ? assistant.resolveAttempt({ ...fence, attemptId: attempt?.id ?? '', resolution: 'reconcile', reconciliationNote: reconciliationNotes[turn.id] ?? '' })
+            : action === 'retry' && turn.state === 'outcome_unknown' ? assistant.resolveAttempt({ ...fence, attemptId: attempt?.id ?? '', resolution: 'retry',
+              acknowledgeDuplicateActionRisk: acknowledged, ...(reconciliation ? { reconciliationEvidenceId: reconciliation.id } : {}) })
+            : action === 'retry' ? assistant.retryParticipant({ ...fence, attemptId: attempt?.id ?? '', participantId: attempt?.participantId ?? '' })
+            : assistant.control({ ...fence, action, ...(attempt ? { attemptId: attempt.id } : {}) });
+          sent.catch(error => setToolError(String(error)));
         };
         return <div key={turn.id} className="assistant-action-card" data-testid="assistant-turn-status">
           <strong>{turn.state === 'queued' ? `Queued ${index + 1}` : `${member?.role ?? 'Team'}: ${turn.state.replaceAll('_', ' ')}`}</strong>

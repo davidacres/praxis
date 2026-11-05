@@ -441,6 +441,9 @@ const praxis: PraxisIpc = {
   assistant: {
     sessionTurn: (request: unknown) => ipcRenderer.invoke('assistant:sessionTurn', request),
     control: (command: unknown) => ipcRenderer.invoke('assistant:control', command),
+    cancelTurn: (command: unknown) => ipcRenderer.invoke('assistant:cancelTurn', command),
+    retryParticipant: (command: unknown) => ipcRenderer.invoke('assistant:retryParticipant', command),
+    resolveAttempt: (command: unknown) => ipcRenderer.invoke('assistant:resolveAttempt', command),
     stageAttachments: (id: string, images: unknown) => ipcRenderer.invoke('assistant:stageAttachments', id, images),
     turn: (request: unknown) => ipcRenderer.invoke('assistant:turn', request),
     teamReview: (request: unknown) => ipcRenderer.invoke('assistant:teamReview', request),

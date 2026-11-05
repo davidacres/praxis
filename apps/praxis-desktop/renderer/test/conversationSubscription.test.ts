@@ -72,3 +72,56 @@ test('a conversation-update error is surfaced at the loaded revision while snaps
     'Halted again. Restart Praxis to recover this team chat.'
   ]);
 });
+
+/**
+ * A bridge holding one server-side conversation. It exposes only reads and the subscription:
+ * the client has no mutation method to call, so nothing it does can replay work.
+ */
+function server(initial: number) {
+  let revision = initial;
+  let reads = 0;
+  let notify!: (update: { revision: number }) => void;
+  const bridge = {
+    getConversation: async () => { reads += 1; return snapshot(revision); },
+    subscribeConversation: (_id: string, listener: (update: { revision: number }) => void) => { notify = listener; return () => undefined; }
+  } as unknown as AssistantIpc;
+  return { bridge, commit: (next: number) => { revision = next; notify({ revision: next }); }, replay: (old: number) => notify({ revision: old }), reads: () => reads };
+}
+const tick = () => new Promise(resolve => setTimeout(resolve, 20));
+
+test('TASK-479 AC2 new window: loads the snapshot, then applies each newer revision', async () => {
+  const s = server(3);
+  const published: number[] = [];
+  const dispose = subscribeConversation(s.bridge, 'c', value => { if (value) published.push(value.revision); }, error => { throw error; });
+  await tick();
+  s.commit(4); await tick();
+  s.commit(5); await tick();
+  dispose();
+  assert.deepEqual(published, [3, 4, 5]);
+});
+
+test('TASK-479 AC2 duplicates: repeated and older revision events cause no read and no publish', async () => {
+  const s = server(5);
+  const published: number[] = [];
+  const dispose = subscribeConversation(s.bridge, 'c', value => { if (value) published.push(value.revision); }, error => { throw error; });
+  await tick();
+  const baseline = s.reads();
+  s.replay(5); s.replay(5); s.replay(2);
+  await tick();
+  dispose();
+  assert.equal(s.reads(), baseline, 'no extra getConversation');
+  assert.deepEqual(published, [5], 'no extra publish');
+});
+
+test('TASK-479 AC2 gap: a revision gap triggers exactly one fresh snapshot without replaying work', async () => {
+  const s = server(3);
+  const published: number[] = [];
+  const dispose = subscribeConversation(s.bridge, 'c', value => { if (value) published.push(value.revision); }, error => { throw error; });
+  await tick();
+  const baseline = s.reads();
+  s.commit(9);
+  await tick();
+  dispose();
+  assert.equal(s.reads() - baseline, 1, 'one snapshot read covers the gap');
+  assert.deepEqual(published, [3, 9]);
+});

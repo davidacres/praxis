@@ -240,8 +240,29 @@ export interface ConversationControlCommand {
   action: 'cancel' | 'retry' | 'pin' | 'unpin' | 'resume-context' | 'reconcile';
   turnId?: string;
   attemptId?: string;
+  /** Retry only: the member the caller believes is next. A mismatch is a stale target. */
+  participantId?: string;
   messageId?: string;
   acknowledgeDuplicateActionRisk?: boolean;
   reconciliationEvidenceId?: string;
   reconciliationNote?: string;
+}
+/**
+ * Every control command answers with the fresh committed conversation. A stale command is not a
+ * silent no-op: it is a `conflict` naming why, so the caller can tell it apart from success.
+ */
+export type ConversationControlOutcome =
+  | { status: 'applied' | 'duplicate'; conversation: DurableConversation }
+  | { status: 'conflict'; reason: 'stale-revision' | 'stale-target' | 'not-actionable'; conversation: DurableConversation };
+/** Stop an active turn, or cancel one still queued. */
+export interface CancelTurnCommand { conversationId: string; commandId: string; expectedRevision: number; turnId: string; attemptId?: string }
+/** Retry the member whose latest attempt failed or was interrupted. */
+export interface RetryParticipantCommand { conversationId: string; commandId: string; expectedRevision: number; turnId: string; participantId: string; attemptId: string }
+/** Resolve an `outcome_unknown` attempt: record what was checked, or retry after accepting the duplicate-action risk. */
+export interface ResolveAttemptCommand {
+  conversationId: string; commandId: string; expectedRevision: number; turnId: string; attemptId: string;
+  resolution: 'reconcile' | 'retry';
+  reconciliationNote?: string;
+  acknowledgeDuplicateActionRisk?: boolean;
+  reconciliationEvidenceId?: string;
 }

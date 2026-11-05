@@ -378,28 +378,43 @@ export class TeamChatCoordinator {
 
   /** Revision and target fencing plus the command receipt commit in one transaction. */
   public async control(command: import('./assistantTypes').ConversationControlCommand): Promise<DurableConversation> {
+    return (await this.controlWithOutcome(command)).conversation;
+  }
+
+  /**
+   * As `control`, but says what happened: `applied`, `duplicate` (the same command ID was already
+   * committed), or `conflict` with the reason. The conversation is always the fresh committed state.
+   */
+  public async controlWithOutcome(command: import('./assistantTypes').ConversationControlCommand): Promise<import('./assistantTypes').ConversationControlOutcome> {
     command = structuredClone(command);
     await this.initialize();
     if (!['cancel', 'retry', 'pin', 'unpin', 'resume-context', 'reconcile'].includes(command.action)) throw new Error('Invalid conversation control.');
     const digest = conversationPayloadDigest(command);
     let applied = false;
+    let rejection: { status: 'duplicate' } | { status: 'conflict'; reason: 'stale-revision' | 'stale-target' | 'not-actionable' } | undefined;
+    const reject = (conv: DurableConversation, reason: 'stale-revision' | 'stale-target' | 'not-actionable') => {
+      rejection = { status: 'conflict', reason };
+      return conv;
+    };
     const updated = await this.transitionConversation(command.conversationId, conv => {
       const receipt = conv.controlReceipts?.find(r => r.commandId === command.commandId);
       if (receipt) {
         if (receipt.payloadDigest !== digest) throw new Error('Command payload conflict.');
+        rejection = { status: 'duplicate' };
         return conv;
       }
-      if (conv.revision !== command.expectedRevision) return conv;
+      if (conv.revision !== command.expectedRevision) return reject(conv, 'stale-revision');
       if (!command.commandId.trim()) throw new Error('Command ID required.');
       const turn = conv.turns.find(t => t.id === command.turnId);
       const attempt = turn?.attempts.at(-1);
-      if (command.attemptId && attempt?.id !== command.attemptId) return conv;
+      if (command.attemptId && attempt?.id !== command.attemptId) return reject(conv, 'stale-target');
+      if (command.action === 'retry' && command.participantId && attempt?.participantId !== command.participantId) return reject(conv, 'stale-target');
       if (command.action === 'pin') pinConversationDecision(conv, command.messageId!);
       else if (command.action === 'unpin') conv.pinnedMessageIds = conv.pinnedMessageIds.filter(id => id !== command.messageId);
       else {
         if (!turn) throw new Error('Turn not found.');
         if (command.action === 'cancel') {
-          if (['completed', 'cancelled'].includes(turn.state)) return conv;
+          if (['completed', 'cancelled'].includes(turn.state)) return reject(conv, 'not-actionable');
           const active = attempt && ['dispatching', 'running', 'awaiting_approval'].includes(attempt.state);
           turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
           turn.skippedParticipantIds = turn.plan.participants.filter(p => !turn.completedParticipantIds.includes(p.id) && p.id !== (active ? attempt.participantId : undefined)).map(p => p.id);
@@ -410,11 +425,12 @@ export class TeamChatCoordinator {
             participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
             kind: 'reconciliation', observedAt: this.clock(), provenance: 'user', data: { note: command.reconciliationNote.trim() } });
         } else if (command.action === 'resume-context') {
-          if (turn.state !== 'context_required') return conv;
+          if (turn.state !== 'context_required') return reject(conv, 'not-actionable');
           turn.state = 'running';
           delete turn.contextRequiredReason;
         } else if (command.action === 'retry') {
-          if (!attempt || attempt.id !== command.attemptId || !['failed', 'interrupted', 'outcome_unknown'].includes(turn.state)) return conv;
+          if (!attempt || attempt.id !== command.attemptId) return reject(conv, 'stale-target');
+          if (!['failed', 'interrupted', 'outcome_unknown'].includes(turn.state)) return reject(conv, 'not-actionable');
           if (turn.state === 'outcome_unknown') {
             if (!command.acknowledgeDuplicateActionRisk || !attempt.recoveryEvidence?.some(e => e.id === command.reconciliationEvidenceId && e.kind === 'reconciliation')) throw new Error('Acknowledge duplicate-action risk after reconciliation.');
             attempt.recoveryEvidence.push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
@@ -436,7 +452,7 @@ export class TeamChatCoordinator {
       this.notify({ conversationId: updated.id, revision: updated.revision, type: 'turn_accepted' });
       void this.processConversation(updated.id);
     }
-    return updated;
+    return rejection ? { ...rejection, conversation: updated } : { status: 'applied', conversation: updated };
   }
 
   public async removeConversation(conversationId: string): Promise<void> {
@@ -959,6 +975,11 @@ export class TeamChatCoordinator {
             attemptId,
             message: replyMessage
           });
+          // The last member's reply completes the turn in the same transaction, so the loop's own
+          // completion branch never sees it: announce it here, at the same revision.
+          if (completedConv.turns.find(t => t.id === activeTurn!.id)?.state === 'completed') {
+            this.notify({ conversationId, revision: completedConv.revision, type: 'turn_completed', turnId: activeTurn.id, state: 'completed' });
+          }
         }
       }
     } catch (error) {

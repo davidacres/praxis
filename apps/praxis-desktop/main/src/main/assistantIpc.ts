@@ -1,4 +1,6 @@
 import { createTeamChatServices } from './teamChatServices';
+import { createTeamChatCommands } from './teamChatCommands';
+import { getProjectStore } from './projectStoreInstance';
 import { TeamChatAttachments } from './teamChatAttachments';
 import { createProductionTeamChatExecutionAdapter, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
 import * as path from 'node:path';
@@ -67,6 +69,14 @@ const teamChats = createTeamChatServices({
   })
 });
 const activation = teamChats.activation;
+/** Validated durable-chat commands; see `teamChatCommands.ts` for what is checked before acceptance. */
+const teamChatCommands = createTeamChatCommands({
+  services: teamChats,
+  attachments,
+  projectExists: id => Boolean(getProjectStore().get(id)),
+  activeProvider: () => getSettingsBackend().read().ai.activeProvider,
+  assertCanRunAgentSession
+});
 const activate = teamChats.activate;
 const getTeamChatRepository = teamChats.repository;
 const getTeamChatStore = teamChats.store;
@@ -276,11 +286,10 @@ export function registerAssistantIpc(): void {
   });
   ipcMain.handle('assistant:teamReview', (_event, request: AssistantTeamReviewRequest) => runTeamReview(request, completionFor({})));
 
-  ipcMain.handle('assistant:listChats', async (_event, projectId: string) => { await activate(); return getTeamChatStore().list(projectId); });
+  ipcMain.handle('assistant:listChats', (_event, projectId: string) => teamChatCommands.listChats(projectId));
   ipcMain.handle('assistant:getChat', async (_event, chatId: string) => { await activate(); return getTeamChatStore().get(chatId); });
   ipcMain.handle('assistant:createChat', async (_event, projectId: string, issueKey?: string) => {
-    await activate();
-    const chat = await getTeamChatStore().create(projectId, issueKey);
+    const chat = await teamChatCommands.createChat(projectId, issueKey);
     changed();
     return chat;
   });
@@ -307,15 +316,11 @@ export function registerAssistantIpc(): void {
     if (!getTeamChatStore().get(id)) throw new Error('Conversation was not found.');
     return attachments().stage(id, images);
   });
-  ipcMain.handle('assistant:submitTurn', async (_event, command: SubmitConversationCommand) => {
-    await activate();
-    await attachments().resolve(command.conversationId, command.attachmentRefs);
-    if (command.attachmentRefs.length) {
-      const options = command.runtimeOptions;
-      if ((options.mode ?? 'chat') === 'chat' && (options.toolMode ?? 'project-only') === 'project-only') throw new Error('Choose an image-capable agent runtime before attaching images.');
-      assertCanRunAgentSession(String(options.provider ?? getSettingsBackend().read().ai.activeProvider) as AiProvider);
-    }
-    return teamChats.submitTurn(command);
-  });
-  ipcMain.handle('assistant:getConversation', async (_event, conversationId: string) => { await activate(); await getTeamChatCoordinator().initialize(); return getTeamChatCoordinator().getConversation(conversationId); });
+  // Accepted work is owned by the coordinator, never by `event.sender`: closing the window that
+  // submitted a turn cancels nothing, and every window observes it through the broadcast updates.
+  ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => teamChatCommands.submitTurn(command));
+  ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => teamChatCommands.getConversation(conversationId));
+  ipcMain.handle('assistant:cancelTurn', (_event, command: import('@praxis/core').CancelTurnCommand) => teamChatCommands.cancelTurn(command));
+  ipcMain.handle('assistant:retryParticipant', (_event, command: import('@praxis/core').RetryParticipantCommand) => teamChatCommands.retryParticipant(command));
+  ipcMain.handle('assistant:resolveAttempt', (_event, command: import('@praxis/core').ResolveAttemptCommand) => teamChatCommands.resolveAttempt(command));
 }
