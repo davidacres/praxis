@@ -880,3 +880,70 @@ test('queued page identity and attachment references survive caller mutation bef
   assert.equal(message.context!.summary, 'Original context');
   assert.deepEqual(message.attachments, [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }]);
 });
+
+const taskConfig = (conversationId: string, participantId: string, instructionVersion: string) => ({ conversationId, participantId, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat' as const, toolPolicy: 'read-only' as const, permissionPolicy: 'manual' as const });
+
+test('TASK-481 AC1: second-turn native prompt repeats neither own reply nor delivered history, and carries peer reply and intervening turn once', async () => {
+  const prompts: Record<string, string> = {};
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: {
+    prepare: async ({ conversation, participant }) => taskConfig(conversation.id, participant.id, participant.instructionVersion),
+    execute: async ({ attempt, conversation, participant, turn, nativePrompt }) => {
+      const binding = conversation.bindings.find(b => b.id === attempt.bindingId)!;
+      if (turn.commandId === 'second') prompts[participant.role] = nativePrompt!;
+      return { text: `REPLY-${participant.role}-${turn.commandId}`, providerSessionId: `s:${binding.id}`, contextDelivery: binding.providerSessionId ? 'native' : 'reconstruction' };
+    }
+  } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'first', expectedRevision: 1, text: 'FIRST-INPUT', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
+  await settled(coordinator, 'conv-1');
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'second', expectedRevision: coordinator.getConversation('conv-1')!.revision, text: 'SECOND-INPUT', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
+  await settled(coordinator, 'conv-1');
+  const once = (p: string, s: string) => p.split(s).length - 1;
+  assert.ok(!prompts.dev.includes('REPLY-dev-first'));
+  assert.ok(!prompts.dev.includes('FIRST-INPUT'));
+  assert.equal(once(prompts.dev, 'REPLY-qa-first'), 1);
+  assert.equal(once(prompts.dev, 'SECOND-INPUT'), 1);
+  assert.ok(!prompts.qa.includes('REPLY-qa-first'));
+});
+
+test('TASK-481 AC4: unavailable summarizer, oversized current input and missing pinned source pause as context_required with no provider call', async () => {
+  const cases: Array<[string, (c: DurableConversation) => void, boolean]> = [
+    ['summarizer fails', c => { c.messages = Array.from({ length: 18 }, (_, i) => ({ id: `o${i}`, turnId: 'old', role: 'user' as const, text: 'x'.repeat(1500), createdAt: 'n', sequence: i + 1, attachments: [] })); }, true],
+    ['oversized current', () => undefined, false],
+    ['missing pinned', c => { c.pinnedMessageIds = ['gone']; }, false]
+  ];
+  for (const [name, setup, hasSummarizer] of cases) {
+    const conversation = makeConversation();
+    setup(conversation);
+    let calls = 0, summaries = 0;
+    const events: string[] = [];
+    const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([conversation]), onUpdate: u => events.push(u.type),
+      executionAdapter: { ...(hasSummarizer || name === 'oversized current' ? { summarize: async () => { summaries++; throw new Error('unavailable'); } } : {}), execute: async () => { calls++; return { text: 'unexpected' }; } } });
+    await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'c', expectedRevision: 1, text: name === 'oversized current' ? 'z'.repeat(40000) : 'ask', selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+    const result = await settled(coordinator, 'conv-1');
+    assert.equal(result.turns[0].state, 'context_required', name);
+    assert.equal(calls, 0, name);
+    assert.ok(events.includes('context_required'), name);
+    assert.ok(summaries <= 8, name);
+  }
+});
+
+test('TASK-481 AC5: uncertain acceptance invalidates the cursor, leaves delivery unchanged and the next fresh binding reconstructs fully', async () => {
+  const coordinatorModule = require('./teamChatCoordinator') as typeof import('./teamChatCoordinator');
+  const conversation = makeConversation();
+  let calls = 0;
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([conversation]), executionAdapter: {
+    prepare: async ({ conversation: c, participant }) => taskConfig(c.id, participant.id, participant.instructionVersion),
+    execute: async () => { calls++; throw new coordinatorModule.TeamChatAcceptanceUnknown('closed after send'); }
+  } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'u', expectedRevision: 1, text: 'Hello', selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+  const result = await settled(coordinator, 'conv-1');
+  const binding = result.bindings.find(b => b.id === result.turns[0].attempts[0].bindingId)!;
+  assert.equal(binding.status, 'invalid');
+  assert.deepEqual(binding.deliveredMessageIds, []);
+  assert.equal(calls, 1);
+  assert.equal(result.turns[0].state, 'outcome_unknown');
+  const { resolveTeamChatBinding } = require('./teamChatBindings') as typeof import('./teamChatBindings');
+  const fresh = resolveTeamChatBinding(result.bindings, taskConfig('conv-1', 'part-lead', '1'), 'fresh');
+  assert.notEqual(fresh.id, binding.id);
+  assert.deepEqual(fresh.deliveredMessageIds, []);
+});
