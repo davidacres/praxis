@@ -81,13 +81,15 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
   const sessionReuse = ['part-dev', 'part-lead'].map(participantId => {
     const member = attempts.filter(attempt => attempt.participantId === participantId);
     const reused = Boolean(member[0]?.providerSessionId && member[0].providerSessionId === member[1]?.providerSessionId);
-    return { participantId, reused, firstBindingId: member[0]?.bindingId, secondBindingId: member[1]?.bindingId,
+    const nativeDelivery = member[1]?.recoveryEvidence?.some(evidence => evidence.kind === 'final_result' && evidence.result?.contextDelivery === 'native') === true;
+    const nativeReuseProved = reused && nativeDelivery;
+    return { participantId, reused, nativeDelivery, nativeReuseProved, firstBindingId: member[0]?.bindingId, secondBindingId: member[1]?.bindingId,
       firstSessionId: member[0]?.providerSessionId, secondSessionId: member[1]?.providerSessionId,
-      proof: reused ? 'native-session-reused' : 'context-reconstructed-native-reuse-unproved' };
+      proof: nativeReuseProved ? 'native-session-reused' : 'context-reconstructed-native-reuse-unproved' };
   });
   const evidence = { check: label, codename, conversationId: id, recordedAt: new Date().toISOString(), runtimeOptions,
     bindings: conversation.bindings.map(({ id, providerRuntime, status, providerSessionId, deliveredMessageIds }) => ({ id, providerRuntime, status, providerSessionId, delivered: deliveredMessageIds.length })),
-    sessionReuse, nativeReuseProved: sessionReuse.every(member => member.reused),
+    sessionReuse, nativeReuseProved: sessionReuse.every(member => member.nativeReuseProved),
     attempts, replies: conversation.messages.filter(m => m.role !== 'user').map(m => m.text) };
   fs.mkdirSync(ARTIFACTS, { recursive: true });
   fs.writeFileSync(path.join(ARTIFACTS, `durable-team-chat-live-${label}.json`), JSON.stringify(evidence, null, 2));
@@ -103,16 +105,20 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
     }
     for (const attempt of memberAttempts) expect(attempt.contextReceipt.messageIds).toContain(conversation.messages[0].id);
   }
-  const firstTurnSessions = conversation.turns[0].attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
-  if (firstTurnSessions.length) expect(new Set(firstTurnSessions).size).toBe(2);
-  const secondTurnSessions = conversation.turns[1].attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
-  if (secondTurnSessions.length) expect(new Set(secondTurnSessions).size).toBe(2);
+  for (const turn of conversation.turns) {
+    const sessions = turn.attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
+    if (sessions.length) expect(new Set(sessions).size).toBe(2);
+  }
   // The third turn's context includes the pinned decision, whether reused natively or reconstructed.
   const firstMessage = conversation.messages[0].id;
   const third = conversation.turns[2].attempts.at(-1)!;
   const binding = conversation.bindings.find(b => b.id === third.bindingId);
   expect(third.contextReceipt.messageIds.includes(firstMessage) || Boolean(binding?.deliveredMessageIds.includes(firstMessage))).toBe(true);
-  expect(conversation.messages.at(-1)!.text.toLowerCase()).toContain(codename);
+  for (const attempt of conversation.turns[2].attempts) {
+    const reply = conversation.messages.find(message => message.id === attempt.resultMessageId);
+    expect(reply, `restart reply for ${attempt.participantId}`).toBeDefined();
+    expect(reply!.text.toLowerCase()).toContain(codename);
+  }
 }
 
 test('real CLI member continues a durable team chat across an app restart', async () => {

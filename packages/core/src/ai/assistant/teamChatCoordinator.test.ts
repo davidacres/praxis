@@ -444,9 +444,21 @@ async function settled(coordinator: TeamChatCoordinator, conversationId: string)
 
 test('compatible members retain one binding each across turns and chats remain isolated; usage commits once', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation(), makeConversation('other')]);
+  const sessions = new Map<string, string>();
   const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
     prepare: async ({ conversation, participant }) => ({ conversationId: conversation.id, participantId: participant.id, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: participant.instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat', toolPolicy: 'read-only', permissionPolicy: 'manual' }),
-    execute: async ({ attempt }) => ({ text: 'Reply', usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] })
+    execute: async ({ attempt, conversation, nativePrompt }) => {
+      const binding = conversation.bindings.find(b => b.id === attempt.bindingId)!;
+      const previousSession = sessions.get(binding.id);
+      if (previousSession) {
+        assert.equal(binding.providerSessionId, previousSession, 'dispatch receives the persisted member session');
+        assert.ok(nativePrompt, 'native continuation has a prepared prompt');
+      }
+      const providerSessionId = previousSession ?? `session:${binding.id}`;
+      sessions.set(binding.id, providerSessionId);
+      return { text: 'Reply', providerSessionId, contextDelivery: previousSession ? 'native' : 'reconstruction',
+        usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] };
+    }
   } });
   for (const [conversationId, commandId] of [['conv-1', 'first'], ['conv-1', 'second'], ['other', 'third']]) {
     await coordinator.submitTurn({ conversationId, commandId, expectedRevision: 1, text: 'Hello', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
@@ -455,6 +467,15 @@ test('compatible members retain one binding each across turns and chats remain i
   const conversation = coordinator.getConversation('conv-1')!;
   assert.equal(conversation.turns.flatMap(t => t.attempts).length, 4);
   assert.equal(conversation.bindings.length, 2);
+  assert.equal(new Set(conversation.turns.flatMap(t => t.attempts).map(a => a.providerSessionId)).size, 2);
+  for (const participantId of ['part-dev', 'part-qa']) {
+    const [first, second] = conversation.turns.flatMap(t => t.attempts).filter(a => a.participantId === participantId);
+    assert.equal(second.providerSessionId, first.providerSessionId);
+    assert.equal(second.bindingId, first.bindingId);
+    assert.deepEqual(second.contextReceipt, second.nativeContextReceipt, 'completion records the context actually delivered natively');
+    assert.ok(!second.contextReceipt.messageIds.includes(conversation.turns[0].userMessageId), 'native receipt excludes history already delivered');
+  }
+  assert.equal(sessions.size, 4, 'the other conversation has independent member sessions');
   assert.equal(new Set([...conversation.bindings, ...coordinator.getConversation('other')!.bindings].map(b => b.id)).size, 4);
   for (const attempt of conversation.turns.flatMap(t => t.attempts)) {
     assert.equal(attempt.usage?.inputTokens, 2);
