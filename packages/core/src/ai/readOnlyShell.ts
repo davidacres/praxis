@@ -12,19 +12,32 @@
 export function isReadOnlyShellCommand(command: string): boolean {
   const segments = splitSegments(command);
   if (!segments || segments.length === 0) return false;
-  return segments.every(segment => {
+  let hasProgram = false;
+  const allSegmentsValid = segments.every(segment => {
     const words = segment.filter(word => word.length > 0);
-    // Leading `NAME=value` assignments (`GIT_PAGER=cat git log`) configure the command, not the shell.
+    // Allow variable declarations like `export foo=bar` or `local foo=bar`
+    if (words.length > 1 && (words[0] === 'export' || words[0] === 'local') && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[1])) {
+      words.shift();
+    }
+    // Leading `NAME=value` assignments (`GIT_PAGER=cat git log` or `f=path; cat $f/file`)
     while (words.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) {
       if (/^(PATH|LD_|DYLD_|BASH_ENV|ENV|GIT_(EXTERNAL_DIFF|PAGER_IN_USE|CONFIG|EXEC_PATH|SSH))/.test(words[0])) return false;
       words.shift();
     }
-    if (words.length === 0) return false;
+    if (words.length === 0) {
+      // The segment was purely safe variable assignments (e.g. `f=path;`).
+      return true;
+    }
     const program = words[0].split('/').pop() ?? '';
     const args = words.slice(1);
     const check = PROGRAMS[program];
-    return check ? check(args) : false;
+    if (check && check(args)) {
+      hasProgram = true;
+      return true;
+    }
+    return false;
   });
+  return allSegmentsValid && hasProgram;
 }
 
 /** The command an ACP permission request is for, from the tool call's `rawInput`, when it names one. */

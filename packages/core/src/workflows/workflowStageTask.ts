@@ -393,6 +393,32 @@ export function stageOutcomeFromSession(
     }
   }
 
+  const missing = nodeOutputs(node)
+    .filter(contract => contract.required)
+    .filter(contract => !artifacts.some(artifact => artifact.contractId === contract.id))
+    .map(contract => contract.id);
+  if (missing.length > 0) {
+    return {
+      status: 'failed',
+      artifacts,
+      ...(findings ? { findings } : {}),
+      ...(session.snapshotRef ? { snapshotRef: session.snapshotRef } : {}),
+      error: `${node.name ?? 'Stage'} did not produce required artifacts: ${missing.join(', ')}.`
+    };
+  }
+
+  const hasRequiredFindings = nodeOutputs(node).some(
+    contract => contract.required && contract.kind === 'findings'
+  );
+  if (hasRequiredFindings && !findings) {
+    return {
+      status: 'failed',
+      artifacts,
+      ...(session.snapshotRef ? { snapshotRef: session.snapshotRef } : {}),
+      error: `${node.name ?? 'Stage'} declared required findings artifact but produced no structured findings.`
+    };
+  }
+
   return {
     status: 'succeeded',
     artifacts,

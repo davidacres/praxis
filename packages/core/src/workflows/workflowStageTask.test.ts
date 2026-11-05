@@ -213,7 +213,24 @@ test('a report artifact is claimed when the session actually said something', ()
 
 test('a silent session claims no narrative artifact, so the engine fails the stage', () => {
   const outcome = stageOutcomeFromSession(reviewNode(), { state: 'completed', responseText: '   ' });
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error ?? '', /did not produce required artifacts: review-report/);
   assert.deepEqual(outcome.artifacts, [], 'nothing to stand behind the report');
+});
+
+test('a stage fails when required findings are missing even if prose report was produced', () => {
+  const node = reviewNode({
+    outputs: [
+      { id: 'review-report', kind: 'report', required: true },
+      { id: 'review-findings', kind: 'findings', required: true }
+    ]
+  });
+  const outcome = stageOutcomeFromSession(node, {
+    state: 'completed',
+    responseText: 'Info: Operation cancelled by user\n\nI stopped here.'
+  });
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error ?? '', /did not produce required artifacts: review-findings/);
 });
 
 test('a diff artifact is claimed from the commit the stage froze', () => {
