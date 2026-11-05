@@ -136,6 +136,16 @@ export interface ConversationAttempt {
   toolEvidenceReferences: string[];
   /** Durable observations gathered for recovery; absence is never proof of non-execution. */
   recoveryEvidence?: ConversationRecoveryEvidence[];
+  /** Runtime permission request this attempt is blocked on; it is never reassigned to another attempt. */
+  pendingApproval?: ConversationPendingApproval;
+}
+export interface ConversationPendingApproval {
+  runtimeRequestId: string;
+  requestedAt: string;
+  coordinatorEpoch: string;
+  status: 'pending' | 'invalidated' | 'restored' | 'resolved';
+  /** Epoch that verified a live matching runtime request. */
+  restoredEpoch?: string;
 }
 export interface ConversationRecoveryEvidence {
   id: string;

@@ -17,6 +17,10 @@ import {
   advanceConversationAttempt,
   completeConversationAttempt,
   beginConversationEpoch,
+  invalidateAttemptApproval,
+  recordAttemptApproval,
+  resolveAttemptApproval,
+  restoreAttemptApproval,
   conversationPayloadDigest,
   reserveConversationAttempt,
   startConversationTurn,
@@ -91,6 +95,8 @@ export interface TeamChatExecutionParams {
   messages: readonly ConversationMessage[];
   onAccepted?: () => Promise<void>;
   onEvidence?: (evidence: Pick<import('./assistantTypes').ConversationRecoveryEvidence, 'kind' | 'provenance' | 'data'>) => Promise<void>;
+  /** Report a runtime permission request (with its stable id) or its resolution. */
+  onApproval?: (approval: { runtimeRequestId: string; resolved?: boolean }) => Promise<void>;
   preparedPrompt?: string;
   nativePrompt?: string;
   signal?: AbortSignal;
@@ -101,6 +107,8 @@ export interface TeamChatExecutionAdapter {
   summarize?(prompt: string, params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant; signal?: AbortSignal }): Promise<TeamChatExecutionResult>;
   prepare?(params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant }): Promise<TeamChatConfiguration>;
   execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
+  /** Live runtime permission requests for an attempt; absence or failure means nothing can be restored. */
+  listLiveApprovals?(attempt: ConversationAttempt): Promise<readonly { requestId: string; attemptId?: string }[]>;
 }
 
 export type ConversationUpdateType =
@@ -113,7 +121,9 @@ export type ConversationUpdateType =
   | 'turn_failed'
   | 'turn_cancelled'
   | 'context_required'
-  | 'decision_pinned';
+  | 'decision_pinned'
+  | 'approval_restored'
+  | 'approval_invalidated';
 
 export interface ConversationUpdate {
   conversationId: string;
@@ -174,6 +184,21 @@ export class TeamChatCoordinator {
           if (attempt && ['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed'].includes(attempt.state) &&
               attempt.recoveryEvidence?.some(e => e.kind === 'final_result' && typeof (e.result?.text ?? e.data?.text) === 'string')) {
             await this.importRecoveredResult(updated.id, turn.id, attempt.id);
+          }
+        }
+        for (const turn of updated.turns) {
+          const attempt = turn.attempts.at(-1);
+          if (attempt?.pendingApproval?.status !== 'invalidated') continue;
+          const requestId = attempt.pendingApproval.runtimeRequestId;
+          let live: readonly { requestId: string; attemptId?: string }[] = [];
+          try { live = await this.executionAdapter.listLiveApprovals?.(attempt) ?? []; } catch { live = []; }
+          const match = live.some(item => item.requestId === requestId && (item.attemptId === undefined || item.attemptId === attempt.id));
+          if (match) {
+            const restored = await this.transitionConversation(updated.id, current =>
+              restoreAttemptApproval(current, current.revision, turn.id, attempt.id, current.coordinatorEpoch, requestId, this.clock()));
+            this.notify({ conversationId: restored.id, revision: restored.revision, type: 'approval_restored', turnId: turn.id, attemptId: attempt.id });
+          } else {
+            this.notify({ conversationId: updated.id, revision: updated.revision, type: 'approval_invalidated', turnId: turn.id, attemptId: attempt.id });
           }
         }
         updated = this.getConversation(updated.id)!;
@@ -419,6 +444,7 @@ export class TeamChatCoordinator {
           turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
           turn.skippedParticipantIds = turn.plan.participants.filter(p => !turn.completedParticipantIds.includes(p.id) && p.id !== (active ? attempt.participantId : undefined)).map(p => p.id);
           if (attempt?.state === 'prepared') attempt.state = 'cancelled';
+          if (attempt) invalidateAttemptApproval(attempt);
         } else if (command.action === 'reconcile') {
           if (turn.state !== 'outcome_unknown' || !attempt || attempt.id !== command.attemptId || !command.reconciliationNote?.trim()) throw new Error('Describe the reconciliation for the unknown attempt.');
           (attempt.recoveryEvidence ??= []).push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
@@ -435,7 +461,7 @@ export class TeamChatCoordinator {
             if (!command.acknowledgeDuplicateActionRisk || !attempt.recoveryEvidence?.some(e => e.id === command.reconciliationEvidenceId && e.kind === 'reconciliation')) throw new Error('Acknowledge duplicate-action risk after reconciliation.');
             attempt.recoveryEvidence.push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
               participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
-              kind: 'decision', observedAt: this.clock(), provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: command.reconciliationEvidenceId! } });
+              kind: 'decision', observedAt: this.clock(), provenance: 'user', data: { retryKind: 'user-authorized-unknown', acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: command.reconciliationEvidenceId! } });
           }
           const binding = conv.bindings.find(b => b.id === attempt.bindingId);
           if (binding) binding.status = 'invalid';
@@ -480,6 +506,7 @@ export class TeamChatCoordinator {
         !turn.attempts.some(a => a.participantId === p.id && ['dispatching', 'running', 'awaiting_approval', 'outcome_unknown'].includes(a.state))).map(p => p.id);
       const active = turn.attempts.find(a => ['dispatching', 'running', 'awaiting_approval'].includes(a.state));
       turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
+      for (const a of turn.attempts) invalidateAttemptApproval(a);
       for (const a of turn.attempts) if (a.state === 'prepared') {
         a.state = 'cancelled';
         a.completedAt = this.clock();
@@ -547,7 +574,7 @@ export class TeamChatCoordinator {
           }
           a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId, participantId: a.participantId,
             attemptId, coordinatorEpoch: a.coordinatorEpoch, observingEpoch: conv.coordinatorEpoch, kind: 'decision', observedAt: this.clock(),
-            provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: options.reconciliationEvidenceId } });
+            provenance: 'user', data: { retryKind: 'user-authorized-unknown', acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: options.reconciliationEvidenceId } });
           const binding = conv.bindings.find(b => b.id === a.bindingId);
           if (binding) binding.status = 'invalid';
           t.state = 'running';
@@ -835,7 +862,7 @@ export class TeamChatCoordinator {
               await this.transitionConversation(conversationId, conv => {
                 const t = conv.turns.find(t => t.id === activeTurn!.id);
                 const a = t?.attempts.find(a => a.id === attemptId);
-                if (!a || t?.state !== 'running' || conv.coordinatorEpoch !== attempt.coordinatorEpoch ||
+                if (!a || !t || !['running', 'cancelling'].includes(t.state) || conv.coordinatorEpoch !== attempt.coordinatorEpoch ||
                     a.coordinatorEpoch !== attempt.coordinatorEpoch || t.attempts.at(-1)?.id !== attemptId) throw new Error('Fenced runtime evidence.');
                 a.recoveryEvidence ??= [];
                 a.recoveryEvidence.push({ ...evidence, id: this.idSource(), conversationId, turnId: t.id,
@@ -843,6 +870,12 @@ export class TeamChatCoordinator {
                 conv.revision++;
                 return conv;
               });
+            },
+            onApproval: async approval => {
+              await accepted();
+              await this.transitionConversation(conversationId, conv => approval.resolved
+                ? resolveAttemptApproval(conv, conv.revision, activeTurn!.id, attemptId, attempt.coordinatorEpoch, approval.runtimeRequestId)
+                : recordAttemptApproval(conv, conv.revision, activeTurn!.id, attemptId, attempt.coordinatorEpoch, approval.runtimeRequestId, this.clock()));
             },
             turn: activeTurn,
             attempt,

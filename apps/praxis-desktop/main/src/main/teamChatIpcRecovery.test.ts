@@ -273,3 +273,30 @@ test('startup recovery keeps an outcome_unknown attempt blocked: no provider run
   assert.equal(after.turns[1].state, 'queued', 'later work stays blocked behind the uncertain attempt');
   assert.equal(after.turns[1].attempts.length, 0);
 });
+
+test('startup restores a pending approval on its own attempt only for a live matching runtime request', async t => {
+  for (const live of [true, false]) {
+    const file = profile(t);
+    const first = new Promise<void>(() => undefined);
+    const crashed = launch(file, async params => { await params.onAccepted!(); await params.onApproval!({ runtimeRequestId: 'session-1:permission:1' }); return first as never; });
+    await crashed.services.activate();
+    await crashed.services.repository().transaction(draft => { draft.conversations.push(conversation('approval')); });
+    await crashed.services.submitTurn(submit('approval', 'needs-approval'));
+    await until(() => read(file).conversations[0].turns[0]?.attempts[0]?.state === 'awaiting_approval', 'persisted approval');
+    const originalAttempt = read(file).conversations[0].turns[0].attempts[0].id;
+
+    const updates: string[] = [];
+    const calls: string[] = [];
+    const services = createTeamChatServices({ filePath: () => file, enabled: true, createCoordinator: repository => new TeamChatCoordinator({
+      repository, idSource: () => 'epoch-after-restart', onUpdate: update => updates.push(update.type),
+      executionAdapter: { execute: async params => { calls.push(params.attempt.id); return { text: 'never' }; },
+        listLiveApprovals: async attempt => live ? [{ requestId: 'session-1:permission:1', attemptId: attempt.id }] : [] } }) });
+    assert.equal(await services.recoverOnStartup(), true);
+    const attempts = read(file).conversations[0].turns[0].attempts;
+    assert.equal(attempts.length, 1, 'the approval is never transferred to a new attempt');
+    assert.equal(attempts[0].id, originalAttempt);
+    assert.equal(attempts[0].pendingApproval?.status, live ? 'restored' : 'invalidated');
+    assert.equal(updates.includes('approval_restored'), live);
+    assert.equal(calls.length, 0);
+  }
+});

@@ -23,7 +23,19 @@ export function createTeamChatExecutionAdapter(
   } };
 }
 
+/**
+ * Stable identity of the permission request an awaiting_approval session is blocked on. The runtime
+ * queues carry no id of their own, so it is derived from the session and the count of requests it
+ * has raised; it changes whenever a new request is raised and is never shared between sessions.
+ */
+export function runtimeApprovalRequestId(record: Pick<AgentSessionRecord, 'sessionId' | 'state' | 'events'>): string | undefined {
+  if (record.state !== 'awaiting_approval') return undefined;
+  const raised = record.events.filter(event => event.type === 'permission_requested').length;
+  return raised > 0 ? `${record.sessionId}:permission:${raised}` : undefined;
+}
+
 export interface TeamChatRuntimeOptions {
+  onApproval?: (approval: { runtimeRequestId: string; resolved?: boolean }) => void;
   onAccepted?: () => void;
   onTerminal?: (record: AgentSessionRecord) => void;
   ownership?: import('@praxis/core').TeamChatExecutionOwnership;
@@ -46,9 +58,11 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
   resolveRuntimeConfiguration: (provider: AiProvider) => Promise<string>;
   settings: () => import('@praxis/core').AppSettings;
   resolveConnectionOptions: (provider: AiProvider) => Promise<{ apiKey?: string; gatewayUrl?: string; model?: string }>;
+  /** Live runtime sessions; a request survives only while its session is still awaiting approval. */
+  liveRuntimeSessions?: () => Iterable<AgentSessionRecord>;
   completeWithTools: (runtime: TeamChatRuntimeOptions, systemPrompt: string, prompt: string) => Promise<string>;
 }): TeamChatExecutionAdapter {
-  const adapter = createTeamChatExecutionAdapter(async ({ messages, conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence }, preparedPrompt) => {
+  const adapter = createTeamChatExecutionAdapter(async ({ messages, conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence, onApproval }, preparedPrompt) => {
     const parsedReply = (text: string) => {
       const parsed = parseAssistantReply(text);
       if (parsed.proposedAction && !actionAllowedOn(parsed.proposedAction, turn.plan.context)) delete parsed.proposedAction;
@@ -61,6 +75,7 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
     const noteAccepted = () => { void onAccepted?.().catch(() => {}); };
     const runtime: TeamChatRuntimeOptions = {
       onAccepted: noteAccepted,
+      onApproval: approval => { void onApproval?.(approval).catch(() => {}); },
       provider: selectedProvider,
       model: typeof options.model === 'string' ? options.model : (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
       personaId: participant.role,
@@ -143,6 +158,14 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
       onUsage: reported => { usage = reported; } });
     return { text: result.text, usage };
   });
+  adapter.listLiveApprovals = async attempt => {
+    const live: { requestId: string; attemptId: string }[] = [];
+    for (const record of dependencies.liveRuntimeSessions?.() ?? []) {
+      const requestId = record.teamChatExecution?.attemptId === attempt.id ? runtimeApprovalRequestId(record) : undefined;
+      if (requestId) live.push({ requestId, attemptId: attempt.id });
+    }
+    return live;
+  };
   adapter.validateAttachments = async (id, messages) => {
     const refs = messages.flatMap(m => m.attachments);
     if (!dependencies.resolveAttachments) throw new Error('Attachment storage is unavailable.');

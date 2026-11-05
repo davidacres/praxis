@@ -2,7 +2,7 @@ import { createTeamChatServices } from './teamChatServices';
 import { createTeamChatCommands } from './teamChatCommands';
 import { getProjectStore } from './projectStoreInstance';
 import { TeamChatAttachments } from './teamChatAttachments';
-import { createProductionTeamChatExecutionAdapter, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
+import { createProductionTeamChatExecutionAdapter, runtimeApprovalRequestId, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -60,6 +60,7 @@ const teamChats = createTeamChatServices({
     },
     executionAdapter: createProductionTeamChatExecutionAdapter({
       settings: () => getSettingsBackend().read(), resolveConnectionOptions, completeWithTools,
+      liveRuntimeSessions: () => getAiSessionManager().getAllAgentSessions().values(),
       resolveAttachments: (id, refs) => attachments().resolve(id, refs),
       resolveRuntimeConfiguration: async provider => {
         const prepared = await prepareAgentLaunch({ provider });
@@ -156,12 +157,23 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
   }
   let subscription: { dispose(): void } | undefined;
   let started = false;
+  let reportedApproval: string | undefined;
   const completed = new Promise<AgentSessionRecord>(resolve => {
     subscription = manager.onDidChangeAgentSession(record => {
       if (record.issueKey !== issue.key) return;
       if (!['completed', 'failed', 'aborted'].includes(record.state)) {
         started = true;
         if (record.responseText || record.state === 'awaiting_approval') runtime.onAccepted?.();
+        if (runtime.ownership && record.teamChatExecution?.attemptId === runtime.ownership.attemptId) {
+          const requestId = runtimeApprovalRequestId(record);
+          if (requestId && requestId !== reportedApproval) {
+            reportedApproval = requestId;
+            runtime.onApproval?.({ runtimeRequestId: requestId });
+          } else if (!requestId && reportedApproval) {
+            runtime.onApproval?.({ runtimeRequestId: reportedApproval, resolved: true });
+            reportedApproval = undefined;
+          }
+        }
       }
       // Continuation preparation also emits the previous completed record.
       else if (started && (!runtime.ownership || record.teamChatExecution?.attemptId === runtime.ownership.attemptId)) resolve(record);

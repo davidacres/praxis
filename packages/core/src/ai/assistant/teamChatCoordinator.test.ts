@@ -851,7 +851,7 @@ test('queued page identity and attachment references survive caller mutation bef
     validateAttachments: async () => {},
     execute: async params => {
       if (params.turn.commandId === 'first') { started(); await gate; }
-      else captured = structuredClone({ ...params, signal: undefined, onAccepted: undefined, onEvidence: undefined });
+      else captured = structuredClone({ ...params, signal: undefined, onAccepted: undefined, onEvidence: undefined, onApproval: undefined });
       return { text: 'Reply' };
     }
   } });

@@ -79,6 +79,52 @@ export function advanceConversationAttempt(current: DurableConversation, expecte
   if (state === 'dispatching') attempt.dispatchIntent = timestamp;
   return next;
 }
+/** Record the runtime request an attempt is blocked on. Fenced by epoch and attempt; moves running -> awaiting_approval. */
+export function recordAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, runtimeRequestId: string, timestamp: string): DurableConversation {
+  const next = changed(current, expected);
+  const turn = next.turns.find(item => item.id === turnId);
+  const attempt = turn?.attempts.find(item => item.id === attemptId);
+  if (!runtimeRequestId?.trim() || !turn || !attempt || !['running', 'cancelling'].includes(turn.state) || epoch !== current.coordinatorEpoch ||
+      epoch !== attempt.coordinatorEpoch || attempt.state !== 'running' || turn.attempts.at(-1)?.id !== attemptId) throw new Error('Invalid or fenced approval request.');
+  attempt.state = 'awaiting_approval';
+  attempt.pendingApproval = { runtimeRequestId, requestedAt: timestamp, coordinatorEpoch: epoch, status: 'pending' };
+  return next;
+}
+/** Resolve the pending approval of a live attempt and let it continue. */
+export function resolveAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, runtimeRequestId: string): DurableConversation {
+  const next = changed(current, expected);
+  const turn = next.turns.find(item => item.id === turnId);
+  const attempt = turn?.attempts.find(item => item.id === attemptId);
+  if (!turn || !attempt || epoch !== current.coordinatorEpoch || epoch !== attempt.coordinatorEpoch || attempt.state !== 'awaiting_approval' ||
+      attempt.pendingApproval?.status !== 'pending' || attempt.pendingApproval.runtimeRequestId !== runtimeRequestId) throw new Error('Invalid or fenced approval resolution.');
+  attempt.pendingApproval.status = 'resolved';
+  attempt.state = 'running';
+  return next;
+}
+/** Invalidate unresolved approval callbacks; the request is never carried to another attempt. */
+export function invalidateAttemptApproval(attempt: ConversationAttempt): boolean {
+  if (attempt.pendingApproval?.status !== 'pending') return false;
+  attempt.pendingApproval.status = 'invalidated';
+  return true;
+}
+/**
+ * Re-request an invalidated approval only when a live runtime request with the same identity
+ * is observed for the same attempt. The attempt keeps its conservative interrupted/unknown state.
+ */
+export function restoreAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, liveRequestId: string, timestamp: string): DurableConversation {
+  const next = changed(current, expected);
+  const turn = next.turns.find(item => item.id === turnId);
+  const attempt = turn?.attempts.find(item => item.id === attemptId);
+  if (!turn || !attempt || epoch !== current.coordinatorEpoch || attempt.pendingApproval?.status !== 'invalidated' ||
+      attempt.pendingApproval.runtimeRequestId !== liveRequestId || !['interrupted', 'outcome_unknown'].includes(attempt.state) ||
+      turn.attempts.at(-1)?.id !== attemptId) throw new Error('Approval cannot be restored.');
+  attempt.pendingApproval.status = 'restored';
+  attempt.pendingApproval.restoredEpoch = epoch;
+  (attempt.recoveryEvidence ??= []).push({ id: `approval-restored:${epoch}:${attempt.id}`, conversationId: current.id, turnId, participantId: attempt.participantId,
+    attemptId, coordinatorEpoch: attempt.coordinatorEpoch, observingEpoch: epoch, kind: 'reconciliation', observedAt: timestamp,
+    provenance: 'runtime-live-approval', data: { approvalRequestId: liveRequestId, restored: true } });
+  return next;
+}
 const ACTIVE_ATTEMPT_STATES = new Set(['dispatching', 'running', 'awaiting_approval']);
 const RECOVERABLE_TURN_STATES = new Set(['running', 'cancelling', 'interrupted', 'outcome_unknown', 'failed']);
 const RECOVERABLE_ATTEMPT_STATES = new Set(['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed']);
@@ -136,6 +182,7 @@ export function beginConversationEpoch(current: DurableConversation, expected: n
   for (const turn of next.turns) {
     for (const attempt of turn.attempts) {
       if (['prepared', 'dispatching', 'running', 'awaiting_approval'].includes(attempt.state)) {
+        invalidateAttemptApproval(attempt);
         const wasDispatched = Boolean(attempt.dispatchIntent);
         const toolCapable = !attempt.recoveryEvidence?.some(item => item.kind === 'runtime_identity' && item.data?.toolCapable === false);
         attempt.state = wasDispatched && toolCapable ? 'outcome_unknown' : 'interrupted';
