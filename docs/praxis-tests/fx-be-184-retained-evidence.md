@@ -503,3 +503,143 @@ The current full functional run passed the previously recorded assistant drag/re
 The final focused command was `npm run test:e2e --workspace=@praxis/desktop-main -- assistant.spec.ts quickSession.spec.ts durableTeamChat.spec.ts standaloneConversations.spec.ts --project=functional`: **45 passed**, 0 failed, 0 skipped, on `6d627c90`.
 
 Release acceptance remains open: supply `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` (and optionally `PRAXIS_LIVE_API_MODEL`) through the supported environment and rerun the live check; provide authoritative CLI account/resume capability before counting native reuse; complete the remaining manual journey; resolve the unconditional permission-matrix state discrepancy and obtain a clean full functional run. None of those gaps is represented by mock evidence or catalog validation.
+
+## WF-0C7166C7 current execution
+
+Execution source: `47c0f4fd`; final durable keyboard harness: `64e542df`. Full suite not completed; live API skipped by user instruction. Logs below are current, separate from inherited evidence above. Raw temp logs may expire; retained hashes and tails identify their results.
+
+### core-permitted
+
+Source: `/tmp/fx184-implement-core-permitted.log`. SHA256: `16e4d0d65496edd6adf1299fac068f221859b1ec9a8652ae7bd8c4668ffdee3d`.
+
+```text
+✔ isPortableFolderPath reports whether a stored path will travel (0.052333ms)
+ℹ tests 1942
+ℹ suites 9
+ℹ pass 1940
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 11681.0665
+```
+
+### main-final
+
+Source: `/tmp/fx184-implement-main-final.log`. SHA256: `745182aa1ff83cf98172ea916e12c10a66db9c3dfc2ac0b9e4592b233093c581`.
+
+```text
+✔ saveWindowStateSync: persists bounds from BrowserWindow mock (14.740459ms)
+ℹ tests 141
+ℹ suites 0
+ℹ pass 141
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8188.832667
+```
+
+### renderer
+
+Source: `/tmp/fx184-implement-renderer.log`. SHA256: `8b2ea47b2ccb2ea044673edf785ea455227209dfac1a91896c68444d24a6c3c1`.
+
+```text
+✔ keys, tokens, money and durations read short (13.077666ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6306.016459
+```
+
+### types-final
+
+Source: `/tmp/fx184-implement-types-final.log`. SHA256: `51d94c0337861376a40c3eca26d153776547311e23045a250b47457242cc2a2d`.
+
+```text
+
+
+> @praxis/mobile-protocol@0.0.0 check-types
+> tsc --noEmit -p .
+
+
+> @praxis/mobile-relay@0.0.0 check-types
+> tsc --noEmit -p .
+
+```
+
+### renderer-build
+
+Source: `/tmp/fx184-implement-renderer-build.log`. SHA256: `60abf557a36285f42d1d66d22723a2416658bae1c0a5a47a6560f77ebb6d9351`.
+
+```text
+
+> desktop:copy-renderer
+> npm run copy-renderer --workspace=@praxis/desktop-main
+
+
+> @praxis/desktop-main@0.6.1 copy-renderer
+> node scripts/copy-renderer.cjs
+
+copied /Users/daveacres/dev/tools/praxis/.worktrees/WF-C10627E5-governed-delivery-fx-be-184-durable-team-chat-re/apps/praxis-desktop/renderer/dist -> /Users/daveacres/dev/tools/praxis/.worktrees/WF-C10627E5-governed-delivery-fx-be-184-durable-team-chat-re/apps/praxis-desktop/main/renderer
+```
+
+### desktop-build
+
+Source: `/tmp/fx184-implement-desktop-build.log`. SHA256: `5abe6a66c2837265a4c94e9cdcd4e233744bedc3f05912426fa48f914300b58c`.
+
+```text
+
+
+> @praxis/desktop-main@0.6.1 compile
+> npm run check-ipc-senders && tsc -p .
+
+
+> @praxis/desktop-main@0.6.1 check-ipc-senders
+> node scripts/checkTrustedIpc.cjs
+
+```
+
+### focused-final
+
+Source: `/tmp/fx184-implement-focused-final.log`. SHA256: `0f04cdea1271ca598995ff4657201bff44c5dca876517f826e8d851841173451`.
+
+```text
+  1 failed
+  45 passed (2.8m)
+```
+
+### durable-final
+
+Source: `/tmp/fx184-implement-durable-final.log`. SHA256: `1c2690c267df3f63c763ecbbf488bf246b8a18e4c3948e06712eb7e8c05a27dc`.
+
+```text
+[6/13] [functional] › e2e/durableTeamChat.spec.ts:206:5 › an unconfirmed submission retries its original command after both acknowledgements are lost
+[7/13] [functional] › e2e/durableTeamChat.spec.ts:259:5 › an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed
+[8/13] [functional] › e2e/durableTeamChat.spec.ts:295:5 › a queued turn resumes after restart before any chat is opened
+[9/13] [functional] › e2e/durableTeamChat.spec.ts:326:5 › a storage write failure is shown and the accepted transcript remains
+[10/13] [functional] › e2e/durableTeamChat.spec.ts:395:5 › re-opening a team chat whose first load failed reads its transcript again
+[11/13] [functional] › e2e/durableTeamChat.spec.ts:430:5 › a tool member's pending permission is attached to its attempt and a restart never reuses the approval
+[12/13] [functional] › e2e/durableTeamChat.spec.ts:466:5 › a CLI member without resume capability reconstructs context on its second turn
+[13/13] [functional] › e2e/durableTeamChat.spec.ts:494:5 › queued page context and staged image reach the provider after navigation and composer replacement
+  13 passed (1.3m)
+```
+
+### catalog-final
+
+Source: `/tmp/fx184-implement-catalog-final.log`. SHA256: `5440996828891ec7e2bca126e90af10c82bed736638ec2c0fa82748ba12f5a27`.
+
+```text
+Wrote 801 Praxis Test contracts to docs/praxis-tests (801 existing contracts carried over).
+
+> test:praxis-contracts
+> node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs
+
+Praxis Tests: 801 Playwright tests catalogued and linked.
+```
+
+Visually inspected light-theme artifact: `.praxis/session-artifacts/WF-0C7166C7-two-windows.png`, 468697 bytes, SHA256 `9e17079ad3bc12f772f0dc2108af90c8143ce0ac3a4062518759e3a06a80a83e`. Automated evidence only; manual dark/light checklist remains incomplete.

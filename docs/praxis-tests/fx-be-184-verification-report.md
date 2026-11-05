@@ -1,5 +1,41 @@
 # FX-BE-184 durable team-chat release verification report
 
+
+## WF-0C7166C7 final implementation evidence
+
+Implementation commits: `47c0f4fd` (queue/image wire assertion, production compatibility test and live evidence classification), `64e542df` (native window activation before keyboard controls). This section describes current execution; all older sections below are historical evidence and do not establish current release acceptance.
+
+User direction: do not execute the full e2e suite or live API check. **Full suite: not run to completion; no passing result.** Earlier invocations were interrupted (exit 130: 14 passed / 4 interrupted / 746 unrun, then 37 passed / 4 interrupted / 723 unrun). Neither was restarted after the final instruction. **Live API: skipped by instruction**, not passed; no credentials requested. Real CLI and separate theme projects were not repeated. The focused assistant test still exercises its theme/surface-pack contrast assertions.
+
+Current commands: `npm run build:core`, `npm run check-types`, `npm run build:renderer`, `npm run desktop:copy-renderer`, `npm run build:desktop` exited 0. `npm run test:core`: **1,940 passed, 2 skipped, 0 failed**; `npm run test:desktop:git`: **141 passed**; `npm run test:renderer`: **34 passed**. Initial sandbox runs had loopback EPERM and watcher EMFILE; unchanged permitted runs passed. Core/renderer production sources were unchanged by these implementation commits.
+
+Focused command: `npm run test:e2e --workspace=@praxis/desktop-main -- e2e/assistant.spec.ts e2e/quickSession.spec.ts e2e/durableTeamChat.spec.ts e2e/standaloneConversations.spec.ts --project=functional --reporter=line --output=/tmp/fx184-focused-final-results`: **45 passed, 1 failed**, exit 1. The queued-cancellation Enter interaction retained the queue despite DOM focus. Explicit native window activation was added before keyboard cancellation and Stop. Subsequent `npm run test:e2e --workspace=@praxis/desktop-main -- e2e/durableTeamChat.spec.ts --project=functional --reporter=line --output=/tmp/fx184-durable-final-results`: **13 passed, 0 failed/skipped**, exit 0 (1.3 min), using the final test source in `64e542df`. This targeted pass does not rewrite the initial focused failure. Earlier queue-fixture failures (undefined JSON field and release-barrier initialization race) were fixed before the passing wire test.
+
+Catalog generation and `npm run test:praxis-contracts`: exit 0, **801** linked Playwright contracts. Registration remains in the existing owning suites; no check or assertion was weakened. [Retained evidence](fx-be-184-retained-evidence.md#wf-0c7166c7-current-execution) contains log hashes and output tails. [Assertion supplement](fx-be-184-release-proof.md#wf-0c7166c7-implementation-additions) names the added tests.
+
+The AC1–AC12 matrix below remains the full coverage map. For current execution provenance: its core assertions ran in the core runner, persistence/adapter assertions in main's `test:git`, subscription assertions in `test:renderer`, and assistant/quick-session/standalone assertions in the focused Electron runner. All use production revision `47c0f4fd`; final durable Electron assertions use test revision `64e542df`. Each runner's retained artifact is indexed in the current evidence section. Unexecuted live/manual claims remain unresolved.
+
+| Criterion | Exact current named assertion or explicit gap | Runner / current result | Evidence |
+| --- | --- | --- | --- |
+| AC1 | duplicate runtime events and a duplicate submit command converge to one turn and one usage reference | core / pass | core log |
+| AC2 | production API compatibility follows credentials, model and policy without exposing credentials; real native CLI reuse unresolved | main / pass; live unexecuted | main log; native reuse classification in live spec |
+| AC3 | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | durable Electron / pass | durable log; retained screenshot |
+| AC4 | a pending approval at crash is never reused by the replacement attempt | core / pass | core log; unconditional interrupted matrix remains discrepant where prior tool activity cannot be excluded |
+| AC5 | queued page context and staged image reach the provider after navigation and composer replacement | durable Electron / pass | durable log; PT-EE0AB4E23D |
+| AC6 | every resolved compatibility dimension invalidates reuse and switching back stays fresh | core / pass | core log; production API test adds credential/policy proof |
+| AC7 | migration is deterministic, lossless, isolated and never schedules imported history | core / pass | core log; legacy provable association remains unavailable |
+| AC8 | a standalone chat stays navigable beside the single team-chat row | focused Electron / pass | focused log; classic sidebar absent, EasyModeSidebar remains applicable |
+| AC9 | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | durable Electron / pass after harness fix | durable log; initial focused failure retained |
+| AC10 | pre-rename failure preserves committed bytes and rejects acknowledgement; next mutation uses old state | main / pass | main log |
+| AC11 | Preview then Apply updates the ticket; Apply is refused on an incompatible page | focused Electron / pass | focused log; complete manual journey unresolved |
+| AC12 | 801 catalog entries validated; no complete full-suite or live API result claimed | catalog / pass, release gate open | catalog log and this report |
+
+Visual inspection: opened the current two-window screenshot and checked both accepted user messages, both member replies, one sidebar conversation row and 50-token usage. Preserved separately as `.praxis/session-artifacts/WF-0C7166C7-two-windows.png`; publish at handoff. This is automated light-theme evidence, not completion of the prescribed hand-driven light/dark journey. No snapshots were updated.
+
+All new fixture data, profiles, coordination roots, attachment storage and logs use temporary directories; injected dispatch barriers die with the isolated app. No user data or repository plans are used as write targets. Existing backup/rollback boundaries below remain unchanged. Production still reconstructs unverified CLI identities; pending approvals cannot exclude prior external actions, so `outcome_unknown` and reconciliation/duplicate-risk gates remain intact.
+
+Implementation additions and focused verification are complete. Release acceptance remains open for real API proof, authoritative native CLI reuse, the complete manual journey and a completed full functional run. No ticket or workflow stage was advanced.
+
 Ticket: **PRX-S111-184 / FX-BE-184** (TASK-486, TASK-487). Feature: **FX-BF-111**. Base: `c6e81e86`.
 Node:test contracts: [fx-be-184-release-proof.md](fx-be-184-release-proof.md). Playwright contracts: [catalog.json](catalog.json) (800 tests, curated flows for every new id).
 
