@@ -643,3 +643,337 @@ Praxis Tests: 801 Playwright tests catalogued and linked.
 ```
 
 Visually inspected light-theme artifact: `.praxis/session-artifacts/WF-0C7166C7-two-windows.png`, 468697 bytes, SHA256 `9e17079ad3bc12f772f0dc2108af90c8143ce0ac3a4062518759e3a06a80a83e`. Automated evidence only; manual dark/light checklist remains incomplete.
+
+## WF-0C7166C7 resumed execution on 2026-11-05
+
+Recovery base `67968cf0`; native-delivery assertions `fafbacc8`; timestamped live retention `1018ed98`; desktop harness repairs `4d3d0fbf`. Production sources are unchanged. The first full run started on the recovery base; the second uses both desktop harness repairs. Current core assertions ran in `core-serial`; live checks use the timestamped source.
+
+Raw logs and traces are retained in `/tmp/fx184-recovery-current` for this handoff and may expire. Hashes and excerpts below preserve provenance; no missing or skipped result is a pass. Useful screenshots and the CLI receipt remain under `.praxis/session-artifacts/`.
+
+### Exact command results
+
+```json
+[
+  {
+    "label": "core",
+    "command": "npm run test:core",
+    "exitCode": 0,
+    "seconds": 11.5
+  },
+  {
+    "label": "types",
+    "command": "npm run check-types",
+    "exitCode": 0,
+    "seconds": 3.0
+  },
+  {
+    "label": "renderer-build",
+    "command": "npm run build:renderer",
+    "exitCode": 0,
+    "seconds": 2.2
+  },
+  {
+    "label": "copy",
+    "command": "npm run desktop:copy-renderer",
+    "exitCode": 0,
+    "seconds": 0.5
+  },
+  {
+    "label": "desktop-build",
+    "command": "npm run build:desktop",
+    "exitCode": 0,
+    "seconds": 1.0
+  },
+  {
+    "label": "main",
+    "command": "npm run test:desktop:git",
+    "exitCode": 0,
+    "seconds": 6.3
+  },
+  {
+    "label": "renderer",
+    "command": "npm run test:renderer",
+    "exitCode": 0,
+    "seconds": 6.7
+  }
+]
+```
+
+```json
+[
+  {
+    "label": "core-serial",
+    "command": "npm run test:core",
+    "exitCode": 0,
+    "seconds": 11.1
+  },
+  {
+    "label": "types-complete",
+    "command": "npm run check-types",
+    "exitCode": 0,
+    "seconds": 3.7
+  },
+  {
+    "label": "failure-reruns",
+    "command": "npm run test:e2e --workspace=@praxis/desktop-main -- e2e/easymode.spec.ts e2e/sessionShelfNew.spec.ts --project=functional --grep 'selecting a session opens details|a session started from the shelf' --workers=1 --repeat-each=3 --output=/tmp/fx184-recovery-current/failure-reruns",
+    "exitCode": 0,
+    "seconds": 26.4
+  },
+  {
+    "label": "focused",
+    "command": "npm run test:e2e --workspace=@praxis/desktop-main -- e2e/assistant.spec.ts e2e/quickSession.spec.ts e2e/durableTeamChat.spec.ts e2e/standaloneConversations.spec.ts --project=functional --output=/tmp/fx184-recovery-current/focused",
+    "exitCode": 0,
+    "seconds": 151.2
+  },
+  {
+    "label": "themes",
+    "command": "npm run test:desktop:themes -- --output=/tmp/fx184-recovery-current/themes",
+    "exitCode": 0,
+    "seconds": 118.0
+  },
+  {
+    "label": "live",
+    "command": "cd apps/praxis-desktop/main && PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/durableTeamChat.live.spec.ts --workers=1 --output=/tmp/fx184-recovery-current/live",
+    "exitCode": 0,
+    "seconds": 32.9
+  }
+]
+```
+
+Additional commands: `npm run build:core` exited 0; `npm run test:desktop` ran twice (results below); `node --test packages/core/out/ai/assistant/teamChatCoordinator.test.js` exited 0 (23 passed); `node --test packages/core/out/deployments/directProcessExecutor.test.js` exited 0 (11 passed). Workflow reruns used `npm run test:e2e --workspace=@praxis/desktop-main -- e2e/workflowRun.spec.ts e2e/workflowRunWorkspace.spec.ts --project=functional --grep 'a run started against a ticket writes its outcome|deleting a live run cancels' --workers=1 --repeat-each=3 --output=/tmp/fx184-recovery-current/workflow-reruns` (exit 0, 6 passed). Final catalog commands: `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write`, then `npm run test:praxis-contracts` (results below).
+
+### Log fingerprints
+
+| Log | Bytes | SHA256 |
+| --- | ---: | --- |
+| `build-core.log` | 100 | `cd56a916bef6bcfa46056cd7eb7e3d7db2da5e01bad5aa8d46e5f97509b682c4` |
+| `core-sandbox.log` | 201633 | `9c55dfda1014fe18d4f09815b27696763bbd400fc41e9ada47455304c24a8902` |
+| `core.log` | 178494 | `c15325af0ba158735c263f074125c9394a096a3165f4b5229db7c121690ec55d` |
+| `types.log` | 611 | `51d94c0337861376a40c3eca26d153776547311e23045a250b47457242cc2a2d` |
+| `renderer-build.log` | 1301 | `514b890d8297faeca6e8884a6d660a623bd06f824aa598e387c13577b0d2ccdc` |
+| `copy.log` | 451 | `3ef90c5599c6bd417b7c1ab98c228943152f19e4322ae5f28e2afeedc07eaa16` |
+| `desktop-build.log` | 232 | `5abe6a66c2837265a4c94e9cdcd4e233744bedc3f05912426fa48f914300b58c` |
+| `main.log` | 13647 | `48c21fe5d7df34d343ed09208f59634f1bbcf42eeec51dc6f2b569d964b393a8` |
+| `renderer.log` | 5020 | `9db38086ea0449f99e1dccdbb88d89b772325495a33c25d536cce28dd91e1500` |
+| `core-final.log` | 186280 | `2062cd26c0f7016510a3dcfacab4a262297a113d4cc21d1e0cb6aaabe90ee890` |
+| `coordinator.log` | 2583 | `7f41ad4a219bed5c93eb4c9f2a809ab64b97f6c1ebe680363cfcc6ed131526fd` |
+| `direct-process-isolated.log` | 1121 | `c7206144a7bce112b2d50a94b31ebecb3c12e8deae056a1fba7afcc5087ec6ea` |
+| `core-serial.log` | 178445 | `37e4051bb8c529c1273b76b43cb5390c259cb11b5a5ff8f4fe32dfdfe90b4738` |
+| `types-complete.log` | 611 | `51d94c0337861376a40c3eca26d153776547311e23045a250b47457242cc2a2d` |
+| `functional.log` | 127175 | `32aaa4d053b8d341386d5abe656469e3929ebf3648fef88dbe6a7160f2105cbf` |
+| `failure-reruns.log` | 2216 | `1c16aeb295128626800bbd24a7a69030d6973d9a23b5d41c7a0ee58bc0788a18` |
+| `workflow-reruns.log` | 2272 | `e80cf5be641c083b4fe15214a254ab1353a6e11f1d91a5fd6fe17b9088c97d97` |
+| `focused.log` | 8278 | `529a81cc42e293e7fcdea705929362a7b1dbac7b5020ec259e976ddece6c26c8` |
+| `themes.log` | 7994 | `3c01fbad1aa034200ce813565f7dfce34b7d9fdee26719e13ee38acdaef81d9e` |
+| `live.log` | 509 | `4c3e73e6d9d8e27e5c00ad1ec850d5628d29e32818ba189979edbad9e308dd2b` |
+| `functional-final.log` | 122161 | `71336c48b45f4c51fa70254d41553ae548a77df9bb1f0395b80046014cc6803b` |
+| `catalog-write-final.log` | 92 | `caf27158ba9f00cb1a84e9b145b4a44b73a246c7b7b4a59da9adbe25b5446d2f` |
+| `catalog-final.log` | 148 | `52ea9bd04a395fafc5cac84e457041c8887c540955082c17ea10127fc8720a68` |
+
+### Retained result excerpts
+
+**core-serial**
+
+```text
+ℹ tests 1942
+ℹ suites 9
+ℹ pass 1940
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 9963.329375
+```
+
+**main**
+
+```text
+ℹ team-chats.json 4335274 bytes; large-chat commits 48, 93, 136, 180, 223 ms (queued behind concurrent writes)
+ℹ tests 141
+ℹ suites 0
+ℹ pass 141
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4977.069542
+```
+
+**renderer**
+
+```text
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6195.444584
+```
+
+**core-final**
+
+```text
+ℹ tests 1942
+ℹ suites 9
+ℹ pass 1939
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 17399.073917
+```
+
+**functional**
+
+```text
+  ✘  355 [functional] › e2e/easymode.spec.ts:980:5 › in EasyMode selecting a session opens details in the center (43.7s)
+  ✘  561 [functional] › e2e/sessionShelfNew.spec.ts:62:5 › a session started from the shelf stays in the shelf as its own preview card (9.4s)
+  ✘  715 [functional] › e2e/workflowRunWorkspace.spec.ts:292:5 › deleting a live run cancels it first, then removes it (35.1s)
+  ✘  735 [functional] › e2e/workflowRun.spec.ts:709:5 › a run started against a ticket writes its outcome back as a comment once it settles (16.1s)
+    Error: expect(locator).toHaveText(expected) failed
+  4 failed
+  14 skipped
+  746 passed (19.0m)
+npm error command failed
+```
+
+**failure-reruns**
+
+```text
+  ✓  4 [functional] › e2e/sessionShelfNew.spec.ts:62:5 › a session started from the shelf stays in the shelf as its own preview card (4.3s)
+(node:65520) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  5 [functional] › e2e/easymode.spec.ts:980:5 › in EasyMode selecting a session opens details in the center (3.4s)
+  ✓  6 [functional] › e2e/sessionShelfNew.spec.ts:62:5 › a session started from the shelf stays in the shelf as its own preview card (4.3s)
+
+  6 passed (24.4s)
+```
+
+**workflow-reruns**
+
+```text
+(node:95087) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  5 [functional] › e2e/workflowRun.spec.ts:709:5 › a run started against a ticket writes its outcome back as a comment once it settles (5.6s)
+  ✓  6 [functional] › e2e/workflowRunWorkspace.spec.ts:292:5 › deleting a live run cancels it first, then removes it (5.1s)
+
+  6 passed (33.0s)
+```
+
+**focused**
+
+```text
+  ✓  42 [functional] › e2e/assistant.spec.ts:764:5 › the assistant's controls show a focus ring and carry tooltips (5.1s)
+  ✓  43 [functional] › e2e/assistant.spec.ts:828:5 › the assistant stays readable on every theme and surface pack (6.3s)
+  ✓  44 [functional] › e2e/assistant.spec.ts:919:5 › the composer grows with its text up to the shared cap, then scrolls (4.6s)
+  ✓  45 [functional] › e2e/assistant.spec.ts:940:5 › durable no-tools API turns retain bounded history and usage without allocating agent sessions (5.5s)
+  ✓  46 [functional] › e2e/assistant.spec.ts:975:5 › durable tool members reuse two runtime sessions for four attempts and isolate another chat (5.7s)
+
+  46 passed (2.5m)
+```
+
+**themes**
+
+```text
+  ✓  43 [themes] › e2e/surfacePacks.spec.ts:645:5 › Noir is offered under a dark theme and hidden under a light one (3.3s)
+  ✓  44 [themes] › e2e/surfacePacks.spec.ts:662:5 › a custom surface pack can be created, applied, and survives a reload (3.3s)
+  ✓  45 [themes] › e2e/surfacePacks.spec.ts:681:5 › a user can swap the material by picking a pattern — no code, no new CSS (3.3s)
+  ✓  46 [themes] › e2e/surfacePacks.spec.ts:706:5 › the Window-blur toggle is present on a vibrancy-capable OS and persists (4.6s)
+  ✓  47 [themes] › e2e/surfacePacks.spec.ts:721:5 › the Texture toggle gates the grain layer without changing the pack (3.4s)
+
+  47 passed (1.9m)
+```
+
+**live**
+
+```text
+(node:90725) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [live-agent] › e2e/durableTeamChat.live.spec.ts:126:5 › real CLI member continues a durable team chat across an app restart (31.6s)
+  -  2 [live-agent] › e2e/durableTeamChat.live.spec.ts:139:5 › real API member continues a durable team chat across an app restart
+
+  1 skipped
+  1 passed (31.9s)
+```
+
+**functional-final**
+
+```text
+  ✘  560 [functional] › e2e/sessionShelf.spec.ts:144:5 › the shelf card sends a quick reply into the session (9.6s)
+  ✘  571 [functional] › e2e/sessionShelf.spec.ts:262:5 › only the revealed spine glows when moving across all five sessions (11.2s)
+    Error: expect(locator).toBeVisible() failed
+    Error: expect(locator).toHaveCount(expected) failed
+  2 failed
+  14 skipped
+  748 passed (18.1m)
+npm error command failed
+```
+
+**catalog-final**
+
+```text
+
+> test:praxis-contracts
+> node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs
+
+Praxis Tests: 801 Playwright tests catalogued and linked.
+```
+
+Initial sandbox core execution failed with `listen EPERM: operation not permitted 127.0.0.1`; the unchanged permitted run passed. A later core run concurrent with Electron had one failure: the 200 ms direct-process timeout fixture captured empty output rather than `partial-output`. Its unchanged isolated file passed 11/11 and the final serial core suite passed 1940 with 2 documented skips. No timeout assertion or production process behavior was changed.
+
+First full-run failures: EasyMode follow-position assertion (40 s poll after clicking Quote on the opening historical message); shelf preview disappeared after creating its session (creation remained visible in the sidebar); workflow ticket-comment write-back returned zero comments for 10 s; run-delete click was intercepted by the row time label while hover actions hid. EasyMode now checks follow position before the historical navigation, with the exact same geometry assertion. The delete test holds the existing focus-within affordance before its real click. The shelf and ticket-comment tests passed unchanged three times serially; the broad-run cause of those two transient failures remains unproved. These reruns do not erase the initial full-run failures. Initial failure traces remain in `apps/praxis-desktop/main/test-results` until the second full run replaces them; the EasyMode and shelf traces were separately copied to the temporary evidence directory.
+
+### Real CLI receipt
+
+Receipt: `.praxis/session-artifacts/durable-team-chat-live-cli-2026-11-05T09-54-07-840Z.json`; 23334 bytes; SHA256 `fec79f6d970a121b6fa6b2d4430452b433e35108d7232cbe8fc917bce1b1ee95`. Six completed attempts, two members, three turns, restart epoch change and both final replies `heron-hm36e`. `nativeReuseProved` is **false**; each member reconstructed context. API check is **skipped**, because `PRAXIS_LIVE_API_PROVIDER` / `PRAXIS_LIVE_API_KEY` are unset. No credential was requested or replaced with a mock.
+
+| Participant | Attempt | Binding | Provider session | Epoch | Context digest |
+| --- | --- | --- | --- | --- | --- |
+| `part-dev` | `id-mw3dblcy-8z0yv1` | `id-mw3dblcz-mt7b9w` | `e348a7d1-8391-419e-ba02-74424f529447` | `id-mw3dblbx-u7h23u` | `f3ccea1ffc07b98fca64378d484c700aeed957411508eb82be6a42c453707576` |
+| `part-lead` | `id-mw3dbnvj-oa2led` | `id-mw3dbnvj-namjy5` | `1ebf76f6-422f-4fe3-9a07-ad2ea2d29063` | `id-mw3dblbx-u7h23u` | `b4d16c757ce3c4c556c8deda09259004cb86715b0a27f44db7068285472b96ff` |
+| `part-dev` | `id-mw3dbwad-9muyph` | `id-mw3dbwae-du4g0q` | `1ec07cab-5dac-42a9-9bcb-dc59ea6ff87e` | `id-mw3dblbx-u7h23u` | `be29c2c488e825c607b3df76b2202ce333806e0853133c48df179003a7826866` |
+| `part-lead` | `id-mw3dbz05-9q3kmn` | `id-mw3dbz06-v1zzkl` | `8effb35b-9431-4a63-b11c-0704c353848b` | `id-mw3dblbx-u7h23u` | `e2a42d803c250b97b3ec60caac9f883dcf34be7876a8e11545057dee8cf39260` |
+| `part-dev` | `id-mw3dc496-0x21mm` | `id-mw3dc498-sdxdvq` | `18623c45-f676-43e4-9536-af67c22b0140` | `id-mw3dc2qb-ep6doz` | `f3ec3caf0dacda84c222bd0163f7063a946698af67bd3f6e6fb5db635fbc2b3d` |
+| `part-lead` | `id-mw3dc5rg-bs6ig1` | `id-mw3dc5ri-f2hw2y` | `9d134bf4-3791-4d9f-8277-791983f2198a` | `id-mw3dc2qb-ep6doz` | `09155eac1ce7264f97ad10ceb2b0b1f0d7eb5d30440d4a7ea988fd0d53a4244b` |
+
+Per-member capability/reuse classifications:
+
+```json
+[
+  {
+    "participantId": "part-dev",
+    "reused": false,
+    "nativeDelivery": false,
+    "nativeReuseProved": false,
+    "firstBindingId": "id-mw3dblcz-mt7b9w",
+    "secondBindingId": "id-mw3dbwae-du4g0q",
+    "firstSessionId": "e348a7d1-8391-419e-ba02-74424f529447",
+    "secondSessionId": "1ec07cab-5dac-42a9-9bcb-dc59ea6ff87e",
+    "proof": "context-reconstructed-native-reuse-unproved"
+  },
+  {
+    "participantId": "part-lead",
+    "reused": false,
+    "nativeDelivery": false,
+    "nativeReuseProved": false,
+    "firstBindingId": "id-mw3dbnvj-namjy5",
+    "secondBindingId": "id-mw3dbz06-v1zzkl",
+    "firstSessionId": "1ebf76f6-422f-4fe3-9a07-ad2ea2d29063",
+    "secondSessionId": "8effb35b-9431-4a63-b11c-0704c353848b",
+    "proof": "context-reconstructed-native-reuse-unproved"
+  }
+]
+```
+
+### Manual and visual evidence
+
+Current isolated scripted-provider profile: light send, pin decision, dock, close/reopen; Simple Dark float, `@qa` continuation, close/reopen. Native accessibility state showed both messages, Dev/QA attribution and the retained pin. All three images below were opened and inspected. Manual second-window interaction, process restart during execution/permission handling, Stop/retry/unknown-outcome/context-required controls, Preview/Apply and reported usage attribution remain unexecuted manually in this pass; automated coverage is separate. The fake CLI reports no token count, which the UI correctly renders as a dash. No snapshots were updated.
+
+- `.praxis/session-artifacts/WF-0C7166C7-recovery-two-windows.png`: 469038 bytes, SHA256 `759e812b869f8ab9bc6f9dc11cc089ada4bc24e1c539bb460214f6a814c23925`.
+- `.praxis/session-artifacts/WF-0C7166C7-recovery-manual-light.png`: 193553 bytes, SHA256 `2e55607e84543ce6222a0cd745ae9e0924e41714a2ddbfefdf675d5420087d17`.
+- `.praxis/session-artifacts/WF-0C7166C7-recovery-manual-dark.png`: 190806 bytes, SHA256 `0a0fb1520dc44e980f812c6584c3efd15f8a3fc46640aff74f0de61390464ac7`.
+
+The manual helper and profile were temporary. SIGINT also terminated Electron before the cleanup evaluation finished; the helper reported that the process exited and the profile was removed. No user profile or repository plans were used. Screenshot/receipt files are session-retained artifacts, not generated product sources.

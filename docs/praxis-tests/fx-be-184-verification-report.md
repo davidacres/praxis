@@ -1,7 +1,40 @@
 # FX-BE-184 durable team-chat release verification report
 
 
-## WF-0C7166C7 final implementation evidence
+## WF-0C7166C7 resumed implementation
+
+Recovery base: `67968cf0`; test repair: `fafbacc8`. The supplied failure is a stage-session abort, without a structured product finding. The prior report also records interrupted full-suite invocations (exit 130) and a later direction to leave full/live API checks unrun. Those are historical execution limits, not a product failure diagnosis or a passing release gate. This resumed pass executes the currently requested checks and retains earlier results below.
+
+Targeted repair: native session reuse in the live evidence now requires both a matching provider session and durable adapter-native delivery evidence. Matching IDs alone no longer establish native reuse. Both members must recall the pinned decision after restart, and session isolation is checked on all three turns. The existing core compatibility assertion now proves persisted member-session reuse, native delivery receipts and isolation across conversations, preserving unique usage attribution. Production code and safety policies are unchanged.
+
+### Current results and disposition
+
+Build core, check types, build renderer, copy renderer, build desktop, main units (**141 passed**) and renderer units (**34 passed**) exited 0. The final serial core run passed **1,940**, with **2 skipped**. Its 23-case coordinator file also passed separately. An initial sandbox run failed 27 tests with loopback `EPERM`; an unchanged permitted run passed. A later core run concurrent with Electron had one 200 ms process-start/output timing failure; the unchanged isolated file passed 11/11 and the final serial full core suite passed. No timeout was relaxed.
+
+The prescribed focused assistant/quick-session/durable/standalone command passed **46/46**. Theme and theme-regression projects passed **47/47**, without snapshot updates. The opt-in provider command passed the real CLI check and **skipped** the API check because `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` are unset. The retained timestamped CLI receipt records six distinct completed attempts, both members recalling the pinned codename after restart, isolated sessions and changed recovery epochs. It explicitly records **nativeReuseProved: false**; this is real reconstruction/continuation proof, not AC2 native-reuse proof.
+
+Initial full functional command: exit 1, **746 passed, 4 failed, 14 skipped** (19.0 minutes). Every failure was investigated:
+
+| Failure | Targeted disposition | Subsequent proof |
+| --- | --- | --- |
+| `easymode.spec.ts` — in EasyMode selecting a session opens details in the center | Check the exact unchanged follow-position assertion before clicking Quote on the opening message; that navigation intentionally scrolls into history and suspends following. | Three serial repetitions passed. |
+| `sessionShelfNew.spec.ts` — a session started from the shelf stays in the shelf as its own preview card | The snapshot retained the newly created session but its transient preview closed. Broad-run cause is unproved; no product assertion was changed. | Unchanged test passed three serial repetitions. |
+| `workflowRun.spec.ts` — a run started against a ticket writes its outcome back as a comment once it settles | The asynchronous comment was absent during the 10 s poll. Broad-run cause is unproved; no write-back behavior, timeout or assertion was changed. | Unchanged test passed three serial repetitions. |
+| `workflowRunWorkspace.spec.ts` — deleting a live run cancels it first, then removes it | The row time label intercepted the click after hover actions hid. Focus the actual delete button to retain the existing focus-within affordance, then perform the same real click and all cancellation/deletion assertions. | Repaired test passed three serial repetitions. |
+
+Harness fixes are committed in `4d3d0fbf`. Serial repetitions supplement the initial result; they do not turn the first full run green. The second full result and supported single-worker rerun are recorded below.
+
+Second full functional command: exit 1, **748 passed, 2 failed, 14 skipped** (18.1 minutes). All four first-run failures passed, but two different pointer-dependent shelf checks failed: quick-reply preview closed before the confirmation assertion, and spine-hover preview closed before its expanded-state assertion. Their assertions remain unchanged. `PRAXIS_E2E_WORKERS=1 npm run test:desktop` is currently running to eliminate competing test windows on the shared native pointer; no final result is claimed yet.
+
+The existing AC1–AC12 named-assertion matrix remains the source coverage map. Current core/repository/subscription assertions were rerun in the full owning unit suites; current assistant, quick-session, durable and standalone assertions passed the 46-test focused command. AC2 additionally has the strengthened native-delivery contract at `teamChatCoordinator.test.ts:445` and the six-attempt real CLI receipt; real authenticated native reuse remains unresolved. AC3/AC8/AC11 gain the inspected manual artifacts below. All current log fingerprints, exact commands, failure excerpts and attempt identifiers are retained in [the resumed execution evidence](fx-be-184-retained-evidence.md#wf-0c7166c7-resumed-execution-on-2026-11-05).
+
+Manual verification used the built app and an isolated temporary scripted-provider profile: light send, pin decision, dock, close/reopen; Simple Dark float, `@qa` continuation, close/reopen. Both replies and the pinned state survived. Captures: `.praxis/session-artifacts/WF-0C7166C7-recovery-manual-light.png` and `WF-0C7166C7-recovery-manual-dark.png`. Current automated two-window proof is retained separately as `WF-0C7166C7-recovery-two-windows.png`. All were visually inspected. The manual profile was on All projects, so its screenshot is not evidence for a project-specific conversation row; the automated project screenshot supplies that proof. The fake CLI does not report tokens; reported usage attribution remains covered by automated tests, not this manual capture.
+
+Release acceptance remains open for real API proof, authoritative authenticated CLI native reuse, the pending-approval matrix discrepancy and the rest of the manual recovery/control journey. To close API proof, run the documented opt-in command with the supported provider/key environment and capacity. Native reuse needs an authoritative runtime account identity and resume evidence; a renderer-supplied label cannot substitute for it. Pending approval remains conservatively `outcome_unknown` whenever prior external execution cannot be excluded; reconciliation and duplicate-risk acknowledgement are preserved. Manual second-window operation, process restart during execution/permission handling, Stop/retry/context-required/unknown-outcome controls, Preview/Apply and usage attribution were not all exercised by hand in this pass. These are explicit remaining acceptance gaps, not passes or unnamed ticket deferrals.
+
+The classic project-tree sidebar is absent (`App.tsx` renders `EasyModeSidebar`); the historical dual-sidebar requirement remains an applicability discrepancy. Fixtures still use temporary profiles, repositories, coordination and attachment roots. Existing corruption, pre-rename preservation, uncertain-commit fencing, immutable attempts, migration backup and rollback-limit assertions remain intact and passed their owning suites. No product runtime code, dependency, workflow definition, ticket status or safety gate was changed.
+
+## WF-0C7166C7 prior implementation evidence
 
 Implementation commits: `47c0f4fd` (queue/image wire assertion, production compatibility test and live evidence classification), `64e542df` (native window activation before keyboard controls). This section describes current execution; all older sections below are historical evidence and do not establish current release acceptance.
 

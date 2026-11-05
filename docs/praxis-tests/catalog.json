@@ -5099,7 +5099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
-        "line": 118,
+        "line": 126,
         "project": "functional"
       },
       "area": "durable Team Chat.live",
@@ -5115,7 +5115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
-        "line": 131,
+        "line": 139,
         "project": "functional"
       },
       "area": "durable Team Chat.live",
@@ -5579,7 +5579,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1155,
+        "line": 1157,
         "project": "functional"
       },
       "area": "easymode",
@@ -5595,7 +5595,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1377,
+        "line": 1379,
         "project": "functional"
       },
       "area": "easymode",
@@ -5611,7 +5611,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1525,
+        "line": 1527,
         "project": "functional"
       },
       "area": "easymode",
@@ -5627,7 +5627,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1560,
+        "line": 1562,
         "project": "functional"
       },
       "area": "easymode",
@@ -5643,7 +5643,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1591,
+        "line": 1593,
         "project": "functional"
       },
       "area": "easymode",
@@ -5659,7 +5659,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1620,
+        "line": 1622,
         "project": "functional"
       },
       "area": "easymode",
@@ -5675,7 +5675,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1775,
+        "line": 1777,
         "project": "functional"
       },
       "area": "easymode",
@@ -5691,7 +5691,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1832,
+        "line": 1834,
         "project": "functional"
       },
       "area": "easymode",
@@ -5707,7 +5707,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/easymode.spec.ts",
-        "line": 1900,
+        "line": 1902,
         "project": "functional"
       },
       "area": "easymode",
@@ -12459,7 +12459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 315,
+        "line": 318,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12475,7 +12475,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 359,
+        "line": 362,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12491,7 +12491,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 376,
+        "line": 379,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12507,7 +12507,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 408,
+        "line": 411,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12523,7 +12523,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 495,
+        "line": 498,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12539,7 +12539,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 508,
+        "line": 511,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12555,7 +12555,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 516,
+        "line": 519,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12571,7 +12571,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 526,
+        "line": 529,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12587,7 +12587,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 553,
+        "line": 556,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12603,7 +12603,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 615,
+        "line": 618,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12619,7 +12619,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 651,
+        "line": 654,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12635,7 +12635,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 665,
+        "line": 668,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12651,7 +12651,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 687,
+        "line": 690,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12667,7 +12667,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 753,
+        "line": 756,
         "project": "functional"
       },
       "area": "workflow Run Workspace",
@@ -12683,7 +12683,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts",
-        "line": 776,
+        "line": 779,
         "project": "functional"
       },
       "area": "workflow Run Workspace",

@@ -256,7 +256,7 @@ Title: **unverified CLI identity cannot be stabilized by turn or participant acc
 
 ### PT-F19C6CE02C
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:684](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L684).
+Automation: **node:test**, [teamChatCoordinator.test.ts:705](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L705).
 Title: **queued page identity and attachment references survive caller mutation before dispatch**.
 
 **Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
@@ -284,3 +284,11 @@ Title: **queued page context and staged image reach the provider after navigatio
 **Then** the queued turn keeps its original page identity and immutable attachment references; only its prompt contains the captured page sentinel; the agent receives exactly one PNG. The earlier prompt excludes the future queued page context.
 
 The live-provider checks now retain per-member reuse classification, native context receipts and runtime recovery evidence. Six distinct completed attempts and session isolation are asserted; a reconstruction pass explicitly leaves native reuse unproved. Production has no authoritative CLI account reference, so the conservative per-turn identity remains in place.
+
+## WF-0C7166C7 resumed implementation: native delivery evidence
+
+Execution source: `fafbacc8`, with timestamped live receipt retention in `1018ed98` (recovery base `67968cf0`). The existing assertion **compatible members retain one binding each across turns and chats remain isolated; usage commits once** in `teamChatCoordinator.test.ts` now exercises a compatible native adapter: four distinct attempts reuse exactly two isolated member sessions; dispatch receives the persisted session identity; completion records the native context receipt without already-delivered history; another conversation creates independent sessions. Usage still commits once. This is deterministic adapter evidence, not real CLI authentication proof.
+
+The existing real CLI/API continuation assertions in `durableTeamChat.live.spec.ts` now require both members to recall the pinned codename after restart, check session isolation on all three turns, and classify native reuse only when matching session IDs are accompanied by durable `final_result.result.contextDelivery === 'native'` evidence. A matching session ID by itself cannot establish native delivery. Reconstruction remains a separate successful continuation result with native reuse explicitly unproved.
+
+No production identity fallback, permission classification, runtime checks or test registration was weakened. The conservative per-turn CLI identity and unknown-outcome reconciliation gates remain intact. Live receipts use timestamped filenames and Playwright JSON attachments to preserve prior runs. Current runner results and retained artifacts are recorded separately in the verification report.
