@@ -18,6 +18,7 @@ import {
   completeConversationAttempt,
   beginConversationEpoch,
   invalidateAttemptApproval,
+  settleAttemptApproval,
   recordAttemptApproval,
   resolveAttemptApproval,
   restoreAttemptApproval,
@@ -108,7 +109,7 @@ export interface TeamChatExecutionAdapter {
   prepare?(params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant }): Promise<TeamChatConfiguration>;
   execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
   /** Live runtime permission requests for an attempt; absence or failure means nothing can be restored. */
-  listLiveApprovals?(attempt: ConversationAttempt): Promise<readonly { requestId: string; attemptId?: string }[]>;
+  listLiveApprovals?(attempt: ConversationAttempt): Promise<readonly { requestId: string; attemptId: string }[]>;
 }
 
 export type ConversationUpdateType =
@@ -190,9 +191,10 @@ export class TeamChatCoordinator {
           const attempt = turn.attempts.at(-1);
           if (attempt?.pendingApproval?.status !== 'invalidated') continue;
           const requestId = attempt.pendingApproval.runtimeRequestId;
-          let live: readonly { requestId: string; attemptId?: string }[] = [];
+          let live: readonly { requestId: string; attemptId: string }[] = [];
           try { live = await this.executionAdapter.listLiveApprovals?.(attempt) ?? []; } catch { live = []; }
-          const match = live.some(item => item.requestId === requestId && (item.attemptId === undefined || item.attemptId === attempt.id));
+          // A live request must name this attempt; one without an attempt identity is never restored.
+          const match = live.some(item => item.requestId === requestId && item.attemptId === attempt.id);
           if (match) {
             const restored = await this.transitionConversation(updated.id, current =>
               restoreAttemptApproval(current, current.revision, turn.id, attempt.id, current.coordinatorEpoch, requestId, this.clock()));
@@ -907,6 +909,7 @@ export class TeamChatCoordinator {
               participantId: a.participantId, attemptId, coordinatorEpoch: a.coordinatorEpoch,
               kind: 'final_result', observedAt: this.clock(), provenance: 'execution-adapter-after-abort', result });
             a.state = textOnly && !result ? 'cancelled' : 'outcome_unknown';
+            settleAttemptApproval(a, 'invalidated');
             a.completedAt = this.clock();
             t.state = a.state;
             conv.revision++;
@@ -934,6 +937,7 @@ export class TeamChatCoordinator {
                 conv.coordinatorEpoch !== attempt.coordinatorEpoch || t.attempts.at(-1)?.id !== attemptId) return conv;
             const uncertain = executionError instanceof TeamChatAcceptanceUnknown;
             a.state = uncertain ? 'outcome_unknown' : 'failed';
+            settleAttemptApproval(a, 'invalidated');
             const binding = conv.bindings.find(b => b.id === a.bindingId);
             if (binding) binding.status = 'invalid';
             a.error = executionError!.message;

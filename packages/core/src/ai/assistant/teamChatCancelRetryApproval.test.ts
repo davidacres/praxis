@@ -128,6 +128,81 @@ test('approval identity is recorded on the attempt, fenced, and resolvable only 
   assert.equal(attemptsOf(repo, 'part-dev')[0].pendingApproval?.status, 'resolved');
 });
 
+test('an approval raised after cancel is rejected and the attempt is not reopened', async () => {
+  const repo = new MemoryRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  let lateApproval: Promise<void> | undefined;
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('e'), executionAdapter: {
+    execute: async params => {
+      await params.onAccepted!();
+      await new Promise<void>(resolve => params.signal!.addEventListener('abort', () => resolve()));
+      lateApproval = params.onApproval!({ runtimeRequestId: 'req-late' });
+      await lateApproval.catch(() => undefined);
+      throw new Error('aborted');
+    } } });
+  await coordinator.submitTurn(command({ selectedParticipantIds: ['part-dev'] }));
+  await until(() => attemptsOf(repo, 'part-dev')[0]?.state === 'running', 'running');
+  await coordinator.cancelTurn('conv', turn0(repo).id);
+  await until(() => turn0(repo).state !== 'cancelling', 'settlement');
+  await assert.rejects(lateApproval!, /fenced approval request/);
+  const attempt = attemptsOf(repo, 'part-dev')[0];
+  assert.equal(attempt.pendingApproval, undefined, 'no approval is opened on a cancelling turn');
+  assert.notEqual(attempt.state, 'awaiting_approval');
+  assert.equal(turn0(repo).state, 'outcome_unknown');
+});
+
+test('completing while awaiting approval resolves the pending approval', async () => {
+  const repo = new MemoryRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('f'), executionAdapter: {
+    execute: async params => {
+      await params.onAccepted!();
+      await params.onApproval!({ runtimeRequestId: 'req-1' });
+      return { text: 'done without a resolve callback' };
+    } } });
+  await coordinator.submitTurn(command({ selectedParticipantIds: ['part-dev'] }));
+  await until(() => turn0(repo).state === 'completed', 'completion');
+  const attempt = attemptsOf(repo, 'part-dev')[0];
+  assert.equal(attempt.state, 'completed');
+  assert.equal(attempt.pendingApproval?.status, 'resolved');
+  await coordinator.cancelTurn('conv', turn0(repo).id).catch(() => undefined);
+  assert.equal(attemptsOf(repo, 'part-dev')[0].pendingApproval?.status, 'resolved', 'a later cancel does not invalidate a finished approval');
+});
+
+test('failing while awaiting approval invalidates the pending approval', async () => {
+  const repo = new MemoryRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('g'), executionAdapter: {
+    execute: async params => {
+      await params.onAccepted!();
+      await params.onApproval!({ runtimeRequestId: 'req-1' });
+      throw new Error('provider down');
+    } } });
+  await coordinator.submitTurn(command({ selectedParticipantIds: ['part-dev'] }));
+  await until(() => turn0(repo).state === 'failed', 'failure');
+  const attempt = attemptsOf(repo, 'part-dev')[0];
+  assert.equal(attempt.state, 'failed');
+  assert.equal(attempt.pendingApproval?.status, 'invalidated');
+});
+
+test('a superseding runtime request resolves the previous one before recording the next', async () => {
+  const repo = new MemoryRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  const seen: string[] = [];
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('h'), executionAdapter: {
+    execute: async params => {
+      await params.onAccepted!();
+      await params.onApproval!({ runtimeRequestId: 'A' });
+      await params.onApproval!({ runtimeRequestId: 'A', resolved: true });
+      await params.onApproval!({ runtimeRequestId: 'B' });
+      seen.push(`${repo.snapshot.conversations[0].turns[0].attempts[0].state}:${repo.snapshot.conversations[0].turns[0].attempts[0].pendingApproval?.runtimeRequestId}`);
+      await params.onApproval!({ runtimeRequestId: 'B', resolved: true });
+      return { text: 'done' };
+    } } });
+  await coordinator.submitTurn(command({ selectedParticipantIds: ['part-dev'] }));
+  await until(() => turn0(repo).state === 'completed', 'completion');
+  assert.deepEqual(seen, ['awaiting_approval:B']);
+  const attempt = attemptsOf(repo, 'part-dev')[0];
+  assert.equal(attempt.pendingApproval?.runtimeRequestId, 'B');
+  assert.equal(attempt.pendingApproval?.status, 'resolved');
+});
+
 async function crashedWithApproval(): Promise<TeamChatSnapshot> {
   const repo = new MemoryRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
   const first = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('first'), executionAdapter: {
@@ -169,6 +244,8 @@ test('without a live matching request the approval stays invalidated and is neve
     ['empty queue', async () => []],
     ['different request id', async attempt => [{ requestId: 'req-2', attemptId: attempt.id }]],
     ['different attempt', async () => [{ requestId: 'req-1', attemptId: 'someone-else' }]],
+    // The adapter contract requires attemptId; a live request that omits it must not restore onto any attempt.
+    ['no attempt identity', async () => [{ requestId: 'req-1' } as unknown as { requestId: string; attemptId: string }]],
     ['enumeration failure', async () => { throw new Error('runtime gone'); }]
   ];
   for (const [label, live] of cases) {

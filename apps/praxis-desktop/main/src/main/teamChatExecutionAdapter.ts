@@ -3,6 +3,7 @@ import { realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { actionAllowedOn, PROTOCOL_PROMPT, parseAssistantReply, getProviderDescriptor, getKnownContextLength, runProviderPrompt, TeamChatAcceptanceUnknown, type AiProvider, type AgentSessionRecord, type AgentToolMode, type AgentPermissionMode, type ReasoningEffort, type AssistantRole, type WireImageAttachment } from '@praxis/core';
 import { conversationPayloadDigest } from '@praxis/core';
+import { pendingMobilePermissions } from './mobilePermissions';
 import type { TeamChatExecutionAdapter, TeamChatExecutionParams, TeamChatExecutionResult } from '@praxis/core';
 
 /** Keeps prepared durable prompts out of the legacy assistant history clipping path. */
@@ -24,14 +25,15 @@ export function createTeamChatExecutionAdapter(
 }
 
 /**
- * Stable identity of the permission request an awaiting_approval session is blocked on. The runtime
- * queues carry no id of their own, so it is derived from the session and the count of requests it
- * has raised; it changes whenever a new request is raised and is never shared between sessions.
+ * Stable identity of the permission request an awaiting_approval session is blocked on. It is the
+ * same identity the mobile permission surface uses (`pendingMobilePermissions`): the session id plus
+ * the index of the request's `permission_requested` event, taken from the head of the session's
+ * pending queue. It moves to the next queued request when one completes and is never shared
+ * between sessions.
  */
-export function runtimeApprovalRequestId(record: Pick<AgentSessionRecord, 'sessionId' | 'state' | 'events'>): string | undefined {
+export function runtimeApprovalRequestId(record: AgentSessionRecord): string | undefined {
   if (record.state !== 'awaiting_approval') return undefined;
-  const raised = record.events.filter(event => event.type === 'permission_requested').length;
-  return raised > 0 ? `${record.sessionId}:permission:${raised}` : undefined;
+  return pendingMobilePermissions([record])[0]?.requestId;
 }
 
 export interface TeamChatRuntimeOptions {
@@ -73,9 +75,11 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
     const selectedProvider = (options.provider as AiProvider | undefined) ?? settings.ai.activeProvider;
     const userPrompt = preparedPrompt;
     const noteAccepted = () => { void onAccepted?.().catch(() => {}); };
+    let approvalQueue: Promise<void> = Promise.resolve();
     const runtime: TeamChatRuntimeOptions = {
       onAccepted: noteAccepted,
-      onApproval: approval => { void onApproval?.(approval).catch(() => {}); },
+      // Commit approval changes in the order they were reported, so a resolve always lands before the next record.
+      onApproval: approval => { approvalQueue = approvalQueue.then(() => onApproval?.(approval)).catch(() => {}); },
       provider: selectedProvider,
       model: typeof options.model === 'string' ? options.model : (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
       personaId: participant.role,

@@ -79,12 +79,15 @@ export function advanceConversationAttempt(current: DurableConversation, expecte
   if (state === 'dispatching') attempt.dispatchIntent = timestamp;
   return next;
 }
-/** Record the runtime request an attempt is blocked on. Fenced by epoch and attempt; moves running -> awaiting_approval. */
+/**
+ * Record the runtime request an attempt is blocked on. Fenced by epoch and attempt; moves running -> awaiting_approval.
+ * A cancelling turn opens no new approval: cancel has already aborted the runtime that raised it.
+ */
 export function recordAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, runtimeRequestId: string, timestamp: string): DurableConversation {
   const next = changed(current, expected);
   const turn = next.turns.find(item => item.id === turnId);
   const attempt = turn?.attempts.find(item => item.id === attemptId);
-  if (!runtimeRequestId?.trim() || !turn || !attempt || !['running', 'cancelling'].includes(turn.state) || epoch !== current.coordinatorEpoch ||
+  if (!runtimeRequestId?.trim() || !turn || !attempt || turn.state !== 'running' || epoch !== current.coordinatorEpoch ||
       epoch !== attempt.coordinatorEpoch || attempt.state !== 'running' || turn.attempts.at(-1)?.id !== attemptId) throw new Error('Invalid or fenced approval request.');
   attempt.state = 'awaiting_approval';
   attempt.pendingApproval = { runtimeRequestId, requestedAt: timestamp, coordinatorEpoch: epoch, status: 'pending' };
@@ -101,11 +104,18 @@ export function resolveAttemptApproval(current: DurableConversation, expected: n
   attempt.state = 'running';
   return next;
 }
+/**
+ * Settle a still-pending approval when its attempt ends: `resolved` when the reply completed,
+ * `invalidated` when it failed, was cancelled or interrupted. Acts only on a pending approval.
+ */
+export function settleAttemptApproval(attempt: ConversationAttempt, outcome: 'resolved' | 'invalidated'): boolean {
+  if (attempt.pendingApproval?.status !== 'pending') return false;
+  attempt.pendingApproval.status = outcome;
+  return true;
+}
 /** Invalidate unresolved approval callbacks; the request is never carried to another attempt. */
 export function invalidateAttemptApproval(attempt: ConversationAttempt): boolean {
-  if (attempt.pendingApproval?.status !== 'pending') return false;
-  attempt.pendingApproval.status = 'invalidated';
-  return true;
+  return settleAttemptApproval(attempt, 'invalidated');
 }
 /**
  * Re-request an invalidated approval only when a live runtime request with the same identity
@@ -146,6 +156,7 @@ export function completeConversationAttempt(current: DurableConversation, expect
       message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||
       message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 ||
       ![attempt.contextReceipt, attempt.nativeContextReceipt].some(candidate => candidate && JSON.stringify(receipt) === JSON.stringify(candidate))) throw new Error('Invalid, duplicate or fenced completion.');
+  settleAttemptApproval(attempt, 'resolved');
   attempt.contextReceipt = structuredClone(receipt);
   if (evidence?.reportedCost) attempt.reportedCost = structuredClone(evidence.reportedCost);
   if (evidence?.usage) attempt.usage = structuredClone(evidence.usage);

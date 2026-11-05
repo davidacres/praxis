@@ -167,6 +167,8 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
         if (runtime.ownership && record.teamChatExecution?.attemptId === runtime.ownership.attemptId) {
           const requestId = runtimeApprovalRequestId(record);
           if (requestId && requestId !== reportedApproval) {
+            // A new head request supersedes the previous one: settle that first, then record the next.
+            if (reportedApproval) runtime.onApproval?.({ runtimeRequestId: reportedApproval, resolved: true });
             reportedApproval = requestId;
             runtime.onApproval?.({ runtimeRequestId: requestId });
           } else if (!requestId && reportedApproval) {

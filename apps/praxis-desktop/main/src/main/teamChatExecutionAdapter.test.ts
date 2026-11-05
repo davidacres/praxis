@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import type { TeamChatExecutionParams } from '@praxis/core';
 import { createTeamChatExecutionAdapter, createProductionTeamChatExecutionAdapter, runtimeApprovalRequestId } from './teamChatExecutionAdapter';
+import { pendingMobilePermissions } from './mobilePermissions';
 
 test('dispatch consumes prepared context unchanged and preserves attempt usage', async () => {
   const adapter = createTeamChatExecutionAdapter(async (_params, prompt) => {
@@ -315,16 +316,29 @@ test('TASK-480 AC5: tool-runtime usage is attributed once per attempt and contex
 test('live approvals are reported only for the owning attempt while its session still awaits approval', async () => {
   const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
   type Record = import('@praxis/core').AgentSessionRecord;
-  const session = (sessionId: string, state: string, attemptId: string, raised: number) => ({ sessionId, state, teamChatExecution: { attemptId },
-    events: Array.from({ length: raised }, () => ({ type: 'permission_requested' })) }) as unknown as Record;
-  let sessions: Record[] = [session('s1', 'awaiting_approval', 'attempt-1', 2), session('s2', 'awaiting_approval', 'attempt-2', 1), session('s3', 'running', 'attempt-3', 1)];
+  type Event = Record['events'][number];
+  const requested = (n: number): Event => ({ type: 'permission_requested', timestamp: `t${n}`, summary: `request ${n}` }) as Event;
+  const completed = (n: number): Event => ({ type: 'permission_completed', timestamp: `t${n}`, summary: 'answered' }) as Event;
+  const session = (sessionId: string, state: string, attemptId: string, events: Event[]) => ({ sessionId, issueKey: `KEY-${sessionId}`, state,
+    teamChatExecution: { attemptId }, events }) as unknown as Record;
+  // s1 raised two requests (event indexes 0 and 2) with a message between them; the head of its queue is index 0.
+  const s1Events = [requested(0), { type: 'message', timestamp: 't1', summary: 'thinking' } as Event, requested(2)];
+  let sessions: Record[] = [session('s1', 'awaiting_approval', 'attempt-1', s1Events), session('s2', 'awaiting_approval', 'attempt-2', [requested(0)]),
+    session('s3', 'running', 'attempt-3', [requested(0)])];
   const adapter = createProductionTeamChatExecutionAdapter({ settings: () => structuredClone(DEFAULT_APP_SETTINGS), resolveRuntimeConfiguration: async () => 'r',
     resolveConnectionOptions: async () => ({}), completeWithTools: async () => 'unused', liveRuntimeSessions: () => sessions });
   const list = (id: string) => adapter.listLiveApprovals!({ id } as import('@praxis/core').ConversationAttempt);
-  assert.deepEqual(await list('attempt-1'), [{ requestId: 's1:permission:2', attemptId: 'attempt-1' }]);
+  assert.deepEqual(await list('attempt-1'), [{ requestId: 's1:permission:0', attemptId: 'attempt-1' }]);
+  assert.equal(runtimeApprovalRequestId(sessions[0]), pendingMobilePermissions([sessions[0]])[0].requestId,
+    'the team-chat identity is the mobile permission identity of the head request');
+  sessions[0] = session('s1', 'awaiting_approval', 'attempt-1', [...s1Events, completed(3)]);
+  assert.deepEqual(await list('attempt-1'), [{ requestId: 's1:permission:2', attemptId: 'attempt-1' }], 'answering the head moves to the next queued request');
+  assert.equal(runtimeApprovalRequestId(sessions[0]), pendingMobilePermissions([sessions[0]])[0].requestId);
+  sessions[0] = session('s1', 'awaiting_approval', 'attempt-1', [...s1Events, completed(3), completed(4)]);
+  assert.deepEqual(await list('attempt-1'), [], 'an emptied queue has nothing to restore');
   assert.deepEqual(await list('attempt-3'), []);
   assert.deepEqual(await list('missing'), []);
   sessions = [];
   assert.deepEqual(await list('attempt-1'), [], 'a vanished runtime session has nothing to restore');
-  assert.equal(runtimeApprovalRequestId({ sessionId: 's', state: 'awaiting_approval', events: [] }), undefined);
+  assert.equal(runtimeApprovalRequestId(session('s', 'awaiting_approval', 'a', [])), undefined);
 });

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import type { ConversationAttempt, ConversationMessage, ConversationTurn, DurableConversation } from './assistantTypes';
-import { beginConversationEpoch, conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } from './teamChatTransitions';
+import { beginConversationEpoch, conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt, settleAttemptApproval, invalidateAttemptApproval } from './teamChatTransitions';
 
 function fixture() {
   const chat: DurableConversation = { schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] };
@@ -154,4 +154,20 @@ test('payload canonicalization rejects sparse arrays at any depth and preserves 
     conversationPayloadDigest({ a: 'text', b: [null, true, 2] }));
   assert.equal(conversationPayloadDigest([]), '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945');
   assert.notEqual(conversationPayloadDigest([null]), conversationPayloadDigest([]));
+});
+
+test('settleAttemptApproval acts only on a pending approval and is idempotent', () => {
+  const base = { id: 'a1', turnId: 't1', participantId: 'p1', ordinal: 1, coordinatorEpoch: 'e1', state: 'awaiting_approval', createdAt: 'now' } as ConversationAttempt;
+  const none = structuredClone(base);
+  assert.equal(settleAttemptApproval(none, 'resolved'), false);
+  assert.equal(none.pendingApproval, undefined);
+  const pending = { ...structuredClone(base), pendingApproval: { runtimeRequestId: 'r1', requestedAt: 'now', coordinatorEpoch: 'e1', status: 'pending' as const } };
+  assert.equal(settleAttemptApproval(pending, 'resolved'), true);
+  assert.equal(pending.pendingApproval.status, 'resolved');
+  assert.equal(settleAttemptApproval(pending, 'invalidated'), false, 'a settled approval is never re-settled');
+  assert.equal(pending.pendingApproval.status, 'resolved');
+  const toInvalidate = { ...structuredClone(base), pendingApproval: { runtimeRequestId: 'r2', requestedAt: 'now', coordinatorEpoch: 'e1', status: 'pending' as const } };
+  assert.equal(invalidateAttemptApproval(toInvalidate), true);
+  assert.equal(invalidateAttemptApproval(toInvalidate), false);
+  assert.equal(toInvalidate.pendingApproval.status, 'invalidated');
 });
