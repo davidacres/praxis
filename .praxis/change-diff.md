@@ -1,1312 +1,1303 @@
-# change-diff — PRX-S111-184 / WF-0C7166C7-implement
+# change-diff — PRX-S111-180 (FX-BE-180)
 
-Cumulative base: plan inspection `ea2abb59`. Resumed-pass base: `67968cf0`.
-Current repairs: `fafbacc8` (native delivery/session evidence), `1018ed98` (timestamped receipts), `4d3d0fbf` (desktop harness ordering/focus).
-Earlier implementation and recovery commits remain included; this patch does not discard the changes already delivered before the stage-session abort.
+## Summary
+Implements main-owned turn scheduling and command delivery for Praxis durable team chat:
+- Core `TeamChatCoordinator` in `packages/core/src/ai/assistant/teamChatCoordinator.ts`
+- Comprehensive test coverage for all TASK-478 and TASK-479 acceptance criteria in `packages/core/src/ai/assistant/teamChatCoordinator.test.ts`
+- Safe whole-transcript save rejection for durable conversations in `packages/core/src/ai/assistant/teamChatStore.ts`
+- Main process coordinator singleton and IPC handlers in `apps/praxis-desktop/main/src/main/assistantIpc.ts`
+- Preload exposure for validated turn commands and revision subscriptions in `apps/praxis-desktop/main/src/preload/index.ts`
+- IPC contracts in `packages/core/src/host/ipcContracts.ts`
 
-The patch includes code, tests, scoped reports and catalog updates. Generated diff artifacts exclude themselves to avoid recursive patch contents. Runtime safety and workflow gates are preserved; real-provider reconstruction is distinct from authenticated native reuse.
+## Changed Files
+```
+apps/praxis-desktop/main/src/main/assistantIpc.ts  |  60 +-
+ apps/praxis-desktop/main/src/preload/index.ts      |  15 +
+ packages/core/package.json                         |   2 +-
+ .../src/ai/assistant/teamChatCoordinator.test.ts   | 434 ++++++++++++++
+ .../core/src/ai/assistant/teamChatCoordinator.ts   | 621 +++++++++++++++++++++
+ packages/core/src/ai/assistant/teamChatStore.ts    |   3 +
+ packages/core/src/host/ipcContracts.ts             |  18 +-
+ packages/core/src/index.ts                         |   1 +
+ 8 files changed, 1150 insertions(+), 4 deletions(-)
+```
 
-See the [verification report](../docs/praxis-tests/fx-be-184-verification-report.md) and [retained evidence](../docs/praxis-tests/fx-be-184-retained-evidence.md) for exact commands, initial failures, reruns, skips and unresolved acceptance requirements. A checkpoint made while a runner is active explicitly retains its pending state; only completed results establish a pass.
-
-Plain zero-context patch: `.praxis/session-artifacts/change-diff.patch`; validate/apply with `git apply --unidiff-zero`.
-SHA256: `ad332f1e6dee6fa3aeaef946a4494864b7e2c91dc93ae7f33af8d9c85e7d8006`.
-
+## Diff
 ```diff
-diff --git a/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts b/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts
-index 1f80a47d..62b380c8 100644
---- a/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts
-+++ b/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts
-@@ -13 +13 @@
-- * `.praxis/session-artifacts/durable-team-chat-live-*.json`.
-+ * timestamped `.praxis/session-artifacts/durable-team-chat-live-*.json` files.
-@@ -48 +48 @@ async function send(win: Page, id: string, text: string, runtimeOptions: Record<
--      text, selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions });
-+      text, selectedParticipantIds: ['part-dev', 'part-lead'], attachmentRefs: [], runtimeOptions });
-@@ -77 +77 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
--  const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, state: attempt.state,
-+  const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, participantId: attempt.participantId, state: attempt.state,
-@@ -79 +79,11 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
--    contextReceipt: attempt.contextReceipt, usage: attempt.usage })));
-+    contextReceipt: attempt.contextReceipt, nativeContextReceipt: attempt.nativeContextReceipt,
-+    recoveryEvidence: attempt.recoveryEvidence, usage: attempt.usage })));
-+  const sessionReuse = ['part-dev', 'part-lead'].map(participantId => {
-+    const member = attempts.filter(attempt => attempt.participantId === participantId);
-+    const reused = Boolean(member[0]?.providerSessionId && member[0].providerSessionId === member[1]?.providerSessionId);
-+    const nativeDelivery = member[1]?.recoveryEvidence?.some(evidence => evidence.kind === 'final_result' && evidence.result?.contextDelivery === 'native') === true;
-+    const nativeReuseProved = reused && nativeDelivery;
-+    return { participantId, reused, nativeDelivery, nativeReuseProved, firstBindingId: member[0]?.bindingId, secondBindingId: member[1]?.bindingId,
-+      firstSessionId: member[0]?.providerSessionId, secondSessionId: member[1]?.providerSessionId,
-+      proof: nativeReuseProved ? 'native-session-reused' : 'context-reconstructed-native-reuse-unproved' };
-+  });
-@@ -81,0 +92 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
-+    sessionReuse, nativeReuseProved: sessionReuse.every(member => member.nativeReuseProved),
-@@ -84 +95,3 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
--  fs.writeFileSync(path.join(ARTIFACTS, `durable-team-chat-live-${label}.json`), JSON.stringify(evidence, null, 2));
-+  const artifact = path.join(ARTIFACTS, `durable-team-chat-live-${label}-${evidence.recordedAt.replace(/[:.]/g, '-')}.json`);
-+  fs.writeFileSync(artifact, JSON.stringify(evidence, null, 2));
-+  await test.info().attach(`durable-team-chat-live-${label}`, { path: artifact, contentType: 'application/json' });
-@@ -86,2 +99,15 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
--  expect(new Set(attempts.map(a => a.attemptId)).size).toBe(3);
--  expect(attempts[2].coordinatorEpoch).not.toBe(attempts[0].coordinatorEpoch);
-+  expect(new Set(attempts.map(a => a.attemptId)).size).toBe(6);
-+  for (const participantId of ['part-dev', 'part-lead']) {
-+    const memberAttempts = attempts.filter(attempt => attempt.participantId === participantId);
-+    expect(memberAttempts).toHaveLength(3);
-+    expect(memberAttempts[2].coordinatorEpoch).not.toBe(memberAttempts[0].coordinatorEpoch);
-+    expect(memberAttempts.every(attempt => attempt.state === 'completed')).toBe(true);
-+    if (sessionReuse.find(member => member.participantId === participantId)!.reused) {
-+      expect(memberAttempts[1].bindingId).toBe(memberAttempts[0].bindingId);
-+    }
-+    for (const attempt of memberAttempts) expect(attempt.contextReceipt.messageIds).toContain(conversation.messages[0].id);
-+  }
-+  for (const turn of conversation.turns) {
-+    const sessions = turn.attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
-+    if (sessions.length) expect(new Set(sessions).size).toBe(2);
-+  }
-@@ -93 +119,5 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
--  expect(conversation.messages.at(-1)!.text.toLowerCase()).toContain(codename);
-+  for (const attempt of conversation.turns[2].attempts) {
-+    const reply = conversation.messages.find(message => message.id === attempt.resultMessageId);
-+    expect(reply, `restart reply for ${attempt.participantId}`).toBeDefined();
-+    expect(reply!.text.toLowerCase()).toContain(codename);
-+  }
-diff --git a/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts b/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts
-index 02508cdf..81db7d9d 100644
---- a/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts
-+++ b/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts
-@@ -174,23 +174,30 @@ test('keyboard cancellation preserves accepted messages and cancels only the sel
--  mock = await startMockOpenAiCompatibleServer({ reply: 'Should be cancelled', responseDelayMs: 5000 });
--  app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
--  const win = app.window;
--  await win.getByTestId('titlebar-assistant').click();
--  await win.getByTestId('assistant-input').fill('Active accepted message');
--  await win.getByTestId('assistant-send').click();
--  await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
--  await win.getByTestId('assistant-input').fill('Queued accepted message');
--  await win.getByTestId('assistant-send').click();
--  const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
--  await expect(queued).toHaveCount(1);
--  await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
--  await expect(queued).toHaveCount(0);
--  await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
--  await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
--  await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
--  await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
--  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
--  const conversation = (await win.evaluate(async () => {
--    const chats = await window.praxis.assistant.listChats('');
--    return window.praxis.assistant.getConversation(chats[0].id);
--  }))!;
--  expect(conversation.turns.map(turn => turn.state)).toEqual(['cancelled', 'cancelled']);
-+  let releaseReply!: () => void;
-+  const responseGate = new Promise<void>(resolve => { releaseReply = resolve; });
-+  mock = await startMockOpenAiCompatibleServer({ reply: 'Should be cancelled', responseGate });
-+  try {
-+    app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
-+    const win = app.window;
-+    await win.getByTestId('titlebar-assistant').click();
-+    await win.getByTestId('assistant-input').fill('Active accepted message');
-+    await win.getByTestId('assistant-send').click();
-+    await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
-+    await win.getByTestId('assistant-input').fill('Queued accepted message');
-+    await win.getByTestId('assistant-send').click();
-+    const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
-+    await expect(queued).toHaveCount(1);
-+    // Electron's native keyboard target can belong to another concurrently launched window.
-+    await win.bringToFront();
-+    await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
-+    await expect(queued).toHaveCount(0);
-+    await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
-+    await win.bringToFront();
-+    await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
-+    await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
-+    await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
-+    await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
-+    const conversation = (await win.evaluate(async () => {
-+      const chats = await window.praxis.assistant.listChats('');
-+      return window.praxis.assistant.getConversation(chats[0].id);
-+    }))!;
-+    expect(conversation.turns.map(turn => turn.state)).toEqual(['cancelled', 'cancelled']);
-+  } finally { releaseReply(); }
-@@ -485,0 +493,59 @@ test('a CLI member without resume capability reconstructs context on its second
+diff --git a/apps/praxis-desktop/main/src/main/assistantIpc.ts b/apps/praxis-desktop/main/src/main/assistantIpc.ts
+index c7e36e62..896ca7e1 100644
+--- a/apps/praxis-desktop/main/src/main/assistantIpc.ts
++++ b/apps/praxis-desktop/main/src/main/assistantIpc.ts
+@@ -7,6 +7,7 @@ import {
+   runAssistantTurn,
+   runTeamReview,
+   TeamChatStore,
++  TeamChatCoordinator,
+   parseAssistantMention,
+   DEFAULT_ASSISTANT_ROLE,
+   type AssistantCompletion,
+@@ -21,7 +22,9 @@ import {
+   type AiProvider,
+   type ReasoningEffort,
+   type WireImageAttachment,
+-  type IssueDetails
++  type IssueDetails,
++  type ConversationUpdate,
++  type SubmitConversationCommand
+ } from '@praxis/core';
+ import { FileTeamChatRepository } from './adapters/teamChatRepository';
+ import { assistantCapabilityNote } from './assistantCapability';
+@@ -32,16 +35,57 @@ import { broadcastToAllWindows } from './windowBroadcast';
+ import { getAiSessionManager } from './aiInstance';
+ import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
+ 
++let chatRepository: FileTeamChatRepository | undefined;
+ let chatStore: TeamChatStore | undefined;
++let coordinator: TeamChatCoordinator | undefined;
+ const activeToolSessions = new Set<string>();
+ const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
+ 
++function getTeamChatRepository(): FileTeamChatRepository {
++  if (!chatRepository) chatRepository = new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json'));
++  return chatRepository;
++}
 +
-+test('queued page context and staged image reach the provider after navigation and composer replacement', async () => {
-+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-queued-image-'));
-+  const promptLog = path.join(folder, 'prompts.jsonl');
-+  try {
-+    app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } } } }, undefined,
-+      { FAKE_ACP_PROMPT_LOG: promptLog }, { openNewSession: false });
-+    const win = app.window;
-+    const id = await win.evaluate(() => window.praxis.assistant.createChat('').then(chat => chat.id));
-+    // Hold the first dispatch without using a timing assumption about provider speed.
-+    await app.electronApp.evaluate((_electron, modulePath) => {
-+      const coordinator = process.getBuiltinModule('module')!.createRequire(modulePath)(modulePath).getTeamChatCoordinator();
-+      const execute = coordinator.executionAdapter.execute.bind(coordinator.executionAdapter);
-+      let first = true;
-+      const gate = new Promise<void>(resolve => { coordinator.releaseQueuedImageTest = resolve; });
-+      coordinator.executionAdapter.execute = async (params: unknown) => {
-+        if (first) {
-+          first = false;
-+          await gate;
+ /** `userData/team-chats.json` — per-profile like the other AI stores, so e2e profiles never share chats. */
+ function getTeamChatStore(): TeamChatStore {
+-  if (!chatStore) chatStore = new TeamChatStore(new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json')));
++  if (!chatStore) chatStore = new TeamChatStore(getTeamChatRepository());
+   return chatStore;
+ }
+ 
++export function getTeamChatCoordinator(): TeamChatCoordinator {
++  if (!coordinator) {
++    const repository = getTeamChatRepository();
++    coordinator = new TeamChatCoordinator({
++      repository,
++      onUpdate: update => {
++        broadcastToAllWindows('assistant:conversationUpdate', update);
++        if (update.type === 'turn_completed' || update.type === 'turn_accepted') {
++          broadcastToAllWindows('assistant:chatsChanged');
 +        }
-+        return execute(params);
-+      };
-+    }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
-+    const original = await win.evaluate(async ({ id, folder }) => {
-+      const runtimeOptions = { provider: 'claude-code-cli' as const, toolMode: 'read-only' as const, workingDirectory: folder };
-+      const submit = async (text: string, attachmentRefs: import('@praxis/core').ConversationAttachment[] = [], context?: import('@praxis/core').SubmitConversationCommand['context']) => {
-+        const snapshot = (await window.praxis.assistant.getConversation(id))!;
-+        return window.praxis.assistant.submitTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot.revision,
-+          text, selectedParticipantIds: ['part-dev'], attachmentRefs, runtimeOptions, ...(context ? { context } : {}) });
-+      };
-+      await submit('First queued-image test turn');
-+      const refs = await window.praxis.assistant.stageAttachments(id, [{ mimeType: 'image/png', dataBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' }]);
-+      await submit('IMAGE_ECHO captured question', refs, { pageType: 'issue', entityId: 'ORIGINAL-184', title: 'Original issue', summary: 'Captured page sentinel' });
-+      // A later composer image is staged, but was never attached to this accepted turn.
-+      await window.praxis.assistant.stageAttachments(id, [{ mimeType: 'image/png', dataBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' }]);
-+      return refs;
-+    }, { id, folder });
-+    const queued = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
-+    expect(queued.turns[1].state).toBe('queued');
-+    await win.reload();
-+    await app.electronApp.evaluate((_electron, modulePath) => {
-+      process.getBuiltinModule('module')!.createRequire(modulePath)(modulePath).getTeamChatCoordinator().releaseQueuedImageTest();
-+    }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
-+    await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns[1].state, id), { timeout: 20000 }).toBe('completed');
-+    const conversation = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
-+    const message = conversation.messages.find(message => message.id === conversation.turns[1].userMessageId)!;
-+    expect(message.attachments).toEqual(original);
-+    expect(conversation.turns[1].plan.context?.entityId).toBe('ORIGINAL-184');
-+    expect(conversation.messages.at(-1)?.text).toContain('IMAGES_RECEIVED:1:image/png');
-+    const prompts = fs.readFileSync(promptLog, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { promptText: string });
-+    expect(prompts).toHaveLength(2);
-+    expect(prompts[0].promptText).not.toContain('Captured page sentinel');
-+    expect(prompts[1].promptText).toContain('Captured page sentinel');
-+  } finally {
-+    if (app) await closeTestApp(app);
-+    app = undefined;
-+    fs.rmSync(folder, { recursive: true, force: true });
-+  }
-+});
-diff --git a/apps/praxis-desktop/main/e2e/easymode.spec.ts b/apps/praxis-desktop/main/e2e/easymode.spec.ts
-index e2f096d8..63ada4a6 100644
---- a/apps/praxis-desktop/main/e2e/easymode.spec.ts
-+++ b/apps/praxis-desktop/main/e2e/easymode.spec.ts
-@@ -1089,0 +1090,15 @@ test('in EasyMode selecting a session opens details in the center', async () =>
-+  // The thread follows the latest message: the last one sits inside the
-+  // scroll body's visible area rather than below the fold under the ticket card.
-+  // Check before clicking Quote on the opening message: that click intentionally
-+  // scrolls into history and stops following, just as a person reading earlier replies would.
-+  // Polled: the follow runs after layout settles (ResizeObserver + a frame), so a single read can race it.
-+  // Generous timeout: under a full parallel suite those frames can be seconds late, and the
-+  // default 5s poll timed out there while passing alone.
-+  await expect.poll(() => win.evaluate(() => {
-+    const body = document.querySelector('[data-testid="agent-details-body"]');
-+    const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
-+    const last = messages[messages.length - 1];
-+    if (!body || !last) return false;
-+    return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
-+  }), { timeout: 40000 }).toBe(true);
-+
-@@ -1105,13 +1119,0 @@ test('in EasyMode selecting a session opens details in the center', async () =>
--  // The thread follows the latest message: the last one sits inside the
--  // scroll body's visible area rather than below the fold under the ticket card.
--  // Polled: the follow runs after layout settles (ResizeObserver + a frame), so a single read can race it.
--  // Generous timeout: under a full parallel suite those frames can be seconds late, and the
--  // default 5s poll timed out there while passing alone.
--  await expect.poll(() => win.evaluate(() => {
--    const body = document.querySelector('[data-testid="agent-details-body"]');
--    const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
--    const last = messages[messages.length - 1];
--    if (!body || !last) return false;
--    return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
--  }), { timeout: 40000 }).toBe(true);
--
-diff --git a/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts b/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts
-index 815342dc..fa1bd243 100644
---- a/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts
-+++ b/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts
-@@ -35,0 +36,2 @@ export async function startMockOpenAiCompatibleServer(options: {
-+  /** Holds completion until a test releases its execution barrier. */
-+  responseGate?: Promise<void>;
-@@ -64,0 +67 @@ export async function startMockOpenAiCompatibleServer(options: {
-+      await options.responseGate;
-diff --git a/apps/praxis-desktop/main/e2e/themeLooks.spec.ts b/apps/praxis-desktop/main/e2e/themeLooks.spec.ts
-index 1816e188..58644cbc 100644
---- a/apps/praxis-desktop/main/e2e/themeLooks.spec.ts
-+++ b/apps/praxis-desktop/main/e2e/themeLooks.spec.ts
-@@ -135,0 +136,2 @@ test('factory appearance reset restores the theme, Look, surface, and libraries'
-+  // Factory reset reloads the renderer; do not read settings from the outgoing context.
-+  const reloaded = window.waitForEvent('domcontentloaded');
-@@ -136,0 +139 @@ test('factory appearance reset restores the theme, Look, surface, and libraries'
-+  await reloaded;
-diff --git a/apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts b/apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts
-index 0fb0b206..2e12305c 100644
---- a/apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts
-+++ b/apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts
-@@ -305,2 +305,5 @@ test('deleting a live run cancels it first, then removes it', async () => {
--  await runRow.locator('.easymode-automation-row').hover();
--  await page.getByTestId(`easymode-run-delete-${run.runId}`).click();
-+  // Keep the action exposed through focus-within while moving to the button;
-+  // pointer-only hover can disappear on the shared desktop.
-+  const deleteButton = page.getByTestId(`easymode-run-delete-${run.runId}`);
-+  await deleteButton.focus();
-+  await deleteButton.click();
-diff --git a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts
-index b73a525b..103907a8 100644
---- a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts
-+++ b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts
-@@ -62,0 +63,60 @@ test('effective capability evidence is durable before runtime dispatch; evidence
-+
-+
-+test('unverified CLI identity cannot be stabilized by turn or participant account references', async () => {
-+  const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
-+  const adapter = createProductionTeamChatExecutionAdapter({
-+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
-+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
-+    resolveConnectionOptions: async () => ({}),
-+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
-+  });
-+  for (const source of ['defaults', 'runtimeOptions'] as const) {
-+    const params = {
-+      conversation: { id: 'chat' },
-+      participant: { id: 'lead', instructionVersion: '1', instructions: 'help',
-+        defaults: source === 'defaults' ? { accountReference: 'claimed-account' } : {} },
-+      turn: { id: 'first', plan: { runtimeOptions: { provider: 'claude-code-cli',
-+        ...(source === 'runtimeOptions' ? { accountReference: 'claimed-account' } : {}) } } }
-+    } as unknown as TeamChatExecutionParams;
-+    const first = await adapter.prepare!(params);
-+    assert.deepEqual(await adapter.prepare!(params), first, 'same-turn dispatch revalidation stays stable');
-+    params.turn.id = 'second';
-+    const second = await adapter.prepare!(params);
-+    assert.notEqual(second.accountReference, first.accountReference, 'unverified identity forces reconstruction across turns');
-+    assert.equal(second.providerRuntime, first.providerRuntime);
-+  }
-+});
-+
-+test('production API compatibility follows credentials, model and policy without exposing credentials', async () => {
-+  const { DEFAULT_APP_SETTINGS, resolveTeamChatBinding } = await import('@praxis/core');
-+  let apiKey = 'fixture-key-first';
-+  const adapter = createProductionTeamChatExecutionAdapter({
-+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
-+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
-+    resolveConnectionOptions: async () => ({ apiKey, model: 'fixture-model' }),
-+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
-+  });
-+  const params = {
-+    conversation: { id: 'chat' },
-+    participant: { id: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
-+    turn: { id: 'first', plan: { runtimeOptions: { provider: 'vercel-gateway', toolMode: 'project-only', permissionMode: 'manual' } } }
-+  } as unknown as TeamChatExecutionParams;
-+  const first = await adapter.prepare!(params);
-+  const bindings: import('@praxis/core').ConversationBinding[] = [];
-+  const initial = resolveTeamChatBinding(bindings, first, 'first-binding');
-+  params.turn.id = 'second';
-+  assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'unused'), initial);
-+  assert.ok(!JSON.stringify(first).includes(apiKey), 'resolved identity must not contain the API key');
-+  apiKey = 'fixture-key-second';
-+  const changedAccount = await adapter.prepare!(params);
-+  assert.notEqual(changedAccount.accountReference, first.accountReference);
-+  assert.equal(resolveTeamChatBinding(bindings, changedAccount, 'replacement').id, 'replacement');
-+  assert.equal(initial.status, 'invalid');
-+  const changes: Record<string, string>[] = [{ model: 'changed-model' }, { permissionMode: 'auto' }, { toolMode: 'read-only' }];
-+  for (const change of changes) {
-+    const original = params.turn.plan.runtimeOptions;
-+    params.turn.plan.runtimeOptions = { ...original, ...change };
-+    assert.notDeepEqual(await adapter.prepare!(params), changedAccount);
-+    params.turn.plan.runtimeOptions = original;
-+  }
-+});
-diff --git a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts
-index 7387af45..444a1c76 100644
---- a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts
-+++ b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts
-@@ -124 +124 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
--      ? String(options.accountReference ?? `${provider}:unverified-account:${turn.id}`) : connection.apiKey ?? provider;
-+      ? `${provider}:unverified-account:${turn.id}` : connection.apiKey ?? provider;
-diff --git a/docs/praxis-tests/catalog.json b/docs/praxis-tests/catalog.json
-index 5d024ce3..50e10414 100644
---- a/docs/praxis-tests/catalog.json
-+++ b/docs/praxis-tests/catalog.json
-@@ -6 +6 @@
--  "testCount": 800,
-+  "testCount": 801,
-@@ -5102 +5102 @@
--        "line": 96,
-+        "line": 126,
-@@ -5118 +5118 @@
--        "line": 109,
-+        "line": 139,
-@@ -5214 +5214 @@
--        "line": 199,
-+        "line": 206,
-@@ -5230 +5230 @@
--        "line": 252,
-+        "line": 259,
-@@ -5246 +5246 @@
--        "line": 288,
-+        "line": 295,
-@@ -5262 +5262 @@
--        "line": 319,
-+        "line": 326,
-@@ -5278 +5278 @@
--        "line": 388,
-+        "line": 395,
-@@ -5294 +5294 @@
--        "line": 423,
-+        "line": 430,
-@@ -5310 +5310 @@
--        "line": 459,
-+        "line": 466,
-@@ -5319,0 +5320,16 @@
-+    {
-+      "id": "PT-EE0AB4E23D",
-+      "title": "queued page context and staged image reach the provider after navigation and composer replacement",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-+        "line": 494,
-+        "project": "functional"
 +      },
-+      "area": "durable Team Chat",
-+      "flow": {
-+        "given": "An isolated durable conversation with a held first dispatch, a queued issue-context turn and a staged PNG.",
-+        "when": "A different composer image is staged, the renderer reloads and the first dispatch is released.",
-+        "then": "Both turns complete; only the queued provider prompt contains the captured page sentinel, its durable attachment refs remain identical and the ACP agent receives exactly one PNG."
++      executionAdapter: {
++        execute: async ({ participant, messages, turn }) => {
++          const settings = getSettingsBackend().read();
++          const selectedProvider = settings.ai.activeProvider;
++          const userPrompt = messages.filter(m => m.role === 'user').at(-1)?.text ?? '';
++          const runtime: AssistantRuntimeOptions = {
++            provider: selectedProvider,
++            model: (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
++            personaId: participant.role,
++            mode: 'chat',
++            toolMode: 'read-only',
++            toolSessionPrefix: `ASSISTANT-${turn.id}`
++          };
++          const systemPrompt = `You are the ${participant.role} team member. Respond to the conversation.`;
++          const text = await completeWithTools(runtime, systemPrompt, userPrompt);
++          return { text };
++        }
 +      }
++    });
++  }
++  return coordinator;
++}
++
+ /** The assistant has no ticket of its own; the runtime wants one, so give it an empty stand-in. */
+ const ASSISTANT_ISSUE: IssueDetails = {
+   key: 'assistant:team-chat',
+@@ -228,4 +272,16 @@ export function registerAssistantIpc(): void {
+     await getTeamChatStore().remove(chatId);
+     changed();
+   });
++
++  ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => getTeamChatCoordinator().submitTurn(command));
++  ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => getTeamChatCoordinator().getConversation(conversationId));
++  ipcMain.handle('assistant:cancelTurn', async (_event, conversationId: string, turnId: string) => {
++    await getTeamChatCoordinator().cancelTurn(conversationId, turnId);
++  });
++  ipcMain.handle('assistant:retryParticipant', async (_event, conversationId: string, turnId: string, participantId: string) => {
++    await getTeamChatCoordinator().retryParticipant(conversationId, turnId, participantId);
++  });
++  ipcMain.handle('assistant:resolveAttempt', async (_event, conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort') => {
++    await getTeamChatCoordinator().resolveAttempt(conversationId, turnId, attemptId, resolution);
++  });
+ }
+diff --git a/apps/praxis-desktop/main/src/preload/index.ts b/apps/praxis-desktop/main/src/preload/index.ts
+index f067d618..f114eda8 100644
+--- a/apps/praxis-desktop/main/src/preload/index.ts
++++ b/apps/praxis-desktop/main/src/preload/index.ts
+@@ -1,6 +1,7 @@
+ import { contextBridge, ipcRenderer } from 'electron';
+ import type {
+   CodeIntelligenceRequest,
++  ConversationUpdate,
+   SemanticModelStatus,
+   SemanticModelProgressEvent,
+   CheckFindings,
+@@ -446,6 +447,20 @@ const praxis: PraxisIpc = {
+     saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
+     renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
+     deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
++    submitTurn: (command: unknown) => ipcRenderer.invoke('assistant:submitTurn', command),
++    getConversation: (conversationId: string) => ipcRenderer.invoke('assistant:getConversation', conversationId),
++    subscribeConversation: (conversationId: string, listener: (update: ConversationUpdate) => void) => {
++      const handler = (_event: unknown, update: ConversationUpdate) => {
++        if (update && update.conversationId === conversationId) listener(update);
++      };
++      ipcRenderer.on('assistant:conversationUpdate', handler);
++      return () => {
++        ipcRenderer.removeListener('assistant:conversationUpdate', handler);
++      };
 +    },
-@@ -5566 +5582 @@
--        "line": 1155,
-+        "line": 1157,
-@@ -5582 +5598 @@
--        "line": 1377,
-+        "line": 1379,
-@@ -5598 +5614 @@
--        "line": 1525,
-+        "line": 1527,
-@@ -5614 +5630 @@
--        "line": 1560,
-+        "line": 1562,
-@@ -5630 +5646 @@
--        "line": 1591,
-+        "line": 1593,
-@@ -5646 +5662 @@
--        "line": 1620,
-+        "line": 1622,
-@@ -5662 +5678 @@
--        "line": 1775,
-+        "line": 1777,
-@@ -5678 +5694 @@
--        "line": 1832,
-+        "line": 1834,
-@@ -5694 +5710 @@
--        "line": 1900,
-+        "line": 1902,
-@@ -12446 +12462 @@
--        "line": 315,
-+        "line": 318,
-@@ -12462 +12478 @@
--        "line": 359,
-+        "line": 362,
-@@ -12478 +12494 @@
--        "line": 376,
-+        "line": 379,
-@@ -12494 +12510 @@
--        "line": 408,
-+        "line": 411,
-@@ -12510 +12526 @@
--        "line": 495,
-+        "line": 498,
-@@ -12526 +12542 @@
--        "line": 508,
-+        "line": 511,
-@@ -12542 +12558 @@
--        "line": 516,
-+        "line": 519,
-@@ -12558 +12574 @@
--        "line": 526,
-+        "line": 529,
-@@ -12574 +12590 @@
--        "line": 553,
-+        "line": 556,
-@@ -12590 +12606 @@
--        "line": 615,
-+        "line": 618,
-@@ -12606 +12622 @@
--        "line": 651,
-+        "line": 654,
-@@ -12622 +12638 @@
--        "line": 665,
-+        "line": 668,
-@@ -12638 +12654 @@
--        "line": 687,
-+        "line": 690,
-@@ -12654 +12670 @@
--        "line": 753,
-+        "line": 756,
-@@ -12670 +12686 @@
--        "line": 776,
-+        "line": 779,
-diff --git a/docs/praxis-tests/fx-be-184-release-proof.md b/docs/praxis-tests/fx-be-184-release-proof.md
-index 2b5bbb5f..9d01e34f 100644
---- a/docs/praxis-tests/fx-be-184-release-proof.md
-+++ b/docs/praxis-tests/fx-be-184-release-proof.md
-@@ -3 +3 @@
--Runner: **node:test**. These **25 supplemental source contracts, representing 32 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
-+Runner: **node:test**. These **27 supplemental source contracts, representing 34 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
-@@ -66 +66 @@ Title: **a pending approval at crash is never reused by the replacement attempt*
--**Then** the recovered attempt is interrupted or outcome_unknown (recorded deviation: tool-capable is outcome_unknown, not the matrix's interrupted); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
-+**Then** the recovered attempt is exactly outcome_unknown because a pending prompt cannot exclude earlier tool activity (explicit discrepancy with the matrix's interrupted row); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
-@@ -246,0 +247,48 @@ Registration: core contracts run through `packages/core/package.json` → `test`
-+
-+### PT-3544C516BE
-+
-+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:65](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L65).
-+Title: **unverified CLI identity cannot be stabilized by turn or participant account references**.
-+
-+**Given** a CLI configuration with a claimed account reference in participant defaults or turn options.
-+**When** production preparation repeats within one turn and then prepares another turn.
-+**Then** same-turn validation is stable, but cross-turn account identity changes and cannot authorize native reuse. No provider dispatch occurs.
-+
-+### PT-F19C6CE02C
-+
-+Automation: **node:test**, [teamChatCoordinator.test.ts:705](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L705).
-+Title: **queued page identity and attachment references survive caller mutation before dispatch**.
-+
-+**Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
-+**When** the caller changes the page identity, summary, draft and attachment list before releasing the first turn.
-+**Then** the queued provider invocation receives the original page identity, summary, text and immutable image reference. Both turns complete.
-+
-+## WF-0C7166C7 implementation additions
-+
-+### PT-DD3C1A1EA1
-+
-+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:90](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L90).
-+Title: **production API compatibility follows credentials, model and policy without exposing credentials**.
-+
-+**Given** the production adapter resolving an API credential and captured policy.
-+**When** a second turn keeps the configuration, then the credential, model or policy changes.
-+**Then** compatible turns keep one binding; credential rotation invalidates it; model and policy changes alter compatibility; the resolved configuration contains no plaintext credential. This proves binding compatibility, not native CLI authentication or resume capability.
-+
-+### PT-EE0AB4E23D
-+
-+Automation: **Playwright**, [durableTeamChat.spec.ts:494](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L494).
-+Title: **queued page context and staged image reach the provider after navigation and composer replacement**.
-+
-+**Given** a temporary profile, coordination root, attachment store and scripted ACP provider, with the first dispatch held at a barrier.
-+**When** an issue-context turn and PNG are queued, a replacement composer image is staged and the renderer reloads before dispatch is released.
-+**Then** the queued turn keeps its original page identity and immutable attachment references; only its prompt contains the captured page sentinel; the agent receives exactly one PNG. The earlier prompt excludes the future queued page context.
-+
-+The live-provider checks now retain per-member reuse classification, native context receipts and runtime recovery evidence. Six distinct completed attempts and session isolation are asserted; a reconstruction pass explicitly leaves native reuse unproved. Production has no authoritative CLI account reference, so the conservative per-turn identity remains in place.
-+
-+## WF-0C7166C7 resumed implementation: native delivery evidence
-+
-+Execution source: `fafbacc8`, with timestamped live receipt retention in `1018ed98` (recovery base `67968cf0`). The existing assertion **compatible members retain one binding each across turns and chats remain isolated; usage commits once** in `teamChatCoordinator.test.ts` now exercises a compatible native adapter: four distinct attempts reuse exactly two isolated member sessions; dispatch receives the persisted session identity; completion records the native context receipt without already-delivered history; another conversation creates independent sessions. Usage still commits once. This is deterministic adapter evidence, not real CLI authentication proof.
-+
-+The existing real CLI/API continuation assertions in `durableTeamChat.live.spec.ts` now require both members to recall the pinned codename after restart, check session isolation on all three turns, and classify native reuse only when matching session IDs are accompanied by durable `final_result.result.contextDelivery === 'native'` evidence. A matching session ID by itself cannot establish native delivery. Reconstruction remains a separate successful continuation result with native reuse explicitly unproved.
-+
-+No production identity fallback, permission classification, runtime checks or test registration was weakened. The conservative per-turn CLI identity and unknown-outcome reconciliation gates remain intact. Live receipts use timestamped filenames and Playwright JSON attachments to preserve prior runs. Current runner results and retained artifacts are recorded separately in the verification report.
-diff --git a/docs/praxis-tests/fx-be-184-retained-evidence.md b/docs/praxis-tests/fx-be-184-retained-evidence.md
-index c85e0d9b..d1be4f7e 100644
---- a/docs/praxis-tests/fx-be-184-retained-evidence.md
-+++ b/docs/praxis-tests/fx-be-184-retained-evidence.md
-@@ -437,0 +438,542 @@ These images remain session artifacts and are not committed. Hashes below were r
-+
-+## Recovery execution on 2026-11-05
-+
-+Code revision: `b291c054`; initial checkout: `ea2abb59`. This section is current execution evidence. Earlier sections remain historical records, including their original failures. Raw command logs are `/tmp/fx184-*.log` and may expire; useful receipts and screenshots remain in `.praxis/session-artifacts/`.
-+
-+| Command | Result |
-+| --- | --- |
-+| `npm run build:core` | exit 0, including compilation of the new queue and recovery assertions |
-+| `npm run test:core` | initial sandbox run encountered localhost EPERM; permitted final run exit 0, 1942 tests: 1940 passed, 2 conditional skips |
-+| `npm run check-types` | exit 0, repeated after the final code changes |
-+| `npm run build:renderer` | exit 0 |
-+| `npm run desktop:copy-renderer` | exit 0 |
-+| `npm run build:desktop` | exit 0 |
-+| `npm run test:desktop:git` | sandbox run exit 1 (localhost EPERM); permitted retry exit 0: 140 passed, 0 skipped |
-+| `npm run test:renderer` | exit 0: 34 passed, 0 skipped |
-+| `node --test packages/core/out/ai/assistant/*.test.js` | exit 0: 76 passed, 0 skipped |
-+| focused assistant/quickSession/durableTeamChat/standaloneConversations functional run | initial sandbox run exit 1 (localhost EPERM); permitted run exit 1: 44 passed, 1 failed (composer reply visibility) |
-+| `npm run test:desktop:themes` initial run | exit 1: 45 passed, 2 failed (factory reset read raced renderer reload; motif master switch) |
-+| focused `themeLooks.spec.ts --project=themes` after reload wait fix | exit 0: all 6 passed |
-+| focused composer visibility and motif master switch, one worker | exit 0: 2 passed; does not erase earlier broad-run failures |
-+| `PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/durableTeamChat.live.spec.ts` | exit 0: CLI passed, API skipped; provider/key unset |
-+| catalog `--write`, then `npm run test:praxis-contracts` | exit 0: 800 linked Playwright contracts; source inventory only |
-+
-+Broad suites overlapped during this execution. Profiles and mock servers were isolated; real pointer activity remains shared. This limits inference about timing/pointer failures. No assertion was weakened and no snapshot was updated.
-+
-+### Current real CLI receipts
-+
-+Two selected members, two compatible turns, then a full restart and third turn. All six attempts completed; native reuse was not established (unverified CLI identity deliberately forces fresh bindings). Each first-turn member session is isolated, each later prompt retains the original decision, and the final reply recalls its codename. API absence is a skip, not substitute mock proof.
-+
-+| Member | Attempt | Epoch | Binding | Provider session | Context messages |
-+| --- | --- | --- | --- | --- | --- |
-+| part-dev | id-mw2x67v5-5ko0y2 | id-mw2x67rt-zknn9f | id-mw2x67v9-51vw6e | ae945edc-7420-4e63-9b16-8ff060e2899d | 1 |
-+| part-lead | id-mw2x6cks-z430od | id-mw2x67rt-zknn9f | id-mw2x6clw-3nblqq | defe70fd-e65a-4c79-aac1-ed9fd6a9d73a | 2 |
-+| part-dev | id-mw2x6gtz-8ysh3f | id-mw2x67rt-zknn9f | id-mw2x6gu3-rgqfdg | 91a3e7d5-ccd9-4c75-a875-010bd98dca6c | 4 |
-+| part-lead | id-mw2x6kp8-h0nl6p | id-mw2x67rt-zknn9f | id-mw2x6kpl-j2jzau | 965cf389-5a37-4c2c-a5cd-b2a2ab6f9d61 | 5 |
-+| part-dev | id-mw2x6uyk-5ps2sw | id-mw2x6q95-3y4xae | id-mw2x6uyn-pzis2u | 6e09c173-38d0-4959-83ce-59db92866ef4 | 7 |
-+| part-lead | id-mw2x71d3-0y8al2 | id-mw2x6q95-3y4xae | id-mw2x71d7-6mdyzs | ee0400dd-6c27-47f9-bdee-0dcbaeb7fba3 | 8 |
-+
-+### Current retained artifact integrity
-+
-+Manual screenshots were captured through computer use and visually inspected. A temporary mock-backed profile was used; no user data or repository plan write path was used. Light: send, dock, close and reopen while preserving the conversation. Dark: float, pin a decision, send `@qa`, close/reopen and observe QA's reply and 50 total tokens. These checks do not claim the remaining manual recovery/Preview/Apply journey.
-+
-+| Artifact | Bytes | SHA256 |
-+| --- | --- | --- |
-+| `.praxis/session-artifacts/fx184-manual-light.png` | 188832 | `e9bcc5ba3d9c6b51712db7d2ebacd7cab3aaf223b128dd773b46fc11b7f72ad4` |
-+| `.praxis/session-artifacts/fx184-manual-dark.png` | 181744 | `718f886ed352cc90e502f213d1227b463c051e2b80ced8c3b6fe9483e17fffea` |
-+| `.praxis/session-artifacts/durable-team-chat-live-cli.json` | 8542 | `80e9360ca3f5fb6d93700c0edd5f2d980cda0d44006aaa13ffda90db8917f8b4` |
-+
-+### Regression discrimination
-+
-+A temporary in-memory module harness restored only the old `options.accountReference` fallback in the compiled adapter, without changing the worktree or a running app. `node --test /tmp/fx184-regression-before.cjs` failed exactly the new identity assertion (4 passed, 1 failed). The unchanged committed adapter suite then passed all 5 tests. The prior identity hash stayed equal across turns; the repaired configuration differs across turns while remaining stable during dispatch revalidation.
-+
-+The final theme gate (`npm run test:desktop:themes`) exited 0: **47 passed**, no skips, no snapshot updates. The initial 45-pass/2-failure run remains above.
-+
-+### Prior full-suite failures rechecked
-+
-+The current full functional run passed the previously recorded assistant drag/resize, agent-hub theme synchronization, ordinary note actions, both app/folder scheduled-run settlement cases and revealed shelf spine glow. No product assertions were weakened for these cases. A separate keyboard-cancellation check failed to remove its queued status after Enter. Its five-second mock also allowed provider completion to race keyboard controls; the exact broad-run focus/timing cause was not proven. Revision `6d627c90` replaces that wall-clock race with a provider-completion barrier released in `finally`; the targeted single-worker test passed (3.9 s). The initial broad failure is retained and the final focused group is recorded separately below.
-+
-+### Final functional disposition
-+
-+`npm run test:desktop` exited 1 after 20.7 minutes: **747 passed, 2 failed, 14 skipped** (763 cases). It began on `b291c054`, before the cancellation fixture correction in `6d627c90`.
-+
-+1. Keyboard cancellation: after pressing Enter on Cancel queued turn, the queued status still had count 1 (expected 0, 5-second timeout). The completion barrier in `6d627c90` removes the mock completion race; the corrected targeted case passed, and the full prescribed focused group subsequently passed **45/45** (exit 0, 2.9 minutes). Exact original focus/timing cause remains unproven. Concurrent test runners also removed its trace output: the broad report records `ENOENT` opening `.playwright-artifacts-1/...zip`. No retained trace is claimed for that case.
-+2. What Changed: longest main-thread task was **107 ms**, exceeding the unchanged **100 ms** limit while rendering/filtering 600 changes. The unchanged case passed alone with one worker (exit 0, 6.9 seconds). No performance threshold or product behavior was changed. This is not a clean full-suite pass and remains explicit release-gate evidence.
-+
-+The final focused command was `npm run test:e2e --workspace=@praxis/desktop-main -- assistant.spec.ts quickSession.spec.ts durableTeamChat.spec.ts standaloneConversations.spec.ts --project=functional`: **45 passed**, 0 failed, 0 skipped, on `6d627c90`.
-+
-+Release acceptance remains open: supply `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` (and optionally `PRAXIS_LIVE_API_MODEL`) through the supported environment and rerun the live check; provide authoritative CLI account/resume capability before counting native reuse; complete the remaining manual journey; resolve the unconditional permission-matrix state discrepancy and obtain a clean full functional run. None of those gaps is represented by mock evidence or catalog validation.
-+
-+## WF-0C7166C7 current execution
-+
-+Execution source: `47c0f4fd`; final durable keyboard harness: `64e542df`. Full suite not completed; live API skipped by user instruction. Logs below are current, separate from inherited evidence above. Raw temp logs may expire; retained hashes and tails identify their results.
-+
-+### core-permitted
-+
-+Source: `/tmp/fx184-implement-core-permitted.log`. SHA256: `16e4d0d65496edd6adf1299fac068f221859b1ec9a8652ae7bd8c4668ffdee3d`.
-+
-+```text
-+✔ isPortableFolderPath reports whether a stored path will travel (0.052333ms)
-+ℹ tests 1942
-+ℹ suites 9
-+ℹ pass 1940
-+ℹ fail 0
-+ℹ cancelled 0
-+ℹ skipped 2
-+ℹ todo 0
-+ℹ duration_ms 11681.0665
-+```
-+
-+### main-final
-+
-+Source: `/tmp/fx184-implement-main-final.log`. SHA256: `745182aa1ff83cf98172ea916e12c10a66db9c3dfc2ac0b9e4592b233093c581`.
-+
-+```text
-+✔ saveWindowStateSync: persists bounds from BrowserWindow mock (14.740459ms)
-+ℹ tests 141
-+ℹ suites 0
-+ℹ pass 141
-+ℹ fail 0
-+ℹ cancelled 0
-+ℹ skipped 0
-+ℹ todo 0
-+ℹ duration_ms 8188.832667
-+```
-+
-+### renderer
-+
-+Source: `/tmp/fx184-implement-renderer.log`. SHA256: `8b2ea47b2ccb2ea044673edf785ea455227209dfac1a91896c68444d24a6c3c1`.
-+
-+```text
-+✔ keys, tokens, money and durations read short (13.077666ms)
-+ℹ tests 34
-+ℹ suites 0
-+ℹ pass 34
-+ℹ fail 0
-+ℹ cancelled 0
-+ℹ skipped 0
-+ℹ todo 0
-+ℹ duration_ms 6306.016459
-+```
-+
-+### types-final
-+
-+Source: `/tmp/fx184-implement-types-final.log`. SHA256: `51d94c0337861376a40c3eca26d153776547311e23045a250b47457242cc2a2d`.
-+
-+```text
-+
-+
-+> @praxis/mobile-protocol@0.0.0 check-types
-+> tsc --noEmit -p .
-+
-+
-+> @praxis/mobile-relay@0.0.0 check-types
-+> tsc --noEmit -p .
-+
-+```
-+
-+### renderer-build
-+
-+Source: `/tmp/fx184-implement-renderer-build.log`. SHA256: `60abf557a36285f42d1d66d22723a2416658bae1c0a5a47a6560f77ebb6d9351`.
-+
-+```text
-+
-+> desktop:copy-renderer
-+> npm run copy-renderer --workspace=@praxis/desktop-main
-+
-+
-+> @praxis/desktop-main@0.6.1 copy-renderer
-+> node scripts/copy-renderer.cjs
-+
-+copied /Users/daveacres/dev/tools/praxis/.worktrees/WF-C10627E5-governed-delivery-fx-be-184-durable-team-chat-re/apps/praxis-desktop/renderer/dist -> /Users/daveacres/dev/tools/praxis/.worktrees/WF-C10627E5-governed-delivery-fx-be-184-durable-team-chat-re/apps/praxis-desktop/main/renderer
-+```
-+
-+### desktop-build
-+
-+Source: `/tmp/fx184-implement-desktop-build.log`. SHA256: `5abe6a66c2837265a4c94e9cdcd4e233744bedc3f05912426fa48f914300b58c`.
-+
-+```text
-+
-+
-+> @praxis/desktop-main@0.6.1 compile
-+> npm run check-ipc-senders && tsc -p .
-+
-+
-+> @praxis/desktop-main@0.6.1 check-ipc-senders
-+> node scripts/checkTrustedIpc.cjs
-+
-+```
-+
-+### focused-final
-+
-+Source: `/tmp/fx184-implement-focused-final.log`. SHA256: `0f04cdea1271ca598995ff4657201bff44c5dca876517f826e8d851841173451`.
-+
-+```text
-+  1 failed
-+  45 passed (2.8m)
-+```
-+
-+### durable-final
-+
-+Source: `/tmp/fx184-implement-durable-final.log`. SHA256: `1c2690c267df3f63c763ecbbf488bf246b8a18e4c3948e06712eb7e8c05a27dc`.
-+
-+```text
-+[6/13] [functional] › e2e/durableTeamChat.spec.ts:206:5 › an unconfirmed submission retries its original command after both acknowledgements are lost
-+[7/13] [functional] › e2e/durableTeamChat.spec.ts:259:5 › an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed
-+[8/13] [functional] › e2e/durableTeamChat.spec.ts:295:5 › a queued turn resumes after restart before any chat is opened
-+[9/13] [functional] › e2e/durableTeamChat.spec.ts:326:5 › a storage write failure is shown and the accepted transcript remains
-+[10/13] [functional] › e2e/durableTeamChat.spec.ts:395:5 › re-opening a team chat whose first load failed reads its transcript again
-+[11/13] [functional] › e2e/durableTeamChat.spec.ts:430:5 › a tool member's pending permission is attached to its attempt and a restart never reuses the approval
-+[12/13] [functional] › e2e/durableTeamChat.spec.ts:466:5 › a CLI member without resume capability reconstructs context on its second turn
-+[13/13] [functional] › e2e/durableTeamChat.spec.ts:494:5 › queued page context and staged image reach the provider after navigation and composer replacement
-+  13 passed (1.3m)
-+```
-+
-+### catalog-final
-+
-+Source: `/tmp/fx184-implement-catalog-final.log`. SHA256: `5440996828891ec7e2bca126e90af10c82bed736638ec2c0fa82748ba12f5a27`.
-+
-+```text
-+Wrote 801 Praxis Test contracts to docs/praxis-tests (801 existing contracts carried over).
-+
-+> test:praxis-contracts
-+> node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs
-+
-+Praxis Tests: 801 Playwright tests catalogued and linked.
-+```
-+
-+Visually inspected light-theme artifact: `.praxis/session-artifacts/WF-0C7166C7-two-windows.png`, 468697 bytes, SHA256 `9e17079ad3bc12f772f0dc2108af90c8143ce0ac3a4062518759e3a06a80a83e`. Automated evidence only; manual dark/light checklist remains incomplete.
-+
-+## WF-0C7166C7 resumed execution on 2026-11-05
-+
-+Recovery base `67968cf0`; native-delivery assertions `fafbacc8`; timestamped live retention `1018ed98`; desktop harness repairs `4d3d0fbf`. Production sources are unchanged. The first full run started on the recovery base; the second uses both desktop harness repairs. Current core assertions ran in `core-serial`; live checks use the timestamped source.
-+
-+Raw logs and traces are retained in `/tmp/fx184-recovery-current` for this handoff and may expire. Hashes and excerpts below preserve provenance; no missing or skipped result is a pass. Useful screenshots and the CLI receipt remain under `.praxis/session-artifacts/`.
-+
-+### Exact command results
-+
-+```json
-+[
-+  {
-+    "label": "core",
-+    "command": "npm run test:core",
-+    "exitCode": 0,
-+    "seconds": 11.5
-+  },
-+  {
-+    "label": "types",
-+    "command": "npm run check-types",
-+    "exitCode": 0,
-+    "seconds": 3.0
-+  },
-+  {
-+    "label": "renderer-build",
-+    "command": "npm run build:renderer",
-+    "exitCode": 0,
-+    "seconds": 2.2
-+  },
-+  {
-+    "label": "copy",
-+    "command": "npm run desktop:copy-renderer",
-+    "exitCode": 0,
-+    "seconds": 0.5
-+  },
-+  {
-+    "label": "desktop-build",
-+    "command": "npm run build:desktop",
-+    "exitCode": 0,
-+    "seconds": 1.0
-+  },
-+  {
-+    "label": "main",
-+    "command": "npm run test:desktop:git",
-+    "exitCode": 0,
-+    "seconds": 6.3
-+  },
-+  {
-+    "label": "renderer",
-+    "command": "npm run test:renderer",
-+    "exitCode": 0,
-+    "seconds": 6.7
-+  }
-+]
-+```
-+
-+```json
-+[
-+  {
-+    "label": "core-serial",
-+    "command": "npm run test:core",
-+    "exitCode": 0,
-+    "seconds": 11.1
-+  },
-+  {
-+    "label": "types-complete",
-+    "command": "npm run check-types",
-+    "exitCode": 0,
-+    "seconds": 3.7
-+  },
-+  {
-+    "label": "failure-reruns",
-+    "command": "npm run test:e2e --workspace=@praxis/desktop-main -- e2e/easymode.spec.ts e2e/sessionShelfNew.spec.ts --project=functional --grep 'selecting a session opens details|a session started from the shelf' --workers=1 --repeat-each=3 --output=/tmp/fx184-recovery-current/failure-reruns",
-+    "exitCode": 0,
-+    "seconds": 26.4
-+  },
-+  {
-+    "label": "focused",
-+    "command": "npm run test:e2e --workspace=@praxis/desktop-main -- e2e/assistant.spec.ts e2e/quickSession.spec.ts e2e/durableTeamChat.spec.ts e2e/standaloneConversations.spec.ts --project=functional --output=/tmp/fx184-recovery-current/focused",
-+    "exitCode": 0,
-+    "seconds": 151.2
-+  },
-+  {
-+    "label": "themes",
-+    "command": "npm run test:desktop:themes -- --output=/tmp/fx184-recovery-current/themes",
-+    "exitCode": 0,
-+    "seconds": 118.0
-+  },
-+  {
-+    "label": "live",
-+    "command": "cd apps/praxis-desktop/main && PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/durableTeamChat.live.spec.ts --workers=1 --output=/tmp/fx184-recovery-current/live",
-+    "exitCode": 0,
-+    "seconds": 32.9
-+  }
-+]
-+```
-+
-+Additional commands: `npm run build:core` exited 0; `npm run test:desktop` ran twice (results below); `node --test packages/core/out/ai/assistant/teamChatCoordinator.test.js` exited 0 (23 passed); `node --test packages/core/out/deployments/directProcessExecutor.test.js` exited 0 (11 passed). Workflow reruns used `npm run test:e2e --workspace=@praxis/desktop-main -- e2e/workflowRun.spec.ts e2e/workflowRunWorkspace.spec.ts --project=functional --grep 'a run started against a ticket writes its outcome|deleting a live run cancels' --workers=1 --repeat-each=3 --output=/tmp/fx184-recovery-current/workflow-reruns` (exit 0, 6 passed). Final catalog commands: `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write`, then `npm run test:praxis-contracts` (results below).
-+
-+### Log fingerprints
-+
-+| Log | Bytes | SHA256 |
-+| --- | ---: | --- |
-+| `build-core.log` | 100 | `cd56a916bef6bcfa46056cd7eb7e3d7db2da5e01bad5aa8d46e5f97509b682c4` |
-+| `core-sandbox.log` | 201633 | `9c55dfda1014fe18d4f09815b27696763bbd400fc41e9ada47455304c24a8902` |
-+| `core.log` | 178494 | `c15325af0ba158735c263f074125c9394a096a3165f4b5229db7c121690ec55d` |
-+| `types.log` | 611 | `51d94c0337861376a40c3eca26d153776547311e23045a250b47457242cc2a2d` |
-+| `renderer-build.log` | 1301 | `514b890d8297faeca6e8884a6d660a623bd06f824aa598e387c13577b0d2ccdc` |
-+| `copy.log` | 451 | `3ef90c5599c6bd417b7c1ab98c228943152f19e4322ae5f28e2afeedc07eaa16` |
-+| `desktop-build.log` | 232 | `5abe6a66c2837265a4c94e9cdcd4e233744bedc3f05912426fa48f914300b58c` |
-+| `main.log` | 13647 | `48c21fe5d7df34d343ed09208f59634f1bbcf42eeec51dc6f2b569d964b393a8` |
-+| `renderer.log` | 5020 | `9db38086ea0449f99e1dccdbb88d89b772325495a33c25d536cce28dd91e1500` |
-+| `core-final.log` | 186280 | `2062cd26c0f7016510a3dcfacab4a262297a113d4cc21d1e0cb6aaabe90ee890` |
-+| `coordinator.log` | 2583 | `7f41ad4a219bed5c93eb4c9f2a809ab64b97f6c1ebe680363cfcc6ed131526fd` |
-+| `direct-process-isolated.log` | 1121 | `c7206144a7bce112b2d50a94b31ebecb3c12e8deae056a1fba7afcc5087ec6ea` |
-+| `core-serial.log` | 178445 | `37e4051bb8c529c1273b76b43cb5390c259cb11b5a5ff8f4fe32dfdfe90b4738` |
-+| `types-complete.log` | 611 | `51d94c0337861376a40c3eca26d153776547311e23045a250b47457242cc2a2d` |
-+| `functional.log` | 127175 | `32aaa4d053b8d341386d5abe656469e3929ebf3648fef88dbe6a7160f2105cbf` |
-+| `failure-reruns.log` | 2216 | `1c16aeb295128626800bbd24a7a69030d6973d9a23b5d41c7a0ee58bc0788a18` |
-+| `workflow-reruns.log` | 2272 | `e80cf5be641c083b4fe15214a254ab1353a6e11f1d91a5fd6fe17b9088c97d97` |
-+| `focused.log` | 8278 | `529a81cc42e293e7fcdea705929362a7b1dbac7b5020ec259e976ddece6c26c8` |
-+| `themes.log` | 7994 | `3c01fbad1aa034200ce813565f7dfce34b7d9fdee26719e13ee38acdaef81d9e` |
-+| `live.log` | 509 | `4c3e73e6d9d8e27e5c00ad1ec850d5628d29e32818ba189979edbad9e308dd2b` |
-+| `functional-final.log` | 122161 | `71336c48b45f4c51fa70254d41553ae548a77df9bb1f0395b80046014cc6803b` |
-+| `catalog-write-final.log` | 92 | `caf27158ba9f00cb1a84e9b145b4a44b73a246c7b7b4a59da9adbe25b5446d2f` |
-+| `catalog-final.log` | 148 | `52ea9bd04a395fafc5cac84e457041c8887c540955082c17ea10127fc8720a68` |
-+
-+### Retained result excerpts
-+
-+**core-serial**
-+
-+```text
-+ℹ tests 1942
-+ℹ suites 9
-+ℹ pass 1940
-+ℹ fail 0
-+ℹ cancelled 0
-+ℹ skipped 2
-+ℹ todo 0
-+ℹ duration_ms 9963.329375
-+```
-+
-+**main**
-+
-+```text
-+ℹ team-chats.json 4335274 bytes; large-chat commits 48, 93, 136, 180, 223 ms (queued behind concurrent writes)
-+ℹ tests 141
-+ℹ suites 0
-+ℹ pass 141
-+ℹ fail 0
-+ℹ cancelled 0
-+ℹ skipped 0
-+ℹ todo 0
-+ℹ duration_ms 4977.069542
-+```
-+
-+**renderer**
-+
-+```text
-+ℹ tests 34
-+ℹ suites 0
-+ℹ pass 34
-+ℹ fail 0
-+ℹ cancelled 0
-+ℹ skipped 0
-+ℹ todo 0
-+ℹ duration_ms 6195.444584
-+```
-+
-+**core-final**
-+
-+```text
-+ℹ tests 1942
-+ℹ suites 9
-+ℹ pass 1939
-+ℹ fail 1
-+ℹ cancelled 0
-+ℹ skipped 2
-+ℹ todo 0
-+ℹ duration_ms 17399.073917
-+```
-+
-+**functional**
-+
-+```text
-+  ✘  355 [functional] › e2e/easymode.spec.ts:980:5 › in EasyMode selecting a session opens details in the center (43.7s)
-+  ✘  561 [functional] › e2e/sessionShelfNew.spec.ts:62:5 › a session started from the shelf stays in the shelf as its own preview card (9.4s)
-+  ✘  715 [functional] › e2e/workflowRunWorkspace.spec.ts:292:5 › deleting a live run cancels it first, then removes it (35.1s)
-+  ✘  735 [functional] › e2e/workflowRun.spec.ts:709:5 › a run started against a ticket writes its outcome back as a comment once it settles (16.1s)
-+    Error: expect(locator).toHaveText(expected) failed
-+  4 failed
-+  14 skipped
-+  746 passed (19.0m)
-+npm error command failed
-+```
-+
-+**failure-reruns**
-+
-+```text
-+  ✓  4 [functional] › e2e/sessionShelfNew.spec.ts:62:5 › a session started from the shelf stays in the shelf as its own preview card (4.3s)
-+(node:65520) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-+(Use `node --trace-warnings ...` to show where the warning was created)
-+  ✓  5 [functional] › e2e/easymode.spec.ts:980:5 › in EasyMode selecting a session opens details in the center (3.4s)
-+  ✓  6 [functional] › e2e/sessionShelfNew.spec.ts:62:5 › a session started from the shelf stays in the shelf as its own preview card (4.3s)
-+
-+  6 passed (24.4s)
-+```
-+
-+**workflow-reruns**
-+
-+```text
-+(node:95087) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-+(Use `node --trace-warnings ...` to show where the warning was created)
-+
-+  ✓  5 [functional] › e2e/workflowRun.spec.ts:709:5 › a run started against a ticket writes its outcome back as a comment once it settles (5.6s)
-+  ✓  6 [functional] › e2e/workflowRunWorkspace.spec.ts:292:5 › deleting a live run cancels it first, then removes it (5.1s)
-+
-+  6 passed (33.0s)
-+```
-+
-+**focused**
-+
-+```text
-+  ✓  42 [functional] › e2e/assistant.spec.ts:764:5 › the assistant's controls show a focus ring and carry tooltips (5.1s)
-+  ✓  43 [functional] › e2e/assistant.spec.ts:828:5 › the assistant stays readable on every theme and surface pack (6.3s)
-+  ✓  44 [functional] › e2e/assistant.spec.ts:919:5 › the composer grows with its text up to the shared cap, then scrolls (4.6s)
-+  ✓  45 [functional] › e2e/assistant.spec.ts:940:5 › durable no-tools API turns retain bounded history and usage without allocating agent sessions (5.5s)
-+  ✓  46 [functional] › e2e/assistant.spec.ts:975:5 › durable tool members reuse two runtime sessions for four attempts and isolate another chat (5.7s)
-+
-+  46 passed (2.5m)
-+```
-+
-+**themes**
-+
-+```text
-+  ✓  43 [themes] › e2e/surfacePacks.spec.ts:645:5 › Noir is offered under a dark theme and hidden under a light one (3.3s)
-+  ✓  44 [themes] › e2e/surfacePacks.spec.ts:662:5 › a custom surface pack can be created, applied, and survives a reload (3.3s)
-+  ✓  45 [themes] › e2e/surfacePacks.spec.ts:681:5 › a user can swap the material by picking a pattern — no code, no new CSS (3.3s)
-+  ✓  46 [themes] › e2e/surfacePacks.spec.ts:706:5 › the Window-blur toggle is present on a vibrancy-capable OS and persists (4.6s)
-+  ✓  47 [themes] › e2e/surfacePacks.spec.ts:721:5 › the Texture toggle gates the grain layer without changing the pack (3.4s)
-+
-+  47 passed (1.9m)
-+```
-+
-+**live**
-+
-+```text
-+(node:90725) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
-+(Use `node --trace-warnings ...` to show where the warning was created)
-+  ✓  1 [live-agent] › e2e/durableTeamChat.live.spec.ts:126:5 › real CLI member continues a durable team chat across an app restart (31.6s)
-+  -  2 [live-agent] › e2e/durableTeamChat.live.spec.ts:139:5 › real API member continues a durable team chat across an app restart
-+
-+  1 skipped
-+  1 passed (31.9s)
-+```
-+
-+**functional-final**
-+
-+```text
-+  ✘  560 [functional] › e2e/sessionShelf.spec.ts:144:5 › the shelf card sends a quick reply into the session (9.6s)
-+  ✘  571 [functional] › e2e/sessionShelf.spec.ts:262:5 › only the revealed spine glows when moving across all five sessions (11.2s)
-+    Error: expect(locator).toBeVisible() failed
-+    Error: expect(locator).toHaveCount(expected) failed
-+  2 failed
-+  14 skipped
-+  748 passed (18.1m)
-+npm error command failed
-+```
-+
-+**catalog-final**
-+
-+```text
-+
-+> test:praxis-contracts
-+> node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs
-+
-+Praxis Tests: 801 Playwright tests catalogued and linked.
-+```
-+
-+Initial sandbox core execution failed with `listen EPERM: operation not permitted 127.0.0.1`; the unchanged permitted run passed. A later core run concurrent with Electron had one failure: the 200 ms direct-process timeout fixture captured empty output rather than `partial-output`. Its unchanged isolated file passed 11/11 and the final serial core suite passed 1940 with 2 documented skips. No timeout assertion or production process behavior was changed.
-+
-+First full-run failures: EasyMode follow-position assertion (40 s poll after clicking Quote on the opening historical message); shelf preview disappeared after creating its session (creation remained visible in the sidebar); workflow ticket-comment write-back returned zero comments for 10 s; run-delete click was intercepted by the row time label while hover actions hid. EasyMode now checks follow position before the historical navigation, with the exact same geometry assertion. The delete test holds the existing focus-within affordance before its real click. The shelf and ticket-comment tests passed unchanged three times serially; the broad-run cause of those two transient failures remains unproved. These reruns do not erase the initial full-run failures. Initial failure traces remain in `apps/praxis-desktop/main/test-results` until the second full run replaces them; the EasyMode and shelf traces were separately copied to the temporary evidence directory.
-+
-+### Real CLI receipt
-+
-+Receipt: `.praxis/session-artifacts/durable-team-chat-live-cli-2026-11-05T09-54-07-840Z.json`; 23334 bytes; SHA256 `fec79f6d970a121b6fa6b2d4430452b433e35108d7232cbe8fc917bce1b1ee95`. Six completed attempts, two members, three turns, restart epoch change and both final replies `heron-hm36e`. `nativeReuseProved` is **false**; each member reconstructed context. API check is **skipped**, because `PRAXIS_LIVE_API_PROVIDER` / `PRAXIS_LIVE_API_KEY` are unset. No credential was requested or replaced with a mock.
-+
-+| Participant | Attempt | Binding | Provider session | Epoch | Context digest |
-+| --- | --- | --- | --- | --- | --- |
-+| `part-dev` | `id-mw3dblcy-8z0yv1` | `id-mw3dblcz-mt7b9w` | `e348a7d1-8391-419e-ba02-74424f529447` | `id-mw3dblbx-u7h23u` | `f3ccea1ffc07b98fca64378d484c700aeed957411508eb82be6a42c453707576` |
-+| `part-lead` | `id-mw3dbnvj-oa2led` | `id-mw3dbnvj-namjy5` | `1ebf76f6-422f-4fe3-9a07-ad2ea2d29063` | `id-mw3dblbx-u7h23u` | `b4d16c757ce3c4c556c8deda09259004cb86715b0a27f44db7068285472b96ff` |
-+| `part-dev` | `id-mw3dbwad-9muyph` | `id-mw3dbwae-du4g0q` | `1ec07cab-5dac-42a9-9bcb-dc59ea6ff87e` | `id-mw3dblbx-u7h23u` | `be29c2c488e825c607b3df76b2202ce333806e0853133c48df179003a7826866` |
-+| `part-lead` | `id-mw3dbz05-9q3kmn` | `id-mw3dbz06-v1zzkl` | `8effb35b-9431-4a63-b11c-0704c353848b` | `id-mw3dblbx-u7h23u` | `e2a42d803c250b97b3ec60caac9f883dcf34be7876a8e11545057dee8cf39260` |
-+| `part-dev` | `id-mw3dc496-0x21mm` | `id-mw3dc498-sdxdvq` | `18623c45-f676-43e4-9536-af67c22b0140` | `id-mw3dc2qb-ep6doz` | `f3ec3caf0dacda84c222bd0163f7063a946698af67bd3f6e6fb5db635fbc2b3d` |
-+| `part-lead` | `id-mw3dc5rg-bs6ig1` | `id-mw3dc5ri-f2hw2y` | `9d134bf4-3791-4d9f-8277-791983f2198a` | `id-mw3dc2qb-ep6doz` | `09155eac1ce7264f97ad10ceb2b0b1f0d7eb5d30440d4a7ea988fd0d53a4244b` |
-+
-+Per-member capability/reuse classifications:
-+
-+```json
-+[
-+  {
-+    "participantId": "part-dev",
-+    "reused": false,
-+    "nativeDelivery": false,
-+    "nativeReuseProved": false,
-+    "firstBindingId": "id-mw3dblcz-mt7b9w",
-+    "secondBindingId": "id-mw3dbwae-du4g0q",
-+    "firstSessionId": "e348a7d1-8391-419e-ba02-74424f529447",
-+    "secondSessionId": "1ec07cab-5dac-42a9-9bcb-dc59ea6ff87e",
-+    "proof": "context-reconstructed-native-reuse-unproved"
-+  },
-+  {
-+    "participantId": "part-lead",
-+    "reused": false,
-+    "nativeDelivery": false,
-+    "nativeReuseProved": false,
-+    "firstBindingId": "id-mw3dbnvj-namjy5",
-+    "secondBindingId": "id-mw3dbz06-v1zzkl",
-+    "firstSessionId": "1ebf76f6-422f-4fe3-9a07-ad2ea2d29063",
-+    "secondSessionId": "8effb35b-9431-4a63-b11c-0704c353848b",
-+    "proof": "context-reconstructed-native-reuse-unproved"
-+  }
-+]
-+```
-+
-+### Manual and visual evidence
-+
-+Current isolated scripted-provider profile: light send, pin decision, dock, close/reopen; Simple Dark float, `@qa` continuation, close/reopen. Native accessibility state showed both messages, Dev/QA attribution and the retained pin. All three images below were opened and inspected. Manual second-window interaction, process restart during execution/permission handling, Stop/retry/unknown-outcome/context-required controls, Preview/Apply and reported usage attribution remain unexecuted manually in this pass; automated coverage is separate. The fake CLI reports no token count, which the UI correctly renders as a dash. No snapshots were updated.
-+
-+- `.praxis/session-artifacts/WF-0C7166C7-recovery-two-windows.png`: 469038 bytes, SHA256 `759e812b869f8ab9bc6f9dc11cc089ada4bc24e1c539bb460214f6a814c23925`.
-+- `.praxis/session-artifacts/WF-0C7166C7-recovery-manual-light.png`: 193553 bytes, SHA256 `2e55607e84543ce6222a0cd745ae9e0924e41714a2ddbfefdf675d5420087d17`.
-+- `.praxis/session-artifacts/WF-0C7166C7-recovery-manual-dark.png`: 190806 bytes, SHA256 `0a0fb1520dc44e980f812c6584c3efd15f8a3fc46640aff74f0de61390464ac7`.
-+
-+The manual helper and profile were temporary. SIGINT also terminated Electron before the cleanup evaluation finished; the helper reported that the process exited and the profile was removed. No user profile or repository plans were used. Screenshot/receipt files are session-retained artifacts, not generated product sources.
-diff --git a/docs/praxis-tests/fx-be-184-verification-report.md b/docs/praxis-tests/fx-be-184-verification-report.md
-index cf79cf0d..392418ae 100644
---- a/docs/praxis-tests/fx-be-184-verification-report.md
-+++ b/docs/praxis-tests/fx-be-184-verification-report.md
-@@ -2,0 +3,69 @@
-+
-+## WF-0C7166C7 resumed implementation
-+
-+Recovery base: `67968cf0`; test repair: `fafbacc8`. The supplied failure is a stage-session abort, without a structured product finding. The prior report also records interrupted full-suite invocations (exit 130) and a later direction to leave full/live API checks unrun. Those are historical execution limits, not a product failure diagnosis or a passing release gate. This resumed pass executes the currently requested checks and retains earlier results below.
-+
-+Targeted repair: native session reuse in the live evidence now requires both a matching provider session and durable adapter-native delivery evidence. Matching IDs alone no longer establish native reuse. Both members must recall the pinned decision after restart, and session isolation is checked on all three turns. The existing core compatibility assertion now proves persisted member-session reuse, native delivery receipts and isolation across conversations, preserving unique usage attribution. Production code and safety policies are unchanged.
-+
-+### Current results and disposition
-+
-+Build core, check types, build renderer, copy renderer, build desktop, main units (**141 passed**) and renderer units (**34 passed**) exited 0. The final serial core run passed **1,940**, with **2 skipped**. Its 23-case coordinator file also passed separately. An initial sandbox run failed 27 tests with loopback `EPERM`; an unchanged permitted run passed. A later core run concurrent with Electron had one 200 ms process-start/output timing failure; the unchanged isolated file passed 11/11 and the final serial full core suite passed. No timeout was relaxed.
-+
-+The prescribed focused assistant/quick-session/durable/standalone command passed **46/46**. Theme and theme-regression projects passed **47/47**, without snapshot updates. The opt-in provider command passed the real CLI check and **skipped** the API check because `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` are unset. The retained timestamped CLI receipt records six distinct completed attempts, both members recalling the pinned codename after restart, isolated sessions and changed recovery epochs. It explicitly records **nativeReuseProved: false**; this is real reconstruction/continuation proof, not AC2 native-reuse proof.
-+
-+Initial full functional command: exit 1, **746 passed, 4 failed, 14 skipped** (19.0 minutes). Every failure was investigated:
-+
-+| Failure | Targeted disposition | Subsequent proof |
-+| --- | --- | --- |
-+| `easymode.spec.ts` — in EasyMode selecting a session opens details in the center | Check the exact unchanged follow-position assertion before clicking Quote on the opening message; that navigation intentionally scrolls into history and suspends following. | Three serial repetitions passed. |
-+| `sessionShelfNew.spec.ts` — a session started from the shelf stays in the shelf as its own preview card | The snapshot retained the newly created session but its transient preview closed. Broad-run cause is unproved; no product assertion was changed. | Unchanged test passed three serial repetitions. |
-+| `workflowRun.spec.ts` — a run started against a ticket writes its outcome back as a comment once it settles | The asynchronous comment was absent during the 10 s poll. Broad-run cause is unproved; no write-back behavior, timeout or assertion was changed. | Unchanged test passed three serial repetitions. |
-+| `workflowRunWorkspace.spec.ts` — deleting a live run cancels it first, then removes it | The row time label intercepted the click after hover actions hid. Focus the actual delete button to retain the existing focus-within affordance, then perform the same real click and all cancellation/deletion assertions. | Repaired test passed three serial repetitions. |
-+
-+Harness fixes are committed in `4d3d0fbf`. Serial repetitions supplement the initial result; they do not turn the first full run green. The second full result and supported single-worker rerun are recorded below.
-+
-+Second full functional command: exit 1, **748 passed, 2 failed, 14 skipped** (18.1 minutes). All four first-run failures passed, but two different pointer-dependent shelf checks failed: quick-reply preview closed before the confirmation assertion, and spine-hover preview closed before its expanded-state assertion. Their assertions remain unchanged. `PRAXIS_E2E_WORKERS=1 npm run test:desktop` is currently running to eliminate competing test windows on the shared native pointer; no final result is claimed yet.
-+
-+The existing AC1–AC12 named-assertion matrix remains the source coverage map. Current core/repository/subscription assertions were rerun in the full owning unit suites; current assistant, quick-session, durable and standalone assertions passed the 46-test focused command. AC2 additionally has the strengthened native-delivery contract at `teamChatCoordinator.test.ts:445` and the six-attempt real CLI receipt; real authenticated native reuse remains unresolved. AC3/AC8/AC11 gain the inspected manual artifacts below. All current log fingerprints, exact commands, failure excerpts and attempt identifiers are retained in [the resumed execution evidence](fx-be-184-retained-evidence.md#wf-0c7166c7-resumed-execution-on-2026-11-05).
-+
-+Manual verification used the built app and an isolated temporary scripted-provider profile: light send, pin decision, dock, close/reopen; Simple Dark float, `@qa` continuation, close/reopen. Both replies and the pinned state survived. Captures: `.praxis/session-artifacts/WF-0C7166C7-recovery-manual-light.png` and `WF-0C7166C7-recovery-manual-dark.png`. Current automated two-window proof is retained separately as `WF-0C7166C7-recovery-two-windows.png`. All were visually inspected. The manual profile was on All projects, so its screenshot is not evidence for a project-specific conversation row; the automated project screenshot supplies that proof. The fake CLI does not report tokens; reported usage attribution remains covered by automated tests, not this manual capture.
-+
-+Release acceptance remains open for real API proof, authoritative authenticated CLI native reuse, the pending-approval matrix discrepancy and the rest of the manual recovery/control journey. To close API proof, run the documented opt-in command with the supported provider/key environment and capacity. Native reuse needs an authoritative runtime account identity and resume evidence; a renderer-supplied label cannot substitute for it. Pending approval remains conservatively `outcome_unknown` whenever prior external execution cannot be excluded; reconciliation and duplicate-risk acknowledgement are preserved. Manual second-window operation, process restart during execution/permission handling, Stop/retry/context-required/unknown-outcome controls, Preview/Apply and usage attribution were not all exercised by hand in this pass. These are explicit remaining acceptance gaps, not passes or unnamed ticket deferrals.
-+
-+The classic project-tree sidebar is absent (`App.tsx` renders `EasyModeSidebar`); the historical dual-sidebar requirement remains an applicability discrepancy. Fixtures still use temporary profiles, repositories, coordination and attachment roots. Existing corruption, pre-rename preservation, uncertain-commit fencing, immutable attempts, migration backup and rollback-limit assertions remain intact and passed their owning suites. No product runtime code, dependency, workflow definition, ticket status or safety gate was changed.
-+
-+## WF-0C7166C7 prior implementation evidence
-+
-+Implementation commits: `47c0f4fd` (queue/image wire assertion, production compatibility test and live evidence classification), `64e542df` (native window activation before keyboard controls). This section describes current execution; all older sections below are historical evidence and do not establish current release acceptance.
-+
-+User direction: do not execute the full e2e suite or live API check. **Full suite: not run to completion; no passing result.** Earlier invocations were interrupted (exit 130: 14 passed / 4 interrupted / 746 unrun, then 37 passed / 4 interrupted / 723 unrun). Neither was restarted after the final instruction. **Live API: skipped by instruction**, not passed; no credentials requested. Real CLI and separate theme projects were not repeated. The focused assistant test still exercises its theme/surface-pack contrast assertions.
-+
-+Current commands: `npm run build:core`, `npm run check-types`, `npm run build:renderer`, `npm run desktop:copy-renderer`, `npm run build:desktop` exited 0. `npm run test:core`: **1,940 passed, 2 skipped, 0 failed**; `npm run test:desktop:git`: **141 passed**; `npm run test:renderer`: **34 passed**. Initial sandbox runs had loopback EPERM and watcher EMFILE; unchanged permitted runs passed. Core/renderer production sources were unchanged by these implementation commits.
-+
-+Focused command: `npm run test:e2e --workspace=@praxis/desktop-main -- e2e/assistant.spec.ts e2e/quickSession.spec.ts e2e/durableTeamChat.spec.ts e2e/standaloneConversations.spec.ts --project=functional --reporter=line --output=/tmp/fx184-focused-final-results`: **45 passed, 1 failed**, exit 1. The queued-cancellation Enter interaction retained the queue despite DOM focus. Explicit native window activation was added before keyboard cancellation and Stop. Subsequent `npm run test:e2e --workspace=@praxis/desktop-main -- e2e/durableTeamChat.spec.ts --project=functional --reporter=line --output=/tmp/fx184-durable-final-results`: **13 passed, 0 failed/skipped**, exit 0 (1.3 min), using the final test source in `64e542df`. This targeted pass does not rewrite the initial focused failure. Earlier queue-fixture failures (undefined JSON field and release-barrier initialization race) were fixed before the passing wire test.
-+
-+Catalog generation and `npm run test:praxis-contracts`: exit 0, **801** linked Playwright contracts. Registration remains in the existing owning suites; no check or assertion was weakened. [Retained evidence](fx-be-184-retained-evidence.md#wf-0c7166c7-current-execution) contains log hashes and output tails. [Assertion supplement](fx-be-184-release-proof.md#wf-0c7166c7-implementation-additions) names the added tests.
-+
-+The AC1–AC12 matrix below remains the full coverage map. For current execution provenance: its core assertions ran in the core runner, persistence/adapter assertions in main's `test:git`, subscription assertions in `test:renderer`, and assistant/quick-session/standalone assertions in the focused Electron runner. All use production revision `47c0f4fd`; final durable Electron assertions use test revision `64e542df`. Each runner's retained artifact is indexed in the current evidence section. Unexecuted live/manual claims remain unresolved.
-+
-+| Criterion | Exact current named assertion or explicit gap | Runner / current result | Evidence |
-+| --- | --- | --- | --- |
-+| AC1 | duplicate runtime events and a duplicate submit command converge to one turn and one usage reference | core / pass | core log |
-+| AC2 | production API compatibility follows credentials, model and policy without exposing credentials; real native CLI reuse unresolved | main / pass; live unexecuted | main log; native reuse classification in live spec |
-+| AC3 | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | durable Electron / pass | durable log; retained screenshot |
-+| AC4 | a pending approval at crash is never reused by the replacement attempt | core / pass | core log; unconditional interrupted matrix remains discrepant where prior tool activity cannot be excluded |
-+| AC5 | queued page context and staged image reach the provider after navigation and composer replacement | durable Electron / pass | durable log; PT-EE0AB4E23D |
-+| AC6 | every resolved compatibility dimension invalidates reuse and switching back stays fresh | core / pass | core log; production API test adds credential/policy proof |
-+| AC7 | migration is deterministic, lossless, isolated and never schedules imported history | core / pass | core log; legacy provable association remains unavailable |
-+| AC8 | a standalone chat stays navigable beside the single team-chat row | focused Electron / pass | focused log; classic sidebar absent, EasyModeSidebar remains applicable |
-+| AC9 | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | durable Electron / pass after harness fix | durable log; initial focused failure retained |
-+| AC10 | pre-rename failure preserves committed bytes and rejects acknowledgement; next mutation uses old state | main / pass | main log |
-+| AC11 | Preview then Apply updates the ticket; Apply is refused on an incompatible page | focused Electron / pass | focused log; complete manual journey unresolved |
-+| AC12 | 801 catalog entries validated; no complete full-suite or live API result claimed | catalog / pass, release gate open | catalog log and this report |
-+
-+Visual inspection: opened the current two-window screenshot and checked both accepted user messages, both member replies, one sidebar conversation row and 50-token usage. Preserved separately as `.praxis/session-artifacts/WF-0C7166C7-two-windows.png`; publish at handoff. This is automated light-theme evidence, not completion of the prescribed hand-driven light/dark journey. No snapshots were updated.
-+
-+All new fixture data, profiles, coordination roots, attachment storage and logs use temporary directories; injected dispatch barriers die with the isolated app. No user data or repository plans are used as write targets. Existing backup/rollback boundaries below remain unchanged. Production still reconstructs unverified CLI identities; pending approvals cannot exclude prior external actions, so `outcome_unknown` and reconciliation/duplicate-risk gates remain intact.
-+
-+Implementation additions and focused verification are complete. Release acceptance remains open for real API proof, authoritative native CLI reuse, the complete manual journey and a completed full functional run. No ticket or workflow stage was advanced.
-+
-@@ -6 +75 @@ Node:test contracts: [fx-be-184-release-proof.md](fx-be-184-release-proof.md). P
--**Release gate remains open:** real API continuation has no credential, the planned hand-driven dark-theme session is incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
-+**Release gate remains open:** real API continuation has no credential, the full manual journey remains incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
-@@ -11,0 +81,18 @@ Each section below is evidence of one kind; they are not merged. A skipped test
-+## Recovery implementation on 2026-11-05
-+
-+Execution revisions: `b291c054`, then `6d627c90` for deterministic keyboard-cancellation timing (base `ea2abb59`). Earlier sections below retain historical evidence; current results here supersede their counts without erasing failures.
-+
-+- Removed the production CLI `options.accountReference` bypass. Neither turn options nor participant defaults can establish an authenticated account identity. Same-turn preparation remains stable; different turns reconstruct until the runtime supplies authoritative identity. Regression: **unverified CLI identity cannot be stabilized by turn or participant account references** (`teamChatExecutionAdapter.test.ts`).
-+- Added **queued page identity and attachment references survive caller mutation before dispatch** (`teamChatCoordinator.test.ts`): a barrier holds the active turn while the queued command's page, text and image references are mutated; dispatch retains the accepted values.
-+- Pending permission recovery now asserts exactly `outcome_unknown` for both production and projected approval shapes. A pending approval cannot exclude earlier tools in the same attempt. No durable no-action evidence exists, so the plan's conservative recovery rule applies; the feature matrix's unconditional `interrupted` row remains an explicit acceptance discrepancy. Approval and evidence never transfer to the replacement.
-+- Strengthened real CLI/API checks to two members over three turns, six distinct attempts, isolated member sessions and restart epoch/context proof. Real CLI passed; API skipped because `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` are unset. Native CLI reuse remains unresolved, independently of reconstruction success.
-+- Fixed the factory-appearance-reset test race by waiting for its renderer reload before reading settings; all assertions remain unchanged.
-+
-+Current deterministic commands: core/renderer/desktop builds, renderer copy and `check-types` passed; `test:core` **1940 passed, 2 skipped**, `test:desktop:git` **140 passed**, `test:renderer` **34 passed**. The focused assistant/core suites passed **76 cases**. Initial sandbox executions encountered `listen EPERM 127.0.0.1`; unchanged retries with permitted access passed. Those initial results are not product failures or silent passes.
-+
-+Focused Electron run: **44 passed, 1 failed** (composer reply visibility); isolated rerun passed. Initial theme run: **45 passed, 2 failed** (factory-reset navigation race and motif master switch). The factory-reset fix passed all **6 Look tests**; motif master switch passed its single-worker rerun. These reruns do not replace initial run results. The final theme gate passed all **47 tests**, with no snapshot updates. The full functional run ended **747 passed, 2 failed, 14 skipped**; after the cancellation barrier correction the prescribed focused group passed **45/45**. The unchanged What Changed performance check (107 ms against 100 ms in the full run) passed alone. These reruns do not establish a clean full functional run; details and trace-output limitations are retained in the evidence document.
-+
-+Manual interaction in an isolated mock-backed profile: light send, dock, close/reopen; dark float, pin decision, `@qa` continuation and close/reopen. Both replies retained; usage advanced from 25 to 50 tokens. Screenshots were inspected and retained as `fx184-manual-light.png` and `fx184-manual-dark.png` under `.praxis/session-artifacts/`. This is partial manual proof: manual second-window, permission restart, unknown-outcome controls and Preview/Apply are still unexecuted in this recovery pass, with automated coverage retained separately. Classic sidebar remains inapplicable; no historical UI was restored.
-+
-+AC mapping additions: AC1/AC5/AC11 use the queued-capture assertion; AC2/AC6 use the account-identity regression and six-attempt CLI receipt artifact; AC3/AC8/AC11 gain the light/dark manual screenshots; AC4/AC6 retain conservative approval recovery. All other AC mappings below are inherited source mappings, with current owning-suite executions reported above. No remaining gap is promoted to a pass.
-+
-diff --git a/docs/praxis-tests/index.md b/docs/praxis-tests/index.md
-index 4deb4974..7d26687c 100644
---- a/docs/praxis-tests/index.md
-+++ b/docs/praxis-tests/index.md
-@@ -3 +3 @@
--This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
-+This catalogue describes **801 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
-@@ -325,2 +325,2 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
--| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:96` |
--| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:109` |
-+| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:126` |
-+| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:139` |
-@@ -332,7 +332,8 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
--| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:199` |
--| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:252` |
--| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:288` |
--| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:319` |
--| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:388` |
--| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:423` |
--| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:459` |
-+| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:206` |
-+| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:259` |
-+| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:295` |
-+| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:326` |
-+| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:395` |
-+| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:430` |
-+| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:466` |
-+| PT-EE0AB4E23D | durable Team Chat | queued page context and staged image reach the provider after navigation and composer replacement | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:494` |
-@@ -354,9 +355,9 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
--| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1155` |
--| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1377` |
--| PT-519130BC3E | easymode | easy mode divider resizes Runs with pointer and keyboard and remembers the split | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1525` |
--| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1560` |
--| PT-938AF7A1AB | easymode | easy mode groups sessions by last activity like classic mode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1591` |
--| PT-A5B22DE4DB | easymode | easy mode sessions can be grouped, reordered and restored after filtering and restart | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1620` |
--| PT-1EA437CC5C | easymode | EasyMode run history groups by completion date and keeps old active work visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1775` |
--| PT-F16E9F210F | easymode | EasyMode general conversations create without a project and retain history through project and ticket assignment | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1832` |
--| PT-EFA42D0996 | easymode | sidebar split button offers all creation paths without a separate conversation button | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1900` |
-+| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1157` |
-+| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1379` |
-+| PT-519130BC3E | easymode | easy mode divider resizes Runs with pointer and keyboard and remembers the split | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1527` |
-+| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1562` |
-+| PT-938AF7A1AB | easymode | easy mode groups sessions by last activity like classic mode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1593` |
-+| PT-A5B22DE4DB | easymode | easy mode sessions can be grouped, reordered and restored after filtering and restart | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1622` |
-+| PT-1EA437CC5C | easymode | EasyMode run history groups by completion date and keeps old active work visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1777` |
-+| PT-F16E9F210F | easymode | EasyMode general conversations create without a project and retain history through project and ticket assignment | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1834` |
-+| PT-EFA42D0996 | easymode | sidebar split button offers all creation paths without a separate conversation button | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1902` |
-@@ -784,15 +785,15 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
--| PT-69CC944489 | workflow Run Workspace | a run can be renamed from the sidebar and the name persists after reload | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:315` |
--| PT-21DA46DD55 | workflow Run Workspace | the start-run dialog opens from the Runs header with the only workflow preselected, and lands on the new run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:359` |
--| PT-F13D2F4C05 | workflow Run Workspace | the Runs header opens a new workflow run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:376` |
--| PT-50A0E46A5A | workflow Run Workspace | a long run uses a bounded gauge and exposes every step in the workflow sheet | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:408` |
--| PT-D18B652AC9 | workflow Run Workspace | a dirty checkout offers to include its changes: the run sees them, the checkout is untouched | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:495` |
--| PT-63B5C57146 | workflow Run Workspace | a dirty checkout can instead start from the last commit without its changes | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:508` |
--| PT-AC2482A561 | workflow Run Workspace | a dirty checkout can commit its changes, then the run starts from that commit | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:516` |
--| PT-26466F3922 | workflow Run Workspace | starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:526` |
--| PT-59D76BB99D | workflow Run Workspace | an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:553` |
--| PT-3C9A1A5834 | workflow Run Workspace | a stage whose AI ran out can be switched to another AI and carries on | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:615` |
--| PT-522BA7819F | workflow Run Workspace | with "Switch AI automatically" the stage moves to another AI without asking | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:651` |
--| PT-951522F605 | workflow Run Workspace | with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:665` |
--| PT-5C5F154311 | workflow Run Workspace | a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:687` |
--| PT-05BE089E81 | workflow Run Workspace | auto-approve does not widen a stage: a read-only stage still cannot write | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:753` |
--| PT-79DD10EF59 | workflow Run Workspace | a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:776` |
-+| PT-69CC944489 | workflow Run Workspace | a run can be renamed from the sidebar and the name persists after reload | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:318` |
-+| PT-21DA46DD55 | workflow Run Workspace | the start-run dialog opens from the Runs header with the only workflow preselected, and lands on the new run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:362` |
-+| PT-F13D2F4C05 | workflow Run Workspace | the Runs header opens a new workflow run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:379` |
-+| PT-50A0E46A5A | workflow Run Workspace | a long run uses a bounded gauge and exposes every step in the workflow sheet | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:411` |
-+| PT-D18B652AC9 | workflow Run Workspace | a dirty checkout offers to include its changes: the run sees them, the checkout is untouched | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:498` |
-+| PT-63B5C57146 | workflow Run Workspace | a dirty checkout can instead start from the last commit without its changes | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:511` |
-+| PT-AC2482A561 | workflow Run Workspace | a dirty checkout can commit its changes, then the run starts from that commit | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:519` |
-+| PT-26466F3922 | workflow Run Workspace | starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:529` |
-+| PT-59D76BB99D | workflow Run Workspace | an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:556` |
-+| PT-3C9A1A5834 | workflow Run Workspace | a stage whose AI ran out can be switched to another AI and carries on | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:618` |
-+| PT-522BA7819F | workflow Run Workspace | with "Switch AI automatically" the stage moves to another AI without asking | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:654` |
-+| PT-951522F605 | workflow Run Workspace | with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:668` |
-+| PT-5C5F154311 | workflow Run Workspace | a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:690` |
-+| PT-05BE089E81 | workflow Run Workspace | auto-approve does not widen a stage: a read-only stage still cannot write | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:756` |
-+| PT-79DD10EF59 | workflow Run Workspace | a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:779` |
++    cancelTurn: (conversationId: string, turnId: string) => ipcRenderer.invoke('assistant:cancelTurn', conversationId, turnId),
++    retryParticipant: (conversationId: string, turnId: string, participantId: string) => ipcRenderer.invoke('assistant:retryParticipant', conversationId, turnId, participantId),
++    resolveAttempt: (conversationId: string, turnId: string, attemptId: string, resolution: string) => ipcRenderer.invoke('assistant:resolveAttempt', conversationId, turnId, attemptId, resolution),
+     onChatsChanged: (listener: () => void) => {
+       const handler = () => listener();
+       ipcRenderer.on('assistant:chatsChanged', handler);
+diff --git a/packages/core/package.json b/packages/core/package.json
+index 9f85b6e4..9bd01d4f 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -7,7 +7,7 @@
+   "scripts": {
+     "check-types": "tsc --noEmit -p .",
+     "compile": "tsc -p .",
+-    "test": "tsc -p . && node --test out/notes/noteValidation.test.js out/workflows/affectedTests.test.js out/notes/noteSnapshot.test.js out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/pathSandbox.test.js out/ai/tools/networkAddress.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/readOnlyFilesMcp.test.js out/ai/readOnlyShell.test.js out/ai/browserMcpServer.test.js out/ai/trackerMcpServer.test.js out/ai/assistant/assistantEngine.test.js out/ai/assistant/teamChatTransitions.test.js out/ai/ticketContext.test.js out/ai/gateway/wire.test.js out/ai/providers/anthropicWire.test.js out/ai/providers/reasoningSupport.test.js out/ai/providers/geminiWire.test.js out/ai/providers/modelPricing.test.js out/ai/providers/providerPreflight.test.js out/ai/providers/customProviders.test.js out/ai/providers/providerProbe.test.js out/ai/providers/localRuntimeDetection.test.js out/ai/providerLimitError.test.js out/ai/acp/acpAgentHost.test.js out/ai/aiSessionManager.test.js out/ai/skillUsage.test.js out/ai/sessionChangeSummary.test.js out/ai/backgroundTasks.test.js out/ai/ticketReview.test.js out/ai/humanReview.test.js out/ai/sessionHandover.test.js out/ai/contextSnapshot.test.js out/ai/coordination/coordination.test.js out/ai/gadgets/validation.test.js out/ai/gadgets/gadgetRepair.test.js out/ai/gadgets/gadgetLifecycle.test.js out/ai/gadgets/fixtures.test.js out/ai/agentEventUtils.test.js out/ai/sessionChangeEncoder.test.js out/ai/diagnosisBrief.test.js out/ai/diagnosisState.test.js out/ai/aiUsageStats.test.js out/ai/agentRuntime/discovery.test.js out/ai/agentRuntime/agentCatalog.test.js out/ai/agentRuntime/agentAuthoring.test.js out/ai/agentRuntime/bundledAgents.test.js out/ai/agentRuntime/manager.test.js out/ai/agentRuntime/nativeSources.test.js out/ci/githubActionsEvidenceProvider.test.js out/ci/gitLabCiEvidenceProvider.test.js out/ci/ciEvidenceImport.test.js out/ci/ciSecurityReports.test.js out/folder/boardConfigFile.test.js out/folder/folderFs.test.js out/folder/markdownPlanParser.test.js out/folder/markdownStatusWriter.test.js out/github/githubBoardService.test.js out/gitlab/gitLabBoardService.test.js out/jira/jiraShape.test.js out/marketplace/semver.test.js out/marketplace/integrity.test.js out/marketplace/addonManifest.test.js out/marketplace/registryClient.test.js out/marketplace/marketplaceService.test.js out/marketplace/tarballManifest.test.js out/workspaces/workspacePaths.test.js out/projects/projectActivity.test.js out/projects/projectWorkflow.test.js out/projects/projectService.test.js out/projects/projectImportPlanner.test.js out/projects/runProfile.test.js out/projects/runProfileDiscovery.test.js out/projects/runProfileStore.test.js out/projects/previewAccess.test.js out/projects/runServiceManager.test.js out/projects/runReconciliation.test.js out/projects/browserDiagnostics.test.js out/projects/previewVerification.test.js out/projects/deploymentProfile.test.js out/projects/deploymentProfileStore.test.js out/projects/publishManifest.test.js out/projects/deploymentRunState.test.js out/projects/deploymentRunStore.test.js out/deployments/directProcessExecutor.test.js out/deployments/directoryTarget.test.js out/deployments/directDeploymentOrchestrator.test.js out/deployments/directDeliveryJourney.test.js out/deployments/githubActionsExecutor.test.js out/deployments/githubActionsObserver.test.js out/deployments/githubActionsOrchestrator.test.js out/deployments/githubActionsResults.test.js out/workflows/workflowValidation.test.js out/workflows/workflowStore.test.js out/workflows/workflowRun.test.js out/workflows/stageModel.test.js out/ai/workflowModelRecommendation.test.js out/workflows/workflowGates.test.js out/workflows/workflowApprovalGadgets.test.js out/workflows/workflowTemplates.test.js out/workflows/workflowDesignerState.test.js out/workflows/workflowRunSummary.test.js out/workflows/workflowDeploymentPhase.test.js out/workflows/workflowOrchestrator.test.js out/workflows/workflowStageTask.test.js out/workflows/workflowEvidence.test.js out/workflows/checkFindings.test.js out/workflows/checkResultAdapters.test.js out/workflows/workflowThresholdGates.test.js out/workflows/checkPresets.test.js out/workflows/checkEnvironmentFailure.test.js out/workflows/checkToolPreflight.test.js out/workflows/checkCommandArgs.test.js out/workflows/waiverRegister.test.js out/workflows/workflowMultiOwnerGates.test.js out/workflows/structuredReviewFindings.test.js out/workflows/reviewFixLoop.test.js out/workflows/workflowLoops.test.js out/workflows/workflowEstimate.test.js out/workflows/workflowImprove.test.js out/workflows/workflowMap.test.js out/workflows/fullSdlcTemplates.test.js out/workflows/sdlcLoopTemplates.test.js out/workflows/workflowAddonTemplates.test.js out/workflows/workflowPlanPublishing.test.js out/host/mobileProtocol.test.js out/host/mobileExecutionBoundary.test.js out/host/mobileCommandLedger.test.js out/host/mobileAccessPolicy.test.js out/host/mobileConnectionLifecycle.test.js out/host/mobileAccessAdministration.test.js out/host/mobilePairingHandshake.test.js out/host/mobileTrustStore.test.js out/host/mobileHostDiscovery.test.js out/host/mobileReconnect.test.js out/host/mobileLanOnly.test.js out/codeIntelligence/mcpBridge.test.js out/scheduledRuns/scheduledRun.test.js out/scheduledRuns/scheduledRunStore.test.js out/scheduledRuns/scheduledRunRequest.test.js out/scheduledRuns/scheduledBudget.test.js out/scheduledRuns/scheduledRunRunner.test.js out/scheduledRuns/scheduledRunParallel.test.js out/scheduledRuns/scheduledRunDetail.test.js out/scheduledRuns/scheduledTicketStatus.test.js out/ai/feedback/feedbackTypes.test.js out/ai/feedback/sessionFeedbackScorer.test.js out/ai/feedback/sessionFeedbackStore.test.js out/ai/feedback/promptRewriteHelper.test.js out/ai/feedback/goldenCorpus.test.js out/ai/feedback/feedbackV2.test.js out/ai/feedback/promptClarity.test.js out/ai/feedback/feedbackCoaching.test.js"
++    "test": "tsc -p . && node --test out/notes/noteValidation.test.js out/workflows/affectedTests.test.js out/notes/noteSnapshot.test.js out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/pathSandbox.test.js out/ai/tools/networkAddress.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/readOnlyFilesMcp.test.js out/ai/readOnlyShell.test.js out/ai/browserMcpServer.test.js out/ai/trackerMcpServer.test.js out/ai/assistant/assistantEngine.test.js out/ai/assistant/teamChatTransitions.test.js out/ai/assistant/teamChatCoordinator.test.js out/ai/ticketContext.test.js out/ai/gateway/wire.test.js out/ai/providers/anthropicWire.test.js out/ai/providers/reasoningSupport.test.js out/ai/providers/geminiWire.test.js out/ai/providers/modelPricing.test.js out/ai/providers/providerPreflight.test.js out/ai/providers/customProviders.test.js out/ai/providers/providerProbe.test.js out/ai/providers/localRuntimeDetection.test.js out/ai/providerLimitError.test.js out/ai/acp/acpAgentHost.test.js out/ai/aiSessionManager.test.js out/ai/skillUsage.test.js out/ai/sessionChangeSummary.test.js out/ai/backgroundTasks.test.js out/ai/ticketReview.test.js out/ai/humanReview.test.js out/ai/sessionHandover.test.js out/ai/contextSnapshot.test.js out/ai/coordination/coordination.test.js out/ai/gadgets/validation.test.js out/ai/gadgets/gadgetRepair.test.js out/ai/gadgets/gadgetLifecycle.test.js out/ai/gadgets/fixtures.test.js out/ai/agentEventUtils.test.js out/ai/sessionChangeEncoder.test.js out/ai/diagnosisBrief.test.js out/ai/diagnosisState.test.js out/ai/aiUsageStats.test.js out/ai/agentRuntime/discovery.test.js out/ai/agentRuntime/agentCatalog.test.js out/ai/agentRuntime/agentAuthoring.test.js out/ai/agentRuntime/bundledAgents.test.js out/ai/agentRuntime/manager.test.js out/ai/agentRuntime/nativeSources.test.js out/ci/githubActionsEvidenceProvider.test.js out/ci/gitLabCiEvidenceProvider.test.js out/ci/ciEvidenceImport.test.js out/ci/ciSecurityReports.test.js out/folder/boardConfigFile.test.js out/folder/folderFs.test.js out/folder/markdownPlanParser.test.js out/folder/markdownStatusWriter.test.js out/github/githubBoardService.test.js out/gitlab/gitLabBoardService.test.js out/jira/jiraShape.test.js out/marketplace/semver.test.js out/marketplace/integrity.test.js out/marketplace/addonManifest.test.js out/marketplace/registryClient.test.js out/marketplace/marketplaceService.test.js out/marketplace/tarballManifest.test.js out/workspaces/workspacePaths.test.js out/projects/projectActivity.test.js out/projects/projectWorkflow.test.js out/projects/projectService.test.js out/projects/projectImportPlanner.test.js out/projects/runProfile.test.js out/projects/runProfileDiscovery.test.js out/projects/runProfileStore.test.js out/projects/previewAccess.test.js out/projects/runServiceManager.test.js out/projects/runReconciliation.test.js out/projects/browserDiagnostics.test.js out/projects/previewVerification.test.js out/projects/deploymentProfile.test.js out/projects/deploymentProfileStore.test.js out/projects/publishManifest.test.js out/projects/deploymentRunState.test.js out/projects/deploymentRunStore.test.js out/deployments/directProcessExecutor.test.js out/deployments/directoryTarget.test.js out/deployments/directDeploymentOrchestrator.test.js out/deployments/directDeliveryJourney.test.js out/deployments/githubActionsExecutor.test.js out/deployments/githubActionsObserver.test.js out/deployments/githubActionsOrchestrator.test.js out/deployments/githubActionsResults.test.js out/workflows/workflowValidation.test.js out/workflows/workflowStore.test.js out/workflows/workflowRun.test.js out/workflows/stageModel.test.js out/ai/workflowModelRecommendation.test.js out/workflows/workflowGates.test.js out/workflows/workflowApprovalGadgets.test.js out/workflows/workflowTemplates.test.js out/workflows/workflowDesignerState.test.js out/workflows/workflowRunSummary.test.js out/workflows/workflowDeploymentPhase.test.js out/workflows/workflowOrchestrator.test.js out/workflows/workflowStageTask.test.js out/workflows/workflowEvidence.test.js out/workflows/checkFindings.test.js out/workflows/checkResultAdapters.test.js out/workflows/workflowThresholdGates.test.js out/workflows/checkPresets.test.js out/workflows/checkEnvironmentFailure.test.js out/workflows/checkToolPreflight.test.js out/workflows/checkCommandArgs.test.js out/workflows/waiverRegister.test.js out/workflows/workflowMultiOwnerGates.test.js out/workflows/structuredReviewFindings.test.js out/workflows/reviewFixLoop.test.js out/workflows/workflowLoops.test.js out/workflows/workflowEstimate.test.js out/workflows/workflowImprove.test.js out/workflows/workflowMap.test.js out/workflows/fullSdlcTemplates.test.js out/workflows/sdlcLoopTemplates.test.js out/workflows/workflowAddonTemplates.test.js out/workflows/workflowPlanPublishing.test.js out/host/mobileProtocol.test.js out/host/mobileExecutionBoundary.test.js out/host/mobileCommandLedger.test.js out/host/mobileAccessPolicy.test.js out/host/mobileConnectionLifecycle.test.js out/host/mobileAccessAdministration.test.js out/host/mobilePairingHandshake.test.js out/host/mobileTrustStore.test.js out/host/mobileHostDiscovery.test.js out/host/mobileReconnect.test.js out/host/mobileLanOnly.test.js out/codeIntelligence/mcpBridge.test.js out/scheduledRuns/scheduledRun.test.js out/scheduledRuns/scheduledRunStore.test.js out/scheduledRuns/scheduledRunRequest.test.js out/scheduledRuns/scheduledBudget.test.js out/scheduledRuns/scheduledRunRunner.test.js out/scheduledRuns/scheduledRunParallel.test.js out/scheduledRuns/scheduledRunDetail.test.js out/scheduledRuns/scheduledTicketStatus.test.js out/ai/feedback/feedbackTypes.test.js out/ai/feedback/sessionFeedbackScorer.test.js out/ai/feedback/sessionFeedbackStore.test.js out/ai/feedback/promptRewriteHelper.test.js out/ai/feedback/goldenCorpus.test.js out/ai/feedback/feedbackV2.test.js out/ai/feedback/promptClarity.test.js out/ai/feedback/feedbackCoaching.test.js"
+   },
+   "dependencies": {
+     "@agentclientprotocol/sdk": "^1.4.0",
 diff --git a/packages/core/src/ai/assistant/teamChatCoordinator.test.ts b/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
-index 614228d1..da943c86 100644
---- a/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
+new file mode 100644
+index 00000000..4b8b9f7b
+--- /dev/null
 +++ b/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
-@@ -446,0 +447 @@ test('compatible members retain one binding each across turns and chats remain i
-+  const sessions = new Map<string, string>();
-@@ -449 +450,12 @@ test('compatible members retain one binding each across turns and chats remain i
--    execute: async ({ attempt }) => ({ text: 'Reply', usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] })
-+    execute: async ({ attempt, conversation, nativePrompt }) => {
-+      const binding = conversation.bindings.find(b => b.id === attempt.bindingId)!;
-+      const previousSession = sessions.get(binding.id);
-+      if (previousSession) {
-+        assert.equal(binding.providerSessionId, previousSession, 'dispatch receives the persisted member session');
-+        assert.ok(nativePrompt, 'native continuation has a prepared prompt');
-+      }
-+      const providerSessionId = previousSession ?? `session:${binding.id}`;
-+      sessions.set(binding.id, providerSessionId);
-+      return { text: 'Reply', providerSessionId, contextDelivery: previousSession ? 'native' : 'reconstruction',
-+        usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] };
-+    }
-@@ -457,0 +470,9 @@ test('compatible members retain one binding each across turns and chats remain i
-+  assert.equal(new Set(conversation.turns.flatMap(t => t.attempts).map(a => a.providerSessionId)).size, 2);
-+  for (const participantId of ['part-dev', 'part-qa']) {
-+    const [first, second] = conversation.turns.flatMap(t => t.attempts).filter(a => a.participantId === participantId);
-+    assert.equal(second.providerSessionId, first.providerSessionId);
-+    assert.equal(second.bindingId, first.bindingId);
-+    assert.deepEqual(second.contextReceipt, second.nativeContextReceipt, 'completion records the context actually delivered natively');
-+    assert.ok(!second.contextReceipt.messageIds.includes(conversation.turns[0].userMessageId), 'native receipt excludes history already delivered');
-+  }
-+  assert.equal(sessions.size, 4, 'the other conversation has independent member sessions');
-@@ -682,0 +704,40 @@ test('a structured execution result and original page identity survive completio
+@@ -0,0 +1,434 @@
++import { test } from 'node:test';
++import * as assert from 'node:assert/strict';
++import {
++  TeamChatCoordinator,
++  makeParticipant,
++  type TeamChatExecutionAdapter,
++  type ConversationUpdate
++} from './teamChatCoordinator';
++import type {
++  DurableConversation,
++  TeamChatRepository,
++  TeamChatSnapshot,
++  SubmitConversationCommand
++} from './assistantTypes';
 +
-+test('queued page identity and attachment references survive caller mutation before dispatch', async () => {
-+  let release!: () => void;
-+  let started!: () => void;
-+  const gate = new Promise<void>(resolve => { release = resolve; });
-+  const running = new Promise<void>(resolve => { started = resolve; });
-+  let captured: import('./teamChatCoordinator').TeamChatExecutionParams | undefined;
-+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: {
-+    validateAttachments: async () => {},
-+    execute: async params => {
-+      if (params.turn.commandId === 'first') { started(); await gate; }
-+      else captured = structuredClone({ ...params, signal: undefined, onAccepted: undefined, onEvidence: undefined });
-+      return { text: 'Reply' };
-+    }
-+  } });
-+  const command: SubmitConversationCommand = {
-+    conversationId: 'conv-1', commandId: 'first', expectedRevision: 1, text: 'First',
-+    selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: {}
++class MemoryTeamChatRepository implements TeamChatRepository {
++  public snapshot: TeamChatSnapshot;
++
++  public constructor(initialConversations: DurableConversation[] = []) {
++    this.snapshot = {
++      schemaVersion: 2,
++      revision: 0,
++      teamChats: [],
++      conversations: initialConversations
++    };
++  }
++
++  public read(): TeamChatSnapshot {
++    return structuredClone(this.snapshot);
++  }
++
++  public async transaction<T>(mutate: (draft: TeamChatSnapshot) => T): Promise<T> {
++    const draft = structuredClone(this.snapshot);
++    const result = mutate(draft);
++    this.snapshot = structuredClone(draft);
++    return result;
++  }
++}
++
++function makeConversation(id = 'conv-1'): DurableConversation {
++  return {
++    id,
++    schemaVersion: 2,
++    revision: 1,
++    title: 'Test Conversation',
++    createdAt: '2026-11-03T20:00:00.000Z',
++    updatedAt: '2026-11-03T20:00:00.000Z',
++    coordinatorEpoch: 'epoch-1',
++    participants: [
++      makeParticipant('dev'),
++      makeParticipant('qa'),
++      makeParticipant('lead'),
++      makeParticipant('security'),
++      makeParticipant('product')
++    ],
++    messages: [],
++    turns: [],
++    bindings: [],
++    summaries: [],
++    pinnedMessageIds: [],
++    commandReceipts: []
 +  };
-+  await coordinator.submitTurn(command);
-+  await running;
-+  try {
-+    const queued: SubmitConversationCommand = { ...command, commandId: 'queued', text: 'Captured question',
-+      context: { pageType: 'issue', entityId: 'original-issue', title: 'Original issue', summary: 'Original context' },
-+      attachmentRefs: [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }] };
-+    await coordinator.submitTurn(queued);
-+    assert.equal(coordinator.getConversation('conv-1')!.turns[1].state, 'queued');
-+    queued.context!.entityId = 'navigated-issue';
-+    queued.context!.summary = 'Changed composer context';
-+    queued.attachmentRefs[0].digest = 'replacement-digest';
-+    queued.attachmentRefs.length = 0;
-+    queued.text = 'Changed draft';
-+  } finally { release(); }
-+  const conversation = await settled(coordinator, 'conv-1');
-+  assert.equal(conversation.turns[1].state, 'completed');
-+  assert.equal(captured!.turn.plan.context!.entityId, 'original-issue');
-+  const message = captured!.messages.find(message => message.text === 'Captured question')!;
-+  assert.equal(message.context!.summary, 'Original context');
-+  assert.deepEqual(message.attachments, [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }]);
++}
++
++test('TASK-478 AC1: Two simultaneous sends produce distinct FIFO queued turns, repeated delivery produces one turn', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const executedTurns: string[] = [];
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ turn }) => {
++      executedTurns.push(turn.id);
++      return { text: 'Done' };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  const commandA: SubmitConversationCommand = {
++    conversationId: 'conv-1',
++    commandId: 'cmd-1',
++    expectedRevision: 1,
++    text: 'Hello first',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  };
++
++  const commandB: SubmitConversationCommand = {
++    conversationId: 'conv-1',
++    commandId: 'cmd-2',
++    expectedRevision: 1,
++    text: 'Hello second',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  };
++
++  // Repeated delivery of cmd-1
++  const res1 = await coordinator.submitTurn(commandA);
++  const res1Dup = await coordinator.submitTurn(commandA);
++
++  assert.equal(res1.turnId, res1Dup.turnId, 'Repeated delivery of one command produces one turn');
++
++  // Simultaneous sends produce distinct FIFO queued turns
++  const [simA, simB] = await Promise.all([
++    coordinator.submitTurn({ ...commandA, commandId: 'cmd-sim-1' }),
++    coordinator.submitTurn({ ...commandB, commandId: 'cmd-sim-2' })
++  ]);
++  assert.notEqual(simA.turnId, simB.turnId, 'Two sends produce distinct turns');
++
++  // Allow execution loops to complete
++  await new Promise(r => setTimeout(r, 50));
++
++  const conv = coordinator.getConversation('conv-1')!;
++  assert.equal(conv.turns.length, 3);
++  assert.equal(conv.turns[0].id, res1.turnId);
++  assert.equal(conv.turns[1].id, simA.turnId);
++  assert.equal(conv.turns[2].id, simB.turnId);
 +});
-diff --git a/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts b/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts
-index 8f13e6ba..42610ad6 100644
---- a/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts
-+++ b/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts
-@@ -189,3 +189,3 @@ test('a pending approval at crash is never reused by the replacement attempt', a
--    // Deviation from the design's matrix (which says "interrupted"): a tool-capable attempt is
--    // classified outcome_unknown. Both refuse automatic replay; the approval is never reused.
--    assert.ok(['interrupted', 'outcome_unknown'].includes(recovered.state), recovered.state);
-+    // A pending prompt cannot exclude earlier tool activity in this attempt. Without
-+    // durable no-action evidence the replacement must require informed reconciliation.
-+    assert.equal(recovered.state, 'outcome_unknown');
++
++test('TASK-478 AC2: Selected members answer in dev, qa, security, product, lead order; mention selects only that member; empty roster resolves to lead', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const answeredRoles: string[] = [];
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ participant }) => {
++      answeredRoles.push(participant.role);
++      return { text: `Reply from ${participant.role}` };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  // Test 1: Out-of-order selected members (product, lead, dev, qa)
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-order',
++    expectedRevision: 1,
++    text: 'Please answer team',
++    selectedParticipantIds: ['part-product', 'part-lead', 'part-dev', 'part-qa'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++
++  assert.deepEqual(answeredRoles, ['dev', 'qa', 'product', 'lead'], 'Must answer in dev, qa, security, product, lead order');
++
++  // Test 2: Explicit mention @qa
++  answeredRoles.length = 0;
++  const currentRev = coordinator.getConversation('conv-1')!.revision;
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-mention',
++    expectedRevision: currentRev,
++    text: '@qa What is the test coverage?',
++    selectedParticipantIds: ['part-dev', 'part-qa', 'part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++  assert.deepEqual(answeredRoles, ['qa'], 'Explicit mention must select only that member');
++
++  // Test 3: Empty roster resolves to lead
++  answeredRoles.length = 0;
++  const rev3 = coordinator.getConversation('conv-1')!.revision;
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-empty',
++    expectedRevision: rev3,
++    text: 'General question without roster',
++    selectedParticipantIds: [],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++  assert.deepEqual(answeredRoles, ['lead'], 'Empty roster must resolve to lead');
++});
++
++test('TASK-478 AC3: Later members see earlier committed replies from their turn; no member sees queued future user messages', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const messagesSeenByRole = new Map<string, string[]>();
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ participant, turn, messages }) => {
++      const key = `${participant.role}:${turn.id}`;
++      messagesSeenByRole.set(key, messages.map(m => m.text));
++      return { text: `Reply from ${participant.role}` };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  // Submit Turn 1 with dev and qa
++  const resTurn1 = await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-turn1',
++    expectedRevision: 1,
++    text: 'User question for turn 1',
++    selectedParticipantIds: ['part-dev', 'part-qa'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  // Immediately submit Turn 2 before Turn 1 finishes
++  const revNow = coordinator.getConversation('conv-1')!.revision;
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-turn2',
++    expectedRevision: revNow,
++    text: 'Queued user question for turn 2',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 100));
++
++  const devMessages = messagesSeenByRole.get(`dev:${resTurn1.turnId}`)!;
++  const qaMessages = messagesSeenByRole.get(`qa:${resTurn1.turnId}`)!;
++
++  assert.ok(devMessages.includes('User question for turn 1'));
++  assert.ok(!devMessages.includes('Queued user question for turn 2'), 'Dev must not see future queued user message');
++
++  assert.ok(qaMessages.includes('User question for turn 1'));
++  assert.ok(qaMessages.includes('Reply from dev'), 'QA must see earlier committed reply from dev');
++  assert.ok(!qaMessages.includes('Queued user question for turn 2'), 'QA must not see future queued user message');
++});
++
++test('TASK-478 AC4: Changing roster affects subsequent accepted turns only; failures pause the current turn and leave later turns queued', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  let shouldFail = true;
++
++  const adapter: TeamChatExecutionAdapter = {
++    execute: async ({ participant }) => {
++      if (participant.role === 'dev' && shouldFail) {
++        throw new Error('Dev provider failed.');
++      }
++      return { text: `Success from ${participant.role}` };
++    }
++  };
++
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: adapter
++  });
++
++  // Turn 1 will fail
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-fail',
++    expectedRevision: 1,
++    text: 'Trigger failure',
++    selectedParticipantIds: ['part-dev'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  // Turn 2 queued behind Turn 1
++  const rev1 = coordinator.getConversation('conv-1')!.revision;
++  const turn2Res = await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-queued',
++    expectedRevision: rev1,
++    text: 'Queued message',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++
++  const conv = coordinator.getConversation('conv-1')!;
++  assert.equal(conv.turns[0].state, 'failed', 'Current turn must be paused on failure');
++  assert.equal(conv.turns[1].state, 'queued', 'Later turn must remain queued');
++  assert.equal(conv.turns[1].id, turn2Res.turnId);
++
++  // Retry the failed participant
++  shouldFail = false;
++  await coordinator.retryParticipant('conv-1', conv.turns[0].id, 'part-dev');
++
++  await new Promise(r => setTimeout(r, 100));
++
++  const convRecovered = coordinator.getConversation('conv-1')!;
++  assert.equal(convRecovered.turns[0].state, 'completed');
++  assert.equal(convRecovered.turns[1].state, 'completed');
++});
++
++test('TASK-479 AC1: IPC timeout after durable acceptance followed by resubmission returns the original turn ID', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: { execute: async () => ({ text: 'ok' }) }
++  });
++
++  const cmd: SubmitConversationCommand = {
++    conversationId: 'conv-1',
++    commandId: 'cmd-timeout-test',
++    expectedRevision: 1,
++    text: 'Message that timed out on client',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  };
++
++  const res1 = await coordinator.submitTurn(cmd);
++  // Resubmission with same command ID
++  const res2 = await coordinator.submitTurn(cmd);
++
++  assert.equal(res1.turnId, res2.turnId);
++  assert.equal(res2.turnId, res1.turnId);
++});
++
++test('TASK-479 AC2: Subscription emits revision updates', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: { execute: async () => ({ text: 'reply text' }) }
++  });
++
++  const updates: ConversationUpdate[] = [];
++  coordinator.subscribe('conv-1', update => updates.push(update));
++
++  await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-sub',
++    expectedRevision: 1,
++    text: 'Sub test',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await new Promise(r => setTimeout(r, 50));
++
++  assert.ok(updates.length >= 3, 'Should receive turn_accepted, attempt, and completed updates');
++  assert.equal(updates[0].type, 'turn_accepted');
++  assert.ok(updates.some(u => u.type === 'attempt_completed'));
++});
++
++test('TASK-479 AC3: Invalid participant, attachment reference, and permission choice are rejected before provider invocation', async () => {
++  let invoked = false;
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: { execute: async () => { invoked = true; return { text: 'ok' }; } }
++  });
++
++  // Invalid participant
++  await assert.rejects(
++    coordinator.submitTurn({
++      conversationId: 'conv-1',
++      commandId: 'cmd-bad-part',
++      expectedRevision: 1,
++      text: 'hello',
++      selectedParticipantIds: ['part-nonexistent'],
++      attachmentRefs: [],
++      runtimeOptions: {}
++    }),
++    /Invalid participant reference/
++  );
++
++  // Invalid attachment
++  await assert.rejects(
++    coordinator.submitTurn({
++      conversationId: 'conv-1',
++      commandId: 'cmd-bad-att',
++      expectedRevision: 1,
++      text: 'hello',
++      selectedParticipantIds: ['part-lead'],
++      attachmentRefs: [{ digest: '', mediaType: '' } as never],
++      runtimeOptions: {}
++    }),
++    /Invalid attachment reference/
++  );
++
++  // Invalid permission choice
++  await assert.rejects(
++    coordinator.submitTurn({
++      conversationId: 'conv-1',
++      commandId: 'cmd-bad-perm',
++      expectedRevision: 1,
++      text: 'hello',
++      selectedParticipantIds: ['part-lead'],
++      attachmentRefs: [],
++      runtimeOptions: { permissionMode: 'invalid' as never }
++    }),
++    /Invalid permission choice/
++  );
++
++  assert.equal(invoked, false, 'Provider must not be invoked for invalid commands');
++});
++
++test('TASK-479 AC4: Closing/cancelling turn does not corrupt conversation state', async () => {
++  const repo = new MemoryTeamChatRepository([makeConversation()]);
++  const coordinator = new TeamChatCoordinator({
++    repository: repo,
++    executionAdapter: {
++      execute: async () => {
++        await new Promise(r => setTimeout(r, 200));
++        return { text: 'Late reply' };
++      }
++    }
++  });
++
++  const res = await coordinator.submitTurn({
++    conversationId: 'conv-1',
++    commandId: 'cmd-cancel',
++    expectedRevision: 1,
++    text: 'Will be cancelled',
++    selectedParticipantIds: ['part-lead'],
++    attachmentRefs: [],
++    runtimeOptions: {}
++  });
++
++  await coordinator.cancelTurn('conv-1', res.turnId);
++
++  await new Promise(r => setTimeout(r, 250));
++
++  const conv = coordinator.getConversation('conv-1')!;
++  const turn = conv.turns.find(t => t.id === res.turnId)!;
++  assert.equal(turn.state, 'cancelled');
++});
+diff --git a/packages/core/src/ai/assistant/teamChatCoordinator.ts b/packages/core/src/ai/assistant/teamChatCoordinator.ts
+new file mode 100644
+index 00000000..660e2ee2
+--- /dev/null
++++ b/packages/core/src/ai/assistant/teamChatCoordinator.ts
+@@ -0,0 +1,621 @@
++import { parseAssistantMention, getAssistantPersona } from './assistantPersonas';
++import type {
++  AssistantRole,
++  ConversationAttempt,
++  ConversationMessage,
++  ConversationParticipant,
++  ConversationTurn,
++  DurableConversation,
++  SubmitConversationCommand,
++  ConversationCommandResult,
++  TeamChatRepository
++} from './assistantTypes';
++import {
++  advanceConversationAttempt,
++  completeConversationAttempt,
++  conversationPayloadDigest,
++  reserveConversationAttempt,
++  startConversationTurn,
++  submitConversationTurn
++} from './teamChatTransitions';
++
++export const CANONICAL_ROLE_ORDER: readonly AssistantRole[] = ['dev', 'qa', 'security', 'product', 'lead'];
++
++export function makeParticipant(role: AssistantRole): ConversationParticipant {
++  const persona = getAssistantPersona(role);
++  return {
++    id: `part-${role}`,
++    role,
++    instructionVersion: '1',
++    instructions: persona.systemPrompt,
++    defaults: {}
++  };
++}
++
++export interface TeamChatExecutionResult {
++  text: string;
++  usageReferences?: string[];
++  toolEvidenceReferences?: string[];
++}
++
++export interface TeamChatExecutionParams {
++  conversation: DurableConversation;
++  turn: ConversationTurn;
++  attempt: ConversationAttempt;
++  participant: ConversationParticipant;
++  messages: readonly ConversationMessage[];
++  signal?: AbortSignal;
++}
++
++export interface TeamChatExecutionAdapter {
++  execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
++}
++
++export type ConversationUpdateType =
++  | 'turn_accepted'
++  | 'turn_started'
++  | 'attempt_prepared'
++  | 'attempt_running'
++  | 'attempt_completed'
++  | 'turn_completed'
++  | 'turn_failed'
++  | 'turn_cancelled';
++
++export interface ConversationUpdate {
++  conversationId: string;
++  revision: number;
++  type: ConversationUpdateType;
++  turnId?: string;
++  attemptId?: string;
++  message?: ConversationMessage;
++  state?: ConversationTurn['state'];
++  error?: string;
++}
++
++export interface TeamChatCoordinatorOptions {
++  repository: TeamChatRepository;
++  executionAdapter: TeamChatExecutionAdapter;
++  clock?: () => string;
++  idSource?: () => string;
++  onUpdate?: (update: ConversationUpdate) => void;
++}
++
++export class TeamChatCoordinator {
++  private readonly repository: TeamChatRepository;
++  private readonly executionAdapter: TeamChatExecutionAdapter;
++  private readonly clock: () => string;
++  private readonly idSource: () => string;
++  private readonly onUpdate?: (update: ConversationUpdate) => void;
++  private readonly subscribers = new Map<string, Set<(update: ConversationUpdate) => void>>();
++  private readonly activeLoops = new Set<string>();
++  private readonly abortControllers = new Map<string, AbortController>();
++
++  public constructor(options: TeamChatCoordinatorOptions) {
++    this.repository = options.repository;
++    this.executionAdapter = options.executionAdapter;
++    this.clock = options.clock ?? (() => new Date().toISOString());
++    this.idSource = options.idSource ?? (() => `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`);
++    this.onUpdate = options.onUpdate;
++  }
++
++  public subscribe(conversationId: string, listener: (update: ConversationUpdate) => void): () => void {
++    let listeners = this.subscribers.get(conversationId);
++    if (!listeners) {
++      listeners = new Set();
++      this.subscribers.set(conversationId, listeners);
++    }
++    listeners.add(listener);
++    return () => {
++      listeners?.delete(listener);
++      if (listeners && listeners.size === 0) {
++        this.subscribers.delete(conversationId);
++      }
++    };
++  }
++
++  private notify(update: ConversationUpdate): void {
++    try {
++      this.onUpdate?.(update);
++    } catch {
++      // Ignored
++    }
++    const listeners = this.subscribers.get(update.conversationId);
++    if (listeners) {
++      for (const listener of listeners) {
++        try {
++          listener(update);
++        } catch {
++          // Listeners must not break coordinator operation
++        }
++      }
++    }
++  }
++
++  public getConversation(conversationId: string): DurableConversation | undefined {
++    return this.repository.read().conversations.find(c => c.id === conversationId);
++  }
++
++  private async transitionConversation(
++    conversationId: string,
++    mutate: (current: DurableConversation) => DurableConversation
++  ): Promise<DurableConversation> {
++    return this.repository.transaction(draft => {
++      const index = draft.conversations.findIndex(c => c.id === conversationId);
++      if (index < 0) throw new Error(`Conversation ${conversationId} was not found.`);
++      const current = draft.conversations[index];
++      const next = mutate(structuredClone(current));
++      draft.conversations[index] = structuredClone(next);
++      return structuredClone(next);
++    });
++  }
++
++  public async submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult> {
++    if (!command.conversationId?.trim()) throw new Error('A conversationId is required.');
++    if (!command.commandId?.trim()) throw new Error('A commandId is required.');
++    if (!command.text?.trim()) throw new Error('A message text is required.');
++
++    // Validate permission choice
++    if (command.runtimeOptions?.permissionMode === ('invalid' as never)) {
++      throw new Error('Invalid permission choice.');
++    }
++
++    // Validate attachment references
++    if (command.attachmentRefs) {
++      for (const att of command.attachmentRefs) {
++        if (!att || !att.digest || typeof att.digest !== 'string' || !att.mediaType) {
++          throw new Error('Invalid attachment reference.');
++        }
++      }
++    }
++
++    const snapshot = this.repository.read();
++    const conversation = snapshot.conversations.find(c => c.id === command.conversationId);
++    if (!conversation) {
++      throw new Error(`Conversation ${command.conversationId} was not found.`);
++    }
++
++    const payloadDigest = conversationPayloadDigest(command);
++    const existingReceipt = conversation.commandReceipts.find(r => r.commandId === command.commandId);
++    if (existingReceipt) {
++      if (existingReceipt.payloadDigest !== payloadDigest) {
++        throw new Error('Command payload conflict.');
++      }
++      const existingTurn = conversation.turns.find(t => t.id === existingReceipt.turnId);
++      return {
++        turnId: existingReceipt.turnId,
++        revision: conversation.revision,
++        state: existingTurn?.state ?? 'completed'
++      };
++    }
++
++    // Validate participants
++    if (command.selectedParticipantIds && command.selectedParticipantIds.length > 0) {
++      const knownIds = new Set(conversation.participants.map(p => p.id));
++      for (const id of command.selectedParticipantIds) {
++        if (!knownIds.has(id)) {
++          throw new Error('Invalid participant reference.');
++        }
++      }
++    }
++
++    // Resolve roster & member ordering
++    const mention = parseAssistantMention(command.text);
++    let planParticipants: ConversationParticipant[] = [];
++
++    if (mention.personaId) {
++      const p = conversation.participants.find(part => part.role === mention.personaId) ?? makeParticipant(mention.personaId);
++      planParticipants = [p];
++    } else if (!command.selectedParticipantIds || command.selectedParticipantIds.length === 0) {
++      const lead = conversation.participants.find(part => part.role === 'lead') ?? makeParticipant('lead');
++      planParticipants = [lead];
++    } else {
++      const selected = command.selectedParticipantIds
++        .map(id => conversation.participants.find(p => p.id === id))
++        .filter((p): p is ConversationParticipant => Boolean(p));
++      planParticipants = selected.sort((a, b) => {
++        const orderA = CANONICAL_ROLE_ORDER.indexOf(a.role);
++        const orderB = CANONICAL_ROLE_ORDER.indexOf(b.role);
++        return (orderA >= 0 ? orderA : 99) - (orderB >= 0 ? orderB : 99);
++      });
++    }
++
++    const turnId = this.idSource();
++    const userMessageId = this.idSource();
++    const sequence = (conversation.messages.at(-1)?.sequence ?? 0) + 1;
++
++    const turn: ConversationTurn = {
++      id: turnId,
++      commandId: command.commandId,
++      payloadDigest,
++      userMessageId,
++      acceptedSequence: sequence,
++      plan: {
++        participants: planParticipants,
++        runtimeOptions: command.runtimeOptions,
++        ...(command.context ? { context: command.context } : {})
++      },
++      state: 'queued',
++      completedParticipantIds: [],
++      attempts: []
++    };
++
++    const userMessage: ConversationMessage = {
++      id: userMessageId,
++      turnId,
++      role: 'user',
++      text: command.text,
++      createdAt: this.clock(),
++      sequence,
++      attachments: command.attachmentRefs ?? []
++    };
++
++    const updated = await this.transitionConversation(command.conversationId, conv => {
++      // Ensure participants in plan exist on the conversation record
++      for (const p of planParticipants) {
++        if (!conv.participants.some(existing => existing.id === p.id)) {
++          conv.participants.push(p);
++        }
++      }
++      return submitConversationTurn(conv, conv.revision, command, turn, userMessage);
++    });
++
++    this.notify({
++      conversationId: command.conversationId,
++      revision: updated.revision,
++      type: 'turn_accepted',
++      turnId,
++      message: userMessage,
++      state: 'queued'
++    });
++
++    void this.processConversation(command.conversationId);
++
++    return {
++      turnId,
++      revision: updated.revision,
++      state: 'queued'
++    };
++  }
++
++  public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
++    const abortKey = `${conversationId}:${turnId}`;
++    const controller = this.abortControllers.get(abortKey);
++    if (controller) {
++      controller.abort();
++      this.abortControllers.delete(abortKey);
++    }
++
++    await this.transitionConversation(conversationId, conv => {
++      const turn = conv.turns.find(t => t.id === turnId);
++      if (!turn || ['completed', 'cancelled'].includes(turn.state)) return conv;
++      turn.state = 'cancelled';
++      conv.revision++;
++      for (const att of turn.attempts) {
++        if (!['completed', 'failed', 'interrupted', 'outcome_unknown'].includes(att.state)) {
++          att.state = 'cancelled';
++          att.completedAt = this.clock();
++        }
++      }
++      return conv;
++    });
++
++    const updated = this.getConversation(conversationId);
++    if (updated) {
++      this.notify({
++        conversationId,
++        revision: updated.revision,
++        type: 'turn_cancelled',
++        turnId,
++        state: 'cancelled'
++      });
++    }
++
++    void this.processConversation(conversationId);
++  }
++
++  public async retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void> {
++    const conversation = this.getConversation(conversationId);
++    if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
++    const turn = conversation.turns.find(t => t.id === turnId);
++    if (!turn || turn.state !== 'failed') {
++      throw new Error('Stale or invalid retry target.');
++    }
++    const lastAttempt = turn.attempts.filter(a => a.participantId === participantId).at(-1);
++    if (!lastAttempt || lastAttempt.state !== 'failed') {
++      throw new Error('Stale or invalid retry target.');
++    }
++
++    await this.transitionConversation(conversationId, conv => {
++      const targetTurn = conv.turns.find(t => t.id === turnId);
++      if (!targetTurn) return conv;
++      targetTurn.state = 'running';
++      conv.revision++;
++      return conv;
++    });
++
++    void this.processConversation(conversationId);
++  }
++
++  public async resolveAttempt(
++    conversationId: string,
++    turnId: string,
++    attemptId: string,
++    resolution: 'accept' | 'retry' | 'abort'
++  ): Promise<void> {
++    const conversation = this.getConversation(conversationId);
++    if (!conversation) throw new Error(`Conversation ${conversationId} was not found.`);
++    const turn = conversation.turns.find(t => t.id === turnId);
++    const attempt = turn?.attempts.find(a => a.id === attemptId);
++    if (!turn || !attempt) throw new Error('Stale or invalid retry target.');
++
++    if (resolution === 'abort') {
++      await this.cancelTurn(conversationId, turnId);
++      return;
++    }
++
++    if (resolution === 'retry') {
++      await this.retryParticipant(conversationId, turnId, attempt.participantId);
++      return;
++    }
++
++    if (resolution === 'accept') {
++      await this.transitionConversation(conversationId, conv => {
++        const t = conv.turns.find(item => item.id === turnId);
++        const a = t?.attempts.find(item => item.id === attemptId);
++        if (!a || !t) return conv;
++        a.state = 'completed';
++        a.completedAt = this.clock();
++        if (!t.completedParticipantIds.includes(a.participantId)) {
++          t.completedParticipantIds.push(a.participantId);
++        }
++        if (t.completedParticipantIds.length === t.plan.participants.length) {
++          t.state = 'completed';
++        }
++        conv.revision++;
++        return conv;
++      });
++      void this.processConversation(conversationId);
++    }
++  }
++
++  private async processConversation(conversationId: string): Promise<void> {
++    if (this.activeLoops.has(conversationId)) return;
++    this.activeLoops.add(conversationId);
++
++    try {
++      while (true) {
++        let conversation = this.getConversation(conversationId);
++        if (!conversation) break;
++
++        // Check for an active running turn
++        let activeTurn = conversation.turns.find(t => t.state === 'running');
++
++        if (!activeTurn) {
++          // If no running turn, see if the next queued turn can start
++          const hasFailedOrPausedTurn = conversation.turns.some(t => !['queued', 'completed', 'cancelled'].includes(t.state));
++          if (hasFailedOrPausedTurn) {
++            // Failures and pauses block subsequent queued turns
++            break;
++          }
++
++          const nextQueuedTurn = conversation.turns.find(t => t.state === 'queued');
++          if (!nextQueuedTurn) {
++            // No more work queued
++            break;
++          }
++
++          const started = await this.transitionConversation(conversationId, conv => {
++            return startConversationTurn(conv, conv.revision, nextQueuedTurn.id);
++          });
++
++          this.notify({
++            conversationId,
++            revision: started.revision,
++            type: 'turn_started',
++            turnId: nextQueuedTurn.id,
++            state: 'running'
++          });
++
++          conversation = started;
++          activeTurn = conversation.turns.find(t => t.id === nextQueuedTurn.id);
++        }
++
++        if (!activeTurn || activeTurn.state !== 'running') {
++          break;
++        }
++
++        // Find next participant
++        const nextParticipant = activeTurn.plan.participants.find(p => !activeTurn!.completedParticipantIds.includes(p.id));
++        if (!nextParticipant) {
++          // Turn completed
++          await this.transitionConversation(conversationId, conv => {
++            const t = conv.turns.find(item => item.id === activeTurn!.id);
++            if (t && t.state !== 'completed') {
++              t.state = 'completed';
++              conv.revision++;
++            }
++            return conv;
++          });
++          const updated = this.getConversation(conversationId);
++          if (updated) {
++            this.notify({
++              conversationId,
++              revision: updated.revision,
++              type: 'turn_completed',
++              turnId: activeTurn.id,
++              state: 'completed'
++            });
++          }
++          continue; // Process next queued turn
++        }
++
++        // Prepare attempt
++        const attemptId = this.idSource();
++        const ordinal = activeTurn.attempts.filter(a => a.participantId === nextParticipant.id).length + 1;
++        const visibleMessages = conversation.messages.filter(m => m.sequence < activeTurn!.acceptedSequence || m.turnId === activeTurn!.id);
++        const messageIds = visibleMessages.map(m => m.id);
++        const contextDigest = conversationPayloadDigest({
++          turnId: activeTurn.id,
++          participantId: nextParticipant.id,
++          ordinal,
++          messageIds
++        });
++        const contextReceipt = {
++          digest: contextDigest,
++          messageIds
++        };
++
++        const attempt: ConversationAttempt = {
++          id: attemptId,
++          turnId: activeTurn.id,
++          participantId: nextParticipant.id,
++          ordinal,
++          coordinatorEpoch: conversation.coordinatorEpoch,
++          state: 'prepared',
++          contextReceipt,
++          createdAt: this.clock(),
++          usageReferences: [],
++          toolEvidenceReferences: []
++        };
++
++        const checkTurnBefore = this.getConversation(conversationId)?.turns.find(t => t.id === activeTurn!.id);
++        if (!checkTurnBefore || checkTurnBefore.state !== 'running') {
++          break;
++        }
++
++        let currentConv: DurableConversation;
++        try {
++          currentConv = await this.transitionConversation(conversationId, conv => {
++            const t = conv.turns.find(item => item.id === activeTurn!.id);
++            if (!t || t.state !== 'running') return conv;
++            return reserveConversationAttempt(conv, conv.revision, attempt);
++          });
++        } catch {
++          break;
++        }
++
++        if (currentConv.turns.find(t => t.id === activeTurn!.id)?.state !== 'running') {
++          break;
++        }
++
++        // Advance to dispatching then running
++        const dispatchTime = this.clock();
++        currentConv = await this.transitionConversation(conversationId, conv => {
++          const step1 = advanceConversationAttempt(conv, conv.revision, activeTurn!.id, attemptId, conv.coordinatorEpoch, 'dispatching', dispatchTime);
++          return advanceConversationAttempt(step1, step1.revision, activeTurn!.id, attemptId, step1.coordinatorEpoch, 'running', dispatchTime);
++        });
++
++        this.notify({
++          conversationId,
++          revision: currentConv.revision,
++          type: 'attempt_running',
++          turnId: activeTurn.id,
++          attemptId
++        });
++
++        const abortController = new AbortController();
++        const abortKey = `${conversationId}:${activeTurn.id}`;
++        this.abortControllers.set(abortKey, abortController);
++
++        let executionError: Error | undefined;
++        let result: TeamChatExecutionResult | undefined;
++
++        try {
++          result = await this.executionAdapter.execute({
++            conversation: currentConv,
++            turn: activeTurn,
++            attempt,
++            participant: nextParticipant,
++            messages: visibleMessages,
++            signal: abortController.signal
++          });
++        } catch (err) {
++          executionError = err instanceof Error ? err : new Error(String(err));
++        } finally {
++          this.abortControllers.delete(abortKey);
++        }
++
++        if (abortController.signal.aborted) {
++          break;
++        }
++
++        const latestConv = this.getConversation(conversationId);
++        const latestTurn = latestConv?.turns.find(t => t.id === activeTurn!.id);
++        if (!latestTurn || latestTurn.state === 'cancelled') {
++          break;
++        }
++
++        if (executionError) {
++          // Failure pauses the current turn and leaves later turns queued
++          await this.transitionConversation(conversationId, conv => {
++            const t = conv.turns.find(item => item.id === activeTurn!.id);
++            const a = t?.attempts.find(item => item.id === attemptId);
++            if (!t || !a) return conv;
++            a.state = 'failed';
++            a.error = executionError!.message;
++            a.completedAt = this.clock();
++            t.state = 'failed';
++            conv.revision++;
++            return conv;
++          });
++
++          const failedConv = this.getConversation(conversationId);
++          if (failedConv) {
++            this.notify({
++              conversationId,
++              revision: failedConv.revision,
++              type: 'turn_failed',
++              turnId: activeTurn.id,
++              attemptId,
++              error: executionError.message,
++              state: 'failed'
++            });
++          }
++          break; // Stop loop on failure
++        }
++
++        if (result) {
++          const checkTurn = this.getConversation(conversationId)?.turns.find(t => t.id === activeTurn!.id);
++          const checkAttempt = checkTurn?.attempts.find(a => a.id === attemptId);
++          if (!checkTurn || checkTurn.state === 'cancelled' || !checkAttempt || checkAttempt.state === 'cancelled') {
++            break;
++          }
++
++          const replyMessage: ConversationMessage = {
++            id: this.idSource(),
++            turnId: activeTurn.id,
++            participantId: nextParticipant.id,
++            role: nextParticipant.role,
++            text: result.text,
++            createdAt: this.clock(),
++            sequence: (currentConv.messages.at(-1)?.sequence ?? 0) + 1,
++            attachments: []
++          };
++
++          const completedConv = await this.transitionConversation(conversationId, conv => {
++            return completeConversationAttempt(
++              conv,
++              conv.revision,
++              activeTurn!.id,
++              attemptId,
++              conv.coordinatorEpoch,
++              replyMessage,
++              contextReceipt
++            );
++          });
++
++          this.notify({
++            conversationId,
++            revision: completedConv.revision,
++            type: 'attempt_completed',
++            turnId: activeTurn.id,
++            attemptId,
++            message: replyMessage
++          });
++        }
++      }
++    } finally {
++      this.activeLoops.delete(conversationId);
++    }
++  }
++}
+diff --git a/packages/core/src/ai/assistant/teamChatStore.ts b/packages/core/src/ai/assistant/teamChatStore.ts
+index b9511f14..f4eceaf9 100644
+--- a/packages/core/src/ai/assistant/teamChatStore.ts
++++ b/packages/core/src/ai/assistant/teamChatStore.ts
+@@ -57,6 +57,9 @@ export class TeamChatStore {
+   /** Replaces a chat's transcript. A still-untitled chat is named from its first user message. */
+   public async saveMessages(id: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord> {
+     return this.store.transaction(draft => {
++      if (draft.conversations.some(c => c.id === id)) {
++        throw new Error('Whole-transcript replacement is rejected for durable conversations.');
++      }
+       const chats = draft.teamChats;
+       const index = chats.findIndex(chat => chat.id === id);
+       if (index < 0) throw new Error(`Team chat ${id} was not found.`);
+diff --git a/packages/core/src/host/ipcContracts.ts b/packages/core/src/host/ipcContracts.ts
+index 6c752e14..aa53af2e 100644
+--- a/packages/core/src/host/ipcContracts.ts
++++ b/packages/core/src/host/ipcContracts.ts
+@@ -8,8 +8,12 @@ import type {
+   AssistantTurnResult,
+   AssistantMessage,
+   TeamChatRecord,
+-  TeamChatSummary
++  TeamChatSummary,
++  SubmitConversationCommand,
++  ConversationCommandResult,
++  DurableConversation
+ } from '../ai/assistant/assistantTypes';
++import type { ConversationUpdate } from '../ai/assistant/teamChatCoordinator';
+ import type { AiUsageEvent } from '../ai/aiUsageLog';
+ import type { CoordinationState } from '../ai/coordination/coordinationTypes';
+ import type { UsageBucket, UsageComparison, UsageDashboardSummary, UsageGranularity } from '../ai/aiUsageStats';
+@@ -1264,6 +1268,18 @@ export interface AssistantIpc {
+   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
+   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
+   deleteChat(chatId: string): Promise<void>;
++  /** Submits a validated turn to a durable conversation. */
++  submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult>;
++  /** Retrieves a durable conversation by ID. */
++  getConversation(conversationId: string): Promise<DurableConversation | undefined>;
++  /** Subscribes to conversation revision updates. */
++  subscribeConversation(conversationId: string, listener: (update: ConversationUpdate) => void): () => void;
++  /** Cancels an active or queued turn. */
++  cancelTurn(conversationId: string, turnId: string): Promise<void>;
++  /** Retries a failed participant within an active turn. */
++  retryParticipant(conversationId: string, turnId: string, participantId: string): Promise<void>;
++  /** Resolves an attempt in an unknown or interrupted state. */
++  resolveAttempt(conversationId: string, turnId: string, attemptId: string, resolution: 'accept' | 'retry' | 'abort'): Promise<void>;
+   /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
+   onChatsChanged(listener: () => void): () => void;
+ }
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index e99f2400..dbeaa8d8 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -52,6 +52,7 @@ export * from './ai/assistant/assistantTypes';
+ export * from './ai/assistant/assistantPersonas';
+ export * from './ai/assistant/assistantEngine';
+ export * from './ai/assistant/teamChatStore';
++export * from './ai/assistant/teamChatCoordinator';
+ export * from './ai/ticketContext';
+ export * from './ai/mcp/mcpServerConfig';
+ export * from './ai/mcp/mcpToolBridge';
+
 ```

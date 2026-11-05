@@ -1,5 +1,9 @@
 # FX-BE-184 durable team-chat release verification report
 
+**Authoritative status (supersedes every section below, which is historical):** the full functional suite has **no clean pass** (last known: 748 passed / 2 failed pointer-dependent shelf checks / 14 skipped; a single-worker rerun has no claimed result). Live API check: **skipped** (no credentials). Native CLI session reuse: **unproven** (reconstruction only). Pending-approval `interrupted` vs `outcome_unknown` matrix discrepancy: **open**. Release acceptance stays open.
+
+Production changes outside core/renderer, unrelated to any AC and made only to remove test-run flakes: `workflowWorkspace.ts` (readiness re-read when the base checkout is held) and `ticketWriteBackCommit.ts` (bounded retry on git exit 128 with an `index.lock` error). The clean-base path is unchanged.
+
 
 ## WF-0C7166C7 resumed implementation
 
