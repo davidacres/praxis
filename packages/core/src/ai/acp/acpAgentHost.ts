@@ -1,5 +1,5 @@
 import { backgroundTaskIsLive, type ProviderBackgroundUpdate } from '../backgroundTasks';
-import { isReadOnlyShellCommand, shellCommandOf } from '../readOnlyShell';
+import { isFullDesktopE2eCommand, isReadOnlyShellCommand, shellCommandOf } from '../readOnlyShell';
 import { randomUUID } from 'node:crypto';
 import type { CoordinationGate } from '../coordination/coordinationGate';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
@@ -555,6 +555,10 @@ export class AcpAgentHost {
     // Titles are agent-authored display text, not an authorization boundary.
     // Unclassified actions (including missing kinds) fail closed in read-only mode.
     const command = request.kind === undefined || request.kind === 'execute' || request.kind === 'other' ? shellCommandOf(request.rawInput) : undefined;
+    if (record?.taskDefinition.scheduledRun && command && isFullDesktopE2eCommand(command)) {
+      this.appendEvent(issueKey, evt('warning', 'Blocked full desktop e2e execution for this scheduled run. Run only ticket-changed tests or a focused smoke check.'));
+      return Promise.resolve('deny');
+    }
     // A refused tool ends Copilot's whole turn, so a command that can only look is not refused.
     const readOnlyKind = request.kind === 'read' || request.kind === 'search' || request.kind === 'think' || request.kind === 'fetch' ||
       (command !== undefined && isReadOnlyShellCommand(command));

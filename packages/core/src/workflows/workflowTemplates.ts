@@ -276,11 +276,14 @@ export function governedDeliveryTemplate(): WorkflowDefinition {
         x: 40,
         y: 1000,
         inputs: ['change-diff', 'test-contracts', 'install-log'],
-        command: 'npm',
-        args: ['test'],
+        // The desktop QA runner replaces this marker with tests changed in this ticket. Keeping a
+        // harmless executable here satisfies the workflow check schema without invoking npm test.
+        command: 'node',
+        args: ['-e', 'process.stdout.write("QA test selection is managed by Praxis.")'],
         successExitCodes: [0],
         outputs: [{ id: 'qa-results', kind: 'test-results', required: true }],
         satisfiesGate: 'qa',
+        affectedTests: true,
         // Keep a failed QA run open so the user can retry QA without rerunning implementation.
         maxAttempts: 2,
         failureRecovery: { repairNodeId: 'qa-repair-agent', maxAttempts: 2 }

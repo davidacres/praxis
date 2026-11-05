@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -221,6 +222,60 @@ test('a check with no command fails without spawning anything', async () => {
     const outcome = await runWorkflowCheck(node, runContext(node, cwd), undefined, evidenceRoot);
     assert.equal(outcome.status, 'failed');
     assert.match(outcome.error ?? '', /no command/);
+  });
+});
+
+test('QA skips the configured project-wide command and runs only ticket-changed tests', async () => {
+  await withTempDirs(async (cwd, evidenceRoot) => {
+    const git = (...args: string[]) => execFileSync('git', args, { cwd, stdio: 'ignore' });
+    await writeFile(join(cwd, 'package.json'), '{}');
+    git('init', '--initial-branch=main');
+    git('config', 'user.name', 'Praxis test');
+    git('config', 'user.email', 'praxis@example.test');
+    git('add', 'package.json');
+    git('commit', '-m', 'base');
+    const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+    const marker = join(cwd, 'project-command-ran');
+    const node = check(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`, { satisfiesGate: 'qa' });
+    const context = runContext(node, cwd);
+    context.run = { ...context.run, scheduledLaunchToken: 'scheduled', worktreeBaseRef: base, startedAt: new Date(Date.now() + 5_000).toISOString() };
+
+    const outcome = await runWorkflowCheck(node, context, cwd, evidenceRoot);
+    assert.equal(outcome.status, 'succeeded');
+    assert.equal(await readFile(marker, 'utf8').catch(() => ''), '');
+    assert.match(await readFile(outcome.artifacts![0].path!, 'utf8'), /No test files were added or updated/);
+  });
+});
+
+test('scheduled QA trusts the saved per-ticket base after a later worktree reacquisition', async () => {
+  await withTempDirs(async (cwd, evidenceRoot) => {
+    const git = (...args: string[]) => execFileSync('git', args, { cwd, stdio: 'ignore' });
+    await mkdir(join(cwd, 'test'), { recursive: true });
+    await writeFile(join(cwd, 'package.json'), '{}');
+    await writeFile(join(cwd, 'test', 'earlier-ticket.test.js'), 'test("earlier", () => {});\n');
+    git('init', '--initial-branch=main');
+    git('config', 'user.name', 'Praxis test');
+    git('config', 'user.email', 'praxis@example.test');
+    git('add', '.');
+    git('commit', '-m', 'earlier ticket');
+    const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+    await writeFile(join(cwd, 'source.js'), 'export const current = true;\n');
+    git('add', '.');
+    git('commit', '-m', 'current ticket source');
+
+    const node = check('echo should-not-run', { satisfiesGate: 'qa' });
+    const context = runContext(node, cwd);
+    context.run = {
+      ...context.run,
+      scheduledLaunchToken: 'scheduled',
+      worktreeBaseRef: base,
+      // Simulates an existing workflow record whose original start predates the captured ref.
+      startedAt: '2000-01-01T00:00:00.000Z'
+    };
+    const outcome = await runWorkflowCheck(node, context, cwd, evidenceRoot);
+
+    assert.equal(outcome.status, 'succeeded');
+    assert.match(await readFile(outcome.artifacts![0].path!, 'utf8'), /No test files were added or updated in this ticket/);
   });
 });
 

@@ -41,6 +41,19 @@ export function shellCommandOf(rawInput: unknown): string | undefined {
   return undefined;
 }
 
+/** Blocks unattended scheduled agents from launching an entire desktop e2e suite. */
+export function isFullDesktopE2eCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  const focused = /(?:^|\s)(?:[\w./-]+\/)?[\w.-]+\.spec\.[cm]?[jt]sx?(?:\s|$)/i.test(command)
+    || /(?:--grep(?:=|\s)|\s-g\s|--last-failed|--only-changed)/i.test(command)
+    || /--project(?:=|\s)smoke\b/i.test(command);
+  if (focused) return false;
+  if (/\bnpm\s+(?:run\s+)?test:desktop:smoke\b/.test(normalized)) return false;
+  if (/\bnpm\s+(?:run\s+)?(?:test:full|test:desktop(?::themes|:all)?|test:e2e)\b/.test(normalized)) return true;
+  const playwright = normalized.match(/\b(?:npx|npm\s+(?:exec|run))\s+(?:[^;&|]*?\s)?playwright\s+test\b/);
+  return Boolean(playwright);
+}
+
 type ArgCheck = (args: string[]) => boolean;
 
 const any: ArgCheck = () => true;

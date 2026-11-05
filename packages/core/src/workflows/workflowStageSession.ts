@@ -56,6 +56,7 @@ export interface WorkflowImplementationSnapshot {
 /** Everything a stage is given when it starts. Deliberately closed. */
 export interface WorkflowStageContext {
   runId: string;
+  scheduledRun?: boolean;
   nodeId: string;
   stageName: string;
   instructions: string;
@@ -117,6 +118,7 @@ export function buildStageContext(
 
   return {
     runId: run.runId,
+    ...(run.scheduledLaunchToken ? { scheduledRun: true } : {}),
     nodeId,
     stageName: node.name,
     instructions: isAgentTaskNode(node) ? node.instructions : '',

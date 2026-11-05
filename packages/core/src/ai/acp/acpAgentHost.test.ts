@@ -8,10 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentEventSummary, AgentToolMode } from '../agentTypes';
 
-function permissionHost(toolMode: AgentToolMode, autoApprove = true) {
+function permissionHost(toolMode: AgentToolMode, autoApprove = true, scheduledRun = false) {
   const events: AgentEventSummary[] = [];
   const agentHost = new AcpAgentHost({
-    getAgentSession: () => ({ toolMode }),
+    getAgentSession: () => ({ toolMode, taskDefinition: { scheduledRun } }),
     appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added),
     updateAgentState: () => {}
   } as never, { appendLine: () => {} });
@@ -697,6 +697,23 @@ test('read-only ACP shell inspection remains permitted while writes and test exe
       assert.equal(await host.requestPermission('permission-test', { toolCallId: command, title: 'Shell', kind: 'execute', rawInput: { command: ['bash', '-lc', command] }, options: [] }), expected, command);
     }
   }
+});
+
+test('scheduled ACP tasks block full desktop e2e suites while allowing focused tests and smoke', async () => {
+  const { agentHost, events } = permissionHost('full', true, true);
+  const host = agentHost as unknown as { requestPermission(key: string, request: unknown): Promise<string> };
+  const ask = (command: string) => host.requestPermission('permission-test', {
+    toolCallId: command,
+    title: 'Run tests',
+    kind: 'execute',
+    rawInput: { command: ['bash', '-lc', command] },
+    options: []
+  });
+  assert.equal(await ask('npm run test:desktop -- --output=/tmp/full'), 'deny');
+  assert.equal(await ask('npm run test:desktop:themes'), 'deny');
+  assert.equal(await ask('npm run test:desktop -- e2e/workflowRun.spec.ts'), 'allow_always');
+  assert.equal(await ask('npm run test:desktop:smoke'), 'allow_always');
+  assert.ok(events.some(event => /Blocked full desktop e2e/.test(event.summary)));
 });
 
 test('ACP preserves read arguments so workflow inspection is attributable to the completed tool call', () => {

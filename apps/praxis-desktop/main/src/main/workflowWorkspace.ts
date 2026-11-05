@@ -4,6 +4,8 @@ import {
   type WorkflowRun,
   type WorkflowWorkspaceProvider
 } from '@praxis/core';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { commitPathsGit, getCurrentBranch, getGitStatus } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
@@ -23,6 +25,7 @@ import { withBaseCheckout } from './baseCheckoutLock';
  */
 
 const logger = { appendLine: (message: string): void => console.log(`[workflow] ${message}`) };
+const execFileAsync = promisify(execFile);
 
 /** Stable per-run name, so re-attaching after a restart lands on the same tree. */
 function worktreeKeyFor(run: WorkflowRun): string {
@@ -148,6 +151,13 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
         { worktreePath: run.worktreePath, branchName: worktreeKeyFor(run) },
         { keepBranch: true }
       );
+    },
+
+    async baseRef(_run: WorkflowRun, worktreePath: string): Promise<string | undefined> {
+      try {
+        const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, windowsHide: true });
+        return /^[0-9a-f]{40}$/i.test(stdout.trim()) ? stdout.trim() : undefined;
+      } catch { return undefined; }
     },
 
     async restore(run: WorkflowRun, ref: string): Promise<void> {

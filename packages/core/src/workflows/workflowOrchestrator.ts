@@ -137,6 +137,7 @@ export interface WorkflowRunPersistence {
 /** Prepares and tears down the single worktree a run's stages share. */
 export interface WorkflowWorkspaceProvider {
   acquire(run: WorkflowRun): Promise<string>;
+  baseRef?(run: WorkflowRun, worktreePath: string): Promise<string | undefined>;
   release(run: WorkflowRun): Promise<void>;
   /**
    * Puts the run's worktree back to `ref`'s content as a new commit on the run's
@@ -712,7 +713,8 @@ export class WorkflowOrchestrator {
   private async ensureWorkspace(run: WorkflowRun): Promise<WorkflowRun> {
     if (!this.options.workspace || run.worktreePath) return run;
     const worktreePath = await this.options.workspace.acquire(run);
-    return this.persist({ ...run, worktreePath });
+    const worktreeBaseRef = await this.options.workspace.baseRef?.(run, worktreePath);
+    return this.persist({ ...run, worktreePath, ...(worktreeBaseRef ? { worktreeBaseRef } : {}) });
   }
 
   private async releaseWorkspace(run: WorkflowRun): Promise<void> {

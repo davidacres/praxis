@@ -60,6 +60,12 @@ test('the brief carries the stage instructions, its inputs, and what it must pro
   assert.match(task.definitionOfDone, /report "review-report" \(required\)/);
 });
 
+test('scheduled stage tasks carry the suite restriction into both task metadata and instructions', () => {
+  const task = buildStageTaskDefinition(context({ scheduledRun: true }));
+  assert.equal(task.scheduledRun, true);
+  assert.ok(task.nonGoals?.some(rule => /Do not run the full desktop functional or theme e2e suites/.test(rule)));
+});
+
 test('optional checks with a documented skip path do not block the rest of an autonomous stage', () => {
   assert.match(STAGE_STATUS_INSTRUCTIONS, /explicitly optional.*documented skip path.*leave it skipped with the reason, do not request credentials.*continue the rest of the stage/);
 });

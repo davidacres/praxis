@@ -83,6 +83,8 @@ test('the governed delivery template converges review, QA, and security before a
   const qa = template.nodes.find(node => node.id === 'qa');
   const security = template.nodes.find(node => node.id === 'security');
   assert.equal(qa?.type, 'check');
+  assert.equal(qa?.type === 'check' ? qa.command : undefined, 'node');
+  assert.equal(qa?.type === 'check' ? qa.affectedTests : undefined, true);
   assert.equal(security?.type, 'check');
   assert.equal(qa?.type === 'check' ? qa.maxAttempts : undefined, 2);
   assert.deepEqual(qa?.type === 'check' ? qa.failureRecovery : undefined, { repairNodeId: 'qa-repair-agent', maxAttempts: 2 });

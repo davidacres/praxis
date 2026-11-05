@@ -64,13 +64,18 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       ].join('\n')
     : undefined;
 
+  const scheduledRunPolicy = context.scheduledRun
+    ? 'Scheduled-run policy: release-level full functional/theme suites, live API proofs, and manual theme passes are optional and must not block this run. Do not request live API credentials or pause for those checks. Record them as not run, complete the ticket’s implementation, and continue to downstream workflow stages. QA will run only ticket-changed test files.'
+    : undefined;
+
   const isImplementation = context.expectedOutputs.some(output => output.kind === 'diff');
   const isReview = context.expectedOutputs.some(output => output.kind === 'findings');
   const kind = isImplementation ? ('implementation' as const) : isReview ? ('review' as const) : undefined;
 
   return {
     ...(kind ? { kind } : {}),
-    goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, packGuidance]
+    ...(context.scheduledRun ? { scheduledRun: true } : {}),
+    goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, scheduledRunPolicy, packGuidance]
       .filter((line): line is string => Boolean(line))
       .join('\n\n'),
     scope,
@@ -92,6 +97,7 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       : {}),
     ...(context.ticketContext ? { ticketContext: context.ticketContext } : {}),
     nonGoals: [
+      ...(context.scheduledRun ? ['Do not run the full desktop functional or theme e2e suites. Run only test files added or updated for this ticket, or a focused smoke check when a change has no tests.'] : []),
       'Do not advance, approve, or skip any other stage of this workflow.',
       'Do not modify the workflow definition itself.',
       // An agent short of packages once linked the run's node_modules to the main checkout's, and the

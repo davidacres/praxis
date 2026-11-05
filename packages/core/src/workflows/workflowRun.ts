@@ -318,6 +318,8 @@ export interface WorkflowRun {
    * second one beside it.
    */
   worktreePath?: string;
+  /** Commit at which this run's worktree was acquired, used to scope scheduled QA. */
+  worktreeBaseRef?: string;
   /**
    * The tracker issue this run was started from, if any. A run has no
    * required ticket — workflows are project-scoped automation, not
@@ -1676,6 +1678,7 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       : {}),
     ...normalizeLoopState(raw),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
+    ...(typeof raw.worktreeBaseRef === 'string' ? { worktreeBaseRef: raw.worktreeBaseRef } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
     ...(typeof raw.scheduledLaunchToken === 'string' ? { scheduledLaunchToken: raw.scheduledLaunchToken } : {}),
