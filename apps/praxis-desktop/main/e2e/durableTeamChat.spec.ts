@@ -351,6 +351,38 @@ test('a storage write failure is shown and the accepted transcript remains', asy
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-user')).toHaveText(['Before the disk filled', 'Lost to a full disk']);
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
+  // Post-dispatch commit failure after the renderer has already loaded the attempt_running revision.
+  await app.electronApp.evaluate((_electron, modulePath) => {
+    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
+    const coordinator = require(modulePath).getTeamChatCoordinator();
+    const adapter = coordinator.executionAdapter;
+    const execute = adapter.execute.bind(adapter);
+    const promises = process.getBuiltinModule('fs').promises;
+    const original = promises.open;
+    let failCompletion = false;
+    (globalThis as Record<string, unknown>).__restoreTeamChatOpen = () => { promises.open = original; failCompletion = false; };
+    promises.open = (async (target: unknown, ...rest: unknown[]) => {
+      if (failCompletion && String(target).includes('team-chats.json.') && String(target).endsWith('.tmp')) {
+        throw Object.assign(new Error('ENOSPC: completion write failed'), { code: 'ENOSPC' });
+      }
+      return (original as (...args: unknown[]) => unknown)(target, ...rest);
+    }) as typeof promises.open;
+    adapter.execute = async (params: { onAccepted?: () => Promise<void> }) => {
+      const result = await execute(params);
+      await params.onAccepted?.();
+      await new Promise(resolve => setTimeout(resolve, 150));
+      failCompletion = true;
+      return result;
+    };
+  }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+  await input.fill('Halted on completion write');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByRole('alert')).toContainText('ENOSPC: completion write failed Restart Praxis to recover this team chat.');
+  await app.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).__restoreTeamChatOpen as () => void)());
+  await input.fill('Queued behind halted turn');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' })).toHaveCount(1);
+  await expect(win.getByRole('alert')).toContainText('ENOSPC: completion write failed Restart Praxis to recover this team chat.');
 });
 
 test('re-opening a team chat whose first load failed reads its transcript again', async () => {

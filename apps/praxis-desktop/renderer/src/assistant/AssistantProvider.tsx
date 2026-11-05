@@ -194,7 +194,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setMessages(snapshot?.messages ?? []);
       const active = snapshot?.turns.find(t => !['completed', 'cancelled', 'queued'].includes(t.state));
       setActiveTurnStartedAt(active ? Date.parse(snapshot!.messages.find(m => m.id === active.userMessageId)?.createdAt ?? '') : undefined);
-    }, error => { loadedChatIdRef.current = undefined; setError(String(error)); });
+      setError(current => current && snapshot?.turns.some(t => t.attempts.some(a => a.error === current) || t.contextRequiredReason === current) &&
+        !snapshot.turns.some(t => !['completed', 'cancelled'].includes(t.state) && (t.attempts.at(-1)?.error === current || t.contextRequiredReason === current)) ? undefined : current);
+    }, error => { setError(error instanceof Error ? error.message : String(error)); });
   }, [chatId, chatLoad]);
 
   useEffect(() => {
@@ -272,13 +274,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       };
       pendingSubmissions.current.set(pendingKey, command);
       // One transport retry, with exactly the same command identity and payload.
+      if (generation.current === selectedGeneration) setError(undefined);
       try { await window.praxis.assistant.submitTurn(command); }
       catch { await window.praxis.assistant.submitTurn(command); }
       pendingSubmissions.current.delete(pendingKey);
       if (generation.current === selectedGeneration) {
         setDraft(current => current.trim() === text ? '' : current);
         setDetachedTitle(undefined);
-        setError(undefined);
       }
       return true;
     } catch (err) {

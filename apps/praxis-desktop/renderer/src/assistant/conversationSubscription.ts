@@ -36,6 +36,7 @@ export function subscribeConversation(bridge: AssistantIpc, id: string, publish:
     finally { loading = false; }
   };
   const unsubscribe = bridge.subscribeConversation(id, update => {
+    if (update.error && !disposed) failed(update.error);
     if (update.revision <= revision) return;
     requiredRevision = Math.max(requiredRevision, update.revision);
     dirty = true;

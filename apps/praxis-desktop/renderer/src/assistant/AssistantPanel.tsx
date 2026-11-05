@@ -199,8 +199,8 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         };
         return <div key={turn.id} className="assistant-action-card" data-testid="assistant-turn-status">
           <strong>{turn.state === 'queued' ? `Queued ${index + 1}` : `${member?.role ?? 'Team'}: ${turn.state.replaceAll('_', ' ')}`}</strong>
-          {attempt?.error && <p role="alert">{attempt.error}</p>}
-          {turn.contextRequiredReason && <p role="alert">{turn.contextRequiredReason}</p>}
+          {attempt?.error && attempt.error !== a.error && <p role="alert">{attempt.error}</p>}
+          {turn.contextRequiredReason && turn.contextRequiredReason !== a.error && <p role="alert">{turn.contextRequiredReason}</p>}
           {turn.state === 'outcome_unknown' && <div>
             <label>What did you check before retrying?<input value={reconciliationNotes[turn.id] ?? ''} onChange={event => setReconciliationNotes(current => ({ ...current, [turn.id]: event.target.value }))} /></label>
             <button className="btn btn-sm" disabled={!reconciliationNotes[turn.id]?.trim()} onClick={() => control('reconcile')}>Record reconciliation</button>
