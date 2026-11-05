@@ -153,3 +153,12 @@ Title: **a lagging read that catches up publishes the notified revision**.
 **Given** a bridge whose revision rises by one on every read.
 **When** a revision-4 notification arrives.
 **Then** revision 4 is the last one published.
+
+### PT-1DB6829ECC
+
+Automation: **node:test**, [conversationSubscription.test.ts:43](../../apps/praxis-desktop/renderer/test/conversationSubscription.test.ts#L43).
+Title: **a conversation-update error is surfaced at the loaded revision while snapshot ordering stays monotonic**.
+
+**Given** a subscription whose snapshot is loaded at revision 3.
+**When** an update carrying a loop-stop error arrives at revision 3, then another at revision 5, then a stale revision-2 update.
+**Then** each error reaches the error callback without an extra read; the equal-revision error does not republish, and snapshots published are only 3 then 5.

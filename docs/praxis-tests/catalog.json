@@ -5264,9 +5264,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "an answered team-chat turn, then every team-chat temp-file open in main fails with ENOSPC",
-        "when": "the user sends a second message, then the fault is removed and the user sends again",
-        "then": "an alert shows ENOSPC, the composer keeps the draft, the earlier question and reply stay visible, team-chats.json is byte-identical and no temp file remains; after the fault clears the retried send lands as the second user message with a second reply"
+        "given": "an answered team-chat turn, then every team-chat temp-file open in main fails with ENOSPC; separately, a completion-write fault injected after the renderer has loaded the attempt_running revision",
+        "when": "the user sends a second message, then the fault is removed and the user sends again; and a message whose completion write fails, followed by a further message",
+        "then": "an alert shows ENOSPC, the composer keeps the draft, the earlier question and reply stay visible, team-chats.json is byte-identical and no temp file remains; after the fault clears the retried send lands as the second user message with a second reply; for the completion fault the alert shows the error with the restart instruction at the already-loaded revision, and the later message stays queued while the alert remains visible"
       }
     },
     {
@@ -5275,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 356,
+        "line": 388,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5291,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 391,
+        "line": 423,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5307,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 427,
+        "line": 459,
         "project": "functional"
       },
       "area": "durable Team Chat",

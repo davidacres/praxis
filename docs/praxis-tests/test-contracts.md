@@ -3,6 +3,15 @@
 Ticket: **PRX-S111-184 / FX-BE-184**. Stage: **WF-C10627E5-test-contracts**.
 Frozen implementation: `5e2266f63cabbc2dbddd7e7985ce66cbab49dbd5`. HEAD matched this revision and the tree was clean before authoring. The supplied snapshot includes the implementation and retained release evidence. This stage changes catalog documentation only.
 
+## Review finding: loop-stop notification not visible (medium)
+
+Addressed in the frozen snapshot `596caff2`: `subscribeConversation` now forwards `update.error` to its error callback before the revision guard, so a notification at an already-loaded revision is shown by `AssistantProvider` while snapshot ordering stays monotonic. Contract coverage:
+
+- Node **PT-1DB6829ECC** (`conversationSubscription.test.ts:43`, documented in [renderer migration contracts](fx-be-183-renderer-migration.md)): equal-revision error surfaced, no extra read, snapshots 3 then 5 only. Re-run: renderer suite 34 passed, 0 failed.
+- Playwright **PT-F202472C30** (`durableTeamChat.spec.ts:319`): its curated flow now covers the injected post-dispatch completion-write fault, the visible restart alert and the queued follow-up. Not re-run in this stage; the Electron run is inherited from QA.
+
+Catalog maintenance: three moved links (PT-2467F68DB7, PT-0DD1738998, PT-2633FBDC53) refreshed by `--write`. Validator: 800 Playwright tests catalogued and linked, exit 0. Source contracts now total **826** (800 Playwright + 26 Node: the 25 release-proof ones plus PT-1DB6829ECC, which is documented in the FX-BE-183 file and not counted in the release-proof 25/32 figures). Findings: the Node catalogue remains outside the generator, so Node contracts are not machine-validated; no duplicate ids; no stale links.
+
 ## Iteration 2 recovery and snapshot provenance
 
 The returned finding was **“Interrupted — the app stopped while this stage was running.”** This retry completed a fresh deterministic catalog validation and source/hash audit against the requested frozen implementation. The interruption is addressed by completing and committing this report; it is not evidence of an application defect or a passing runtime test. Earlier contract edits are retained, and no interrupted execution is counted as a pass.
