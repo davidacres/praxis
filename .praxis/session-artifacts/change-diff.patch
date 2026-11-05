@@ -1,708 +1,372 @@
-diff --git a/apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts b/apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts
-new file mode 100644
-index 00000000..976ae8e3
---- /dev/null
-+++ b/apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts
-@@ -0,0 +1,90 @@
-+import { execFileSync } from 'node:child_process';
-+import * as fs from 'node:fs';
-+import * as os from 'node:os';
-+import * as path from 'node:path';
-+import { expect, test } from '@playwright/test';
-+import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
-+import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+diff --git a/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts b/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts
+index 1f80a47d..6bb11f59 100644
+--- a/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts
++++ b/apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts
+@@ -48 +48 @@ async function send(win: Page, id: string, text: string, runtimeOptions: Record<
+-      text, selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions });
++      text, selectedParticipantIds: ['part-dev', 'part-lead'], attachmentRefs: [], runtimeOptions });
+@@ -77 +77 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
+-  const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, state: attempt.state,
++  const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, participantId: attempt.participantId, state: attempt.state,
+@@ -86,2 +86,9 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
+-  expect(new Set(attempts.map(a => a.attemptId)).size).toBe(3);
+-  expect(attempts[2].coordinatorEpoch).not.toBe(attempts[0].coordinatorEpoch);
++  expect(new Set(attempts.map(a => a.attemptId)).size).toBe(6);
++  for (const participantId of ['part-dev', 'part-lead']) {
++    const memberAttempts = attempts.filter(attempt => attempt.participantId === participantId);
++    expect(memberAttempts).toHaveLength(3);
++    expect(memberAttempts[2].coordinatorEpoch).not.toBe(memberAttempts[0].coordinatorEpoch);
++    for (const attempt of memberAttempts) expect(attempt.contextReceipt.messageIds).toContain(conversation.messages[0].id);
++  }
++  const firstTurnSessions = conversation.turns[0].attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
++  if (firstTurnSessions.length) expect(new Set(firstTurnSessions).size).toBe(2);
+diff --git a/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts b/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts
+index 02508cdf..81d87c7e 100644
+--- a/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts
++++ b/apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts
+@@ -174,23 +174,27 @@ test('keyboard cancellation preserves accepted messages and cancels only the sel
+-  mock = await startMockOpenAiCompatibleServer({ reply: 'Should be cancelled', responseDelayMs: 5000 });
+-  app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
+-  const win = app.window;
+-  await win.getByTestId('titlebar-assistant').click();
+-  await win.getByTestId('assistant-input').fill('Active accepted message');
+-  await win.getByTestId('assistant-send').click();
+-  await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
+-  await win.getByTestId('assistant-input').fill('Queued accepted message');
+-  await win.getByTestId('assistant-send').click();
+-  const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
+-  await expect(queued).toHaveCount(1);
+-  await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
+-  await expect(queued).toHaveCount(0);
+-  await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
+-  await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
+-  await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
+-  await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
+-  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
+-  const conversation = (await win.evaluate(async () => {
+-    const chats = await window.praxis.assistant.listChats('');
+-    return window.praxis.assistant.getConversation(chats[0].id);
+-  }))!;
+-  expect(conversation.turns.map(turn => turn.state)).toEqual(['cancelled', 'cancelled']);
++  let releaseReply!: () => void;
++  const responseGate = new Promise<void>(resolve => { releaseReply = resolve; });
++  mock = await startMockOpenAiCompatibleServer({ reply: 'Should be cancelled', responseGate });
++  try {
++    app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
++    const win = app.window;
++    await win.getByTestId('titlebar-assistant').click();
++    await win.getByTestId('assistant-input').fill('Active accepted message');
++    await win.getByTestId('assistant-send').click();
++    await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
++    await win.getByTestId('assistant-input').fill('Queued accepted message');
++    await win.getByTestId('assistant-send').click();
++    const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
++    await expect(queued).toHaveCount(1);
++    await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
++    await expect(queued).toHaveCount(0);
++    await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
++    await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
++    await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
++    await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
++    await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
++    const conversation = (await win.evaluate(async () => {
++      const chats = await window.praxis.assistant.listChats('');
++      return window.praxis.assistant.getConversation(chats[0].id);
++    }))!;
++    expect(conversation.turns.map(turn => turn.state)).toEqual(['cancelled', 'cancelled']);
++  } finally { releaseReply(); }
+diff --git a/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts b/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts
+index 815342dc..fa1bd243 100644
+--- a/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts
++++ b/apps/praxis-desktop/main/e2e/mockOpenAiCompatibleServer.ts
+@@ -35,0 +36,2 @@ export async function startMockOpenAiCompatibleServer(options: {
++  /** Holds completion until a test releases its execution barrier. */
++  responseGate?: Promise<void>;
+@@ -64,0 +67 @@ export async function startMockOpenAiCompatibleServer(options: {
++      await options.responseGate;
+diff --git a/apps/praxis-desktop/main/e2e/themeLooks.spec.ts b/apps/praxis-desktop/main/e2e/themeLooks.spec.ts
+index 1816e188..58644cbc 100644
+--- a/apps/praxis-desktop/main/e2e/themeLooks.spec.ts
++++ b/apps/praxis-desktop/main/e2e/themeLooks.spec.ts
+@@ -135,0 +136,2 @@ test('factory appearance reset restores the theme, Look, surface, and libraries'
++  // Factory reset reloads the renderer; do not read settings from the outgoing context.
++  const reloaded = window.waitForEvent('domcontentloaded');
+@@ -136,0 +139 @@ test('factory appearance reset restores the theme, Look, surface, and libraries'
++  await reloaded;
+diff --git a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts
+index b73a525b..4e4e2182 100644
+--- a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts
++++ b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts
+@@ -62,0 +63,26 @@ test('effective capability evidence is durable before runtime dispatch; evidence
 +
-+test.slow();
-+let app: TestApp | undefined;
-+let mock: MockGatewayServer | undefined;
-+const roots: string[] = [];
-+test.afterEach(async () => {
-+  if (app) await closeTestApp(app);
-+  if (mock) await mock.close();
-+  app = undefined;
-+  mock = undefined;
-+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
-+});
 +
-+test('scheduled allowance handover checkpoints and continues the active stage in the same session', async () => {
-+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-scheduled-handover-'));
-+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-scheduled-handover-repo-'));
-+  roots.push(profile, repo);
-+  const agentDir = path.join(profile, 'agents', 'scheduled-reviewer');
-+  fs.mkdirSync(agentDir, { recursive: true });
-+  fs.writeFileSync(path.join(agentDir, 'agent.json'), JSON.stringify({ schemaVersion: 1, id: 'scheduled-reviewer', name: 'Scheduled reviewer', type: 'gateway', entry: 'session' }));
-+  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
-+  git('init', '-q', '--initial-branch=main');
-+  fs.writeFileSync(path.join(repo, 'README.md'), '# fixture\n');
-+  git('add', '.');
-+  git('-c', 'user.name=E2E', '-c', 'user.email=e2e@example.com', 'commit', '-qm', 'initial');
-+  mock = await startMockGatewayServer({ mode: 'hang' });
-+  app = await launchTestApp({
-+    preview: { enableScheduledRuns: true },
-+    ai: {
-+      activeProvider: 'vercel-gateway', workingDirectory: repo,
-+      providers: {
-+        'codex-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') },
-+        'claude-code-cli': { enabled: false }, 'copilot-cli': { enabled: false },
-+        'antigravity-cli': { enabled: false }, 'cursor-cli': { enabled: false }
-+      }
-+    }
-+  }, { userDataDir: profile, settingsPath: path.join(profile, 'settings.json') }, {
-+    AI_GATEWAY_API_KEY: 'e2e-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_AI_GATEWAY_URL: undefined,
-+    PRAXIS_E2E_SCHEDULE_TICK_MS: '500', PRAXIS_E2E_PROVIDER_USAGE: JSON.stringify({ 'vercel-gateway': 0.1, 'codex-cli': 0.1 })
-+  }, { openNewSession: false });
-+  const page = app.window;
-+  const scheduleId = await page.evaluate(async repo => {
-+    const workspace = (await window.praxis.workspaces.list())[0];
-+    const project = await window.praxis.projects.create({
-+      name: 'Handover', key: 'HND', type: 'software', purpose: '', brief: {}, startingPoint: 'existing-folder', folderPath: repo,
-+      workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done', category: 'done' }],
-+      starterTickets: [{ summary: 'Continue this ticket', description: '', issueType: 'Task', status: 'Backlog' }], defaultAiToolMode: 'read-only'
-+    }, workspace.id);
-+    await window.praxis.agentRuntime.refresh();
-+    const now = new Date().toISOString();
-+    await window.praxis.workflows.save(project.id, {
-+      schemaVersion: 1, id: 'scheduled-handover', name: 'Scheduled handover', scope: 'project', projectId: project.id, version: 1,
-+      entryNodeId: 'review', createdAt: now, updatedAt: now,
-+      nodes: [
-+        { type: 'agent-task', id: 'review', name: 'Review', x: 0, y: 0, inputs: [], agent: { agentId: 'scheduled-reviewer', scope: 'global', toolMode: 'read-only' }, instructions: 'Review the ticket and report your findings.', outputs: [{ id: 'review-report', kind: 'report', required: true }], mutatesWorktree: false },
-+        { type: 'approval', id: 'approve', name: 'Approve', x: 240, y: 0, inputs: ['review-report'], prompt: 'Ship?', requiredGates: [], allowBypass: false }
-+      ], edges: [{ id: 'next', from: 'review', to: 'approve', on: 'success', required: true }]
-+    } as never);
-+    const issues = await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 10, `project:${project.id}`);
-+    const view = await window.praxis.scheduledRuns.save({ projectId: project.id, name: 'Handover', timezone: 'UTC', date: new Date(Date.now() + 86400000).toISOString().slice(0, 10), time: '12:00', workflowId: 'scheduled-handover', tickets: issues.issues.map(issue => ({ connectionId: `project:${project.id}`, issueKey: issue.key, title: issue.summary })) });
-+    await window.praxis.scheduledRuns.startNow(view.run.id);
-+    return view.run.id;
-+  }, repo);
-+  await expect.poll(() => mock!.requests.length).toBeGreaterThan(0);
-+  const original = await page.evaluate(async () => (await window.praxis.ai.listSessions()).find(session => session.workflowRole === 'stage'));
-+  expect(['planning', 'executing']).toContain(original?.state);
-+  expect(original?.worktreePath).toBeTruthy();
-+  fs.writeFileSync(path.join(original!.worktreePath!, 'checkpoint.txt'), 'work before handover\n');
-+  await app.electronApp.evaluate(() => { process.env.PRAXIS_E2E_PROVIDER_USAGE = JSON.stringify({ 'vercel-gateway': 0.95, 'codex-cli': 0.1 }); });
-+  await expect.poll(async () => (await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId))?.run.entries[0].outcome?.handovers?.length, { timeout: 30000 }).toBe(1);
-+  const view = await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId);
-+  const outcome = view!.run.entries[0].outcome!;
-+  expect(outcome.workflowRunId).toBe(original!.workflowRunId);
-+  expect(outcome.handovers![0].usedPercent).toBe(95);
-+  const checkpoint = outcome.handovers![0].checkpointRef!;
-+  expect(execFileSync('git', ['show', `${checkpoint}:checkpoint.txt`], { cwd: original!.worktreePath!, encoding: 'utf8' })).toBe('work before handover\n');
-+  const replacement = await page.evaluate(async key => (await window.praxis.ai.listSessions()).find(session => session.issueKey === key), original!.issueKey);
-+  expect(replacement?.sessionId).toBe(original!.sessionId);
-+  expect(replacement?.provider).toBe('codex-cli');
-+  expect(replacement?.handoverBrief?.revision).toBeGreaterThan(0);
-+  await expect.poll(async () => (await page.evaluate(id => window.praxis.workflows.getRun(id), outcome.workflowRunId!))?.status, { timeout: 30000 }).toBe('awaiting-approval');
-+  await expect.poll(async () => (await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId))?.run.entries[0].outcome?.artifacts?.length).toBeGreaterThan(0);
-+});
-diff --git a/apps/praxis-desktop/main/package.json b/apps/praxis-desktop/main/package.json
-index 5e799fb7..95076d2c 100644
---- a/apps/praxis-desktop/main/package.json
-+++ b/apps/praxis-desktop/main/package.json
-@@ -29,7 +29,7 @@
-     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
-     "start": "npm run compile && electron .",
-     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
--    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/taskNotificationPolicy.test.js out/main/workflowAgentStage.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
-+    "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/workflowMergeRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/taskNotificationPolicy.test.js out/main/workflowAgentStage.test.js out/main/stageHandoverGuard.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
-     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js out/main/minimaxUsage.test.js out/main/alibabaCodingPlanUsage.test.js out/main/antigravityUsage.test.js out/main/providerUsageBatch.test.js out/main/providerUsageHistory.test.js out/main/ticketReviewApply.test.js out/main/windowState.test.js out/main/autoUpdate.test.js out/main/windowBroadcast.test.js out/main/logPersistence.test.js out/main/semanticModelDownload.test.js out/main/codeIntelligenceSession.test.js",
-     "test:mobile": "npm run compile && node --test out/main/mobileHostServices.test.js out/main/mobileScheduledRuns.test.js out/main/mobileRunProjection.test.js out/main/mobileSessionProjection.test.js out/main/mobileSessionChanges.test.js out/main/mobileImagePreview.test.js out/main/mobilePermissions.test.js out/main/mobileAccessLifecycle.test.js out/main/mobileLanServer.test.js out/main/mobileRelayClient.test.js out/main/mobilePairingRegistry.test.js out/main/mobileDiscoveryAdvertiser.test.js out/main/mobileEndToEnd.test.js out/main/mobileAppearance.test.js",
-     "check-ipc-senders": "node scripts/checkTrustedIpc.cjs",
-diff --git a/apps/praxis-desktop/main/src/main/scheduledRunLive.ts b/apps/praxis-desktop/main/src/main/scheduledRunLive.ts
-index 3c6976d2..6d8e281a 100644
---- a/apps/praxis-desktop/main/src/main/scheduledRunLive.ts
-+++ b/apps/praxis-desktop/main/src/main/scheduledRunLive.ts
-@@ -1,5 +1,7 @@
- import {
-   WorkflowRunStore,
-+  estimateWorkflowRun,
-+  stageUsageSample,
-   exhaustedProviders,
-   providerHeadroom,
-   resolveApprovalTarget,
-@@ -13,6 +15,7 @@ import {
-   type WorkflowObservation,
-   type WorkflowRun
- } from '@praxis/core';
-+import { getAiSessionManager } from './aiInstance';
- import { getAiUsageLog } from './aiUsageLogInstance';
- import { providerSnapshot } from './aiUsageIpc';
- import { getSettingsBackend } from './settingsBackendInstance';
-@@ -88,15 +91,17 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
-     progress = { kind: 'stalled', pauseReason: 'policy', reason: summary.needsDecision.message, ...spendField, ...exhaustedField };
-   } else {
-     const live = summary.stages.find(stage => stage.lane === 'running') ?? [...summary.stages].reverse().find(stage => stage.provider);
-+    const session = live?.sessionId ? getAiSessionManager().listAgentSessionSummaries().find(session => session.sessionId === live.sessionId) : undefined;
-     progress = {
-       kind: 'running',
--      provider: live?.provider ?? summary.aiProvider,
-+      provider: session?.provider ?? live?.provider ?? summary.aiProvider,
-       ...(live?.sessionId ? { sessionId: live.sessionId } : {}),
-       ...spendField,
-       ...exhaustedField
-     };
-   }
--  return { progress };
-+  const estimate = estimateWorkflowRun(run.definition, { parameters: run.parameters, usage: stageUsageSample(getAiUsageLog().list()) });
-+  return { progress: { ...progress, estimate: { tokens: estimate.tokens, spend: estimate.spend, notEstimable: estimate.notEstimable, basedOnSessions: estimate.basedOnSessions }, artifacts: Object.values(run.nodes).flatMap(node => node.artifacts) } };
- }
- 
- /** A run's progress through its stages, for the live view. */
-diff --git a/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts b/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts
-index 5e38a82d..d2b93f36 100644
---- a/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts
-+++ b/apps/praxis-desktop/main/src/main/scheduledRunRunnerInstance.ts
-@@ -6,6 +6,7 @@ import {
-   WorkflowRunStore,
-   approveStage,
-   resolveApprovalTarget,
-+  type AiProvider,
-   type ScheduledRunnerPorts
- } from '@praxis/core';
- import { handoverThreshold, observeWorkflowRun, readProviderUsage } from './scheduledRunLive';
-@@ -15,6 +16,9 @@ import { getSettingsBackend } from './settingsBackendInstance';
- import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
- import { getWorkflowOrchestrator, onDidChangeWorkflowRun } from './workflowOrchestratorInstance';
- import { startWorkflowRun } from './workflowIpc';
-+import { stageHandoverGuard } from './stageHandoverGuard';
-+import { getAiSessionManager, abortActiveTask } from './aiInstance';
-+import { handoverSession } from './aiIpc';
- import { preserveUncommittedWork } from './runWork';
- 
- /**
-@@ -89,13 +93,32 @@ function ports(): ScheduledRunnerPorts {
-     threshold: handoverThreshold,
-     handOver: async ({ entry, workflowRunId, from, to, usedFraction: used }) => {
-       const run = runStore().get(workflowRunId);
--      // A running turn is never cut off: the run's provider changes for every stage not yet started.
--      await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
-+      if (!run) throw new Error('The workflow run no longer exists.');
-+      const sessions = getAiSessionManager();
-+      const active = sessions.listAgentSessionSummaries().filter(session => session.workflowRunId === workflowRunId && session.workflowRole === 'stage' && session.provider === from && !['completed', 'failed', 'aborted'].includes(session.state));
-+      if (active.length !== 1) throw new Error('Provider handover requires exactly one active workflow stage session.');
-+      const session = active[0];
-+      const worktreePath = session.worktreePath ?? run.worktreePath;
-       let checkpointRef: string | undefined;
--      if (run?.worktreePath) {
--        const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
--        if (await preserveUncommittedWork(run.worktreePath, message)) checkpointRef = await headOf(run.worktreePath);
--      }
-+      await stageHandoverGuard.during(session.issueKey, async () => {
-+        await abortActiveTask(session.issueKey);
-+        if (worktreePath) {
-+          const message = `checkpoint: ${entry.ticket.issueKey} at ${Math.round(used * 100)}% of ${from}`;
-+          await preserveUncommittedWork(worktreePath, message);
-+          checkpointRef = await headOf(worktreePath);
-+          if (!checkpointRef) throw new Error('Could not record the handover checkpoint.');
-+        }
-+        if (runStore().get(workflowRunId)?.status !== 'running') throw new Error('The workflow stopped during provider handover.');
-+        await handoverSession(session.issueKey, {
-+          provider: to as AiProvider,
-+          expectedBriefRevision: sessions.getAgentSession(session.issueKey)?.handoverBrief?.revision ?? 0
-+        });
-+        if (runStore().get(workflowRunId)?.status !== 'running') {
-+          await abortActiveTask(session.issueKey);
-+          throw new Error('The workflow stopped during provider handover.');
-+        }
-+        await getWorkflowOrchestrator().updateRun(workflowRunId, current => ({ ...current, aiProvider: to as typeof current.aiProvider }));
-+      });
-       return { ...(checkpointRef ? { checkpointRef } : {}) };
-     },
-     onChanged: run => notifyScheduledRunsChanged(run.projectId),
-diff --git a/apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts b/apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts
-new file mode 100644
-index 00000000..ae2a8c6e
---- /dev/null
-+++ b/apps/praxis-desktop/main/src/main/stageHandoverGuard.test.ts
-@@ -0,0 +1,29 @@
-+import test from 'node:test';
-+import assert from 'node:assert/strict';
-+import { StageHandoverGuard } from './stageHandoverGuard';
-+
-+test('intentional abort is held until the replacement turn is launched', async () => {
-+  const guard = new StageHandoverGuard();
-+  let state = 'executing';
-+  const settled: string[] = [];
-+  const check = () => { if (!guard.isHeld('stage') && state !== 'executing') settled.push(state); };
-+  guard.observe('stage', check);
-+  await guard.during('stage', async () => {
-+    state = 'aborted'; check();
-+    await assert.rejects(guard.during('stage', async () => {}), /already in progress/);
-+    state = 'executing'; check();
++test('unverified CLI identity cannot be stabilized by turn or participant account references', async () => {
++  const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
++  const adapter = createProductionTeamChatExecutionAdapter({
++    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
++    resolveRuntimeConfiguration: async () => 'fixture-runtime',
++    resolveConnectionOptions: async () => ({}),
++    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
 +  });
-+  assert.deepEqual(settled, []);
-+  state = 'completed'; check();
-+  assert.deepEqual(settled, ['completed']);
-+});
-+
-+test('failed handover releases the waiter and preserves the stopped result', async () => {
-+  const guard = new StageHandoverGuard();
-+  let checked = false;
-+  const dispose = guard.observe('stage', () => { checked = true; });
-+  await assert.rejects(guard.during('stage', async () => { throw new Error('checkpoint failed'); }), /checkpoint failed/);
-+  assert.equal(checked, true);
-+  assert.equal(guard.isHeld('stage'), false);
-+  dispose();
-+});
-diff --git a/apps/praxis-desktop/main/src/main/stageHandoverGuard.ts b/apps/praxis-desktop/main/src/main/stageHandoverGuard.ts
-new file mode 100644
-index 00000000..1d5e36bf
---- /dev/null
-+++ b/apps/praxis-desktop/main/src/main/stageHandoverGuard.ts
-@@ -0,0 +1,25 @@
-+/** Keeps a workflow stage attached while an intentional provider interruption is in progress. */
-+export class StageHandoverGuard {
-+  private readonly held = new Set<string>();
-+  private readonly observers = new Map<string, () => void>();
-+
-+  public observe(key: string, check: () => void): () => void {
-+    this.observers.set(key, check);
-+    return () => this.observers.delete(key);
++  for (const source of ['defaults', 'runtimeOptions'] as const) {
++    const params = {
++      conversation: { id: 'chat' },
++      participant: { id: 'lead', instructionVersion: '1', instructions: 'help',
++        defaults: source === 'defaults' ? { accountReference: 'claimed-account' } : {} },
++      turn: { id: 'first', plan: { runtimeOptions: { provider: 'claude-code-cli',
++        ...(source === 'runtimeOptions' ? { accountReference: 'claimed-account' } : {}) } } }
++    } as unknown as TeamChatExecutionParams;
++    const first = await adapter.prepare!(params);
++    assert.deepEqual(await adapter.prepare!(params), first, 'same-turn dispatch revalidation stays stable');
++    params.turn.id = 'second';
++    const second = await adapter.prepare!(params);
++    assert.notEqual(second.accountReference, first.accountReference, 'unverified identity forces reconstruction across turns');
++    assert.equal(second.providerRuntime, first.providerRuntime);
 +  }
-+
-+  public isHeld(key: string): boolean { return this.held.has(key); }
-+
-+  public async during<T>(key: string, action: () => Promise<T>): Promise<T> {
-+    if (this.held.has(key)) throw new Error('A provider handover is already in progress.');
-+    this.held.add(key);
-+    try {
-+      return await action();
-+    } finally {
-+      this.held.delete(key);
-+      this.observers.get(key)?.();
-+    }
-+  }
-+}
-+
-+export const stageHandoverGuard = new StageHandoverGuard();
-diff --git a/apps/praxis-desktop/main/src/main/workflowAgentStage.ts b/apps/praxis-desktop/main/src/main/workflowAgentStage.ts
-index 38012241..f67d5016 100644
---- a/apps/praxis-desktop/main/src/main/workflowAgentStage.ts
-+++ b/apps/praxis-desktop/main/src/main/workflowAgentStage.ts
-@@ -1,3 +1,4 @@
-+import { stageHandoverGuard } from './stageHandoverGuard';
- import type { AgentSessionRecord } from '@praxis/core';
- import { runAsAgent } from './projectActivityInstance';
- import { createHash } from 'node:crypto';
-@@ -614,12 +615,18 @@ function waitForSession(issueKey: string): { promise: Promise<FinishedStageSessi
-       });
-     };
- 
--    const subscription = sessions.onDidChangeAgentSession(record => {
--      if (record.issueKey !== issueKey) return;
-+    const check = () => {
-+      if (stageHandoverGuard.isHeld(issueKey)) return;
-+      const record = sessions.getAgentSession(issueKey);
-+      if (!record) return;
-       const completion = stageSessionCompletion(record);
-       if (completion) settle(completion.state, completion.error);
-+    };
-+    const unobserve = stageHandoverGuard.observe(issueKey, check);
-+    const subscription = sessions.onDidChangeAgentSession(record => {
-+      if (record.issueKey === issueKey) check();
-     });
--    dispose = () => subscription.dispose();
-+    dispose = () => { subscription.dispose(); unobserve(); };
-   });
- 
-   return { promise, cancel: () => dispose?.() };
++});
+diff --git a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts
+index 7387af45..444a1c76 100644
+--- a/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts
++++ b/apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.ts
+@@ -124 +124 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
+-      ? String(options.accountReference ?? `${provider}:unverified-account:${turn.id}`) : connection.apiKey ?? provider;
++      ? `${provider}:unverified-account:${turn.id}` : connection.apiKey ?? provider;
 diff --git a/docs/praxis-tests/catalog.json b/docs/praxis-tests/catalog.json
-index a73c2154..7b2a6453 100644
+index 5d024ce3..778c1c0d 100644
 --- a/docs/praxis-tests/catalog.json
 +++ b/docs/praxis-tests/catalog.json
-@@ -3,7 +3,7 @@
-   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
-   "runner": "playwright",
-   "scope": "apps/praxis-desktop/main/e2e",
--  "testCount": 708,
-+  "testCount": 710,
-   "tests": [
-     {
-       "id": "PT-DD79DC7C96",
-@@ -7397,6 +7397,22 @@
-         "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-+    {
-+      "id": "PT-F32409778D",
-+      "title": "scheduled allowance handover checkpoints and continues the active stage in the same session",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts",
-+        "line": 21,
-+        "project": "functional"
-+      },
-+      "area": "scheduled Provider Handover",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "scheduled allowance handover checkpoints and continues the active stage in the same session",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-     {
-       "id": "PT-8DC4807D76",
-       "title": "builds a schedule on the belt, saves it, and it survives a restart in the same order",
-@@ -7669,13 +7685,29 @@
-         "then": "the automated assertions for this test pass and record the described user-visible result"
-       }
-     },
-+    {
-+      "id": "PT-9DA156CF24",
-+      "title": "the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing",
-+      "source": {
-+        "runner": "playwright",
-+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
-+        "line": 790,
-+        "project": "functional"
-+      },
-+      "area": "scheduled Runs",
-+      "flow": {
-+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-+        "when": "the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing",
-+        "then": "the automated assertions for this test pass and record the described user-visible result"
-+      }
-+    },
-     {
-       "id": "PT-76F292ED66",
-       "title": "the editor can Run now without a scheduled start time and still obeys the provider budget gate",
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 790,
-+        "line": 807,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -7691,7 +7723,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 807,
-+        "line": 824,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -7707,7 +7739,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 845,
-+        "line": 862,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -7723,7 +7755,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 862,
-+        "line": 879,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
-@@ -7739,7 +7771,7 @@
-       "source": {
-         "runner": "playwright",
-         "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
--        "line": 902,
-+        "line": 919,
-         "project": "functional"
-       },
-       "area": "scheduled Runs",
+@@ -5102 +5102 @@
+-        "line": 96,
++        "line": 103,
+@@ -5118 +5118 @@
+-        "line": 109,
++        "line": 116,
+@@ -5214 +5214 @@
+-        "line": 199,
++        "line": 203,
+@@ -5230 +5230 @@
+-        "line": 252,
++        "line": 256,
+@@ -5246 +5246 @@
+-        "line": 288,
++        "line": 292,
+@@ -5262 +5262 @@
+-        "line": 319,
++        "line": 323,
+@@ -5278 +5278 @@
+-        "line": 388,
++        "line": 392,
+@@ -5294 +5294 @@
+-        "line": 423,
++        "line": 427,
+@@ -5310 +5310 @@
+-        "line": 459,
++        "line": 463,
+diff --git a/docs/praxis-tests/fx-be-184-release-proof.md b/docs/praxis-tests/fx-be-184-release-proof.md
+index 2b5bbb5f..05dfac65 100644
+--- a/docs/praxis-tests/fx-be-184-release-proof.md
++++ b/docs/praxis-tests/fx-be-184-release-proof.md
+@@ -3 +3 @@
+-Runner: **node:test**. These **25 supplemental source contracts, representing 32 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
++Runner: **node:test**. These **27 supplemental source contracts, representing 34 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
+@@ -66 +66 @@ Title: **a pending approval at crash is never reused by the replacement attempt*
+-**Then** the recovered attempt is interrupted or outcome_unknown (recorded deviation: tool-capable is outcome_unknown, not the matrix's interrupted); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
++**Then** the recovered attempt is exactly outcome_unknown because a pending prompt cannot exclude earlier tool activity (explicit discrepancy with the matrix's interrupted row); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
+@@ -246,0 +247,18 @@ Registration: core contracts run through `packages/core/package.json` → `test`
++
++### PT-3544C516BE
++
++Automation: **node:test**, [teamChatExecutionAdapter.test.ts:65](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L65).
++Title: **unverified CLI identity cannot be stabilized by turn or participant account references**.
++
++**Given** a CLI configuration with a claimed account reference in participant defaults or turn options.
++**When** production preparation repeats within one turn and then prepares another turn.
++**Then** same-turn validation is stable, but cross-turn account identity changes and cannot authorize native reuse. No provider dispatch occurs.
++
++### PT-F19C6CE02C
++
++Automation: **node:test**, [teamChatCoordinator.test.ts:684](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L684).
++Title: **queued page identity and attachment references survive caller mutation before dispatch**.
++
++**Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
++**When** the caller changes the page identity, summary, draft and attachment list before releasing the first turn.
++**Then** the queued provider invocation receives the original page identity, summary, text and immutable image reference. Both turns complete.
+diff --git a/docs/praxis-tests/fx-be-184-retained-evidence.md b/docs/praxis-tests/fx-be-184-retained-evidence.md
+index c85e0d9b..28346502 100644
+--- a/docs/praxis-tests/fx-be-184-retained-evidence.md
++++ b/docs/praxis-tests/fx-be-184-retained-evidence.md
+@@ -437,0 +438,68 @@ These images remain session artifacts and are not committed. Hashes below were r
++
++## Recovery execution on 2026-11-05
++
++Code revision: `b291c054`; initial checkout: `ea2abb59`. This section is current execution evidence. Earlier sections remain historical records, including their original failures. Raw command logs are `/tmp/fx184-*.log` and may expire; useful receipts and screenshots remain in `.praxis/session-artifacts/`.
++
++| Command | Result |
++| --- | --- |
++| `npm run build:core` | exit 0, including compilation of the new queue and recovery assertions |
++| `npm run test:core` | initial sandbox run encountered localhost EPERM; permitted final run exit 0, 1942 tests: 1940 passed, 2 conditional skips |
++| `npm run check-types` | exit 0, repeated after the final code changes |
++| `npm run build:renderer` | exit 0 |
++| `npm run desktop:copy-renderer` | exit 0 |
++| `npm run build:desktop` | exit 0 |
++| `npm run test:desktop:git` | sandbox run exit 1 (localhost EPERM); permitted retry exit 0: 140 passed, 0 skipped |
++| `npm run test:renderer` | exit 0: 34 passed, 0 skipped |
++| `node --test packages/core/out/ai/assistant/*.test.js` | exit 0: 76 passed, 0 skipped |
++| focused assistant/quickSession/durableTeamChat/standaloneConversations functional run | initial sandbox run exit 1 (localhost EPERM); permitted run exit 1: 44 passed, 1 failed (composer reply visibility) |
++| `npm run test:desktop:themes` initial run | exit 1: 45 passed, 2 failed (factory reset read raced renderer reload; motif master switch) |
++| focused `themeLooks.spec.ts --project=themes` after reload wait fix | exit 0: all 6 passed |
++| focused composer visibility and motif master switch, one worker | exit 0: 2 passed; does not erase earlier broad-run failures |
++| `PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/durableTeamChat.live.spec.ts` | exit 0: CLI passed, API skipped; provider/key unset |
++| catalog `--write`, then `npm run test:praxis-contracts` | exit 0: 800 linked Playwright contracts; source inventory only |
++
++Broad suites overlapped during this execution. Profiles and mock servers were isolated; real pointer activity remains shared. This limits inference about timing/pointer failures. No assertion was weakened and no snapshot was updated.
++
++### Current real CLI receipts
++
++Two selected members, two compatible turns, then a full restart and third turn. All six attempts completed; native reuse was not established (unverified CLI identity deliberately forces fresh bindings). Each first-turn member session is isolated, each later prompt retains the original decision, and the final reply recalls its codename. API absence is a skip, not substitute mock proof.
++
++| Member | Attempt | Epoch | Binding | Provider session | Context messages |
++| --- | --- | --- | --- | --- | --- |
++| part-dev | id-mw2x67v5-5ko0y2 | id-mw2x67rt-zknn9f | id-mw2x67v9-51vw6e | ae945edc-7420-4e63-9b16-8ff060e2899d | 1 |
++| part-lead | id-mw2x6cks-z430od | id-mw2x67rt-zknn9f | id-mw2x6clw-3nblqq | defe70fd-e65a-4c79-aac1-ed9fd6a9d73a | 2 |
++| part-dev | id-mw2x6gtz-8ysh3f | id-mw2x67rt-zknn9f | id-mw2x6gu3-rgqfdg | 91a3e7d5-ccd9-4c75-a875-010bd98dca6c | 4 |
++| part-lead | id-mw2x6kp8-h0nl6p | id-mw2x67rt-zknn9f | id-mw2x6kpl-j2jzau | 965cf389-5a37-4c2c-a5cd-b2a2ab6f9d61 | 5 |
++| part-dev | id-mw2x6uyk-5ps2sw | id-mw2x6q95-3y4xae | id-mw2x6uyn-pzis2u | 6e09c173-38d0-4959-83ce-59db92866ef4 | 7 |
++| part-lead | id-mw2x71d3-0y8al2 | id-mw2x6q95-3y4xae | id-mw2x71d7-6mdyzs | ee0400dd-6c27-47f9-bdee-0dcbaeb7fba3 | 8 |
++
++### Current retained artifact integrity
++
++Manual screenshots were captured through computer use and visually inspected. A temporary mock-backed profile was used; no user data or repository plan write path was used. Light: send, dock, close and reopen while preserving the conversation. Dark: float, pin a decision, send `@qa`, close/reopen and observe QA's reply and 50 total tokens. These checks do not claim the remaining manual recovery/Preview/Apply journey.
++
++| Artifact | Bytes | SHA256 |
++| --- | --- | --- |
++| `.praxis/session-artifacts/fx184-manual-light.png` | 188832 | `e9bcc5ba3d9c6b51712db7d2ebacd7cab3aaf223b128dd773b46fc11b7f72ad4` |
++| `.praxis/session-artifacts/fx184-manual-dark.png` | 181744 | `718f886ed352cc90e502f213d1227b463c051e2b80ced8c3b6fe9483e17fffea` |
++| `.praxis/session-artifacts/durable-team-chat-live-cli.json` | 8542 | `80e9360ca3f5fb6d93700c0edd5f2d980cda0d44006aaa13ffda90db8917f8b4` |
++
++### Regression discrimination
++
++A temporary in-memory module harness restored only the old `options.accountReference` fallback in the compiled adapter, without changing the worktree or a running app. `node --test /tmp/fx184-regression-before.cjs` failed exactly the new identity assertion (4 passed, 1 failed). The unchanged committed adapter suite then passed all 5 tests. The prior identity hash stayed equal across turns; the repaired configuration differs across turns while remaining stable during dispatch revalidation.
++
++The final theme gate (`npm run test:desktop:themes`) exited 0: **47 passed**, no skips, no snapshot updates. The initial 45-pass/2-failure run remains above.
++
++### Prior full-suite failures rechecked
++
++The current full functional run passed the previously recorded assistant drag/resize, agent-hub theme synchronization, ordinary note actions, both app/folder scheduled-run settlement cases and revealed shelf spine glow. No product assertions were weakened for these cases. A separate keyboard-cancellation check failed to remove its queued status after Enter. Its five-second mock also allowed provider completion to race keyboard controls; the exact broad-run focus/timing cause was not proven. Revision `6d627c90` replaces that wall-clock race with a provider-completion barrier released in `finally`; the targeted single-worker test passed (3.9 s). The initial broad failure is retained and the final focused group is recorded separately below.
++
++### Final functional disposition
++
++`npm run test:desktop` exited 1 after 20.7 minutes: **747 passed, 2 failed, 14 skipped** (763 cases). It began on `b291c054`, before the cancellation fixture correction in `6d627c90`.
++
++1. Keyboard cancellation: after pressing Enter on Cancel queued turn, the queued status still had count 1 (expected 0, 5-second timeout). The completion barrier in `6d627c90` removes the mock completion race; the corrected targeted case passed, and the full prescribed focused group subsequently passed **45/45** (exit 0, 2.9 minutes). Exact original focus/timing cause remains unproven. Concurrent test runners also removed its trace output: the broad report records `ENOENT` opening `.playwright-artifacts-1/...zip`. No retained trace is claimed for that case.
++2. What Changed: longest main-thread task was **107 ms**, exceeding the unchanged **100 ms** limit while rendering/filtering 600 changes. The unchanged case passed alone with one worker (exit 0, 6.9 seconds). No performance threshold or product behavior was changed. This is not a clean full-suite pass and remains explicit release-gate evidence.
++
++The final focused command was `npm run test:e2e --workspace=@praxis/desktop-main -- assistant.spec.ts quickSession.spec.ts durableTeamChat.spec.ts standaloneConversations.spec.ts --project=functional`: **45 passed**, 0 failed, 0 skipped, on `6d627c90`.
++
++Release acceptance remains open: supply `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` (and optionally `PRAXIS_LIVE_API_MODEL`) through the supported environment and rerun the live check; provide authoritative CLI account/resume capability before counting native reuse; complete the remaining manual journey; resolve the unconditional permission-matrix state discrepancy and obtain a clean full functional run. None of those gaps is represented by mock evidence or catalog validation.
+diff --git a/docs/praxis-tests/fx-be-184-verification-report.md b/docs/praxis-tests/fx-be-184-verification-report.md
+index cf79cf0d..a58bd5cf 100644
+--- a/docs/praxis-tests/fx-be-184-verification-report.md
++++ b/docs/praxis-tests/fx-be-184-verification-report.md
+@@ -6 +6 @@ Node:test contracts: [fx-be-184-release-proof.md](fx-be-184-release-proof.md). P
+-**Release gate remains open:** real API continuation has no credential, the planned hand-driven dark-theme session is incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
++**Release gate remains open:** real API continuation has no credential, the full manual journey remains incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
+@@ -11,0 +12,18 @@ Each section below is evidence of one kind; they are not merged. A skipped test
++## Recovery implementation on 2026-11-05
++
++Execution revisions: `b291c054`, then `6d627c90` for deterministic keyboard-cancellation timing (base `ea2abb59`). Earlier sections below retain historical evidence; current results here supersede their counts without erasing failures.
++
++- Removed the production CLI `options.accountReference` bypass. Neither turn options nor participant defaults can establish an authenticated account identity. Same-turn preparation remains stable; different turns reconstruct until the runtime supplies authoritative identity. Regression: **unverified CLI identity cannot be stabilized by turn or participant account references** (`teamChatExecutionAdapter.test.ts`).
++- Added **queued page identity and attachment references survive caller mutation before dispatch** (`teamChatCoordinator.test.ts`): a barrier holds the active turn while the queued command's page, text and image references are mutated; dispatch retains the accepted values.
++- Pending permission recovery now asserts exactly `outcome_unknown` for both production and projected approval shapes. A pending approval cannot exclude earlier tools in the same attempt. No durable no-action evidence exists, so the plan's conservative recovery rule applies; the feature matrix's unconditional `interrupted` row remains an explicit acceptance discrepancy. Approval and evidence never transfer to the replacement.
++- Strengthened real CLI/API checks to two members over three turns, six distinct attempts, isolated member sessions and restart epoch/context proof. Real CLI passed; API skipped because `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` are unset. Native CLI reuse remains unresolved, independently of reconstruction success.
++- Fixed the factory-appearance-reset test race by waiting for its renderer reload before reading settings; all assertions remain unchanged.
++
++Current deterministic commands: core/renderer/desktop builds, renderer copy and `check-types` passed; `test:core` **1940 passed, 2 skipped**, `test:desktop:git` **140 passed**, `test:renderer` **34 passed**. The focused assistant/core suites passed **76 cases**. Initial sandbox executions encountered `listen EPERM 127.0.0.1`; unchanged retries with permitted access passed. Those initial results are not product failures or silent passes.
++
++Focused Electron run: **44 passed, 1 failed** (composer reply visibility); isolated rerun passed. Initial theme run: **45 passed, 2 failed** (factory-reset navigation race and motif master switch). The factory-reset fix passed all **6 Look tests**; motif master switch passed its single-worker rerun. These reruns do not replace initial run results. The final theme gate passed all **47 tests**, with no snapshot updates. The full functional run ended **747 passed, 2 failed, 14 skipped**; after the cancellation barrier correction the prescribed focused group passed **45/45**. The unchanged What Changed performance check (107 ms against 100 ms in the full run) passed alone. These reruns do not establish a clean full functional run; details and trace-output limitations are retained in the evidence document.
++
++Manual interaction in an isolated mock-backed profile: light send, dock, close/reopen; dark float, pin decision, `@qa` continuation and close/reopen. Both replies retained; usage advanced from 25 to 50 tokens. Screenshots were inspected and retained as `fx184-manual-light.png` and `fx184-manual-dark.png` under `.praxis/session-artifacts/`. This is partial manual proof: manual second-window, permission restart, unknown-outcome controls and Preview/Apply are still unexecuted in this recovery pass, with automated coverage retained separately. Classic sidebar remains inapplicable; no historical UI was restored.
++
++AC mapping additions: AC1/AC5/AC11 use the queued-capture assertion; AC2/AC6 use the account-identity regression and six-attempt CLI receipt artifact; AC3/AC8/AC11 gain the light/dark manual screenshots; AC4/AC6 retain conservative approval recovery. All other AC mappings below are inherited source mappings, with current owning-suite executions reported above. No remaining gap is promoted to a pass.
++
 diff --git a/docs/praxis-tests/index.md b/docs/praxis-tests/index.md
-index dfedc8cd..3499a9f4 100644
+index 4deb4974..92d48a12 100644
 --- a/docs/praxis-tests/index.md
 +++ b/docs/praxis-tests/index.md
-@@ -1,6 +1,6 @@
- # Praxis Test catalogue
- 
--This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
-+This catalogue describes **710 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
- 
- | ID | Area | Test | Automation |
- | --- | --- | --- | --- |
-@@ -466,6 +466,7 @@ This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/mai
- | PT-6A873CE029 | saved Workspaces | closing the active workspace returns to the Open Workspace screen | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:58` |
- | PT-2907C48991 | saved Workspaces | New workspace opens the workspace creation dialog | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:69` |
- | PT-491CCAB290 | saved Workspaces | each workspace resumes at its own last route, not the other one's | `apps/praxis-desktop/main/e2e/savedWorkspaces.spec.ts:79` |
-+| PT-F32409778D | scheduled Provider Handover | scheduled allowance handover checkpoints and continues the active stage in the same session | `apps/praxis-desktop/main/e2e/scheduledProviderHandover.spec.ts:21` |
- | PT-8DC4807D76 | scheduled Runs | builds a schedule on the belt, saves it, and it survives a restart in the same order | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:91` |
- | PT-20627BB23E | scheduled Runs | edit, schedule, hold and delete a schedule | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:151` |
- | PT-74238ECE73 | scheduled Runs | a start that passed while Praxis was closed is missed, and only a choice resolves it | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:187` |
-@@ -483,11 +484,12 @@ This catalogue describes **708 Playwright tests** under `apps/praxis-desktop/mai
- | PT-D31B062F2D | scheduled Runs | sidebar uses classic recency groups and expands group tickets | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:593` |
- | PT-706E3FFD23 | scheduled Runs | a due schedule starts by itself, and a provider at its allowance pauses it before anything launches | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:728` |
- | PT-9EEC436CE9 | scheduled Runs | Run now starts drafts and future schedules immediately, records one attempt and opens the live view | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:766` |
--| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:790` |
--| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:807` |
--| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:845` |
--| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
--| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:902` |
-+| PT-9DA156CF24 | scheduled Runs | the hand-over point is a setting: raised past a provider's usage, Run now launches instead of pausing | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:790` |
-+| PT-76F292ED66 | scheduled Runs | the editor can Run now without a scheduled start time and still obeys the provider budget gate | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:807` |
-+| PT-9EBCCE6CC4 | scheduled Runs | a ticket that cannot be launched pauses the run with the reason, keeps its order, and can be skipped | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:824` |
-+| PT-6890A4393F | scheduled Runs | quitting with a schedule pending asks first, and offers to minimise instead | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:862` |
-+| PT-7600A815C3 | scheduled Runs | an idle failed stage pauses the schedule and retries in the same workflow | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:879` |
-+| PT-2370A6254B | scheduled Runs | an older schedule refresh cannot overwrite a newer failure status | `apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts:919` |
- | PT-4BED3303D0 | security Remediation | unregistered renderers cannot read settings or emit privileged one-way messages | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:14` |
- | PT-119034639B | security Remediation | OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:26` |
- | PT-29ECE51EF8 | security Remediation | secret reads repair permissive file modes and encrypted values remain retrievable | `apps/praxis-desktop/main/e2e/securityRemediation.spec.ts:49` |
-diff --git a/packages/core/src/scheduledRuns/scheduledRun.ts b/packages/core/src/scheduledRuns/scheduledRun.ts
-index 6ad1b7a8..78852578 100644
---- a/packages/core/src/scheduledRuns/scheduledRun.ts
-+++ b/packages/core/src/scheduledRuns/scheduledRun.ts
-@@ -23,6 +23,8 @@
-  *   resolves it.
-  */
- 
-+import type { RunEstimate } from '../workflows/workflowEstimate';
-+import type { WorkflowArtifactRef } from '../workflows/workflowTypes';
- import { randomUUID } from 'node:crypto';
- import { zonedTimeToInstant } from './scheduledRunTime';
- 
-@@ -96,6 +98,9 @@ export interface ScheduledEntryOutcome {
-   gate?: ScheduledEntryGate;
-   handovers?: ScheduledHandover[];
-   spend?: ScheduledEntrySpend;
-+  /** First observed estimate, retained independently of actual spend. */
-+  estimate?: Pick<RunEstimate, 'tokens' | 'spend' | 'notEstimable' | 'basedOnSessions'>;
-+  artifacts?: WorkflowArtifactRef[];
-   /** Times the user retried this ticket after it failed or stopped. */
-   retries?: number;
-   /**
-diff --git a/packages/core/src/scheduledRuns/scheduledRunExecution.ts b/packages/core/src/scheduledRuns/scheduledRunExecution.ts
-index d9424f43..1025b046 100644
---- a/packages/core/src/scheduledRuns/scheduledRunExecution.ts
-+++ b/packages/core/src/scheduledRuns/scheduledRunExecution.ts
-@@ -31,14 +31,14 @@ import { newScheduledId } from './scheduledRun';
-  * the schedule acts on. `exhausted` lists the providers that ran out during the
-  * run, so a retry or a hand-over never goes back to one of them.
-  */
--export type EntryProgress =
-+export type EntryProgress = Pick<ScheduledEntryOutcome, 'estimate' | 'artifacts'> & (
-   | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
-   | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
-   /** Stopped on the provider's limit or a stage's tooling; waiting for the user. */
-   | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
-   | { kind: 'succeeded'; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
-   | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
--  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] };
-+  | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] });
- 
- function findEntry(run: ScheduledRun, entryId: string): ScheduledQueueEntry {
-   const entry = run.entries.find(candidate => candidate.id === entryId);
-@@ -104,6 +104,8 @@ export function markEntryLaunching(run: ScheduledRun, entryId: string, launchTok
-     launchToken,
-     startedAt: at,
-     ...(provider ? { provider } : {}),
-+    ...(previous.estimate ? { estimate: previous.estimate } : {}),
-+    ...(previous.artifacts ? { artifacts: previous.artifacts } : {}),
-     ...(previous.retries ? { retries: previous.retries } : {}),
-     ...(previous.handovers ? { handovers: previous.handovers } : {}),
-     ...(previous.exhausted ? { exhausted: previous.exhausted } : {})
-@@ -175,6 +177,16 @@ export function resumeScheduledRun(run: ScheduledRun, at: string): ScheduledRun
-  * person, to the run). Idempotent: repeating the same progress changes nothing.
-  */
- export function applyEntryProgress(run: ScheduledRun, entryId: string, progress: EntryProgress, at: string): ScheduledRun {
-+  const outcome = outcomeOf(findEntry(run, entryId));
-+  if (outcome.status === 'done' || outcome.status === 'skipped') return run;
-+  const estimate = outcome.estimate ?? progress.estimate;
-+  const artifacts = [...new Map([...(outcome.artifacts ?? []), ...(progress.artifacts ?? [])].map(artifact => [artifact.artifactId, artifact])).values()];
-+  const changed = JSON.stringify(estimate) !== JSON.stringify(outcome.estimate) || JSON.stringify(artifacts) !== JSON.stringify(outcome.artifacts ?? []);
-+  const enriched = changed ? withOutcome(run, entryId, { ...outcome, ...(estimate ? { estimate } : {}), ...(artifacts.length ? { artifacts } : {}) }) : run;
-+  return applyProgressState(enriched, entryId, progress, at);
-+}
+@@ -325,2 +325,2 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
+-| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:96` |
+-| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:109` |
++| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:103` |
++| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:116` |
+@@ -332,7 +332,7 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
+-| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:199` |
+-| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:252` |
+-| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:288` |
+-| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:319` |
+-| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:388` |
+-| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:423` |
+-| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:459` |
++| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:203` |
++| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:256` |
++| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:292` |
++| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:323` |
++| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:392` |
++| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:427` |
++| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:463` |
+diff --git a/packages/core/src/ai/assistant/teamChatCoordinator.test.ts b/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
+index 614228d1..8e56ac54 100644
+--- a/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
++++ b/packages/core/src/ai/assistant/teamChatCoordinator.test.ts
+@@ -682,0 +683,40 @@ test('a structured execution result and original page identity survive completio
 +
-+function applyProgressState(run: ScheduledRun, entryId: string, progress: EntryProgress, at: string): ScheduledRun {
-   const entry = findEntry(run, entryId);
-   const outcome = outcomeOf(entry);
-   const key = entry.ticket.issueKey;
-@@ -185,7 +197,7 @@ export function applyEntryProgress(run: ScheduledRun, entryId: string, progress:
-   switch (progress.kind) {
-     case 'running': {
-       const exhausted = exhaustedAfter(outcome, progress.exhausted);
--      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || run.pause.reason === 'budget' || run.pause.reason === 'policy' || run.pause.reason === 'failure');
-+      const wasWaiting = run.status === 'paused' && run.pause?.entryId === entryId && (run.pause.reason === 'approval' || (run.pause.reason === 'budget' && outcome.status === 'paused') || run.pause.reason === 'policy' || run.pause.reason === 'failure');
-       const unchanged =
-         outcome.status === 'running' && !outcome.gate && !wasWaiting && sameSpend(outcome.spend, spend) && sameExhausted(outcome.exhausted, exhausted) &&
-         (!progress.provider || progress.provider === outcome.provider) && (!progress.sessionId || progress.sessionId === outcome.sessionId);
-@@ -272,6 +284,8 @@ export function retryScheduledEntry(run: ScheduledRun, entryId: string, at: stri
-   const next = withOutcome(run, entryId, {
-     status: 'queued',
-     retries,
-+    ...(outcome.estimate ? { estimate: outcome.estimate } : {}),
-+    ...(outcome.artifacts ? { artifacts: outcome.artifacts } : {}),
-     ...(outcome.handovers ? { handovers: outcome.handovers } : {}),
-     ...(outcome.exhausted ? { exhausted: outcome.exhausted } : {})
-   });
-diff --git a/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts b/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts
-index 81402f98..8ad1b059 100644
---- a/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts
-+++ b/packages/core/src/scheduledRuns/scheduledRunRunner.test.ts
-@@ -306,13 +306,13 @@ test('budget: the hand-over point comes from the threshold port, read at every d
-   assert.equal(h.run.status, 'running');
- });
- 
--test('mid-ticket hand-over waits for the current turn to finish', async () => {
-+test('mid-ticket hand-over interrupts the active turn through the handover port', async () => {
-   const h = new Harness(['T-1']);
-   await h.runner.tick();
-   h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.99, codex: 0.3 } };
-   h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' }, idle: false });
-   await h.runner.tick();
--  assert.equal(h.handovers.length, 0);
-+  assert.equal(h.handovers.length, 1);
- });
- 
- test('a retry does not go back to the provider that ran out', async () => {
-@@ -461,3 +461,26 @@ test('only an idle failed workflow needs manual scheduled recovery', () => {
-   assert.equal(scheduledWorkflowBlocker({ ...summary, stages: [{ ...summary.stages[0], lane: 'paused' }] }), undefined);
-   assert.equal(scheduledWorkflowBlocker({ ...summary, loops: [{ firing: true, needsDecision: false }] as typeof summary.loops }), undefined);
- });
-+
-+test('a threshold pause persists while the active turn still reports running', async () => {
-+  const h = new Harness(['T-1', 'T-2']);
-+  await h.runner.tick();
-+  h.usage = { usable: ['claude'], active: 'claude', used: { claude: 0.99 } };
-+  await h.runner.tick();
-+  assert.equal(h.run.status, 'paused');
-+  await h.runner.tick();
-+  assert.equal(h.run.status, 'paused');
-+  assert.equal(h.launches.length, 1);
-+});
-+
-+test('a failed handover pauses once instead of retrying each tick', async () => {
-+  const h = new Harness(['T-1']);
-+  await h.runner.tick();
-+  h.usage = { usable: ['claude', 'codex'], active: 'claude', used: { claude: 0.99, codex: 0.2 } };
-+  let calls = 0;
-+  h.ports.handOver = async () => { calls++; throw new Error('checkpoint refused'); };
-+  await h.runner.tick();
-+  assert.match(h.run.pause?.message ?? '', /checkpoint refused/);
-+  await h.runner.tick();
-+  assert.equal(calls, 1);
-+});
-diff --git a/packages/core/src/scheduledRuns/scheduledRunRunner.ts b/packages/core/src/scheduledRuns/scheduledRunRunner.ts
-index b7f05759..95c0220a 100644
---- a/packages/core/src/scheduledRuns/scheduledRunRunner.ts
-+++ b/packages/core/src/scheduledRuns/scheduledRunRunner.ts
-@@ -58,7 +58,7 @@ export class ScheduledLaunchError extends Error {
- /** A workflow run as the runner sees it. */
- export interface WorkflowObservation {
-   progress: EntryProgress;
--  /** True when no agent turn is in flight, so a stage may be handed to another provider without cutting it off. */
-+  /** Informational: false while an agent turn is in flight. The handover port owns safe interruption. */
-   idle?: boolean;
- }
- 
-@@ -289,7 +289,7 @@ export class ScheduledRunRunner {
-       }
-       return next;
-     }
--    if (observation?.progress.kind === 'running' && observation.idle !== false && next.status === 'running') {
-+    if (observation?.progress.kind === 'running' && next.status === 'running') {
-       next = await this.checkHandover(next, entry.id, workflowRunId, observation.progress.provider ?? entry.outcome?.provider);
-     }
-     return next;
-@@ -308,17 +308,19 @@ export class ScheduledRunRunner {
-     });
-     if (decision.kind === 'handover' && decision.from) {
-       const usedFraction = decision.usedFraction ?? this.ports.threshold?.() ?? DEFAULT_HANDOVER_THRESHOLD;
--      const { checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction });
-+      let checkpointRef: string | undefined;
-+      try {
-+        ({ checkpointRef } = await this.ports.handOver({ run, entry, workflowRunId, from: decision.from, to: decision.provider, usedFraction }));
-+      } catch (error) {
-+        return this.save(pauseScheduledRun(run, 'budget', `Provider handover failed: ${error instanceof Error ? error.message : String(error)}`, this.ports.now(), entryId));
-+      }
-       const at = this.ports.now();
-       return this.save(
-         recordProviderHandover(run, entryId, { at, from: decision.from, to: decision.provider, usedPercent: usedFraction * 100, ...(checkpointRef ? { checkpointRef } : {}) }, at)
-       );
-     }
-     if (decision.kind === 'pause') {
--      // The stage cannot be stopped mid-flight just because nothing else is free: say so once, and let the
--      // workflow's own limit policy deal with the hard limit.
--      const last = [...run.events].reverse().find(event => event.kind === 'budget-checked' && event.entryId === entryId);
--      if (!last || last.message !== decision.reason) return this.save(recordBudgetCheck(run, decision.reason, this.ports.now(), entryId));
-+      return this.save(pauseScheduledRun(run, 'budget', decision.reason, this.ports.now(), entryId));
-     }
-     return run;
-   }
-diff --git a/packages/core/src/scheduledRuns/scheduledRunStore.test.ts b/packages/core/src/scheduledRuns/scheduledRunStore.test.ts
-index 51632ff7..94058c18 100644
---- a/packages/core/src/scheduledRuns/scheduledRunStore.test.ts
-+++ b/packages/core/src/scheduledRuns/scheduledRunStore.test.ts
-@@ -1,3 +1,4 @@
-+import { applyEntryProgress, markEntryLaunching, startScheduledRunAttempt } from './scheduledRunExecution';
- import { test } from 'node:test';
- import assert from 'node:assert/strict';
- import type { KeyValueStore } from '../host/stateStore';
-@@ -141,3 +142,19 @@ test('the project id survives a round trip and an unset one stays unset', async
-   assert.equal(store.get('mine')?.projectId, 'p1');
-   assert.ok(!('projectId' in store.get('loose')!));
- });
-+
-+test('ledger estimates and artifacts survive progress and a store restart', async () => {
-+  let run = startScheduledRunAttempt(armScheduledRun(makeRun('Audit', '2026-10-21T21:00:00Z'), NOW), NOW);
-+  const entryId = run.entries[0].id;
-+  run = markEntryLaunching(run, entryId, 'token', 'claude', NOW);
-+  const estimate = { tokens: { low: 10, high: 100 }, spend: { low: 1, high: 2, currency: 'USD' }, basedOnSessions: 3 };
-+  const artifact = { artifactId: 'a', contractId: 'change-diff', nodeId: 'implement', runId: 'w', kind: 'diff' as const, path: '.praxis/change-diff.md', createdAt: NOW };
-+  run = applyEntryProgress(run, entryId, { kind: 'running', estimate, artifacts: [artifact] }, NOW);
-+  run = applyEntryProgress(run, entryId, { kind: 'succeeded', spend: { tokens: 50 } }, NOW);
-+  const state = memoryStore();
-+  await new ScheduledRunStore(state).save(run);
-+  const outcome = new ScheduledRunStore(state).get(run.id)?.entries[0].outcome;
-+  assert.deepEqual(outcome?.estimate, estimate);
-+  assert.deepEqual(outcome?.artifacts, [artifact]);
-+  assert.deepEqual(outcome?.spend, { tokens: 50 });
-+});
-diff --git a/packages/core/src/scheduledRuns/scheduledRunStore.ts b/packages/core/src/scheduledRuns/scheduledRunStore.ts
-index 17c5045c..2a5b0e0a 100644
---- a/packages/core/src/scheduledRuns/scheduledRunStore.ts
-+++ b/packages/core/src/scheduledRuns/scheduledRunStore.ts
-@@ -46,6 +46,9 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
-   const status = typeof raw.status === 'string' && ENTRY_STATUSES.has(raw.status) ? (raw.status as ScheduledEntryStatus) : 'queued';
-   const gate = normalizeGate(raw.gate);
-   const spend = normalizeSpend(raw.spend);
-+  const estimate = normalizeEstimate(raw.estimate);
-+  const artifacts = (Array.isArray(raw.artifacts) ? raw.artifacts : []).filter((artifact): artifact is NonNullable<ScheduledEntryOutcome['artifacts']>[number] =>
-+    !!artifact && typeof artifact === 'object' && ['artifactId', 'contractId', 'nodeId', 'runId', 'kind', 'createdAt'].every(key => typeof artifact[key] === 'string'));
-   const handovers = (Array.isArray(raw.handovers) ? raw.handovers : []).map(normalizeHandover).filter((h): h is ScheduledHandover => !!h);
-   const exhausted = (Array.isArray(raw.exhausted) ? raw.exhausted : []).filter((value): value is string => typeof value === 'string' && !!value);
-   return {
-@@ -61,6 +64,8 @@ function normalizeOutcome(value: unknown): ScheduledEntryOutcome | undefined {
-     ...(handovers.length > 0 ? { handovers } : {}),
-     ...(exhausted.length > 0 ? { exhausted: [...new Set(exhausted)] } : {}),
-     ...(spend ? { spend } : {}),
-+    ...(estimate ? { estimate } : {}),
-+    ...(artifacts.length ? { artifacts } : {}),
-     ...(typeof raw.retries === 'number' && raw.retries > 0 ? { retries: Math.trunc(raw.retries) } : {})
-   };
- }
-@@ -89,6 +94,25 @@ function normalizeSpend(value: unknown): ScheduledEntryOutcome['spend'] {
-   return Object.keys(spend).length > 0 ? spend : undefined;
- }
- 
-+function normalizeEstimate(value: unknown): ScheduledEntryOutcome['estimate'] {
-+  if (!value || typeof value !== 'object') return undefined;
-+  const raw = value as Record<string, unknown>;
-+  const range = (value: unknown) => {
-+    if (!value || typeof value !== 'object') return undefined;
-+    const r = value as Record<string, unknown>;
-+    return typeof r.low === 'number' && Number.isFinite(r.low) && r.low >= 0 && typeof r.high === 'number' && Number.isFinite(r.high) && r.high >= r.low ? { low: r.low, high: r.high } : undefined;
++test('queued page identity and attachment references survive caller mutation before dispatch', async () => {
++  let release!: () => void;
++  let started!: () => void;
++  const gate = new Promise<void>(resolve => { release = resolve; });
++  const running = new Promise<void>(resolve => { started = resolve; });
++  let captured: import('./teamChatCoordinator').TeamChatExecutionParams | undefined;
++  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: {
++    validateAttachments: async () => {},
++    execute: async params => {
++      if (params.turn.commandId === 'first') { started(); await gate; }
++      else captured = structuredClone({ ...params, signal: undefined, onAccepted: undefined, onEvidence: undefined });
++      return { text: 'Reply' };
++    }
++  } });
++  const command: SubmitConversationCommand = {
++    conversationId: 'conv-1', commandId: 'first', expectedRevision: 1, text: 'First',
++    selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: {}
 +  };
-+  const tokens = range(raw.tokens);
-+  const cost = range(raw.spend);
-+  const currency = raw.spend && typeof raw.spend === 'object' ? text((raw.spend as Record<string, unknown>).currency) : undefined;
-+  return {
-+    ...(tokens ? { tokens } : {}),
-+    ...(cost && currency ? { spend: { ...cost, currency } } : {}),
-+    ...(text(raw.notEstimable) ? { notEstimable: text(raw.notEstimable) } : {}),
-+    ...(num(raw.basedOnSessions) !== undefined ? { basedOnSessions: num(raw.basedOnSessions) } : {})
-+  };
-+}
-+
- function normalizeHandover(value: unknown): ScheduledHandover | undefined {
-   if (!value || typeof value !== 'object') return undefined;
-   const raw = value as Record<string, unknown>;
++  await coordinator.submitTurn(command);
++  await running;
++  try {
++    const queued: SubmitConversationCommand = { ...command, commandId: 'queued', text: 'Captured question',
++      context: { pageType: 'issue', entityId: 'original-issue', title: 'Original issue', summary: 'Original context' },
++      attachmentRefs: [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }] };
++    await coordinator.submitTurn(queued);
++    assert.equal(coordinator.getConversation('conv-1')!.turns[1].state, 'queued');
++    queued.context!.entityId = 'navigated-issue';
++    queued.context!.summary = 'Changed composer context';
++    queued.attachmentRefs[0].digest = 'replacement-digest';
++    queued.attachmentRefs.length = 0;
++    queued.text = 'Changed draft';
++  } finally { release(); }
++  const conversation = await settled(coordinator, 'conv-1');
++  assert.equal(conversation.turns[1].state, 'completed');
++  assert.equal(captured!.turn.plan.context!.entityId, 'original-issue');
++  const message = captured!.messages.find(message => message.text === 'Captured question')!;
++  assert.equal(message.context!.summary, 'Original context');
++  assert.deepEqual(message.attachments, [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }]);
++});
+diff --git a/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts b/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts
+index 8f13e6ba..42610ad6 100644
+--- a/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts
++++ b/packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts
+@@ -189,3 +189,3 @@ test('a pending approval at crash is never reused by the replacement attempt', a
+-    // Deviation from the design's matrix (which says "interrupted"): a tool-capable attempt is
+-    // classified outcome_unknown. Both refuse automatic replay; the approval is never reused.
+-    assert.ok(['interrupted', 'outcome_unknown'].includes(recovered.state), recovered.state);
++    // A pending prompt cannot exclude earlier tool activity in this attempt. Without
++    // durable no-action evidence the replacement must require informed reconciliation.
++    assert.equal(recovered.state, 'outcome_unknown');
