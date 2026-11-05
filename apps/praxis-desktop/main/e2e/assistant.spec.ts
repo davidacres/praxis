@@ -737,7 +737,7 @@ test('a chat can be renamed, survives an app restart, and the docked width persi
 test('durable activation rejects stale legacy turns and transcript writers', async () => {
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli' } }, undefined, undefined, { openNewSession: false });
   const win = app.window;
-  const chat = await win.evaluate(() => window.praxis.assistant.createChat('p1'));
+  const chat = await win.evaluate(() => window.praxis.assistant.createChat(''));
   await expect(win.evaluate(() => window.praxis.assistant.turn({ message: 'hello' }))).rejects.toThrow(/Legacy/);
   await expect(win.evaluate(id => window.praxis.assistant.saveChat(id, []), chat.id)).rejects.toThrow(/Legacy|replacement/);
   await win.evaluate(id => window.praxis.assistant.deleteChat(id), chat.id);

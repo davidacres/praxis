@@ -48,6 +48,9 @@ FX-BE-179
 
 **TASK-478 result (2026-11-05):** all four criteria pass. Evidence is in [TASK-478 › Validation evidence](tasks/task-478-turn-coordinator.md#validation-evidence-2026-11-05). Simultaneous sends to one chat on the file repository were rejected; acceptance now resolves the roster, plan and sequence inside the transaction.
 
+
+**TASK-479 result (2026-11-05):** all four criteria pass. Evidence is in [TASK-479 › Validation evidence](tasks/task-479-command-and-event-ipc.md#validation-evidence-2026-11-05). Stale controls now return a conflict, and commands are validated before any provider call.
+
 ## Validation
 
 Use the parent feature acceptance-to-suite mapping and validation commands. Each task supplies executable scenarios; record exact commands, assertion names and artifacts. This story does not close on typechecking alone.

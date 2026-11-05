@@ -51,6 +51,9 @@ test('two windows converge, queue capture survives navigation and stale controls
   await expect(second.getByTestId('assistant-message-dev')).toHaveCount(2, { timeout: 20000 });
   const stale = await second.evaluate(async ({ id, revision, turnId }) => window.praxis.assistant.control({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: revision, turnId, action: 'cancel' }), { id: chat.id, revision: snapshot!.revision, turnId: snapshot!.turns[0].id });
   expect(stale.turns.every(turn => turn.state === 'completed')).toBe(true);
+  const staleTyped = await second.evaluate(async ({ id, revision, turnId }) => window.praxis.assistant.cancelTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: revision, turnId }), { id: chat.id, revision: snapshot!.revision, turnId: snapshot!.turns[0].id });
+  expect(staleTyped.status).toBe('conflict');
+  expect(staleTyped.conversation.turns.every(turn => turn.state === 'completed')).toBe(true);
   await second.reload();
   await second.getByTestId('team-chat-row').locator('.team-chat-main').click();
   await expect(second.getByTestId('assistant-message-dev')).toHaveCount(2);
@@ -589,5 +592,52 @@ test('queued page context and staged image reach the provider after navigation a
     if (app) await closeTestApp(app);
     app = undefined;
     fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('closing the initiating window keeps its accepted turn and pending approval observable from another window', async () => {
+  const promptLog = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-acp-prompts-')), 'prompts.jsonl');
+  const env = { FAKE_ACP_PROMPT_LOG: promptLog };
+  const prompts = () => fs.existsSync(promptLog) ? fs.readFileSync(promptLog, 'utf8').trim().split('\n').filter(Boolean).length : 0;
+  try {
+    app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } } } }, undefined, env, { openNewSession: false });
+    const main = app.window;
+    const chat = await main.evaluate(async folderPath => {
+      const workspace = (await window.praxis.workspaces.list())[0];
+      const project = await window.praxis.projects.create({ name: 'Durable project', key: 'DUR', type: 'product', purpose: '', brief: {}, startingPoint: 'existing-folder', folderPath, planningMode: 'files', workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], starterTickets: [], defaultAiToolMode: 'project-only' }, workspace.id);
+      localStorage.setItem(`praxis-last-workspace-route:${workspace.id}`, JSON.stringify({ projectId: project.id }));
+      return window.praxis.assistant.createChat(project.id);
+    }, app.userDataDir);
+    await main.reload();
+    await expect(main.getByTestId('team-chat-row')).toHaveCount(1);
+    const extraPromise = app.electronApp.waitForEvent('window');
+    await app.electronApp.evaluate(async ({ BrowserWindow }, paths) => {
+      const win = new BrowserWindow({ width: 1300, height: 900, webPreferences: { preload: paths.preload, contextIsolation: true, nodeIntegration: false } });
+      const require = process.getBuiltinModule('module')!.createRequire(paths.guard);
+      require(paths.guard).attachRendererNavigationGuard(win, undefined);
+      await win.loadURL(paths.url);
+    }, { preload: path.resolve(__dirname, '../out/preload/index.js'), guard: path.resolve(__dirname, '../out/main/rendererNavigationGuard.js'), url: main.url() });
+    const extra = await extraPromise;
+    await extra.evaluate(async ({ id, folder }) => {
+      const snapshot = await window.praxis.assistant.getConversation(id);
+      await window.praxis.assistant.submitTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot!.revision,
+        text: 'WITH_PERMISSION read the notes', selectedParticipantIds: ['part-dev'], attachmentRefs: [],
+        runtimeOptions: { provider: 'claude-code-cli', toolMode: 'read-only', permissionMode: 'manual', workingDirectory: folder } });
+    }, { id: chat.id, folder: app.userDataDir });
+    await expect.poll(async () => (await main.evaluate(() => window.praxis.ai.listSessions())).find(s => s.teamChatExecution)?.state, { timeout: 20000 }).toBe('awaiting_approval');
+    await extra.close();
+    const attempt = (await main.evaluate(id => window.praxis.assistant.getConversation(id), chat.id))!.turns[0].attempts.at(-1)!;
+    const pending = (await main.evaluate(() => window.praxis.ai.listSessions())).find(s => s.teamChatExecution)!;
+    expect(pending.teamChatExecution!.attemptId).toBe(attempt.id);
+    await main.getByTestId('team-chat-row').locator('.team-chat-main').click();
+    await expect(main.getByTestId('assistant-tool-permission')).toBeVisible({ timeout: 15000 });
+    const artifact = path.resolve(__dirname, '../../../../.praxis/session-artifacts/durable-team-chat-closed-initiator.png');
+    fs.mkdirSync(path.dirname(artifact), { recursive: true });
+    await main.screenshot({ path: artifact });
+    await main.getByTestId('assistant-tool-permission').getByRole('button', { name: 'Allow' }).click();
+    await expect(main.getByTestId('assistant-message-dev')).toBeVisible({ timeout: 30000 });
+    expect(prompts()).toBe(1);
+  } finally {
+    fs.rmSync(path.dirname(promptLog), { recursive: true, force: true });
   }
 });
