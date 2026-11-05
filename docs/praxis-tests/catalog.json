@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 802,
+  "testCount": 803,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5147,7 +5147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 70,
+        "line": 73,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5163,7 +5163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 101,
+        "line": 104,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5179,7 +5179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 142,
+        "line": 145,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5195,7 +5195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 173,
+        "line": 176,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5211,7 +5211,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 206,
+        "line": 209,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5227,7 +5227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 259,
+        "line": 262,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5243,7 +5243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 295,
+        "line": 298,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5259,7 +5259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 326,
+        "line": 329,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5275,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 395,
+        "line": 398,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5291,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 431,
+        "line": 434,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5307,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 472,
+        "line": 475,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5323,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 508,
+        "line": 511,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5339,7 +5339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 536,
+        "line": 539,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5347,6 +5347,22 @@
         "given": "An isolated durable conversation with a held first dispatch, a queued issue-context turn and a staged PNG.",
         "when": "A different composer image is staged, the renderer reloads and the first dispatch is released.",
         "then": "Both turns complete; only the queued provider prompt contains the captured page sentinel, its durable attachment refs remain identical and the ACP agent receives exactly one PNG."
+      }
+    },
+    {
+      "id": "PT-6A15DADEFB",
+      "title": "closing the initiating window keeps its accepted turn and pending approval observable from another window",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 598,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "a team-chat turn has been accepted from one window and is awaiting a permission approval",
+        "when": "closing the initiating window keeps its accepted turn and pending approval observable from another window",
+        "then": "the accepted turn is not cancelled and a second window observes the same turn and its pending approval"
       }
     },
     {
