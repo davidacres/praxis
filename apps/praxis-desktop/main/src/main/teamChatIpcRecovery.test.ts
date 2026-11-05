@@ -231,3 +231,23 @@ test('two windows over two chats retain every accepted submit', async t => {
   assert.equal(new Set(revisions).size, revisions.length, 'each accepted commit has its own revision');
   for (const conv of [x, y]) for (const r of conv.commandReceipts) assert.ok(r.revision <= conv.revision);
 });
+
+test('simultaneous sends to one chat on the file repository produce distinct FIFO turns and one turn per repeated command', async t => {
+  const file = profile(t);
+  const app = await ready(file, async params => ({ text: `reply to ${params.turn.id}` }), 'x');
+  const revision = revisionOf(file, 'x');
+  const [first, second, repeat] = await Promise.all([
+    app.services.submitTurn(submit('x', 'x1', revision)),
+    app.services.submitTurn(submit('x', 'x2', revision)),
+    app.services.submitTurn(submit('x', 'x1', revision))
+  ]) as { turnId: string }[];
+  assert.notEqual(first.turnId, second.turnId);
+  assert.equal(repeat.turnId, first.turnId, 'a repeated command converges on its original turn');
+  await until(() => read(file).conversations[0].turns.length === 2 && read(file).conversations[0].turns.every(turn => turn.state === 'completed'), 'both turns complete');
+  const x = read(file).conversations[0];
+  assert.deepEqual(x.commandReceipts.map(r => r.commandId), ['x1', 'x2']);
+  assert.deepEqual(x.turns.map(turn => turn.id), [first.turnId, second.turnId]);
+  assert.deepEqual(x.messages.map(m => m.sequence), x.messages.map((_, i) => i + 1));
+  assert.deepEqual(app.calls.map(call => call.turn.id), [first.turnId, second.turnId], 'provider calls follow acceptance order');
+  assert.equal(app.updates.filter(u => u.type === 'turn_accepted' && u.turnId === first.turnId).length, 1);
+});

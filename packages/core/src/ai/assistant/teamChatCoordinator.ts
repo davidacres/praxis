@@ -36,6 +36,31 @@ export function makeParticipant(role: AssistantRole): ConversationParticipant {
   };
 }
 
+function assertKnownParticipants(conversation: DurableConversation, ids: readonly string[] | undefined): void {
+  if (!ids?.length) return;
+  const knownIds = new Set(conversation.participants.map(p => p.id));
+  if (ids.some(id => !knownIds.has(id))) throw new Error('Invalid participant reference.');
+}
+
+/** An explicit mention selects only that member; no selection means lead; otherwise canonical role order. */
+function resolvePlanParticipants(conversation: DurableConversation, command: SubmitConversationCommand): ConversationParticipant[] {
+  const mention = parseAssistantMention(command.text);
+  if (mention.personaId) {
+    return [conversation.participants.find(p => p.role === mention.personaId) ?? makeParticipant(mention.personaId)];
+  }
+  if (!command.selectedParticipantIds?.length) {
+    return [conversation.participants.find(p => p.role === 'lead') ?? makeParticipant('lead')];
+  }
+  const rank = (role: AssistantRole) => {
+    const index = CANONICAL_ROLE_ORDER.indexOf(role);
+    return index >= 0 ? index : 99;
+  };
+  return command.selectedParticipantIds
+    .map(id => conversation.participants.find(p => p.id === id))
+    .filter((p): p is ConversationParticipant => Boolean(p))
+    .sort((a, b) => rank(a.role) - rank(b.role));
+}
+
 export class TeamChatAcceptanceUnknown extends Error {}
 
 /** The transition refused an attempt reservation; distinct from a storage fault. */
@@ -259,69 +284,54 @@ export class TeamChatCoordinator {
       };
     }
 
-    // Validate participants
-    if (command.selectedParticipantIds && command.selectedParticipantIds.length > 0) {
-      const knownIds = new Set(conversation.participants.map(p => p.id));
-      for (const id of command.selectedParticipantIds) {
-        if (!knownIds.has(id)) {
-          throw new Error('Invalid participant reference.');
-        }
-      }
-    }
+    // Cheap pre-check; the authoritative check repeats inside the transaction.
+    assertKnownParticipants(conversation, command.selectedParticipantIds);
 
-    // Resolve roster & member ordering
-    const mention = parseAssistantMention(command.text);
-    let planParticipants: ConversationParticipant[] = [];
-
-    if (mention.personaId) {
-      const p = conversation.participants.find(part => part.role === mention.personaId) ?? makeParticipant(mention.personaId);
-      planParticipants = [p];
-    } else if (!command.selectedParticipantIds || command.selectedParticipantIds.length === 0) {
-      const lead = conversation.participants.find(part => part.role === 'lead') ?? makeParticipant('lead');
-      planParticipants = [lead];
-    } else {
-      const selected = command.selectedParticipantIds
-        .map(id => conversation.participants.find(p => p.id === id))
-        .filter((p): p is ConversationParticipant => Boolean(p));
-      planParticipants = selected.sort((a, b) => {
-        const orderA = CANONICAL_ROLE_ORDER.indexOf(a.role);
-        const orderB = CANONICAL_ROLE_ORDER.indexOf(b.role);
-        return (orderA >= 0 ? orderA : 99) - (orderB >= 0 ? orderB : 99);
-      });
-    }
-
+    // Side effects (IDs, settings reads) happen before the transaction so the
+    // mutation stays synchronous. Everything that depends on the conversation's
+    // current state — roster, plan, sequence — is resolved against the draft, so
+    // two sends queued behind each other each see the other's committed turn.
     const turnId = this.idSource();
     const userMessageId = this.idSource();
-    const sequence = (conversation.messages.at(-1)?.sequence ?? 0) + 1;
-
-    const turn: ConversationTurn = {
-      id: turnId,
-      commandId: command.commandId,
-      payloadDigest,
-      userMessageId,
-      acceptedSequence: sequence,
-      plan: {
-        participants: planParticipants,
-        runtimeOptions: this.captureRuntimeOptions?.(command.runtimeOptions) ?? command.runtimeOptions,
-        ...(command.context ? { context: command.context } : {})
-      },
-      state: 'queued',
-      completedParticipantIds: [],
-      attempts: []
-    };
-
-    const userMessage: ConversationMessage = {
-      id: userMessageId,
-      turnId,
-      role: 'user',
-      text: command.text,
-      createdAt: this.clock(),
-      sequence,
-      attachments: command.attachmentRefs ?? [],
-      ...(command.context ? { context: command.context, contextTitle: command.context.title } : {})
-    };
+    const runtimeOptions = this.captureRuntimeOptions?.(command.runtimeOptions) ?? command.runtimeOptions;
 
     const updated = await this.transitionConversation(command.conversationId, conv => {
+      const receipt = conv.commandReceipts.find(r => r.commandId === command.commandId);
+      if (receipt) {
+        if (receipt.payloadDigest !== payloadDigest) throw new Error('Command payload conflict.');
+        return conv;
+      }
+      assertKnownParticipants(conv, command.selectedParticipantIds);
+      const planParticipants = resolvePlanParticipants(conv, command);
+      const sequence = (conv.messages.at(-1)?.sequence ?? 0) + 1;
+
+      const turn: ConversationTurn = {
+        id: turnId,
+        commandId: command.commandId,
+        payloadDigest,
+        userMessageId,
+        acceptedSequence: sequence,
+        plan: {
+          participants: planParticipants,
+          runtimeOptions,
+          ...(command.context ? { context: command.context } : {})
+        },
+        state: 'queued',
+        completedParticipantIds: [],
+        attempts: []
+      };
+
+      const userMessage: ConversationMessage = {
+        id: userMessageId,
+        turnId,
+        role: 'user',
+        text: command.text,
+        createdAt: this.clock(),
+        sequence,
+        attachments: command.attachmentRefs ?? [],
+        ...(command.context ? { context: command.context, contextTitle: command.context.title } : {})
+      };
+
       // Ensure participants in plan exist on the conversation record
       for (const p of planParticipants) {
         if (!conv.participants.some(existing => existing.id === p.id)) {
@@ -334,6 +344,10 @@ export class TeamChatCoordinator {
     });
 
     const acceptedTurn = updated.turns.find(t => t.id === updated.commandReceipts.find(r => r.commandId === command.commandId)!.turnId)!;
+    if (acceptedTurn.id !== turnId) {
+      // A concurrent delivery of the same command won; it already announced the turn.
+      return { turnId: acceptedTurn.id, revision: updated.revision, state: acceptedTurn.state };
+    }
     const acceptedMessage = updated.messages.find(m => m.id === acceptedTurn.userMessageId)!;
     this.notify({
       conversationId: command.conversationId,
