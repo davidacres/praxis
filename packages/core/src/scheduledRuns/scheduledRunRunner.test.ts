@@ -672,6 +672,29 @@ test('a failed stage with attempts remaining is retried autonomously and recorde
   assert.equal(h.run.entries[0].outcome?.decisions?.[0]?.kind, 'entry-retried');
 });
 
+test('an environment-paused stage is not automatically retried, but remains recoverable manually', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+
+  let retryCount = 0;
+  h.ports.retryStage = async () => { retryCount += 1; };
+  h.setWorkflow('T-1', {
+    progress: {
+      kind: 'stalled',
+      pauseReason: 'failure',
+      reason: 'QA was interrupted when Praxis quit.',
+      recovery: { nodeId: 'qa', attempts: 0, maxAttempts: 2, automatic: false }
+    }
+  });
+
+  await h.runner.tick();
+  await h.runner.tick();
+
+  assert.equal(retryCount, 0);
+  assert.equal(h.run.status, 'paused');
+  assert.equal(h.run.entries[0].outcome?.status, 'paused');
+});
+
 test('a paused scheduled run whose entry was paused on an environment block resumes when the workflow recovers', async () => {
   const h = new Harness(['T-1']);
   await h.runner.tick();

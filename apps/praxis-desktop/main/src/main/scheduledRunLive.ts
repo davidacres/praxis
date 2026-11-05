@@ -87,7 +87,7 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
           kind: 'stalled',
           pauseReason: 'failure',
           reason: `${stuck.name} could not run here: ${stuck.lastError ?? summary.explanation} Fix that, then retry the stage.`,
-          recovery: { nodeId: stuck.nodeId, attempts, maxAttempts },
+          recovery: { nodeId: stuck.nodeId, attempts, maxAttempts, automatic: false },
           ...spendField,
           ...exhaustedField
         }

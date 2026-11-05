@@ -415,7 +415,7 @@ export class ScheduledRunRunner {
       }
     }
 
-    if (progress.kind === 'stalled' && progress.recovery && progress.recovery.attempts < progress.recovery.maxAttempts && this.ports.retryStage) {
+    if (progress.kind === 'stalled' && progress.recovery?.automatic !== false && progress.recovery && progress.recovery.attempts < progress.recovery.maxAttempts && this.ports.retryStage) {
       try {
         await this.ports.retryStage(workflowRunId, progress.recovery.nodeId);
         at = this.ports.now();
