@@ -10,7 +10,7 @@
  * optionally PRAXIS_LIVE_API_MODEL. A missing credential is a skip with a reason, never a mock.
  *
  * Each check retains attempt ids, provider session ids and context receipts under
- * `.praxis/session-artifacts/durable-team-chat-live-*.json`.
+ * timestamped `.praxis/session-artifacts/durable-team-chat-live-*.json` files.
  */
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -92,7 +92,9 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
     sessionReuse, nativeReuseProved: sessionReuse.every(member => member.nativeReuseProved),
     attempts, replies: conversation.messages.filter(m => m.role !== 'user').map(m => m.text) };
   fs.mkdirSync(ARTIFACTS, { recursive: true });
-  fs.writeFileSync(path.join(ARTIFACTS, `durable-team-chat-live-${label}.json`), JSON.stringify(evidence, null, 2));
+  const artifact = path.join(ARTIFACTS, `durable-team-chat-live-${label}-${evidence.recordedAt.replace(/[:.]/g, '-')}.json`);
+  fs.writeFileSync(artifact, JSON.stringify(evidence, null, 2));
+  await test.info().attach(`durable-team-chat-live-${label}`, { path: artifact, contentType: 'application/json' });
   expect(conversation.turns).toHaveLength(3);
   expect(new Set(attempts.map(a => a.attemptId)).size).toBe(6);
   for (const participantId of ['part-dev', 'part-lead']) {
