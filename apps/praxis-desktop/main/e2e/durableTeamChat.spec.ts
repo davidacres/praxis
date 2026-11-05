@@ -171,29 +171,33 @@ test('a migrated chat continues from imported history without reusing unproved r
 });
 
 test('keyboard cancellation preserves accepted messages and cancels only the selected queued turn', async () => {
-  mock = await startMockOpenAiCompatibleServer({ reply: 'Should be cancelled', responseDelayMs: 5000 });
-  app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
-  const win = app.window;
-  await win.getByTestId('titlebar-assistant').click();
-  await win.getByTestId('assistant-input').fill('Active accepted message');
-  await win.getByTestId('assistant-send').click();
-  await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
-  await win.getByTestId('assistant-input').fill('Queued accepted message');
-  await win.getByTestId('assistant-send').click();
-  const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
-  await expect(queued).toHaveCount(1);
-  await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
-  await expect(queued).toHaveCount(0);
-  await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
-  await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
-  await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
-  await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
-  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
-  const conversation = (await win.evaluate(async () => {
-    const chats = await window.praxis.assistant.listChats('');
-    return window.praxis.assistant.getConversation(chats[0].id);
-  }))!;
-  expect(conversation.turns.map(turn => turn.state)).toEqual(['cancelled', 'cancelled']);
+  let releaseReply!: () => void;
+  const responseGate = new Promise<void>(resolve => { releaseReply = resolve; });
+  mock = await startMockOpenAiCompatibleServer({ reply: 'Should be cancelled', responseGate });
+  try {
+    app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
+    const win = app.window;
+    await win.getByTestId('titlebar-assistant').click();
+    await win.getByTestId('assistant-input').fill('Active accepted message');
+    await win.getByTestId('assistant-send').click();
+    await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
+    await win.getByTestId('assistant-input').fill('Queued accepted message');
+    await win.getByTestId('assistant-send').click();
+    const queued = win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' });
+    await expect(queued).toHaveCount(1);
+    await queued.getByRole('button', { name: 'Cancel queued turn' }).press('Enter');
+    await expect(queued).toHaveCount(0);
+    await expect(win.getByTestId('assistant-turn-status')).toContainText('dev: running');
+    await win.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
+    await expect(win.getByTestId('assistant-turn-status')).toHaveCount(0);
+    await expect(win.getByTestId('assistant-message-user')).toHaveText(['Active accepted message', 'Queued accepted message']);
+    await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
+    const conversation = (await win.evaluate(async () => {
+      const chats = await window.praxis.assistant.listChats('');
+      return window.praxis.assistant.getConversation(chats[0].id);
+    }))!;
+    expect(conversation.turns.map(turn => turn.state)).toEqual(['cancelled', 'cancelled']);
+  } finally { releaseReply(); }
 });
 
 test('an unconfirmed submission retries its original command after both acknowledgements are lost', async () => {

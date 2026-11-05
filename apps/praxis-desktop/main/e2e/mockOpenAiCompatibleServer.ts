@@ -33,6 +33,8 @@ export async function startMockOpenAiCompatibleServer(options: {
   /** Reply text for chat requests. */
   reply?: string | (() => string);
   responseDelayMs?: number;
+  /** Holds completion until a test releases its execution barrier. */
+  responseGate?: Promise<void>;
   /** One tool request for agent-session tests; subsequent completions answer normally. */
   toolCall?: { name: string; arguments: string };
 }): Promise<MockOpenAiCompatibleServer> {
@@ -62,6 +64,7 @@ export async function startMockOpenAiCompatibleServer(options: {
         return;
       }
       if (options.responseDelayMs) await new Promise(resolve => setTimeout(resolve, options.responseDelayMs));
+      await options.responseGate;
       const payload = JSON.parse(body || '{}') as {
         stream?: boolean;
         stream_options?: unknown;
