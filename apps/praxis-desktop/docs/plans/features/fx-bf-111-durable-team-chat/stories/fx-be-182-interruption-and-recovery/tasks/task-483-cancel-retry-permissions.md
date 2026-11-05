@@ -61,6 +61,22 @@ Status: Failed · Duration: 4m 50s
 - ⏳ Security scan: pending
 
 Required stage "review" failed.
+
+**PRX-T111-483** — 2026-11-05T21:05:09.311Z
+**Workflow run failed: Governed delivery — TASK-483: Implement safe cancellation, retry, and approval restoration**
+
+Status: Failed · Duration: 25m 4s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
