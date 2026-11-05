@@ -6,7 +6,12 @@ export function conversationPayloadDigest(payload: unknown): string {
   const canonical = (value: unknown): string => {
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
     if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index++) {
+        if (!Object.hasOwn(value, index)) throw new Error('Command payload must contain only JSON values; sparse arrays are invalid.');
+      }
+      return `[${value.map(canonical).join(',')}]`;
+    }
     if (typeof value === 'object' && value && Object.getPrototypeOf(value) === Object.prototype) {
       return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
     }

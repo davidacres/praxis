@@ -623,10 +623,34 @@ test('durable ownership and negotiated context delivery persist without aliasing
   const manager = new AiSessionManager(storage);
   const ownership = { conversationId: 'conversation', turnId: 'turn', participantId: 'member', attemptId: 'attempt', bindingId: 'binding', coordinatorEpoch: 'epoch' };
   manager.updateAgentRuntime('SESSION-abc', { teamChatExecution: ownership, teamChatContextDelivery: 'native' });
+  const expected = structuredClone(ownership);
   ownership.attemptId = 'mutated';
   assert.equal(manager.getAgentSession('SESSION-abc')?.teamChatExecution?.attemptId, 'attempt');
   await new Promise(resolve => setTimeout(resolve, 0));
   const restored = new AiSessionManager(storage).getAgentSession('SESSION-abc');
-  assert.equal(restored?.teamChatExecution?.bindingId, 'binding');
+  assert.equal(restored?.teamChatExecution?.providerSessionId, undefined);
+  assert.deepEqual(restored?.teamChatExecution, expected);
   assert.equal(restored?.teamChatContextDelivery, 'native');
+});
+
+test('standalone sessions persist without team-chat ownership', async () => {
+  const storage = storeWith({ 'SESSION-abc': baseRecord('completed') });
+  const manager = new AiSessionManager(storage);
+  assert.equal(manager.getAgentSession('SESSION-abc')?.teamChatExecution, undefined);
+  manager.updateAgentRuntime('SESSION-abc', { agentId: 'standalone-agent' });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const restored = new AiSessionManager(storage).getAgentSession('SESSION-abc');
+  assert.ok(restored);
+  assert.equal(restored.teamChatExecution, undefined);
+});
+
+test('provider session identity survives ownership persistence', async () => {
+  const storage = storeWith({ 'SESSION-abc': baseRecord('completed') });
+  const manager = new AiSessionManager(storage);
+  const ownership = { conversationId: 'c', turnId: 't', participantId: 'p', attemptId: 'a', coordinatorEpoch: 'epoch', providerSessionId: 'provider-session' };
+  const expected = structuredClone(ownership);
+  manager.updateAgentRuntime('SESSION-abc', { teamChatExecution: ownership });
+  ownership.providerSessionId = 'mutated';
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(new AiSessionManager(storage).getAgentSession('SESSION-abc')?.teamChatExecution, expected);
 });
