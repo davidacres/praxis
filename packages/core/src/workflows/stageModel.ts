@@ -25,6 +25,17 @@ export interface StageModelChoice {
   reason: string;
 }
 
+/**
+ * A model id a stage or run may carry, or undefined when it names no model. `default` is how a CLI
+ * agent (Claude Code) lists its own default, not a model id: carried into a stage, it was sent as-is
+ * to whichever provider took over and failed there ("model not found"). It means "the provider's
+ * default", which is what leaving the model unset already does on every provider.
+ */
+export function namedModel(value: string | undefined): string | undefined {
+  const model = value?.trim();
+  return model && model.toLowerCase() !== 'default' ? model : undefined;
+}
+
 export function isModelTier(value: unknown): value is WorkflowModelTier {
   return typeof value === 'string' && (WORKFLOW_MODEL_TIERS as readonly string[]).includes(value);
 }
@@ -43,9 +54,10 @@ export function chooseStageModel(input: {
   /** Attempts that spent the stage so far (see `attemptsSpent`). */
   attemptsSpent: number;
 }): StageModelChoice {
-  const { node, provider, tiers, runModel, attemptsSpent } = input;
+  const { node, provider, tiers, attemptsSpent } = input;
+  const runModel = namedModel(input.runModel);
 
-  const exact = node.model?.trim();
+  const exact = namedModel(node.model);
   if (exact) return { model: exact, reason: 'the stage names this model' };
 
   if (node.modelTier) {

@@ -17,6 +17,7 @@ import {
   stageOutcomeFromSession,
   stageSessionKey,
   chooseStageModel,
+  namedModel,
   formatUpstreamReports,
   UPSTREAM_REPORT_MAX_CHARS,
   formatUpstreamLogs,
@@ -341,7 +342,7 @@ export async function runWorkflowAgentStage(
   // on the stage's own AI, the run's model only on the run's AI.
   const switched = Boolean(workflowRun.stageProviders?.[recordNodeId]);
   const ownProvider = node.agent.providerId?.trim();
-  const switchedModel = workflowRun.stageModels?.[recordNodeId];
+  const switchedModel = namedModel(workflowRun.stageModels?.[recordNodeId]);
   let modelChoice: { model?: string; reason: string } = switchedModel
     ? { model: switchedModel, reason: 'explicitly chosen for this stage' }
     : chooseStageModel({
