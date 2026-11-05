@@ -293,3 +293,8 @@ Still open (unchanged, not promoted to a pass): real API proof (no `PRAXIS_LIVE_
 
 - `.praxis/change-diff.md` and `.praxis/session-artifacts/change-diff.patch`: verified identical to the merge-base with `main` (`git diff c6e81e86 HEAD -- .praxis` is empty); the delivery diff holds only source, tests and docs.
 - Real API proof, authoritative native CLI reuse, the manual second-window/restart journey and the pending-approval `interrupted` vs `outcome_unknown` discrepancy remain open. They were not run and are not reported as passes; carry them into release sign-off.
+
+## Review disposition (iteration 3, final pass)
+
+- Re-verified `git diff e1f3f211 HEAD -- .praxis` is empty, so the run artifacts add no delivery-diff noise.
+- The iteration-2 QA excerpt showed `durableTeamChat.spec.ts` tests 6–13 passing; it did not identify a failing test. No full functional/theme suite was run in this pass (scheduled-run policy), so the five recorded full-suite failures stay open and are not reported as passes.
