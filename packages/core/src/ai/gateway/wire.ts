@@ -341,7 +341,7 @@ export function trimToolOutputToBudget(
   return { history: out, trimmed };
 }
 
-const ELIDED_TOOL_RESULT = '[earlier tool output dropped to stay within the context window]';
+const ELIDED_TOOL_RESULT = '[earlier tool output omitted to conserve context; do not re-read this output]';
 
 export function compactHistoryForReplay(history: ReadonlyArray<WireMessage>): WireMessage[] {
   const out: WireMessage[] = [];

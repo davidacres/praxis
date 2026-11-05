@@ -51,9 +51,18 @@ import {
   type EntryProgress
 } from './scheduledRunExecution';
 
-/** Every provider that ran out on an earlier ticket of this run: the next ticket should not start on one. */
+/** Every provider that ran out on an earlier ticket of this run, unless a later ticket has since run successfully on it. */
 function exhaustedInRun(run: ScheduledRun): string[] {
-  return [...new Set(run.entries.flatMap(entry => entry.outcome?.exhausted ?? []))];
+  const exhausted = new Set<string>();
+  for (const entry of run.entries) {
+    if (entry.outcome?.status === 'done' && entry.outcome.provider && !(entry.outcome.exhausted ?? []).includes(entry.outcome.provider)) {
+      exhausted.delete(entry.outcome.provider);
+    }
+    for (const p of entry.outcome?.exhausted ?? []) {
+      exhausted.add(p);
+    }
+  }
+  return [...exhausted];
 }
 
 function scheduledBranchName(runId: string): string {
