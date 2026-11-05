@@ -116,6 +116,7 @@ export * from './scheduledRuns/scheduledRunForecast';
 export * from './scheduledRuns/scheduledRunReadiness';
 export * from './scheduledRuns/scheduledRunRequest';
 export * from './scheduledRuns/scheduledRunRunner';
+export * from './scheduledRuns/scheduledRunWorkflow';
 export * from './scheduledRuns/scheduledRunStore';
 export * from './scheduledRuns/scheduledRunTime';
 export * from './scheduledRuns/scheduledTicketStatus';

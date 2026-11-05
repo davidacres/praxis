@@ -51,7 +51,7 @@ export async function runWorkflowMerge(
   }
 
   // 2. Identify the branch to merge
-  const sourceBranch = (await findRunBranch(root, context.run.runId)) ?? runWorktreeKey(context.run.runId);
+  const sourceBranch = context.run.sharedDeliveryBranch ?? (await findRunBranch(root, context.run.runId)) ?? runWorktreeKey(context.run.runId);
   const targetBranch = node.targetBranch?.trim() || (await getCurrentBranch(root)) || 'main';
 
   // 3. Execution log collector

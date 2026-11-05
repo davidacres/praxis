@@ -56,6 +56,10 @@ function exhaustedInRun(run: ScheduledRun): string[] {
   return [...new Set(run.entries.flatMap(entry => entry.outcome?.exhausted ?? []))];
 }
 
+function scheduledBranchName(runId: string): string {
+  return `WF-SR-${runId.replace(/^run-/, '').replace(/[^A-Za-z0-9-]/g, '-').toUpperCase()}`;
+}
+
 /** Thrown by the `launch` port when a ticket cannot be started, with the reason the run should pause for. */
 export class ScheduledLaunchError extends Error {
   public constructor(message: string, public readonly reason: ScheduledPauseReason = 'policy') {
@@ -88,7 +92,7 @@ export interface ProviderUsageReading {
 }
 
 export interface ScheduledGateDecisionResult {
-  decision: 'approved' | 'rejected' | 'skipped';
+  decision: 'approved' | 'rejected' | 'skipped' | 'reworking';
   reason: string;
 }
 
@@ -114,7 +118,9 @@ export interface ScheduledRunnerPorts {
   /** A readable reason the ticket cannot be run any more (deleted, moved, closed), or `undefined` when it can. */
   checkTicket(ticket: ScheduledTicketRef): Promise<string | undefined>;
   /** Starts the ticket's workflow run and returns its id. Throws `ScheduledLaunchError` when it cannot. */
-  launch(request: { run: ScheduledRun; entry: ScheduledQueueEntry; workflowId: string; token: string; provider?: string }): Promise<string>;
+  launch(request: { run: ScheduledRun; entry: ScheduledQueueEntry; workflowId: string; token: string; provider?: string; deliveryBranchName?: string; finalEntry: boolean }): Promise<string | { workflowRunId: string; deliveryBranchName?: string }>;
+  /** Finds the branch that already holds the failed intermediate ticket, so the schedule can resume it. */
+  deliveryBranchForWorkflow?(workflowRunId: string): Promise<string | undefined>;
   cancelWorkflow(workflowRunId: string, reason: string): Promise<void>;
   usage(): Promise<ProviderUsageReading>;
   /**
@@ -316,8 +322,61 @@ export class ScheduledRunRunner {
     const entry = run.entries.find(candidate => candidate.id === run.pause?.entryId);
     const workflowRunId = entry?.outcome?.workflowRunId;
     if (!entry || (entry.outcome?.status !== 'failed' && entry.outcome?.status !== 'paused') || !workflowRunId) return run;
-    const progress = this.ports.observe(workflowRunId)?.progress;
-    if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    let progress = this.ports.observe(workflowRunId)?.progress;
+    if (!progress || progress.kind === 'cancelled') return run;
+    const isIntermediateSequentialEntry = run.policy.mode === 'sequential' && run.entries.at(-1)?.id !== entry.id;
+    if (progress.kind === 'failed') {
+      if (isIntermediateSequentialEntry && progress.nodeId === 'merge' && this.ports.deliveryBranchForWorkflow) {
+        const deliveryBranchName = await this.ports.deliveryBranchForWorkflow(workflowRunId);
+        if (!deliveryBranchName) return run;
+        const retried = retryScheduledEntry({ ...run, deliveryBranchName }, entry.id, this.ports.now());
+        return this.save(recordScheduledDecision(retried, entry.id, {
+          kind: 'entry-retried',
+          at: this.ports.now(),
+          message: `${entry.ticket.issueKey} merge was deferred to the final ticket; continuing on ${deliveryBranchName}.`
+        }));
+      }
+      return run;
+    }
+    if (progress.kind === 'gate' && this.ports.decideGate) {
+      const result = await this.ports.decideGate(workflowRunId, progress.nodeId);
+      run = await this.save(recordScheduledDecision(run, entry.id, {
+        kind: 'gate-decided',
+        at: this.ports.now(),
+        message: `${entry.ticket.issueKey} gate "${progress.label}": ${result.decision} — ${result.reason}`
+      }));
+      progress = this.ports.observe(workflowRunId)?.progress;
+      if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    } else if (progress.kind === 'gate' && this.ports.approveGate) {
+      await this.ports.approveGate(workflowRunId, progress.nodeId);
+      run = await this.save(recordScheduledDecision(run, entry.id, {
+        kind: 'gate-decided',
+        at: this.ports.now(),
+        message: `${entry.ticket.issueKey} gate "${progress.label}": approved autonomously.`
+      }));
+      progress = this.ports.observe(workflowRunId)?.progress;
+      if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    }
+    if (progress.kind === 'stalled' && progress.edgeId && this.ports.decideLoop) {
+      const result = await this.ports.decideLoop(workflowRunId, progress.edgeId);
+      run = await this.save(recordScheduledDecision(run, entry.id, {
+        kind: 'loop-decided',
+        at: this.ports.now(),
+        message: `${entry.ticket.issueKey} loop decision: ${result.decision} — ${result.reason}`
+      }));
+      progress = this.ports.observe(workflowRunId)?.progress;
+      if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    }
+    if (progress.kind === 'stalled' && progress.recovery?.automatic !== false && progress.recovery && progress.recovery.attempts < progress.recovery.maxAttempts && this.ports.retryStage) {
+      await this.ports.retryStage(workflowRunId, progress.recovery.nodeId);
+      run = await this.save(recordScheduledDecision(run, entry.id, {
+        kind: 'entry-retried',
+        at: this.ports.now(),
+        message: `${entry.ticket.issueKey} ${progress.recovery.nodeId} recovered automatically after the workflow resumed.`
+      }));
+      progress = this.ports.observe(workflowRunId)?.progress;
+      if (!progress || progress.kind === 'failed' || progress.kind === 'cancelled') return run;
+    }
     if (progress.kind === 'succeeded') run = await this.moveTicket(run, entry.id, 'done');
     return this.save(applyEntryProgress(run, entry.id, progress, this.ports.now()));
   }
@@ -569,7 +628,19 @@ export class ScheduledRunRunner {
       run = await this.save(markEntryLaunching(run, entry.id, token, decision.provider, this.ports.now(), lane ? { lane: lane.lane, reason: lane.reason } : undefined));
       this.launching.add(entry.id);
       try {
-        const workflowRunId = await this.ports.launch({ run, entry, workflowId, token, provider: decision.provider });
+        const launched = await this.ports.launch({
+          run,
+          entry,
+          workflowId,
+          token,
+          provider: decision.provider,
+          ...(run.policy.mode === 'sequential' ? { deliveryBranchName: run.deliveryBranchName ?? scheduledBranchName(run.id) } : {}),
+          finalEntry: run.entries.at(-1)?.id === entry.id
+        });
+        const workflowRunId = typeof launched === 'string' ? launched : launched.workflowRunId;
+        if (typeof launched !== 'string' && launched.deliveryBranchName && run.policy.mode === 'sequential') {
+          run = await this.save({ ...run, deliveryBranchName: launched.deliveryBranchName });
+        }
         run = await this.save(bindEntryWorkflow(run, entry.id, workflowRunId, this.ports.now()));
         run = await this.moveTicket(run, entry.id, 'indeterminate');
       } catch (error) {

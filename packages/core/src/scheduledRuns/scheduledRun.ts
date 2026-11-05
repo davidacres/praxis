@@ -252,6 +252,8 @@ export interface ScheduledRun {
   /** IANA zone the user picked; display and editing only. */
   timezone: string;
   policy: ScheduledRunPolicy;
+  /** Sequential schedules build every ticket on this delivery branch and merge it once at the end. */
+  deliveryBranchName?: string;
   entries: ScheduledQueueEntry[];
   status: ScheduledRunStatus;
   attempts: ScheduledRunAttempt[];

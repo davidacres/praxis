@@ -20,7 +20,7 @@ import { scheduleWorkflowRun } from './workflowScheduler';
 import { findingsPredicateHolds, loopBudget, pendingLoop } from './workflowEdges';
 import { normalizeWorkflow, resolveRunParameters, validateWorkflow } from './workflowValidation';
 import { summarizeWorkflowRun } from './workflowRunSummary';
-import { approveStage, evaluateGates, failingGateFindings } from './workflowGates';
+import { approveStage, evaluateGates, failingGateFindings, repairStageForFindings } from './workflowGates';
 import {
   WORKFLOW_MAX_LOOP_ITERATIONS,
   WORKFLOW_SCHEMA_VERSION,
@@ -481,6 +481,13 @@ test('orchestrator: a loop that never converges stops at its budget and waits fo
   assert.equal(pendingLoop(runs.get('run-loop-1')!)?.kind, 'decide');
 });
 
+test('autonomous repair selects the nearest shared mutating ancestor of blocking findings', () => {
+  const run = start();
+  assert.equal(repairStageForFindings(run, [{ stage: 'Review' }]), 'implement');
+  assert.equal(repairStageForFindings(run, [{ stage: 'missing stage' }]), undefined);
+  assert.equal(repairStageForFindings(run, []), undefined);
+});
+
 test('orchestrator: keep-best asks the workspace to restore before the next pass', async () => {
   const runs = memoryRuns();
   const scores = [70, 60, 95];
@@ -616,6 +623,10 @@ test('a revision started because a gate failed is handed exactly the findings fa
   assert.match(brief, /\[medium\] bug: Update validators accept an empty patch \(src\/notes\/noteValidation\.ts:115\)\n  Suggested fix: Reject an empty patch\./);
   assert.match(formatIterationContext(r, 'review') ?? '', /check whether each is now fixed/);
   assert.equal(formatIterationContext(r, 'plan'), undefined, 'a stage before the revision is not told');
+
+  const automated = reworkWorkflowRun(r, 'implement', now(), { freshAttempts: true, carryFindings: carried }).run;
+  assert.match(automated.events.at(-1)?.message ?? '', /^An autonomous revision was started from Implement to fix 1 finding from Review\./);
+  assert.equal(formatIterationContext(automated, 'implement')?.includes('Update validators accept an empty patch'), true);
 
   // It survives a reload, and a later revision with nothing to carry clears it.
   assert.deepEqual(normalizeWorkflowRun(JSON.parse(JSON.stringify(r)))?.revisionFindings, r.revisionFindings);

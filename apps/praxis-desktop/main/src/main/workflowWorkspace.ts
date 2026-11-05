@@ -26,7 +26,7 @@ const logger = { appendLine: (message: string): void => console.log(`[workflow] 
 
 /** Stable per-run name, so re-attaching after a restart lands on the same tree. */
 function worktreeKeyFor(run: WorkflowRun): string {
-  return runWorktreeKey(run.runId);
+  return run.sharedDeliveryBranch ?? runWorktreeKey(run.runId);
 }
 
 /** App-owned metadata can be dirty without changing the product snapshot a run builds and tests. */
@@ -110,7 +110,7 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
       // Branched in turn with other writes to the base, so a ticket move or outcome comment being
       // committed for another run is never mistaken for the person's uncommitted work.
       const prepared = await withBaseCheckout(folder, () => manager.prepareDeliveryWorktree(
-        { key: worktreeKeyFor(run), summary: run.definition.name } as Parameters<
+        { key: run.sharedDeliveryBranch ? 'WF-SCHEDULED' : worktreeKeyFor(run), summary: run.sharedDeliveryBranch ? '' : run.definition.name } as Parameters<
           GitWorktreeManager['prepareDeliveryWorktree']
         >[0],
         baseBranch,
@@ -118,6 +118,7 @@ export function createWorkflowWorkspaceProvider(): WorkflowWorkspaceProvider {
         {
           forceClean: false,
           reuseExisting: true,
+          ...(run.sharedDeliveryBranch ? { branchName: run.sharedDeliveryBranch } : {}),
           // A Git worktree starts from a commit, not from the files currently visible in the main
           // checkout. Silently dropping those files makes workflow QA test an older product than the
           // one the user just ran. Refuse that ambiguous base and tell them how to make it durable.

@@ -291,6 +291,8 @@ export interface WorkflowRun {
   stageModels?: Record<string, string>;
   /** Number of completed automatic recovery repairs per source node. */
   recoveryAttempts?: Record<string, number>;
+  /** Number of autonomous revisions started after failed approval gates. */
+  autonomousReworkAttempts?: number;
   /** Values given for the definition's `parameters` at start; fixed for the life of the run. */
   parameters?: Record<string, string | number>;
   /** Every time a loop edge was taken, oldest first. Iteration counts derive from this. */
@@ -332,6 +334,8 @@ export interface WorkflowRun {
    * launched instead of launching the ticket a second time.
    */
   scheduledLaunchToken?: string;
+  /** Shared branch used by all tickets in one sequential scheduled run. */
+  sharedDeliveryBranch?: string;
   /**
    * Set once the terminal outcome has been written back to `issueKey` as a
    * comment. An idempotency marker only — set directly by the host after a
@@ -444,6 +448,7 @@ export function createWorkflowRun(input: {
   issueKey?: string;
   issueConnectionId?: string;
   scheduledLaunchToken?: string;
+  sharedDeliveryBranch?: string;
   controllerSessionKey?: string;
   controllerSessionId?: string;
   planInput?: WorkflowPlanInput;
@@ -474,6 +479,7 @@ export function createWorkflowRun(input: {
     ...(input.issueKey ? { issueKey: input.issueKey } : {}),
     ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {}),
     ...(input.scheduledLaunchToken ? { scheduledLaunchToken: input.scheduledLaunchToken } : {}),
+    ...(input.sharedDeliveryBranch ? { sharedDeliveryBranch: input.sharedDeliveryBranch } : {}),
     ...(input.controllerSessionKey ? { controllerSessionKey: input.controllerSessionKey } : {}),
     ...(input.controllerSessionId ? { controllerSessionId: input.controllerSessionId } : {}),
     ...(input.planInput ? { planInput: input.planInput } : {}),
@@ -604,7 +610,9 @@ export function reworkWorkflowRun(
      * instructions for the new one.
      */
     byPerson?: boolean;
-    /** With `byPerson`: the gate-failing findings this revision is meant to fix. */
+    /** An autonomous rework starts a fresh node-attempt budget like a person-led revision. */
+    freshAttempts?: boolean;
+    /** Gate-failing findings this revision is meant to fix. */
     carryFindings?: WorkflowRevisionFindings['items'];
   } = {}
 ): WorkflowReworkResult {
@@ -631,7 +639,7 @@ export function reworkWorkflowRun(
       artifacts: [],
       // A person's new revision also gets a fresh attempt budget, and is not told its
       // predecessor's failures as if they were its own.
-      ...(options.byPerson
+      ...(options.byPerson || options.freshAttempts
         ? { revisionBase: state.attempts.length }
         : state.revisionBase !== undefined ? { revisionBase: state.revisionBase } : {})
     };
@@ -659,7 +667,7 @@ export function reworkWorkflowRun(
     message: `${label(run, nodeId)} opened a new delivery revision; requeued ${requeued.map(id => label(run, id)).join(', ')}.`
   });
   return {
-    run: options.byPerson
+    run: options.byPerson || options.freshAttempts || options.carryFindings?.length
       ? append(
           {
             ...reworked,
@@ -669,7 +677,7 @@ export function reworkWorkflowRun(
             at,
             kind: 'revision-started',
             nodeId,
-            message: `A new revision was started from ${label(run, nodeId)}${
+            message: `${options.byPerson ? 'A new' : 'An autonomous'} revision was started from ${label(run, nodeId)}${
               options.carryFindings?.length
                 ? ` to fix ${options.carryFindings.length} finding${options.carryFindings.length === 1 ? '' : 's'} from ${[...new Set(options.carryFindings.map(item => item.stage))].join(', ')}`
                 : ''
@@ -1659,11 +1667,15 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
           )
         }
       : {}),
+    ...(typeof raw.autonomousReworkAttempts === 'number' && Number.isInteger(raw.autonomousReworkAttempts) && raw.autonomousReworkAttempts >= 0
+      ? { autonomousReworkAttempts: raw.autonomousReworkAttempts }
+      : {}),
     ...normalizeLoopState(raw),
     ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
     ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
     ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
     ...(typeof raw.scheduledLaunchToken === 'string' ? { scheduledLaunchToken: raw.scheduledLaunchToken } : {}),
+    ...(typeof raw.sharedDeliveryBranch === 'string' ? { sharedDeliveryBranch: raw.sharedDeliveryBranch } : {}),
     ...normalizeRevisionFindings(raw.revisionFindings),
     ...(raw.mergeAiAttempt && typeof raw.mergeAiAttempt === 'object' && !Array.isArray(raw.mergeAiAttempt)
       ? {

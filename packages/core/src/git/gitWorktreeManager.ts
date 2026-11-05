@@ -145,6 +145,8 @@ export class GitWorktreeManager {
     options?: {
       forceClean?: boolean;
       requireCleanBase?: boolean;
+      /** Reuse one named branch/worktree across sequential scheduled ticket workflows. */
+      branchName?: string;
       /** Branch from a snapshot of the checkout's uncommitted work instead of committed HEAD alone. */
       includeUncommitted?: boolean;
       /** Reuse an existing worktree directory if it is already checked out to the expected branch. */
@@ -156,7 +158,10 @@ export class GitWorktreeManager {
       throw new Error('Could not resolve the git repository root for the active workspace.');
     }
 
-    const worktreeName = buildWorktreeName(issue);
+    const worktreeName = options?.branchName ?? buildWorktreeName(issue);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(worktreeName) || worktreeName.includes('..')) {
+      throw new Error('The requested delivery branch name is invalid.');
+    }
     const worktreeRoot = resolveRepoWorktreeRoot(repoRoot);
     const worktreePath = path.join(worktreeRoot, worktreeName);
 

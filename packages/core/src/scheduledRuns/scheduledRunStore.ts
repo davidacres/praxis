@@ -230,6 +230,7 @@ export function normalizeScheduledRun(value: unknown): ScheduledRun | undefined 
     scheduledStartAt: new Date(start).toISOString(),
     timezone: text(raw.timezone) && isValidTimeZone(raw.timezone as string) ? (raw.timezone as string) : 'UTC',
     policy: storedPolicy(rawPolicy, workflowId),
+    ...(text(raw.deliveryBranchName) ? { deliveryBranchName: text(raw.deliveryBranchName) } : {}),
     entries: renumberEntries(ordered),
     status,
     attempts: (Array.isArray(raw.attempts) ? raw.attempts : []).map(normalizeAttempt).filter((a): a is ScheduledRunAttempt => !!a),

@@ -19,7 +19,7 @@ class Harness {
   public saved = new Map<string, ScheduledRun>();
   public workflows = new Map<string, WorkflowObservation | undefined>();
   public byToken = new Map<string, string>();
-  public launches: Array<{ key: string; provider?: string; token: string }> = [];
+  public launches: Array<{ key: string; provider?: string; token: string; deliveryBranchName?: string; finalEntry: boolean }> = [];
   public cancelled: string[] = [];
   public handovers: Array<{ from: string; to: string }> = [];
   public missingTickets = new Map<string, string>();
@@ -46,14 +46,14 @@ class Harness {
     observe: id => this.workflows.get(id),
     findByLaunchToken: token => this.byToken.get(token),
     checkTicket: async ticket => this.missingTickets.get(ticket.issueKey),
-    launch: async ({ entry, token, provider }) => {
+    launch: async ({ entry, token, provider, deliveryBranchName, finalEntry }) => {
       if (this.failLaunch && !this.launchBeforeFailing) throw this.failLaunch;
       const id = `wf-${entry.ticket.issueKey}`;
-      this.launches.push({ key: entry.ticket.issueKey, provider, token });
+      this.launches.push({ key: entry.ticket.issueKey, provider, token, deliveryBranchName, finalEntry });
       this.byToken.set(token, id);
       this.workflows.set(id, { progress: { kind: 'running', provider } });
       if (this.failLaunch) throw this.failLaunch;
-      return id;
+      return { workflowRunId: id, ...(deliveryBranchName ? { deliveryBranchName } : {}) };
     },
     cancelWorkflow: async id => {
       this.cancelled.push(id);
@@ -134,6 +134,8 @@ test('tickets run in order, each waiting for the one before to settle', async ()
   await h.runner.tick();
   assert.equal(h.run.status, 'completed');
   assert.deepEqual(h.launches.map(launch => launch.key), ['T-1', 'T-2', 'T-3']);
+  assert.equal(new Set(h.launches.map(launch => launch.deliveryBranchName)).size, 1, 'sequential tickets share one branch');
+  assert.deepEqual(h.launches.map(launch => launch.finalEntry), [false, false, true], 'only the final entry retains its merge stage');
   assert.ok(h.run.attempts[0].endedAt);
 });
 
@@ -483,6 +485,54 @@ test('a stalled failure pauses once, keeps its workflow, and resumes after stage
   assert.equal(h.launches.length, 1, 'stage recovery never launches a duplicate workflow');
 });
 
+test('a recovered scheduled workflow automatically decides its next approval gate', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+  const workflowRunId = h.run.entries[0].outcome!.workflowRunId!;
+  h.setWorkflow('T-1', { progress: { kind: 'stalled', pauseReason: 'failure', reason: 'Stage failed.' } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+
+  let decided = 0;
+  h.ports.decideGate = async (_id, nodeId) => {
+    assert.equal(nodeId, 'approve');
+    decided += 1;
+    h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+    return { decision: 'reworking', reason: 'Starting an autonomous repair revision.' };
+  };
+  h.setWorkflow('T-1', { progress: { kind: 'gate', nodeId: 'approve', label: 'Approve' } });
+  await h.runner.handleWorkflowChanged(workflowRunId);
+
+  assert.equal(decided, 1);
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.entries[0].outcome?.status, 'running');
+  assert.match(h.run.entries[0].outcome?.decisions?.at(-1)?.message ?? '', /reworking/);
+  assert.equal(h.launches.length, 1, 'recovery continues the existing workflow instead of launching another ticket run');
+});
+
+test('an intermediate sequential merge failure retries on its delivery branch and defers merge', async () => {
+  const h = new Harness(['T-1', 'T-2']);
+  await h.runner.tick();
+  const workflowRunId = h.run.entries[0].outcome!.workflowRunId!;
+  h.setWorkflow('T-1', { progress: { kind: 'failed', nodeId: 'merge', reason: 'Target checkout contains uncommitted changes.' } });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+
+  h.ports.deliveryBranchForWorkflow = async id => {
+    assert.equal(id, workflowRunId);
+    return 'WF-CURRENT-SCHEDULE';
+  };
+  await h.runner.tick();
+
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.deliveryBranchName, 'WF-CURRENT-SCHEDULE');
+  assert.equal(h.run.entries[0].outcome?.retries, 1);
+  assert.equal(h.launches.length, 2);
+  assert.equal(h.launches[1].deliveryBranchName, 'WF-CURRENT-SCHEDULE');
+  assert.equal(h.launches[1].finalEntry, false);
+  assert.ok(h.run.events.some(event => /merge was deferred to the final ticket/.test(event.message)));
+});
+
 test('only an idle failed workflow needs manual scheduled recovery', () => {
   const failed = { nodeId: 'implement', outcome: 'failed', lane: 'failed' };
   const summary = { status: 'running', stages: [failed], loops: [] } as unknown as Parameters<typeof scheduledWorkflowBlocker>[0];
@@ -693,6 +743,43 @@ test('an environment-paused stage is not automatically retried, but remains reco
   assert.equal(retryCount, 0);
   assert.equal(h.run.status, 'paused');
   assert.equal(h.run.entries[0].outcome?.status, 'paused');
+});
+
+test('a stage interrupted by app shutdown retries autonomously after Praxis restarts', async () => {
+  const h = new Harness(['T-1']);
+  await h.runner.tick();
+  const workflowRunId = h.run.entries[0].outcome!.workflowRunId!;
+
+  h.setWorkflow('T-1', {
+    progress: {
+      kind: 'stalled',
+      pauseReason: 'failure',
+      reason: 'Implement was interrupted when Praxis stopped.'
+    }
+  });
+  await h.runner.tick();
+  assert.equal(h.run.status, 'paused');
+
+  let retryCount = 0;
+  h.ports.retryStage = async (_workflowRunId, nodeId) => {
+    assert.equal(nodeId, 'implement');
+    retryCount += 1;
+    h.setWorkflow('T-1', { progress: { kind: 'running', provider: 'claude' } });
+  };
+  h.setWorkflow('T-1', {
+    progress: {
+      kind: 'stalled',
+      pauseReason: 'failure',
+      reason: 'Implement could not run here: interrupted',
+      recovery: { nodeId: 'implement', attempts: 0, maxAttempts: 2, automatic: true }
+    }
+  });
+
+  await h.runner.handleWorkflowChanged(workflowRunId);
+
+  assert.equal(retryCount, 1);
+  assert.equal(h.run.status, 'running');
+  assert.equal(h.run.entries[0].outcome?.status, 'running');
 });
 
 test('a paused scheduled run whose entry was paused on an environment block resumes when the workflow recovers', async () => {

@@ -91,6 +91,7 @@ test('runner fields survive a round trip untouched', async () => {
   const base = makeRun('Running', '2026-10-21T10:00:00Z', 'r');
   const run: ScheduledRun = {
     ...base,
+    deliveryBranchName: 'WF-SR-R',
     status: 'paused',
     attempts: [{ id: 'att-1', trigger: 'start-now', startedAt: NOW }],
     entries: base.entries.map((entry, index) =>
