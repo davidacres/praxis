@@ -45,6 +45,22 @@ All criteria pass with linked evidence, relevant feature commands pass, and the 
 
 ## Comments
 
+
+**PRX-T111-479** — 2026-11-05T18:14:45.026Z
+**Workflow run failed: Governed delivery — TASK-479: Expose validated commands and revisioned conversation updates**
+
+Status: Failed · Duration: 17m 38s
+
+- ✅ Plan: succeeded
+- ✅ Implement: succeeded
+- ⏳ Praxis Test contracts: pending
+- ❌ Review: failed
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "review" failed.
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
