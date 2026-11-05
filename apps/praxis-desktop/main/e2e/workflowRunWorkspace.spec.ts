@@ -489,17 +489,26 @@ async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'unco
 }
 
 /** The run's checkout: the only directory under the repo's `.worktrees`. */
-const runWorktree = (repo: string): string | undefined => {
+const runWorktree = (repo: string, expectedFile?: string): string | undefined => {
   const root = path.join(repo, '.worktrees');
   const [name] = fs.existsSync(root) ? fs.readdirSync(root) : [];
   // The directory appears before git has populated it; wait for a checked-out file.
-  return name && fs.existsSync(path.join(root, name, 'README.md')) ? path.join(root, name) : undefined;
+  if (!name) return undefined;
+  const dir = path.join(root, name);
+  if (!fs.existsSync(path.join(dir, 'README.md'))) return undefined;
+  if (expectedFile && !fs.existsSync(path.join(dir, expectedFile))) return undefined;
+  try {
+    // A complete checkout has nothing left to write, so git reports it clean.
+    return gitOut(dir, 'status', '--porcelain').trim() === '' ? dir : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 test('a dirty checkout offers to include its changes: the run sees them, the checkout is untouched', async () => {
   const { repo } = await startFromDirtyCheckout('uncommitted-base-include');
-  await expect.poll(() => runWorktree(repo)).toBeTruthy();
-  const worktree = runWorktree(repo) as string;
+  await expect.poll(() => runWorktree(repo, 'unsaved.ts')).toBeTruthy();
+  const worktree = runWorktree(repo, 'unsaved.ts') as string;
   expect(fs.readFileSync(path.join(worktree, 'unsaved.ts'), 'utf8')).toContain('draft = 1');
   expect(fs.readFileSync(path.join(worktree, 'README.md'), 'utf8')).toContain('local edit');
   expect(gitOut(worktree, 'log', '-1', '--format=%s')).toMatch(/^WIP snapshot: uncommitted changes/);
@@ -519,8 +528,8 @@ test('a dirty checkout can instead start from the last commit without its change
 
 test('a dirty checkout can commit its changes, then the run starts from that commit', async () => {
   const { repo } = await startFromDirtyCheckout('uncommitted-base-commit');
-  await expect.poll(() => runWorktree(repo)).toBeTruthy();
-  const worktree = runWorktree(repo) as string;
+  await expect.poll(() => runWorktree(repo, 'unsaved.ts')).toBeTruthy();
+  const worktree = runWorktree(repo, 'unsaved.ts') as string;
   expect(fs.readFileSync(path.join(worktree, 'unsaved.ts'), 'utf8')).toContain('draft = 1');
   // The changes are now a real commit in the user's checkout, which is left clean.
   expect(gitOut(repo, 'log', '-1', '--format=%s').trim()).toMatch(/^WIP: save changes/);
