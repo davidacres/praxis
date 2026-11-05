@@ -322,3 +322,45 @@ test('after a loop fault, later queued turns stay queued and never re-dispatch t
   assert.equal(conv(restarted.snapshot).turns[0].state === 'running', false, 'startup reconciled the faulted turn');
   assert.equal(replays.filter(p => p.turn.id === conv(restarted.snapshot).turns[0].id).length, 0, 'the faulted turn was never replayed');
 });
+
+test('a late completion after cancel never restarts the turn or appends a reply, and cancel aborts the attempt claim', async () => {
+  const repo = new CrashableRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  let release!: (value: { text: string }) => void;
+  let signal: AbortSignal | undefined;
+  let calls = 0;
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('cancel'), executionAdapter: { execute: async params => {
+    calls++;
+    signal = params.signal;
+    await params.onAccepted!();
+    return new Promise<{ text: string }>(resolve => { release = resolve; });
+  } } });
+  await coordinator.submitTurn(command());
+  await until(() => lastAttempt(repo.snapshot)?.state === 'running', 'running attempt');
+  const turnId = conv(repo.snapshot).turns[0].id;
+  await coordinator.cancelTurn('conv', turnId);
+  assert.equal(signal?.aborted, true, 'cancel aborts the current attempt by its turn');
+  release({ text: 'Late reply' });
+  await tick(30);
+  const after = conv(repo.snapshot);
+  assert.notEqual(after.turns[0].state, 'running', 'a late completion never restarts the cancelled turn');
+  assert.ok(after.messages.filter(m => m.text === 'Late reply').length <= 1, 'the late result is imported at most once');
+  release({ text: 'Late reply' });
+  await tick(20);
+  assert.equal(conv(repo.snapshot).messages.filter(m => m.text === 'Late reply').length, after.messages.filter(m => m.text === 'Late reply').length);
+  assert.equal(after.turns[0].attempts.length, 1);
+  assert.equal(calls, 1);
+});
+
+test('a settled attempt releases only its own abort claim', async () => {
+  const repo = new CrashableRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  const coordinator = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('claim'),
+    executionAdapter: { execute: async params => { await params.onAccepted!(); return { text: 'Done' }; } } });
+  await coordinator.submitTurn(command());
+  await until(() => conv(repo.snapshot).turns[0]?.state === 'completed', 'completion');
+  const claims = (coordinator as unknown as { abortControllers: Map<string, AbortController> }).abortControllers;
+  const stranger = new AbortController();
+  claims.set('conv:other-turn:other-attempt', stranger);
+  await coordinator.cancelTurn('conv', conv(repo.snapshot).turns[0].id);
+  assert.equal(stranger.signal.aborted, false, 'a different turn/attempt claim is untouched');
+  assert.equal(claims.size, 1);
+});

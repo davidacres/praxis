@@ -448,11 +448,16 @@ export class TeamChatCoordinator {
       return conv;
     });
     if (applied) {
-      if (command.action === 'cancel') this.abortControllers.get(`${command.conversationId}:${command.turnId}`)?.abort();
+      if (command.action === 'cancel' && command.turnId) this.abortTurn(command.conversationId, command.turnId);
       this.notify({ conversationId: updated.id, revision: updated.revision, type: 'turn_accepted' });
       void this.processConversation(updated.id);
     }
     return rejection ? { ...rejection, conversation: updated } : { status: 'applied', conversation: updated };
+  }
+
+  private abortTurn(conversationId: string, turnId: string): void {
+    const prefix = `${conversationId}:${turnId}:`;
+    for (const [key, controller] of this.abortControllers) if (key.startsWith(prefix)) controller.abort();
   }
 
   public async removeConversation(conversationId: string): Promise<void> {
@@ -465,7 +470,6 @@ export class TeamChatCoordinator {
 
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
     await this.initialize();
-    const abortKey = `${conversationId}:${turnId}`;
     // Persist the intent before signalling the runtime. An abort request is not
     // evidence that an external tool did not execute.
     const updated = await this.transitionConversation(conversationId, conv => {
@@ -487,7 +491,7 @@ export class TeamChatCoordinator {
       conv.revision++;
       return conv;
     });
-    this.abortControllers.get(abortKey)?.abort();
+    this.abortTurn(conversationId, turnId);
     this.notify({ conversationId, revision: updated.revision, type: 'turn_cancelled', turnId,
       state: updated.turns.find(t => t.id === turnId)?.state });
     void this.processConversation(conversationId);
@@ -711,7 +715,7 @@ export class TeamChatCoordinator {
               });
               let reportedSummary: TeamChatExecutionResult | undefined;
               const summaryAbort = new AbortController();
-              const summaryAbortKey = `${conversationId}:${activeTurn.id}`;
+              const summaryAbortKey = `${conversationId}:${activeTurn.id}:summary`;
               this.abortControllers.set(summaryAbortKey, summaryAbort);
               try {
                 const summary = await this.executionAdapter.summarize(prompt, { conversation, turn: activeTurn, participant: nextParticipant, signal: summaryAbort.signal });
@@ -817,7 +821,7 @@ export class TeamChatCoordinator {
         };
 
         const abortController = new AbortController();
-        const abortKey = `${conversationId}:${activeTurn.id}`;
+        const abortKey = `${conversationId}:${activeTurn.id}:${attemptId}`;
         this.abortControllers.set(abortKey, abortController);
 
         let executionError: Error | undefined;
@@ -852,7 +856,7 @@ export class TeamChatCoordinator {
         } catch (err) {
           executionError = err instanceof Error ? err : new Error(String(err));
         } finally {
-          this.abortControllers.delete(abortKey);
+          if (this.abortControllers.get(abortKey) === abortController) this.abortControllers.delete(abortKey);
         }
 
         if (abortController.signal.aborted) {

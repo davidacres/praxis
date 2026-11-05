@@ -251,3 +251,25 @@ test('simultaneous sends to one chat on the file repository produce distinct FIF
   assert.deepEqual(app.calls.map(call => call.turn.id), [first.turnId, second.turnId], 'provider calls follow acceptance order');
   assert.equal(app.updates.filter(u => u.type === 'turn_accepted' && u.turnId === first.turnId).length, 1);
 });
+
+test('startup recovery keeps an outcome_unknown attempt blocked: no provider runs and a later queued turn in the same chat waits', async t => {
+  const file = profile(t);
+  const first = launch(file, () => new Promise(() => undefined));
+  await first.services.activate();
+  await first.services.repository().transaction(draft => { draft.conversations.push(conversation('blocked')); });
+  await first.services.submitTurn(submit('blocked', 'mid-reply'));
+  await until(() => read(file).conversations[0].turns[0]?.attempts[0]?.state === 'dispatching', 'dispatch');
+  const bytes = read(file);
+  const chat = bytes.conversations[0];
+  chat.turns.push({ ...structuredClone(chat.turns[0]), id: 'later-turn', commandId: 'later', userMessageId: 'later-message', state: 'queued', attempts: [] });
+  fs.writeFileSync(file, JSON.stringify(bytes));
+
+  const second = launch(file, async () => ({ text: 'unexpected' }));
+  assert.equal(await second.services.recoverOnStartup(), true);
+  await new Promise(resolve => setTimeout(resolve, 40));
+  const after = read(file).conversations[0];
+  assert.equal(second.calls.length, 0, 'no provider is invoked after recovery');
+  assert.equal(after.turns[0].attempts[0].state, 'outcome_unknown');
+  assert.equal(after.turns[1].state, 'queued', 'later work stays blocked behind the uncertain attempt');
+  assert.equal(after.turns[1].attempts.length, 0);
+});
