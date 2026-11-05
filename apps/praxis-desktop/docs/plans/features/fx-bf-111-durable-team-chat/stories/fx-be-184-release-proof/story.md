@@ -107,3 +107,19 @@ Status: Failed · Duration: 14h 14m
 - ✅ Security scan: succeeded
 
 Required stage "merge" failed.
+
+**PRX-S111-184** — 2026-11-05T02:07:54.858Z
+**Workflow run failed: Governed delivery — FX-BE-184: Durable team-chat release verification**
+
+Status: Failed · Duration: 3s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
