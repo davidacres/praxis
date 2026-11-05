@@ -58,7 +58,7 @@ Title: **an earlier turn reply committed after a queued input remains eligible**
 
 ## PT-36D88646CB
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:445](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L445).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:540](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L540).
 Title: **compatible members retain one binding each across turns and chats remain isolated; usage commits once**.
 
 **Given** two in-memory conversations and a configured stub adapter returning duplicate usage references.
@@ -67,7 +67,7 @@ Title: **compatible members retain one binding each across turns and chats remai
 
 ## PT-8322FDF906
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:466](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L466).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:582](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L582).
 Title: **context overflow pauses before any main provider attempt**.
 
 **Given** a coordinator without summarization and a dispatch counter.
@@ -76,7 +76,7 @@ Title: **context overflow pauses before any main provider attempt**.
 
 ## PT-B3B7D355CB
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:476](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L476).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:592](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L592).
 Title: **uncertain acceptance invalidates the binding and never automatically resends**.
 
 **Given** a coordinator with an adapter throwing TeamChatAcceptanceUnknown.
@@ -85,7 +85,7 @@ Title: **uncertain acceptance invalidates the binding and never automatically re
 
 ## PT-D453C7A90A
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:491](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L491).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:607](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L607).
 Title: **bounded summarization has separate provenance and usage; summary failure dispatches no main prompt**.
 
 **Given** 18 long historical messages, an early pin and stub summarization in success and failure modes.

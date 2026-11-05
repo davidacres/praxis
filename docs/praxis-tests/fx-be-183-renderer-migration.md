@@ -109,7 +109,7 @@ Title: **ambiguous legacy results remain diagnostics rather than invented succes
 
 ### PT-D81B94C6F4
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:657](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L657).
+Automation: **node:test**, [teamChatCoordinator.test.ts:752](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L752).
 Title: **revisioned controls reject stale targets and persist idempotent command outcomes**.
 
 **Given** a conversation with one decision message.
@@ -118,7 +118,7 @@ Title: **revisioned controls reject stale targets and persist idempotent command
 
 ### PT-824F86BCDF
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:677](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L677).
+Automation: **node:test**, [teamChatCoordinator.test.ts:772](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L772).
 Title: **deletion during dispatch fences late results and never recreates a conversation**.
 
 **Given** a turn whose execution is held open.
@@ -127,7 +127,7 @@ Title: **deletion during dispatch fences late results and never recreates a conv
 
 ### PT-BCE1A74F9A
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:694](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L694).
+Automation: **node:test**, [teamChatCoordinator.test.ts:789](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L789).
 Title: **a structured execution result and original page identity survive completion**.
 
 **Given** a turn submitted with issue page context `P-1` and an executor returning choices and an update-ticket action.

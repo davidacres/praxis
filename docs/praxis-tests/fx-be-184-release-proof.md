@@ -256,7 +256,7 @@ Title: **unverified CLI identity cannot be stabilized by turn or participant acc
 
 ### PT-F19C6CE02C
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:705](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L705).
+Automation: **node:test**, [teamChatCoordinator.test.ts:800](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L800).
 Title: **queued page identity and attachment references survive caller mutation before dispatch**.
 
 **Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
