@@ -1087,6 +1087,21 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   await expect(win.locator('[data-testid="session-chat-tasks-progress"]')).toBeVisible();
   await expect(win.locator('.session-chat-tasks-count')).toContainText('50%');
 
+  // The thread follows the latest message: the last one sits inside the
+  // scroll body's visible area rather than below the fold under the ticket card.
+  // Check before clicking Quote on the opening message: that click intentionally
+  // scrolls into history and stops following, just as a person reading earlier replies would.
+  // Polled: the follow runs after layout settles (ResizeObserver + a frame), so a single read can race it.
+  // Generous timeout: under a full parallel suite those frames can be seconds late, and the
+  // default 5s poll timed out there while passing alone.
+  await expect.poll(() => win.evaluate(() => {
+    const body = document.querySelector('[data-testid="agent-details-body"]');
+    const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
+    const last = messages[messages.length - 1];
+    if (!body || !last) return false;
+    return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
+  }), { timeout: 40000 }).toBe(true);
+
   // Verify Quote and Branch buttons (Feature 5)
   await expect(win.locator('[data-testid="session-chat-quote-btn"]').first()).toBeVisible();
   await expect(win.locator('[data-testid="session-chat-branch-btn"]').first()).toBeVisible();
@@ -1101,19 +1116,6 @@ test('in EasyMode selecting a session opens details in the center', async () => 
   await expect(win.locator('[data-testid="agent-details-composer-dock"]')).toBeVisible();
   await expect(win.locator('.session-chat-composer')).toBeVisible();
   await expect(win.locator('[data-testid="session-follow-up-input"]')).toBeVisible();
-
-  // The thread follows the latest message: the last one sits inside the
-  // scroll body's visible area rather than below the fold under the ticket card.
-  // Polled: the follow runs after layout settles (ResizeObserver + a frame), so a single read can race it.
-  // Generous timeout: under a full parallel suite those frames can be seconds late, and the
-  // default 5s poll timed out there while passing alone.
-  await expect.poll(() => win.evaluate(() => {
-    const body = document.querySelector('[data-testid="agent-details-body"]');
-    const messages = document.querySelectorAll('[data-testid="agent-timeline-message"]');
-    const last = messages[messages.length - 1];
-    if (!body || !last) return false;
-    return last.getBoundingClientRect().bottom <= body.getBoundingClientRect().bottom + 1;
-  }), { timeout: 40000 }).toBe(true);
 
   // Verify default width is full
   await expect(agentDetailsPage).toHaveAttribute('data-width-mode', 'full');

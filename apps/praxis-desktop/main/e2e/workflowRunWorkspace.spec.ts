@@ -302,8 +302,11 @@ test('deleting a live run cancels it first, then removes it', async () => {
   const runRow = page.locator('.easymode-automation-card').filter({ hasText: /Workspace review/ });
   await expect(runRow).toHaveCount(1);
 
-  await runRow.locator('.easymode-automation-row').hover();
-  await page.getByTestId(`easymode-run-delete-${run.runId}`).click();
+  // Keep the action exposed through focus-within while moving to the button;
+  // pointer-only hover can disappear on the shared desktop.
+  const deleteButton = page.getByTestId(`easymode-run-delete-${run.runId}`);
+  await deleteButton.focus();
+  await deleteButton.click();
   // The confirm says the run is live and will be cancelled first.
   await expect(page.getByRole('dialog')).toContainText(/cancelled first/i);
   await page.getByRole('dialog').getByRole('button', { name: 'Delete run', exact: true }).click();
