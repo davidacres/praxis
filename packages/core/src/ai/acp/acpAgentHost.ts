@@ -143,6 +143,12 @@ interface ActiveAcpTask {
   costBefore?: { amount: number; currency: string };
   /** The model the agent says it is running, for a reply whose turn names none. */
   agentModel?: string;
+  /**
+   * Tool inputs that arrived after the opening `tool_call`, by call id. claude-agent-acp opens a
+   * streamed call with no input and sends it in a later in-progress `tool_call_update`; without
+   * this the completed call carried no path, so a review's file reads were never counted as reads.
+   */
+  toolInputs?: Map<string, Record<string, unknown>>;
 }
 
 /** What a finished ACP turn can say about itself — the fields the reply's chips read. */
@@ -151,6 +157,11 @@ export interface AcpTurnTelemetry {
   tokenUsage?: TokenUsage;
   cost?: { currency: string; amount: number };
   modelId?: string;
+}
+
+/** An ACP `rawInput` that is a plain object, the only shape recorded as tool arguments. */
+function objectInput(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
 function finiteNumber(value: unknown): number | undefined {
@@ -820,7 +831,16 @@ export class AcpAgentHost {
         break;
       }
       case 'tool_call_update':
-        if (update.status === 'completed' || update.status === 'failed') {
+        if (update.status !== 'completed' && update.status !== 'failed') {
+          // A refinement resends only what changed, so merge it over what this call already had.
+          const input = objectInput(update.rawInput);
+          if (input) {
+            task.toolInputs ??= new Map();
+            task.toolInputs.set(update.toolCallId, { ...task.toolInputs.get(update.toolCallId), ...input });
+          }
+          break;
+        }
+        {
           const ok = update.status === 'completed';
           const { fileChanges, output } = readAcpToolContent(update.content);
           const rawOutput =
@@ -832,6 +852,10 @@ export class AcpAgentHost {
                 : '');
           const detail =
             fileChanges.map(change => change.diff ?? '').join('\n').trim() || rawOutput || undefined;
+          const streamedInput = task.toolInputs?.get(update.toolCallId);
+          task.toolInputs?.delete(update.toolCallId);
+          const finalInput = objectInput(update.rawInput);
+          const args = finalInput || streamedInput ? { ...streamedInput, ...finalInput } : undefined;
           this.appendEvent(
             issueKey,
             evt(
@@ -841,7 +865,7 @@ export class AcpAgentHost {
               {
                 callId: update.toolCallId,
                 toolName: update.name ?? update.title ?? undefined,
-                ...(update.rawInput && typeof update.rawInput === 'object' && !Array.isArray(update.rawInput) ? { args: update.rawInput as Record<string, unknown> } : {}),
+                ...(args ? { args } : {}),
                 // `kind` is often only on the initial `tool_call`; diff blocks in
                 // the result imply a write even when this update omits it.
                 kind: fileChanges.length > 0 ? 'write' : mapAcpToolKind(update.kind ?? undefined),

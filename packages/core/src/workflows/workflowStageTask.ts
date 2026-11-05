@@ -324,8 +324,10 @@ export function stageOutcomeFromSession(
     return { status: 'failed', pause: 'environment', error: `${node.name} was blocked by its environment: ${blocked}` };
   }
 
+  // Not an environment pause: the reader was supplied and the agent did not use it. That is the
+  // agent's failure, so it spends an attempt and a scheduled run retries it instead of waiting for a person.
   if (session.repositoryInspectionRequired && !session.repositoryInspectionObserved) {
-    return { status: 'failed', pause: 'environment', error: `${node.name} produced a verdict without an observed successful repository read. No findings or gate result were accepted. The agent must inspect the supplied snapshot and files before completing this stage.` };
+    return { status: 'failed', error: `${node.name} produced a verdict without an observed successful repository read. No findings or gate result were accepted. The agent must inspect the supplied snapshot and files before completing this stage.` };
   }
 
   // A diff that is the commit the stage started on is not a change. Recording it as one let an

@@ -7,6 +7,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentEventSummary, AgentToolMode } from '../agentTypes';
+import { hasRepositoryInspection } from '../../workflows/workflowStageTask';
 
 function permissionHost(toolMode: AgentToolMode, autoApprove = true, scheduledRun = false) {
   const events: AgentEventSummary[] = [];
@@ -725,4 +726,37 @@ test('ACP preserves read arguments so workflow inspection is attributable to the
   assert.deepEqual(events[0].data?.args, { path: '.praxis-run/change-diff.patch' });
   assert.equal(events[1].data?.callId, events[0].data?.callId);
   assert.equal(events[1].data?.ok, true);
+});
+
+test('ACP keeps tool input sent after the opening tool_call, as claude-agent-acp streams it', () => {
+  const events: AgentEventSummary[] = [];
+  const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  const review = task('review');
+  // The order claude-agent-acp sends a streamed call in: an empty opening call, input refinements, then the result.
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'mcp-read', name: 'mcp__praxis-review-files__read_file', kind: 'other', status: 'pending' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'mcp-read', rawInput: { path: 'apps/praxis-desktop/main/src/main/teamChatRepository.ts' } }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'mcp-read', rawInput: { limit: 400 } }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'mcp-read', status: 'completed', rawOutput: 'import * as fs from "node:fs";' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'bash-show', name: 'Bash', kind: 'execute', status: 'pending' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'bash-show', rawInput: { command: 'git show --stat HEAD' } }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'bash-show', status: 'completed', rawOutput: 'commit d15874ef' }, review);
+
+  assert.equal(events.length, 4, 'refinements add no events of their own');
+  assert.equal(events[0].data?.args, undefined);
+  assert.deepEqual(events[1].data?.args, { path: 'apps/praxis-desktop/main/src/main/teamChatRepository.ts', limit: 400 });
+  assert.deepEqual(events[3].data?.args, { command: 'git show --stat HEAD' });
+  assert.equal(hasRepositoryInspection(events), true);
+  assert.equal(hasRepositoryInspection(events.slice(0, 2)), true, 'the MCP read alone counts');
+  assert.equal((review as { toolInputs?: Map<string, unknown> }).toolInputs?.size ?? 0, 0, 'finished calls are forgotten');
+});
+
+test('a review with no recorded input still has no observed read', () => {
+  const events: AgentEventSummary[] = [];
+  const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  const review = task('review');
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'search', name: 'ToolSearch', kind: 'other', status: 'pending' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'search', status: 'completed', rawOutput: 'Tool: mcp__praxis-review-files__read_file' }, review);
+  assert.equal(hasRepositoryInspection(events), false);
 });

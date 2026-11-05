@@ -434,7 +434,7 @@ test('repository reviews cannot accept plausible findings without observed inspe
   const responseText = '{"summary":"Prior finding fixed", "findings":[]}';
   const missing = stageOutcomeFromSession(node, { state: 'completed', responseText, repositoryInspectionRequired: true });
   assert.equal(missing.status, 'failed');
-  assert.equal(missing.pause, 'environment');
+  assert.equal(missing.pause, undefined, 'an unused reader is the agent\'s failure, retried like any other');
   assert.match(missing.error ?? '', /without an observed successful repository read/);
   assert.equal(missing.artifacts?.length ?? 0, 0);
   assert.equal(stageOutcomeFromSession(node, { state: 'completed', responseText, repositoryInspectionRequired: true, repositoryInspectionObserved: true }).status, 'succeeded');
