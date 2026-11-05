@@ -3,8 +3,9 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { TeamChatCoordinator, makeParticipant, type DurableConversation, type SubmitConversationCommand, type TeamChatExecutionParams } from '@praxis/core';
+import { TeamChatCoordinator, makeParticipant, type ConversationUpdate, type DurableConversation, type SubmitConversationCommand, type TeamChatExecutionParams } from '@praxis/core';
 import { createTeamChatServices } from './teamChatServices';
+import { FileTeamChatRepository, TeamChatCommitUncertainError } from './adapters/teamChatRepository';
 
 function profile(t: { after(fn: () => void): void }): string {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-chat-recovery-'));
@@ -20,17 +21,19 @@ const submit = (conversationId: string, commandId: string, expectedRevision = 1)
 /** One "process": a services instance whose provider is scripted by `execute`. */
 function launch(file: string, execute: (params: TeamChatExecutionParams) => Promise<{ text: string }>, enabled = true) {
   const calls: TeamChatExecutionParams[] = [];
+  const updates: ConversationUpdate[] = [];
   let epoch = 0;
   const prefix = `process-${Math.random().toString(36).slice(2, 8)}`;
   const services = createTeamChatServices({ filePath: () => file, enabled, createCoordinator: repository => new TeamChatCoordinator({
-    repository, idSource: () => `${prefix}-${++epoch}`, executionAdapter: { execute: async params => { calls.push(params); return execute(params); } } }) });
-  return { services, calls };
+    repository, idSource: () => `${prefix}-${++epoch}`, onUpdate: update => updates.push(update),
+    executionAdapter: { execute: async params => { calls.push(params); return execute(params); } } }) });
+  return { services, calls, updates };
 }
 async function until(check: () => boolean, label: string): Promise<void> {
   for (let i = 0; i < 400; i++) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 5)); }
   throw new Error(`Timed out waiting for ${label}.`);
 }
-const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')) as { conversations: DurableConversation[] };
+const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')) as { revision: number; conversations: DurableConversation[] };
 
 test('startup recovery reconciles a running attempt and resumes a queued turn before any chat is opened', async t => {
   const file = profile(t);
@@ -101,4 +104,130 @@ test('activation failure leaves durable dispatch disabled', async t => {
   await fixed.services.submitTurn(submit('old', 'allowed', 0));
   await until(() => read(file).conversations[0].turns[0]?.state === 'completed', 'completion after repair');
   assert.equal(fixed.calls.length, 1);
+});
+
+/** Start a profile with durable chat active and the given conversations, ready to accept commands. */
+async function ready(file: string, execute: (params: TeamChatExecutionParams) => Promise<{ text: string }>, ...ids: string[]) {
+  const app = launch(file, execute);
+  await app.services.activate();
+  await app.services.repository().transaction(draft => { draft.conversations.push(...ids.map(conversation)); });
+  await app.services.coordinator().initialize();
+  return app;
+}
+const revisionOf = (file: string, id: string) => read(file).conversations.find(c => c.id === id)!.revision;
+
+test('a pre-rename submit failure emits no acceptance and invokes no provider; the same command then succeeds once', async t => {
+  const file = profile(t);
+  const app = await ready(file, async () => ({ text: 'reply' }), 'c');
+  const before = fs.readFileSync(file, 'utf8');
+  const rename = t.mock.method(fs.promises, 'rename', async () => { throw new Error('injected before rename'); });
+  await assert.rejects(app.services.submitTurn(submit('c', 'cmd', revisionOf(file, 'c'))), /injected before rename/);
+  rename.mock.restore();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(fs.readFileSync(file, 'utf8'), before, 'the old committed snapshot is still what is on disk');
+  assert.equal(app.updates.some(update => update.type === 'turn_accepted'), false, 'no accepted acknowledgement');
+  assert.equal(app.calls.length, 0, 'no provider dispatch');
+
+  const accepted = await app.services.submitTurn(submit('c', 'cmd', revisionOf(file, 'c')));
+  await until(() => read(file).conversations[0].turns[0]?.state === 'completed', 'completion');
+  const after = read(file).conversations[0];
+  assert.equal(after.turns.length, 1); assert.equal(after.turns[0].id, accepted.turnId);
+  assert.equal(after.commandReceipts.length, 1);
+  assert.equal(app.updates.filter(update => update.type === 'turn_accepted').length, 1);
+  assert.equal(app.calls.length, 1);
+});
+
+test('an uncertain submit commit is not acknowledged; reconciliation returns the original turn for the same command id', async t => {
+  if (process.platform === 'win32') { t.skip('Windows does not flush directories'); return; }
+  const file = profile(t);
+  const first = await ready(file, () => new Promise(() => undefined), 'c');
+  const command = submit('c', 'uncertain', revisionOf(file, 'c'));
+  const originalOpen = fs.promises.open;
+  const open = t.mock.method(fs.promises, 'open', async (...args: Parameters<typeof originalOpen>) => {
+    if (args[0] === path.dirname(file)) throw new Error('directory flush unavailable');
+    return originalOpen(...args);
+  });
+  await assert.rejects(first.services.submitTurn(command), TeamChatCommitUncertainError);
+  open.mock.restore();
+  assert.equal(first.updates.some(update => update.type === 'turn_accepted'), false, 'an uncertain commit is never acknowledged');
+  assert.equal(first.calls.length, 0, 'an uncertain commit never dispatches');
+  // Every later write is refused until reconciliation reads the receipts back.
+  await assert.rejects(first.services.submitTurn({ ...command, commandId: 'later' }), TeamChatCommitUncertainError);
+
+  let receipt: string | undefined;
+  await first.services.repository().reconcile(snapshot => {
+    receipt = snapshot.conversations[0].commandReceipts.find(item => item.commandId === 'uncertain')?.turnId;
+  });
+  assert.ok(receipt, 'the rename landed, so the receipt is on disk');
+  const replay = await first.services.submitTurn(command);
+  assert.equal(replay.turnId, receipt, 'the same command id resolves to the original turn');
+  const after = read(file).conversations[0];
+  assert.equal(after.turns.length, 1);
+  assert.equal(after.messages.filter(message => message.role === 'user').length, 1);
+});
+
+test('an uncertain commit while reserving an attempt halts dispatch and reports reload', async t => {
+  if (process.platform === 'win32') { t.skip('Windows does not flush directories'); return; }
+  const file = profile(t);
+  const first = await ready(file, async () => ({ text: 'must not run' }), 'c');
+  const originalOpen = fs.promises.open;
+  let failed = false;
+  // Fail the directory flush only for the commit whose bytes first carry a reserved attempt.
+  const open = t.mock.method(fs.promises, 'open', async (...args: Parameters<typeof originalOpen>) => {
+    if (!failed && args[0] === path.dirname(file) && read(file).conversations[0].turns[0]?.attempts.length) {
+      failed = true;
+      throw new Error('directory flush unavailable');
+    }
+    return originalOpen(...args);
+  });
+  await first.services.submitTurn(submit('c', 'reserve', revisionOf(file, 'c')));
+  await until(() => first.updates.some(update => update.type === 'turn_failed'), 'halt report');
+  open.mock.restore();
+  assert.equal(failed, true);
+  assert.equal(first.calls.length, 0, 'the provider is never called after an uncertain reservation');
+  const halt = first.updates.find(update => update.type === 'turn_failed')!;
+  assert.match(halt.error ?? '', /Restart Praxis to recover this team chat\./);
+  const stranded = read(file).conversations[0].turns[0].attempts[0];
+  assert.equal(stranded.state, 'prepared');
+  assert.equal(stranded.dispatchIntent, undefined);
+
+  // Writes stay refused until reconciliation (a real restart resets this module-level fence).
+  await assert.rejects(first.services.repository().transaction(() => undefined), TeamChatCommitUncertainError);
+  await first.services.repository().reconcile(snapshot => { assert.equal(snapshot.conversations[0].turns[0].attempts[0].id, stranded.id); });
+  // Restart: a new process starts a new epoch, and the never-dispatched attempt is not replayed.
+  const second = launch(file, async () => ({ text: 'after restart' }));
+  assert.equal(await second.services.recoverOnStartup(), true);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  const recovered = read(file).conversations[0].turns[0];
+  assert.equal(recovered.attempts[0].state, 'interrupted', 'an undispatched reservation is classified, not replayed');
+  assert.equal(recovered.attempts[0].id, stranded.id);
+  assert.equal(second.calls.filter(call => call.attempt.id === stranded.id).length, 0);
+});
+
+test('two windows over two chats retain every accepted submit', async t => {
+  const file = profile(t);
+  const app = await ready(file, async params => ({ text: `reply to ${params.turn.id}` }), 'x', 'y');
+  // A second adapter instance stands in for another window's writes to the same profile.
+  const otherWindow = new FileTeamChatRepository(file);
+  const revisions: number[] = [];
+  const watch = <T>(work: Promise<T>) => work.then(value => { revisions.push(read(file).revision); return value; });
+  const results = await Promise.all([
+    watch(app.services.submitTurn(submit('x', 'x1', revisionOf(file, 'x')))),
+    watch(app.services.submitTurn(submit('y', 'y1', revisionOf(file, 'y')))),
+    watch(otherWindow.transaction(draft => { draft.conversations.find(c => c.id === 'x')!.title = 'renamed in window two'; })),
+    watch(otherWindow.transaction(draft => { draft.conversations.find(c => c.id === 'y')!.title = 'also renamed'; }))
+  ]);
+  await until(() => read(file).conversations.every(c => c.turns.length && c.turns.every(turn => turn.state === 'completed')), 'both turns complete');
+  await app.services.submitTurn(submit('x', 'x2', revisionOf(file, 'x')));
+  await until(() => read(file).conversations[0].turns.length === 2 && read(file).conversations[0].turns[1].state === 'completed', 'second x turn');
+  const after = read(file);
+  const x = after.conversations.find(c => c.id === 'x')!, y = after.conversations.find(c => c.id === 'y')!;
+  assert.deepEqual(x.commandReceipts.map(r => r.commandId), ['x1', 'x2']);
+  assert.deepEqual(y.commandReceipts.map(r => r.commandId), ['y1']);
+  assert.equal(x.turns[0].id, (results[0] as { turnId: string }).turnId);
+  assert.equal(y.turns[0].id, (results[1] as { turnId: string }).turnId);
+  assert.equal(x.title, 'renamed in window two'); assert.equal(y.title, 'also renamed');
+  assert.deepEqual(x.messages.map(m => m.sequence), x.messages.map((_, i) => i + 1));
+  assert.equal(new Set(revisions).size, revisions.length, 'each accepted commit has its own revision');
+  for (const conv of [x, y]) for (const r of conv.commandReceipts) assert.ok(r.revision <= conv.revision);
 });

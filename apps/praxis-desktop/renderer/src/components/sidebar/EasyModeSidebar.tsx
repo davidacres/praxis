@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AgentSessionRecord, GitStatusSnapshot, WorkflowRunSummary, ProjectRecord } from '@praxis/core';
-import { useProjectsTeamChats } from '../../assistant/TeamChatRow';
+import { TeamChatStorageAlert, useProjectsTeamChatsState } from '../../assistant/TeamChatRow';
 import { SectionHeader } from './SectionHeader';
 import { EasyModeSessionsList } from './EasyModeSessionsList';
 import { EasyModeAutomationsList } from './EasyModeAutomationsList';
@@ -135,7 +135,7 @@ export function EasyModeSidebar({
     return list;
   }, [projects, runsByProjectId]);
 
-  const teamChats = useProjectsTeamChats(generalConversations ? [''] : projects.map(project => project.id));
+  const { chats: teamChats, error: teamChatsError, retry: retryTeamChats } = useProjectsTeamChatsState(generalConversations ? [''] : projects.map(project => project.id));
 
   const rootSessions = useMemo(() => {
     return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
@@ -198,6 +198,7 @@ export function EasyModeSidebar({
             testId="section-header-add-sessions"
           />
           <div className="easymode-section__body">
+            {teamChatsError && <TeamChatStorageAlert error={teamChatsError} onRetry={retryTeamChats} />}
             {renderSessionsContent ? renderSessionsContent() : (
               <EasyModeSessionsList
                 sessions={sessions}

@@ -427,6 +427,48 @@ test('re-opening a team chat whose first load failed reads its transcript again'
   await expect(win.getByTestId('assistant-message-dev')).toContainText('Kept on disk');
 });
 
+// TASK-477: unreadable storage is a recoverable error, never an empty chat list and never rewritten.
+test('a malformed team-chat file is shown as a recoverable error and never replaced', async () => {
+  mock = await startMockOpenAiCompatibleServer({ reply: 'Unused' });
+  app = await launchTestApp(mockSettings(mock), undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  await win.evaluate(async folderPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create({ name: 'Corrupt project', key: 'COR', type: 'product', purpose: '', brief: {}, startingPoint: 'existing-folder', folderPath, planningMode: 'files', workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], starterTickets: [], defaultAiToolMode: 'project-only' }, workspace.id);
+    localStorage.setItem(`praxis-last-workspace-route:${workspace.id}`, JSON.stringify({ projectId: project.id }));
+    await window.praxis.assistant.createChat(project.id);
+  }, app.userDataDir);
+  await win.reload();
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+  const file = path.join(app.userDataDir, 'team-chats.json');
+  const valid = fs.readFileSync(file, 'utf8');
+  const siblings = () => fs.readdirSync(app!.userDataDir).filter(name => name.startsWith('team-chats.json.')).sort();
+  const siblingsBefore = siblings();
+  fs.writeFileSync(file, '{broken');
+  await win.reload();
+  const storageAlert = win.getByTestId('team-chat-storage-error');
+  await expect(storageAlert).toBeVisible();
+  await expect(storageAlert).toContainText("Team chats can't be read. The file was left unchanged.");
+  await expect(storageAlert).toContainText('Cannot read team chat storage');
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(0);
+  // Sending from the assistant is refused with the same storage error, not accepted over an empty list.
+  await win.getByTestId('titlebar-assistant').click();
+  await win.getByTestId('assistant-input').fill('Must not replace the file');
+  await win.getByTestId('assistant-send').click();
+  await expect(win.locator('[role="alert"]').filter({ hasText: 'Cannot read team chat storage' }).first()).toBeVisible();
+  await expect(win.getByTestId('assistant-message-user')).toHaveCount(0);
+  expect(fs.readFileSync(file, 'utf8')).toBe('{broken');
+  expect(siblings(), 'no temp file, backup or replacement is written beside the malformed file').toEqual(siblingsBefore);
+  const artifact = path.resolve(__dirname, '../../../../.praxis/session-artifacts/task-477-corrupt-storage.png');
+  fs.mkdirSync(path.dirname(artifact), { recursive: true });
+  await win.screenshot({ path: artifact });
+  // Repairing the file and retrying brings the chat back without a restart.
+  fs.writeFileSync(file, valid);
+  await win.getByTestId('team-chat-storage-retry').click();
+  await expect(storageAlert).toHaveCount(0);
+  await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+});
+
 test('a tool member\'s pending permission is attached to its attempt and a restart never reuses the approval', async () => {
   const promptLog = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-acp-prompts-')), 'prompts.jsonl');
   const env = { FAKE_ACP_PROMPT_LOG: promptLog };

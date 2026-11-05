@@ -29,7 +29,7 @@ import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
 import { SessionOrganizer } from './SessionOrganizer';
-import { TeamChatRow, useProjectTeamChats, useStartTeamChat } from '../assistant/TeamChatRow';
+import { TeamChatRow, TeamChatStorageAlert, useProjectsTeamChatsState, useStartTeamChat } from '../assistant/TeamChatRow';
 import { AssignSessionDialog } from '../components/sidebar/AssignSessionDialog';
 import { StatusGlyph } from '../ui/StatusGlyph';
 import { SessionCardActivity } from '../components/sidebar/SessionCardActivity';
@@ -399,7 +399,7 @@ function ProjectRecencyFeed({
   onNewSession: () => void;
   renderSession: (session: AgentSessionRecord) => ReactNode;
 }) {
-  const chats = useProjectTeamChats(project.id);
+  const { chats, error: chatsError, retry: retryChats } = useProjectsTeamChatsState([project.id]);
   const startTeamChat = useStartTeamChat(project.id);
   const entries = [
     ...sessions.map(session => ({ id: session.issueKey, at: sessionLastActivityAt(session), node: renderSession(session) })),
@@ -411,6 +411,7 @@ function ProjectRecencyFeed({
 
   return (
     <>
+      {chatsError && <TeamChatStorageAlert error={chatsError} onRetry={retryChats} />}
       {buckets.length === 0 && (
         <div className="project-session-empty" data-testid="project-sessions-empty"><span>No sessions yet</span></div>
       )}

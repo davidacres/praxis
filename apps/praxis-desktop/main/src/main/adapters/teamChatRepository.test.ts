@@ -65,29 +65,60 @@ test('corrupt and unsupported files fail visibly without replacing data; legacy 
 test('durable submit and completion commit together and replay returns the original turn', async t => {
   const { conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } = await import('@praxis/core');
   const file = profile(t); const repository = new FileTeamChatRepository(file); const store = new TeamChatStore(repository);
-  await repository.transaction(draft => { draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] }); });
+  await repository.transaction(draft => { draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [],
+    bindings: [{ id: 'b', conversationId: 'c', participantId: 'p', providerRuntime: 'fixture', compatibilityDigest: 'digest', deliveredMessageIds: [], nativeOutputMessageIds: [], status: 'valid' }],
+    summaries: [], pinnedMessageIds: [], commandReceipts: [] }); });
   const payload = { text: 'hello' };
   const turn: import('@praxis/core').ConversationTurn = { id: 't', commandId: 'cmd', payloadDigest: conversationPayloadDigest(payload), userMessageId: 'u', acceptedSequence: 1, plan: { participants: [{ id: 'p', role: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} }], runtimeOptions: {} }, state: 'queued', completedParticipantIds: [], attempts: [] };
   const message: import('@praxis/core').ConversationMessage = { id: 'u', role: 'user', text: 'hello', createdAt: 'now', sequence: 1, turnId: 't', attachments: [] };
   const submit = () => store.transition('c', chat => submitConversationTurn(chat, 0, payload, turn, message));
+
+  // A pre-rename fault on submit commits none of message, plan or receipt.
+  const beforeSubmit = fs.readFileSync(file, 'utf8'); const revisionBeforeSubmit = repository.read().revision;
+  const failSubmit = t.mock.method(fs.promises, 'rename', async () => { throw new Error('submit commit failed'); });
+  await assert.rejects(submit(), /submit commit failed/);
+  failSubmit.mock.restore();
+  assert.equal(fs.readFileSync(file, 'utf8'), beforeSubmit);
+  const unsubmitted = repository.read();
+  assert.equal(unsubmitted.revision, revisionBeforeSubmit);
+  assert.deepEqual([unsubmitted.conversations[0].messages.length, unsubmitted.conversations[0].turns.length, unsubmitted.conversations[0].commandReceipts.length], [0, 0, 0]);
+
   await Promise.all([submit(), submit()]);
-  assert.equal(repository.read().conversations[0].messages.length, 1);
-  assert.equal(repository.read().conversations[0].commandReceipts[0].turnId, 't');
+  const submitted = repository.read().conversations[0];
+  assert.equal(submitted.messages.length, 1);
+  assert.equal(submitted.commandReceipts[0].turnId, 't');
+  assert.deepEqual(submitted.turns[0].plan, turn.plan, 'the frozen response plan lands with the message and receipt');
+  assert.equal(submitted.commandReceipts[0].revision, submitted.revision);
   await store.transition('c', chat => startConversationTurn(chat, 1, 't'));
-  const attempt: import('@praxis/core').ConversationAttempt = { id: 'a', turnId: 't', participantId: 'p', ordinal: 1, coordinatorEpoch: 'epoch', state: 'prepared', contextReceipt: { digest: 'context', messageIds: ['u'] }, createdAt: 'now', usageReferences: [], toolEvidenceReferences: [] };
+  const attempt: import('@praxis/core').ConversationAttempt = { id: 'a', turnId: 't', participantId: 'p', ordinal: 1, coordinatorEpoch: 'epoch', state: 'prepared', bindingId: 'b', contextReceipt: { digest: 'context', messageIds: ['u'] }, createdAt: 'now', usageReferences: [], toolEvidenceReferences: [] };
   await store.transition('c', chat => reserveConversationAttempt(chat, 2, attempt));
   await store.transition('c', chat => advanceConversationAttempt(chat, 3, 't', 'a', 'epoch', 'dispatching', 'now'));
   const finish = () => store.transition('c', chat => completeConversationAttempt(chat, 4, 't', 'a', 'epoch', { ...message, id: 'reply', role: 'lead', participantId: 'p', sequence: 2 }, attempt.contextReceipt));
-  const before = fs.readFileSync(file, 'utf8');
+  const before = fs.readFileSync(file, 'utf8'); const revisionBefore = repository.read().revision;
   const rename = t.mock.method(fs.promises, 'rename', async () => { throw new Error('completion commit failed'); });
   await assert.rejects(finish(), /completion commit failed/);
-  assert.equal(fs.readFileSync(file, 'utf8'), before);
   rename.mock.restore();
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  const unfinished = repository.read();
+  assert.equal(unfinished.revision, revisionBefore);
+  assert.equal(unfinished.conversations[0].messages.some(m => m.id === 'reply'), false, 'no reply without its outcome');
+  assert.equal(unfinished.conversations[0].turns[0].attempts[0].state, 'dispatching');
+  assert.deepEqual(unfinished.conversations[0].turns[0].completedParticipantIds, []);
+  assert.deepEqual(unfinished.conversations[0].bindings[0].deliveredMessageIds, []);
+  assert.deepEqual(unfinished.conversations[0].bindings[0].nativeOutputMessageIds, []);
+
   await finish();
-  const reloaded = new FileTeamChatRepository(file).read().conversations[0];
-  assert.equal(reloaded.messages.length, 2);
+  const reloadedSnapshot = new FileTeamChatRepository(file).read();
+  const reloaded = reloadedSnapshot.conversations[0];
+  assert.equal(reloadedSnapshot.revision, revisionBefore + 1, 'reply, outcome and context boundary share one revision');
+  assert.deepEqual(reloaded.messages.map(m => m.id), ['u', 'reply']);
   assert.equal(reloaded.turns[0].attempts[0].state, 'completed');
+  assert.equal(reloaded.turns[0].attempts[0].resultMessageId, 'reply');
+  assert.equal(reloaded.turns[0].state, 'completed');
+  assert.deepEqual(reloaded.turns[0].completedParticipantIds, ['p']);
   assert.equal(reloaded.turns[0].attempts[0].contextReceipt.digest, 'context');
+  assert.deepEqual(reloaded.bindings[0].deliveredMessageIds, ['u']);
+  assert.deepEqual(reloaded.bindings[0].nativeOutputMessageIds, ['reply']);
 });
 
 test('provider bindings, summary provenance, usage and decision corrections survive reload in isolation', async t => {

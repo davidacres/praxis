@@ -21069,6 +21069,12 @@ button.session-chat-attachment {
 .team-chat-personas { display: inline-flex; gap: 2px; flex-shrink: 0; }
 .team-chat-delete { opacity: 0; flex-shrink: 0; margin-right: 4px; }
 .team-chat-row:hover .team-chat-delete, .team-chat-delete:focus-visible { opacity: 1; }
+.team-chat-storage-error { display: flex; align-items: flex-start; gap: 8px; margin: 4px; padding: 8px; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated)); color: var(--text); font-size: 12px; }
+.team-chat-storage-error__lead { flex-shrink: 0; display: inline-flex; padding-top: 1px; color: var(--danger); }
+.team-chat-storage-error__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.team-chat-storage-error__title { font-weight: 600; }
+.team-chat-storage-error__detail { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.team-chat-storage-error__retry { flex-shrink: 0; }
 
 /* Composer usage panel: shared provider quota bars + collapsed-strip meter */
 .session-usage-meters { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-3); }

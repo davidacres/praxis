@@ -6,8 +6,12 @@ import { migrateTeamChats, type TeamChatRepository, type TeamChatSnapshot } from
 type Writer = { queue: Promise<void>; uncertain: boolean };
 // All windows route IPC to main. All adapter instances for a profile share this lock.
 const writers = new Map<string, Writer>();
-export class TeamChatStorageError extends Error {}
-export class TeamChatCommitUncertainError extends TeamChatStorageError {}
+export class TeamChatStorageError extends Error {
+  public constructor(message: string) { super(message); this.name = 'TeamChatStorageError'; }
+}
+export class TeamChatCommitUncertainError extends TeamChatStorageError {
+  public constructor(message: string) { super(message); this.name = 'TeamChatCommitUncertainError'; }
+}
 
 function decode(raw: string): TeamChatSnapshot {
   const value = JSON.parse(raw);

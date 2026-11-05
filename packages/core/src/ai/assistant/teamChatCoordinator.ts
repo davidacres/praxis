@@ -38,6 +38,13 @@ export function makeParticipant(role: AssistantRole): ConversationParticipant {
 
 export class TeamChatAcceptanceUnknown extends Error {}
 
+/** The transition refused an attempt reservation; distinct from a storage fault. */
+class ReservationRejected extends Error {
+  constructor(readonly rejection: unknown) {
+    super(rejection instanceof Error ? rejection.message : String(rejection));
+  }
+}
+
 export interface TeamChatExecutionResult {
   text: string;
   choices?: import('./assistantTypes').AssistantChoiceOption[];
@@ -744,10 +751,17 @@ export class TeamChatCoordinator {
           currentConv = await this.transitionConversation(conversationId, conv => {
             const t = conv.turns.find(item => item.id === activeTurn!.id);
             if (!t || t.state !== 'running') return conv;
-            return reserveConversationAttempt(conv, conv.revision, attempt);
+            try {
+              return reserveConversationAttempt(conv, conv.revision, attempt);
+            } catch (rejection) {
+              throw new ReservationRejected(rejection);
+            }
           });
-        } catch {
-          break;
+        } catch (error) {
+          // A refused reservation stops this pass quietly. A storage fault (before or
+          // after the rename) must reach the halting handler so it is reported.
+          if (error instanceof ReservationRejected) break;
+          throw error;
         }
 
         if (currentConv.turns.find(t => t.id === activeTurn!.id)?.state !== 'running') {
