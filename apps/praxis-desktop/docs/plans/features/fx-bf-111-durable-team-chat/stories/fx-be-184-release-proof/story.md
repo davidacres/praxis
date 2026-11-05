@@ -123,3 +123,19 @@ Status: Failed · Duration: 3s
 - ⏳ Security scan: pending
 
 Required stage "plan" failed.
+
+**PRX-S111-184** — 2026-11-05T12:24:34.318Z
+**Workflow run failed: Governed delivery — FX-BE-184: Durable team-chat release verification**
+
+Status: Failed · Duration: 10h 8m
+
+- ✅ Plan: succeeded
+- ❌ Implement: failed
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "implement" failed.
