@@ -492,7 +492,8 @@ async function startFromDirtyCheckout(choice: 'uncommitted-base-include' | 'unco
 const runWorktree = (repo: string): string | undefined => {
   const root = path.join(repo, '.worktrees');
   const [name] = fs.existsSync(root) ? fs.readdirSync(root) : [];
-  return name ? path.join(root, name) : undefined;
+  // The directory appears before git has populated it; wait for a checked-out file.
+  return name && fs.existsSync(path.join(root, name, 'README.md')) ? path.join(root, name) : undefined;
 };
 
 test('a dirty checkout offers to include its changes: the run sees them, the checkout is untouched', async () => {
