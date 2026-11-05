@@ -288,3 +288,8 @@ Still open (unchanged, not promoted to a pass): real API proof (no `PRAXIS_LIVE_
 ## Recovery pass addendum: binding invalidation
 
 `teamChatExecutionAdapter.test.ts` gained "a changed provider or working folder invalidates the compatible binding" (main `node --test`, 7/7 passing). It complements the existing account, model and policy assertions: an unchanged turn reuses the binding, while a changed folder or provider creates a replacement and invalidates the old binding. Not run in this pass: full functional/theme suites, live API/CLI proofs and the remaining manual journey; they remain open gaps.
+
+## Review disposition (iteration 3 recovery)
+
+- `.praxis/change-diff.md` and `.praxis/session-artifacts/change-diff.patch`: verified identical to the merge-base with `main` (`git diff c6e81e86 HEAD -- .praxis` is empty); the delivery diff holds only source, tests and docs.
+- Real API proof, authoritative native CLI reuse, the manual second-window/restart journey and the pending-approval `interrupted` vs `outcome_unknown` discrepancy remain open. They were not run and are not reported as passes; carry them into release sign-off.
