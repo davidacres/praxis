@@ -93,7 +93,8 @@ test('each kind of stage is told a failure in delivered work is fixed here, and 
   const implement = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'change-diff', kind: 'diff', required: true }] })).definitionOfDone;
   const review = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'review-findings', kind: 'findings', required: true }] })).definitionOfDone;
   assert.match(plan, /Plan to fix every failing test .* already delivered .* later ticket in the same plan explicitly covers/);
-  assert.match(implement, /run the tests that cover what you changed \(the plan's "Tests to keep passing".*including the end-to-end or UI tests/);
+  assert.match(implement, /run focused tests that cover what you changed/);
+  assert.match(implement, /Never run the full desktop e2e suite or the full test suite from a scheduled ticket/);
   assert.match(plan, /## Tests to keep passing/);
   assert.match(plan, /find_related on a component returns the tests .*search the test files for the test ids \(data-testid\), aria-labels, role names/);
   assert.match(review, /report an existing test that covers changed code or UI but is missing from it/);
@@ -156,9 +157,12 @@ test('a stage carries ticket context when provided on context', () => {
 // ── Outcome extraction ───────────────────────────────────────────────────
 
 test('an aborted or failed session fails the stage', () => {
-  assert.equal(stageOutcomeFromSession(reviewNode(), { state: 'aborted' }).status, 'failed');
+  const aborted = stageOutcomeFromSession(reviewNode(), { state: 'aborted' });
+  assert.equal(aborted.status, 'failed');
+  assert.equal(aborted.retryable, true, 'unexpected session aborts are recoverable');
   const failed = stageOutcomeFromSession(reviewNode(), { state: 'failed', responseText: 'ran out of tokens\nmore' });
   assert.equal(failed.status, 'failed');
+  assert.equal(failed.retryable, undefined, 'ordinary stage verdicts follow workflow repair and review edges');
   assert.match(failed.error ?? '', /ran out of tokens/);
   assert.doesNotMatch(failed.error ?? '', /more/, 'only the first line is quoted');
 });

@@ -409,7 +409,7 @@ export async function runWorkflowAgentStage(
 
     dispatch.signal?.throwIfAborted();
     if (node.mutatesWorktree) {
-      taskDefinition.scope += '\n\nThis is an implementation stage running autonomously in an isolated git worktree with full file editing and execution permissions. Implement all required modules, types, and logic specified in the plan and ticket. Do not refuse or declare blocked-environment because code or contracts need to be created from scratch: writing that code is the purpose of this stage. Do not end your turn with a preliminary plan or wait for approval; execute the file changes directly, run tests, and create a git commit before finishing.';
+      taskDefinition.scope += '\n\nThis is an implementation stage running autonomously in an isolated git worktree with full file editing and execution permissions. Implement all required modules, types, and logic specified in the plan and ticket. Do not refuse or declare blocked-environment because code or contracts need to be created from scratch: writing that code is the purpose of this stage. Do not end your turn with a preliminary plan or wait for approval; execute the file changes directly, run focused tests that cover this change, and create a git commit before finishing. For UI changes, use the relevant focused spec or desktop smoke suite. Never run the full desktop e2e suite or full test suite from a scheduled ticket. If a focused test fails, diagnose and fix the implementation, then rerun that test before finishing.';
     }
     const needsReviewFileTools = canReadRunFiles && prepared.plan.state === 'acp';
     if (needsReviewFileTools) {

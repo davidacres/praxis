@@ -39,6 +39,7 @@ import {
 import type { WorkflowMapItemState } from './workflowMap';
 import {
   applyWorkflowRunCommand,
+  attemptsSpent,
   downstreamNodeIds,
   isRunSettled,
   reworkWorkflowRun,
@@ -53,6 +54,8 @@ import { findTimedOutNodes } from './workflowRecovery';
 export interface StageOutcome {
   status: 'succeeded' | 'failed';
   error?: string;
+  /** Unexpected agent-session aborts may be retried automatically by the orchestrator. */
+  retryable?: boolean;
   exitCode?: number;
   /** Commit or worktree ref a mutating stage froze. */
   snapshotRef?: string;
@@ -87,6 +90,9 @@ export interface StageDispatchContext {
   /** Reports a bounded human-readable milestone while the stage is running. */
   reportProgress?: (message: string) => void;
 }
+
+/** Allow several automatic recoveries from interrupted agent transport before surfacing the failure. */
+const MAX_AUTOMATIC_ABORT_ATTEMPTS = 5;
 
 /**
  * How stages actually execute. The desktop app supplies process spawning for
@@ -594,6 +600,25 @@ export class WorkflowOrchestrator {
             }
           }
           let saved = await this.persist(next);
+          const failedStage = saved.definition.nodes.find(candidate => candidate.id === nodeId);
+          const failedState = saved.nodes[nodeId];
+          const isScheduledAgentStageFailure = Boolean(
+            result.kind === 'outcome' && result.outcome.status === 'failed' && !result.outcome.pause &&
+            saved.scheduledLaunchToken && failedStage && isAgentTaskNode(failedStage) && failedState?.outcome === 'failed' &&
+            attemptsSpent(failedState) < (failedStage.maxAttempts ?? 3)
+          );
+          const isUnexpectedAbortRetry = Boolean(
+            result.kind === 'outcome' && result.outcome.status === 'failed' && result.outcome.retryable === true &&
+            saved.scheduledLaunchToken && !result.outcome.pause && failedState?.outcome === 'failed' &&
+            failedState.attempts.length <= MAX_AUTOMATIC_ABORT_ATTEMPTS
+          );
+          if (isScheduledAgentStageFailure || isUnexpectedAbortRetry) {
+            const retried = applyWorkflowRunCommand(saved, { kind: 'node-retry', nodeId, at });
+            if (retried !== saved) {
+              await this.persist(retried);
+              return;
+            }
+          }
           if (result.kind === 'outcome' && result.outcome.status === 'failed') {
             const failedNode = next.definition.nodes.find(candidate => candidate.id === nodeId);
             const recovery = failedNode?.type === 'check' ? failedNode.failureRecovery : undefined;

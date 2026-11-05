@@ -484,7 +484,7 @@ test('a settled run releases its worktree and clears the path', async () => {
   assert.equal(runs.get('run-1')?.worktreePath, undefined);
 });
 
-test('a failed stage inside its attempt budget keeps the run alive and is not retried automatically', async () => {
+test('a failed non-scheduled stage inside its attempt budget stays available for a person to retry', async () => {
   const runs = memoryRuns();
   const def = definition(); // implement has maxAttempts 2
   seed(runs, def);
@@ -500,6 +500,29 @@ test('a failed stage inside its attempt budget keeps the run alive and is not re
   assert.equal(run.status, 'running', 'a retryable failure does not sink the run');
   assert.equal(run.nodes.implement.attempts.length, 1, 'retry is a user decision, not the loop’s');
   assert.deepEqual(fake.started, ['implement']);
+});
+
+test('a scheduled run retries a failed agent stage within its attempt budget', async () => {
+  const runs = memoryRuns();
+  const def = definition(); // Implement allows two judged attempts.
+  const run = createWorkflowRun({
+    runId: 'run-1', projectId: 'p1', definition: def, at: now(), scheduledLaunchToken: 'schedule-1'
+  });
+  void runs.save(run);
+  let implementationAttempts = 0;
+  const fake = fakeDispatcher(nodeId => {
+    if (nodeId === 'implement' && implementationAttempts++ === 0) return { status: 'failed', error: 'The first attempt produced no change.' };
+    if (nodeId === 'implement') return { status: 'succeeded', artifacts: outputsFor(def, nodeId), snapshotRef: 'sha-recovered' };
+    return { status: 'failed', pause: 'environment', error: 'not part of this retry test' };
+  });
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+
+  assert.deepEqual(fake.started.slice(0, 2), ['implement', 'implement']);
+  assert.equal(runs.get('run-1')?.nodes.implement.outcome, 'succeeded');
+  assert.equal(runs.get('run-1')?.nodes.implement.attempts.length, 2);
 });
 
 test('a run that dispatches nothing never branches a worktree', async () => {
@@ -720,6 +743,31 @@ test('a required stage failing ends the run, stops its running siblings and reco
   assert.equal(run.nodes.qa.attempts.at(-1)?.outcome, 'cancelled');
   assert.match(run.nodes.qa.attempts.at(-1)?.error ?? '', /the run ended/);
   assert.equal(Object.values(run.nodes).some(state => state.outcome === 'running'), false);
+});
+
+test('an unexpectedly aborted agent stage retries automatically and continues when it succeeds', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  const run = createWorkflowRun({
+    runId: 'run-1', projectId: 'p1', definition: def, at: now(), scheduledLaunchToken: 'schedule-1'
+  });
+  void runs.save(run);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', { status: 'failed', error: 'The stage session was aborted.', retryable: true });
+  await settleAll();
+
+  assert.deepEqual(fake.started, ['implement', 'implement']);
+  assert.equal(runs.get('run-1')?.status, 'running');
+  assert.equal(runs.get('run-1')?.nodes.implement.attempts.length, 2, 'the retry starts a fresh recorded attempt');
+
+  fake.finish('implement', { status: 'succeeded', artifacts: outputsFor(def, 'implement'), snapshotRef: 'sha-retry' });
+  await settleAll();
+  assert.equal(runs.get('run-1')?.nodes.implement.outcome, 'succeeded');
+  assert.deepEqual(fake.started.slice(2), ['qa', 'security']);
 });
 
 test('an environment failure pauses the run: siblings keep running, and a retry continues it', async () => {

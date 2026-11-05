@@ -129,7 +129,8 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
         'Even if surrounding components are missing, author the required types, interfaces, coordinators, adapters, or modules according to the plan.',
         'Never refuse or report blocked-environment because codebase components need to be created.',
         'You are running autonomously with full tool and edit permissions in an isolated git worktree. Do not end your turn with a preliminary summary or wait for approval. Execute the edits, run local verification, and commit your changes in git before finishing.',
-        `Before you finish, run the tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), including the end-to-end or UI tests for any UI you changed, and fix what fails.`,
+        `Before you finish, run focused tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), and fix what fails. For UI changes, run the relevant focused spec or the desktop smoke suite. Never run the full desktop e2e suite or the full test suite from a scheduled ticket; those suites are release-level checks, not per-ticket checks.`,
+        'When a focused test or check fails, inspect its output, fix the underlying implementation, and rerun that focused check before finishing. Do not leave a fixable failure for a later ticket unless that ticket explicitly owns the failing behavior.',
         'Fix a failing test or check even when earlier, already-delivered work caused it: no other ticket will. Leave it only when a later ticket in the same plan explicitly covers it, and name that ticket.'
       ].join(' ')
     );
@@ -158,7 +159,7 @@ export const PLANNED_TESTS_INSTRUCTIONS = [
   'Find the existing tests that cover what this plan changes, before planning the change:',
   '- For code: the tests that import or call it. Code-intelligence tools, when you have them (callers, related symbols, code search), follow these better than text search.',
   '- For UI: end-to-end and UI tests do not import the components they drive. Code intelligence\'s find_related on a component returns the tests that look up its test ids, labels and classes (reason "sharedUiHook"); without it, search the test files for the test ids (data-testid), aria-labels, role names, visible labels and CSS classes of every component you will change. Code search finds tests by meaning too, such as the feature\'s name.',
-  `List them in the plan under a heading of their own, "## ${PLANNED_TESTS_HEADING}", one test file path per line, with why it is affected. Say which of them the change is meant to alter (its behaviour changes on purpose) rather than keep passing. QA runs every file listed.`
+  `List them in the plan under a heading of their own, "## ${PLANNED_TESTS_HEADING}", one test file path per line, with why it is affected. Say which of them the change is meant to alter (its behaviour changes on purpose) rather than keep passing. Implementation runs only focused relevant tests; do not turn this inventory into a full-suite run.`
 ].join('\n');
 
 /**
@@ -302,6 +303,7 @@ export function stageOutcomeFromSession(
     const detail = session.lastError || (session.responseText ? firstLine(session.responseText) : undefined);
     return {
       status: 'failed',
+      ...(session.state === 'aborted' ? { retryable: true } : {}),
       error:
         session.state === 'aborted'
           ? 'The stage session was aborted.'
