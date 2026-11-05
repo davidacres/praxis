@@ -52,6 +52,7 @@ export function createTeamChatCommands(deps: TeamChatCommandDeps) {
     requireText(command.turnId, 'A turn ID');
     if (typeof command.expectedRevision !== 'number' || !Number.isInteger(command.expectedRevision)) throw new Error('An expected revision is required.');
   };
+  const ACTIONS = ['cancel', 'retry', 'pin', 'unpin', 'resume-context', 'reconcile'];
   const control = async (command: ConversationControlCommand): Promise<ConversationControlOutcome> => {
     await services.activate();
     return services.coordinator().controlWithOutcome(command);
@@ -92,6 +93,16 @@ export function createTeamChatCommands(deps: TeamChatCommandDeps) {
       await services.activate();
       assertProject(projectId);
       return services.store().create(projectId, issueKey);
+    },
+    /** Generic control (pin, unpin, resume-context): same field checks and activation as the typed commands. */
+    async control(command: ConversationControlCommand): Promise<ConversationControlOutcome> {
+      requireText(command?.conversationId, 'A conversation ID');
+      requireText(command.commandId, 'A command ID');
+      if (!ACTIONS.includes(command.action)) throw new Error('Unknown control action.');
+      if (typeof command.expectedRevision !== 'number' || !Number.isInteger(command.expectedRevision)) throw new Error('An expected revision is required.');
+      if (command.action === 'cancel' || command.action === 'retry' || command.action === 'reconcile') requireText(command.turnId, 'A turn ID');
+      if (command.action === 'pin' || command.action === 'unpin') requireText(command.messageId, 'A message ID');
+      return control(command);
     },
     async cancelTurn(command: CancelTurnCommand): Promise<ConversationControlOutcome> {
       fenced(command);

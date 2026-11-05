@@ -310,7 +310,7 @@ export function registerAssistantIpc(): void {
     changed();
   });
 
-  ipcMain.handle('assistant:control', (_event, command: import('@praxis/core').ConversationControlCommand) => getTeamChatCoordinator().control(command));
+  ipcMain.handle('assistant:control', async (_event, command: import('@praxis/core').ConversationControlCommand) => (await teamChatCommands.control(command)).conversation);
   ipcMain.handle('assistant:stageAttachments', async (_event, id: string, images: import('@praxis/core').WireImageAttachment[]) => {
     await activate();
     if (!getTeamChatStore().get(id)) throw new Error('Conversation was not found.');

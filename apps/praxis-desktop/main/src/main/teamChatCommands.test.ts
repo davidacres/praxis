@@ -143,6 +143,11 @@ test('TASK-479 AC3: malformed control commands and unknown projects on create ar
   await assert.rejects(app.commands.retryParticipant({ ...base, attemptId: '', participantId: 'p' }), /attempt ID/);
   await assert.rejects(app.commands.resolveAttempt({ ...base, attemptId: 'a', resolution: 'accept' as never }), /Unknown attempt resolution/);
   await assert.rejects(app.commands.resolveAttempt({ ...base, turnId: '', attemptId: 'a', resolution: 'reconcile' }), /turn ID/);
+  await assert.rejects(app.commands.control({ ...base, commandId: '', action: 'pin', messageId: 'm' }), /command ID/);
+  await assert.rejects(app.commands.control({ ...base, action: 'explode' as never }), /Unknown control action/);
+  await assert.rejects(app.commands.control({ ...base, expectedRevision: 'one' as never, action: 'resume-context' }), /expected revision/);
+  await assert.rejects(app.commands.control({ ...base, action: 'pin' }), /message ID/);
+  await assert.rejects(app.commands.control({ ...base, turnId: '', action: 'cancel' }), /turn ID/);
   await assert.rejects(app.commands.createChat('project-gone'), /Project project-gone was not found/);
   assert.equal((await app.commands.createChat('')).projectId, '', 'a projectless chat may be created');
   assert.equal((await app.commands.createChat('project-a')).projectId, 'project-a');
