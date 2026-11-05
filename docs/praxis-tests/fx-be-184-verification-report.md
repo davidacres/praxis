@@ -280,3 +280,7 @@ Revision: `16175172` plus this documentation change; no production or test sourc
 | Electron | `playwright test e2e/durableTeamChat.spec.ts --project=functional` | 13 passed, 0 failed |
 
 Still open (unchanged, not promoted to a pass): real API proof (no `PRAXIS_LIVE_API_*` credentials), real CLI native session reuse (reconstruction only), the full manual light/dark journey, and a clean first-run full functional gate. The recorded full-suite failures (assistant resizing, agent-hub theme sync, note actions, scheduled-run settlement, shelf glow) remain unresolved here: they require the release-level full run, which a scheduled ticket may not execute. They are not claimed fixed.
+
+## Recovery pass addendum: binding invalidation
+
+`teamChatExecutionAdapter.test.ts` gained "a changed provider or working folder invalidates the compatible binding" (main `node --test`, 7/7 passing). It complements the existing account, model and policy assertions: an unchanged turn reuses the binding, while a changed folder or provider creates a replacement and invalidates the old binding. Not run in this pass: full functional/theme suites, live API/CLI proofs and the remaining manual journey; they remain open gaps.

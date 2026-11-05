@@ -120,3 +120,36 @@ test('production API compatibility follows credentials, model and policy without
     params.turn.plan.runtimeOptions = original;
   }
 });
+
+test('a changed provider or working folder invalidates the compatible binding', async () => {
+  const { DEFAULT_APP_SETTINGS, resolveTeamChatBinding } = await import('@praxis/core');
+  const { mkdtemp, mkdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'team-chat-binding-'));
+  const folderA = join(root, 'a');
+  const folderB = join(root, 'b');
+  await mkdir(folderA);
+  await mkdir(folderB);
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({ apiKey: 'fixture-key', model: 'fixture-model' }),
+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
+  });
+  const params = {
+    conversation: { id: 'chat' },
+    participant: { id: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
+    turn: { id: 'first', plan: { runtimeOptions: { provider: 'vercel-gateway', workingDirectory: folderA } } }
+  } as unknown as TeamChatExecutionParams;
+  const bindings: import('@praxis/core').ConversationBinding[] = [];
+  const initial = resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'initial');
+  assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'unused'), initial);
+  for (const [id, change] of [['folder', { workingDirectory: folderB }], ['provider', { provider: 'openai' }]] as const) {
+    const original = params.turn.plan.runtimeOptions;
+    params.turn.plan.runtimeOptions = { ...original, ...change };
+    assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), `replacement-${id}`).id, `replacement-${id}`);
+    params.turn.plan.runtimeOptions = original;
+  }
+  assert.equal(initial.status, 'invalid');
+});
