@@ -17,7 +17,9 @@ import { getSettingsBackend } from './settingsBackendInstance';
 /** AIs that are set up (key or CLI present) and not turned off, in the order they are preferred. */
 export async function usableProviders(preferred: readonly string[] = []): Promise<AiProvider[]> {
   const usable = new Set(
-    (await listAiProviderStatuses()).filter(status => status.configured && status.enabled).map(status => status.provider)
+    (await listAiProviderStatuses())
+      .filter(status => status.configured && status.enabled && status.capabilities?.tools !== false)
+      .map(status => status.provider)
   );
   const order = [...preferred, getSettingsBackend().read().ai.activeProvider, ...listProviderIds()];
   return [...new Set(order)].filter((id): id is AiProvider => usable.has(id as AiProvider));

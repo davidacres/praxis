@@ -40,7 +40,7 @@ import type { AiProvider } from '../types';
 import { findSnapshot } from './workflowStageSession';
 import type { WorkflowMapItemState } from './workflowMap';
 import { SEVERITY_RANK, countableFindings, dagEdges, describeFindingsPredicate, loopBudget, loopStatuses, pendingLoop } from './workflowEdges';
-import { providerDisplayName } from '../ai/providers/registry';
+import { getProviderDescriptor, providerDisplayName } from '../ai/providers/registry';
 
 /**
  * How a run's stage sessions handle their own tool-permission requests.
@@ -1015,10 +1015,20 @@ export function stagePermissionMode(run: Pick<WorkflowRun, 'permissionMode'>): '
  * stage (nothing would enforce read-only) and never a run that asks for approval.
  */
 export function providerCanRunStage(run: WorkflowRun, nodeId: string, provider: string): boolean {
-  if (provider !== 'antigravity-cli') return true;
-  const node = findNode(run, nodeId);
-  const toolMode = node && isAgentTaskNode(node) ? node.agent.toolMode : undefined;
-  return toolMode === 'full' && stagePermissionMode(run) === 'autopilot';
+  if (provider === 'antigravity-cli') {
+    const node = findNode(run, nodeId);
+    const toolMode = node && isAgentTaskNode(node) ? node.agent.toolMode : undefined;
+    return toolMode === 'full' && stagePermissionMode(run) === 'autopilot';
+  }
+  try {
+    const descriptor = getProviderDescriptor(provider as AiProvider);
+    if (descriptor.kind === 'api' && descriptor.custom?.capabilities && !descriptor.custom.capabilities.tools) {
+      return false;
+    }
+  } catch {
+    // If provider is unknown, fall through
+  }
+  return true;
 }
 
 /**
