@@ -1,0 +1,14 @@
+diff --git a/apps/praxis-desktop/main/e2e/easymode.spec.ts b/apps/praxis-desktop/main/e2e/easymode.spec.ts
+index c8aca8bc..db17f93a 100644
+--- a/apps/praxis-desktop/main/e2e/easymode.spec.ts
++++ b/apps/praxis-desktop/main/e2e/easymode.spec.ts
+@@ -926 +926,2 @@ test('automation rows have rename, archive, delete and run actions like a sessio
+-  const row = win.locator('[data-testid="easymode-run-run-actions"]');
++  const automationCard = win.locator('[data-testid="easymode-run-run-actions"]');
++  const row = automationCard.locator('.easymode-automation-row');
+@@ -930 +931 @@ test('automation rows have rename, archive, delete and run actions like a sessio
+-  const rowActions = row.locator('.easymode-automation-row__actions');
++  const rowActions = automationCard.locator('.easymode-automation-row__actions');
+@@ -938 +939 @@ test('automation rows have rename, archive, delete and run actions like a sessio
+-  await row.locator('.easymode-automation-row').click({ position: { x: 20, y: 10 } });
++  await row.click({ position: { x: 20, y: 10 } });
