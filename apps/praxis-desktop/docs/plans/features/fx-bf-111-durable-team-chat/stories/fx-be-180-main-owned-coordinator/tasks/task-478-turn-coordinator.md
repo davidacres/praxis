@@ -45,6 +45,22 @@ All criteria pass with linked evidence, relevant feature commands pass, and the 
 
 ## Comments
 
+
+**PRX-T111-478** — 2026-11-05T15:47:05.859Z
+**Workflow run failed: Governed delivery — TASK-478: Implement the durable sequential turn coordinator**
+
+Status: Failed · Duration: 21s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+Required stage "plan" failed.
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
