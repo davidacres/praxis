@@ -435,3 +435,71 @@ These images remain session artifacts and are not committed. Hashes below were r
 | `.praxis/session-artifacts/durable-team-chat-queue.png` | 451413 | `20647e07f3cbd4e6ce1ce72c1b29123fe42761f305722aef4cdd28b94ef031a7` |
 | `.praxis/session-artifacts/fx-be-184-restart-interrupted.png` | 536614 | `09989f419a2e7d387b3033e571e10cab1abe986e25d30553c8d7bf3e827c3132` |
 | `.praxis/session-artifacts/fx-be-184-storage-failure.png` | 499763 | `0ab061a193e7b5a48739103ef11854e631117858a5fbef366aa1adc10c50220d` |
+
+## Recovery execution on 2026-11-05
+
+Code revision: `b291c054`; initial checkout: `ea2abb59`. This section is current execution evidence. Earlier sections remain historical records, including their original failures. Raw command logs are `/tmp/fx184-*.log` and may expire; useful receipts and screenshots remain in `.praxis/session-artifacts/`.
+
+| Command | Result |
+| --- | --- |
+| `npm run build:core` | exit 0, including compilation of the new queue and recovery assertions |
+| `npm run test:core` | initial sandbox run encountered localhost EPERM; permitted final run exit 0, 1942 tests: 1940 passed, 2 conditional skips |
+| `npm run check-types` | exit 0, repeated after the final code changes |
+| `npm run build:renderer` | exit 0 |
+| `npm run desktop:copy-renderer` | exit 0 |
+| `npm run build:desktop` | exit 0 |
+| `npm run test:desktop:git` | sandbox run exit 1 (localhost EPERM); permitted retry exit 0: 140 passed, 0 skipped |
+| `npm run test:renderer` | exit 0: 34 passed, 0 skipped |
+| `node --test packages/core/out/ai/assistant/*.test.js` | exit 0: 76 passed, 0 skipped |
+| focused assistant/quickSession/durableTeamChat/standaloneConversations functional run | initial sandbox run exit 1 (localhost EPERM); permitted run exit 1: 44 passed, 1 failed (composer reply visibility) |
+| `npm run test:desktop:themes` initial run | exit 1: 45 passed, 2 failed (factory reset read raced renderer reload; motif master switch) |
+| focused `themeLooks.spec.ts --project=themes` after reload wait fix | exit 0: all 6 passed |
+| focused composer visibility and motif master switch, one worker | exit 0: 2 passed; does not erase earlier broad-run failures |
+| `PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent e2e/durableTeamChat.live.spec.ts` | exit 0: CLI passed, API skipped; provider/key unset |
+| catalog `--write`, then `npm run test:praxis-contracts` | exit 0: 800 linked Playwright contracts; source inventory only |
+
+Broad suites overlapped during this execution. Profiles and mock servers were isolated; real pointer activity remains shared. This limits inference about timing/pointer failures. No assertion was weakened and no snapshot was updated.
+
+### Current real CLI receipts
+
+Two selected members, two compatible turns, then a full restart and third turn. All six attempts completed; native reuse was not established (unverified CLI identity deliberately forces fresh bindings). Each first-turn member session is isolated, each later prompt retains the original decision, and the final reply recalls its codename. API absence is a skip, not substitute mock proof.
+
+| Member | Attempt | Epoch | Binding | Provider session | Context messages |
+| --- | --- | --- | --- | --- | --- |
+| part-dev | id-mw2x67v5-5ko0y2 | id-mw2x67rt-zknn9f | id-mw2x67v9-51vw6e | ae945edc-7420-4e63-9b16-8ff060e2899d | 1 |
+| part-lead | id-mw2x6cks-z430od | id-mw2x67rt-zknn9f | id-mw2x6clw-3nblqq | defe70fd-e65a-4c79-aac1-ed9fd6a9d73a | 2 |
+| part-dev | id-mw2x6gtz-8ysh3f | id-mw2x67rt-zknn9f | id-mw2x6gu3-rgqfdg | 91a3e7d5-ccd9-4c75-a875-010bd98dca6c | 4 |
+| part-lead | id-mw2x6kp8-h0nl6p | id-mw2x67rt-zknn9f | id-mw2x6kpl-j2jzau | 965cf389-5a37-4c2c-a5cd-b2a2ab6f9d61 | 5 |
+| part-dev | id-mw2x6uyk-5ps2sw | id-mw2x6q95-3y4xae | id-mw2x6uyn-pzis2u | 6e09c173-38d0-4959-83ce-59db92866ef4 | 7 |
+| part-lead | id-mw2x71d3-0y8al2 | id-mw2x6q95-3y4xae | id-mw2x71d7-6mdyzs | ee0400dd-6c27-47f9-bdee-0dcbaeb7fba3 | 8 |
+
+### Current retained artifact integrity
+
+Manual screenshots were captured through computer use and visually inspected. A temporary mock-backed profile was used; no user data or repository plan write path was used. Light: send, dock, close and reopen while preserving the conversation. Dark: float, pin a decision, send `@qa`, close/reopen and observe QA's reply and 50 total tokens. These checks do not claim the remaining manual recovery/Preview/Apply journey.
+
+| Artifact | Bytes | SHA256 |
+| --- | --- | --- |
+| `.praxis/session-artifacts/fx184-manual-light.png` | 188832 | `e9bcc5ba3d9c6b51712db7d2ebacd7cab3aaf223b128dd773b46fc11b7f72ad4` |
+| `.praxis/session-artifacts/fx184-manual-dark.png` | 181744 | `718f886ed352cc90e502f213d1227b463c051e2b80ced8c3b6fe9483e17fffea` |
+| `.praxis/session-artifacts/durable-team-chat-live-cli.json` | 8542 | `80e9360ca3f5fb6d93700c0edd5f2d980cda0d44006aaa13ffda90db8917f8b4` |
+
+### Regression discrimination
+
+A temporary in-memory module harness restored only the old `options.accountReference` fallback in the compiled adapter, without changing the worktree or a running app. `node --test /tmp/fx184-regression-before.cjs` failed exactly the new identity assertion (4 passed, 1 failed). The unchanged committed adapter suite then passed all 5 tests. The prior identity hash stayed equal across turns; the repaired configuration differs across turns while remaining stable during dispatch revalidation.
+
+The final theme gate (`npm run test:desktop:themes`) exited 0: **47 passed**, no skips, no snapshot updates. The initial 45-pass/2-failure run remains above.
+
+### Prior full-suite failures rechecked
+
+The current full functional run passed the previously recorded assistant drag/resize, agent-hub theme synchronization, ordinary note actions, both app/folder scheduled-run settlement cases and revealed shelf spine glow. No product assertions were weakened for these cases. A separate keyboard-cancellation check failed to remove its queued status after Enter. Its five-second mock also allowed provider completion to race keyboard controls; the exact broad-run focus/timing cause was not proven. Revision `6d627c90` replaces that wall-clock race with a provider-completion barrier released in `finally`; the targeted single-worker test passed (3.9 s). The initial broad failure is retained and the final focused group is recorded separately below.
+
+### Final functional disposition
+
+`npm run test:desktop` exited 1 after 20.7 minutes: **747 passed, 2 failed, 14 skipped** (763 cases). It began on `b291c054`, before the cancellation fixture correction in `6d627c90`.
+
+1. Keyboard cancellation: after pressing Enter on Cancel queued turn, the queued status still had count 1 (expected 0, 5-second timeout). The completion barrier in `6d627c90` removes the mock completion race; the corrected targeted case passed, and the full prescribed focused group subsequently passed **45/45** (exit 0, 2.9 minutes). Exact original focus/timing cause remains unproven. Concurrent test runners also removed its trace output: the broad report records `ENOENT` opening `.playwright-artifacts-1/...zip`. No retained trace is claimed for that case.
+2. What Changed: longest main-thread task was **107 ms**, exceeding the unchanged **100 ms** limit while rendering/filtering 600 changes. The unchanged case passed alone with one worker (exit 0, 6.9 seconds). No performance threshold or product behavior was changed. This is not a clean full-suite pass and remains explicit release-gate evidence.
+
+The final focused command was `npm run test:e2e --workspace=@praxis/desktop-main -- assistant.spec.ts quickSession.spec.ts durableTeamChat.spec.ts standaloneConversations.spec.ts --project=functional`: **45 passed**, 0 failed, 0 skipped, on `6d627c90`.
+
+Release acceptance remains open: supply `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` (and optionally `PRAXIS_LIVE_API_MODEL`) through the supported environment and rerun the live check; provide authoritative CLI account/resume capability before counting native reuse; complete the remaining manual journey; resolve the unconditional permission-matrix state discrepancy and obtain a clean full functional run. None of those gaps is represented by mock evidence or catalog validation.

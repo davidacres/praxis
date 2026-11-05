@@ -63,7 +63,7 @@ Title: **a pending approval at crash is never reused by the replacement attempt*
 
 **Given** a running full-tools manual-permission attempt, as production stores it and with an awaiting_approval projection.
 **When** a new coordinator initializes and the user retries with reconciliation evidence and the duplicate-risk acknowledgement.
-**Then** the recovered attempt is interrupted or outcome_unknown (recorded deviation: tool-capable is outcome_unknown, not the matrix's interrupted); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
+**Then** the recovered attempt is exactly outcome_unknown because a pending prompt cannot exclude earlier tool activity (explicit discrepancy with the matrix's interrupted row); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
 
 ### PT-0B76197FF4
 
@@ -247,7 +247,7 @@ Registration: core contracts run through `packages/core/package.json` → `test`
 
 ### PT-3544C516BE
 
-Automation: **node:test**, [teamChatExecutionAdapter.test.ts:69](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L69).
+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:65](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L65).
 Title: **unverified CLI identity cannot be stabilized by turn or participant account references**.
 
 **Given** a CLI configuration with a claimed account reference in participant defaults or turn options.
@@ -256,7 +256,7 @@ Title: **unverified CLI identity cannot be stabilized by turn or participant acc
 
 ### PT-F19C6CE02C
 
-Automation: **node:test**, [teamChatCoordinator.test.ts](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts).
+Automation: **node:test**, [teamChatCoordinator.test.ts:684](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L684).
 Title: **queued page identity and attachment references survive caller mutation before dispatch**.
 
 **Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.

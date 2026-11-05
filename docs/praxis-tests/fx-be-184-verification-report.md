@@ -3,11 +3,29 @@
 Ticket: **PRX-S111-184 / FX-BE-184** (TASK-486, TASK-487). Feature: **FX-BF-111**. Base: `c6e81e86`.
 Node:test contracts: [fx-be-184-release-proof.md](fx-be-184-release-proof.md). Playwright contracts: [catalog.json](catalog.json) (800 tests, curated flows for every new id).
 
-**Release gate remains open:** real API continuation has no credential, the planned hand-driven dark-theme session is incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
+**Release gate remains open:** real API continuation has no credential, the full manual journey remains incomplete, and the full functional run was not green on its first attempt. Deterministic passes below do not close those requirements.
 
 Evidence provenance: [retained command summaries, output tails, CLI context receipts and screenshot hashes](fx-be-184-retained-evidence.md) were checked against files present in this worktree/session during iteration 3. Earlier run results below are inherited evidence; they were not re-executed in iteration 3. The fresh check for this documentation repair is `npm run test:praxis-contracts`: exit 0, 800 linked Playwright tests. No production code or tests changed.
 
 Each section below is evidence of one kind; they are not merged. A skipped test is listed as skipped, never as passed.
+
+## Recovery implementation on 2026-11-05
+
+Execution revisions: `b291c054`, then `6d627c90` for deterministic keyboard-cancellation timing (base `ea2abb59`). Earlier sections below retain historical evidence; current results here supersede their counts without erasing failures.
+
+- Removed the production CLI `options.accountReference` bypass. Neither turn options nor participant defaults can establish an authenticated account identity. Same-turn preparation remains stable; different turns reconstruct until the runtime supplies authoritative identity. Regression: **unverified CLI identity cannot be stabilized by turn or participant account references** (`teamChatExecutionAdapter.test.ts`).
+- Added **queued page identity and attachment references survive caller mutation before dispatch** (`teamChatCoordinator.test.ts`): a barrier holds the active turn while the queued command's page, text and image references are mutated; dispatch retains the accepted values.
+- Pending permission recovery now asserts exactly `outcome_unknown` for both production and projected approval shapes. A pending approval cannot exclude earlier tools in the same attempt. No durable no-action evidence exists, so the plan's conservative recovery rule applies; the feature matrix's unconditional `interrupted` row remains an explicit acceptance discrepancy. Approval and evidence never transfer to the replacement.
+- Strengthened real CLI/API checks to two members over three turns, six distinct attempts, isolated member sessions and restart epoch/context proof. Real CLI passed; API skipped because `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` are unset. Native CLI reuse remains unresolved, independently of reconstruction success.
+- Fixed the factory-appearance-reset test race by waiting for its renderer reload before reading settings; all assertions remain unchanged.
+
+Current deterministic commands: core/renderer/desktop builds, renderer copy and `check-types` passed; `test:core` **1940 passed, 2 skipped**, `test:desktop:git` **140 passed**, `test:renderer` **34 passed**. The focused assistant/core suites passed **76 cases**. Initial sandbox executions encountered `listen EPERM 127.0.0.1`; unchanged retries with permitted access passed. Those initial results are not product failures or silent passes.
+
+Focused Electron run: **44 passed, 1 failed** (composer reply visibility); isolated rerun passed. Initial theme run: **45 passed, 2 failed** (factory-reset navigation race and motif master switch). The factory-reset fix passed all **6 Look tests**; motif master switch passed its single-worker rerun. These reruns do not replace initial run results. The final theme gate passed all **47 tests**, with no snapshot updates. The full functional run ended **747 passed, 2 failed, 14 skipped**; after the cancellation barrier correction the prescribed focused group passed **45/45**. The unchanged What Changed performance check (107 ms against 100 ms in the full run) passed alone. These reruns do not establish a clean full functional run; details and trace-output limitations are retained in the evidence document.
+
+Manual interaction in an isolated mock-backed profile: light send, dock, close/reopen; dark float, pin decision, `@qa` continuation and close/reopen. Both replies retained; usage advanced from 25 to 50 tokens. Screenshots were inspected and retained as `fx184-manual-light.png` and `fx184-manual-dark.png` under `.praxis/session-artifacts/`. This is partial manual proof: manual second-window, permission restart, unknown-outcome controls and Preview/Apply are still unexecuted in this recovery pass, with automated coverage retained separately. Classic sidebar remains inapplicable; no historical UI was restored.
+
+AC mapping additions: AC1/AC5/AC11 use the queued-capture assertion; AC2/AC6 use the account-identity regression and six-attempt CLI receipt artifact; AC3/AC8/AC11 gain the light/dark manual screenshots; AC4/AC6 retain conservative approval recovery. All other AC mappings below are inherited source mappings, with current owning-suite executions reported above. No remaining gap is promoted to a pass.
 
 ## Defects found and fixed by this verification
 
