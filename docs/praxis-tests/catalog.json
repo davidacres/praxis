@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 800,
+  "testCount": 801,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5099,7 +5099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
-        "line": 103,
+        "line": 118,
         "project": "functional"
       },
       "area": "durable Team Chat.live",
@@ -5115,7 +5115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
-        "line": 116,
+        "line": 131,
         "project": "functional"
       },
       "area": "durable Team Chat.live",
@@ -5315,6 +5315,22 @@
         "given": "the scripted ACP fixture advertising no session resume, with a prompt log",
         "when": "the dev member answers FIRST_TURN_SENTINEL and then SECOND_TURN in one team chat",
         "then": "the fixture's second prompt contains both SECOND_TURN and FIRST_TURN_SENTINEL, and the second attempt's context receipt lists both first-turn message ids"
+      }
+    },
+    {
+      "id": "PT-EE0AB4E23D",
+      "title": "queued page context and staged image reach the provider after navigation and composer replacement",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 491,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "An isolated durable conversation with a held first dispatch, a queued issue-context turn and a staged PNG.",
+        "when": "A different composer image is staged, the renderer reloads and the first dispatch is released.",
+        "then": "Both turns complete; only the queued provider prompt contains the captured page sentinel, its durable attachment refs remain identical and the ACP agent receives exactly one PNG."
       }
     },
     {

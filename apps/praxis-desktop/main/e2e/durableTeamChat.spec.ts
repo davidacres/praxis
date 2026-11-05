@@ -487,3 +487,62 @@ test('a CLI member without resume capability reconstructs context on its second 
     fs.rmSync(path.dirname(promptLog), { recursive: true, force: true });
   }
 });
+
+test('queued page context and staged image reach the provider after navigation and composer replacement', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-queued-image-'));
+  const promptLog = path.join(folder, 'prompts.jsonl');
+  try {
+    app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.resolve(__dirname, 'fixtures/fakeAcpAgent.mjs') } } } }, undefined,
+      { FAKE_ACP_PROMPT_LOG: promptLog }, { openNewSession: false });
+    const win = app.window;
+    const id = await win.evaluate(() => window.praxis.assistant.createChat('').then(chat => chat.id));
+    // Hold the first dispatch without using a timing assumption about provider speed.
+    await app.electronApp.evaluate((_electron, modulePath) => {
+      const coordinator = process.getBuiltinModule('module')!.createRequire(modulePath)(modulePath).getTeamChatCoordinator();
+      const execute = coordinator.executionAdapter.execute.bind(coordinator.executionAdapter);
+      let first = true;
+      const gate = new Promise<void>(resolve => { coordinator.releaseQueuedImageTest = resolve; });
+      coordinator.executionAdapter.execute = async (params: unknown) => {
+        if (first) {
+          first = false;
+          await gate;
+        }
+        return execute(params);
+      };
+    }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+    const original = await win.evaluate(async ({ id, folder }) => {
+      const runtimeOptions = { provider: 'claude-code-cli' as const, toolMode: 'read-only' as const, workingDirectory: folder };
+      const submit = async (text: string, attachmentRefs: import('@praxis/core').ConversationAttachment[] = [], context?: import('@praxis/core').SubmitConversationCommand['context']) => {
+        const snapshot = (await window.praxis.assistant.getConversation(id))!;
+        return window.praxis.assistant.submitTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot.revision,
+          text, selectedParticipantIds: ['part-dev'], attachmentRefs, runtimeOptions, ...(context ? { context } : {}) });
+      };
+      await submit('First queued-image test turn');
+      const refs = await window.praxis.assistant.stageAttachments(id, [{ mimeType: 'image/png', dataBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' }]);
+      await submit('IMAGE_ECHO captured question', refs, { pageType: 'issue', entityId: 'ORIGINAL-184', title: 'Original issue', summary: 'Captured page sentinel' });
+      // A later composer image is staged, but was never attached to this accepted turn.
+      await window.praxis.assistant.stageAttachments(id, [{ mimeType: 'image/png', dataBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' }]);
+      return refs;
+    }, { id, folder });
+    const queued = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
+    expect(queued.turns[1].state).toBe('queued');
+    await win.reload();
+    await app.electronApp.evaluate((_electron, modulePath) => {
+      process.getBuiltinModule('module')!.createRequire(modulePath)(modulePath).getTeamChatCoordinator().releaseQueuedImageTest();
+    }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+    await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns[1].state, id), { timeout: 20000 }).toBe('completed');
+    const conversation = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
+    const message = conversation.messages.find(message => message.id === conversation.turns[1].userMessageId)!;
+    expect(message.attachments).toEqual(original);
+    expect(conversation.turns[1].plan.context?.entityId).toBe('ORIGINAL-184');
+    expect(conversation.messages.at(-1)?.text).toContain('IMAGES_RECEIVED:1:image/png');
+    const prompts = fs.readFileSync(promptLog, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { promptText: string });
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0].promptText).not.toContain('Captured page sentinel');
+    expect(prompts[1].promptText).toContain('Captured page sentinel');
+  } finally {
+    if (app) await closeTestApp(app);
+    app = undefined;
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

@@ -262,3 +262,25 @@ Title: **queued page identity and attachment references survive caller mutation 
 **Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
 **When** the caller changes the page identity, summary, draft and attachment list before releasing the first turn.
 **Then** the queued provider invocation receives the original page identity, summary, text and immutable image reference. Both turns complete.
+
+## WF-0C7166C7 implementation additions
+
+### PT-DD3C1A1EA1
+
+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:90](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L90).
+Title: **production API compatibility follows credentials, model and policy without exposing credentials**.
+
+**Given** the production adapter resolving an API credential and captured policy.
+**When** a second turn keeps the configuration, then the credential, model or policy changes.
+**Then** compatible turns keep one binding; credential rotation invalidates it; model and policy changes alter compatibility; the resolved configuration contains no plaintext credential. This proves binding compatibility, not native CLI authentication or resume capability.
+
+### PT-EE0AB4E23D
+
+Automation: **Playwright**, [durableTeamChat.spec.ts:491](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L491).
+Title: **queued page context and staged image reach the provider after navigation and composer replacement**.
+
+**Given** a temporary profile, coordination root, attachment store and scripted ACP provider, with the first dispatch held at a barrier.
+**When** an issue-context turn and PNG are queued, a replacement composer image is staged and the renderer reloads before dispatch is released.
+**Then** the queued turn keeps its original page identity and immutable attachment references; only its prompt contains the captured page sentinel; the agent receives exactly one PNG. The earlier prompt excludes the future queued page context.
+
+The live-provider checks now retain per-member reuse classification, native context receipts and runtime recovery evidence. Six distinct completed attempts and session isolation are asserted; a reconstruction pass explicitly leaves native reuse unproved. Production has no authoritative CLI account reference, so the conservative per-turn identity remains in place.

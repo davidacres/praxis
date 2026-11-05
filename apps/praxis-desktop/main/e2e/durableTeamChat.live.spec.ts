@@ -76,9 +76,18 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
   const conversation = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
   const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, participantId: attempt.participantId, state: attempt.state,
     coordinatorEpoch: attempt.coordinatorEpoch, bindingId: attempt.bindingId, providerSessionId: attempt.providerSessionId,
-    contextReceipt: attempt.contextReceipt, usage: attempt.usage })));
+    contextReceipt: attempt.contextReceipt, nativeContextReceipt: attempt.nativeContextReceipt,
+    recoveryEvidence: attempt.recoveryEvidence, usage: attempt.usage })));
+  const sessionReuse = ['part-dev', 'part-lead'].map(participantId => {
+    const member = attempts.filter(attempt => attempt.participantId === participantId);
+    const reused = Boolean(member[0]?.providerSessionId && member[0].providerSessionId === member[1]?.providerSessionId);
+    return { participantId, reused, firstBindingId: member[0]?.bindingId, secondBindingId: member[1]?.bindingId,
+      firstSessionId: member[0]?.providerSessionId, secondSessionId: member[1]?.providerSessionId,
+      proof: reused ? 'native-session-reused' : 'context-reconstructed-native-reuse-unproved' };
+  });
   const evidence = { check: label, codename, conversationId: id, recordedAt: new Date().toISOString(), runtimeOptions,
     bindings: conversation.bindings.map(({ id, providerRuntime, status, providerSessionId, deliveredMessageIds }) => ({ id, providerRuntime, status, providerSessionId, delivered: deliveredMessageIds.length })),
+    sessionReuse, nativeReuseProved: sessionReuse.every(member => member.reused),
     attempts, replies: conversation.messages.filter(m => m.role !== 'user').map(m => m.text) };
   fs.mkdirSync(ARTIFACTS, { recursive: true });
   fs.writeFileSync(path.join(ARTIFACTS, `durable-team-chat-live-${label}.json`), JSON.stringify(evidence, null, 2));
@@ -88,10 +97,16 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
     const memberAttempts = attempts.filter(attempt => attempt.participantId === participantId);
     expect(memberAttempts).toHaveLength(3);
     expect(memberAttempts[2].coordinatorEpoch).not.toBe(memberAttempts[0].coordinatorEpoch);
+    expect(memberAttempts.every(attempt => attempt.state === 'completed')).toBe(true);
+    if (sessionReuse.find(member => member.participantId === participantId)!.reused) {
+      expect(memberAttempts[1].bindingId).toBe(memberAttempts[0].bindingId);
+    }
     for (const attempt of memberAttempts) expect(attempt.contextReceipt.messageIds).toContain(conversation.messages[0].id);
   }
   const firstTurnSessions = conversation.turns[0].attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
   if (firstTurnSessions.length) expect(new Set(firstTurnSessions).size).toBe(2);
+  const secondTurnSessions = conversation.turns[1].attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
+  if (secondTurnSessions.length) expect(new Set(secondTurnSessions).size).toBe(2);
   // The third turn's context includes the pinned decision, whether reused natively or reconstructed.
   const firstMessage = conversation.messages[0].id;
   const third = conversation.turns[2].attempts.at(-1)!;

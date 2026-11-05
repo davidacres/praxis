@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **801 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -322,8 +322,8 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:148` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:31` |
-| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:103` |
-| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:116` |
+| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:118` |
+| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:131` |
 | PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:13` |
 | PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:70` |
 | PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:101` |
@@ -336,6 +336,7 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
 | PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:392` |
 | PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:427` |
 | PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:463` |
+| PT-EE0AB4E23D | durable Team Chat | queued page context and staged image reach the provider after navigation and composer replacement | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:491` |
 | PT-5D69F1868B | easymode | EasyMode exposes the shared sidebar material through its feed and header | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
 | PT-E4A060174B | easymode | legacy enableEasyMode false still uses the sole sidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:69` |
 | PT-D7A1079D36 | easymode | Preview omits retired switches and the sole sidebar stays active | `apps/praxis-desktop/main/e2e/easymode.spec.ts:79` |

@@ -86,3 +86,37 @@ test('unverified CLI identity cannot be stabilized by turn or participant accoun
     assert.equal(second.providerRuntime, first.providerRuntime);
   }
 });
+
+test('production API compatibility follows credentials, model and policy without exposing credentials', async () => {
+  const { DEFAULT_APP_SETTINGS, resolveTeamChatBinding } = await import('@praxis/core');
+  let apiKey = 'fixture-key-first';
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({ apiKey, model: 'fixture-model' }),
+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
+  });
+  const params = {
+    conversation: { id: 'chat' },
+    participant: { id: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
+    turn: { id: 'first', plan: { runtimeOptions: { provider: 'vercel-gateway', toolMode: 'project-only', permissionMode: 'manual' } } }
+  } as unknown as TeamChatExecutionParams;
+  const first = await adapter.prepare!(params);
+  const bindings: import('@praxis/core').ConversationBinding[] = [];
+  const initial = resolveTeamChatBinding(bindings, first, 'first-binding');
+  params.turn.id = 'second';
+  assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'unused'), initial);
+  assert.ok(!JSON.stringify(first).includes(apiKey), 'resolved identity must not contain the API key');
+  apiKey = 'fixture-key-second';
+  const changedAccount = await adapter.prepare!(params);
+  assert.notEqual(changedAccount.accountReference, first.accountReference);
+  assert.equal(resolveTeamChatBinding(bindings, changedAccount, 'replacement').id, 'replacement');
+  assert.equal(initial.status, 'invalid');
+  const changes: Record<string, string>[] = [{ model: 'changed-model' }, { permissionMode: 'auto' }, { toolMode: 'read-only' }];
+  for (const change of changes) {
+    const original = params.turn.plan.runtimeOptions;
+    params.turn.plan.runtimeOptions = { ...original, ...change };
+    assert.notDeepEqual(await adapter.prepare!(params), changedAccount);
+    params.turn.plan.runtimeOptions = original;
+  }
+});
