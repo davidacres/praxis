@@ -60,3 +60,29 @@ test('effective capability evidence is durable before runtime dispatch; evidence
   assert.equal(observed, true);
   assert.equal(launches, 1);
 });
+
+
+test('unverified CLI identity cannot be stabilized by turn or participant account references', async () => {
+  const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({}),
+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
+  });
+  for (const source of ['defaults', 'runtimeOptions'] as const) {
+    const params = {
+      conversation: { id: 'chat' },
+      participant: { id: 'lead', instructionVersion: '1', instructions: 'help',
+        defaults: source === 'defaults' ? { accountReference: 'claimed-account' } : {} },
+      turn: { id: 'first', plan: { runtimeOptions: { provider: 'claude-code-cli',
+        ...(source === 'runtimeOptions' ? { accountReference: 'claimed-account' } : {}) } } }
+    } as unknown as TeamChatExecutionParams;
+    const first = await adapter.prepare!(params);
+    assert.deepEqual(await adapter.prepare!(params), first, 'same-turn dispatch revalidation stays stable');
+    params.turn.id = 'second';
+    const second = await adapter.prepare!(params);
+    assert.notEqual(second.accountReference, first.accountReference, 'unverified identity forces reconstruction across turns');
+    assert.equal(second.providerRuntime, first.providerRuntime);
+  }
+});

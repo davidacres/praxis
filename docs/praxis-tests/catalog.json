@@ -5099,7 +5099,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
-        "line": 96,
+        "line": 103,
         "project": "functional"
       },
       "area": "durable Team Chat.live",
@@ -5115,7 +5115,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts",
-        "line": 109,
+        "line": 116,
         "project": "functional"
       },
       "area": "durable Team Chat.live",

@@ -322,8 +322,8 @@ This catalogue describes **800 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:148` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:31` |
-| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:96` |
-| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:109` |
+| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:103` |
+| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:116` |
 | PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:13` |
 | PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:70` |
 | PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:101` |

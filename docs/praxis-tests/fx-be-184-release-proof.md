@@ -1,6 +1,6 @@
 # FX-BE-184 release-proof node:test contracts
 
-Runner: **node:test**. These **25 supplemental source contracts, representing 32 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
+Runner: **node:test**. These **27 supplemental source contracts, representing 34 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
 
 ### PT-C2406CA182
 
@@ -244,3 +244,21 @@ The two template ids above are stable source-group identities, not exact runtime
 | PT-5B98C84232 | PT-020116C43E · [teamChatRepository.test.ts:193](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L193) | ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: EACCES at sync |
 
 Registration: core contracts run through `packages/core/package.json` → `test` (root `test:core`); main contracts through `apps/praxis-desktop/main/package.json` → `test:git` (root `test:desktop:git`). The directory-flush/reconciliation assertions in PT-4485239A20 return early on Windows; its activation-retry assertions still run there. Internal scenario loops (four binding changes, four malformed files, two approval projections) are assertion scenarios within one test each, not extra runtime test registrations.
+
+### PT-3544C516BE
+
+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:69](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L69).
+Title: **unverified CLI identity cannot be stabilized by turn or participant account references**.
+
+**Given** a CLI configuration with a claimed account reference in participant defaults or turn options.
+**When** production preparation repeats within one turn and then prepares another turn.
+**Then** same-turn validation is stable, but cross-turn account identity changes and cannot authorize native reuse. No provider dispatch occurs.
+
+### PT-F19C6CE02C
+
+Automation: **node:test**, [teamChatCoordinator.test.ts](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts).
+Title: **queued page identity and attachment references survive caller mutation before dispatch**.
+
+**Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
+**When** the caller changes the page identity, summary, draft and attachment list before releasing the first turn.
+**Then** the queued provider invocation receives the original page identity, summary, text and immutable image reference. Both turns complete.

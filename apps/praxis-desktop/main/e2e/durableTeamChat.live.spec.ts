@@ -45,7 +45,7 @@ async function send(win: Page, id: string, text: string, runtimeOptions: Record<
   await win.evaluate(async ({ id, text, runtimeOptions }) => {
     const snapshot = await window.praxis.assistant.getConversation(id);
     await window.praxis.assistant.submitTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot!.revision,
-      text, selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions });
+      text, selectedParticipantIds: ['part-dev', 'part-lead'], attachmentRefs: [], runtimeOptions });
   }, { id, text, runtimeOptions });
   await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns.at(-1)?.state, id),
     { timeout: TURN_MS, intervals: [1000] }).toMatch(/completed|failed|interrupted|outcome_unknown|context_required/);
@@ -74,7 +74,7 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
   win = app.window;
   await send(win, id, 'What release codename did we decide on? Reply with the codename only. Do not use tools.', runtimeOptions);
   const conversation = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
-  const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, state: attempt.state,
+  const attempts = conversation.turns.flatMap(turn => turn.attempts.map(attempt => ({ turnId: turn.id, attemptId: attempt.id, participantId: attempt.participantId, state: attempt.state,
     coordinatorEpoch: attempt.coordinatorEpoch, bindingId: attempt.bindingId, providerSessionId: attempt.providerSessionId,
     contextReceipt: attempt.contextReceipt, usage: attempt.usage })));
   const evidence = { check: label, codename, conversationId: id, recordedAt: new Date().toISOString(), runtimeOptions,
@@ -83,8 +83,15 @@ async function continuationAcrossRestart(label: string, seed: Record<string, unk
   fs.mkdirSync(ARTIFACTS, { recursive: true });
   fs.writeFileSync(path.join(ARTIFACTS, `durable-team-chat-live-${label}.json`), JSON.stringify(evidence, null, 2));
   expect(conversation.turns).toHaveLength(3);
-  expect(new Set(attempts.map(a => a.attemptId)).size).toBe(3);
-  expect(attempts[2].coordinatorEpoch).not.toBe(attempts[0].coordinatorEpoch);
+  expect(new Set(attempts.map(a => a.attemptId)).size).toBe(6);
+  for (const participantId of ['part-dev', 'part-lead']) {
+    const memberAttempts = attempts.filter(attempt => attempt.participantId === participantId);
+    expect(memberAttempts).toHaveLength(3);
+    expect(memberAttempts[2].coordinatorEpoch).not.toBe(memberAttempts[0].coordinatorEpoch);
+    for (const attempt of memberAttempts) expect(attempt.contextReceipt.messageIds).toContain(conversation.messages[0].id);
+  }
+  const firstTurnSessions = conversation.turns[0].attempts.map(attempt => attempt.providerSessionId).filter(Boolean);
+  if (firstTurnSessions.length) expect(new Set(firstTurnSessions).size).toBe(2);
   // The third turn's context includes the pinned decision, whether reused natively or reconstructed.
   const firstMessage = conversation.messages[0].id;
   const third = conversation.turns[2].attempts.at(-1)!;

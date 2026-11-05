@@ -121,7 +121,7 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
     // CLI authentication is owned by the external process. Without an authoritative
     // account reference, reuse is unsafe across turns; reconstruct a fresh binding.
     const accountReference = descriptor.kind === 'cli-agent'
-      ? String(options.accountReference ?? `${provider}:unverified-account:${turn.id}`) : connection.apiKey ?? provider;
+      ? `${provider}:unverified-account:${turn.id}` : connection.apiKey ?? provider;
     return { ...(contextLimit ? { contextLimit } : {}), conversationId: conversation.id, participantId: participant.id, providerRuntime: runtime,
       accountReference: createHash('sha256').update(accountReference).digest('hex'),
       endpoint: createHash('sha256').update(JSON.stringify([connection.gatewayUrl ?? (descriptor.kind === 'api' ? descriptor.defaultBaseUrl : settings.ai.providers[provider]?.cliPath ?? provider), descriptor.kind === 'api' ? descriptor.apiPath ?? '' : '', descriptor.kind === 'api' ? descriptor.custom?.headers ?? {} : {}])).digest('hex'),

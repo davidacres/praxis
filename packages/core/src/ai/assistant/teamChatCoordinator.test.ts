@@ -680,3 +680,43 @@ test('a structured execution result and original page identity survive completio
   assert.equal(message.proposedAction?.kind, 'update-ticket');
   assert.equal(message.choices?.[0].prompt, 'Continue');
 });
+
+test('queued page identity and attachment references survive caller mutation before dispatch', async () => {
+  let release!: () => void;
+  let started!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const running = new Promise<void>(resolve => { started = resolve; });
+  let captured: import('./teamChatCoordinator').TeamChatExecutionParams | undefined;
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: {
+    validateAttachments: async () => {},
+    execute: async params => {
+      if (params.turn.commandId === 'first') { started(); await gate; }
+      else captured = structuredClone({ ...params, signal: undefined, onAccepted: undefined, onEvidence: undefined });
+      return { text: 'Reply' };
+    }
+  } });
+  const command: SubmitConversationCommand = {
+    conversationId: 'conv-1', commandId: 'first', expectedRevision: 1, text: 'First',
+    selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: {}
+  };
+  await coordinator.submitTurn(command);
+  await running;
+  try {
+    const queued: SubmitConversationCommand = { ...command, commandId: 'queued', text: 'Captured question',
+      context: { pageType: 'issue', entityId: 'original-issue', title: 'Original issue', summary: 'Original context' },
+      attachmentRefs: [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }] };
+    await coordinator.submitTurn(queued);
+    assert.equal(coordinator.getConversation('conv-1')!.turns[1].state, 'queued');
+    queued.context!.entityId = 'navigated-issue';
+    queued.context!.summary = 'Changed composer context';
+    queued.attachmentRefs[0].digest = 'replacement-digest';
+    queued.attachmentRefs.length = 0;
+    queued.text = 'Changed draft';
+  } finally { release(); }
+  const conversation = await settled(coordinator, 'conv-1');
+  assert.equal(conversation.turns[1].state, 'completed');
+  assert.equal(captured!.turn.plan.context!.entityId, 'original-issue');
+  const message = captured!.messages.find(message => message.text === 'Captured question')!;
+  assert.equal(message.context!.summary, 'Original context');
+  assert.deepEqual(message.attachments, [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }]);
+});

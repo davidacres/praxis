@@ -186,9 +186,9 @@ test('a pending approval at crash is never reused by the replacement attempt', a
     await coordinator.initialize();
     await tick(20);
     const recovered = lastAttempt(repo.snapshot)!;
-    // Deviation from the design's matrix (which says "interrupted"): a tool-capable attempt is
-    // classified outcome_unknown. Both refuse automatic replay; the approval is never reused.
-    assert.ok(['interrupted', 'outcome_unknown'].includes(recovered.state), recovered.state);
+    // A pending prompt cannot exclude earlier tool activity in this attempt. Without
+    // durable no-action evidence the replacement must require informed reconciliation.
+    assert.equal(recovered.state, 'outcome_unknown');
     assert.equal(calls.length, 0);
     const observation = recovered.recoveryEvidence!.find(e => e.kind === 'reconciliation')!;
     await coordinator.resolveAttempt('conv', conv(repo.snapshot).turns[0].id, recovered.id, 'retry',

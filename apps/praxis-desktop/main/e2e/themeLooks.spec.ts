@@ -133,7 +133,10 @@ test('factory appearance reset restores the theme, Look, surface, and libraries'
   await window.locator('[data-testid="settings-nav-overview"]').click();
   await window.locator('[data-testid="reset-appearance-factory"]').click();
   await expect(window.getByRole('dialog', { name: 'Reset appearance to factory defaults?' })).toBeVisible();
+  // Factory reset reloads the renderer; do not read settings from the outgoing context.
+  const reloaded = window.waitForEvent('domcontentloaded');
   await window.locator('[data-testid="reset-confirmation-overlay"]').getByRole('button', { name: 'Reset appearance' }).click();
+  await reloaded;
 
   await expect(window.locator('html')).toHaveAttribute('data-theme', DEFAULT_APP_SETTINGS.appearance.themeId);
   await expect(window.locator('html')).toHaveAttribute('data-surface', 'parchment');
