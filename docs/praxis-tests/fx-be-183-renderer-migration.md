@@ -60,7 +60,7 @@ Title: **interrupted activation reuses a validated backup and uncertain commit r
 
 ### PT-8053335DC2
 
-Automation: **node:test**, [teamChatActivation.test.ts:89](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L89).
+Automation: **node:test**, [teamChatActivation.test.ts:105](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L105).
 Title: **disabled activation never commits or fences unrelated legacy work**.
 
 **Given** a TeamChatActivation constructed disabled.
@@ -69,7 +69,7 @@ Title: **disabled activation never commits or fences unrelated legacy work**.
 
 ### PT-63819EA534
 
-Automation: **node:test**, [teamChatActivation.test.ts:97](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L97).
+Automation: **node:test**, [teamChatActivation.test.ts:113](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L113).
 Title: **a failed commit lifts the fence so legacy work resumes and activation can retry**.
 
 **Given** an activation whose commit throws "disk full".
@@ -98,7 +98,7 @@ Title: **identity collisions fail without modifying the source**.
 
 ### PT-A1FF0FEC99
 
-Automation: **node:test**, [teamChatMigration.test.ts:39](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L39).
+Automation: **node:test**, [teamChatMigration.test.ts:71](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L71).
 Title: **ambiguous legacy results remain diagnostics rather than invented successful attempts**.
 
 **Given** a snapshot carrying an unbound legacy result diagnostic.
@@ -109,7 +109,7 @@ Title: **ambiguous legacy results remain diagnostics rather than invented succes
 
 ### PT-D81B94C6F4
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:636](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L636).
+Automation: **node:test**, [teamChatCoordinator.test.ts:657](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L657).
 Title: **revisioned controls reject stale targets and persist idempotent command outcomes**.
 
 **Given** a conversation with one decision message.
@@ -118,7 +118,7 @@ Title: **revisioned controls reject stale targets and persist idempotent command
 
 ### PT-824F86BCDF
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:656](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L656).
+Automation: **node:test**, [teamChatCoordinator.test.ts:677](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L677).
 Title: **deletion during dispatch fences late results and never recreates a conversation**.
 
 **Given** a turn whose execution is held open.
@@ -127,7 +127,7 @@ Title: **deletion during dispatch fences late results and never recreates a conv
 
 ### PT-BCE1A74F9A
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:673](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L673).
+Automation: **node:test**, [teamChatCoordinator.test.ts:694](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L694).
 Title: **a structured execution result and original page identity survive completion**.
 
 **Given** a turn submitted with issue page context `P-1` and an executor returning choices and an update-ticket action.
