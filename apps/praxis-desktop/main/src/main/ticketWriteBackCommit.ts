@@ -5,8 +5,22 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+/** A concurrent Git reader may briefly hold the index; never remove its lock. */
+export async function withGitIndexLockRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      const failure = error as { stderr?: unknown; code?: unknown } | null;
+      const detail = String(failure?.stderr ?? error);
+      if (attempt >= 5 || failure?.code !== 128 || !/fatal: Unable to create [^\r\n]*index\.lock['"]?: File exists/i.test(detail)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 25 * 2 ** attempt));
+    }
+  }
+}
+
 async function git(cwd: string, args: string[]): Promise<string> {
-  return (await execFileAsync('git', args, { cwd, windowsHide: true, maxBuffer: 8 * 1024 * 1024 })).stdout;
+  return (await withGitIndexLockRetry(() => execFileAsync('git', args, { cwd, windowsHide: true, maxBuffer: 8 * 1024 * 1024 }))).stdout;
 }
 
 /** Paths with uncommitted changes, relative to the repository root. */
