@@ -267,3 +267,16 @@ advance QA.
 Fresh validation for this evidence refresh: `npm run test:praxis-contracts`
 exited 0 with 800 catalogued and linked Playwright tests; `git diff --check`
 passed. No runtime or test code changed, so runtime suites were not repeated.
+
+## Recovery pass on 2026-11-05 (WF-0C7166C7-implement)
+
+Revision: `16175172` plus this documentation change; no production or test source changed. The previous implement attempt failed because a long-running background full-functional run was stopped; this pass ran only focused, foreground suites and did not run the full functional or theme suites.
+
+| Runner | Command | Result |
+| --- | --- | --- |
+| core | `node --test out/ai/assistant/teamChat*.test.js out/ai/assistant/assistantEngine.test.js` after `tsc -p .` | 76 passed, 0 failed, 0 skipped |
+| main | `node --test` over `teamChatRepository`, `teamChatActivation`, `teamChatExecutionAdapter`, `teamChatIpcRecovery` | 34 passed, 0 failed, 0 skipped |
+| renderer | `conversationSubscription.test.ts` | 3 passed, 0 failed |
+| Electron | `playwright test e2e/durableTeamChat.spec.ts --project=functional` | 13 passed, 0 failed |
+
+Still open (unchanged, not promoted to a pass): real API proof (no `PRAXIS_LIVE_API_*` credentials), real CLI native session reuse (reconstruction only), the full manual light/dark journey, and a clean first-run full functional gate. The recorded full-suite failures (assistant resizing, agent-hub theme sync, note actions, scheduled-run settlement, shelf glow) remain unresolved here: they require the release-level full run, which a scheduled ticket may not execute. They are not claimed fixed.
