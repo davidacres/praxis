@@ -340,10 +340,17 @@ export async function joinCoordination(
       /* another process made it first */
     }
   }
-  const token = fs.readFileSync(tokenFile, 'utf8').trim();
   const lockFile = path.join(root, LOCK_FILE);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    // Exclusive creation publishes the filename before its bytes. A competing
+    // process must not cache an empty/partial credential for the whole connection.
+    const token = fs.readFileSync(tokenFile, 'utf8').trim();
+    if (!/^[a-f0-9]{64}$/i.test(token)) {
+      if (attempt === 4) throw new Error('The coordination broker token is incomplete; joining was refused.');
+      await new Promise(resolve => setTimeout(resolve, 100));
+      continue;
+    }
     const epoch = randomUUID();
     try {
       fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, epoch, at: new Date().toISOString() }), { flag: 'wx', mode: 0o600 });
