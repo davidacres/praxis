@@ -40,6 +40,13 @@ Implement tests for each criterion above using the feature validation matrix and
 
 All criteria pass with linked evidence, relevant feature commands pass, and the parent story and issue mirror record the result. Preserve unrelated WIP; do not claim unexecuted broad or real-provider checks.
 
+## Needs
+
+What this ticket needs that a scheduled run cannot provide by itself. Praxis does not read this section yet; it will ask for these before a run starts.
+
+- **input (secret):** an API key for one real AI provider, and which provider it is, for the opt-in real API and real CLI continuation/restart check. No variable name is defined; use only what the run supplies.
+- **If it is not supplied:** do not stop the stage as blocked. Run every deterministic check, record "real-provider check not run: no credentials supplied" in the verification report as unresolved blocker evidence (the acceptance criteria allow this), and finish.
+
 ## Description
 
 

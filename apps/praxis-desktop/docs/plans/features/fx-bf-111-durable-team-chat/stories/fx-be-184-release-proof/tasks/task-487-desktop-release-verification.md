@@ -40,6 +40,14 @@ Implement tests for each criterion above using the feature validation matrix and
 
 All criteria pass with linked evidence, relevant feature commands pass, and the parent story and issue mirror record the result. Preserve unrelated WIP; do not claim unexecuted broad or real-provider checks.
 
+## Needs
+
+What this ticket needs that a scheduled run cannot provide by itself. Praxis does not read this section yet; it will ask for these before a run starts.
+
+- **person:** the manual verification list: dock/float, both sidebars, second window, restart, permissions, queue, cancel/retry, context-required and outcome_unknown resolution.
+- **release-level:** the full functional suite and theme checks. Scheduled runs refuse the full desktop e2e suite, so a person runs these after the schedule.
+- **In a scheduled run:** run the focused assistant and standalone-conversation checks and the desktop smoke suite, capture screenshots of the surfaces it can drive, and record the manual list and the full-suite run as handed to a person, as unresolved blocker evidence in the final report. Do not stop the stage as blocked for these.
+
 ## Description
 
 
