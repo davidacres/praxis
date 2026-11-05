@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStageTaskDefinition, formatUpstreamReports, readEnvironmentBlock, readPlanStatus, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
+import { buildStageTaskDefinition, formatUpstreamReports, readEnvironmentBlock, readPlanStatus, stageOutcomeFromSession, stageSessionKey, STAGE_STATUS_INSTRUCTIONS } from './workflowStageTask';
 import type { WorkflowStageContext } from './workflowStageSession';
 import type { WorkflowAgentTaskNode } from './workflowTypes';
 
@@ -58,6 +58,10 @@ test('the brief carries the stage instructions, its inputs, and what it must pro
   assert.match(task.scope, /"Review" stage/);
   assert.match(task.scope, /diff "change-diff"/);
   assert.match(task.definitionOfDone, /report "review-report" \(required\)/);
+});
+
+test('optional checks with a documented skip path do not block the rest of an autonomous stage', () => {
+  assert.match(STAGE_STATUS_INSTRUCTIONS, /explicitly optional.*documented skip path.*leave it skipped with the reason, do not request credentials.*continue the rest of the stage/);
 });
 
 test('the brief points a verification stage at the frozen snapshot, not the branch', () => {

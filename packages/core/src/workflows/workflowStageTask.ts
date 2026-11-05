@@ -169,6 +169,7 @@ export const PLANNED_TESTS_INSTRUCTIONS = [
  */
 export const STAGE_STATUS_INSTRUCTIONS = [
   'If something outside your control stops you doing this stage (a missing tool, service, credential or dependency you may not provide), do not present a report of that as the stage\'s result.',
+  'A test or check that is explicitly optional, or that has a documented skip path when a live service or credential is unavailable, is not a blocker: leave it skipped with the reason, do not request credentials for it, and continue the rest of the stage.',
   'Do not report blocked-environment for missing code, types, coordinators, IPC handlers, or features that are part of this ticket\'s work to build. Implementing missing parts is this stage\'s objective.',
   'Do not report blocked-environment due to shell output truncation: read files in smaller slices or use targeted searches instead.',
   'End your response with this line on its own only when a genuine environment blocker prevents execution: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
