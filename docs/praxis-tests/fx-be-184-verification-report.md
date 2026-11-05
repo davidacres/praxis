@@ -298,3 +298,7 @@ Still open (unchanged, not promoted to a pass): real API proof (no `PRAXIS_LIVE_
 
 - Re-verified `git diff e1f3f211 HEAD -- .praxis` is empty, so the run artifacts add no delivery-diff noise.
 - The iteration-2 QA excerpt showed `durableTeamChat.spec.ts` tests 6–13 passing; it did not identify a failing test. No full functional/theme suite was run in this pass (scheduled-run policy), so the five recorded full-suite failures stay open and are not reported as passes.
+
+## QA rerun record (iteration 3, current execution)
+
+On the delivery checkout, `durableTeamChat.spec.ts` (13/13) and `assistant.spec.ts` + `quickSession.spec.ts` + `standaloneConversations.spec.ts` (33/33) passed on the `functional` project. The QA failure excerpt was truncated and named no failing test, so it could not be reproduced; no code was changed. Full functional/theme suites, live API/CLI proofs and the manual journey were not run and remain open.
