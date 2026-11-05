@@ -51,9 +51,13 @@ export async function workflowBlockingFiles(projectId: string): Promise<string[]
   const folder = project?.workspaceFolder?.trim();
   if (!folder) return [];
   try {
+    const read = async () => workflowBaseBlockingPaths((await getGitStatus(folder)).files);
+    // A clean base needs no wait: readiness must not stall behind a long merge.
+    const blocking = await read();
+    if (blocking.length === 0) return blocking;
     // A scheduled lane may be committing its own status/comment on this base.
-    // Wait for that transaction instead of treating its intermediate file as user work.
-    return await withBaseCheckout(folder, async () => workflowBaseBlockingPaths((await getGitStatus(folder)).files));
+    // Re-read once that transaction finishes instead of treating its intermediate file as user work.
+    return await withBaseCheckout(folder, read);
   } catch (error) {
     // `getGitStatus` surfaces raw git plumbing failures (e.g. "fatal: not a git repository").
     // A workflow run needs a real Git repository to build its worktree from, so turn that into
