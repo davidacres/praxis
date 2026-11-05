@@ -112,7 +112,7 @@ Title: **direct unknown-outcome retry requires informed resolution without dispa
 
 ## PT-485FAE251E
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:58](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L58).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:74](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L74).
 Title: **repeated startup retains originating attempt epoch and observation provenance**.
 
 **Given** a dispatched attempt from epoch epoch.
@@ -121,7 +121,7 @@ Title: **repeated startup retains originating attempt epoch and observation prov
 
 ## PT-064522325E
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:71](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L71).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:87](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L87).
 Title: **recovered imports reject foreign identity and retain cancellation fences**.
 
 **Given** a recovered dispatched attempt with final-result evidence naming a foreign conversation.
@@ -130,7 +130,7 @@ Title: **recovered imports reject foreign identity and retain cancellation fence
 
 ## PT-D03716DB85
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:87](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L87).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatTransitions.test.ts:103](../../packages/core/src/ai/assistant/teamChatTransitions.test.ts#L103).
 Title: **pre-dispatch recovery requires exact durable result and imports only once**.
 
 **Given** a prepared attempt without dispatch intent.

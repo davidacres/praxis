@@ -139,9 +139,9 @@ Title: **durable ACP continuation sends only prepared context on native resume a
 
 ## PT-CCDCE2367D
 
-Automation: **node:test**, [packages/core/src/ai/aiSessionManager.test.ts:596](../../packages/core/src/ai/aiSessionManager.test.ts#L596).
+Automation: **node:test**, [packages/core/src/ai/aiSessionManager.test.ts:621](../../packages/core/src/ai/aiSessionManager.test.ts#L621).
 Title: **durable ownership and negotiated context delivery persist without aliasing the caller**.
 
 **Given** a completed session in an in-memory storage adapter.
 **When** store ownership and native delivery, mutate caller ownership and reload manager.
-**Then** attempt ID remains the original, binding ID survives reload and context delivery remains native.
+**Then** attempt ID remains the original; after reload the ownership deeply equals the original (conversation, turn, participant, attempt, binding and epoch IDs), `providerSessionId` is absent, and context delivery remains native.
