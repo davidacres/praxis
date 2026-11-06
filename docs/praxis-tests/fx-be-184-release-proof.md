@@ -305,7 +305,7 @@ Runtime ids: PT-84EF0A45E2 (`text-only`), PT-57F44DA3DF (`tool-capable`).
 
 **Given** a two-member turn whose dev attempt is running, a second turn queued behind it, and a Stop committed (`cancelling`, lead skipped, queued turn cancelled) before the runtime acknowledges the abort.
 **When** the process dies and a new coordinator initializes over those bytes, then a second restart follows.
-**Then** no provider runs; a text-only attempt and its turn end `cancelled`, a tool-capable attempt and its turn end `outcome_unknown` and refuse a plain retry; both carry a reconciliation record from the new epoch; the skipped member and the cancelled queued turn are unchanged; the second restart changes nothing.
+**Then** no provider runs; a text-only attempt and its turn end `cancelled`, a tool-capable attempt and its turn end `outcome_unknown` and refuse a plain retry; both carry a reconciliation record from the new epoch; the skipped member and the cancelled queued turn are unchanged; no assistant message is written; a second restart dispatches nothing and leaves every turn state unchanged (only turn states are compared, not the full file).
 
 ### PT-3819088619
 
