@@ -58,7 +58,7 @@ Title: **startup recovery matrix: dispatched=true, capability=opaque**.
 
 ## PT-0AA1A09AEC
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:699](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L699).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:729](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L729).
 Title: **recovered result imports atomically once with usage and original epoch**.
 
 **Given** an outcome_unknown attempt with a matching final-result observation and a replacement conversation epoch.
@@ -67,7 +67,7 @@ Title: **recovered result imports atomically once with usage and original epoch*
 
 ## PT-3C03B20D14
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:712](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L712).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:742](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L742).
 Title: **interrupted retry preserves predecessor and unknown retry requires informed evidence**.
 
 **Given** interrupted and outcome_unknown attempts carrying reconciliation observation.
@@ -76,7 +76,7 @@ Title: **interrupted retry preserves predecessor and unknown retry requires info
 
 ## PT-122958093E
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:730](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L730).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:760](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L760).
 Title: **active cancellation remains cancelling until execution settles and records evidence**.
 
 **Given** one active lead attempt whose adapter promise is held open.
@@ -103,7 +103,7 @@ Title: **startup imports durable results once across repeated coordinator replac
 
 ## PT-804A2C0AC4
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:766](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L766).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:796](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L796).
 Title: **direct unknown-outcome retry requires informed resolution without dispatch**.
 
 **Given** an outcome_unknown attempt and repository snapshot.
@@ -157,7 +157,7 @@ Title: **effective capability evidence is durable before runtime dispatch; evide
 
 ## PT-E116B00BE3
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:773](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L773).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:803](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L803).
 Title: **startup imports a prepared attempt result without dispatching the provider**.
 
 **Given** a prepared attempt with no dispatch intent and a durable final result with usage attribution.

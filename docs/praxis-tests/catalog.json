@@ -5392,9 +5392,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "an isolated profile with a mock OpenAI-compatible provider and a model with no known context window, so the bounded budget is 32768 bytes less a 12288-byte reserve",
+        "when": "a single request larger than that budget is sent from the assistant, Recheck context is pressed by keyboard, and then Stop is pressed on the turn status",
+        "then": "the turn pauses as context_required with a \"Bounded context\" reason and no attempt; Recheck commits a newer revision but the turn pauses again with Recheck still enabled and no member reply; Stop removes the status and leaves the turn cancelled with the user message kept; the provider receives zero completion requests throughout"
       }
     },
     {
@@ -5408,9 +5408,9 @@
       },
       "area": "durable Team Chat Journey",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-reply, retry, transcript and usage survive",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "one profile and one existing-folder project with a team chat, a mock provider whose replies are held behind a gate, and the assistant closed and undocked",
+        "when": "the chat is opened from its sidebar row, floated then docked, a second turn is queued and cancelled by click, the active turn is stopped, a third turn is killed with SIGKILL after the provider receives it, the app relaunches, dev is retried once the gate opens, and the app is quit cleanly and relaunched again",
+        "then": "the sidebar shows one team-chat row; the panel moves from floating to docked; the queued cancel applies and both early turns persist as cancelled; after the crash the third turn is interrupted with no extra provider request and shows \"dev: interrupted\"; Retry completes it with the provider reply; after the second relaunch all three user messages, one dev reply and a token usage summary are read back, and exactly one conversation exists across project and all-projects listings"
       }
     },
     {

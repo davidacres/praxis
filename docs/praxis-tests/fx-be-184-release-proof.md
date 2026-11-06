@@ -1,6 +1,6 @@
 # FX-BE-184 release-proof node:test contracts
 
-Runner: **node:test**. These **30 supplemental source contracts, representing 38 runtime cases** (TASK-486 added three source contracts and four runtime cases; see [TASK-486 failure-matrix additions](#task-486-failure-matrix-additions)) (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
+Runner: **node:test**. These **30 supplemental source contracts, representing 38 runtime cases** (TASK-486 added three source contracts and four runtime cases; see [TASK-486 failure-matrix additions](#task-486-failure-matrix-additions); TASK-487 added one more source contract and runtime case; see [TASK-487 release-verification additions](#task-487-release-verification-additions)) (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
 
 ### PT-C2406CA182
 
@@ -256,7 +256,7 @@ Title: **unverified CLI identity cannot be stabilized by turn or participant acc
 
 ### PT-F19C6CE02C
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:844](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L844).
+Automation: **node:test**, [teamChatCoordinator.test.ts:874](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L874).
 Title: **queued page identity and attachment references survive caller mutation before dispatch**.
 
 **Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
@@ -336,3 +336,23 @@ Title: **a Stop interrupted by process exit stays stopped after restart on the f
 **Then** no provider runs; the turn and attempt are `cancelled`, the queued turn stays cancelled, no reply is written and no `turn_failed` (retry) update is emitted.
 
 Registration: unchanged. The core cases run in `packages/core/package.json` → `test`; the main case in `apps/praxis-desktop/main/package.json` → `test:git`. No Playwright spec changed, so `catalog.json` is not regenerated.
+
+## TASK-487 release-verification additions
+
+Added in TASK-487 (2026-11-06, implementation `163701ff`). One new node:test contract guards the product defect the built-app journey found. The two new Playwright tests live in the generated [catalog](index.md) and are cross-referenced here, not counted again.
+
+### PT-F7F4DAD4AF
+
+Automation: **node:test**, [teamChatCoordinator.test.ts:455](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L455).
+Title: **every committed revision reaches subscribers, so a control at the last notified revision applies**.
+
+**Given** an in-memory conversation whose member `prepare` resolves after a 10 ms delay (so its binding commit lands after a second turn is queued) and whose `execute` is held behind a gate, with one subscriber tracking the highest revision it has been sent.
+**When** an active turn and a queued turn are submitted, the commits settle, and a cancel control is sent for the queued turn at the subscriber's last notified revision; then the gate is released.
+**Then** the subscriber's revision equals the stored revision before the control, the cancel answers `applied` and the queued turn is `cancelled`, and after the active reply settles the subscriber again holds the stored revision. The implement stage recorded it failing without the fix (`subscribers hold the stored revision`, 5 vs 8).
+
+Playwright cross-references (catalog entries; flows curated in the TASK-487 contract stage):
+
+- **PT-748A90EE31**, [durableTeamChat.spec.ts:718](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L718): an over-budget current request pauses as `context_required`; Recheck context stays actionable and Stop cancels it. Smoke set.
+- **PT-AEDE2C68C0**, [durableTeamChatJourney.spec.ts:30](../../apps/praxis-desktop/main/e2e/durableTeamChatJourney.spec.ts#L30): the release journey (sidebar row, float/dock, queue and cancel, Stop, SIGKILL mid-reply, retry, restart). Functional project only.
+
+Registration: `teamChatCoordinator.test.ts` is already in `packages/core/package.json` → `test`. Playwright discovers `durableTeamChatJourney.spec.ts` in the functional project; it is deliberately not in `SMOKE_SPECS`.
