@@ -124,7 +124,9 @@ export type ConversationUpdateType =
   | 'context_required'
   | 'decision_pinned'
   | 'approval_restored'
-  | 'approval_invalidated';
+  | 'approval_invalidated'
+  /** A committed revision no typed update reported; subscribers re-read the snapshot. */
+  | 'revision_committed';
 
 export interface ConversationUpdate {
   conversationId: string;
@@ -160,6 +162,8 @@ export class TeamChatCoordinator {
   /** Conversations whose loop stopped on a storage fault; see `processConversation`. */
   private readonly haltedLoops = new Map<string, string>();
   private readonly abortControllers = new Map<string, AbortController>();
+  /** Highest revision each conversation's subscribers have been told about. */
+  private readonly notifiedRevisions = new Map<string, number>();
   private initialization?: Promise<void>;
 
   public constructor(options: TeamChatCoordinatorOptions) {
@@ -231,6 +235,7 @@ export class TeamChatCoordinator {
   }
 
   private notify(update: ConversationUpdate): void {
+    this.notifiedRevisions.set(update.conversationId, Math.max(this.notifiedRevisions.get(update.conversationId) ?? -1, update.revision));
     try {
       this.onUpdate?.(update);
     } catch {
@@ -265,6 +270,18 @@ export class TeamChatCoordinator {
       if (draft.activation && next.turns.length > current.turns.length) draft.activation.acceptedNewTurns = true;
       draft.conversations[index] = structuredClone(next);
       return structuredClone(next);
+    }).then(committed => {
+      // Snapshots carry state, so every committed revision must reach subscribers. Most commits
+      // are followed by a typed update; a commit with none (binding, attempt bookkeeping) would
+      // leave a window holding a stale revision whose next control is refused as stale.
+      if (committed.revision > (this.notifiedRevisions.get(conversationId) ?? -1)) {
+        setTimeout(() => {
+          if (committed.revision > (this.notifiedRevisions.get(conversationId) ?? -1)) {
+            this.notify({ conversationId, revision: committed.revision, type: 'revision_committed' });
+          }
+        }, 0);
+      }
+      return committed;
     });
   }
 

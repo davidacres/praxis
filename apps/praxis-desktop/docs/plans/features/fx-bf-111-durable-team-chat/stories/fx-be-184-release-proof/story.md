@@ -52,6 +52,8 @@ Use the parent feature acceptance-to-suite mapping and validation commands. Each
 
 TASK-486 deterministic matrix (2026-11-06): [verification report](../../../../../../../../docs/praxis-tests/fx-be-184-verification-report.md#task-486-failure-matrix-2026-11-06). Real-provider checks not run; release acceptance stays open.
 
+TASK-487 built-UI verification (2026-11-06): [verification report](../../../../../../../../docs/praxis-tests/fx-be-184-verification-report.md#task-487-release-verification-2026-11-06). Focused checks green; the journey found a stale-revision defect in queued-turn cancel, now fixed in core with a regression test. Full functional and theme suites and real-provider checks not run; native CLI reuse and the pending-approval matrix row stay open, so release acceptance stays open.
+
 ## Close when
 
 Both tasks satisfy every acceptance criterion, results are linked here and in the issue mirror, and no story-specific recovery or compatibility gap remains.

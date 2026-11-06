@@ -2,6 +2,46 @@
 
 Inspected on 2026-11-04 during iteration 3. These are retained execution records from the earlier implementation run, not new executions. The release gate remains open. Command exit codes come from the runner summary; output excerpts below retain counts and failures. Raw logs remain in `/tmp/fx184` and may expire.
 
+## TASK-487 runs (2026-11-06)
+
+These runs are new, made in the TASK-487 worktree, with raw logs in `/tmp/fxbe184-487` (not retained in git).
+
+```text
+build:core exit=0
+test:core exit=0            ℹ tests 1979 ℹ pass 1977 ℹ fail 0 ℹ skipped 2
+check-types exit=0
+test:renderer exit=0        ℹ tests 93 ℹ pass 93 ℹ fail 0 ℹ skipped 0
+build:renderer exit=0
+desktop:copy-renderer exit=0
+build:desktop exit=0
+test:desktop:git exit=0     ℹ tests 168 ℹ pass 168 ℹ fail 0 ℹ skipped 0
+focused e2e (assistant, quickSession, durableTeamChat, durableTeamChatJourney, standaloneConversations; functional) exit=0
+  51 passed (2.7m)
+easymode.spec.ts (functional) exit=0
+  24 passed (1.8m)
+durableTeamChatJourney.spec.ts --repeat-each=10 --workers=3, after the fix
+  10 passed (52.3s)
+praxis-test-catalog --write / test:praxis-contracts
+  Wrote 806 Praxis Test contracts to docs/praxis-tests (804 existing contracts carried over).
+```
+
+Failure fingerprint before the core fix (journey, `--repeat-each=10 --workers=3`, 3–4 of 10 failed):
+
+```text
+Error: expect(locator).toHaveCount(expected) failed   (queued card still shown after Cancel queued turn)
+assistant:cancelTurn → {"expectedRevision":6|7,"status":"conflict","reason":"stale-revision","rev":8}
+team-chats.json → {"rev":8,"turns":["running","queued"]}   (no control receipt)
+```
+
+The guard proven against the old coordinator:
+
+```text
+not ok - every committed revision reaches subscribers, so a control at the last notified revision applies
+  AssertionError [ERR_ASSERTION]: subscribers hold the stored revision
+    actual: 5,
+    expected: 8,
+```
+
 ## Runner summary
 
 ```text

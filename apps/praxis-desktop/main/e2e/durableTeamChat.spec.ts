@@ -712,3 +712,46 @@ test('closing the initiating window keeps its accepted turn and pending approval
     fs.rmSync(path.dirname(promptLog), { recursive: true, force: true });
   }
 });
+
+// TASK-487: the current request can never be summarised away, so one larger than the bounded
+// window (32768 bytes less the 12288 reserve for a model with no known window) must pause.
+test('an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it', async () => {
+  mock = await startMockOpenAiCompatibleServer({ reply: 'Must never be produced' });
+  app = await launchTestApp(mockSettings(mock), undefined, undefined, { openNewSession: false });
+  const win = app.window;
+  const oversized = `Over budget request.${' context'.repeat(3000)}`;
+  expect(Buffer.byteLength(oversized)).toBeGreaterThan(32768 - 12288);
+  await win.getByTestId('titlebar-assistant').click();
+  await win.getByTestId('assistant-input').fill(oversized);
+  await win.getByTestId('assistant-send').click();
+  const status = win.getByTestId('assistant-turn-status');
+  await expect(status).toContainText('context required');
+  const recheck = win.getByTestId('assistant-turn-recheck-context');
+  await expect(recheck).toBeEnabled();
+  const readConversation = async () => (await win.evaluate(async () => {
+    const chats = await window.praxis.assistant.listChats('');
+    return window.praxis.assistant.getConversation(chats[0].id);
+  }))!;
+  const paused = await readConversation();
+  expect(paused.turns[0].state).toBe('context_required');
+  expect(paused.turns[0].contextRequiredReason).toContain('Bounded context');
+  expect(paused.turns[0].attempts).toHaveLength(0);
+  const artifact = path.resolve(__dirname, '../../../../.praxis/session-artifacts/fx-be-184-context-required.png');
+  fs.mkdirSync(path.dirname(artifact), { recursive: true });
+  await win.screenshot({ path: artifact });
+  // Recheck resumes the turn; the budget is unchanged, so it pauses again rather than inventing a reply.
+  await recheck.focus();
+  await win.keyboard.press('Enter');
+  await expect.poll(async () => (await readConversation()).revision).toBeGreaterThan(paused.revision);
+  await expect.poll(async () => (await readConversation()).turns[0].state).toBe('context_required');
+  await expect(win.getByTestId('assistant-turn-recheck-context')).toBeEnabled();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(0);
+  expect(completions(mock)).toBe(0);
+  await win.bringToFront();
+  await status.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
+  await expect(status).toHaveCount(0);
+  const settled = await readConversation();
+  expect(settled.turns[0].state).toBe('cancelled');
+  expect(settled.messages.filter(m => m.role === 'user').map(m => m.text)).toEqual([oversized]);
+  expect(completions(mock)).toBe(0);
+});

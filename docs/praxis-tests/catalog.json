@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 804,
+  "testCount": 806,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5379,6 +5379,38 @@
         "given": "a team-chat turn has been accepted from one window and is awaiting a permission approval",
         "when": "closing the initiating window keeps its accepted turn and pending approval observable from another window",
         "then": "the accepted turn is not cancelled and a second window observes the same turn and its pending approval"
+      }
+    },
+    {
+      "id": "PT-748A90EE31",
+      "title": "an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 718,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-AEDE2C68C0",
+      "title": "journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-reply, retry, transcript and usage survive",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChatJourney.spec.ts",
+        "line": 30,
+        "project": "functional"
+      },
+      "area": "durable Team Chat Journey",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-reply, retry, transcript and usage survive",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
     {

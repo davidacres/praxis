@@ -450,6 +450,36 @@ test('subscription emits turn_accepted, attempt and completion revision updates'
   assert.ok(updates.some(u => u.type === 'attempt_completed'));
 });
 
+// TASK-487 regression: commits with no typed update (attempt bookkeeping) left a window on an
+// older revision; its control was then refused as stale and the window never refreshed.
+test('every committed revision reaches subscribers, so a control at the last notified revision applies', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  // A slow prepare, like main resolving the provider connection: its binding commit lands after the queued turn is accepted.
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
+    prepare: async ({ conversation, participant }) => {
+      await new Promise(r => setTimeout(r, 10));
+      return { conversationId: conversation.id, participantId: participant.id, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: participant.instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat', toolPolicy: 'read-only', permissionPolicy: 'manual' };
+    },
+    execute: async () => { await gate; return { text: 'reply' }; } } });
+  let seen = -1;
+  coordinator.subscribe('conv-1', update => { seen = Math.max(seen, update.revision); });
+  const submit = (commandId: string, expectedRevision: number, text: string) => coordinator.submitTurn({ conversationId: 'conv-1', commandId, expectedRevision,
+    text, selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  const active = await submit('cmd-active', 1, 'Active');
+  const queued = await submit('cmd-queued', active.revision, 'Queued');
+  await new Promise(r => setTimeout(r, 50));
+  const stored = (await coordinator.getConversation('conv-1'))!;
+  assert.equal(seen, stored.revision, 'subscribers hold the stored revision');
+  const outcome = await coordinator.controlWithOutcome({ conversationId: 'conv-1', commandId: 'cancel-queued', expectedRevision: seen, turnId: queued.turnId, action: 'cancel' });
+  assert.equal(outcome.status, 'applied');
+  assert.equal(outcome.conversation.turns.find(t => t.id === queued.turnId)!.state, 'cancelled');
+  release();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(seen, (await coordinator.getConversation('conv-1'))!.revision);
+});
+
 test('TASK-479 AC3: Invalid participant, attachment reference, and permission choice are rejected before provider invocation; stale retry targets conflict', async () => {
   let invoked = false;
   const repo = new MemoryTeamChatRepository([makeConversation()]);

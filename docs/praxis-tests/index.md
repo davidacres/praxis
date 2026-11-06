@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **804 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **806 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -340,6 +340,8 @@ This catalogue describes **804 Playwright tests** under `apps/praxis-desktop/mai
 | PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:582` |
 | PT-EE0AB4E23D | durable Team Chat | queued page context and staged image reach the provider after navigation and composer replacement | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:610` |
 | PT-6A15DADEFB | durable Team Chat | closing the initiating window keeps its accepted turn and pending approval observable from another window | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:669` |
+| PT-748A90EE31 | durable Team Chat | an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:718` |
+| PT-AEDE2C68C0 | durable Team Chat Journey | journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-reply, retry, transcript and usage survive | `apps/praxis-desktop/main/e2e/durableTeamChatJourney.spec.ts:30` |
 | PT-5D69F1868B | easymode | EasyMode exposes the shared sidebar material through its feed and header | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
 | PT-E4A060174B | easymode | legacy enableEasyMode false still uses the sole sidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:69` |
 | PT-D7A1079D36 | easymode | Preview omits retired switches and the sole sidebar stays active | `apps/praxis-desktop/main/e2e/easymode.spec.ts:79` |

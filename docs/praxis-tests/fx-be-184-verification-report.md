@@ -1,9 +1,89 @@
 # FX-BE-184 durable team-chat release verification report
 
-**Authoritative status (supersedes every section below, which is historical):** TASK-486 deterministic failure matrix: **complete** (see [TASK-486 failure matrix](#task-486-failure-matrix-2026-11-06); every AC maps to named assertions, all focused runners green, nothing skipped). Full functional suite: **no clean pass** (last known: 748 passed / 2 failed pointer-dependent shelf checks / 14 skipped; not rerun here — release-level, TASK-487). Live API check: **not run** (no `PRAXIS_LIVE_API_PROVIDER` / `PRAXIS_LIVE_API_KEY`; optional in scheduled runs). Real CLI continuation: **not run** in this pass; earlier receipts are historical. Native CLI session reuse: **unproven** (reconstruction only). Pending-approval `interrupted` vs `outcome_unknown` matrix discrepancy: **open** (conservative `outcome_unknown` kept). Release acceptance stays open.
+**Authoritative status (supersedes every section below, which is historical):** TASK-486 deterministic failure matrix: **complete** (see [TASK-486 failure matrix](#task-486-failure-matrix-2026-11-06)). TASK-487 built-UI verification: **focused checks green, one product defect found and fixed** (see [TASK-487 release verification](#task-487-release-verification-2026-11-06)): cancelling a queued turn could be refused as stale and the window never refreshed, because some coordinator commits sent no update. Full functional suite and theme projects: **not run** in this scheduled pass (release-level; last known full run 748 passed / 2 failed pointer-dependent shelf checks / 14 skipped; themes last 47/47 in WF-0C7166C7). Live API check and real CLI continuation: **not run** (no credentials; optional in scheduled runs). Native CLI session reuse: **unproven**. Pending-approval `interrupted` vs `outcome_unknown` matrix discrepancy: **open**. Release acceptance stays open.
 
 Production changes outside core/renderer, unrelated to any AC and made only to remove test-run flakes: `workflowWorkspace.ts` (readiness re-read when the base checkout is held) and `ticketWriteBackCommit.ts` (bounded retry on git exit 128 with an `index.lock` error). The clean-base path is unchanged.
 
+
+
+## TASK-487 release verification (2026-11-06)
+
+Branch head before this change: `d3cc37ed` (TASK-486 commits `b363f41a` and `d3cc37ed` are ancestors). Every run below used temporary profiles and repositories (`launchTestApp`, `mkdtemp`); nothing pointed a Praxis write path at user data or the working tree.
+
+### Product defect found and fixed
+
+The journey spec failed intermittently (3–4 of 10 under `--repeat-each=10 --workers=3`) at "cancel the queued turn". A wrapped `assistant:cancelTurn` handler showed the cause: the renderer sent `expectedRevision` 6 or 7, main was at 8, and the command answered `conflict / stale-revision`. Several coordinator commits (binding resolution in `prepare`, attempt bookkeeping, summary attempts) bumped the revision without a `ConversationUpdate`. The window therefore held an older snapshot, and its next control was refused with nothing to make it re-read, so the user could not cancel until something else happened.
+
+Fix (`packages/core/src/ai/assistant/teamChatCoordinator.ts`): `transitionConversation` now schedules a `revision_committed` update for any committed revision that no typed update reported. The coordinator tracks the highest revision it has notified per conversation, so a commit followed by its usual typed update produces no extra event, and subscribers already ignore duplicate revisions.
+
+Regression guard: `teamChatCoordinator.test.ts` › "every committed revision reaches subscribers, so a control at the last notified revision applies". It was proven to fail without the fix (`subscribers hold the stored revision`, actual 5, expected 8) and passes with it. After the fix the journey passed 10/10 under the same load.
+
+### Deterministic evidence
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm run build:core` | 0 | built |
+| `npm run test:core` | 0 | 1979 tests, 1977 pass, 0 fail, 2 skipped (pre-existing native code-intelligence MCP checks, unrelated to FX-BF-111) |
+| `npm run check-types` | 0 | every workspace |
+| `npm run test:renderer` | 0 | 93/93 |
+| `npm run build:renderer` | 0 | built |
+| `npm run desktop:copy-renderer` | 0 | copied |
+| `npm run build:desktop` | 0 | built |
+| `npm run test:desktop:git` | 0 | 168/168 |
+| `npx playwright test e2e/assistant.spec.ts e2e/quickSession.spec.ts e2e/durableTeamChat.spec.ts e2e/durableTeamChatJourney.spec.ts e2e/standaloneConversations.spec.ts --project=functional --reporter=line` | 0 | 51 passed, 0 failed, 0 skipped |
+| `npx playwright test e2e/easymode.spec.ts --project=functional --reporter=line` | 0 | 24 passed |
+| `npx playwright test e2e/durableTeamChatJourney.spec.ts --project=functional --repeat-each=10 --workers=3` | 0 | 10 passed (before the fix: 3–4 failed) |
+| `node apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs --write`, then `npm run test:praxis-contracts` | 0 | 806 contracts (804 carried over, 2 new); no unrelated drift |
+
+New assertions:
+
+- `durableTeamChat.spec.ts` › "an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it". A 24 KB request exceeds the bounded window (32768 bytes − 12288 reserved; `mock-model` has no known window). The test asserts the turn is `context_required` with the "Bounded context" reason and no attempt. Recheck resumes it, and it pauses again: the revision advances, no member reply appears and the provider gets 0 requests. Stop then gives `cancelled` and keeps the user message. It is in the smoke set and uses no hover, mouse or drag.
+- `durableTeamChatJourney.spec.ts` (functional only). One profile goes through:
+  - the sidebar team-chat row in project scope;
+  - float, then dock;
+  - queue two turns, cancel the queued one, Stop the active one;
+  - SIGKILL after the provider has the request: the turn becomes `interrupted` with no replay;
+  - Retry gives the reply;
+  - a clean restart: transcript and usage are read back from disk, and the chat is listed once across project and "All projects" scope.
+
+### Real-provider evidence
+
+| Check | Result |
+| --- | --- |
+| `durableTeamChat.live.spec.ts` (live API, real CLI continuation) | **Not run.** `PRAXIS_LIVE_AGENT`, `PRAXIS_LIVE_API_PROVIDER`, `PRAXIS_LIVE_API_KEY` unset; optional under scheduled-run policy. No mock result is substituted. |
+| AC2 native CLI session reuse | **Unproven** (reconstruction only). Open feature blocker. |
+
+### Full-suite evidence
+
+| Suite | Result |
+| --- | --- |
+| `npm run test:desktop` (full functional) | **Not run** in this scheduled ticket. Scheduled-run policy reserves release-level suites. Last known: 748 passed / 2 failed (pointer-dependent session-shelf preview checks) / 14 skipped. Never relabelled green. |
+| `npm run test:desktop:themes` | **Not run** in this ticket. Last recorded 47/47 (WF-0C7166C7). No `toHaveScreenshot` baseline was regenerated, so there are no actual/diff images to inspect. |
+
+### Visual evidence
+
+Captured by the specs into `.praxis/session-artifacts/` (git-ignored) and opened by eye:
+
+| File | Checked |
+| --- | --- |
+| `fx-be-184-context-required.png` | Floating panel: "dev: context required" card with Recheck context and Stop, the bounded-context reason under it, composer usable. |
+| `fx-be-184-journey-01-floating.png` | Team chat opened from its sidebar row into the floating panel. |
+| `fx-be-184-journey-02-docked-queue.png` | Docked column: "dev: running" + Stop, "Queued 2" + Cancel queued turn, sidebar row "Journey active question · team chat". |
+| `fx-be-184-journey-03-restart-interrupted.png` | After SIGKILL and relaunch: three user messages, "dev: interrupted" with Retry dev and Stop; no reply invented. |
+| `fx-be-184-journey-04-transcript-after-restart.png` | After the second restart: all three user messages and the Senior Dev reply "Journey answer"; usage chip shows "25+ tok". |
+
+Earlier captures still apply for the second window (`durable-team-chat-two-windows.png`, `durable-team-chat-queue.png`) and for restart (`fx-be-184-restart-interrupted.png`). Permission across restart, outcome_unknown reconciliation, and Preview/Apply are covered by named Electron assertions (`durableTeamChat.spec.ts`: "a tool member's pending permission…", "unknown outcome requires recorded reconciliation…"; `assistant.spec.ts` Preview/Apply). They were not driven again by hand in this pass. Simple Dark captures were not taken; theme readability is guarded by `assistant.spec.ts`'s contrast test, which passed in the focused run.
+
+### Open feature blockers (the feature stays open)
+
+- Real API and real CLI continuation checks not run (credentials).
+- Native CLI session reuse unproven.
+- Pending-approval crash row: the design says `interrupted`, the code keeps the more cautious `outcome_unknown`.
+- "Both sidebars": the classic project tree was removed on purpose (f977690f), so only `EasyModeSidebar` (project scope and "All projects") and the session shelf apply. Not applicable rather than passed.
+
+### User data and rollback
+
+No run touched user data. Rollback limits are unchanged (see [Rollback limits](#rollback-limits)). The `team-chats.json.v1-backup` can be restored only before v2 accepts its first turn. After that, repair forward: returning to the legacy writer once v2 has accepted turns is not supported. The new `revision_committed` update changes no stored data and needs no migration.
 
 ## TASK-486 failure matrix (2026-11-06)
 
