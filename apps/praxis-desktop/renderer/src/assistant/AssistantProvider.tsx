@@ -5,6 +5,7 @@ import { onSessionChanged } from '../ai/sessionChangeStream';
 import * as shellMode from './assistantShellMode';
 import { resolveAssistantError } from './assistantErrorState';
 import { PendingSubmissions } from './assistantPendingSubmissions';
+import { buildSubmitCommand } from './assistantSubmitCommand';
 import { INCOMPATIBLE_PAGE_CONTEXT_MESSAGE, isCompatiblePageContext } from './assistantPageContext';
 
 export interface AssistantRuntimeOptions {
@@ -344,12 +345,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       // Attachments are staged once per command: a retry reuses the refs the first attempt wrote.
       const attachmentRefs = pending?.attachmentRefs ?? (capturedRuntime.images?.length ? await window.praxis.assistant.stageAttachments(id, capturedRuntime.images) : []);
       const { images: _images, ...options } = capturedRuntime;
-      const command: SubmitConversationCommand = pending ?? {
+      const command: SubmitConversationCommand = pending ?? buildSubmitCommand({
         conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot.revision, text,
-        selectedParticipantIds: selected.map(role => `part-${role}`), attachmentRefs,
-        ...(context ? { context } : {}),
-        runtimeOptions: Object.fromEntries(Object.entries(options).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
-      };
+        members: selected, attachmentRefs, context, runtimeOptions: options
+      });
       pendingSubmissions.current.record(command, staged || attachmentRefs.length > 0);
       // One transport retry, with exactly the same command identity and payload.
       try { await window.praxis.assistant.submitTurn(command); }
