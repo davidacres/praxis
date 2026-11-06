@@ -124,19 +124,15 @@ export function ArtifactDock({
       {/* Top Header Bar */}
       <div className="artifact-dock-header" data-testid="artifact-dock-header">
         <div className="artifact-dock-identity">
-          <Icon name={iconName} size={15} />
+          <div className="artifact-dock-icon-tile">
+            <Icon name={iconName} size={15} />
+          </div>
           <strong className="artifact-dock-title" title={artifact.name} data-testid="artifact-dock-title">
             {artifact.name}
           </strong>
           {artifact.version !== undefined && (
             <span className="badge badge-version" data-testid="artifact-version-badge">
               v{artifact.version}
-            </span>
-          )}
-          <span className="badge badge-quiet">{langLabel}</span>
-          {artifact.category && (
-            <span className={`gadget-artifact-category-badge category-${artifact.category}`}>
-              {artifact.category}
             </span>
           )}
         </div>
@@ -254,25 +250,44 @@ export function ArtifactDock({
           />
         ) : mode === 'code' ? (
           <div className="artifact-code-view" data-testid="artifact-code-view">
-            <div className="artifact-code-lines">
-              {lines.map((line, idx) => (
-                <div key={idx} className="artifact-code-line">
-                  <span className="artifact-code-lineno">{idx + 1}</span>
-                  <code className="artifact-code-text">{highlightCode(line) || ' '}</code>
-                </div>
-              ))}
+            <div className="artifact-code-banner">
+              <div className="artifact-code-banner-left">
+                <span className="artifact-code-banner-lang">{langLabel}</span>
+                {artifact.category && (
+                  <span className={`gadget-artifact-category-badge category-${artifact.category}`}>
+                    {artifact.category}
+                  </span>
+                )}
+              </div>
+              <span className="artifact-code-banner-count">{lines.length} {lines.length === 1 ? 'line' : 'lines'}</span>
+            </div>
+            <div className="artifact-code-scroll">
+              <div className="artifact-code-lines">
+                {lines.map((line, idx) => (
+                  <div key={idx} className="artifact-code-line">
+                    <span className="artifact-code-lineno">{idx + 1}</span>
+                    <code className="artifact-code-text">{highlightCode(line) || ' '}</code>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
           <div className="artifact-diff-view" data-testid="artifact-diff-view">
-            <div className="artifact-diff-lines">
-              {lines.map((line, idx) => (
-                <div key={idx} className="artifact-diff-line diff-added">
-                  <span className="artifact-diff-indicator">+</span>
-                  <span className="artifact-code-lineno">{idx + 1}</span>
-                  <code className="artifact-code-text">{highlightCode(line) || ' '}</code>
-                </div>
-              ))}
+            <div className="artifact-diff-banner">
+              <span className="artifact-diff-banner-tag">Changes (+{lines.length})</span>
+              <span className="artifact-diff-banner-path">{artifact.path}</span>
+            </div>
+            <div className="artifact-diff-scroll">
+              <div className="artifact-diff-lines">
+                {lines.map((line, idx) => (
+                  <div key={idx} className="artifact-diff-line diff-added">
+                    <span className="artifact-diff-indicator">+</span>
+                    <span className="artifact-code-lineno">{idx + 1}</span>
+                    <code className="artifact-code-text">{highlightCode(line) || ' '}</code>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -280,9 +295,12 @@ export function ArtifactDock({
 
       {/* Bottom Footer Bar */}
       <div className="artifact-dock-footer" data-testid="artifact-dock-footer">
-        <code className="artifact-dock-path" title={artifact.path}>
-          {artifact.path}
-        </code>
+        <div className="artifact-dock-footer-info">
+          <Icon name="file" size={13} />
+          <code className="artifact-dock-path" title={artifact.path}>
+            {artifact.path}
+          </code>
+        </div>
         <div className="artifact-dock-footer-actions">
           <button
             type="button"
@@ -291,7 +309,7 @@ export function ArtifactDock({
             disabled={saving}
             onClick={handleSaveToWorkspace}
           >
-            <Icon name="check" size={12} />
+            <Icon name={saving ? 'refresh' : 'check'} size={12} />
             <span>{saving ? 'Saving…' : 'Save to Workspace'}</span>
           </button>
         </div>

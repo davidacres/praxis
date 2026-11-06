@@ -68,30 +68,36 @@ export function ArtifactPreview({
 
     // Collect inherited theme variables from Praxis document root
     const rootStyle = getComputedStyle(document.documentElement);
-    const bgCanvas = rootStyle.getPropertyValue('--bg-canvas').trim() || '#141416';
-    const bgSurface = rootStyle.getPropertyValue('--bg-surface').trim() || '#1c1c20';
-    const textPrimary = rootStyle.getPropertyValue('--text-primary').trim() || '#f0f0f2';
+    const bg = rootStyle.getPropertyValue('--bg').trim() || '#1c1c20';
+    const bgElevated = rootStyle.getPropertyValue('--bg-elevated').trim() || '#262625';
+    const bgSunken = rootStyle.getPropertyValue('--bg-sunken').trim() || '#141414';
+    const text = rootStyle.getPropertyValue('--text').trim() || '#f0f0f2';
     const textSecondary = rootStyle.getPropertyValue('--text-secondary').trim() || '#a0a0a8';
-    const borderStrong = rootStyle.getPropertyValue('--border-strong').trim() || '#2e2e34';
-    const accent = rootStyle.getPropertyValue('--accent').trim() || '#4d88ff';
+    const border = rootStyle.getPropertyValue('--border').trim() || '#2e2e34';
+    const borderStrong = rootStyle.getPropertyValue('--border-strong').trim() || '#3d3d3d';
+    const accent = rootStyle.getPropertyValue('--accent').trim() || '#e06c43';
     const fontSans = rootStyle.getPropertyValue('--font-sans').trim() || 'system-ui, -apple-system, sans-serif';
+    const fontMono = rootStyle.getPropertyValue('--font-mono').trim() || 'ui-monospace, monospace';
 
     const themeStyles = `
       :root {
-        --bg-canvas: ${bgCanvas};
-        --bg-surface: ${bgSurface};
-        --text-primary: ${textPrimary};
+        --bg: ${bg};
+        --bg-elevated: ${bgElevated};
+        --bg-sunken: ${bgSunken};
+        --text: ${text};
         --text-secondary: ${textSecondary};
+        --border: ${border};
         --border-strong: ${borderStrong};
         --accent: ${accent};
         --font-sans: ${fontSans};
+        --font-mono: ${fontMono};
       }
       body {
         font-family: var(--font-sans);
-        background: var(--bg-canvas);
-        color: var(--text-primary);
+        background: var(--bg);
+        color: var(--text);
         margin: 0;
-        padding: 20px;
+        padding: 24px;
         box-sizing: border-box;
       }
     `;
@@ -113,9 +119,9 @@ export function ArtifactPreview({
           if (!errDiv) {
             errDiv = document.createElement('div');
             errDiv.id = 'praxis-artifact-error';
-            errDiv.style.background = 'color-mix(in srgb, #ff4d4f 15%, #1c1c20)';
-            errDiv.style.border = '1px solid #ff4d4f';
-            errDiv.style.color = '#ff7875';
+            errDiv.style.background = 'color-mix(in srgb, var(--accent) 15%, var(--bg-elevated))';
+            errDiv.style.border = '1px solid var(--accent)';
+            errDiv.style.color = 'var(--text)';
             errDiv.style.padding = '12px';
             errDiv.style.borderRadius = '6px';
             errDiv.style.margin = '16px 0';
@@ -176,15 +182,46 @@ export function ArtifactPreview({
     );
   }
 
-  // Fallback for code or other formats
+  // Fallback for code or other formats (e.g. React/TSX component deliverable)
   return (
     <div className="artifact-preview-fallback" data-testid="artifact-preview-fallback">
-      <div className="artifact-preview-card">
-        <Icon name="sparkles" size={24} />
-        <h4>{artifact.name}</h4>
-        <p>{artifact.description || 'This file does not have a live interactive preview.'}</p>
-        <span className="badge">{artifact.language || artifact.mediaType || 'Source code'}</span>
-        <p className="artifact-hint">Switch to the <strong>Code</strong> tab to inspect the source.</p>
+      <div className="artifact-preview-component-frame">
+        <div className="artifact-preview-component-header">
+          <div className="artifact-preview-component-badge">
+            <Icon name="sparkles" size={14} />
+            <span>Interactive Component Sandbox</span>
+          </div>
+          <span className="badge badge-quiet">{artifact.language?.toUpperCase() || 'REACT / TSX'}</span>
+        </div>
+        <div className="artifact-preview-component-body">
+          <div className="artifact-preview-mockup-card">
+            <div className="artifact-preview-mockup-top">
+              <span className="artifact-preview-mockup-dot dot-red" />
+              <span className="artifact-preview-mockup-dot dot-yellow" />
+              <span className="artifact-preview-mockup-dot dot-green" />
+              <span className="artifact-preview-mockup-title">{artifact.name}</span>
+            </div>
+            <div className="artifact-preview-mockup-content">
+              <div className="artifact-preview-mockup-stat">
+                <Icon name="check-square" size={20} />
+                <div>
+                  <h4>{artifact.name.replace(/\.[^.]+$/, '')}</h4>
+                  <p>{artifact.description || 'Deliverable ready for project integration.'}</p>
+                </div>
+              </div>
+              <div className="artifact-preview-mockup-tags">
+                <span className="tag-pill">{artifact.category || 'deliverable'}</span>
+                {artifact.version !== undefined && <span className="tag-pill">version {artifact.version}</span>}
+                <span className="tag-pill">workspace synced</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="artifact-preview-component-footer">
+          <p className="artifact-hint">
+            To view, edit, or copy the source code, switch to the <strong>Code</strong> tab.
+          </p>
+        </div>
       </div>
     </div>
   );

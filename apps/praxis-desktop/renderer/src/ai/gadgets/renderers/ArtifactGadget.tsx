@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ArtifactGadgetPayload, ArtifactItem } from '@praxis/core';
-import { Icon } from '../../../ui/Icon';
+import { Icon, type IconName } from '../../../ui/Icon';
 import { Markdown } from '../../../ui/Markdown';
 import { GadgetActionBar, GadgetHeading } from '../controls';
 import { payloadOf, type GadgetRendererProps } from '../gadgetContract';
@@ -30,6 +30,15 @@ function isPreviewableHtml(mediaType: string | undefined, path: string): boolean
 function markdownImageForArtifact(name: string, path: string): string {
   const alt = name.replace(/[\[\]]/g, ' ').trim() || 'Artifact preview';
   return `![${alt}](<${path}>)`;
+}
+
+function getIconForArtifactItem(artifact: ArtifactItem): IconName {
+  const ext = artifact.path.split('.').pop()?.toLowerCase();
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (ext === 'html' || ext === 'htm') return 'globe';
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext ?? '')) return 'eye';
+  if (['ts', 'tsx', 'js', 'jsx', 'py', 'cs', 'sh'].includes(ext ?? '')) return 'terminal';
+  return 'file';
 }
 
 /**
@@ -153,39 +162,61 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
           const size = formatSize(artifact.sizeBytes);
           const previewableImage = isPreviewableImage(artifact.mediaType, artifact.path);
           const previewableHtml = isPreviewableHtml(artifact.mediaType, artifact.path);
+          const iconName = getIconForArtifactItem(artifact);
           return (
-            <li key={artifact.path} className={previewableImage ? 'gadget-artifact-image-item' : undefined}>
-              <Icon name="file" size={13} />
-              <span className="gadget-artifact-body">
-                <div className="gadget-artifact-title-row">
-                  <strong>{artifact.name}</strong>
-                  {artifact.version !== undefined && (
-                    <span className="badge badge-version" data-testid="gadget-artifact-version">
-                      v{artifact.version}
-                    </span>
-                  )}
-                  {artifact.category && (
-                    <span
-                      className={`gadget-artifact-category-badge category-${artifact.category}`}
-                      data-testid="gadget-artifact-item-category"
-                    >
-                      {artifact.category}
-                    </span>
-                  )}
-                  {artifact.verdict && (
-                    <span
-                      className={`gadget-artifact-item-verdict verdict-${artifact.verdict}`}
-                      data-testid="gadget-artifact-item-verdict"
-                    >
-                      {artifact.verdict}
-                    </span>
-                  )}
+            <li key={artifact.path} className={`gadget-artifact-item${previewableImage ? ' gadget-artifact-image-item' : ''}`}>
+              <div
+                className="gadget-artifact-card"
+                data-testid="gadget-artifact-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => openInWorkspace(artifact)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openInWorkspace(artifact);
+                  }
+                }}
+              >
+                <div className="gadget-artifact-card-lead">
+                  <div className={`gadget-artifact-icon-tile icon-${iconName}`}>
+                    <Icon name={iconName} size={16} />
+                  </div>
+                  <div className="gadget-artifact-info">
+                    <div className="gadget-artifact-title-row">
+                      <strong className="gadget-artifact-title">{artifact.name}</strong>
+                      {artifact.version !== undefined && (
+                        <span className="badge badge-version" data-testid="gadget-artifact-version">
+                          v{artifact.version}
+                        </span>
+                      )}
+                      {artifact.category && (
+                        <span
+                          className={`gadget-artifact-category-badge category-${artifact.category}`}
+                          data-testid="gadget-artifact-item-category"
+                        >
+                          {artifact.category}
+                        </span>
+                      )}
+                      {artifact.verdict && (
+                        <span
+                          className={`gadget-artifact-item-verdict verdict-${artifact.verdict}`}
+                          data-testid="gadget-artifact-item-verdict"
+                        >
+                          {artifact.verdict}
+                        </span>
+                      )}
+                    </div>
+                    <div className="gadget-artifact-subrow">
+                      <code className="gadget-artifact-path">{artifact.path}</code>
+                      {artifact.description && <span className="gadget-artifact-desc">{artifact.description}</span>}
+                    </div>
+                  </div>
                 </div>
-                <code className="gadget-artifact-path">{artifact.path}</code>
-                {artifact.description && <small>{artifact.description}</small>}
-                <div className="gadget-artifact-card-actions">
+
+                <div className="gadget-artifact-card-actions" onClick={e => e.stopPropagation()}>
                   <button
-                    className="btn btn-sm btn-quiet"
+                    className="btn btn-sm btn-primary gadget-btn-open"
                     type="button"
                     data-testid="gadget-artifact-open-dock"
                     onClick={() => openInWorkspace(artifact)}
@@ -218,21 +249,17 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
                     <span>{saveStatus[artifact.path] || 'Save'}</span>
                   </button>
                 </div>
-                {previewError && <small role="alert">{previewError}</small>}
-                {previewableImage && (
-                  <div className="gadget-artifact-preview" data-testid="gadget-artifact-image-preview">
-                    <Markdown
-                      text={markdownImageForArtifact(artifact.name, artifact.path)}
-                      imageSessionId={gadget.scope.workId ?? gadget.scope.sessionId}
-                      testId="gadget-artifact-image-markdown"
-                    />
-                  </div>
-                )}
-              </span>
-              <span className="gadget-artifact-meta">
-                {artifact.mediaType && <span>{artifact.mediaType}</span>}
-                {size && <span>{size}</span>}
-              </span>
+              </div>
+              {previewError && <small role="alert">{previewError}</small>}
+              {previewableImage && (
+                <div className="gadget-artifact-preview" data-testid="gadget-artifact-image-preview">
+                  <Markdown
+                    text={markdownImageForArtifact(artifact.name, artifact.path)}
+                    imageSessionId={gadget.scope.workId ?? gadget.scope.sessionId}
+                    testId="gadget-artifact-image-markdown"
+                  />
+                </div>
+              )}
             </li>
           );
         })}
