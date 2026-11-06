@@ -534,7 +534,7 @@ test('property: any always-firing loop graph stops within its budget', async () 
 
 // ── Iteration brief (FX-BE-163 / TASK-426) ───────────────────────────────
 
-import { formatIterationContext, formatRunParameters } from './workflowIterationBrief';
+import { formatIterationContext, formatRunParameters, formatInterruptedSessionDetails } from './workflowIterationBrief';
 
 test('a first, clean pass gets no iteration section: the brief is unchanged', () => {
   const r = run(start(), 'plan', 'succeeded');
@@ -549,6 +549,67 @@ test('a retry is told why its last attempt failed', () => {
   assert.ok(brief);
   assert.match(brief, /Previous attempt at this stage failed \(1\)/);
   assert.match(brief, /failed with: boom/);
+});
+
+test('a retry after an interrupted attempt is told about the app crash and in-progress worktree state', () => {
+  let r = run(start(), 'plan', 'succeeded');
+  // Node starts running
+  r = applyWorkflowRunCommand(r, { kind: 'node-started', nodeId: 'implement', at: now() });
+  // Praxis stopped/restarted
+  r = applyWorkflowRunCommand(r, { kind: 'node-interrupted', nodeId: 'implement', at: now() });
+  // Stage is retried
+  r = applyWorkflowRunCommand(r, { kind: 'node-retry', nodeId: 'implement', at: now() });
+
+  const brief = formatIterationContext(r, 'implement');
+  assert.ok(brief);
+  assert.match(brief, /Previous attempt was interrupted mid-flight by an app restart or crash/);
+  assert.match(brief, /The git worktree and working files retain the in-progress changes/);
+  assert.match(brief, /Do NOT start from scratch or guess why changes are present/);
+});
+
+test('formatInterruptedSessionDetails formats completed tasks, pending tasks, touched files and git status', () => {
+  const details = formatInterruptedSessionDetails(
+    {
+      handoverBrief: {
+        schemaVersion: 1,
+        revision: 1,
+        updatedAt: now(),
+        sourceEventCount: 5,
+        freshness: 'fresh',
+        progress: 'Implemented data models and started controller endpoint.',
+        changes: 'Touched 2 files',
+        decisions: '',
+        risks: '',
+        openQuestions: '',
+        nextSteps: 'Complete controller endpoint and write tests',
+        userNotes: '',
+        touchedFiles: ['src/models/user.ts', 'src/controllers/user.ts']
+      },
+      taskList: [
+        { content: 'Create User data model', status: 'completed', priority: 'high' },
+        { content: 'Implement UserController endpoint', status: 'in_progress', priority: 'medium' },
+        { content: 'Add unit tests for UserController', status: 'pending', priority: 'low' }
+      ]
+    },
+    {
+      files: [
+        { path: 'src/models/user.ts', staged: true },
+        { path: 'src/controllers/user.ts', staged: false, worktreeStatus: 'modified' },
+        { path: 'src/controllers/user.test.ts', staged: false, worktreeStatus: 'untracked' }
+      ]
+    }
+  );
+
+  assert.ok(details);
+  assert.match(details, /In-Progress Details from Interrupted Session/);
+  assert.match(details, /Implemented data models and started controller endpoint/);
+  assert.match(details, /- \[x\] Create User data model/);
+  assert.match(details, /- \[ \] Implement UserController endpoint/);
+  assert.match(details, /- \[ \] Add unit tests for UserController/);
+  assert.match(details, /src\/models\/user\.ts, src\/controllers\/user\.ts/);
+  assert.match(details, /Staged: src\/models\/user\.ts/);
+  assert.match(details, /Unstaged\/untracked: src\/controllers\/user\.ts \(modified\), src\/controllers\/user\.test\.ts \(untracked\)/);
+  assert.match(details, /Inspect the existing changes with `git status` and `git diff`/);
 });
 
 test('a loop pass is handed the findings that sent it round, with repeats called out and history listed', () => {

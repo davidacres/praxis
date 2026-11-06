@@ -33,6 +33,7 @@ import {
   isGuardedPath,
   type ChangedFile,
   formatIterationContext,
+  formatInterruptedSessionDetails,
   formatRunParameters,
   resolveTicketContext,
   type FinishedStageSession,
@@ -64,7 +65,7 @@ import { getSessionCodeIntelligenceServer } from './codeIntelligenceIpc';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 import { stageCapableProvider, usableProviders } from './providerFallback';
 import { restoreWorktreeTo } from './runWork';
-import { getCurrentBranch } from './gitService';
+import { getCurrentBranch, getGitStatus } from './gitService';
 
 /**
  * Agent stages as real, attributed sessions (FX-BE-025 / TASK-114, TASK-115).
@@ -332,6 +333,34 @@ export async function runWorkflowAgentStage(
   const iteration = formatIterationContext(workflowRun, recordNodeId);
   if (iteration) taskDefinition.scope += `\n\n${iteration}`;
   if (item) taskDefinition.scope += `\n\n${item.brief}`;
+
+  // If this stage is continuing/retrying an attempt that was interrupted by an app crash or restart,
+  // hand the agent exact details of what the previous session was doing, its task progress, and
+  // the in-progress worktree state so it continues seamlessly rather than guessing from changes.
+  const nodeState = workflowRun.nodes[recordNodeId];
+  const lastAttempt = nodeState?.attempts[nodeState.attempts.length - 1];
+  const isInterruptedAttempt =
+    lastAttempt?.pause === 'environment' && (lastAttempt?.error?.toLowerCase().includes('interrupted') ?? false);
+  const previousSession = sessions.getAgentSession(issueKey);
+  const isInterruptedSession = Boolean(previousSession?.interruptedByRestart);
+
+  if (isInterruptedAttempt || isInterruptedSession) {
+    if (previousSession && !previousSession.eventsLoaded) {
+      await sessions.ensureSessionTranscript(issueKey).catch(() => undefined);
+    }
+    let gitStatus: Awaited<ReturnType<typeof getGitStatus>> | undefined;
+    if (worktreePath) {
+      try {
+        gitStatus = await getGitStatus(worktreePath);
+      } catch {
+        // ignore if worktree status cannot be read
+      }
+    }
+    const interruptedDetails = formatInterruptedSessionDetails(previousSession, gitStatus);
+    if (interruptedDetails) {
+      taskDefinition.scope += `\n\n${interruptedDetails}`;
+    }
+  }
 
   // Attempts that judged the stage and failed. The one launching now is not among them, and one
   // that stopped without a verdict (provider limit, environment) never spent the stage.

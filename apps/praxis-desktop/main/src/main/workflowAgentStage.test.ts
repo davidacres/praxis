@@ -2,6 +2,7 @@ import { stageSessionCompletion, shouldContinueReadOnlyDiscovery } from './workf
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { IssueDetails, IssueTrackerService } from '@praxis/core';
+import { formatInterruptedSessionDetails } from '@praxis/core';
 import { resolveStageTicketContext } from './workflowAgentStage';
 
 function mockTrackerService(issues: Record<string, IssueDetails>): IssueTrackerService {
@@ -187,4 +188,48 @@ test('an untested read-only tool-access block gets discovery recovery, but obser
   assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'failed', lastError: 'Rate limit exceeded' }, []), false);
   assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'completed', responseText: '{"summary":"Reviewed", "findings":[], "metrics":{"filesReviewed":1,"issuesFound":0}}' }, [], true), true);
   assert.equal(shouldContinueReadOnlyDiscovery(node, 'read-only', { state: 'completed', responseText: '{"summary":"Reviewed supplied plan", "findings":[]}' }, []), false);
+});
+
+test('interrupted workflow stage retry includes in-progress details and worktree status in scope', () => {
+  const details = formatInterruptedSessionDetails(
+    {
+      handoverBrief: {
+        schemaVersion: 1,
+        revision: 1,
+        updatedAt: '2026-11-06T00:00:00.000Z',
+        sourceEventCount: 3,
+        freshness: 'fresh',
+        progress: 'Implemented parser and started serializer.',
+        changes: 'Touched 2 files',
+        decisions: '',
+        risks: '',
+        openQuestions: '',
+        nextSteps: 'Complete serializer and add tests',
+        userNotes: '',
+        touchedFiles: ['src/parser.ts', 'src/serializer.ts']
+      },
+      taskList: [
+        { content: 'Implement parser logic', status: 'completed', priority: 'high' },
+        { content: 'Implement serializer logic', status: 'in_progress', priority: 'medium' }
+      ]
+    },
+    {
+      files: [
+        { path: 'src/parser.ts', staged: true },
+        { path: 'src/serializer.ts', staged: false, worktreeStatus: 'modified' }
+      ]
+    }
+  );
+
+  assert.ok(details);
+  assert.match(details, /In-Progress Details from Interrupted Session/);
+  assert.match(details, /Praxis crashed or stopped while the previous session was actively executing this stage/);
+  assert.match(details, /Do NOT discard these changes, start over, or guess what they are for/);
+  assert.match(details, /Implemented parser and started serializer/);
+  assert.match(details, /- \[x\] Implement parser logic/);
+  assert.match(details, /- \[ \] Implement serializer logic/);
+  assert.match(details, /src\/parser\.ts, src\/serializer\.ts/);
+  assert.match(details, /Staged: src\/parser\.ts/);
+  assert.match(details, /Unstaged\/untracked: src\/serializer\.ts \(modified\)/);
+  assert.match(details, /Inspect the existing changes with `git status` and `git diff`/);
 });

@@ -75,7 +75,8 @@ async function seed(page: Page, repo: string, marker: string): Promise<{ project
             type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
             command: 'test', args: ['-f', markerPath], successExitCodes: [0], timeoutMs: 30000,
             outputs: [{ id: 'verify-log', kind: 'log', required: false }],
-            satisfiesGate: 'qa'
+            satisfiesGate: 'qa',
+            affectedTests: false
           },
           {
             type: 'approval', id: 'approve', name: 'Approve', x: 240, y: 0, inputs: [],
