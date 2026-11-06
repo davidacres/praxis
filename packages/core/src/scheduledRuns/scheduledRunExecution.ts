@@ -40,9 +40,9 @@ export type EntryProgress = Pick<ScheduledEntryOutcome, 'estimate' | 'artifacts'
   | { kind: 'running'; provider?: string; sessionId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'gate'; nodeId: string; label: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   /** Stopped on the provider's limit or a stage's tooling; waiting for the user. */
-  | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; edgeId?: string; recovery?: { nodeId: string; attempts: number; maxAttempts: number }; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'stalled'; reason: string; pauseReason: ScheduledPauseReason; edgeId?: string; recovery?: { nodeId: string; attempts: number; maxAttempts: number; automatic?: boolean }; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'succeeded'; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
-  | { kind: 'failed'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
+  | { kind: 'failed'; reason: string; nodeId?: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] }
   | { kind: 'cancelled'; reason: string; spend?: ScheduledEntrySpend; exhausted?: readonly string[] });
 
 function findEntry(run: ScheduledRun, entryId: string): ScheduledQueueEntry {

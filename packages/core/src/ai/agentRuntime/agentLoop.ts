@@ -89,6 +89,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const startedAt = nowMs();
   let lastActivity = startedAt;
   let stepCount = 0;
+  const toolCallCounts = new Map<string, number>();
+  let consecutiveDuplicateReads = 0;
+  let synthesisPromptInjected = false;
+  const isReadOnly = (options.tools ?? []).every(t =>
+    ['read_file', 'list_dir', 'read_image'].includes(t.name) || (t.description ?? '').toLowerCase().includes('read-only')
+  );
 
   const history: WireMessage[] = [...(options.history ?? [])];
   const lastHistoryRole = history.at(-1)?.role;
@@ -137,10 +143,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         { role: 'system', content: options.systemPrompt },
         ...history
       ];
+      const shouldForceFinalResponse = consecutiveDuplicateReads >= 4 || (isReadOnly && stepCount >= 30);
+      const activeTools = shouldForceFinalResponse ? [] : options.tools;
       const body = options.adapter.buildChatRequest({
         modelId: options.modelId,
         messages,
-        tools: options.tools,
+        tools: activeTools,
         streamUsage: options.gateway.streamUsage,
         gatewayCaching: options.gateway.gatewayCaching,
         reasoningEffort: options.reasoningEffort
@@ -223,7 +231,29 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           arguments: call.arguments
         });
 
-        const result = await options.toolExecutor.execute(call.name, call.arguments);
+        const isReadTool = ['read_file', 'list_dir', 'read_image'].includes(call.name);
+        const callKey = `${call.name}:${JSON.stringify(call.arguments)}`;
+        const priorCount = toolCallCounts.get(callKey) ?? 0;
+        if (isReadTool) {
+          toolCallCounts.set(callKey, priorCount + 1);
+        } else {
+          toolCallCounts.clear();
+          consecutiveDuplicateReads = 0;
+        }
+
+        let result: { ok: boolean; content: string; data?: AgentToolEventData; images?: WireImageAttachment[] };
+        if (isReadTool && priorCount >= 2) {
+          consecutiveDuplicateReads += 1;
+          const target = typeof (call.arguments as { path?: unknown })?.path === 'string'
+            ? (call.arguments as { path: string }).path
+            : 'this target';
+          const loopNotice = `[Notice: You have already inspected ${target} ${priorCount + 1} times in this session. Its contents have not changed and will not be re-read. Do not re-inspect files in a loop. You have gathered sufficient codebase context; synthesize your findings and produce your required stage response now.]`;
+          result = { ok: true, content: loopNotice };
+        } else {
+          if (isReadTool) consecutiveDuplicateReads = 0;
+          result = await options.toolExecutor.execute(call.name, call.arguments);
+        }
+
         touch();
         emit({
           type: 'tool_complete',
@@ -231,7 +261,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           name: call.name,
           ok: result.ok,
           content: result.content,
-          data: result.data
+          data: result.data as any
         });
         toolResults.push({ callId: call.id, content: result.content });
         // A `role: 'tool'` message is text-only on every provider, so an image
@@ -244,6 +274,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
 
       history.push(...toolResultMessages(toolResults));
+      if (!synthesisPromptInjected && (consecutiveDuplicateReads >= 2 || (isReadOnly && stepCount >= 25))) {
+        synthesisPromptInjected = true;
+        history.push({
+          role: 'user',
+          content: 'You have gathered comprehensive context from the codebase. Do not invoke any further tools. Deliver your complete output and final response now.'
+        });
+      }
       if (toolImages.length > 0) {
         history.push({
           role: 'user',

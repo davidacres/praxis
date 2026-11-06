@@ -207,15 +207,6 @@ function mergeConflictResolver(
   };
 }
 
-/** What the run's plan stages wrote, for the `Tests to keep passing` its QA check also runs. */
-function runPlanText(run: WorkflowRun): string | undefined {
-  const texts = run.definition.nodes
-    .filter(node => isAgentTaskNode(node) && node.outputs.some(output => output.kind === 'plan'))
-    .map(node => getAiSessionManager().getAgentSession(stageSessionKey(run.runId, node.id))?.responseText ?? '')
-    .filter(Boolean);
-  return texts.length ? texts.join('\n\n') : undefined;
-}
-
 async function runTrustError(run: WorkflowRun): Promise<string | undefined> {
   const trust = await projectWorkflowTrust(getWorkflowBackingStore(), projectFolderFor(run), run.workflowId, run.definition, true);
   if (!trust.trusted) return 'This project workflow needs local workspace trust. Start a reviewed run on the desktop.';
@@ -250,7 +241,7 @@ const dispatcher: StageDispatcher = {
       }, context.signal);
       if (installError) return { status: 'failed' as const, error: installError };
     }
-    return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot(), { planText: runPlanText });
+    return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
   async runMerge(node, context, onSession) {
     const error = await runTrustError(context.run);

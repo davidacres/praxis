@@ -17,6 +17,9 @@ import { countableFindings, definitionWaivers, loopStatuses, SEVERITY_RANK } fro
 import { filterUnwaivedFindings } from './waiverRegister';
 import { downstreamNodeIds, type WorkflowLoopIteration, type WorkflowRun } from './workflowRun';
 import { nodeMutatesWorktree, type CheckFinding } from './workflowTypes';
+import type { AgentEventSummary, AgentSessionRecord, AgentTaskListItem, HandoverBrief } from '../ai/agentTypes';
+import type { SessionChangeSummary } from '../ai/sessionChangeSummary';
+import { buildDeterministicHandoverBrief, collectTouchedFiles, summariseForBrief } from '../ai/sessionHandover';
 
 /** Enough for a full set of findings with suggestions; small enough not to become the prompt. */
 export const ITERATION_BRIEF_MAX_CHARS = 8000;
@@ -159,17 +162,33 @@ export function formatIterationContext(run: WorkflowRun, nodeId: string, maxChar
     }
   }
 
-  // An ordinary retry in this revision: tell the stage why its last attempt failed.
+  // An ordinary retry in this revision: tell the stage why its last attempt failed, or that it was interrupted.
   if (state) {
     const thisRevision = state.attempts.slice(state.revisionBase ?? 0);
-    const failed = thisRevision.filter(attempt => attempt.outcome === 'failed' && !attempt.pause && attempt.error);
-    if (failed.length > 0) {
-      const last = failed[failed.length - 1];
+    const lastAttempt = thisRevision[thisRevision.length - 1];
+    const isInterrupted =
+      lastAttempt &&
+      lastAttempt.outcome === 'failed' &&
+      lastAttempt.pause === 'environment' &&
+      (lastAttempt.error?.toLowerCase().includes('interrupted') ?? false);
+
+    if (isInterrupted) {
       sections.push([
-        `### Previous attempt${failed.length === 1 ? '' : 's'} at this stage failed (${failed.length})`,
-        `The most recent failed with: ${last.error!.trim().slice(0, 1500)}`,
-        'Work out why before repeating the same approach.'
+        '### Previous attempt was interrupted mid-flight by an app restart or crash',
+        'The previous attempt at this stage was running when Praxis stopped or crashed.',
+        'The git worktree and working files retain the in-progress changes from that session.',
+        'Do NOT start from scratch or guess why changes are present. Inspect the working tree (git status / diff), verify what was already done against the goal and plan, and continue the implementation from that point.'
       ].join('\n'));
+    } else {
+      const failed = thisRevision.filter(attempt => attempt.outcome === 'failed' && !attempt.pause && attempt.error);
+      if (failed.length > 0) {
+        const last = failed[failed.length - 1];
+        sections.push([
+          `### Previous attempt${failed.length === 1 ? '' : 's'} at this stage failed (${failed.length})`,
+          `The most recent failed with: ${last.error!.trim().slice(0, 1500)}`,
+          'Work out why before repeating the same approach.'
+        ].join('\n'));
+      }
     }
   }
 
@@ -214,4 +233,102 @@ export function formatRunParameters(run: Pick<WorkflowRun, 'definition' | 'param
     .map(parameter => `- ${parameter.label}: ${String(values[parameter.id])}`);
   if (lines.length === 0) return undefined;
   return ['What the person who started this run asked for:', ...lines].join('\n');
+}
+
+export interface GitStatusSummaryInput {
+  files?: Array<{ path: string; staged?: boolean; worktreeStatus?: string }>;
+}
+
+export interface InterruptedSessionSummaryInput {
+  handoverBrief?: HandoverBrief;
+  taskList?: AgentTaskListItem[];
+  responseText?: string;
+  events?: AgentEventSummary[];
+  changeSummary?: SessionChangeSummary;
+}
+
+/**
+ * Details of in-progress work from a session that was interrupted by a crash or restart.
+ * Formats tasks completed vs remaining, files modified, and instructions to prevent the
+ * resumed agent from guessing what the in-progress changes are.
+ */
+export function formatInterruptedSessionDetails(
+  previous?: InterruptedSessionSummaryInput,
+  gitStatus?: GitStatusSummaryInput
+): string | undefined {
+  if (!previous && (!gitStatus?.files || gitStatus.files.length === 0)) {
+    return undefined;
+  }
+
+  const lines: string[] = [
+    '### In-Progress Details from Interrupted Session',
+    'Praxis crashed or stopped while the previous session was actively executing this stage.',
+    'The working directory and git worktree retain in-progress changes from that attempt. Do NOT discard these changes, start over, or guess what they are for — continue the implementation from where the previous session left off.'
+  ];
+
+  let progress: string | undefined;
+  if (previous?.handoverBrief?.progress && previous.handoverBrief.progress !== 'Session has not produced work yet.') {
+    progress = previous.handoverBrief.progress;
+  } else if (previous?.responseText?.trim()) {
+    progress = summariseForBrief(previous.responseText, 600);
+  } else if (previous?.events?.length) {
+    const brief = buildDeterministicHandoverBrief(previous as AgentSessionRecord);
+    if (brief.progress && brief.progress !== 'Session has not produced work yet.') {
+      progress = brief.progress;
+    }
+  }
+
+  if (progress) {
+    lines.push(`**Previous Progress / Activity:**\n${progress}`);
+  }
+
+  const completedTasks = (previous?.taskList ?? [])
+    .filter(t => t.status === 'completed')
+    .map(t => t.content);
+
+  if (completedTasks.length > 0) {
+    lines.push('**Tasks Completed Before Interruption:**\n' + completedTasks.map(t => `- [x] ${t}`).join('\n'));
+  } else if (previous?.handoverBrief?.decisions) {
+    lines.push(`**Completed Work / Decisions:**\n${previous.handoverBrief.decisions}`);
+  }
+
+  const pendingTasks = (previous?.taskList ?? [])
+    .filter(t => t.status !== 'completed')
+    .map(t => t.content);
+
+  if (pendingTasks.length > 0) {
+    lines.push('**Remaining / In-Flight Tasks:**\n' + pendingTasks.map(t => `- [ ] ${t}`).join('\n'));
+  } else if (previous?.handoverBrief?.nextSteps && previous.handoverBrief.nextSteps !== 'Continue the current task.') {
+    lines.push(`**Planned Next Steps:**\n${previous.handoverBrief.nextSteps}`);
+  }
+
+  const touched = previous?.handoverBrief?.touchedFiles?.length
+    ? previous.handoverBrief.touchedFiles
+    : previous?.events?.length
+      ? collectTouchedFiles(previous.events)
+      : [];
+
+  if (touched.length > 0) {
+    lines.push(`**Files Touched Before Interruption:**\n${touched.slice(0, 20).join(', ')}${touched.length > 20 ? '…' : ''}`);
+  }
+
+  const staged = (gitStatus?.files ?? []).filter(f => f.staged).map(f => f.path);
+  const unstaged = (gitStatus?.files ?? []).filter(f => !f.staged).map(f => `${f.path}${f.worktreeStatus ? ` (${f.worktreeStatus})` : ''}`);
+
+  if (staged.length > 0 || unstaged.length > 0) {
+    const gitParts: string[] = [];
+    if (staged.length > 0) gitParts.push(`Staged: ${staged.slice(0, 15).join(', ')}${staged.length > 15 ? '…' : ''}`);
+    if (unstaged.length > 0) gitParts.push(`Unstaged/untracked: ${unstaged.slice(0, 15).join(', ')}${unstaged.length > 15 ? '…' : ''}`);
+    lines.push(`**Current Worktree Git Status:**\n${gitParts.join('\n')}`);
+  }
+
+  lines.push(
+    '**Continuation Instructions:**\n' +
+    '1. Inspect the existing changes with `git status` and `git diff` to understand what was already written.\n' +
+    '2. Complete the remaining requirements from the plan and ticket.\n' +
+    '3. Run focused tests to verify all changes.\n' +
+    '4. Create a git commit with the completed work before finishing.'
+  );
+
+  return lines.join('\n\n');
 }

@@ -7,11 +7,12 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentEventSummary, AgentToolMode } from '../agentTypes';
+import { hasRepositoryInspection } from '../../workflows/workflowStageTask';
 
-function permissionHost(toolMode: AgentToolMode, autoApprove = true) {
+function permissionHost(toolMode: AgentToolMode, autoApprove = true, scheduledRun = false) {
   const events: AgentEventSummary[] = [];
   const agentHost = new AcpAgentHost({
-    getAgentSession: () => ({ toolMode }),
+    getAgentSession: () => ({ toolMode, taskDefinition: { scheduledRun } }),
     appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added),
     updateAgentState: () => {}
   } as never, { appendLine: () => {} });
@@ -633,4 +634,131 @@ for await (const line of createInterface({ input: process.stdin })) {
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
+});
+
+test('read-only launch and continuation authorize inspection in the actual ACP prompt', async () => {
+  const folder = await mkdtemp(join(tmpdir(), 'praxis-acp-review-prompt-'));
+  const fixture = join(folder, 'agent.mjs');
+  const promptFile = join(folder, 'prompt.txt');
+  await writeFile(fixture, `
+import { createInterface } from 'node:readline';
+import { writeFileSync } from 'node:fs';
+const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
+for await (const line of createInterface({ input: process.stdin })) {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: {} } });
+  else if (request.method === 'session/new') send({ id: request.id, result: { sessionId: 'review' } });
+  else if (request.method === 'session/prompt') {
+    writeFileSync(process.env.PROMPT_FILE, request.params.prompt[0].text);
+    send({ id: request.id, result: { stopReason: 'end_turn' } });
+  } else if (request.id !== undefined) send({ id: request.id, result: {} });
+}
+`);
+  const record = { state: 'completed', sessionId: 'owner', provider: 'codex-cli', toolMode: 'read-only', events: [] as AgentEventSummary[], taskDefinition: { kind: 'general', goal: 'Review the frozen patch', scope: 'Read .praxis-run/change-diff.patch', definitionOfDone: 'Report findings' } };
+  const manager = {
+    getAgentSession: () => record,
+    createAgentSession: (_key: string, sessionId: string) => { record.sessionId = sessionId; },
+    appendAgentEvents: (_key: string, events: AgentEventSummary[]) => record.events.push(...events),
+    updateAgentState: (_key: string, state: string) => { record.state = state; },
+    updateAgentOutput: (_key: string, value: object) => Object.assign(record, value),
+    updateAgentRuntime: (_key: string, value: object) => Object.assign(record, value),
+    refreshHandoverBrief: async () => {}
+  };
+  const host = new AcpAgentHost(manager as never, { appendLine: () => {} });
+  const options = { command: process.execPath, args: [fixture], workingDirectory: folder, toolMode: 'read-only' as const, env: { PROMPT_FILE: promptFile } };
+  try {
+    for (const continuation of [false, true]) {
+      if (continuation) await host.continueTask('review', 'Recheck the patch', options);
+      else await host.startTask({ key: 'review', summary: 'Review', issueType: 'Task', status: 'In progress' } as never, record.taskDefinition as never, 'codex-cli', options);
+      for (let i = 0; i < 300 && host.hasActiveTask('review'); i++) await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(host.hasActiveTask('review'), false);
+      assert.equal(record.state, 'completed');
+      const prompt = await readFile(promptFile, 'utf8');
+      assert.match(prompt, /You may inspect files using file tools or read-only shell commands/);
+      assert.match(prompt, /Do not edit files, run builds or tests/);
+      assert.match(prompt, /functions\.exec.*ALL_TOOLS.*tools\.exec_command/);
+      assert.doesNotMatch(prompt, /Do not edit files, execute commands, or mutate/);
+    }
+  } finally {
+    await host.abortTask('review');
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
+test('read-only ACP shell inspection remains permitted while writes and test execution stay denied', async () => {
+  for (const autoApprove of [false, true]) {
+    const { agentHost } = permissionHost('read-only', autoApprove);
+    const host = agentHost as unknown as { requestPermission(key: string, request: unknown): Promise<string> };
+    for (const [command, expected] of [
+      ['git status --short', 'allow_always'],
+      ['cat .praxis-run/change-diff.patch', 'allow_always'],
+      ['git show HEAD:package.json', 'allow_always'],
+      ['npm test', 'deny'],
+      ['git reset --hard', 'deny'],
+      ['echo changed > package.json', 'deny']
+    ]) {
+      assert.equal(await host.requestPermission('permission-test', { toolCallId: command, title: 'Shell', kind: 'execute', rawInput: { command: ['bash', '-lc', command] }, options: [] }), expected, command);
+    }
+  }
+});
+
+test('scheduled ACP tasks block full desktop e2e suites while allowing focused tests and smoke', async () => {
+  const { agentHost, events } = permissionHost('full', true, true);
+  const host = agentHost as unknown as { requestPermission(key: string, request: unknown): Promise<string> };
+  const ask = (command: string) => host.requestPermission('permission-test', {
+    toolCallId: command,
+    title: 'Run tests',
+    kind: 'execute',
+    rawInput: { command: ['bash', '-lc', command] },
+    options: []
+  });
+  assert.equal(await ask('npm run test:desktop -- --output=/tmp/full'), 'deny');
+  assert.equal(await ask('npm run test:desktop:themes'), 'deny');
+  assert.equal(await ask('npm run test:desktop -- e2e/workflowRun.spec.ts'), 'allow_always');
+  assert.equal(await ask('npm run test:desktop:smoke'), 'allow_always');
+  assert.ok(events.some(event => /Blocked full desktop e2e/.test(event.summary)));
+});
+
+test('ACP preserves read arguments so workflow inspection is attributable to the completed tool call', () => {
+  const events: AgentEventSummary[] = [];
+  const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'patch-read', name: 'read_file', kind: 'read', status: 'in_progress', rawInput: { path: '.praxis-run/change-diff.patch' } }, task('review'));
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'patch-read', status: 'completed' }, task('review'));
+  assert.deepEqual(events[0].data?.args, { path: '.praxis-run/change-diff.patch' });
+  assert.equal(events[1].data?.callId, events[0].data?.callId);
+  assert.equal(events[1].data?.ok, true);
+});
+
+test('ACP keeps tool input sent after the opening tool_call, as claude-agent-acp streams it', () => {
+  const events: AgentEventSummary[] = [];
+  const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  const review = task('review');
+  // The order claude-agent-acp sends a streamed call in: an empty opening call, input refinements, then the result.
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'mcp-read', name: 'mcp__praxis-review-files__read_file', kind: 'other', status: 'pending' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'mcp-read', rawInput: { path: 'apps/praxis-desktop/main/src/main/teamChatRepository.ts' } }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'mcp-read', rawInput: { limit: 400 } }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'mcp-read', status: 'completed', rawOutput: 'import * as fs from "node:fs";' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'bash-show', name: 'Bash', kind: 'execute', status: 'pending' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'bash-show', rawInput: { command: 'git show --stat HEAD' } }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'bash-show', status: 'completed', rawOutput: 'commit d15874ef' }, review);
+
+  assert.equal(events.length, 4, 'refinements add no events of their own');
+  assert.equal(events[0].data?.args, undefined);
+  assert.deepEqual(events[1].data?.args, { path: 'apps/praxis-desktop/main/src/main/teamChatRepository.ts', limit: 400 });
+  assert.deepEqual(events[3].data?.args, { command: 'git show --stat HEAD' });
+  assert.equal(hasRepositoryInspection(events), true);
+  assert.equal(hasRepositoryInspection(events.slice(0, 2)), true, 'the MCP read alone counts');
+  assert.equal((review as { toolInputs?: Map<string, unknown> }).toolInputs?.size ?? 0, 0, 'finished calls are forgotten');
+});
+
+test('a review with no recorded input still has no observed read', () => {
+  const events: AgentEventSummary[] = [];
+  const host = new AcpAgentHost({ appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added) } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  const review = task('review');
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'search', name: 'ToolSearch', kind: 'other', status: 'pending' }, review);
+  handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'search', status: 'completed', rawOutput: 'Tool: mcp__praxis-review-files__read_file' }, review);
+  assert.equal(hasRepositoryInspection(events), false);
 });

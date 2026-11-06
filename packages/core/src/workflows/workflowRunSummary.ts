@@ -56,6 +56,8 @@ export interface StageRow {
   sessionKey?: string;
   snapshotRef?: string;
   gate?: WorkflowGateKind;
+  /** Artifact contract ids this node consumes. */
+  inputs?: string[];
   artifacts: Array<{ contractId: string; kind: string; path?: string; reference?: WorkflowBoardReference }>;
   lastError?: string;
   /** The last attempt stopped without a verdict (AI provider limit, or the stage's tooling could not run); retrying does not spend an attempt. */
@@ -353,6 +355,7 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
         : {}),
       ...(state?.snapshotRef ? { snapshotRef: state.snapshotRef } : {}),
       ...(nodeGate(node) ? { gate: nodeGate(node) } : {}),
+      ...(node.inputs?.length ? { inputs: node.inputs } : {}),
       artifacts: (state?.artifacts ?? []).map(artifact => ({
         contractId: artifact.contractId,
         kind: artifact.kind,

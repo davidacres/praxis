@@ -388,7 +388,7 @@ export async function startWorkflowRun(input: {
   planInput?: WorkflowPlanInput;
   /** Set by the scheduled-run runner so a restart can find the run it launched (FX-BF-047). */
   scheduledLaunchToken?: string;
-  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown; parameters?: unknown };
+  options?: { permissionMode?: unknown; uncommittedChanges?: unknown; aiProvider?: unknown; aiModel?: unknown; providerLimitPolicy?: unknown; parameters?: unknown; sharedDeliveryBranch?: unknown; deferMerge?: unknown };
 }): Promise<WorkflowRunSummary> {
   const { projectId, workflowId, taskTitle, issue, controller, planInput, scheduledLaunchToken, options } = input;
   let instantiated = false;
@@ -472,10 +472,15 @@ export async function startWorkflowRun(input: {
   const run = createWorkflowRun({
     runId: randomUUID(),
     projectId,
-    definition: { ...definition, name: `${definition.name} — ${taskTitle}`.trim() },
+    definition: {
+      ...definition,
+      name: `${definition.name} — ${taskTitle}`.trim()
+    },
     at: new Date().toISOString(),
     ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {}),
     ...(scheduledLaunchToken ? { scheduledLaunchToken } : {}),
+    ...(typeof options?.sharedDeliveryBranch === 'string' && options.sharedDeliveryBranch ? { sharedDeliveryBranch: options.sharedDeliveryBranch } : {}),
+    ...(options?.deferMerge === true ? { deferMerge: true } : {}),
     ...(controller ? { controllerSessionKey: controller.sessionKey, controllerSessionId: controller.sessionId } : {}),
     ...(planInput ? { planInput } : {}),
     ...(options?.permissionMode === 'auto' ? { permissionMode: 'auto' as const } : {}),

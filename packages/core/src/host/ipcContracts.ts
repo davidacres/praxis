@@ -1411,6 +1411,8 @@ export interface ScheduledRunsIpc {
   /** Creates or updates a schedule from the composer. Rejects with a readable message for an invalid one. */
   save(input: SaveScheduledRunInput): Promise<ScheduledRunView>;
   remove(id: string): Promise<void>;
+  /** Archives or restores a scheduled run. Running schedules cannot be archived. */
+  archive(id: string, archived: boolean): Promise<ScheduledRunView>;
   /**
    * Validates what the composer holds without saving it: the readiness it would have,
    * or the reason it cannot be saved yet (a start that has passed, a time that does not exist).

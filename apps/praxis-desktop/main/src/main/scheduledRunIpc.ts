@@ -119,8 +119,21 @@ export function registerScheduledRunIpc(): void {
 
   ipcMain.handle('scheduledRuns:remove', async (_event, id: string): Promise<void> => {
     const run = getScheduledRunStore().get(id);
+    if (run && (run.status === 'running' || run.status === 'paused')) {
+      try {
+        await getScheduledRunRunner().cancel(id);
+      } catch {
+        // Fall through to removal
+      }
+    }
     await getScheduledRunStore().remove(id);
     notifyScheduledRunsChanged(run?.projectId);
+  });
+
+  ipcMain.handle('scheduledRuns:archive', async (_event, id: string, archived: boolean): Promise<ScheduledRunView> => {
+    const run = await getScheduledRunStore().setArchived(id, archived);
+    notifyScheduledRunsChanged(run.projectId);
+    return buildScheduledRunView(run);
   });
 
   ipcMain.handle('scheduledRuns:setArmed', async (_event, id: string, armed: boolean): Promise<ScheduledRunView> => {

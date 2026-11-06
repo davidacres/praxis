@@ -1,7 +1,7 @@
 import { spawnCheck } from './workflowCheckProcess';
 import { formatTestRunSummary, summarizeTestRun } from './testRunnerSummary';
 import { removeEscapingDependencyLinks } from './worktreeDependencyLinks';
-import { runAffectedTests, selectAffectedTests } from './affectedTestsRunner';
+import { runAffectedTests, selectChangedTests } from './affectedTestsRunner';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -45,17 +45,11 @@ import {
 const OUTPUT_TAIL = 4000;
 const execFileAsync = promisify(execFile);
 
-export interface WorkflowCheckPorts {
-  /** The run's plan text, for the `Tests to keep passing` a QA check also runs. */
-  planText?(run: StageDispatchContext['run']): string | undefined;
-}
-
 export async function runWorkflowCheck(
   node: WorkflowCheckNode,
   context: StageDispatchContext,
   fallbackCwd: string | undefined,
-  evidenceRoot: string,
-  ports: WorkflowCheckPorts = {}
+  evidenceRoot: string
 ): Promise<StageOutcome> {
   const cwd = context.worktreePath ?? fallbackCwd;
   if (!cwd) {
@@ -64,6 +58,10 @@ export async function runWorkflowCheck(
   if (!node.command.trim()) {
     return { status: 'failed', error: 'This check has no command.' };
   }
+
+  // QA's deterministic contract is the ticket's own changed tests. The template's historical
+  // `npm test` command was launching every unit suite plus desktop smoke for every ticket.
+  const ticketQa = node.satisfiesGate === 'qa' && node.affectedTests !== false;
 
   const successCodes = node.successExitCodes?.length ? node.successExitCodes : [0];
   const capturedAt = new Date().toISOString();
@@ -85,18 +83,19 @@ export async function runWorkflowCheck(
       context.reportProgress?.(`Removed ${link}, a link to ${target} outside this run's worktree, so this check cannot change files there.`);
     }
   }
-  let result = await spawnCheck(command, cwd, context.signal, line => {
+  let result = ticketQa
+    ? { code: 0, timedOut: false, output: 'QA runs only test files added or updated in this ticket.' }
+    : await spawnCheck(command, cwd, context.signal, line => {
     const progress = checkProgressLine(line);
     if (progress) context.reportProgress?.(progress);
   });
 
-  // A QA check also runs the tests for this change, which the project's own test command may not
-  // include (a smoke set, say). Only once that command passed: a failing one already fails QA.
+  // QA is the changed-test gate; it does not run a project-wide test command.
   if (
-    node.satisfiesGate === 'qa' && node.affectedTests !== false && context.worktreePath && fallbackCwd &&
+    ticketQa && context.worktreePath &&
     result.code !== null && (node.successExitCodes?.length ? node.successExitCodes : [0]).includes(result.code) && !context.signal?.aborted
   ) {
-    const affected = await runChangeTests(node, context, context.worktreePath, fallbackCwd, ports);
+    const affected = await runChangeTests(node, context, context.worktreePath, fallbackCwd ?? context.worktreePath);
     if (affected) {
       result = {
         ...result,
@@ -269,19 +268,21 @@ async function runChangeTests(
   node: WorkflowCheckNode,
   context: StageDispatchContext,
   worktreePath: string,
-  projectFolder: string,
-  ports: WorkflowCheckPorts
+  projectFolder: string
 ) {
-  const baseCommit = await runForkPoint(worktreePath, projectFolder);
+  const baseCommit = context.run.scheduledLaunchToken
+    ? await scheduledTicketBase(worktreePath, context.run.startedAt, context.run.worktreeBaseRef)
+    : context.run.worktreeBaseRef ?? await runForkPoint(worktreePath, projectFolder);
   if (!baseCommit) {
-    context.reportProgress?.('Could not tell where this run branched, so the tests for this change were not picked.');
-    return undefined;
+    const message = 'Could not determine this ticket’s worktree base, so QA cannot safely identify its changed tests.';
+    context.reportProgress?.(message);
+    return { code: 1, timedOut: false, output: `== Tests for this change ==\n${message}` };
   }
   try {
-    const selection = await selectAffectedTests(worktreePath, baseCommit, ports.planText?.(context.run));
+    const selection = await selectChangedTests(worktreePath, baseCommit);
     context.reportProgress?.(selection.tests.length
       ? `Running the ${selection.tests.length} test file${selection.tests.length === 1 ? '' : 's'} for this change.`
-      : 'No existing tests refer to what this change touched.');
+      : 'No test files were added or updated in this ticket.');
     return await runAffectedTests(worktreePath, selection, {
       spawn: (check, cwd, signal) => spawnCheck(check, cwd, signal, line => {
         const progress = checkProgressLine(line);
@@ -289,10 +290,33 @@ async function runChangeTests(
       })
     }, { signal: context.signal, timeoutMs: node.timeoutMs });
   } catch (error) {
-    // Praxis failing to pick tests is not the change failing them: say so, and leave QA to the project's command.
+    // Selection or runner failures are QA failures; never silently pass without running the changed tests.
     const message = `Could not pick or run the tests for this change: ${error instanceof Error ? error.message : String(error)}`;
     context.reportProgress?.(message);
-    return { code: 0, timedOut: false, output: `== Tests for this change ==\n${message}` };
+    return { code: 1, timedOut: false, output: `== Tests for this change ==\n${message}` };
+  }
+}
+
+/** Recover the ticket-start commit for older scheduled runs whose worktree was reacquired after retries. */
+async function scheduledTicketBase(
+  worktreePath: string,
+  startedAt: string,
+  capturedBase: string | undefined
+): Promise<string | undefined> {
+  if (capturedBase) {
+    try {
+      // This ref is captured from the ticket's worktree when that checkout is acquired.
+      // A retry can reacquire the worktree after the workflow's original startedAt, so
+      // comparing commit timestamps here incorrectly falls back to the schedule-wide base.
+      await execFileAsync('git', ['merge-base', '--is-ancestor', capturedBase, 'HEAD'], { cwd: worktreePath });
+      return capturedBase;
+    } catch { /* fall through to the ticket start time */ }
+  }
+  try {
+    const commit = (await execFileAsync('git', ['log', `--before=${startedAt}`, '-n', '1', '--format=%H'], { cwd: worktreePath })).stdout.trim();
+    return /^[0-9a-f]{7,64}$/i.test(commit) ? commit : undefined;
+  } catch {
+    return undefined;
   }
 }
 

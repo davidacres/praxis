@@ -33,22 +33,25 @@ test.afterEach(async () => {
   while (tempDirs.length) fs.rmSync(tempDirs.pop() as string, { recursive: true, force: true });
 });
 
-/** A profile dir with one trusted agent already on disk. */
-function profileWithAgent(): { userDataDir: string; settingsPath: string } {
+/** A profile dir with one or more trusted agents already on disk. */
+function profileWithAgent(...extraAgents: string[]): { userDataDir: string; settingsPath: string } {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-agent-'));
   tempDirs.push(userDataDir);
-  const agentDir = path.join(userDataDir, 'agents', 'wf-reviewer');
-  fs.mkdirSync(agentDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(agentDir, 'agent.json'),
-    JSON.stringify({
-      schemaVersion: 1,
-      id: 'wf-reviewer',
-      name: 'Workflow Reviewer',
-      type: 'gateway',
-      entry: 'noop'
-    })
-  );
+  const agentIds = ['wf-reviewer', ...extraAgents];
+  for (const id of agentIds) {
+    const agentDir = path.join(userDataDir, 'agents', id);
+    fs.mkdirSync(agentDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentDir, 'agent.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        id,
+        name: `Workflow Agent ${id}`,
+        type: 'gateway',
+        entry: 'noop'
+      })
+    );
+  }
   return { userDataDir, settingsPath: path.join(userDataDir, 'test-settings.json') };
 }
 
@@ -258,4 +261,141 @@ test('an agent stage with a missing Agent Hub binding is rejected before a run o
   expect(failure.message).toMatch(/not in the .* catalog|not trusted|preflight/i);
   expect(failure.sessionOpened).toBe(false);
   expect(mock.requests.length).toBe(0);
+});
+
+test('the plan is available in the right sidebar during an implement stage and opens in the main middle pane', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    reply: '# Implementation Blueprint\n\n1. Step One: Prepare environment\n2. Step Two: Implement logic\n3. Step Three: Run verification tests\n\nPlan status: ready'
+  });
+  const profile = profileWithAgent('wf-planner', 'wf-implementer');
+  const repo = createRepository();
+
+  app = await launchTestApp(
+    { ai: { activeProvider: 'vercel-gateway', workingDirectory: repo } },
+    profile,
+    { AI_GATEWAY_API_KEY: 'e2e-key', AI_GATEWAY_URL: mock.baseUrl, VERCEL_AI_GATEWAY_URL: undefined },
+    { openNewSession: false }
+  );
+  const page = app.window;
+
+  const started = await page.evaluate(async repoPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Plan and Implement Delivery',
+        key: 'PID',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        startingPoint: 'existing-folder',
+        folderPath: repoPath,
+        workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'Task', description: '', issueType: 'Task', status: 'Backlog' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+
+    await window.praxis.agentRuntime.refresh();
+
+    const now = new Date().toISOString();
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1,
+      id: `plan-impl-${project.id}`,
+      name: 'Plan and Implement',
+      scope: 'project',
+      projectId: project.id,
+      version: 1,
+      entryNodeId: 'plan',
+      createdAt: now,
+      updatedAt: now,
+      nodes: [
+        {
+          type: 'agent-task',
+          id: 'plan',
+          name: 'Plan',
+          x: 0,
+          y: 0,
+          inputs: [],
+          agent: { agentId: 'wf-planner', scope: 'global', toolMode: 'read-only' },
+          instructions: 'Create an implementation plan.',
+          outputs: [{ id: 'plan-doc', kind: 'plan', required: true }],
+          mutatesWorktree: false
+        },
+        {
+          type: 'agent-task',
+          id: 'implement',
+          name: 'Implement',
+          x: 200,
+          y: 0,
+          inputs: ['plan-doc'],
+          agent: { agentId: 'wf-implementer', scope: 'global', toolMode: 'full' },
+          instructions: 'Implement the plan.',
+          outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
+          mutatesWorktree: true
+        }
+      ],
+      edges: [{ id: 'e1', from: 'plan', to: 'implement', on: 'success', required: true }]
+    } as never);
+
+    const summary = await window.praxis.workflows.startRun(project.id, `plan-impl-${project.id}`, 'Plan delivery');
+    return { runId: summary.runId, projectId: project.id };
+  }, repo);
+
+  // Wait for the plan stage to complete and succeed
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(id =>
+          window.praxis.workflows.getRun(id).then(r => r?.stages.find(s => s.nodeId === 'plan')?.outcome)
+        , started.runId),
+      { timeout: 30000, message: 'plan stage should succeed' }
+    )
+    .toBe('succeeded');
+
+  // Navigate to the run page
+  await page.evaluate(({ pid, rid }) => {
+    const ws = localStorage.getItem('praxis-active-workspace') ?? 'default';
+    localStorage.setItem(
+      `praxis-last-workspace-route:${ws}`,
+      JSON.stringify({ projectId: pid, feature: 'workflows', workflowView: 'runs', workflowRunId: rid })
+    );
+  }, { pid: started.projectId, rid: started.runId });
+  await page.reload();
+
+  const runPanel = page.getByTestId('wf-run-panel');
+  await expect(runPanel).toBeVisible({ timeout: 10000 });
+
+  // While implement stage is selected/running, the upstream plan is available in the right sidebar
+  const upstreamPlan = runPanel.getByTestId('wf-upstream-plan');
+  await expect(upstreamPlan).toBeVisible({ timeout: 10000 });
+  await expect(upstreamPlan).toContainText('Plan (from Plan)');
+
+  const openPlanBtn = upstreamPlan.getByTestId('wf-open-plan');
+  await expect(openPlanBtn).toBeVisible();
+  await expect(openPlanBtn).toContainText('Open plan');
+
+  // Clicking "Open plan" opens the plan in the main middle pane and displays it in markdown
+  await openPlanBtn.click();
+
+  const planViewer = page.getByTestId('wf-run-plan-viewer');
+  await expect(planViewer).toBeVisible({ timeout: 10000 });
+
+  const planMarkdown = planViewer.getByTestId('wf-plan-markdown');
+  await expect(planMarkdown).toBeVisible();
+  await expect(planMarkdown).toContainText('Implementation Blueprint');
+  await expect(planMarkdown).toContainText('Step Two: Implement logic');
+
+  // The sidebar button toggles to "Back to session"
+  await expect(openPlanBtn).toContainText('Back to session');
+
+  // In the run bar or plan toolbar, returning to the session restores the session view
+  const backToSessionBtn = page.getByTestId('wf-plan-back-session');
+  await expect(backToSessionBtn).toBeVisible();
+  await backToSessionBtn.click();
+
+  await expect(planViewer).toBeHidden();
+  await expect(page.getByTestId('wf-run-session')).toBeVisible();
+  await expect(openPlanBtn).toContainText('Open plan');
 });

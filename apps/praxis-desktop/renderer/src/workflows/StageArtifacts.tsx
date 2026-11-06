@@ -13,10 +13,18 @@ type StageRow = WorkflowRunSummary['stages'][number];
 export function StageArtifacts({
   runId,
   stage,
+  availablePlanStage,
+  isPlanOpen,
+  onOpenPlan,
+  onClosePlan,
   onOpenBoardItem
 }: {
   runId: string;
   stage: StageRow;
+  availablePlanStage?: StageRow;
+  isPlanOpen?: boolean;
+  onOpenPlan?: (nodeId: string, title: string) => void;
+  onClosePlan?: () => void;
   onOpenBoardItem?: (issueKey: string) => void;
 }) {
   const [reading, setReading] = useState<string | undefined>();
@@ -24,74 +32,138 @@ export function StageArtifacts({
   const written = stage.artifacts.find(artifact => artifact.kind === 'report' || artifact.kind === 'plan');
   const noun = written?.kind === 'plan' ? 'plan' : 'report';
   const canRead = stage.type === 'agent-task' && stage.outcome === 'succeeded' && !!written;
+  const hasUpstreamPlan = Boolean(availablePlanStage && stage.nodeId !== availablePlanStage.nodeId);
 
-  const load = async (): Promise<string | undefined> => {
-    const text = await window.praxis.workflows.stageReport(runId, stage.nodeId);
-    if (!text) setNotice(`This stage's ${noun} is no longer available.`);
+  const load = async (nodeId = stage.nodeId, itemNoun = noun): Promise<string | undefined> => {
+    const text = await window.praxis.workflows.stageReport(runId, nodeId);
+    if (!text) setNotice(`This stage's ${itemNoun} is no longer available.`);
     return text || undefined;
   };
 
-  const copy = async () => {
-    const text = await load();
+  const copy = async (nodeId = stage.nodeId) => {
+    const text = await load(nodeId);
     if (!text) return;
     await navigator.clipboard.writeText(text);
     setNotice('Copied as Markdown.');
   };
 
-  const save = async () => {
+  const save = async (nodeId = stage.nodeId) => {
     try {
-      const result = await window.praxis.workflows.saveStageReport(runId, stage.nodeId);
+      const result = await window.praxis.workflows.saveStageReport(runId, nodeId);
       if (result.saved) setNotice(`Saved to ${result.path}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     }
   };
 
-  if (stage.artifacts.length === 0) return null;
+  if (stage.artifacts.length === 0 && !hasUpstreamPlan) return null;
+
+  const planRef = availablePlanStage?.artifacts.find(a => a.kind === 'plan')?.reference;
 
   return (
     <>
-      <ul className="wf-stage-artifacts">
-        {stage.artifacts.map(artifact => (
-          <li key={artifact.contractId}>
-            {artifact.reference ? (
-              <span className="wf-artifact-plan" data-testid="wf-published-plan">
-                Plan <strong>{artifact.reference.key}</strong> created on the board — {artifact.reference.title} ·{' '}
-                {artifact.reference.itemKeys.length} {artifact.reference.itemKeys.length === 1 ? 'item' : 'items'}
-                {onOpenBoardItem && (
-                  <button
-                    type="button"
-                    className="btn btn-compact"
-                    onClick={() => onOpenBoardItem(artifact.reference!.key)}
-                  >
-                    Open on board
-                  </button>
-                )}
-              </span>
-            ) : (
-              <>
-                {artifact.kind}: {artifact.contractId}
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+      {stage.artifacts.length > 0 && (
+        <ul className="wf-stage-artifacts">
+          {stage.artifacts.map(artifact => (
+            <li key={artifact.contractId}>
+              {artifact.reference ? (
+                <span className="wf-artifact-plan" data-testid="wf-published-plan">
+                  Plan <strong>{artifact.reference.key}</strong> created on the board — {artifact.reference.title} ·{' '}
+                  {artifact.reference.itemKeys.length} {artifact.reference.itemKeys.length === 1 ? 'item' : 'items'}
+                  {onOpenBoardItem && (
+                    <button
+                      type="button"
+                      className="btn btn-compact"
+                      onClick={() => onOpenBoardItem(artifact.reference!.key)}
+                    >
+                      Open on board
+                    </button>
+                  )}
+                </span>
+              ) : (
+                <>
+                  {artifact.kind}: {artifact.contractId}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       {canRead && (
         <div className="wf-stage-report-actions">
-          <button
-            type="button"
-            className="btn btn-compact"
-            data-testid="wf-read-report"
-            onClick={() => void load().then(text => setReading(text))}
-          >
-            <Icon name="markdown" size={12} /> Read {noun}
-          </button>
+          {noun === 'plan' ? (
+            <button
+              type="button"
+              className="btn btn-compact"
+              data-testid="wf-open-plan"
+              onClick={() => {
+                if (isPlanOpen) onClosePlan?.();
+                else if (onOpenPlan) onOpenPlan(stage.nodeId, stage.name);
+                else void load().then(text => setReading(text));
+              }}
+            >
+              <Icon name={isPlanOpen ? 'chats' : 'markdown'} size={12} /> {isPlanOpen ? 'Back to session' : 'Open plan'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-compact"
+              data-testid="wf-read-report"
+              onClick={() => void load().then(text => setReading(text))}
+            >
+              <Icon name="markdown" size={12} /> Read report
+            </button>
+          )}
           <button type="button" className="btn btn-compact" onClick={() => void copy()}>
             Copy
           </button>
           <button type="button" className="btn btn-compact" onClick={() => void save()}>
             Save as Markdown…
           </button>
+        </div>
+      )}
+      {hasUpstreamPlan && availablePlanStage && (
+        <div className="wf-upstream-plan" data-testid="wf-upstream-plan">
+          <span className="rail-sub">Plan (from {availablePlanStage.name})</span>
+          {planRef && onOpenBoardItem && (
+            <span className="wf-artifact-plan" data-testid="wf-published-plan">
+              Plan <strong>{planRef.key}</strong> created on the board
+              <button
+                type="button"
+                className="btn btn-compact"
+                onClick={() => onOpenBoardItem(planRef.key)}
+              >
+                Open on board
+              </button>
+            </span>
+          )}
+          <div className="wf-stage-report-actions">
+            <button
+              type="button"
+              className="btn btn-compact"
+              data-testid="wf-open-plan"
+              onClick={() => {
+                if (isPlanOpen) onClosePlan?.();
+                else onOpenPlan?.(availablePlanStage.nodeId, availablePlanStage.name);
+              }}
+            >
+              <Icon name={isPlanOpen ? 'chats' : 'markdown'} size={12} /> {isPlanOpen ? 'Back to session' : 'Open plan'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-compact"
+              onClick={() => void copy(availablePlanStage.nodeId)}
+            >
+              Copy
+            </button>
+            <button
+              type="button"
+              className="btn btn-compact"
+              onClick={() => void save(availablePlanStage.nodeId)}
+            >
+              Save as Markdown…
+            </button>
+          </div>
         </div>
       )}
       {notice && <p className="rail-sub wf-stage-report-notice">{notice}</p>}

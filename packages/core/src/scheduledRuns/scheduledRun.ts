@@ -252,6 +252,8 @@ export interface ScheduledRun {
   /** IANA zone the user picked; display and editing only. */
   timezone: string;
   policy: ScheduledRunPolicy;
+  /** Sequential schedules build every ticket on this delivery branch and merge it once at the end. */
+  deliveryBranchName?: string;
   entries: ScheduledQueueEntry[];
   status: ScheduledRunStatus;
   attempts: ScheduledRunAttempt[];
@@ -260,6 +262,9 @@ export interface ScheduledRun {
   createdAt: string;
   updatedAt: string;
   events: ScheduledRunEvent[];
+  /** Whether this scheduled run has been archived by the user to tidy the lineup. */
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 /** Statuses in which the definition may still be edited. */
@@ -499,18 +504,18 @@ export function resolveMissedScheduledRun(run: ScheduledRun, resolution: MissedR
   });
 }
 
-/** Armed runs whose time has come, earliest first. */
+/** Armed runs whose time has come, earliest first. Archived runs never fire. */
 export function dueScheduledRuns(runs: readonly ScheduledRun[], now: string): ScheduledRun[] {
   const cutoff = Date.parse(now);
   return runs
-    .filter(run => run.status === 'scheduled' && Date.parse(run.scheduledStartAt) <= cutoff)
+    .filter(run => !run.archived && run.status === 'scheduled' && Date.parse(run.scheduledStartAt) <= cutoff)
     .sort((left, right) => Date.parse(left.scheduledStartAt) - Date.parse(right.scheduledStartAt));
 }
 
-/** The next armed run that has not started yet; what the close warning should name. */
+/** The next armed run that has not started yet; what the close warning should name. Archived runs are ignored. */
 export function nextScheduledRun(runs: readonly ScheduledRun[]): ScheduledRun | undefined {
   return runs
-    .filter(run => run.status === 'scheduled')
+    .filter(run => !run.archived && run.status === 'scheduled')
     .sort((left, right) => Date.parse(left.scheduledStartAt) - Date.parse(right.scheduledStartAt))[0];
 }
 

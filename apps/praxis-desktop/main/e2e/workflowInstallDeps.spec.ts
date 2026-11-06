@@ -81,7 +81,8 @@ async function seed(page: Page, repo: string, withInstall: boolean, withPlan = f
       };
       const qaNode = {
         type: 'check', id: 'qa', name: 'QA', x: 200, y: 0, inputs: install ? ['install-log'] : [], command: 'node', args: ['check.js'],
-        successExitCodes: [0], outputs: [{ id: 'qa-log', kind: 'log', required: true }], satisfiesGate: 'qa'
+        successExitCodes: [0], outputs: [{ id: 'qa-log', kind: 'log', required: true }], satisfiesGate: 'qa',
+        affectedTests: false
       };
       await window.praxis.workflows.save(project.id, {
         schemaVersion: 1, id: workflowId, name: install ? 'With install' : 'Without install', scope: 'project', projectId: project.id, version: 1,

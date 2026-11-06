@@ -198,6 +198,7 @@ test('artifacts and the implementation snapshot ref surface on the stage row', (
   const summary = summarizeWorkflowRun(r);
   const implement = summary.stages.find(stage => stage.nodeId === 'implement');
   assert.equal(implement?.snapshotRef, 'sha-impl');
+  assert.deepEqual(implement?.inputs, ['plan-doc']);
   assert.deepEqual(implement?.artifacts.map(artifact => artifact.contractId), ['change-diff']);
   assert.equal(implement?.sessionId, 's-implement');
 });

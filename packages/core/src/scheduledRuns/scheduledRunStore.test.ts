@@ -54,6 +54,25 @@ test('save replaces by id, list is soonest first, remove deletes', async () => {
   await assert.rejects(store.remove('a'), /was not found/);
 });
 
+test('setArchived archives and restores a scheduled run, and refuses running ones', async () => {
+  const store = new ScheduledRunStore(memoryStore());
+  await store.save(makeRun('Test', '2026-10-21T10:00:00Z', 'run-1'));
+
+  const archived = await store.setArchived('run-1', true);
+  assert.equal(archived.archived, true);
+  assert.ok(archived.archivedAt);
+  assert.equal(store.get('run-1')?.archived, true);
+
+  const restored = await store.setArchived('run-1', false);
+  assert.equal(restored.archived, undefined);
+  assert.equal(restored.archivedAt, undefined);
+  assert.equal(store.get('run-1')?.archived, undefined);
+
+  // Refuses while running
+  await store.save({ ...makeRun('Running', '2026-10-21T10:00:00Z', 'run-running'), status: 'running' });
+  await assert.rejects(store.setArchived('run-running', true), /Cannot archive scheduled run.*running/);
+});
+
 test('an unusable record is dropped without hiding the others', () => {
   const good = makeRun('Good', '2026-10-21T10:00:00Z', 'good');
   const store = new ScheduledRunStore(memoryStore({ 'praxis.scheduledRuns.v1': [null, 'junk', { id: 'x' }, good, { id: 'y', name: 'y', scheduledStartAt: 'nope' }] }));
@@ -91,6 +110,7 @@ test('runner fields survive a round trip untouched', async () => {
   const base = makeRun('Running', '2026-10-21T10:00:00Z', 'r');
   const run: ScheduledRun = {
     ...base,
+    deliveryBranchName: 'WF-SR-R',
     status: 'paused',
     attempts: [{ id: 'att-1', trigger: 'start-now', startedAt: NOW }],
     entries: base.entries.map((entry, index) =>

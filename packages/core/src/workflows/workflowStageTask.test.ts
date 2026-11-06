@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStageTaskDefinition, formatUpstreamReports, readEnvironmentBlock, readPlanStatus, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
+import { buildStageTaskDefinition, formatUpstreamReports, readEnvironmentBlock, readPlanStatus, stageOutcomeFromSession, stageSessionKey, STAGE_STATUS_INSTRUCTIONS } from './workflowStageTask';
 import type { WorkflowStageContext } from './workflowStageSession';
 import type { WorkflowAgentTaskNode } from './workflowTypes';
 
@@ -60,6 +60,16 @@ test('the brief carries the stage instructions, its inputs, and what it must pro
   assert.match(task.definitionOfDone, /report "review-report" \(required\)/);
 });
 
+test('scheduled stage tasks carry the suite restriction into both task metadata and instructions', () => {
+  const task = buildStageTaskDefinition(context({ scheduledRun: true }));
+  assert.equal(task.scheduledRun, true);
+  assert.ok(task.nonGoals?.some(rule => /Do not run the full desktop functional or theme e2e suites/.test(rule)));
+});
+
+test('optional checks with a documented skip path do not block the rest of an autonomous stage', () => {
+  assert.match(STAGE_STATUS_INSTRUCTIONS, /explicitly optional.*documented skip path.*leave it skipped with the reason, do not request credentials.*continue the rest of the stage/);
+});
+
 test('the brief points a verification stage at the frozen snapshot, not the branch', () => {
   const task = buildStageTaskDefinition(context());
   assert.match(task.scope, /frozen implementation snapshot sha-abc/);
@@ -89,7 +99,8 @@ test('each kind of stage is told a failure in delivered work is fixed here, and 
   const implement = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'change-diff', kind: 'diff', required: true }] })).definitionOfDone;
   const review = buildStageTaskDefinition(context({ expectedOutputs: [{ id: 'review-findings', kind: 'findings', required: true }] })).definitionOfDone;
   assert.match(plan, /Plan to fix every failing test .* already delivered .* later ticket in the same plan explicitly covers/);
-  assert.match(implement, /run the tests that cover what you changed \(the plan's "Tests to keep passing".*including the end-to-end or UI tests/);
+  assert.match(implement, /run focused tests that cover what you changed/);
+  assert.match(implement, /Never run the full desktop e2e suite or the full test suite from a scheduled ticket/);
   assert.match(plan, /## Tests to keep passing/);
   assert.match(plan, /find_related on a component returns the tests .*search the test files for the test ids \(data-testid\), aria-labels, role names/);
   assert.match(review, /report an existing test that covers changed code or UI but is missing from it/);
@@ -152,9 +163,12 @@ test('a stage carries ticket context when provided on context', () => {
 // ── Outcome extraction ───────────────────────────────────────────────────
 
 test('an aborted or failed session fails the stage', () => {
-  assert.equal(stageOutcomeFromSession(reviewNode(), { state: 'aborted' }).status, 'failed');
+  const aborted = stageOutcomeFromSession(reviewNode(), { state: 'aborted' });
+  assert.equal(aborted.status, 'failed');
+  assert.equal(aborted.retryable, true, 'unexpected session aborts are recoverable');
   const failed = stageOutcomeFromSession(reviewNode(), { state: 'failed', responseText: 'ran out of tokens\nmore' });
   assert.equal(failed.status, 'failed');
+  assert.equal(failed.retryable, undefined, 'ordinary stage verdicts follow workflow repair and review edges');
   assert.match(failed.error ?? '', /ran out of tokens/);
   assert.doesNotMatch(failed.error ?? '', /more/, 'only the first line is quoted');
 });
@@ -199,7 +213,24 @@ test('a report artifact is claimed when the session actually said something', ()
 
 test('a silent session claims no narrative artifact, so the engine fails the stage', () => {
   const outcome = stageOutcomeFromSession(reviewNode(), { state: 'completed', responseText: '   ' });
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error ?? '', /did not produce required artifacts: review-report/);
   assert.deepEqual(outcome.artifacts, [], 'nothing to stand behind the report');
+});
+
+test('a stage fails when required findings are missing even if prose report was produced', () => {
+  const node = reviewNode({
+    outputs: [
+      { id: 'review-report', kind: 'report', required: true },
+      { id: 'review-findings', kind: 'findings', required: true }
+    ]
+  });
+  const outcome = stageOutcomeFromSession(node, {
+    state: 'completed',
+    responseText: 'Info: Operation cancelled by user\n\nI stopped here.'
+  });
+  assert.equal(outcome.status, 'failed');
+  assert.match(outcome.error ?? '', /did not produce required artifacts: review-findings/);
 });
 
 test('a diff artifact is claimed from the commit the stage froze', () => {
@@ -413,4 +444,42 @@ test('formatUpstreamReports inlines each report, capped with head and tail, and 
   assert.match(out, /characters omitted/);
   assert.doesNotMatch(out, /"empty"/);
   assert.equal(formatUpstreamReports([{ contractId: 'a', stageName: 'A', text: '' }]), undefined);
+});
+
+test('repository reviews cannot accept plausible findings without observed inspection', () => {
+  const node = reviewNode();
+  const responseText = '{"summary":"Prior finding fixed", "findings":[]}';
+  const missing = stageOutcomeFromSession(node, { state: 'completed', responseText, repositoryInspectionRequired: true });
+  assert.equal(missing.status, 'failed');
+  assert.equal(missing.pause, undefined, 'an unused reader is the agent\'s failure, retried like any other');
+  assert.match(missing.error ?? '', /without an observed successful repository read/);
+  assert.equal(missing.artifacts?.length ?? 0, 0);
+  assert.equal(stageOutcomeFromSession(node, { state: 'completed', responseText, repositoryInspectionRequired: true, repositoryInspectionObserved: true }).status, 'succeeded');
+});
+
+test('repository inspection requires a completed source read, not discovery, listing or an attempted read', async () => {
+  const { hasRepositoryInspection } = await import('./workflowStageTask.js');
+  const event = (type: 'tool_start' | 'tool_complete', data: import('../ai/agentTypes').AgentToolEventData): import('../ai/agentTypes').AgentEventSummary => ({ type, data, timestamp: 'now', summary: 'tool' });
+  for (const events of [
+    [],
+    [event('tool_start', { callId: 'read', kind: 'read', args: { path: 'source.ts' } })],
+    [event('tool_complete', { ok: false, kind: 'read', args: { path: 'source.ts' } })],
+    [event('tool_complete', { ok: true, toolName: 'list_dir', args: { path: '.' } })],
+    [event('tool_complete', { ok: true, toolName: 'exec_command', args: { cmd: 'pwd' } })],
+    [event('tool_complete', { ok: true, toolName: 'exec_command', args: { cmd: 'rg --files' } })],
+    [event('tool_complete', { ok: true, toolName: 'exec_command', args: { cmd: 'npm test' } })]
+  ]) assert.equal(hasRepositoryInspection(events), false);
+  assert.equal(hasRepositoryInspection([event('tool_complete', { ok: true, toolName: 'mcp.praxis-review-files.read_file', args: { path: '.praxis-run/change-diff.patch' } })]), true);
+  assert.equal(hasRepositoryInspection([
+    event('tool_start', { callId: 'mcp', kind: 'shell', toolName: 'mcp.praxis-review-files.read_file', args: { server: 'praxis-review-files', tool: 'read_file', arguments: { path: '.praxis-run/change-diff.patch' } } }),
+    event('tool_complete', { callId: 'mcp', kind: 'other', ok: true })
+  ]), true);
+  assert.equal(hasRepositoryInspection([
+    event('tool_start', { callId: 'read', kind: 'read', toolName: 'Read', args: { file_path: 'source.ts' } }),
+    event('tool_complete', { callId: 'read', kind: 'other', ok: true })
+  ]), true);
+  assert.equal(hasRepositoryInspection([
+    event('tool_start', { callId: 'shell', toolName: 'exec_command', args: { command: ['bash', '-lc', 'cat .praxis-run/change-diff.patch'] } }),
+    event('tool_complete', { callId: 'shell', ok: true })
+  ]), true);
 });

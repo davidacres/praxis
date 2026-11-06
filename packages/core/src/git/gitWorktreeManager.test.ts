@@ -100,6 +100,40 @@ test('prepareDeliveryWorktree re-attaches a kept branch with its commits, even o
   }
 });
 
+test('sequential scheduled tickets can reattach to the same named delivery branch', async t => {
+  let repo: string;
+  try {
+    repo = await initRepo();
+  } catch {
+    t.skip('git not available');
+    return;
+  }
+  try {
+    const manager = new GitWorktreeManager(silentLogger);
+    const branchName = 'WF-SR-4D936945';
+    const first = await manager.prepareDeliveryWorktree(
+      { key: 'T-1', summary: 'first ticket', branch: undefined },
+      'main', repo, { branchName }
+    );
+    const git = (args: string[]) => execFile('git', args, { cwd: first.worktreePath, windowsHide: true });
+    await git(['config', 'user.email', 'test@example.com']);
+    await git(['config', 'user.name', 'Test']);
+    await fs.writeFile(path.join(first.worktreePath, 'first.txt'), 'first ticket\n', 'utf8');
+    await git(['add', '.']);
+    await git(['commit', '-m', 'first ticket']);
+    await manager.removeDeliveryWorktree(repo, first, { keepBranch: true });
+
+    const second = await manager.prepareDeliveryWorktree(
+      { key: 'T-2', summary: 'second ticket', branch: undefined },
+      'main', repo, { branchName, requireCleanBase: true }
+    );
+    assert.equal(second.branchName, branchName);
+    assert.equal(await fs.readFile(path.join(second.worktreePath, 'first.txt'), 'utf8'), 'first ticket\n');
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true });
+  }
+});
+
 test('prepareDeliveryWorktree refuses to omit a dirty base when a governed run requires a clean snapshot', async t => {
   let repo: string;
   try {

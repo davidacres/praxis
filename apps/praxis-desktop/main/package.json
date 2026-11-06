@@ -27,7 +27,7 @@
     "predist:win": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --rid win-x64",
     "predist:linux": "npm run copy-renderer && node ../../../scripts/build-service.mjs --package --platform linux",
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
-    "start": "npm run compile && electron .",
+    "start": "npm run compile && electron --js-flags=--max-old-space-size=4096 .",
     "test:e2e": "npm run copy-renderer && npm run compile && npx playwright test",
     "test:workflows": "npm run compile && node --test scripts/fixNodePtyPermissions.test.cjs out/main/shellEnvironment.test.js out/main/workflowCheckProcess.test.js out/main/workflowCheckRunner.test.js out/main/testRunnerSummary.test.js out/main/workflowMergeRunner.test.js out/main/ticketWriteBackCommit.test.js out/main/worktreeDependencyLinks.test.js out/main/runDisplayWake.test.js out/main/runDependencies.test.js out/main/affectedTestsRunner.test.js out/main/workflowIssueWriteBack.test.js out/main/taskNotificationPolicy.test.js out/main/workflowAgentStage.test.js out/main/stageHandoverGuard.test.js out/main/workflowWorkspace.test.js out/main/runWork.test.js out/main/mapWorktrees.test.js out/main/contextSnapshotHost.test.js out/main/coordinationHost.test.js out/main/coordinationHook.test.js out/main/coordinationInstance.test.js out/main/workflowProjectTrust.test.js out/main/adapters/electronAddonStorage.test.js",
     "pretest:git": "node -e \"require('electron')\"",

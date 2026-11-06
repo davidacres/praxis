@@ -74,20 +74,23 @@ export function observeWorkflowRun(workflowRunId: string): WorkflowObservation |
   const exhaustedField = ranOut.length > 0 ? { exhausted: ranOut } : {};
   let progress: EntryProgress;
   if (summary.status === 'succeeded') progress = { kind: 'succeeded', ...spendField, ...exhaustedField };
-  else if (summary.status === 'failed') progress = { kind: 'failed', reason: failing?.lastError || summary.explanation, ...spendField, ...exhaustedField };
+  else if (summary.status === 'failed') progress = { kind: 'failed', reason: failing?.lastError || summary.explanation, ...(failing?.nodeId ? { nodeId: failing.nodeId } : {}), ...spendField, ...exhaustedField };
   else if (summary.status === 'cancelled') progress = { kind: 'cancelled', reason: summary.explanation, ...spendField, ...exhaustedField };
   else if (summary.paused) {
     const stuck = environmentPausedStage(summary, blocker);
     const attempts = stuck?.attemptsThisRevision ?? stuck?.attempts ?? 1;
     const maxAttempts = stuck?.maxAttempts ?? 1;
+    const appWasInterrupted = !!stuck?.lastError?.includes('Interrupted — the app stopped while this stage was running.');
     progress = stuck
       // Name the stage and what stopped it, and offer the stage's retry: the general "could not run
       // in this environment" alone left a person guessing, with only Resume, which changed nothing.
       ? {
           kind: 'stalled',
           pauseReason: 'failure',
-          reason: `${stuck.name} could not run here: ${stuck.lastError ?? summary.explanation} Fix that, then retry the stage.`,
-          recovery: { nodeId: stuck.nodeId, attempts, maxAttempts },
+          reason: appWasInterrupted
+            ? `${stuck.name} was interrupted when Praxis stopped. It will retry automatically when Praxis starts.`
+            : `${stuck.name} could not run here: ${stuck.lastError ?? summary.explanation} Fix that, then retry the stage.`,
+          recovery: { nodeId: stuck.nodeId, attempts, maxAttempts, automatic: appWasInterrupted },
           ...spendField,
           ...exhaustedField
         }

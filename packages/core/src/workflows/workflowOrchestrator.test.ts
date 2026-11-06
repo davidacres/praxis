@@ -172,6 +172,33 @@ test('the entry stage is dispatched and recorded running before it starts', asyn
   assert.equal(runs.get('run-1')?.nodes.implement.outcome, 'running');
 });
 
+test('a deferred merge is skipped after the other stages without changing the approved definition', async () => {
+  const runs = memoryRuns();
+  const def = {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id: 'd', name: 'D', scope: 'project', projectId: 'p1', version: 1,
+    entryNodeId: 'check', createdAt: now(), updatedAt: now(),
+    nodes: [
+      { type: 'check', id: 'check', name: 'Check', x: 0, y: 0, inputs: [], command: 'true', args: [], successExitCodes: [0], outputs: [] },
+      { type: 'merge', id: 'merge', name: 'Merge', x: 0, y: 0, inputs: [], target: 'main' }
+    ],
+    edges: [{ id: 'e-check-merge', from: 'check', to: 'merge', on: 'success', required: true }]
+  } as unknown as WorkflowDefinition;
+  const run = createWorkflowRun({ runId: 'run-1', projectId: 'p1', definition: def, at: now(), deferMerge: true });
+  void runs.save(run);
+  const fake = fakeDispatcher(nodeId => ({ status: 'succeeded', artifacts: outputsFor(def, nodeId) }));
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, workspace: fakeWorkspace().provider, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+
+  const saved = runs.get('run-1');
+  assert.deepEqual(fake.started, ['check']);
+  assert.equal(saved?.definition.nodes.some(node => node.id === 'merge'), true);
+  assert.equal(saved?.nodes.merge.outcome, 'skipped');
+  assert.equal(saved?.status, 'succeeded');
+});
+
 test('a stage is never dispatched twice, however often the loop is entered', async () => {
   const runs = memoryRuns();
   seed(runs);
@@ -457,7 +484,7 @@ test('a settled run releases its worktree and clears the path', async () => {
   assert.equal(runs.get('run-1')?.worktreePath, undefined);
 });
 
-test('a failed stage inside its attempt budget keeps the run alive and is not retried automatically', async () => {
+test('a failed non-scheduled stage inside its attempt budget stays available for a person to retry', async () => {
   const runs = memoryRuns();
   const def = definition(); // implement has maxAttempts 2
   seed(runs, def);
@@ -473,6 +500,29 @@ test('a failed stage inside its attempt budget keeps the run alive and is not re
   assert.equal(run.status, 'running', 'a retryable failure does not sink the run');
   assert.equal(run.nodes.implement.attempts.length, 1, 'retry is a user decision, not the loop’s');
   assert.deepEqual(fake.started, ['implement']);
+});
+
+test('a scheduled run retries a failed agent stage within its attempt budget', async () => {
+  const runs = memoryRuns();
+  const def = definition(); // Implement allows two judged attempts.
+  const run = createWorkflowRun({
+    runId: 'run-1', projectId: 'p1', definition: def, at: now(), scheduledLaunchToken: 'schedule-1'
+  });
+  void runs.save(run);
+  let implementationAttempts = 0;
+  const fake = fakeDispatcher(nodeId => {
+    if (nodeId === 'implement' && implementationAttempts++ === 0) return { status: 'failed', error: 'The first attempt produced no change.' };
+    if (nodeId === 'implement') return { status: 'succeeded', artifacts: outputsFor(def, nodeId), snapshotRef: 'sha-recovered' };
+    return { status: 'failed', pause: 'environment', error: 'not part of this retry test' };
+  });
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+
+  assert.deepEqual(fake.started.slice(0, 2), ['implement', 'implement']);
+  assert.equal(runs.get('run-1')?.nodes.implement.outcome, 'succeeded');
+  assert.equal(runs.get('run-1')?.nodes.implement.attempts.length, 2);
 });
 
 test('a run that dispatches nothing never branches a worktree', async () => {
@@ -695,6 +745,31 @@ test('a required stage failing ends the run, stops its running siblings and reco
   assert.equal(Object.values(run.nodes).some(state => state.outcome === 'running'), false);
 });
 
+test('an unexpectedly aborted agent stage retries automatically and continues when it succeeds', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  const run = createWorkflowRun({
+    runId: 'run-1', projectId: 'p1', definition: def, at: now(), scheduledLaunchToken: 'schedule-1'
+  });
+  void runs.save(run);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', { status: 'failed', error: 'The stage session was aborted.', retryable: true });
+  await settleAll();
+
+  assert.deepEqual(fake.started, ['implement', 'implement']);
+  assert.equal(runs.get('run-1')?.status, 'running');
+  assert.equal(runs.get('run-1')?.nodes.implement.attempts.length, 2, 'the retry starts a fresh recorded attempt');
+
+  fake.finish('implement', { status: 'succeeded', artifacts: outputsFor(def, 'implement'), snapshotRef: 'sha-retry' });
+  await settleAll();
+  assert.equal(runs.get('run-1')?.nodes.implement.outcome, 'succeeded');
+  assert.deepEqual(fake.started.slice(2), ['qa', 'security']);
+});
+
 test('an environment failure pauses the run: siblings keep running, and a retry continues it', async () => {
   const { runs, def, fake, orchestrator } = await withChecksRunning();
 
@@ -828,4 +903,56 @@ test('stop: the run ends, naming the AI and the stage; switching later picks it 
   assert.equal(run.status, 'running');
   assert.deepEqual(run.stageProviders, { implement: 'claude-code-cli' });
   assert.deepEqual(fake.started, ['implement', 'implement']);
+});
+
+test('graceful shutdown persists interruption before abort and never converts it into a repair verdict', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  def.edges.push({ id: 'qa-repair', from: 'qa', to: 'implement', on: 'failure', required: false, loop: { maxIterations: 2 } });
+  seed(runs, def);
+  const fake = fakeDispatcher();
+  const cancel = fake.dispatcher.cancelStage!;
+  fake.dispatcher.cancelStage = async (nodeId, context) => {
+    assert.equal(runs.get('run-1')!.nodes[nodeId].attempts.at(-1)?.pause, 'environment', 'interruption is durable before cancellation');
+    await cancel(nodeId, context);
+  };
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', { status: 'succeeded', snapshotRef: 'delivered', artifacts: outputsFor(def, 'implement') });
+  await settleAll();
+  const implementation = runs.get('run-1')!.nodes.implement;
+  assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
+  await orchestrator.suspend();
+  await orchestrator.suspend();
+  await orchestrator.step('run-1');
+  await settleAll();
+  const run = runs.get('run-1')!;
+  assert.equal(run.status, 'running');
+  assert.equal(run.nodes.implement, implementation);
+  assert.deepEqual(fake.cancelled.sort(), ['qa', 'security']);
+  assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
+  assert.equal(run.loopHistory?.length ?? 0, 0);
+  assert.deepEqual(orchestrator.inFlightStages(), []);
+});
+
+test('shutdown refuses to abort a stage when recording its interruption fails', async () => {
+  const runs = memoryRuns();
+  seed(runs);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  const save = runs.save.bind(runs);
+  runs.save = async run => {
+    if (run.nodes.implement.attempts.at(-1)?.pause === 'environment') throw new Error('disk unavailable');
+    return save(run);
+  };
+  await assert.rejects(orchestrator.suspend(), /disk unavailable/);
+  assert.deepEqual(fake.cancelled, []);
+  assert.equal(runs.get('run-1')!.nodes.implement.outcome, 'running');
+  runs.save = save;
+  await orchestrator.suspend();
+  assert.deepEqual(fake.cancelled, ['implement']);
+  assert.equal(runs.get('run-1')!.nodes.implement.attempts.at(-1)?.pause, 'environment');
 });

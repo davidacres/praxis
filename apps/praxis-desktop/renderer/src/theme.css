@@ -18164,6 +18164,54 @@ button.session-chat-attachment {
 .wf-stage-report-notice { margin: var(--space-1) 0 0; overflow-wrap: anywhere; }
 .wf-artifact-plan { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
 .wf-artifact-plan strong { color: var(--text); }
+.wf-upstream-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-2);
+}
+.wf-run-plan-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+.wf-run-plan-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: var(--text-md);
+}
+.wf-run-plan-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: auto;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wf-run-plan-body {
+  flex: 1;
+  padding: var(--space-4) var(--space-6);
+  overflow-y: auto;
+}
+.wf-run-plan-body > .empty-state {
+  margin: auto;
+  text-align: center;
+  padding: var(--space-4);
+}
 .modal-card.wf-report-dialog { width: min(880px, 94vw); max-height: 86vh; }
 .wf-report-dialog-head {
   display: flex;

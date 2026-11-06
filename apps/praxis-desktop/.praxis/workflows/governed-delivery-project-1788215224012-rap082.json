@@ -29,7 +29,6 @@
         }
       ],
       "mutatesWorktree": false,
-      "model": "default",
       "modelTier": "strong"
     },
     {

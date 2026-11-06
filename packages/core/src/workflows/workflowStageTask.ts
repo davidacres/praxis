@@ -13,7 +13,8 @@
  * implementer's chat is reviewing an argument rather than the change.
  */
 
-import type { AgentTaskDefinition } from '../ai/agentTypes';
+import { isReadOnlyShellCommand, shellCommandOf } from '../ai/readOnlyShell';
+import type { AgentEventSummary, AgentTaskDefinition } from '../ai/agentTypes';
 import { isProviderLimitError, extractProviderLimitMessage } from '../ai/providerLimitError';
 import { nodeOutputs, type CheckFindings, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
 import { parseReviewFindings } from '../ai/aiReviewService';
@@ -63,13 +64,18 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       ].join('\n')
     : undefined;
 
+  const scheduledRunPolicy = context.scheduledRun
+    ? 'Scheduled-run policy: release-level full functional/theme suites, live API proofs, and manual theme passes are optional and must not block this run. Do not request live API credentials or pause for those checks. Record them as not run, complete the ticket’s implementation, and continue to downstream workflow stages. QA will run only ticket-changed test files.'
+    : undefined;
+
   const isImplementation = context.expectedOutputs.some(output => output.kind === 'diff');
   const isReview = context.expectedOutputs.some(output => output.kind === 'findings');
   const kind = isImplementation ? ('implementation' as const) : isReview ? ('review' as const) : undefined;
 
   return {
     ...(kind ? { kind } : {}),
-    goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, packGuidance]
+    ...(context.scheduledRun ? { scheduledRun: true } : {}),
+    goal: [context.instructions.trim() || `Complete the ${context.stageName} stage.`, scheduledRunPolicy, packGuidance]
       .filter((line): line is string => Boolean(line))
       .join('\n\n'),
     scope,
@@ -91,6 +97,7 @@ export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTa
       : {}),
     ...(context.ticketContext ? { ticketContext: context.ticketContext } : {}),
     nonGoals: [
+      ...(context.scheduledRun ? ['Do not run the full desktop functional or theme e2e suites. Run only test files added or updated for this ticket, or a focused smoke check when a change has no tests.'] : []),
       'Do not advance, approve, or skip any other stage of this workflow.',
       'Do not modify the workflow definition itself.',
       // An agent short of packages once linked the run's node_modules to the main checkout's, and the
@@ -128,7 +135,8 @@ function stageRoleRules(context: WorkflowStageContext): string[] {
         'Even if surrounding components are missing, author the required types, interfaces, coordinators, adapters, or modules according to the plan.',
         'Never refuse or report blocked-environment because codebase components need to be created.',
         'You are running autonomously with full tool and edit permissions in an isolated git worktree. Do not end your turn with a preliminary summary or wait for approval. Execute the edits, run local verification, and commit your changes in git before finishing.',
-        `Before you finish, run the tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), including the end-to-end or UI tests for any UI you changed, and fix what fails.`,
+        `Before you finish, run focused tests that cover what you changed (the plan's "${PLANNED_TESTS_HEADING}" and any others you find), and fix what fails. For UI changes, run the relevant focused spec or the desktop smoke suite. Never run the full desktop e2e suite or the full test suite from a scheduled ticket; those suites are release-level checks, not per-ticket checks.`,
+        'When a focused test or check fails, inspect its output, fix the underlying implementation, and rerun that focused check before finishing. Do not leave a fixable failure for a later ticket unless that ticket explicitly owns the failing behavior.',
         'Fix a failing test or check even when earlier, already-delivered work caused it: no other ticket will. Leave it only when a later ticket in the same plan explicitly covers it, and name that ticket.'
       ].join(' ')
     );
@@ -157,7 +165,7 @@ export const PLANNED_TESTS_INSTRUCTIONS = [
   'Find the existing tests that cover what this plan changes, before planning the change:',
   '- For code: the tests that import or call it. Code-intelligence tools, when you have them (callers, related symbols, code search), follow these better than text search.',
   '- For UI: end-to-end and UI tests do not import the components they drive. Code intelligence\'s find_related on a component returns the tests that look up its test ids, labels and classes (reason "sharedUiHook"); without it, search the test files for the test ids (data-testid), aria-labels, role names, visible labels and CSS classes of every component you will change. Code search finds tests by meaning too, such as the feature\'s name.',
-  `List them in the plan under a heading of their own, "## ${PLANNED_TESTS_HEADING}", one test file path per line, with why it is affected. Say which of them the change is meant to alter (its behaviour changes on purpose) rather than keep passing. QA runs every file listed.`
+  `List them in the plan under a heading of their own, "## ${PLANNED_TESTS_HEADING}", one test file path per line, with why it is affected. Say which of them the change is meant to alter (its behaviour changes on purpose) rather than keep passing. Implementation runs only focused relevant tests; do not turn this inventory into a full-suite run.`
 ].join('\n');
 
 /**
@@ -168,6 +176,7 @@ export const PLANNED_TESTS_INSTRUCTIONS = [
  */
 export const STAGE_STATUS_INSTRUCTIONS = [
   'If something outside your control stops you doing this stage (a missing tool, service, credential or dependency you may not provide), do not present a report of that as the stage\'s result.',
+  'A test or check that is explicitly optional, or that has a documented skip path when a live service or credential is unavailable, is not a blocker: leave it skipped with the reason, do not request credentials for it, and continue the rest of the stage.',
   'Do not report blocked-environment for missing code, types, coordinators, IPC handlers, or features that are part of this ticket\'s work to build. Implementing missing parts is this stage\'s objective.',
   'Do not report blocked-environment due to shell output truncation: read files in smaller slices or use targeted searches instead.',
   'End your response with this line on its own only when a genuine environment blocker prevents execution: `Stage status: blocked-environment: <what is missing and what a person must do>`.'
@@ -222,7 +231,31 @@ export function readPlanStatus(responseText: string | undefined): { ready: true 
 }
 
 /** What the desktop app reports about a session that has stopped. */
+/** A verdict needs an observed successful source read, not just a model's claim of inspection. */
+export function hasRepositoryInspection(events: readonly AgentEventSummary[]): boolean {
+  const starts = new Map(events.filter(event => event.type === 'tool_start' && event.data?.callId).map(event => [event.data!.callId!, event.data!]));
+  return events.some(event => {
+    if (event.type !== 'tool_complete' || event.data?.ok !== true) return false;
+    const start = event.data.callId ? starts.get(event.data.callId) : undefined;
+    const rawArgs = event.data.args ?? start?.args;
+    // Codex wraps MCP arguments in { server, tool, arguments }; native tools are flat.
+    const args = rawArgs?.arguments && typeof rawArgs.arguments === 'object' && !Array.isArray(rawArgs.arguments)
+      ? rawArgs.arguments as Record<string, unknown>
+      : rawArgs;
+    const name = event.data.toolName ?? start?.toolName ?? '';
+    const kind = event.data.kind === 'other' ? start?.kind : event.data.kind ?? start?.kind;
+    if ((kind === 'read' || /(?:^|[._])read_file$|^Read$/.test(name)) &&
+        [args?.path, args?.file_path, args?.filePath].some(path => typeof path === 'string' && path.trim())) return true;
+    const command = shellCommandOf(args);
+    return command !== undefined && isReadOnlyShellCommand(command) &&
+      /\b(cat|head|tail|sed|rg|grep)\b|\bgit\b.*\b(show|diff|grep)\b/.test(command) && !/\brg\s+--files\b/.test(command);
+  });
+}
+
 export interface FinishedStageSession {
+  /** The host requires successful repository inspection for this verdict. */
+  repositoryInspectionRequired?: boolean;
+  repositoryInspectionObserved?: boolean;
   /** Terminal agent state. */
   state: 'completed' | 'failed' | 'aborted';
   /** The session's final response, used as the report body for a report stage. */
@@ -276,6 +309,7 @@ export function stageOutcomeFromSession(
     const detail = session.lastError || (session.responseText ? firstLine(session.responseText) : undefined);
     return {
       status: 'failed',
+      ...(session.state === 'aborted' ? { retryable: true } : {}),
       error:
         session.state === 'aborted'
           ? 'The stage session was aborted.'
@@ -288,6 +322,12 @@ export function stageOutcomeFromSession(
   const blocked = readEnvironmentBlock(session.responseText);
   if (blocked) {
     return { status: 'failed', pause: 'environment', error: `${node.name} was blocked by its environment: ${blocked}` };
+  }
+
+  // Not an environment pause: the reader was supplied and the agent did not use it. That is the
+  // agent's failure, so it spends an attempt and a scheduled run retries it instead of waiting for a person.
+  if (session.repositoryInspectionRequired && !session.repositoryInspectionObserved) {
+    return { status: 'failed', error: `${node.name} produced a verdict without an observed successful repository read. No findings or gate result were accepted. The agent must inspect the supplied snapshot and files before completing this stage.` };
   }
 
   // A diff that is the commit the stage started on is not a change. Recording it as one let an
@@ -351,6 +391,32 @@ export function stageOutcomeFromSession(
     } catch {
       findings = undefined;
     }
+  }
+
+  const missing = nodeOutputs(node)
+    .filter(contract => contract.required)
+    .filter(contract => !artifacts.some(artifact => artifact.contractId === contract.id))
+    .map(contract => contract.id);
+  if (missing.length > 0) {
+    return {
+      status: 'failed',
+      artifacts,
+      ...(findings ? { findings } : {}),
+      ...(session.snapshotRef ? { snapshotRef: session.snapshotRef } : {}),
+      error: `${node.name ?? 'Stage'} did not produce required artifacts: ${missing.join(', ')}.`
+    };
+  }
+
+  const hasRequiredFindings = nodeOutputs(node).some(
+    contract => contract.required && contract.kind === 'findings'
+  );
+  if (hasRequiredFindings && !findings) {
+    return {
+      status: 'failed',
+      artifacts,
+      ...(session.snapshotRef ? { snapshotRef: session.snapshotRef } : {}),
+      error: `${node.name ?? 'Stage'} declared required findings artifact but produced no structured findings.`
+    };
   }
 
   return {

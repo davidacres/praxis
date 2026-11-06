@@ -434,6 +434,44 @@ export function failingGateFindings(run: WorkflowRun, policy?: WorkflowPolicyPro
   return out;
 }
 
+/** Find the closest shared mutating agent upstream of every blocking finding owner. */
+export function repairStageForFindings(run: WorkflowRun, findings: readonly { stage: string }[]): string | undefined {
+  if (findings.length === 0) return undefined;
+  const nodes = run.definition.nodes;
+  const byName = new Map(nodes.map(node => [node.name, node]));
+  const parents = new Map<string, string[]>();
+  for (const edge of run.definition.edges) {
+    if (edge.loop) continue;
+    parents.set(edge.to, [...(parents.get(edge.to) ?? []), edge.from]);
+  }
+
+  const candidateDistances = findings.map(({ stage }) => {
+    const owner = byName.get(stage);
+    if (!owner) return new Map<string, number>();
+    const distances = new Map<string, number>();
+    const queue: Array<{ id: string; distance: number }> = [{ id: owner.id, distance: 0 }];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (distances.has(current.id)) continue;
+      distances.set(current.id, current.distance);
+      const node = nodes.find(candidate => candidate.id === current.id);
+      if (node?.type === 'agent-task' && node.mutatesWorktree) continue;
+      for (const parent of parents.get(current.id) ?? []) queue.push({ id: parent, distance: current.distance + 1 });
+    }
+    return new Map([...distances].filter(([id]) => {
+      const node = nodes.find(candidate => candidate.id === id);
+      return node?.type === 'agent-task' && node.mutatesWorktree;
+    }));
+  });
+  if (candidateDistances.some(candidates => candidates.size === 0)) return undefined;
+  const shared = [...candidateDistances[0].keys()].filter(id => candidateDistances.every(candidates => candidates.has(id)));
+  return shared.sort((a, b) => {
+    const aDistances = candidateDistances.map(candidates => candidates.get(a)!);
+    const bDistances = candidateDistances.map(candidates => candidates.get(b)!);
+    return Math.max(...aDistances) - Math.max(...bDistances) || aDistances.reduce((sum, value) => sum + value, 0) - bDistances.reduce((sum, value) => sum + value, 0);
+  })[0];
+}
+
 /**
  * Resolves which approval node an approve/bypass action targets.
  *

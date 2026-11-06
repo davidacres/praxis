@@ -72,6 +72,8 @@ export interface AgentTaskDefinition {
   kind?: 'general' | 'analysis' | 'review' | 'ticket-review' | 'jira-delivery' | 'human-review' | 'implementation';
   /** Explicit composer mode, when a task was created from a session composer. */
   sessionMode?: SessionMode;
+  /** The task belongs to a scheduled workflow run with restricted test-suite execution. */
+  scheduledRun?: boolean;
   goal: string;
   scope: string;
   definitionOfDone: string;

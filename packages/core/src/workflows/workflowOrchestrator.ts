@@ -39,6 +39,7 @@ import {
 import type { WorkflowMapItemState } from './workflowMap';
 import {
   applyWorkflowRunCommand,
+  attemptsSpent,
   downstreamNodeIds,
   isRunSettled,
   reworkWorkflowRun,
@@ -53,6 +54,8 @@ import { findTimedOutNodes } from './workflowRecovery';
 export interface StageOutcome {
   status: 'succeeded' | 'failed';
   error?: string;
+  /** Unexpected agent-session aborts may be retried automatically by the orchestrator. */
+  retryable?: boolean;
   exitCode?: number;
   /** Commit or worktree ref a mutating stage froze. */
   snapshotRef?: string;
@@ -87,6 +90,9 @@ export interface StageDispatchContext {
   /** Reports a bounded human-readable milestone while the stage is running. */
   reportProgress?: (message: string) => void;
 }
+
+/** Allow several automatic recoveries from interrupted agent transport before surfacing the failure. */
+const MAX_AUTOMATIC_ABORT_ATTEMPTS = 5;
 
 /**
  * How stages actually execute. The desktop app supplies process spawning for
@@ -131,6 +137,7 @@ export interface WorkflowRunPersistence {
 /** Prepares and tears down the single worktree a run's stages share. */
 export interface WorkflowWorkspaceProvider {
   acquire(run: WorkflowRun): Promise<string>;
+  baseRef?(run: WorkflowRun, worktreePath: string): Promise<string | undefined>;
   release(run: WorkflowRun): Promise<void>;
   /**
    * Puts the run's worktree back to `ref`'s content as a new commit on the run's
@@ -162,6 +169,8 @@ export class WorkflowOrchestrator {
   private readonly executions = new Map<string, { controller: AbortController; completion: Promise<StageOutcome> }>();
   /** Per-run promise chain; see the "one step at a time" invariant. */
   private readonly chains = new Map<string, Promise<void>>();
+  private suspending = false;
+  private suspension?: Promise<void>;
 
   public constructor(private readonly options: WorkflowOrchestratorOptions) {}
 
@@ -199,6 +208,40 @@ export class WorkflowOrchestrator {
   /** Stages this orchestrator currently has launched, for diagnostics/tests. */
   public inFlightStages(): string[] {
     return [...this.inFlight].sort();
+  }
+
+  /** Persist interruption before stopping processes, so graceful quit cannot become a code failure. */
+  public suspend(): Promise<void> {
+    if (this.suspension) return this.suspension;
+    this.suspending = true;
+    this.suspension = this.suspendActiveStages().catch(error => {
+      this.suspending = false;
+      this.suspension = undefined;
+      throw error;
+    });
+    return this.suspension;
+  }
+
+  private async suspendActiveStages(): Promise<void> {
+    // Drain steps already setting up a workspace. The checks in stepOnce prevent new dispatch.
+    await Promise.all([...this.chains.values()]);
+    const active = [...this.chains.keys()].flatMap(runId => {
+      const run = this.options.runs.get(runId);
+      if (!run || isRunSettled(run)) return [];
+      const nodeIds = Object.values(run.nodes).filter(node => node.outcome === 'running').map(node => node.nodeId);
+      return nodeIds.length ? [{ runId, nodeIds }] : [];
+    });
+    // If persistence fails, leave processes running and let the host refuse the quit.
+    for (const { runId, nodeIds } of active) {
+      await this.updateRun(runId, run => nodeIds.reduce((current, nodeId) =>
+        applyWorkflowRunCommand(current, { kind: 'node-interrupted', nodeId, at: this.now }), run));
+    }
+    for (const { runId, nodeIds } of active) {
+      const run = this.options.runs.get(runId);
+      if (run) await Promise.all(nodeIds.map(nodeId => this.stopStage(run, nodeId)));
+    }
+    // Late abort results settle behind the interruption and cannot replace its pause.
+    await Promise.all([...this.chains.values()]);
   }
 
   /**
@@ -266,6 +309,7 @@ export class WorkflowOrchestrator {
   // ── The loop ───────────────────────────────────────────────────────────
 
   private async stepOnce(runId: string): Promise<void> {
+    if (this.suspending) return;
     let run = this.options.runs.get(runId);
     if (!run) return;
 
@@ -305,6 +349,24 @@ export class WorkflowOrchestrator {
     }
 
     const schedule = scheduleWorkflowRun(run);
+    if (run.deferMerge) {
+      const mergeNodeId = schedule.ready.find(nodeId =>
+        run?.definition.nodes.some(node => node.id === nodeId && isMergeNode(node))
+      );
+      if (mergeNodeId) {
+        const skipped = applyWorkflowRunCommand(run, {
+          kind: 'node-skipped',
+          nodeId: mergeNodeId,
+          at: this.now,
+          reason: 'Merge is deferred until the final ticket in this sequential schedule.'
+        });
+        if (skipped !== run) {
+          await this.persist(skipped);
+          await this.stepOnce(runId);
+          return;
+        }
+      }
+    }
     const current = run;
     const launchable = schedule.ready
       .filter(nodeId => !this.inFlight.has(this.key(runId, nodeId)))
@@ -336,6 +398,7 @@ export class WorkflowOrchestrator {
     }
 
     for (const nodeId of launchable) {
+      if (this.suspending) return;
       const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
       if (!node || (!isCheckNode(node) && !isAgentTaskNode(node) && !isMergeNode(node) && !isMapNode(node))) continue;
 
@@ -350,6 +413,10 @@ export class WorkflowOrchestrator {
         throw error;
       }
 
+      if (this.suspending) {
+        this.inFlight.delete(this.key(runId, nodeId));
+        return;
+      }
       // Fire and forget: the completion handler re-enters the loop.
       void this.dispatch(runId, node, run);
     }
@@ -534,6 +601,25 @@ export class WorkflowOrchestrator {
             }
           }
           let saved = await this.persist(next);
+          const failedStage = saved.definition.nodes.find(candidate => candidate.id === nodeId);
+          const failedState = saved.nodes[nodeId];
+          const isScheduledAgentStageFailure = Boolean(
+            result.kind === 'outcome' && result.outcome.status === 'failed' && !result.outcome.pause &&
+            saved.scheduledLaunchToken && failedStage && isAgentTaskNode(failedStage) && failedState?.outcome === 'failed' &&
+            attemptsSpent(failedState) < (failedStage.maxAttempts ?? 3)
+          );
+          const isUnexpectedAbortRetry = Boolean(
+            result.kind === 'outcome' && result.outcome.status === 'failed' && result.outcome.retryable === true &&
+            saved.scheduledLaunchToken && !result.outcome.pause && failedState?.outcome === 'failed' &&
+            failedState.attempts.length <= MAX_AUTOMATIC_ABORT_ATTEMPTS
+          );
+          if (isScheduledAgentStageFailure || isUnexpectedAbortRetry) {
+            const retried = applyWorkflowRunCommand(saved, { kind: 'node-retry', nodeId, at });
+            if (retried !== saved) {
+              await this.persist(retried);
+              return;
+            }
+          }
           if (result.kind === 'outcome' && result.outcome.status === 'failed') {
             const failedNode = next.definition.nodes.find(candidate => candidate.id === nodeId);
             const recovery = failedNode?.type === 'check' ? failedNode.failureRecovery : undefined;
@@ -627,7 +713,8 @@ export class WorkflowOrchestrator {
   private async ensureWorkspace(run: WorkflowRun): Promise<WorkflowRun> {
     if (!this.options.workspace || run.worktreePath) return run;
     const worktreePath = await this.options.workspace.acquire(run);
-    return this.persist({ ...run, worktreePath });
+    const worktreeBaseRef = await this.options.workspace.baseRef?.(run, worktreePath);
+    return this.persist({ ...run, worktreePath, ...(worktreeBaseRef ? { worktreeBaseRef } : {}) });
   }
 
   private async releaseWorkspace(run: WorkflowRun): Promise<void> {

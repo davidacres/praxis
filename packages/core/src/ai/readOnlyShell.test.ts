@@ -16,7 +16,9 @@ test('commands a planner or reviewer uses to look around are read-only', () => {
     "sed -n '1,120p' apps/praxis-desktop/renderer/src/notes/NoteSendDialog.tsx",
     'cd apps/praxis-desktop && git log -3 2>&1',
     'cat package.json 2>/dev/null | jq .scripts',
-    'GIT_PAGER=cat git log -1'
+    'GIT_PAGER=cat git log -1',
+    'f=apps/praxis-desktop/main/src/main; wc -l $f/teamChatCommands.ts; cat $f/teamChatCommands.ts',
+    'export d=src; cat $d/index.ts'
   ]) assert.equal(isReadOnlyShellCommand(command), true, command);
 });
 
@@ -42,6 +44,9 @@ test('anything that could write, run code or hide what it runs is refused', () =
     'cat <<EOF > x',
     'sleep 100 &',
     'PATH=. ls',
+    'f=apps; PATH=/bin cat $f',
+    'f=apps; rm -rf $f',
+    'f=apps',
     'git status "unterminated',
     ''
   ]) assert.equal(isReadOnlyShellCommand(command), false, command);

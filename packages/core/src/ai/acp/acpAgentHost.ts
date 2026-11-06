@@ -1,5 +1,5 @@
 import { backgroundTaskIsLive, type ProviderBackgroundUpdate } from '../backgroundTasks';
-import { isReadOnlyShellCommand, shellCommandOf } from '../readOnlyShell';
+import { isFullDesktopE2eCommand, isReadOnlyShellCommand, shellCommandOf } from '../readOnlyShell';
 import { randomUUID } from 'node:crypto';
 import type { CoordinationGate } from '../coordination/coordinationGate';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
@@ -37,6 +37,15 @@ import {
 import { isProviderLimitError, isLimitNoticeReply, extractProviderLimitMessage } from '../providerLimitError';
 import { probeCliProvider, type ProviderCapabilityManifest } from '../providers/providerPreflight';
 import type { ReasoningEffort } from '../providers/reasoningSupport';
+
+/** Keep launch and continuation instructions aligned with requestPermission's read-only gate. */
+function toolModePrompt(toolMode: AgentToolMode): string {
+  if (toolMode === 'read-only') {
+    return 'READ ONLY. You may inspect files using file tools or read-only shell commands (git status, log, diff and show; ls, cat, head, wc, rg; sed -n). Do not edit files, run builds or tests, execute commands that change state, or mutate external systems. Permission checks still apply to every tool call. If tools are exposed through functions.exec, discover readers with text(ALL_TOOLS.filter(t => /read_file|exec_command/.test(t.name))) there and call the discovered tools through tools; for example, text(await tools.exec_command({cmd: "pwd"})). Use only APIs exposed in this session. Try the available read-only inspection path before declaring file access unavailable.';
+  }
+  if (toolMode === 'project-only') return 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.';
+  return 'FULL. Use tools as needed; honor every permission request.';
+}
 
 /** The ACP/gateway option carrying a session's coordination gate, when it has one. */
 const optionalCoordination = (gate: CoordinationGate | undefined): { coordination?: CoordinationGate } => (gate ? { coordination: gate } : {});
@@ -134,6 +143,12 @@ interface ActiveAcpTask {
   costBefore?: { amount: number; currency: string };
   /** The model the agent says it is running, for a reply whose turn names none. */
   agentModel?: string;
+  /**
+   * Tool inputs that arrived after the opening `tool_call`, by call id. claude-agent-acp opens a
+   * streamed call with no input and sends it in a later in-progress `tool_call_update`; without
+   * this the completed call carried no path, so a review's file reads were never counted as reads.
+   */
+  toolInputs?: Map<string, Record<string, unknown>>;
 }
 
 /** What a finished ACP turn can say about itself — the fields the reply's chips read. */
@@ -142,6 +157,11 @@ export interface AcpTurnTelemetry {
   tokenUsage?: TokenUsage;
   cost?: { currency: string; amount: number };
   modelId?: string;
+}
+
+/** An ACP `rawInput` that is a plain object, the only shape recorded as tool arguments. */
+function objectInput(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
 function finiteNumber(value: unknown): number | undefined {
@@ -546,6 +566,10 @@ export class AcpAgentHost {
     // Titles are agent-authored display text, not an authorization boundary.
     // Unclassified actions (including missing kinds) fail closed in read-only mode.
     const command = request.kind === undefined || request.kind === 'execute' || request.kind === 'other' ? shellCommandOf(request.rawInput) : undefined;
+    if (record?.taskDefinition.scheduledRun && command && isFullDesktopE2eCommand(command)) {
+      this.appendEvent(issueKey, evt('warning', 'Blocked full desktop e2e execution for this scheduled run. Run only ticket-changed tests or a focused smoke check.'));
+      return Promise.resolve('deny');
+    }
     // A refused tool ends Copilot's whole turn, so a command that can only look is not refused.
     const readOnlyKind = request.kind === 'read' || request.kind === 'search' || request.kind === 'think' || request.kind === 'fetch' ||
       (command !== undefined && isReadOnlyShellCommand(command));
@@ -775,7 +799,8 @@ export class AcpAgentHost {
             callId: update.toolCallId,
             toolName,
             kind: mapAcpToolKind(update.kind ?? undefined),
-            argsSummary: update.title ?? undefined
+            argsSummary: update.title ?? undefined,
+            ...(update.rawInput && typeof update.rawInput === 'object' && !Array.isArray(update.rawInput) ? { args: update.rawInput as Record<string, unknown> } : {})
           })
         );
         break;
@@ -806,7 +831,16 @@ export class AcpAgentHost {
         break;
       }
       case 'tool_call_update':
-        if (update.status === 'completed' || update.status === 'failed') {
+        if (update.status !== 'completed' && update.status !== 'failed') {
+          // A refinement resends only what changed, so merge it over what this call already had.
+          const input = objectInput(update.rawInput);
+          if (input) {
+            task.toolInputs ??= new Map();
+            task.toolInputs.set(update.toolCallId, { ...task.toolInputs.get(update.toolCallId), ...input });
+          }
+          break;
+        }
+        {
           const ok = update.status === 'completed';
           const { fileChanges, output } = readAcpToolContent(update.content);
           const rawOutput =
@@ -818,6 +852,10 @@ export class AcpAgentHost {
                 : '');
           const detail =
             fileChanges.map(change => change.diff ?? '').join('\n').trim() || rawOutput || undefined;
+          const streamedInput = task.toolInputs?.get(update.toolCallId);
+          task.toolInputs?.delete(update.toolCallId);
+          const finalInput = objectInput(update.rawInput);
+          const args = finalInput || streamedInput ? { ...streamedInput, ...finalInput } : undefined;
           this.appendEvent(
             issueKey,
             evt(
@@ -827,6 +865,7 @@ export class AcpAgentHost {
               {
                 callId: update.toolCallId,
                 toolName: update.name ?? update.title ?? undefined,
+                ...(args ? { args } : {}),
                 // `kind` is often only on the initial `tool_call`; diff blocks in
                 // the result imply a write even when this update omits it.
                 kind: fileChanges.length > 0 ? 'write' : mapAcpToolKind(update.kind ?? undefined),
@@ -863,13 +902,7 @@ export class AcpAgentHost {
     const sessionId = randomUUID();
     const hasBrowser = options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false;
     const hasCodeIntelligence = options.mcpServers?.some(server => server.name === CODE_INTELLIGENCE_SERVER_NAME) ?? false;
-    const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
-      toolMode === 'read-only'
-        ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
-        : toolMode === 'project-only'
-          ? 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.'
-          : 'FULL. Use tools as needed; honor every permission request.'
-    }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${hasCodeIntelligence ? `\n\n${CODE_INTELLIGENCE_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
+    const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${toolModePrompt(toolMode)}${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}${hasCodeIntelligence ? `\n\n${CODE_INTELLIGENCE_PROMPT}` : ''}${options.permissionMode === 'autopilot' ? `\n\n${AUTOPILOT_SESSION_PROMPT}` : ''}`;
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
     // its own persona, so the task's own instructions travel as one prompt.
@@ -1119,13 +1152,7 @@ export class AcpAgentHost {
       issueType: 'Task',
       status: 'In progress',
       description: record.taskDefinition.scope
-    } as IssueDetails)}\n\nTool mode: ${
-      toolMode === 'read-only'
-        ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
-        : toolMode === 'project-only'
-          ? 'PROJECT ONLY. Do not edit files, execute commands, or read local repository files.'
-          : 'FULL. Use tools as needed; honor every permission request.'
-    }${
+    } as IssueDetails)}\n\nTool mode: ${toolModePrompt(toolMode)}${
       (options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false)
         ? `\n\n${BROWSER_TOOLS_PROMPT}`
         : ''

@@ -90,6 +90,14 @@ export async function selectAffectedTests(worktreePath: string, baseCommit: stri
   return { tests: ranked.slice(0, MAX_AFFECTED_TESTS), dropped: Math.max(0, ranked.length - MAX_AFFECTED_TESTS) };
 }
 
+/** Scheduled QA contract: run only test files added or modified since this ticket acquired its branch. */
+export async function selectChangedTests(worktreePath: string, baseCommit: string): Promise<AffectedTestSelection> {
+  const changed = (await git(worktreePath, ['diff', '--name-only', '--diff-filter=ACMR', `${baseCommit}..HEAD`]))
+    .split('\n').map(file => file.trim())
+    .filter(file => file && !file.startsWith('.praxis/') && !file.startsWith('.praxis-run/') && isTestFile(file));
+  return { tests: [...new Set(changed)].sort().map(file => ({ file, reasons: ['added or updated in this ticket'] })), dropped: 0 };
+}
+
 function strength(test: AffectedTest): number {
   return test.reasons.reduce((sum, reason) =>
     sum + (reason === 'changed by this run' || reason === 'listed in the plan' ? 100 : /^(uses|selects|imports)/.test(reason) ? 10 : 1), 0);
@@ -100,7 +108,7 @@ export interface TestRunPorts {
 }
 
 interface RunnerGroup {
-  runner: 'playwright' | 'vitest' | 'jest' | 'pytest';
+  runner: 'playwright' | 'vitest' | 'jest' | 'pytest' | 'node-test' | 'renderer-node-test';
   /** Directory the runner is started in. */
   cwd: string;
   /** Test files, relative to `cwd`. */
@@ -114,11 +122,14 @@ async function exists(target: string): Promise<boolean> {
 /** The runner that owns a test file, from the nearest config or package up to the worktree root. */
 async function runnerFor(worktreePath: string, file: string): Promise<{ runner: RunnerGroup['runner']; cwd: string } | undefined> {
   if (/\.py$/.test(file)) return { runner: 'pytest', cwd: worktreePath };
+  const isPlaywrightFile = /\.spec\.[cm]?[jt]sx?$/.test(file) || file.split(/[\\/]/).includes('e2e');
   let dir = path.dirname(path.join(worktreePath, file));
   const root = path.resolve(worktreePath);
   while (dir.startsWith(root)) {
-    for (const name of ['playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs', 'playwright.config.cjs']) {
-      if (await exists(path.join(dir, name))) return { runner: 'playwright', cwd: dir };
+    if (isPlaywrightFile) {
+      for (const name of ['playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs', 'playwright.config.cjs']) {
+        if (await exists(path.join(dir, name))) return { runner: 'playwright', cwd: dir };
+      }
     }
     for (const name of ['vitest.config.ts', 'vitest.config.js', 'vitest.config.mts', 'vite.config.ts']) {
       if (name.startsWith('vitest') && await exists(path.join(dir, name))) return { runner: 'vitest', cwd: dir };
@@ -126,6 +137,13 @@ async function runnerFor(worktreePath: string, file: string): Promise<{ runner: 
     const pkgPath = path.join(dir, 'package.json');
     if (await exists(pkgPath)) {
       const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8').catch(() => '{}')) as Record<string, Record<string, string> | undefined>;
+      const scripts = Object.values(pkg.scripts ?? {});
+      if (scripts.some(script => script.includes('node --import ./test/register.mjs --test'))) {
+        return { runner: 'renderer-node-test', cwd: dir };
+      }
+      if (scripts.some(script => script.includes('node --test out/'))) {
+        return { runner: 'node-test', cwd: dir };
+      }
       const deps = { ...pkg.dependencies, ...pkg.devDependencies };
       if (deps.vitest) return { runner: 'vitest', cwd: dir };
       if (deps.jest) return { runner: 'jest', cwd: dir };
@@ -182,6 +200,10 @@ function commandFor(group: RunnerGroup, project?: string): { command: string; ar
       return { command: 'npx', args: ['jest', '--runTestsByPath', ...group.files] };
     case 'pytest':
       return { command: 'python3', args: ['-m', 'pytest', ...group.files] };
+    case 'node-test':
+      return { command: 'node', args: ['--test', ...group.files] };
+    case 'renderer-node-test':
+      return { command: 'node', args: ['--import', './test/register.mjs', '--test', ...group.files] };
   }
 }
 
@@ -197,7 +219,7 @@ export async function runAffectedTests(
 ): Promise<CheckProcessResult> {
   const lines: string[] = ['== Tests for this change =='];
   if (selection.tests.length === 0) {
-    lines.push('No existing tests refer to what this change touched, and the plan listed none.');
+    lines.push('No test files were added or updated in this ticket.');
     return { code: 0, output: lines.join('\n'), timedOut: false };
   }
   for (const test of selection.tests) lines.push(`- ${test.file}: ${test.reasons.slice(0, 3).join('; ')}`);
@@ -213,12 +235,17 @@ export async function runAffectedTests(
     }
     const key = `${owner.runner}\0${owner.cwd}`;
     const group = groups.get(key) ?? { ...owner, files: [] };
-    group.files.push(path.relative(owner.cwd, path.join(worktreePath, test.file)));
+    const relativeFile = path.relative(owner.cwd, path.join(worktreePath, test.file));
+    group.files.push(owner.runner === 'node-test'
+      ? relativeFile.replace(/^src[\\/]/, 'out/').replace(/\.tsx?$/, '.js')
+      : relativeFile);
     groups.set(key, group);
   }
-  if (unclaimed.length) lines.push(`Not run here (no Playwright, Vitest, Jest or pytest setup claims them; the project's own test command covers them): ${unclaimed.join(', ')}`);
+  if (unclaimed.length) {
+    lines.push(`Could not run because no supported test runner setup claims them: ${unclaimed.join(', ')}`);
+  }
 
-  let failed = false;
+  let failed = unclaimed.length > 0;
   let timedOut = false;
   for (const group of groups.values()) {
     const runs: Array<{ project?: string; files: string[] }> = group.runner === 'playwright'

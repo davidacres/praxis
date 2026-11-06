@@ -9,6 +9,15 @@ test('an exact stage model beats tiers and the run model', () => {
   assert.equal(choice.model, 'exact');
 });
 
+test('a stage or run model of "default" names no model, so the tier or the provider default applies', () => {
+  // A CLI's "default" carried to an API provider failed every attempt with "model not found".
+  const tiered = chooseStageModel({ node: { model: 'default', modelTier: 'fast' }, provider: 'gw', tiers, attemptsSpent: 0 });
+  assert.equal(tiered.model, 'small');
+  const unmapped = chooseStageModel({ node: { model: 'default', modelTier: 'strong' }, provider: 'other', tiers, runModel: ' Default ', attemptsSpent: 0 });
+  assert.equal(unmapped.model, undefined, 'falls through to the provider\'s own default');
+  assert.equal(chooseStageModel({ node: { model: 'default' }, provider: 'gw', tiers, attemptsSpent: 0 }).model, undefined);
+});
+
 test('a tier resolves through the provider mapping', () => {
   assert.equal(chooseStageModel({ node: { modelTier: 'fast' }, provider: 'gw', tiers, runModel: 'run', attemptsSpent: 0 }).model, 'small');
 });

@@ -13,7 +13,7 @@ import { STATUS_LABEL, condenseIssues, formatStart, groupScheduledRuns, type Sch
 import { LineupDetails, LineupNeeds, LineupWeek, isFinished, lineupWhen, LineupBeads, type Need } from './ScheduleLineup';
 import { confirmProjectWorkflowTrust, isTrustCancelled } from '../workflows/workflowProjectTrust';
 
-type LineupTab = 'all' | 'active' | 'drafts' | 'finished';
+type LineupTab = 'all' | 'active' | 'drafts' | 'finished' | 'archived';
 import './schedule.css';
 
 /**
@@ -22,7 +22,7 @@ import './schedule.css';
  * fix beside it, and one row per schedule — its beads in run order, its start and
  * the one action that matters now — that opens to its tickets, facts and actions.
  * Rows are grouped by what needs a person: running, up next, needs attention,
- * drafts, finished. The runner in the main process starts a schedule at its time
+ * drafts, finished, archived. The runner in the main process starts a schedule at its time
  * (only while Praxis is open); a running or paused card opens the live view, a
  * finished one opens its report.
  */
@@ -41,7 +41,8 @@ const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
   { key: 'upNext', title: 'Up next' },
   { key: 'attention', title: 'Needs attention' },
   { key: 'drafts', title: 'Drafts' },
-  { key: 'finished', title: 'Finished' }
+  { key: 'finished', title: 'Finished' },
+  { key: 'archived', title: 'Archived' }
 ];
 
 export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], onOpenWorkflowRun, onOpenSession }: ScheduledRunsPageProps) {
@@ -122,7 +123,20 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
       confirmLabel: 'Delete schedule',
       danger: true
     });
-    if (ok) await act(async () => { await window.praxis.scheduledRuns.remove(view.run.id); setSelectedRunId(undefined); });
+    if (ok) await act(async () => {
+      await window.praxis.scheduledRuns.remove(view.run.id);
+      setSelectedRunId(undefined);
+      setDetailRunId(undefined);
+      setReportFor(undefined);
+      await load();
+    });
+  };
+
+  const handleArchive = async (view: ScheduledRunView, archived: boolean) => {
+    await act(async () => {
+      await window.praxis.scheduledRuns.archive(view.run.id, archived);
+      await load();
+    });
   };
 
   const runNow = async (id: string) => {
@@ -134,6 +148,9 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     });
     setStartingRunId(undefined);
   };
+
+  const total = (views ?? []).filter(view => !view.run.archived).length;
+  const archivedTotal = (views ?? []).filter(view => !!view.run.archived).length;
 
   const sidebar = sidebarHost && createPortal(
     <nav className="easymode-sidebar schedule-sidebar" aria-label="Scheduled runs and project tickets" data-testid="schedule-sidebar">
@@ -147,7 +164,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
       <div className="schedule-sidebar-runs" hidden={ticketsMaximized}>
         <button type="button" className={`easymode-automation-row schedule-nav-row${!selectedRunId && !composing ? ' is-selected' : ''}`} aria-current={!selectedRunId && !composing ? 'page' : undefined} onClick={() => { setSelectedRunId(undefined); setComposing(undefined); }}><Icon name="clock" size={14} className="easymode-automation-row__type-icon" /><span className="easymode-automation-row__title">All scheduled runs</span></button>
         {RECENCY_BUCKETS.map(bucket => {
-          const runs = (views ?? []).filter(view => recencyBucket(view.run.updatedAt, new Date(now)) === bucket).sort((a, b) => b.run.updatedAt.localeCompare(a.run.updatedAt));
+          const runs = (views ?? []).filter(view => !view.run.archived && recencyBucket(view.run.updatedAt, new Date(now)) === bucket).sort((a, b) => b.run.updatedAt.localeCompare(a.run.updatedAt));
           if (!runs.length) return null;
           return <section className="easymode-section" key={bucket} data-testid={`schedule-bucket-${bucket}`}>
             <button type="button" className="easymode-section-header schedule-bucket-title" aria-expanded={!collapsed[bucket]} onClick={() => setCollapsed(current => ({ ...current, [bucket]: !current[bucket] }))}>
@@ -158,6 +175,16 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
             </button>)}
           </section>;
         })}
+        {archivedTotal > 0 && (
+          <section className="easymode-section" data-testid="schedule-bucket-archived">
+            <button type="button" className="easymode-section-header schedule-bucket-title" aria-expanded={!collapsed['archived']} onClick={() => setCollapsed(current => ({ ...current, archived: !current['archived'] }))}>
+              <span className="easymode-section-header__title-group"><Icon name={collapsed['archived'] ? 'chevron-right' : 'chevron-down'} size={12} /><span className="easymode-section-header__title">Archived</span><span className="easymode-section-header__count">{archivedTotal}</span></span>
+            </button>
+            {!collapsed['archived'] && (views ?? []).filter(view => !!view.run.archived).sort((a, b) => b.run.updatedAt.localeCompare(a.run.updatedAt)).map(view => <button key={view.run.id} type="button" className={`easymode-automation-row schedule-nav-row${selectedRunId === view.run.id ? ' is-selected' : ''}`} data-testid="schedule-nav-run" aria-current={selectedRunId === view.run.id ? 'page' : undefined} onClick={() => { setSelectedRunId(view.run.id); setComposing(undefined); setTab('archived'); }}>
+              <Icon name="archive" size={14} className="easymode-automation-row__type-icon" /><span className="easymode-automation-row__details"><span className="easymode-automation-row__title" title={view.run.name}>{view.run.name}</span><span className="easymode-automation-row__sub-row"><span className="easymode-automation-row__project">{STATUS_LABEL[view.run.status]} · {view.run.entries.length} ticket{view.run.entries.length === 1 ? '' : 's'}</span></span></span>
+            </button>)}
+          </section>
+        )}
         {views?.length === 0 && <p className="easymode-empty-hint">No scheduled runs yet</p>}
       </div>
       {!ticketsCollapsed && !ticketsMaximized && <div
@@ -217,26 +244,52 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   if (detail) {
     const live = detail.run.status === 'running' || detail.run.status === 'paused';
     return (<>{sidebar}{live && reportFor !== detail.run.id
-      ? <ScheduleRunMonitor view={detail} onBack={() => setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} onShowReport={() => setReportFor(detail.run.id)} />
-      : <ScheduleRunReport view={detail} live={live} onBack={() => live ? setReportFor(undefined) : setDetailRunId(undefined)} onOpenWorkflowRun={onOpenWorkflowRun} onOpenSession={onOpenSession} />}</>);
+      ? <ScheduleRunMonitor
+          view={detail}
+          onBack={() => setDetailRunId(undefined)}
+          onOpenWorkflowRun={onOpenWorkflowRun}
+          onShowReport={() => setReportFor(detail.run.id)}
+          onDelete={() => void remove(detail)}
+        />
+      : <ScheduleRunReport
+          view={detail}
+          live={live}
+          onBack={() => live ? setReportFor(undefined) : setDetailRunId(undefined)}
+          onOpenWorkflowRun={onOpenWorkflowRun}
+          onOpenSession={onOpenSession}
+          onArchive={archived => void handleArchive(detail, archived)}
+          onDelete={() => void remove(detail)}
+        />}</>);
   }
 
-  const total = views?.length ?? 0;
   const inTab = (view: ScheduledRunView) =>
-    tab === 'all' ||
-    (tab === 'active' && ['running', 'paused', 'scheduled', 'missed'].includes(view.run.status)) ||
-    (tab === 'drafts' && view.run.status === 'draft') ||
-    (tab === 'finished' && isFinished(view));
+    tab === 'archived'
+      ? !!view.run.archived
+      : !view.run.archived && (
+          tab === 'all' ||
+          (tab === 'active' && ['running', 'paused', 'scheduled', 'missed'].includes(view.run.status)) ||
+          (tab === 'drafts' && view.run.status === 'draft') ||
+          (tab === 'finished' && isFinished(view))
+        );
   const tabs: Array<{ id: LineupTab; label: string }> = [
     { id: 'all', label: 'All' },
     { id: 'active', label: 'Active' },
     { id: 'drafts', label: 'Drafts' },
-    { id: 'finished', label: 'Finished' }
+    { id: 'finished', label: 'Finished' },
+    { id: 'archived', label: 'Archived' }
   ];
-  const countFor = (id: LineupTab) => (views ?? []).filter(view => id === 'all' || (id === 'active' ? ['running', 'paused', 'scheduled', 'missed'].includes(view.run.status) : id === 'drafts' ? view.run.status === 'draft' : isFinished(view))).length;
+  const countFor = (id: LineupTab) => (views ?? []).filter(view => {
+    if (id === 'archived') return !!view.run.archived;
+    if (view.run.archived) return false;
+    if (id === 'all') return true;
+    if (id === 'active') return ['running', 'paused', 'scheduled', 'missed'].includes(view.run.status);
+    if (id === 'drafts') return view.run.status === 'draft';
+    return isFinished(view);
+  }).length;
   const reveal = (id: string) => {
+    const isArch = views?.find(v => v.run.id === id)?.run.archived;
     setOpenRows(current => ({ ...current, [id]: true }));
-    setTab('all');
+    setTab(isArch ? 'archived' : 'all');
     window.requestAnimationFrame(() => document.querySelector(`[data-testid="schedule-card"][data-run-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
   };
   // Shows the workflow's exact commands first. Cancelling leaves it untrusted, and is not an error.
@@ -250,7 +303,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     }
     await load();
   });
-  const needs: Need[] = (views ?? []).flatMap(view => {
+  const needs: Need[] = (views ?? []).filter(view => !view.run.archived).flatMap(view => {
     const { run, readiness } = view;
     if (run.status === 'missed') {
       return [{ id: run.id, tone: 'bad' as const, title: run.name, text: `It was due ${formatStart(run.scheduledStartAt, run.timezone)} while Praxis was closed. Start it now or skip it.`, fixes: [
@@ -281,7 +334,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
             A schedule starts at its time while Praxis is open, runs its tickets in order, and pauses to ask you at an approval gate, a failure, or when a provider is nearly out of allowance.
           </p>
         </div>
-        {total > 0 && (
+        {(total > 0 || archivedTotal > 0) && (
           <div className="lineup-tabs" role="tablist" aria-label="Show">
             {tabs.map(item => (
               <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={`lineup-tab${tab === item.id ? ' is-on' : ''}`} data-testid={`schedule-tab-${item.id}`} onClick={() => setTab(item.id)}>
@@ -303,7 +356,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
 
       {views === undefined && !error && <div className="schedule-empty">Loading schedules…</div>}
 
-      {views !== undefined && total === 0 && (
+      {views !== undefined && total === 0 && archivedTotal === 0 && (
         <div className="schedule-empty" data-testid="schedule-empty">
           <Icon name="clock" size={28} />
           <strong>No scheduled runs yet</strong>
@@ -312,8 +365,16 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
         </div>
       )}
 
-      {views !== undefined && total > 0 && <LineupWeek views={views} now={now} onPick={reveal} />}
-      {views !== undefined && <LineupNeeds needs={selectedRunId ? needs.filter(need => need.id === selectedRunId) : needs} />}
+      {views !== undefined && total > 0 && tab !== 'archived' && <LineupWeek views={views} now={now} onPick={reveal} />}
+      {views !== undefined && tab !== 'archived' && <LineupNeeds needs={selectedRunId ? needs.filter(need => need.id === selectedRunId) : needs} />}
+
+      {tab === 'archived' && archivedTotal === 0 && (
+        <div className="schedule-empty" data-testid="schedule-empty-archived">
+          <Icon name="archive" size={28} />
+          <strong>No archived runs</strong>
+          <p>Runs you archive will appear here.</p>
+        </div>
+      )}
 
       {GROUPS.map(({ key, title }) => {
         const shown = groups[key].filter(view => (!selectedRunId || view.run.id === selectedRunId) && inTab(view));
@@ -330,6 +391,7 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
                 onEdit={() => { setSelectedRunId(view.run.id); setComposing({ view }); }}
                 onOpen={() => setDetailRunId(view.run.id)}
                 onDelete={() => void remove(view)}
+                onArchive={archived => void handleArchive(view, archived)}
                 onArm={armed => void act(() => window.praxis.scheduledRuns.setArmed(view.run.id, armed))}
                 onTrust={() => void trust(view)}
                 onRunNow={() => void runNow(view.run.id)}
@@ -357,6 +419,7 @@ function RunCard({
   onEdit,
   onOpen,
   onDelete,
+  onArchive,
   onArm,
   onTrust,
   onRunNow,
@@ -370,6 +433,7 @@ function RunCard({
   onEdit: () => void;
   onOpen: () => void;
   onDelete: () => void;
+  onArchive?: (archived: boolean) => void;
   onArm: (armed: boolean) => void;
   onTrust: () => void;
   onRunNow: () => void;
@@ -390,16 +454,19 @@ function RunCard({
   const open = <button type="button" className="btn btn-primary" data-testid="schedule-open" onClick={onOpen}>{live ? 'Open live view' : 'View report'}</button>;
   const startNow = <button type="button" className="btn btn-primary" data-testid="schedule-start-now" onClick={() => onResolve('start-now')}>Start now</button>;
   // The one action that matters now sits on the row; the rest are inside it.
-  const primary = run.status === 'missed' ? startNow : run.status === 'draft' ? (canArm ? arm : runNow) : run.status === 'scheduled' ? runNow : open;
+  const primary = run.archived ? (
+    <button type="button" className="btn btn-primary" data-testid="schedule-restore" onClick={() => onArchive?.(false)}>Restore</button>
+  ) : run.status === 'missed' ? startNow : run.status === 'draft' ? (canArm ? arm : runNow) : run.status === 'scheduled' ? runNow : open;
 
   return (
-    <article className={`schedule-card lineup-row${expanded ? ' is-open' : ''}`} data-testid="schedule-card" data-status={run.status} data-run-id={run.id}>
+    <article className={`schedule-card lineup-row${expanded ? ' is-open' : ''}${run.archived ? ' is-archived' : ''}`} data-testid="schedule-card" data-status={run.status} data-run-id={run.id}>
       <div className="lineup-row-head">
         <RunRing view={view} now={now} />
         <button type="button" className="lineup-row-name" aria-expanded={expanded} aria-label={`${run.name}, ${expanded ? 'hide' : 'show'} details`} onClick={onToggle}>
           <h4 className="schedule-card-name" data-testid="schedule-card-name">{run.name}</h4>
           <span className="schedule-card-meta">
             <span className={`spot-pill spot-pill--${run.status}`}><span className={`schedule-status schedule-status--${run.status}`} data-testid="schedule-status">{STATUS_LABEL[run.status]}</span></span>
+            {run.archived && <span className="spot-pill spot-pill--archived" data-testid="schedule-pill-archived">Archived</span>}
             <span>{run.policy.mode === 'parallel' ? `up to ${run.policy.maxConcurrency} at once` : 'one at a time'} · once</span>
           </span>
         </button>
@@ -420,11 +487,22 @@ function RunCard({
         <div className="lineup-row-body">
           <LineupDetails view={view} editable={editable} onTrust={onTrust} />
           <div className="schedule-actions lineup-actions">
-            {run.status === 'draft' && primary !== runNow && runNow}
-            {run.status === 'draft' && primary !== arm && arm}
-            {run.status === 'missed' && <button type="button" className="btn" data-testid="schedule-skip" onClick={() => onResolve('skip')}>Skip</button>}
-            {run.status === 'scheduled' && <button type="button" className="btn" data-testid="schedule-hold" onClick={() => onArm(false)}>Put on hold</button>}
-            {editable && <button type="button" className="btn" data-testid="schedule-edit" onClick={onEdit}>Edit</button>}
+            {run.status === 'draft' && !run.archived && primary !== runNow && runNow}
+            {run.status === 'draft' && !run.archived && primary !== arm && arm}
+            {run.status === 'missed' && !run.archived && <button type="button" className="btn" data-testid="schedule-skip" onClick={() => onResolve('skip')}>Skip</button>}
+            {run.status === 'scheduled' && !run.archived && <button type="button" className="btn" data-testid="schedule-hold" onClick={() => onArm(false)}>Put on hold</button>}
+            {editable && !run.archived && <button type="button" className="btn" data-testid="schedule-edit" onClick={onEdit}>Edit</button>}
+            {run.archived && primary !== open && open}
+            {!run.archived && onArchive && run.status !== 'running' && (
+              <button
+                type="button"
+                className="btn"
+                data-testid="schedule-archive"
+                onClick={() => onArchive(true)}
+              >
+                <Icon name="archive" size={13} /> Archive
+              </button>
+            )}
             <button type="button" className="btn btn-icon" data-testid="schedule-delete" aria-label={`Delete ${run.name}`} onClick={onDelete}>
               <Icon name="trash" size={13} />
             </button>

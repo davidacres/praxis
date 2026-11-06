@@ -198,6 +198,12 @@ export function getKnownContextLength(
   if (normalized.includes('deepseek')) {
     return 128000;
   }
+  if (normalized.startsWith('qwen') || normalized.includes('qwen')) {
+    if (normalized.includes('max') || normalized.includes('plus')) {
+      return 1000000;
+    }
+    return 131072;
+  }
   return undefined;
 }
 

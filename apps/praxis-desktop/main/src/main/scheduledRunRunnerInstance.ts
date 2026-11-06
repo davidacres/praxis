@@ -11,6 +11,11 @@ import {
   planStatusToMarkdown,
   pendingLoop,
   providerCanRunStage,
+  failingGateFindings,
+  repairStageForFindings,
+  reworkWorkflowRun,
+  loopBudget,
+  WORKFLOW_MAX_LOOP_ITERATIONS,
   rejectStage,
   resolveApprovalTarget,
   scheduledTicketTransition,
@@ -36,7 +41,7 @@ import { stageCapableProvider } from './providerFallback';
 import { getProjectStore } from './projectStoreInstance';
 import { runAsAgent } from './projectActivityInstance';
 import { changedPaths, commitPraxisWrite } from './ticketWriteBackCommit';
-import { repositoryRoot } from './runWork';
+import { findRunBranch, repositoryRoot } from './runWork';
 import { withBaseCheckout } from './baseCheckoutLock';
 
 /**
@@ -78,6 +83,13 @@ function ports(): ScheduledRunnerPorts {
     newToken: () => randomUUID(),
     observe: observeWorkflowRun,
     findByLaunchToken: token => runStore().list().find(run => run.scheduledLaunchToken === token)?.runId,
+    deliveryBranchForWorkflow: async workflowRunId => {
+      const workflow = runStore().get(workflowRunId);
+      if (!workflow) return undefined;
+      const folder = getProjectStore().get(workflow.projectId)?.workspaceFolder?.trim();
+      const root = folder ? await repositoryRoot(folder) : undefined;
+      return root ? findRunBranch(root, workflowRunId) : undefined;
+    },
     checkTicket: async ticket => {
       try {
         const issue = await (await getServiceForConnection(ticket.connectionId)).getIssue(ticket.issueKey);
@@ -86,9 +98,20 @@ function ports(): ScheduledRunnerPorts {
         return `${ticket.issueKey} no longer exists or can no longer be read.`;
       }
     },
-    launch: async ({ run, entry, workflowId, token, provider }) => {
+    launch: async ({ run, entry, workflowId, token, provider, deliveryBranchName, finalEntry }) => {
       if (!run.projectId) throw new ScheduledLaunchError('This schedule is not tied to a project, so it has nowhere to run the tickets.', 'policy');
       try {
+        let sharedBranch = deliveryBranchName;
+        if (run.policy.mode === 'sequential' && sharedBranch) {
+          const folder = getProjectStore().get(run.projectId)?.workspaceFolder?.trim();
+          const root = folder ? await repositoryRoot(folder) : undefined;
+          const existing = root
+            ? runStore().list()
+                .filter(candidate => candidate.projectId === run.projectId && candidate.issueKey === entry.ticket.issueKey && candidate.status === 'failed' && candidate.nodes.merge?.outcome === 'failed')
+                .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0]
+            : undefined;
+          if (root && existing) sharedBranch = (await findRunBranch(root, existing.runId)) ?? sharedBranch;
+        }
         const summary = await startWorkflowRun({
           projectId: run.projectId,
           workflowId,
@@ -98,9 +121,15 @@ function ports(): ScheduledRunnerPorts {
           // `uncommittedChanges` is deliberately unset: a dirty base pauses the schedule rather than letting it choose.
           // Nobody is there to answer a permission prompt, so stages auto-approve and run in Autopilot,
           // still bounded by each stage's own tool mode.
-          options: { permissionMode: 'auto', providerLimitPolicy: 'switch', ...(provider ? { aiProvider: provider } : {}) }
+          options: {
+            permissionMode: 'auto',
+            providerLimitPolicy: 'switch',
+            ...(provider ? { aiProvider: provider } : {}),
+            ...(sharedBranch ? { sharedDeliveryBranch: sharedBranch } : {}),
+            ...(run.policy.mode === 'sequential' && !finalEntry ? { deferMerge: true } : {})
+          }
         });
-        return summary.runId;
+        return { workflowRunId: summary.runId, ...(run.policy.mode === 'sequential' && sharedBranch ? { deliveryBranchName: sharedBranch } : {}) };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new ScheduledLaunchError(message, launchReason(message));
@@ -220,6 +249,19 @@ function ports(): ScheduledRunnerPorts {
             return skipResult.run;
           }
         }
+        const gateFindings = failingGateFindings(current, policy);
+        const repairNodeId = repairStageForFindings(current, gateFindings);
+        const repairAttempts = current.autonomousReworkAttempts ?? 0;
+        if (repairNodeId && gateFindings.length > 0 && repairAttempts < WORKFLOW_MAX_LOOP_ITERATIONS) {
+          const rework = reworkWorkflowRun(current, repairNodeId, at, { freshAttempts: true, carryFindings: gateFindings });
+          if (!rework.reason) {
+            decisionResult = {
+              decision: 'reworking',
+              reason: `Starting autonomous repair ${repairAttempts + 1} of ${WORKFLOW_MAX_LOOP_ITERATIONS} from ${repairNodeId} with ${gateFindings.length} blocking findings.`
+            };
+            return { ...rework.run, autonomousReworkAttempts: repairAttempts + 1 };
+          }
+        }
         const rejectReason = `Gates unmet: ${readiness.blocking.map(g => `${g.gate} ${g.state} — ${g.detail}`).join('; ')}`;
         const rejectedRun = rejectStage(current, approval.id, {
           actor: 'Scheduled run (autonomous)',
@@ -242,23 +284,26 @@ function ports(): ScheduledRunnerPorts {
         const pending = pendingLoop(current);
         const targetEdgeId = edgeId || pending?.status.edge.id;
         const edge = current.definition.edges.find(e => e.id === targetEdgeId);
-        const keepBest = edge?.loop?.keepBest;
-        const reason = keepBest
-          ? 'Autonomous decision: loop budget exhausted, accepted best iteration.'
-          : 'Autonomous decision: loop budget exhausted, accepted iteration to proceed.';
+        const budget = edge ? loopBudget(current, edge) : WORKFLOW_MAX_LOOP_ITERATIONS;
+        const extraIterations = WORKFLOW_MAX_LOOP_ITERATIONS - budget;
+        const decision = extraIterations > 0 ? 'grant' as const : 'stop' as const;
+        const reason = extraIterations > 0
+          ? `Autonomous repair: granting the remaining ${extraIterations} bounded iteration${extraIterations === 1 ? '' : 's'} to resolve findings before approval.`
+          : `Autonomous repair limit of ${WORKFLOW_MAX_LOOP_ITERATIONS} iterations reached with blocking findings still present.`;
         const next = applyWorkflowRunCommand(current, {
           kind: 'loop-decided',
           edgeId: edge?.id ?? targetEdgeId ?? '',
           actor: 'Scheduled run (autonomous)',
-          decision: 'accept',
+          decision,
+          ...(decision === 'grant' ? { extraIterations } : {}),
           reason,
           at
         });
-        decisionResult = { decision: 'accept', reason };
+        decisionResult = { decision, reason };
         return next;
       });
       await getWorkflowOrchestrator().step(workflowRunId);
-      return decisionResult ?? { decision: 'accept', reason: 'Autonomous decision: accepted loop.' };
+      return decisionResult ?? { decision: 'stop', reason: 'The repair loop could not be continued safely.' };
     },
     approveGate: async (workflowRunId, nodeId) => {
       await getWorkflowOrchestrator().updateRun(workflowRunId, current => {

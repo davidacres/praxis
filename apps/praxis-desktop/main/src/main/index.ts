@@ -30,6 +30,7 @@ import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { recoverTeamChatsOnStartup, registerAssistantIpc } from './assistantIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
+import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
 import { registerGitIpc } from './gitIpc';
 import { attachQuitGuard, attachWindowCloseGuard, attachWindowStateEvents, attachWindowZoomShortcuts, getInitialZoomFactor, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
 import { attachWindowStatePersistence, loadWindowState } from './windowState';
@@ -478,8 +479,26 @@ app.on('window-all-closed', () => {
 // Close any folder/user-workspace file watchers before the process
 // exits — an open chokidar watcher otherwise keeps the event loop alive and
 // hangs a graceful quit (see disposeAllServices' doc comment).
+let workflowsSuspendedForQuit = false;
+let workflowQuitPending = false;
 app.on('before-quit', event => {
   if (event.defaultPrevented) return; // the quit guard is asking the user first
+  if (!workflowsSuspendedForQuit) {
+    event.preventDefault();
+    if (workflowQuitPending) return;
+    workflowQuitPending = true;
+    stopScheduledRunRunner();
+    stopScheduledRunRequestImports();
+    void getWorkflowOrchestrator().suspend().then(() => {
+      workflowsSuspendedForQuit = true;
+      app.quit();
+    }).catch(error => {
+      workflowQuitPending = false;
+      console.error('Could not preserve workflow stages before quitting:', error);
+      dialog.showErrorBox('Could not safely stop workflow runs', error instanceof Error ? error.message : String(error));
+    });
+    return;
+  }
   stopScheduledRunRunner();
   stopScheduledRunRequestImports();
   closeAllDetachedChats();
