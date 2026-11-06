@@ -162,6 +162,11 @@ test('due and next runs ignore drafts and sort soonest first', () => {
   assert.equal(nextScheduledRun([a, b, c])?.name, 'b');
   assert.deepEqual(dueScheduledRuns([a, b, c], '2026-10-22T12:00:00Z').map(run => run.name), ['b', 'a']);
   assert.equal(nextScheduledRun([c]), undefined);
+
+  // Archived runs are ignored by next and due
+  const archivedB = { ...b, archived: true };
+  assert.equal(nextScheduledRun([a, archivedB])?.name, 'a');
+  assert.deepEqual(dueScheduledRuns([a, archivedB], '2026-10-22T12:00:00Z').map(run => run.name), ['a']);
 });
 
 // ---- readiness -------------------------------------------------------------

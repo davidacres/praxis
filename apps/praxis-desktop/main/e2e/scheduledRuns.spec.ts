@@ -1571,3 +1571,80 @@ test('a schedule paused on an untrusted workflow offers to review and trust it, 
   await expect.poll(async () => (await entriesOf(page, runId))[0].workflowRunId, { timeout: 30000 }).toBeTruthy();
   await expect(page.getByTestId('schedule-trust-workflow')).toHaveCount(0);
 });
+
+test('archives and restores a scheduled run from the lineup card and the report, and deletes from the report', async () => {
+  const { page, projectId } = await launch();
+  await page.evaluate(async id => {
+    const issues = await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 10, `project:${id}`);
+    const tickets = issues.issues.slice(0, 1).map(issue => ({ connectionId: `project:${id}`, issueKey: issue.key, title: issue.summary }));
+    await window.praxis.scheduledRuns.save({ projectId: id, name: 'Archive Test', date: '2030-03-01', time: '10:00', timezone: 'UTC', tickets, arm: true });
+  }, projectId);
+
+  await page.reload();
+  await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
+
+  // The schedule is currently scheduled and in 'all' and 'active'
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Archive Test' });
+  await expect(card).toBeVisible();
+
+  // Archive it from the card actions
+  await card.getByTestId('schedule-archive').click();
+
+  // Now it is gone from 'all'
+  await expect(page.getByTestId('schedule-card').filter({ hasText: 'Archive Test' })).toHaveCount(0);
+
+  // Switch to Archived tab
+  await page.getByTestId('schedule-tab-archived').click();
+  const archivedCard = page.getByTestId('schedule-card').filter({ hasText: 'Archive Test' });
+  await expect(archivedCard).toBeVisible();
+  await expect(archivedCard.getByTestId('schedule-pill-archived')).toHaveText('Archived');
+
+  // Restore it
+  await archivedCard.getByTestId('schedule-restore').click();
+
+  // Now the Archived tab is empty
+  await expect(page.getByTestId('schedule-empty-archived')).toBeVisible();
+
+  // Switch back to All tab
+  await page.getByTestId('schedule-tab-all').click();
+  await expect(card).toBeVisible();
+  await expect(card.getByTestId('schedule-pill-archived')).toHaveCount(0);
+
+  // Restart Praxis with the run marked completed so we can test the report view archive & delete
+  const reuse = { userDataDir: app!.userDataDir, settingsPath: app!.settingsPath };
+  await quitWithArmedSchedule();
+  const file = path.join(reuse.userDataDir, 'scheduled-runs.json');
+  const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const run = stored['praxis.scheduledRuns.v1'].find((item: { name: string }) => item.name === 'Archive Test');
+  run.status = 'completed';
+  run.attempts = [{ id: 'attempt-1', trigger: 'schedule', startedAt: new Date(Date.now() - 3600000).toISOString(), endedAt: new Date().toISOString() }];
+  run.events = [{ at: new Date().toISOString(), kind: 'completed', message: 'Finished' }];
+  fs.writeFileSync(file, JSON.stringify(stored));
+
+  app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
+  const window = app.window;
+  await openScheduleSidebar(window);
+
+  // Open the report (card now has View report)
+  const finishedCard = window.getByTestId('schedule-card').filter({ hasText: 'Archive Test' });
+  await finishedCard.getByTestId('schedule-open').click();
+  await expect(window.getByTestId('schedule-report')).toBeVisible();
+
+  // Archive from report header
+  await window.getByTestId('schedule-report-archive').click();
+  await expect(window.getByTestId('schedule-report-pill-archived')).toBeVisible();
+  await expect(window.getByTestId('schedule-report-restore')).toBeVisible();
+
+  // Restore from report header
+  await window.getByTestId('schedule-report-restore').click();
+  await expect(window.getByTestId('schedule-report-pill-archived')).toHaveCount(0);
+  await expect(window.getByTestId('schedule-report-archive')).toBeVisible();
+
+  // Delete from report header
+  await window.getByTestId('schedule-report-delete').click();
+  await window.getByRole('button', { name: 'Delete schedule' }).click();
+
+  // Should navigate back to the lineup and the schedule is deleted
+  await expect(window.getByTestId('scheduled-runs-page')).toBeVisible();
+  await expect(window.getByTestId('schedule-card').filter({ hasText: 'Archive Test' })).toHaveCount(0);
+});

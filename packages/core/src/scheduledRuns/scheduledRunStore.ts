@@ -237,7 +237,9 @@ export function normalizeScheduledRun(value: unknown): ScheduledRun | undefined 
     ...(pause ? { pause } : {}),
     createdAt,
     updatedAt: text(raw.updatedAt) ?? createdAt,
-    events: (Array.isArray(raw.events) ? raw.events : []).map(normalizeEvent).filter((e): e is ScheduledRunEvent => !!e)
+    events: (Array.isArray(raw.events) ? raw.events : []).map(normalizeEvent).filter((e): e is ScheduledRunEvent => !!e),
+    ...(raw.archived === true ? { archived: true } : {}),
+    ...(typeof raw.archivedAt === 'string' ? { archivedAt: raw.archivedAt } : {})
   };
 }
 
@@ -273,6 +275,28 @@ export class ScheduledRunStore {
     const next = runs.filter(run => run.id !== id);
     if (next.length === runs.length) throw new Error(`Scheduled run ${id} was not found.`);
     await this.state.update(RUNS_KEY, next);
+  }
+
+  /**
+   * Archives or restores a scheduled run. Running schedules cannot be archived.
+   */
+  public async setArchived(id: string, archived: boolean): Promise<ScheduledRun> {
+    const runs = this.list();
+    const run = runs.find(candidate => candidate.id === id);
+    if (!run) throw new Error(`Scheduled run ${id} was not found.`);
+    if (archived && run.status === 'running') {
+      throw new Error(`Cannot archive scheduled run ${id} while it is running.`);
+    }
+    const updated: ScheduledRun = {
+      ...run,
+      ...(archived ? { archived: true, archivedAt: new Date().toISOString() } : {})
+    };
+    if (!archived) {
+      delete updated.archived;
+      delete updated.archivedAt;
+    }
+    await this.save(updated);
+    return updated;
   }
 
   /**

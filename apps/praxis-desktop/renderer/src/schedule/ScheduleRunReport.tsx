@@ -24,11 +24,13 @@ interface ScheduleRunReportProps {
   onBack: () => void;
   onOpenWorkflowRun?: (workflowRunId: string) => void;
   onOpenSession?: (sessionKey: string) => void;
+  onArchive?: (archived: boolean) => void;
+  onDelete?: () => void;
 }
 
 const STOP_TONE: Record<StopKind, string> = { loop: 'warn', failure: 'bad', approval: 'accent', blocked: 'muted', other: 'muted' };
 
-export function ScheduleRunReport({ view, live = false, onBack, onOpenWorkflowRun, onOpenSession }: ScheduleRunReportProps) {
+export function ScheduleRunReport({ view, live = false, onBack, onOpenWorkflowRun, onOpenSession, onArchive, onDelete }: ScheduleRunReportProps) {
   const { run } = view;
   const [open, setOpen] = useState<string>();
   const [showLedger, setShowLedger] = useState(false);
@@ -90,6 +92,7 @@ export function ScheduleRunReport({ view, live = false, onBack, onOpenWorkflowRu
           <div className="spot-head-meta">
             <button type="button" className="btn btn-icon" aria-label={live ? 'Back to the live run' : 'Back to scheduled runs'} data-testid="schedule-report-back" onClick={onBack}><Icon name="arrow-left" size={14} /></button>
             <span className={`spot-pill spot-pill--${run.status}`} data-testid="schedule-report-status">{STATUS_LABEL[run.status]}</span>
+            {run.archived && <span className="spot-pill spot-pill--archived" data-testid="schedule-report-pill-archived">Archived</span>}
             <span className="spot-head-sub">{run.name}{attempt ? ` · ${formatStart(attempt.startedAt, run.timezone)}${ended ? ` → ${formatHourMinute(ended, run.timezone)}` : ''}` : ''}</span>
           </div>
           <h2 className="spot-headline">{headline}</h2>
@@ -99,6 +102,32 @@ export function ScheduleRunReport({ view, live = false, onBack, onOpenWorkflowRu
           <div><b>{elapsedMs ? formatWait(Math.max(0, elapsedMs - waitedMs)) : '—'}</b><span>working</span></div>
           <div><b className={waitedMs ? 'is-warn' : undefined}>{formatWait(waitedMs)}</b><span>waiting for you</span></div>
         </div>
+        {!live && (onArchive || onDelete) && (
+          <div className="schedule-head-actions brief-head-actions">
+            {onArchive && (
+              <button
+                type="button"
+                className="btn"
+                data-testid={run.archived ? 'schedule-report-restore' : 'schedule-report-archive'}
+                onClick={() => onArchive(!run.archived)}
+              >
+                <Icon name={run.archived ? 'arrow-up' : 'archive'} size={13} /> {run.archived ? 'Restore' : 'Archive'}
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                className="btn btn-icon"
+                data-testid="schedule-report-delete"
+                aria-label={`Delete ${run.name}`}
+                title="Delete run"
+                onClick={onDelete}
+              >
+                <Icon name="trash" size={13} />
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="brief-insights">

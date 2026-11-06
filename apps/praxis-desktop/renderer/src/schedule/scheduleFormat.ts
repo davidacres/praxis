@@ -13,6 +13,7 @@ export interface ScheduledRunGroups {
   attention: ScheduledRunView[];
   drafts: ScheduledRunView[];
   finished: ScheduledRunView[];
+  archived: ScheduledRunView[];
 }
 
 export const STATUS_LABEL: Record<ScheduledRunStatus, string> = {
@@ -28,8 +29,12 @@ export const STATUS_LABEL: Record<ScheduledRunStatus, string> = {
 
 /** Soonest start first within each group, which is how the lineup reads. */
 export function groupScheduledRuns(views: readonly ScheduledRunView[]): ScheduledRunGroups {
-  const groups: ScheduledRunGroups = { running: [], upNext: [], attention: [], drafts: [], finished: [] };
+  const groups: ScheduledRunGroups = { running: [], upNext: [], attention: [], drafts: [], finished: [], archived: [] };
   for (const view of views) {
+    if (view.run.archived) {
+      groups.archived.push(view);
+      continue;
+    }
     switch (view.run.status) {
       case 'running': groups.running.push(view); break;
       case 'scheduled': groups.upNext.push(view); break;
@@ -42,8 +47,9 @@ export function groupScheduledRuns(views: readonly ScheduledRunView[]): Schedule
   }
   const byStart = (a: ScheduledRunView, b: ScheduledRunView) => Date.parse(a.run.scheduledStartAt) - Date.parse(b.run.scheduledStartAt);
   for (const key of Object.keys(groups) as Array<keyof ScheduledRunGroups>) groups[key].sort(byStart);
-  // The most recent finished run first.
+  // The most recent finished and archived runs first.
   groups.finished.reverse();
+  groups.archived.reverse();
   return groups;
 }
 

@@ -41,7 +41,7 @@ export function LineupWeek({ views, now, onPick }: WeekProps) {
   const days = Array.from({ length: 7 }, (_, index) => new Date(from + index * DAY_MS));
   const x = (time: number) => Math.max(0, Math.min(100, ((time - from) / (to - from)) * 100));
   const shown = views
-    .filter(view => !isFinished(view) && view.run.status !== 'missed')
+    .filter(view => !isFinished(view) && view.run.status !== 'missed' && !view.run.archived)
     .map(view => ({ view, ...span(view) }))
     .filter(item => item.end > from && item.start < to)
     .sort((a, b) => a.start - b.start);

@@ -62,10 +62,10 @@
       "defaultAiToolMode": "full",
       "workItems": [],
       "createdAt": "2026-08-31T22:27:04.012Z",
-      "updatedAt": "2026-09-19T09:23:22.000Z",
+      "updatedAt": "2026-11-06T15:42:49.004Z",
       "projectFileStatus": "created",
       "icon": "rocket",
-      "color": "green",
+      "color": "yellow",
       "recommendedWorkflowTemplate": {
         "templateId": "governed-delivery",
         "rationale": "Praxis Desktop is a substantial software product that benefits from planned implementation, converged review and quality checks, and explicit human approval.",

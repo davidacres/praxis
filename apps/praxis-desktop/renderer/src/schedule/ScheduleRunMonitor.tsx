@@ -27,6 +27,7 @@ interface ScheduleRunMonitorProps {
   onOpenWorkflowRun?: (workflowRunId: string) => void;
   /** Opens the report for the run so far. */
   onShowReport?: () => void;
+  onDelete?: () => void;
 }
 
 const PAUSE_TITLE: Record<string, string> = {
@@ -40,7 +41,7 @@ const PAUSE_TITLE: Record<string, string> = {
   'launch-interrupted': 'Praxis stopped while starting a ticket.'
 };
 
-export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun, onShowReport }: ScheduleRunMonitorProps) {
+export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun, onShowReport, onDelete }: ScheduleRunMonitorProps) {
   const { run } = view;
   const headroom = view.headroom ?? [];
   const lives = view.lives ?? [];
@@ -157,6 +158,19 @@ export function ScheduleRunMonitor({ view, onBack, onOpenWorkflowRun, onShowRepo
             <button type="button" className="btn btn-primary" data-testid="schedule-resume" disabled={busy} onClick={() => void act(() => api.resume(run.id))}>Resume</button>
           )}
           <button type="button" className="btn" data-testid="schedule-stop" disabled={busy} onClick={() => void stop()}>Stop run</button>
+          {onDelete && (
+            <button
+              type="button"
+              className="btn btn-icon"
+              data-testid="schedule-monitor-delete"
+              aria-label={`Delete ${run.name}`}
+              title="Delete run"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              <Icon name="trash" size={13} />
+            </button>
+          )}
         </div>
       </header>
 
