@@ -16,7 +16,7 @@ import { AssistantContextBanner } from './AssistantContextBanner';
 import { AssistantMessageCard } from './AssistantMessageCard';
 import { useAssistant, type AssistantComposerPreferences, type AssistantController } from './AssistantProvider';
 import { PERSONAS } from './personaMeta';
-import { describeTurnCards, resolveTurnKeyBinding, type TurnControl, type TurnControlState } from './turnControlModel';
+import { describeTurnCards, isEditingSurface, resolveTurnKeyBinding, type TurnControl, type TurnControlState } from './turnControlModel';
 
 function useRuntimePreference<K extends keyof AssistantComposerPreferences>(assistant: AssistantController, key: K): [AssistantComposerPreferences[K], Dispatch<SetStateAction<AssistantComposerPreferences[K]>>] {
   const set = useCallback<Dispatch<SetStateAction<AssistantComposerPreferences[K]>>>(value => {
@@ -141,9 +141,15 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
       : assistant.control(control.command.payload);
     sent.catch(error => setToolError(String(error)));
   }, []);
-  /** Panel-scoped key bindings; every one needs a modifier, so composer typing is never touched. */
+  /**
+   * Panel-scoped key bindings. Every one needs a modifier, and presses from the composer or the
+   * reconciliation note reach only Stop — the composer's own Enter handler has already sent.
+   */
   const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    const control = resolveTurnKeyBinding(event, turnCards.map(entry => entry.card));
+    const control = resolveTurnKeyBinding(
+      { key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, fromEditingSurface: isEditingSurface(event.target) },
+      turnCards.map(entry => entry.card)
+    );
     if (!control) return;
     event.preventDefault();
     event.stopPropagation();

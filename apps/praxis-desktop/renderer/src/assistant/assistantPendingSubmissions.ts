@@ -14,45 +14,53 @@ import type { SubmitConversationCommand } from '@praxis/core';
  * 2. **Attachments are staged once.** `stageAttachments` writes real bytes into the profile, so a
  *    retry must reuse the refs the first attempt staged rather than stage them again.
  */
-export class PendingSubmissions {
-  private readonly entries = new Map<string, { command: SubmitConversationCommand; staged: boolean }>();
+type PendingEntry = { command: SubmitConversationCommand; staged: boolean };
 
-  private static key(conversationId: string, text: string): string {
-    return `${conversationId}:${text}`;
+export class PendingSubmissions {
+  /** conversationId → submitted text → entry. Nested, so dropping a conversation is exact. */
+  private readonly byConversation = new Map<string, Map<string, PendingEntry>>();
+
+  private entry(conversationId: string, text: string): PendingEntry | undefined {
+    return this.byConversation.get(conversationId)?.get(text);
   }
 
   /** The command already built for this conversation+text, so a retry reuses its identity. */
   get(conversationId: string, text: string): SubmitConversationCommand | undefined {
-    return this.entries.get(PendingSubmissions.key(conversationId, text))?.command;
+    return this.entry(conversationId, text)?.command;
   }
 
   /** Whether attachments for this command have already been staged; staging must happen once. */
   hasStagedAttachments(conversationId: string, text: string): boolean {
-    return this.entries.get(PendingSubmissions.key(conversationId, text))?.staged ?? false;
+    return this.entry(conversationId, text)?.staged ?? false;
   }
 
   record(command: SubmitConversationCommand, staged: boolean): void {
-    this.entries.set(PendingSubmissions.key(command.conversationId, command.text), { command, staged });
+    let entries = this.byConversation.get(command.conversationId);
+    if (!entries) this.byConversation.set(command.conversationId, entries = new Map());
+    entries.set(command.text, { command, staged });
   }
 
   /** The submission reached main and was accepted (or duplicated by command id). */
   acknowledge(conversationId: string, text: string): void {
-    this.entries.delete(PendingSubmissions.key(conversationId, text));
+    const entries = this.byConversation.get(conversationId);
+    if (!entries) return;
+    entries.delete(text);
+    if (entries.size === 0) this.byConversation.delete(conversationId);
   }
 
   /** The conversation itself is gone: nothing pending for it can ever be delivered. */
   dropConversation(conversationId: string): void {
-    for (const key of [...this.entries.keys()]) {
-      if (key.startsWith(`${conversationId}:`)) this.entries.delete(key);
-    }
+    this.byConversation.delete(conversationId);
   }
 
   /** Everything still pending, for diagnostics and tests. Never used to derive conversation state. */
   list(): SubmitConversationCommand[] {
-    return [...this.entries.values()].map(entry => entry.command);
+    return [...this.byConversation.values()].flatMap(entries => [...entries.values()].map(entry => entry.command));
   }
 
   get size(): number {
-    return this.entries.size;
+    let total = 0;
+    for (const entries of this.byConversation.values()) total += entries.size;
+    return total;
   }
 }

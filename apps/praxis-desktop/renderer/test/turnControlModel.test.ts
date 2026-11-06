@@ -8,7 +8,8 @@ import {
   describeTurnCard,
   describeTurnCards,
   hasReconciliationEvidence,
-  resolveTurnKeyBinding
+  resolveTurnKeyBinding,
+  isEditingSurface
 } from '../src/assistant/turnControlModel.ts';
 
 /* TASK-484: the queue/recovery controls, their accessible names, test ids, gating and commands. */
@@ -224,7 +225,7 @@ test('every control carries a distinct data-testid the specs can select', () => 
   }
 });
 
-test('⌘/Ctrl+. stops the turn in flight and ⌘/Ctrl+R retries the most recent retryable attempt', () => {
+test('⌘/Ctrl+. stops the turn in flight and ⌘/Ctrl+Shift+R retries the most recent retryable attempt', () => {
   const running = turn();
   const failed = turn({ id: 't2', state: 'failed', attempts: [attempt({ id: 'a9', participantId: 'part-qa' })] });
   const cards = describeTurnCards(conversation([running, failed]), () => ({}), commandIds());
@@ -232,7 +233,9 @@ test('⌘/Ctrl+. stops the turn in flight and ⌘/Ctrl+R retries the most recent
   const stop = resolveTurnKeyBinding({ key: '.', ...mod }, cards.map(entry => entry.card))!;
   assert.equal(stop.kind, 'stop');
   assert.equal(stop.command!.payload.turnId, 't1');
-  const retry = resolveTurnKeyBinding({ key: 'r', ...mod }, cards.map(entry => entry.card))!;
+  // ⌘/Ctrl+R alone is the reload chord and is never claimed, retry or not.
+  assert.equal(resolveTurnKeyBinding({ key: 'r', ...mod }, cards.map(entry => entry.card)), undefined);
+  const retry = resolveTurnKeyBinding({ key: 'R', ...mod, shiftKey: true }, cards.map(entry => entry.card))!;
   assert.equal(retry.kind, 'retry');
   assert.equal(retry.command!.payload.turnId, 't2');
   // The macOS spelling resolves to the same control.
@@ -252,11 +255,34 @@ test('⌘/Ctrl+Enter records the reconciliation only while it is the single enab
   assert.equal(resolveTurnKeyBinding({ key: 'Enter', ...mod }, both.map(entry => entry.card)), undefined);
 });
 
+test('⌘/Ctrl+Enter typed in the composer sends the message only; it never records a reconciliation', () => {
+  const unknown = turn({ state: 'outcome_unknown' });
+  const cards = [describeTurnCard(conversation([unknown]), unknown, 1, { reconciliationNote: 'Checked.' }, commandIds())];
+  const mod = { ctrlKey: true, metaKey: false };
+  assert.equal(resolveTurnKeyBinding({ key: 'Enter', ...mod }, cards)!.kind, 'record-reconciliation');
+  assert.equal(resolveTurnKeyBinding({ key: 'Enter', ...mod, fromEditingSurface: true }, cards), undefined);
+  assert.equal(resolveTurnKeyBinding({ key: 'Enter', ctrlKey: false, metaKey: true, fromEditingSurface: true }, cards), undefined);
+  // Retry is not reachable from a text field either; Stop stays reachable so a runaway turn can be halted.
+  const failed = describeTurnCards(conversation([turn({ state: 'failed' })]), () => ({}), commandIds()).map(entry => entry.card);
+  assert.equal(resolveTurnKeyBinding({ key: 'R', ...mod, shiftKey: true, fromEditingSurface: true }, failed), undefined);
+  const running = describeTurnCards(conversation([turn()]), () => ({}), commandIds()).map(entry => entry.card);
+  assert.equal(resolveTurnKeyBinding({ key: '.', ...mod, fromEditingSurface: true }, running)!.kind, 'stop');
+});
+
+test('editing surfaces are inputs, textareas, selects and contenteditable elements', () => {
+  assert.equal(isEditingSurface({ tagName: 'TEXTAREA' }), true);
+  assert.equal(isEditingSurface({ tagName: 'input' }), true);
+  assert.equal(isEditingSurface({ tagName: 'DIV', isContentEditable: true }), true);
+  assert.equal(isEditingSurface({ tagName: 'BUTTON' }), false);
+  assert.equal(isEditingSurface(null), false);
+});
+
 test('a plain key press, an alt-modified one, or a binding with nothing enabled is not ours', () => {
   const running = turn();
   const cards = describeTurnCards(conversation([running]), () => ({}), commandIds()).map(entry => entry.card);
   assert.equal(resolveTurnKeyBinding({ key: 'r', ctrlKey: false, metaKey: false }, cards), undefined);
   assert.equal(resolveTurnKeyBinding({ key: '.', ctrlKey: true, metaKey: false, altKey: true }, cards), undefined);
+  assert.equal(resolveTurnKeyBinding({ key: '.', ctrlKey: true, metaKey: false, shiftKey: true }, cards), undefined);
   assert.equal(resolveTurnKeyBinding({ key: 'z', ctrlKey: true, metaKey: false }, cards), undefined);
   const cancelling = describeTurnCards(conversation([turn({ state: 'cancelling' })]), () => ({}), commandIds()).map(entry => entry.card);
   assert.equal(resolveTurnKeyBinding({ key: '.', ctrlKey: true, metaKey: false }, cancelling), undefined);

@@ -78,7 +78,7 @@ export const RECOVERY_TURN_STATES: readonly string[] = ['failed', 'interrupted',
 
 export const TURN_CONTROL_KEY_HINTS = {
   stop: '⌘/Ctrl+.',
-  retry: '⌘/Ctrl+R',
+  retry: '⌘/Ctrl+Shift+R',
   resolve: '⌘/Ctrl+Enter'
 } as const;
 
@@ -343,15 +343,25 @@ export interface TurnKeyBinding {
   kinds: readonly TurnControlKind[];
   /** `first` targets the turn already in flight; `last` the most recent retryable one. */
   select: 'first' | 'last';
+  /** Whether Shift must be held; a binding never fires with the opposite Shift state. */
+  shift?: boolean;
   /** When set, the binding only fires if it is the sole enabled recovery action on the panel. */
   onlyRecoveryAction?: boolean;
+  /**
+   * Whether the binding may fire from an editing surface (the composer, the reconciliation note).
+   * Only Stop does: the composer sends on Enter, so a modified Enter from it is a send, not a
+   * recovery decision.
+   */
+  whileEditing?: boolean;
   description: string;
 }
 
 /** The documented panel key bindings, in the order they are checked. */
 export const TURN_KEY_BINDINGS: readonly TurnKeyBinding[] = [
-  { combo: 'mod', key: '.', kinds: ['stop', 'cancel-queued', 'resolve-cancel'], select: 'first', description: 'Stop the turn in flight, or cancel the queued one' },
-  { combo: 'mod', key: 'r', kinds: ['retry', 'resolve-retry'], select: 'last', description: 'Retry the most recent retryable attempt' },
+  { combo: 'mod', key: '.', kinds: ['stop', 'cancel-queued', 'resolve-cancel'], select: 'first', whileEditing: true, description: 'Stop the turn in flight, or cancel the queued one' },
+  // Shift+R, not R: ⌘/Ctrl+R is the conventional reload chord, and a binding that only sometimes
+  // swallows it (when a retry happens to be actionable) would be surprising.
+  { combo: 'mod', key: 'r', shift: true, kinds: ['retry', 'resolve-retry'], select: 'last', description: 'Retry the most recent retryable attempt' },
   { combo: 'mod', key: 'Enter', kinds: ['record-reconciliation', 'recheck-context'], select: 'last', onlyRecoveryAction: true, description: 'Record the reconciliation, or recheck the context, when it is the only recovery action available' }
 ];
 
@@ -361,20 +371,33 @@ export interface TurnKeyEvent {
   metaKey: boolean;
   altKey?: boolean;
   shiftKey?: boolean;
+  /** The press came from an input, textarea or contenteditable element. */
+  fromEditingSurface?: boolean;
+}
+
+/** Whether a key event target is an editing surface, where only Stop may fire. */
+export function isEditingSurface(target: unknown): boolean {
+  if (!target || typeof target !== 'object') return false;
+  const element = target as { tagName?: string; isContentEditable?: boolean };
+  const tag = (element.tagName ?? '').toUpperCase();
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || element.isContentEditable === true;
 }
 
 /**
  * The control a key press resolves to — the same one a click would issue, so the keyboard and
  * pointer paths cannot drift. `undefined` means "not ours", and the panel must not preventDefault.
  *
- * Every binding needs a modifier, so printable typing in the composer never reaches one; the panel
- * additionally ignores presses that originate in an editing surface.
+ * Every binding needs a modifier, so printable typing in the composer never reaches one. Presses
+ * from an editing surface reach only the bindings marked `whileEditing` (Stop): the composer sends
+ * on any unshifted Enter, so ⌘/Ctrl+Enter there must not also record a reconciliation.
  */
 export function resolveTurnKeyBinding(event: TurnKeyEvent, cards: readonly TurnCard[]): TurnControl | undefined {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return undefined;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
-  const binding = TURN_KEY_BINDINGS.find(candidate => candidate.key.toLowerCase() === key.toLowerCase());
+  const binding = TURN_KEY_BINDINGS.find(candidate =>
+    candidate.key.toLowerCase() === key.toLowerCase() && Boolean(candidate.shift) === Boolean(event.shiftKey));
   if (!binding) return undefined;
+  if (event.fromEditingSurface && !binding.whileEditing) return undefined;
   const actionable = (control: TurnControl) => !control.disabled && Boolean(control.command);
   const ordered = cards.flatMap(card => card.controls);
   const matching = ordered.filter(control => binding.kinds.includes(control.kind) && actionable(control));
