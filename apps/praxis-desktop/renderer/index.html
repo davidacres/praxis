@@ -6,7 +6,7 @@
          paint: they are inline SVG tiles generated in surfacePatterns.ts, not
          remote assets. HTTPS is also allowed for explicitly linked AI image
          previews; scripts and every other remote resource remain blocked. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self' data: blob:" />
     <title>Praxis</title>
   </head>
   <body>

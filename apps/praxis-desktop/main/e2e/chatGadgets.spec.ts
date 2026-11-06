@@ -371,21 +371,26 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   // Click Open in Workspace button
   await gadget.locator('[data-testid="gadget-artifact-open-dock"]').click();
 
-  // The dock opens in the split pane
+  // The dock opens in the split pane with the live preview tab active by default
   const dock = win.locator('[data-testid="session-artifact-dock"]');
   await expect(dock).toBeVisible();
   await expect(dock.locator('[data-testid="artifact-dock-title"]')).toHaveText('MetricsCard.tsx');
   await expect(dock.locator('[data-testid="artifact-version-badge"]')).toHaveText('v2');
+
+  // Verify live in-sandbox transpiled component preview
+  const previewIframe = dock.locator('[data-testid="artifact-preview-html"] iframe');
+  await expect(previewIframe).toBeVisible();
+  await expect(previewIframe.contentFrame().locator('.card')).toHaveText('Metrics');
+
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-workspace-dock.png')
+  });
 
   // Switch to Code tab
   await dock.locator('[data-testid="artifact-tab-code"]').click();
   const codeView = dock.locator('[data-testid="artifact-code-view"]');
   await expect(codeView).toBeVisible();
   await expect(codeView).toContainText('export function MetricsCard()');
-
-  await win.screenshot({
-    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-workspace-dock.png')
-  });
 
   // Switch to Diff tab
   await dock.locator('[data-testid="artifact-tab-diff"]').click();
@@ -395,7 +400,7 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
 
   // Switch back to Preview tab
   await dock.locator('[data-testid="artifact-tab-preview"]').click();
-  await expect(dock.locator('[data-testid="artifact-preview-fallback"]')).toBeVisible();
+  await expect(previewIframe).toBeVisible();
 
   // Save to workspace
   await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();

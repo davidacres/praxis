@@ -2,17 +2,29 @@ import { useEffect, useMemo, useState } from 'react';
 import { Markdown } from '../../ui/Markdown';
 import { Icon } from '../../ui/Icon';
 import type { ActiveArtifact } from './artifactTypes';
+import { buildComponentSandboxHtml } from './componentTranspiler';
 
 const IMAGE_EXTENSIONS = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i;
 const SVG_EXTENSIONS = /\.svg$/i;
 const HTML_EXTENSIONS = /\.html?$/i;
 const MD_EXTENSIONS = /\.(?:md|markdown)$/i;
+const COMPONENT_EXTENSIONS = /\.(?:tsx|jsx|react)$/i;
 
 function isHtmlArtifact(artifact: ActiveArtifact): boolean {
   if (HTML_EXTENSIONS.test(artifact.path.split(/[?#]/, 1)[0] ?? '')) return true;
   if (artifact.mediaType && ['text/html', 'application/xhtml+xml'].includes(artifact.mediaType.toLowerCase())) return true;
   if (artifact.language && ['html', 'htm'].includes(artifact.language.toLowerCase())) return true;
   if (artifact.content && /^\s*<!doctype\s+html|^\s*<html\b/i.test(artifact.content)) return true;
+  return false;
+}
+
+function isComponentArtifact(artifact: ActiveArtifact): boolean {
+  if (COMPONENT_EXTENSIONS.test(artifact.path.split(/[?#]/, 1)[0] ?? '')) return true;
+  if (artifact.language && ['tsx', 'jsx', 'react'].includes(artifact.language.toLowerCase())) return true;
+  if (artifact.content && (
+    /^\s*(?:import\s+React|export\s+(?:default\s+)?function\s+[A-Z]|export\s+const\s+[A-Z])/m.test(artifact.content) ||
+    /<\s*[A-Z][A-Za-z0-9_]*[\s>/]/.test(artifact.content)
+  )) return true;
   return false;
 }
 
@@ -64,7 +76,7 @@ export function ArtifactPreview({
   }, [artifact.path, effectiveSessionId, artifact]);
 
   const htmlDoc = useMemo(() => {
-    if (!isHtmlArtifact(artifact) && !isSvgArtifact(artifact)) return '';
+    if (!isHtmlArtifact(artifact) && !isSvgArtifact(artifact) && !isComponentArtifact(artifact)) return '';
 
     // Collect inherited theme variables from Praxis document root
     const rootStyle = getComputedStyle(document.documentElement);
@@ -101,6 +113,10 @@ export function ArtifactPreview({
         box-sizing: border-box;
       }
     `;
+
+    if (isComponentArtifact(artifact)) {
+      return buildComponentSandboxHtml(artifact, content, themeStyles);
+    }
 
     const securityBootstrap = `
       <script>
@@ -169,7 +185,7 @@ export function ArtifactPreview({
     );
   }
 
-  if (isHtmlArtifact(artifact) || isSvgArtifact(artifact)) {
+  if (isHtmlArtifact(artifact) || isSvgArtifact(artifact) || isComponentArtifact(artifact)) {
     return (
       <div className="artifact-preview-iframe-wrapper" data-testid="artifact-preview-html">
         <iframe
