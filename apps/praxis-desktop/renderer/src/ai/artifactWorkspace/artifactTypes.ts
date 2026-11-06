@@ -35,7 +35,8 @@ export const ARTIFACT_LAYOUT_PROTOTYPES: ArtifactLayoutMeta[] = [
     id: 'classic-split',
     name: 'Classic Split',
     shortDesc: 'Side-by-side dock with segmented Preview/Code/Diff tabs',
-    icon: 'split-horizontal'
+    icon: 'split-horizontal',
+    badge: 'Default'
   },
   {
     id: 'dual-pane',
