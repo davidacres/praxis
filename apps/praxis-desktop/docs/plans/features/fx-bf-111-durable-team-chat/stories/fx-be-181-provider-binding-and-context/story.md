@@ -75,3 +75,19 @@ Status: Succeeded · Duration: 55m 20s
 - ✅ Build: succeeded
 - ✅ QA: succeeded
 - ✅ Security scan: succeeded
+
+**PRX-S111-181** — 2026-11-06T23:21:20.476Z
+**Workflow run cancelled: Governed delivery — FX-BE-181: Explicit provider bindings and bounded context delivery**
+
+Status: Cancelled · Duration: 72h 50m
+
+- ✅ Plan: succeeded
+- ❌ Implement: failed
+- ⏭️ Praxis Test contracts: cancelled
+- ⏭️ Review: cancelled
+- ⏭️ Install dependencies: cancelled
+- ⏭️ Build: cancelled
+- ⏭️ QA: cancelled
+- ⏭️ Security scan: cancelled
+
+cancelled from runs browser
