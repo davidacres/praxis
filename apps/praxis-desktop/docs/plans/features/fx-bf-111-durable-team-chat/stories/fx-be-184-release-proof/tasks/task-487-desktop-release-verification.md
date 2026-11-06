@@ -53,6 +53,22 @@ What this ticket needs that a scheduled run cannot provide by itself. Praxis doe
 
 ## Comments
 
+
+**PRX-T111-487** — 2026-11-06T10:57:40.289Z
+**Workflow run failed: Governed delivery — TASK-487: Verify built desktop UI and record release evidence**
+
+Status: Failed · Duration: 1m 49s
+
+- ❌ Plan: failed
+- ⏳ Implement: pending
+- ⏳ Praxis Test contracts: pending
+- ⏳ Review: pending
+- ⏳ Install dependencies: pending
+- ⏳ Build: pending
+- ⏳ QA: pending
+- ⏳ Security scan: pending
+
+The run could not be completed: Alibaba ran out of credits or hit its usage limit at Plan (no other AI is set up to switch to).
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
