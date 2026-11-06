@@ -1648,3 +1648,66 @@ test('archives and restores a scheduled run from the lineup card and the report,
   await expect(window.getByTestId('scheduled-runs-page')).toBeVisible();
   await expect(window.getByTestId('schedule-card').filter({ hasText: 'Archive Test' })).toHaveCount(0);
 });
+
+test('sidebar list and card list show edit, archive, and delete matching the session list', async () => {
+  const { page, projectId } = await launch();
+  await page.evaluate(async id => {
+    const issues = await window.praxis.issue.list({ projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all', grouping: 'none' }, 0, 10, `project:${id}`);
+    const tickets = issues.issues.slice(0, 1).map(issue => ({ connectionId: `project:${id}`, issueKey: issue.key, title: issue.summary }));
+    await window.praxis.scheduledRuns.save({ projectId: id, name: 'List Actions Test', date: '2030-03-01', time: '10:00', timezone: 'UTC', tickets, arm: true });
+  }, projectId);
+
+  await page.reload();
+  await expect(page.getByTestId('scheduled-runs-page')).toBeVisible();
+
+  // 1. Sidebar row has edit, archive, delete
+  const navRow = page.getByTestId('schedule-nav-run').filter({ hasText: 'List Actions Test' });
+  await expect(navRow).toBeVisible();
+
+  const navEdit = navRow.locator('[data-testid^="schedule-nav-edit-"]');
+  const navArchive = navRow.locator('[data-testid^="schedule-nav-archive-"]');
+  const navDelete = navRow.locator('[data-testid^="schedule-nav-delete-"]');
+
+  await expect(navEdit).toBeAttached();
+  await expect(navArchive).toBeAttached();
+  await expect(navDelete).toBeAttached();
+
+  // Test inline rename from sidebar
+  await navRow.hover();
+  await navEdit.click();
+  const titleInput = page.locator('[data-testid^="schedule-nav-title-input-"]');
+  await expect(titleInput).toBeVisible();
+  await titleInput.fill('Renamed Actions Test');
+  await titleInput.press('Enter');
+
+  const renamedRow = page.getByTestId('schedule-nav-run').filter({ hasText: 'Renamed Actions Test' });
+  await expect(renamedRow).toBeVisible();
+  const renamedEdit = renamedRow.locator('[data-testid^="schedule-nav-edit-"]');
+  const renamedDelete = renamedRow.locator('[data-testid^="schedule-nav-delete-"]');
+
+  // 2. Main lineup card row has quick edit, archive, delete
+  const card = page.getByTestId('schedule-card').filter({ hasText: 'Renamed Actions Test' });
+  await expect(card.getByTestId('schedule-row-edit')).toBeAttached();
+  await expect(card.getByTestId('schedule-row-archive')).toBeAttached();
+  await expect(card.getByTestId('schedule-row-delete')).toBeAttached();
+
+  // 3. Delete dialog offers Delete and Archive option (matching session list confirmChoice)
+  await renamedRow.hover();
+  await renamedDelete.click();
+  const deleteModal = page.getByRole('dialog', { name: 'Delete this scheduled run?' });
+  await expect(deleteModal).toBeVisible();
+  await expect(deleteModal.getByTestId('app-dialog-tertiary')).toHaveText('Archive');
+
+  // Choose Archive from the delete dialog
+  await deleteModal.getByTestId('app-dialog-tertiary').click();
+  await expect(deleteModal).toHaveCount(0);
+
+  // Now it is archived!
+  await expect(page.getByTestId('schedule-card').filter({ hasText: 'Renamed Actions Test' })).toHaveCount(0);
+  await page.getByTestId('schedule-tab-archived').click();
+  await expect(page.getByTestId('schedule-card').filter({ hasText: 'Renamed Actions Test' })).toBeVisible();
+
+  // Archived run in sidebar also has edit/rename icon
+  const archivedRow = page.getByTestId('schedule-bucket-archived').getByTestId('schedule-nav-run');
+  await expect(archivedRow.locator('[data-testid^="schedule-nav-edit-"]')).toBeAttached();
+});

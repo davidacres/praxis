@@ -26,7 +26,8 @@ export function planStatusToMarkdown(planStatus: string): string {
 }
 
 /**
- * Updates the `**Status:**` line in a markdown file to the given plan status.
+ * Updates the `**Status:**` line in a markdown file to the given plan status,
+ * and a front-matter `status:` too when the file has one.
  * Returns true if the file was modified.
  */
 export async function writeStatusToMarkdownFile(
@@ -53,12 +54,31 @@ export async function writeStatusToMarkdownFile(
     updated = lines.join('\n');
   }
 
+  updated = writeFrontMatterStatus(updated, newPlanStatus);
+
   if (updated === content) {
     return false;
   }
 
   await folderFs().writeFile(filePath, updated);
   return true;
+}
+
+/**
+ * Keeps a YAML front-matter `status:` in step with the `**Status:**` line.
+ *
+ * The parser reads front matter first (`extractStatusRaw`), so a document that
+ * carries both — the template upgrade adds `**Status:**` to files that already
+ * had YAML — would otherwise take every move on disk and still read back as its
+ * original status. Only the front-matter block is touched, never body text.
+ */
+function writeFrontMatterStatus(content: string, newPlanStatus: string): string {
+  const block = /^(---[ \t]*\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/.exec(content);
+  if (!block) return content;
+  const statusRe = /^(status:[ \t]*)(["']?).*?\2[ \t]*$/m;
+  if (!statusRe.test(block[2])) return content;
+  const body = block[2].replace(statusRe, `$1$2${newPlanStatus}$2`);
+  return block[1] + body + block[3] + content.slice(block[0].length);
 }
 
 /**

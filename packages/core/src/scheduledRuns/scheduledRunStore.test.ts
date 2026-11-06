@@ -178,3 +178,17 @@ test('ledger estimates and artifacts survive progress and a store restart', asyn
   assert.deepEqual(outcome?.artifacts, [artifact]);
   assert.deepEqual(outcome?.spend, { tokens: 50 });
 });
+
+test('rename updates the name and adds a renamed event on any status', async () => {
+  const store = new ScheduledRunStore(memoryStore());
+  const run = makeRun('Old Name', '2026-10-21T10:00:00Z', 'to-rename');
+  await store.save({ ...run, status: 'completed' });
+
+  const renamed = await store.rename('to-rename', '  New Descriptive Name  ');
+  assert.equal(renamed.name, 'New Descriptive Name');
+  assert.equal(store.get('to-rename')?.name, 'New Descriptive Name');
+  assert.ok(renamed.events.some(e => e.kind === 'renamed' && e.message.includes('New Descriptive Name')));
+
+  // Blank names are rejected
+  await assert.rejects(() => store.rename('to-rename', '   '), /needs a name/);
+});

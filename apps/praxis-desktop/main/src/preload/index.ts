@@ -836,6 +836,7 @@ const praxis: PraxisIpc = {
     preview: (input: SaveScheduledRunInput) =>
       ipcRenderer.invoke('scheduledRuns:preview', input) as Promise<{ readiness?: ScheduledRunReadiness; error?: string }>,
     remove: (id: string) => ipcRenderer.invoke('scheduledRuns:remove', id) as Promise<void>,
+    rename: (id: string, name: string) => ipcRenderer.invoke('scheduledRuns:rename', id, name) as Promise<ScheduledRunView>,
     archive: (id: string, archived: boolean) => ipcRenderer.invoke('scheduledRuns:archive', id, archived) as Promise<ScheduledRunView>,
     workflowChoices: (projectId: string) =>
       ipcRenderer.invoke('scheduledRuns:workflowChoices', projectId) as Promise<{ choices: ScheduledWorkflowChoice[]; defaultWorkflowId?: string }>,

@@ -222,6 +222,17 @@
 .schedule-sidebar-header .easymode-btn-add { flex: none; }
 .schedule-sidebar-runs { flex: 1; min-height: 80px; overflow-y: auto; padding: 6px 6px 12px; display: flex; flex-direction: column; gap: 4px; }
 .schedule-nav-row { width: 100%; text-align: left; font-family: inherit; background: transparent; }
+.schedule-nav-row:hover .easymode-automation-row__actions,
+.schedule-nav-row.is-selected .easymode-automation-row__actions,
+.schedule-nav-row .easymode-automation-row__actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+.schedule-nav-row .session-title-input {
+  height: 22px;
+  font-size: var(--text-sm, 13px);
+  padding: 1px 4px;
+}
 .schedule-bucket-title { width: 100%; border: 0; background: transparent; color: var(--text-tertiary); cursor: pointer; font-family: inherit; }
 .schedule-bucket-title:hover { background: var(--bg-hover); }
 .schedule-sidebar-tickets { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 140px; max-height: calc(100% - 150px); overflow: hidden; border-top: 1px solid var(--border); }
@@ -553,6 +564,9 @@ button.spot-bar:hover { outline: 1px solid var(--text-tertiary); }
 .lineup-when span.is-bad { color: var(--danger); }
 .lineup-when span.schedule-countdown { font-weight: 500; }
 .lineup-row-actions { display: flex; gap: var(--space-2); align-items: center; justify-content: flex-end; }
+.lineup-row-quick-actions { display: flex; align-items: center; gap: 4px; opacity: 0; transition: opacity 0.15s ease-out; }
+.lineup-row:hover .lineup-row-quick-actions, .lineup-row-quick-actions:focus-within { opacity: 1; }
+@media (pointer: coarse) { .lineup-row-quick-actions { opacity: 1; } }
 .lineup-row-body { border-top: 1px solid var(--border); padding: var(--space-3) var(--space-4) var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); animation: lineup-rise 0.25s ease-out; }
 .lineup-details { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: var(--space-5); }
 .lineup-details-main { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }

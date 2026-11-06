@@ -46,7 +46,7 @@ const GROUPS: Array<{ key: keyof ScheduledRunGroups; title: string }> = [
 ];
 
 export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketKeys = [], onOpenWorkflowRun, onOpenSession }: ScheduledRunsPageProps) {
-  const { confirm } = useDialogs();
+  const { confirm, confirmChoice } = useDialogs();
   const ticketPanel = useResizable({
     storageKey: 'tm-pane-schedule-tickets',
     initial: 320,
@@ -74,6 +74,8 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const { candidates, loadError } = useScheduleTickets(project);
   const [views, setViews] = useState<ScheduledRunView[]>();
+  const [editingRunId, setEditingRunId] = useState<string>();
+  const [nameDraft, setNameDraft] = useState('');
   const [error, setError] = useState('');
   const [startingRunId, setStartingRunId] = useState<string>();
   const [composing, setComposing] = useState<{ view?: ScheduledRunView; ticketKeys?: string[]; autoAdd?: boolean }>();
@@ -116,14 +118,30 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
     }
   };
 
+  const commitRename = async (view: ScheduledRunView) => {
+    const next = nameDraft.trim();
+    setEditingRunId(undefined);
+    if (!next || next === view.run.name) return;
+    await act(async () => {
+      await window.praxis.scheduledRuns.rename(view.run.id, next);
+      await load();
+    });
+  };
+
   const remove = async (view: ScheduledRunView) => {
-    const ok = await confirm({
+    const choice = await confirmChoice({
       title: 'Delete this scheduled run?',
       message: `"${view.run.name}" will be removed. The tickets themselves are not touched.`,
       confirmLabel: 'Delete schedule',
+      tertiaryLabel: !view.run.archived && view.run.status !== 'running' ? 'Archive' : undefined,
       danger: true
     });
-    if (ok) await act(async () => {
+    if (choice === 'cancel') return;
+    if (choice === 'tertiary') {
+      await handleArchive(view, true);
+      return;
+    }
+    await act(async () => {
       await window.praxis.scheduledRuns.remove(view.run.id);
       setSelectedRunId(undefined);
       setDetailRunId(undefined);
@@ -170,9 +188,98 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
             <button type="button" className="easymode-section-header schedule-bucket-title" aria-expanded={!collapsed[bucket]} onClick={() => setCollapsed(current => ({ ...current, [bucket]: !current[bucket] }))}>
               <span className="easymode-section-header__title-group"><Icon name={collapsed[bucket] ? 'chevron-right' : 'chevron-down'} size={12} /><span className="easymode-section-header__title">{RECENCY_BUCKET_LABEL[bucket]}</span><span className="easymode-section-header__count">{runs.length}</span></span>
             </button>
-            {!collapsed[bucket] && runs.map(view => <button key={view.run.id} type="button" className={`easymode-automation-row schedule-nav-row${selectedRunId === view.run.id ? ' is-selected' : ''}`} data-testid="schedule-nav-run" aria-current={selectedRunId === view.run.id ? 'page' : undefined} onClick={() => { setSelectedRunId(view.run.id); setComposing(undefined); }}>
-              <Icon name="clock" size={14} className="easymode-automation-row__type-icon" /><span className="easymode-automation-row__details"><span className="easymode-automation-row__title" title={view.run.name}>{view.run.name}</span><span className="easymode-automation-row__sub-row"><span className="easymode-automation-row__project">{STATUS_LABEL[view.run.status]} · {view.run.entries.length} ticket{view.run.entries.length === 1 ? '' : 's'}</span></span></span>
-            </button>)}
+            {!collapsed[bucket] && runs.map(view => (
+              <div
+                key={view.run.id}
+                className={`easymode-automation-row schedule-nav-row${selectedRunId === view.run.id ? ' is-selected' : ''}`}
+                data-testid="schedule-nav-run"
+                aria-current={selectedRunId === view.run.id ? 'page' : undefined}
+                role="button"
+                tabIndex={0}
+                onClick={() => { setSelectedRunId(view.run.id); setComposing(undefined); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedRunId(view.run.id);
+                    setComposing(undefined);
+                  }
+                }}
+              >
+                <Icon name="clock" size={14} className="easymode-automation-row__type-icon" />
+                <span className="easymode-automation-row__details">
+                  {editingRunId === view.run.id ? (
+                    <input
+                      className="session-title-input"
+                      data-testid={`schedule-nav-title-input-${view.run.id}`}
+                      aria-label={`Schedule name for ${view.run.name}`}
+                      value={nameDraft}
+                      maxLength={120}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setNameDraft(e.target.value)}
+                      onBlur={() => void commitRename(view)}
+                      onKeyDown={e => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setEditingRunId(undefined);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="easymode-automation-row__title" title={view.run.name}>{view.run.name}</span>
+                  )}
+                  <span className="easymode-automation-row__sub-row"><span className="easymode-automation-row__project">{STATUS_LABEL[view.run.status]} · {view.run.entries.length} ticket{view.run.entries.length === 1 ? '' : 's'}</span></span>
+                </span>
+                <div className="easymode-automation-row__actions">
+                  <button
+                    type="button"
+                    className="easymode-automation-action-btn"
+                    title="Rename schedule"
+                    aria-label={`Rename ${view.run.name}`}
+                    data-testid={`schedule-nav-edit-${view.run.id}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      setNameDraft(view.run.name);
+                      setEditingRunId(view.run.id);
+                    }}
+                  >
+                    <Icon name="pencil" size={11} />
+                  </button>
+                  {view.run.status !== 'running' && (
+                    <button
+                      type="button"
+                      className="easymode-automation-action-btn"
+                      title="Archive schedule"
+                      aria-label={`Archive ${view.run.name}`}
+                      data-testid={`schedule-nav-archive-${view.run.id}`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        void handleArchive(view, true);
+                      }}
+                    >
+                      <Icon name="archive" size={11} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="easymode-automation-action-btn easymode-automation-action-btn--delete"
+                    title="Delete schedule"
+                    aria-label={`Delete ${view.run.name}`}
+                    data-testid={`schedule-nav-delete-${view.run.id}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      void remove(view);
+                    }}
+                  >
+                    <Icon name="trash" size={11} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </section>;
         })}
         {archivedTotal > 0 && (
@@ -180,9 +287,97 @@ export function ScheduledRunsPage({ project, sidebarHost, onBack, initialTicketK
             <button type="button" className="easymode-section-header schedule-bucket-title" aria-expanded={!collapsed['archived']} onClick={() => setCollapsed(current => ({ ...current, archived: !current['archived'] }))}>
               <span className="easymode-section-header__title-group"><Icon name={collapsed['archived'] ? 'chevron-right' : 'chevron-down'} size={12} /><span className="easymode-section-header__title">Archived</span><span className="easymode-section-header__count">{archivedTotal}</span></span>
             </button>
-            {!collapsed['archived'] && (views ?? []).filter(view => !!view.run.archived).sort((a, b) => b.run.updatedAt.localeCompare(a.run.updatedAt)).map(view => <button key={view.run.id} type="button" className={`easymode-automation-row schedule-nav-row${selectedRunId === view.run.id ? ' is-selected' : ''}`} data-testid="schedule-nav-run" aria-current={selectedRunId === view.run.id ? 'page' : undefined} onClick={() => { setSelectedRunId(view.run.id); setComposing(undefined); setTab('archived'); }}>
-              <Icon name="archive" size={14} className="easymode-automation-row__type-icon" /><span className="easymode-automation-row__details"><span className="easymode-automation-row__title" title={view.run.name}>{view.run.name}</span><span className="easymode-automation-row__sub-row"><span className="easymode-automation-row__project">{STATUS_LABEL[view.run.status]} · {view.run.entries.length} ticket{view.run.entries.length === 1 ? '' : 's'}</span></span></span>
-            </button>)}
+            {!collapsed['archived'] && (views ?? []).filter(view => !!view.run.archived).sort((a, b) => b.run.updatedAt.localeCompare(a.run.updatedAt)).map(view => (
+              <div
+                key={view.run.id}
+                className={`easymode-automation-row schedule-nav-row${selectedRunId === view.run.id ? ' is-selected' : ''}`}
+                data-testid="schedule-nav-run"
+                aria-current={selectedRunId === view.run.id ? 'page' : undefined}
+                role="button"
+                tabIndex={0}
+                onClick={() => { setSelectedRunId(view.run.id); setComposing(undefined); setTab('archived'); }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedRunId(view.run.id);
+                    setComposing(undefined);
+                    setTab('archived');
+                  }
+                }}
+              >
+                <Icon name="archive" size={14} className="easymode-automation-row__type-icon" />
+                <span className="easymode-automation-row__details">
+                  {editingRunId === view.run.id ? (
+                    <input
+                      className="session-title-input"
+                      data-testid={`schedule-nav-title-input-${view.run.id}`}
+                      aria-label={`Schedule name for ${view.run.name}`}
+                      value={nameDraft}
+                      maxLength={120}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => setNameDraft(e.target.value)}
+                      onBlur={() => void commitRename(view)}
+                      onKeyDown={e => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          setEditingRunId(undefined);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="easymode-automation-row__title" title={view.run.name}>{view.run.name}</span>
+                  )}
+                  <span className="easymode-automation-row__sub-row"><span className="easymode-automation-row__project">{STATUS_LABEL[view.run.status]} · {view.run.entries.length} ticket{view.run.entries.length === 1 ? '' : 's'}</span></span>
+                </span>
+                <div className="easymode-automation-row__actions">
+                  <button
+                    type="button"
+                    className="easymode-automation-action-btn"
+                    title="Rename schedule"
+                    aria-label={`Rename ${view.run.name}`}
+                    data-testid={`schedule-nav-edit-${view.run.id}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      setNameDraft(view.run.name);
+                      setEditingRunId(view.run.id);
+                    }}
+                  >
+                    <Icon name="pencil" size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="easymode-automation-action-btn"
+                    title="Restore schedule"
+                    aria-label={`Restore ${view.run.name}`}
+                    data-testid={`schedule-nav-restore-${view.run.id}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      void handleArchive(view, false);
+                    }}
+                  >
+                    <Icon name="arrow-up" size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="easymode-automation-action-btn easymode-automation-action-btn--delete"
+                    title="Delete schedule"
+                    aria-label={`Delete ${view.run.name}`}
+                    data-testid={`schedule-nav-delete-${view.run.id}`}
+                    onClick={e => {
+                      e.stopPropagation();
+                      void remove(view);
+                    }}
+                  >
+                    <Icon name="trash" size={11} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </section>
         )}
         {views?.length === 0 && <p className="easymode-empty-hint">No scheduled runs yet</p>}
@@ -476,6 +671,51 @@ function RunCard({
           <span className={run.status === 'missed' || (run.status === 'draft' && when.sub === 'start has passed') ? 'is-bad' : run.status === 'scheduled' ? 'schedule-countdown' : undefined}>{when.sub}</span>
         </div>
         <div className="lineup-row-actions">
+          <div className="lineup-row-quick-actions">
+            {editable && !run.archived && (
+              <button
+                type="button"
+                className="btn btn-icon"
+                title="Edit schedule"
+                aria-label={`Edit ${run.name}`}
+                data-testid="schedule-row-edit"
+                onClick={e => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+              >
+                <Icon name="pencil" size={13} />
+              </button>
+            )}
+            {onArchive && run.status !== 'running' && (
+              <button
+                type="button"
+                className="btn btn-icon"
+                title={run.archived ? 'Restore schedule' : 'Archive schedule'}
+                aria-label={run.archived ? `Restore ${run.name}` : `Archive ${run.name}`}
+                data-testid={run.archived ? 'schedule-row-restore' : 'schedule-row-archive'}
+                onClick={e => {
+                  e.stopPropagation();
+                  onArchive(!run.archived);
+                }}
+              >
+                <Icon name={run.archived ? 'arrow-up' : 'archive'} size={13} />
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-icon"
+              title="Delete schedule"
+              aria-label={`Delete ${run.name}`}
+              data-testid="schedule-row-delete"
+              onClick={e => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Icon name="trash" size={13} />
+            </button>
+          </div>
           {primary}
           <button type="button" className="btn btn-icon lineup-chevron" aria-label={expanded ? `Hide details of ${run.name}` : `Show details of ${run.name}`} aria-expanded={expanded} onClick={onToggle}>
             <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={14} />

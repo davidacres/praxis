@@ -15,6 +15,7 @@ import {
   isValidTimeZone,
   reconcileScheduledRunOnLaunch,
   renumberEntries,
+  touch,
   type ScheduledEntryDecision,
   type ScheduledEntryOutcome,
   type ScheduledEntryStatus,
@@ -275,6 +276,22 @@ export class ScheduledRunStore {
     const next = runs.filter(run => run.id !== id);
     if (next.length === runs.length) throw new Error(`Scheduled run ${id} was not found.`);
     await this.state.update(RUNS_KEY, next);
+  }
+
+  /**
+   * Renames a scheduled run. Any run can be renamed to give it a descriptive label.
+   */
+  public async rename(id: string, name: string): Promise<ScheduledRun> {
+    const next = name.trim();
+    if (!next) throw new Error('A scheduled run needs a name.');
+    const runs = this.list();
+    const run = runs.find(candidate => candidate.id === id);
+    if (!run) throw new Error(`Scheduled run ${id} was not found.`);
+    if (next === run.name) return run;
+    const at = new Date().toISOString();
+    const updated: ScheduledRun = touch({ ...run, name: next }, at, { kind: 'renamed', message: `Renamed to "${next}".` });
+    await this.save(updated);
+    return updated;
   }
 
   /**

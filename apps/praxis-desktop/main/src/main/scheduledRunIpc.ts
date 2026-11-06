@@ -130,6 +130,12 @@ export function registerScheduledRunIpc(): void {
     notifyScheduledRunsChanged(run?.projectId);
   });
 
+  ipcMain.handle('scheduledRuns:rename', async (_event, id: string, name: string): Promise<ScheduledRunView> => {
+    const run = await getScheduledRunStore().rename(id, name);
+    notifyScheduledRunsChanged(run.projectId);
+    return buildScheduledRunView(run);
+  });
+
   ipcMain.handle('scheduledRuns:archive', async (_event, id: string, archived: boolean): Promise<ScheduledRunView> => {
     const run = await getScheduledRunStore().setArchived(id, archived);
     notifyScheduledRunsChanged(run.projectId);
