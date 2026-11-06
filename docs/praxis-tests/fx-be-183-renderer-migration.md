@@ -1,12 +1,12 @@
 # FX-BE-183 renderer subscription and legacy migration contracts
 
-Frozen snapshot: `622613fbed15edab22f77d4c2597e3bf784f1b4a` for the first 17 cases; `f27d2793958dbf817c6bea7d06ae474704ad8b55` for the first six TASK-484 sections; `a1f5ecbbf28dfac0de20a85fcc4ee2c3757bec77` for the submit-command section and every line link in this file (all 73 re-audited there). Runner: **node:test**. These **73 supplemental cases** are 8 activation/repository cases, 3 migration cases, 3 coordinator cases and 3 renderer subscription cases, plus 56 TASK-484 renderer cases (18 turn controls, 11 error visibility, 6 pending submissions, 6 sidebar ownership, 4 apply-page compatibility, 5 dock/float shell, 6 submit command). They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog, and none collides with a catalog id.
+Frozen snapshot: `622613fbed15edab22f77d4c2597e3bf784f1b4a` for the first 17 cases; `f27d2793958dbf817c6bea7d06ae474704ad8b55` for the first six TASK-484 sections; `a1f5ecbbf28dfac0de20a85fcc4ee2c3757bec77` for the submit-command section; `c750c105b93b45a304fbdcbaf5f8c1a2c10829c5` for the four TASK-485 sections and every line link in this file (all 82 re-audited there; the 8 activation links moved +1 when c750c105 added an import). Runner: **node:test**. These **82 supplemental cases** are 8 activation/repository cases, 3 migration cases, 3 coordinator cases and 3 renderer subscription cases, plus 56 TASK-484 renderer cases (18 turn controls, 11 error visibility, 6 pending submissions, 6 sidebar ownership, 4 apply-page compatibility, 5 dock/float shell, 6 submit command) and 9 TASK-485 migration cases (4 legacy runtime evidence, 1 copied fixture, 1 repository validation, 3 service cutover). They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog, and none collides with a catalog id.
 
 ## Activation and cutover — `apps/praxis-desktop/main/src/main/teamChatActivation.test.ts`
 
 ### PT-1FC2813D4B
 
-Automation: **node:test**, [teamChatActivation.test.ts:18](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L18).
+Automation: **node:test**, [teamChatActivation.test.ts:19](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L19).
 Title: **quiescence fences new legacy requests and waits for text-only calls and saves**.
 
 **Given** a TeamChatActivation with one legacy operation held open.
@@ -15,7 +15,7 @@ Title: **quiescence fences new legacy requests and waits for text-only calls and
 
 ### PT-0651E34994
 
-Automation: **node:test**, [teamChatActivation.test.ts:30](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L30).
+Automation: **node:test**, [teamChatActivation.test.ts:31](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L31).
 Title: **backup preserves exact bytes, migration is idempotent and legacy writes are rejected**.
 
 **Given** a team-chats.json with one legacy chat for project `p`.
@@ -24,7 +24,7 @@ Title: **backup preserves exact bytes, migration is idempotent and legacy writes
 
 ### PT-5FFDF30323
 
-Automation: **node:test**, [teamChatActivation.test.ts:44](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L44).
+Automation: **node:test**, [teamChatActivation.test.ts:45](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L45).
 Title: **backup failure or mismatched interrupted backup never replaces source**.
 
 **Given** a `.v1-backup` file with invalid content.
@@ -33,7 +33,7 @@ Title: **backup failure or mismatched interrupted backup never replaces source**
 
 ### PT-42C5554A52
 
-Automation: **node:test**, [teamChatActivation.test.ts:51](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L51).
+Automation: **node:test**, [teamChatActivation.test.ts:52](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L52).
 Title: **queued attachments retain bytes after composer mutation and reject cross-conversation ownership**.
 
 **Given** an image staged for conversation `one`.
@@ -42,7 +42,7 @@ Title: **queued attachments retain bytes after composer mutation and reject cros
 
 ### PT-6C6C6D9394
 
-Automation: **node:test**, [teamChatActivation.test.ts:64](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L64).
+Automation: **node:test**, [teamChatActivation.test.ts:65](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L65).
 Title: **restoration is allowed only before durable acceptance**.
 
 **Given** an activated repository.
@@ -51,7 +51,7 @@ Title: **restoration is allowed only before durable acceptance**.
 
 ### PT-4485239A20
 
-Automation: **node:test**, [teamChatActivation.test.ts:76](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L76).
+Automation: **node:test**, [teamChatActivation.test.ts:77](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L77).
 Title: **interrupted activation reuses a validated backup and uncertain commit requires reconciliation**.
 
 **Given** a valid existing backup and `fs.promises.rename` mocked to fail once.
@@ -60,7 +60,7 @@ Title: **interrupted activation reuses a validated backup and uncertain commit r
 
 ### PT-8053335DC2
 
-Automation: **node:test**, [teamChatActivation.test.ts:105](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L105).
+Automation: **node:test**, [teamChatActivation.test.ts:106](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L106).
 Title: **disabled activation never commits or fences unrelated legacy work**.
 
 **Given** a TeamChatActivation constructed disabled.
@@ -69,7 +69,7 @@ Title: **disabled activation never commits or fences unrelated legacy work**.
 
 ### PT-63819EA534
 
-Automation: **node:test**, [teamChatActivation.test.ts:113](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L113).
+Automation: **node:test**, [teamChatActivation.test.ts:114](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L114).
 Title: **a failed commit lifts the fence so legacy work resumes and activation can retry**.
 
 **Given** an activation whose commit throws "disk full".
@@ -682,3 +682,94 @@ Title: **only string runtime options cross the bridge**.
 **Given** runtime options with string, number, boolean and undefined values.
 **When** the command is built.
 **Then** only `provider` and `model` (the strings) remain.
+
+## TASK-485 Legacy runtime evidence — `packages/core/src/ai/assistant/teamChatMigration.test.ts`
+
+Snapshot `c750c105b93b45a304fbdcbaf5f8c1a2c10829c5`. Proof of a legacy association is structural: an `ASSISTANT-<chatId>-<persona>-<digest>` key naming a migrated chat's exact id, the Virtual Team definition of done, and a checkpoint that is that persona's non-error reply in that chat. Anything else with that key shape is a `legacyRuntimeDiagnostics` entry. The renamed text-quoted-key test (PT-CE0D0A3FCE, formerly PT-A89FD06E4B) stays in [FX-BE-184 release proof](fx-be-184-release-proof.md) so it is counted once.
+
+### PT-CC1D097FDA
+
+Automation: **node:test**, [teamChatMigration.test.ts:85](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L85).
+Title: **a provable legacy runtime session imports one typed link and no binding**.
+
+**Given** a legacy chat `legacy` with a dev reply `a`, evidence for `ASSISTANT-legacy-dev-<digest>` with the Virtual Team definition of done and checkpoint `a`, plus a non-legacy key `standalone-session`.
+**When** migration runs with the evidence in both orders.
+**Then** the source is not mutated, both orders give equal results, the conversation carries exactly one `imported` link (`part-dev`, role `dev`, provider, digest, checkpoint `a`), bindings and turns stay empty, and the non-legacy key produces no diagnostic.
+
+### PT-683F7F8A2E
+
+Automation: **node:test**, [teamChatMigration.test.ts:100](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L100).
+Title: **an instruction or title match without a chat-id key is a diagnostic, never a link or merge**.
+
+**Given** evidence keyed by an unsaved chat's random uuid, and separately evidence whose definition of done is not the Virtual Team one.
+**When** migration and `classifyLegacyRuntimeSession` run.
+**Then** one conversation remains, it has no links, the stray key becomes an `unknown-conversation` diagnostic, and the other is classified `not-virtual-team`. The evidence type carries no goal/title field, so "title match" here means only that the key does not name the chat id; the title-equality case is driven in PT-D54AE14ABC.
+
+### PT-BB39A41A4B
+
+Automation: **node:test**, [teamChatMigration.test.ts:112](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L112).
+Title: **a checkpoint that names another chat's message, a wrong-role message, or none, is not proof**.
+
+**Given** chats `legacy` and `other`, and dev evidence whose checkpoint is another chat's message, the user's message, a qa message, or empty; plus qa evidence whose checkpoint is an error-flagged qa reply.
+**When** each is classified, and migration runs with a user-message checkpoint.
+**Then** every case is a `no-checkpoint` diagnostic, and migration imports no link and records `no-checkpoint`.
+
+### PT-ECC22CD4F9
+
+Automation: **node:test**, [teamChatMigration.test.ts:125](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L125).
+Title: **evidence never changes an already-activated snapshot**.
+
+**Given** an already migrated snapshot, and a snapshot whose matching chat is already a durable conversation (not legacy).
+**When** each is migrated again with provable evidence.
+**Then** the activated snapshot is returned unchanged, and the durable conversation gets no link and no diagnostic.
+
+## TASK-485 Copied legacy fixture — `apps/praxis-desktop/main/src/main/teamChatActivation.test.ts`
+
+### PT-09749D9091
+
+Automation: **node:test**, [teamChatActivation.test.ts:124](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L124).
+Title: **a copied legacy fixture survives activation field-for-field and a rerun changes no byte**.
+
+**Given** a temp `team-chats.json` written from `LEGACY_TEAM_CHATS_V1` (`teamChatLegacyFixture.ts`): four chats over two projects plus a projectless chat, two sharing the title "Release planning", a ticket key, context titles, every proposed-action kind, choices, an error reply, an orphan leading reply, out of `updatedAt` order.
+**When** the file repository activates, is reloaded, and activates again.
+**Then** the backup holds the exact source bytes; legacy `teamChats` is empty and `acceptedNewTurns` is false; chat ids keep source order; `projectId`, `title`, `issueKey`, `createdAt`, `updatedAt` and every legacy message field match in order, with sequences 1..n; no turns, bindings or links are created; the orphan is `imported-unknown`, the first question opens turn `legacy:alpha-u1`, the error flag survives; the two equal titles stay two chats; listing by project gives `chat-alpha`/`chat-beta` and `chat-gamma`, and `chat-delta` stays projectless; the rerun changes no byte of the store or backup.
+
+## TASK-485 Repository validation — `apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts`
+
+### PT-C5226F41B4
+
+Automation: **node:test**, [teamChatRepository.test.ts:313](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L313).
+Title: **legacy runtime links and diagnostics are validated on load**.
+
+**Given** an activated store holding one conversation with a valid `imported` link and one valid diagnostic.
+**When** it is reloaded, then rewritten five ways: a checkpoint message that does not exist, an unknown participant, a link naming another conversation, a status other than `imported`, and a diagnostic reason `title-match`.
+**Then** the valid file loads with one link; each corrupt file throws `TeamChatStorageError` on load and its bytes are not rewritten.
+
+## TASK-485 Cutover through services — `apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts`
+
+### PT-3DD9007925
+
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:306](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L306).
+Title: **a migration validation failure (identity collision) leaves source and an existing valid backup byte-identical and refuses submitTurn**.
+
+**Given** a half-migrated store whose legacy chat id `old` is already a durable conversation, and a valid `.v1-backup`.
+**When** the main-process services are launched and `submitTurn` is called for `old`.
+**Then** the submit is rejected with a collision error, no provider call is made, and the source and backup files are byte-identical.
+
+### PT-97215CDBB8
+
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:322](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L322).
+Title: **saveChat is rejected after activation even from a stale caller**.
+
+**Given** a legacy store activated through the services.
+**When** a late message is saved through the activation fence (the path the `assistant:saveChat` handler takes) and again directly on the store.
+**Then** the fenced save is rejected as disabled, the direct save is rejected as a replacement writer, and the conversation keeps zero messages. The IPC handler itself is not invoked; the test reproduces its fenced call.
+
+### PT-E8B588C412
+
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:334](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L334).
+Title: **an in-flight legacy save and turn hold cutover; their writes land in the backup source and submitTurn accepts only afterwards**.
+
+**Given** a legacy store, a legacy turn and a legacy save both held on a gate, and runtime evidence that appears only when the legacy turn finishes.
+**When** `submitTurn` is called while both are held, then the gate is released.
+**Then** while held: no durable coordinator exists, no provider call, no evidence read, the file is unchanged, and new legacy work is fenced. After release: the legacy save is in the backup's original bytes, evidence was read once after the turn settled, both messages are `imported`, one typed link to `part-dev`/`old-dev` exists, one durable turn with the accepted id completes on a single coordinator with one provider call, and no binding reuses the legacy key.

@@ -5186,7 +5186,7 @@
       "flow": {
         "given": "a closed app whose team-chats.json holds a legacy v1 chat with an error-flagged orphan reply and a user message, and no v1 backup",
         "when": "the app relaunches, then a turn is submitted to the migrated chat over IPC and the window reloads",
-        "then": "the chat keeps its id, has no turns or bindings, and marks the orphan imported-unknown; the new turn completes with one attempt and four messages; the provider request contains both legacy texts; the v1 backup holds the exact original bytes; after reload exactly one chat is listed. Session-record association import is not exercised"
+        "then": "the chat keeps its id, has no turns or bindings, and marks the orphan imported-unknown; the new turn completes with one attempt and four messages; the provider request contains both legacy texts; the v1 backup holds the exact original bytes; after reload exactly one chat is listed. With no runtime session evidence the conversation has no legacyRuntimeLinks; linked import is exercised by PT-D54AE14ABC"
       }
     },
     {
@@ -5200,9 +5200,9 @@
       },
       "area": "durable Team Chat",
       "flow": {
-        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "an expired legacy runtime session is linked, reconstructed and listed once",
-        "then": "the automated assertions for this test pass and record the described user-visible result"
+        "given": "a closed app whose team-chats.json holds one legacy chat (user question, dev answer) and whose ai-sessions.json holds two finished Virtual Team runtime sessions: one keyed ASSISTANT-legacy-linked-dev-<digest> with a transcript checkpoint naming the dev answer, and one keyed by an unsaved chat's random uuid whose goal text equals the saved chat's title",
+        "when": "the app relaunches and activates durable chat, a turn is submitted to the migrated chat over IPC, the window reloads, the team-chat row is opened, and the window reloads again",
+        "then": "the chat has no bindings and exactly one imported legacyRuntimeLink to part-dev with the digest and checkpoint old-dev; the store still holds one conversation (the title match merged nothing) and an unknown-conversation diagnostic for the stray key; the new turn completes and the provider request carries both legacy texts (context reconstructed, not resumed); no binding reuses the legacy key or session id; the link is unchanged; dev replies are the legacy answer then the new one; after each reload exactly one team-chat row with the title is shown, no ASSISTANT- session row is listed, both runtime session records still exist, and the opened chat shows two dev messages. A screenshot is written to .praxis/session-artifacts/task-485-migrated-chat.png but not compared"
       }
     },
     {

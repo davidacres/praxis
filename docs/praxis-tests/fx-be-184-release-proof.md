@@ -146,12 +146,12 @@ Title: **a title-only match never merges or links**.
 **When** migration runs.
 **Then** three separate conversations remain with no bindings or turns, and the legacy transcript is complete.
 
-### PT-A89FD06E4B
+### PT-CE0D0A3FCE
 
 Automation: **node:test**, [teamChatMigration.test.ts:60](../../packages/core/src/ai/assistant/teamChatMigration.test.ts#L60).
-Title: **a legacy runtime session key is never treated as a provable association**.
+Title: **a runtime session key quoted in message text is never treated as a provable association**. Formerly PT-A89FD06E4B ("a legacy runtime session key is never treated as a provable association"); TASK-485 (c750c105) renamed the test, so its id changed. PT-A89FD06E4B is retired. Listed here only, so it is counted once; the TASK-485 evidence tests that now carry the proof are in [FX-BE-183](fx-be-183-renderer-migration.md).
 
-**Given** a legacy message mentioning a synthetic ASSISTANT-… session key.
+**Given** a legacy message mentioning a synthetic ASSISTANT-… session key, and no runtime session evidence.
 **When** migration runs.
 **Then** the conversation has no bindings, epoch "imported" and no participant ids on messages.
 
@@ -193,7 +193,7 @@ Title: **a 10,000-message conversation commits under concurrent mutation of anot
 
 ### PT-4485239A20
 
-Automation: **node:test**, [teamChatActivation.test.ts:76](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L76).
+Automation: **node:test**, [teamChatActivation.test.ts:77](../../apps/praxis-desktop/main/src/main/teamChatActivation.test.ts#L77).
 Title: **interrupted activation reuses a validated backup and uncertain commit requires reconciliation**. Existing contract, strengthened by FX-BE-184 (gap G6); this entry supersedes the earlier wording.
 
 **Given** a validated backup and a rename that fails once, then a directory flush that fails after a later rename.
@@ -247,7 +247,7 @@ Registration: core contracts run through `packages/core/package.json` → `test`
 
 ### PT-3544C516BE
 
-Automation: **node:test**, [teamChatExecutionAdapter.test.ts:65](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L65).
+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:66](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L66).
 Title: **unverified CLI identity cannot be stabilized by turn or participant account references**.
 
 **Given** a CLI configuration with a claimed account reference in participant defaults or turn options.
@@ -256,7 +256,7 @@ Title: **unverified CLI identity cannot be stabilized by turn or participant acc
 
 ### PT-F19C6CE02C
 
-Automation: **node:test**, [teamChatCoordinator.test.ts:800](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L800).
+Automation: **node:test**, [teamChatCoordinator.test.ts:844](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L844).
 Title: **queued page identity and attachment references survive caller mutation before dispatch**.
 
 **Given** a running turn held behind a barrier and a second accepted turn with issue context and an image reference.
@@ -267,7 +267,7 @@ Title: **queued page identity and attachment references survive caller mutation 
 
 ### PT-DD3C1A1EA1
 
-Automation: **node:test**, [teamChatExecutionAdapter.test.ts:90](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L90).
+Automation: **node:test**, [teamChatExecutionAdapter.test.ts:91](../../apps/praxis-desktop/main/src/main/teamChatExecutionAdapter.test.ts#L91).
 Title: **production API compatibility follows credentials, model and policy without exposing credentials**.
 
 **Given** the production adapter resolving an API credential and captured policy.
@@ -276,7 +276,7 @@ Title: **production API compatibility follows credentials, model and policy with
 
 ### PT-EE0AB4E23D
 
-Automation: **Playwright**, [durableTeamChat.spec.ts:536](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L536).
+Automation: **Playwright**, [durableTeamChat.spec.ts:610](../../apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts#L610).
 Title: **queued page context and staged image reach the provider after navigation and composer replacement**.
 
 **Given** a temporary profile, coordination root, attachment store and scripted ACP provider, with the first dispatch held at a barrier.
