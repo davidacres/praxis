@@ -380,3 +380,31 @@ test('an in-flight legacy save and turn hold cutover; their writes land in the b
   assert.equal(calls.length, 1);
   assert.ok(after.bindings.every(binding => binding.id !== legacyKey), 'the durable reply never reuses the legacy session as a binding');
 });
+
+test('a Stop interrupted by process exit stays stopped after restart on the file repository', async t => {
+  const file = profile(t);
+  // A text-only member that accepts the turn and never acknowledges the abort before the process dies.
+  const first = await ready(file, async params => {
+    await params.onEvidence!({ kind: 'runtime_identity', provenance: 'adapter', data: { toolCapable: false } });
+    await params.onAccepted!();
+    return new Promise(() => undefined);
+  }, 'stopped');
+  await first.services.submitTurn(submit('stopped', 'mid-reply'));
+  await until(() => read(file).conversations[0].turns[0]?.attempts[0]?.state === 'running', 'running');
+  await first.services.submitTurn(submit('stopped', 'queued-behind', revisionOf(file, 'stopped')));
+  const turnId = read(file).conversations[0].turns[0].id;
+  await first.services.coordinator().cancelTurn('stopped', turnId);
+  assert.equal(read(file).conversations[0].turns[0].state, 'cancelling', 'the Stop is durable before the runtime settles');
+
+  // Second process over the same team-chats.json; the first execution never settled.
+  const second = launch(file, async () => ({ text: 'unexpected' }));
+  assert.equal(await second.services.recoverOnStartup(), true);
+  await new Promise(resolve => setTimeout(resolve, 40));
+  const after = read(file).conversations[0];
+  assert.equal(second.calls.length, 0, 'no provider runs after a Stop survives a restart');
+  assert.equal(after.turns[0].state, 'cancelled');
+  assert.equal(after.turns[0].attempts[0].state, 'cancelled');
+  assert.equal(after.turns[1].state, 'cancelled', 'the queued turn the Stop cancelled is not resurrected');
+  assert.equal(after.messages.filter(m => m.role !== 'user').length, 0);
+  assert.ok(!second.updates.some(u => u.type === 'turn_failed'), 'a stopped turn is not reported as a failure to retry');
+});

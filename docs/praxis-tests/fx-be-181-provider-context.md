@@ -128,14 +128,15 @@ Title: **provider bindings, summary provenance, usage and decision corrections s
 **When** reload, mutate a returned copy and submit invalid source/state transactions.
 **Then** delivered source, summary usage 10, summary attempt linkage and correction survive; returned binding mutation does not affect the repository; missing pinned source and invalid summary state reject.
 
-## PT-1AE4FF6CEF
+## PT-C5D91CE0A1
 
 Automation: **node:test**, [packages/core/src/ai/acp/acpAgentHost.test.ts:593](../../packages/core/src/ai/acp/acpAgentHost.test.ts#L593).
-Title: **durable ACP continuation sends only prepared context on native resume and reconstruction fallback**.
+Title: **durable ACP continuation sends only prepared context on native resume, and full reconstruction when resume is unavailable or advertised but failing**.
+Formerly PT-1AE4FF6CEF; TASK-486 added the advertised-but-failing case and renamed the test.
 
 **Given** a temporary scripted ACP subprocess, prior session and distinct prepared reconstruction/continuation strings.
-**When** continue with resume capability advertised and then absent.
-**Then** captured prompt equals the native delta or full reconstruction respectively, record reports matching delivery mode and completes without legacy history appended.
+**When** continue with resume capability advertised, absent, and advertised but failing with a JSON-RPC error.
+**Then** captured prompt equals the native delta or (for both fallback cases) the full reconstruction, record reports matching delivery mode and completes without legacy history appended.
 
 ## PT-CCDCE2367D
 

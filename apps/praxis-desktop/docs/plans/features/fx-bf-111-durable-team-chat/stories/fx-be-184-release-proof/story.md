@@ -50,6 +50,8 @@ FX-BE-183
 
 Use the parent feature acceptance-to-suite mapping and validation commands. Each task supplies executable scenarios; record exact commands, assertion names and artifacts. This story does not close on typechecking alone.
 
+TASK-486 deterministic matrix (2026-11-06): [verification report](../../../../../../../../docs/praxis-tests/fx-be-184-verification-report.md#task-486-failure-matrix-2026-11-06). Real-provider checks not run; release acceptance stays open.
+
 ## Close when
 
 Both tasks satisfy every acceptance criterion, results are linked here and in the issue mirror, and no story-specific recovery or compatibility gap remains.

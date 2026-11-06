@@ -169,9 +169,9 @@ test('a committed final reply whose acknowledgement was lost replays display eve
 });
 
 test('a pending approval at crash is never reused by the replacement attempt', async () => {
-  // Production never projects awaiting_approval onto the attempt (the runtime record holds it),
-  // so a crash during a permission prompt is seen as a running, dispatched attempt. Cover both
-  // that real shape and the design's awaiting_approval projection.
+  // Since TASK-483 production projects awaiting_approval onto the attempt (recordAttemptApproval).
+  // The `projected: false` branch covers files written before then, where a crash during a
+  // permission prompt is seen as a running, dispatched attempt. Both end outcome_unknown.
   for (const projected of [false, true]) {
     let crashed = await crashAt(s => lastAttempt(s)?.state === 'running', async params => {
       await params.onAccepted!();
@@ -363,4 +363,81 @@ test('a settled attempt releases only its own abort claim', async () => {
   await coordinator.cancelTurn('conv', conv(repo.snapshot).turns[0].id);
   assert.equal(stranger.signal.aborted, false, 'a different turn/attempt claim is untouched');
   assert.equal(claims.size, 1);
+});
+
+for (const capability of ['text-only', 'tool-capable'] as const) {
+  test(`crash while a turn is cancelling settles text-only work as cancelled and tool-capable work as outcome_unknown, never dispatching skipped members or cancelled queued turns: ${capability}`, async () => {
+    const repo = new CrashableRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+    const first = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('stop'), executionAdapter: { execute: async params => {
+      await params.onEvidence!({ kind: 'runtime_identity', provenance: 'adapter', data: { toolCapable: capability === 'tool-capable' } });
+      await params.onAccepted!();
+      // The runtime never acknowledges the abort before the process dies.
+      return never();
+    } } });
+    await first.submitTurn(command({ selectedParticipantIds: ['part-dev', 'part-lead'] }));
+    await until(() => lastAttempt(repo.snapshot)?.state === 'running', 'dev running');
+    await first.submitTurn(command({ commandId: 'cmd-2', expectedRevision: conv(repo.snapshot).revision, text: 'And then?' }));
+    const turnId = conv(repo.snapshot).turns[0].id;
+    await first.cancelTurn('conv', turnId);
+    const crashed = repo.read();
+    assert.equal(conv(crashed).turns[0].state, 'cancelling');
+    assert.deepEqual(conv(crashed).turns[0].skippedParticipantIds, ['part-lead']);
+    assert.equal(conv(crashed).turns[1].state, 'cancelled');
+
+    const { repo: restarted, coordinator, calls } = restart(crashed, async () => ({ text: 'unexpected' }));
+    await coordinator.initialize();
+    await tick(20);
+    const expected = capability === 'text-only' ? 'cancelled' : 'outcome_unknown';
+    const after = conv(restarted.snapshot);
+    assert.equal(calls.length, 0, 'nothing is dispatched after a Stop interrupted by process exit');
+    assert.equal(after.turns[0].state, expected);
+    assert.equal(after.turns[0].attempts[0].state, expected);
+    assert.ok(after.turns[0].attempts[0].recoveryEvidence!.some(e => e.kind === 'reconciliation' && e.observingEpoch === 'restart-1'));
+    assert.deepEqual(after.turns[0].skippedParticipantIds, ['part-lead']);
+    assert.equal(after.turns[1].state, 'cancelled');
+    assert.equal(after.messages.filter(m => m.role !== 'user').length, 0);
+    if (capability === 'tool-capable') {
+      await assert.rejects(coordinator.retryParticipant('conv', turnId, 'part-dev'), /reconciliation evidence/);
+    }
+    // A second restart over the reconciled bytes changes nothing.
+    const again = restart(restarted.read(), async () => ({ text: 'unexpected' }), 'second-restart');
+    await again.coordinator.initialize();
+    await tick(20);
+    assert.equal(again.calls.length, 0);
+    assert.deepEqual(conv(again.repo.snapshot).turns.map(t => t.state), after.turns.map(t => t.state));
+  });
+}
+
+test('a final result persisted for a cancelling turn imports exactly once at restart and never runs the members Stop skipped', async () => {
+  const repo = new CrashableRepository({ schemaVersion: 2, revision: 0, teamChats: [], conversations: [conversation()] });
+  const first = new TeamChatCoordinator({ repository: repo, idSource: sequenceIds('stop'), executionAdapter: { execute: async params => {
+    await params.onEvidence!({ kind: 'runtime_identity', provenance: 'adapter', data: { toolCapable: false } });
+    await params.onAccepted!();
+    return never();
+  } } });
+  await first.submitTurn(command({ selectedParticipantIds: ['part-dev', 'part-lead'] }));
+  await until(() => lastAttempt(repo.snapshot)?.state === 'running', 'dev running');
+  await first.cancelTurn('conv', conv(repo.snapshot).turns[0].id);
+  // The process died after the runtime's final reply was made durable but before it was imported.
+  const crashed = repo.read();
+  const turn = conv(crashed).turns[0];
+  const attempt = turn.attempts[0];
+  (attempt.recoveryEvidence ??= []).push({ id: 'final-before-crash', conversationId: 'conv', turnId: turn.id, participantId: attempt.participantId,
+    attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch, kind: 'final_result', observedAt: 'then', provenance: 'adapter',
+    result: { text: 'dev answer before stop' } });
+  assert.equal(turn.state, 'cancelling');
+
+  let bytes = crashed;
+  for (let restartCount = 0; restartCount < 2; restartCount++) {
+    const { repo: restarted, coordinator, calls } = restart(bytes, async () => ({ text: 'unexpected' }), `restart-${restartCount}`);
+    await coordinator.initialize();
+    await tick(20);
+    const after = conv(restarted.snapshot);
+    assert.equal(calls.length, 0, 'lead was skipped by Stop and is never dispatched');
+    assert.equal(after.messages.filter(m => m.text === 'dev answer before stop').length, 1, 'the durable reply is imported exactly once');
+    assert.equal(after.turns[0].state, 'completed');
+    assert.equal(after.turns[0].attempts[0].state, 'completed');
+    assert.deepEqual(after.turns[0].skippedParticipantIds, ['part-lead']);
+    bytes = restarted.read();
+  }
 });

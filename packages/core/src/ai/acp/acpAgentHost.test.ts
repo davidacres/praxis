@@ -590,7 +590,7 @@ for await (const line of createInterface({ input: process.stdin })) {
   }
 });
 
-test('durable ACP continuation sends only prepared context on native resume and reconstruction fallback', async () => {
+test('durable ACP continuation sends only prepared context on native resume, and full reconstruction when resume is unavailable or advertised but failing', async () => {
   const folder = await mkdtemp(join(tmpdir(), 'praxis-durable-acp-'));
   const fixture = join(folder, 'agent.mjs');
   const promptFile = join(folder, 'prompt.txt');
@@ -600,7 +600,8 @@ import { writeFileSync } from 'node:fs';
 const send = message => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...message }) + '\\n');
 for await (const line of createInterface({ input: process.stdin })) {
   const request = JSON.parse(line);
-  if (request.method === 'initialize') send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: process.env.NATIVE === '1' ? { sessionCapabilities: { resume: true } } : {} } });
+  if (request.method === 'initialize') send({ id: request.id, result: { protocolVersion: 1, agentCapabilities: process.env.NATIVE === '1' || process.env.RESUME_FAILS === '1' ? { sessionCapabilities: { resume: true } } : {} } });
+  else if ((request.method === 'session/resume' || request.method === 'session/load') && process.env.RESUME_FAILS === '1') send({ id: request.id, error: { code: -32603, message: 'Session expired' } });
   else if (request.method === 'session/new') send({ id: request.id, result: { sessionId: 'fresh' } });
   else if (request.method === 'session/prompt') {
     writeFileSync(process.env.PROMPT_FILE, request.params.prompt[0].text);
@@ -610,7 +611,8 @@ for await (const line of createInterface({ input: process.stdin })) {
 }
 `);
   try {
-    for (const native of [true, false]) {
+    for (const mode of ['native', 'unavailable', 'failing'] as const) {
+      const native = mode === 'native';
       const record = { state: 'completed', sessionId: 'owner', runtimeSessionId: 'prior', provider: 'codex-cli', model: 'fixture', toolMode: 'read-only', permissionMode: 'manual', events: [{ type: 'message', timestamp: 'now', summary: 'Old native output', detail: 'MUST NOT APPEND LEGACY HISTORY' }], taskDefinition: { kind: 'general', goal: 'OLD INITIAL PROMPT', scope: 'fixture', definitionOfDone: 'reply' }, teamChatContextDelivery: '' };
       const manager = {
         getAgentSession: () => record,
@@ -621,10 +623,10 @@ for await (const line of createInterface({ input: process.stdin })) {
         refreshHandoverBrief: async () => {}
       };
       const agentHost = new AcpAgentHost(manager as never, { appendLine: () => {} });
-      await agentHost.continueTask('durable', 'current', { command: process.execPath, args: [fixture], env: { NATIVE: native ? '1' : '0', PROMPT_FILE: promptFile }, durableContext: { reconstruction: 'FULL PREPARED HISTORY ONCE', continuation: 'MISSING SHARED MESSAGES ONCE' } });
+      await agentHost.continueTask('durable', 'current', { command: process.execPath, args: [fixture], env: { NATIVE: native ? '1' : '0', RESUME_FAILS: mode === 'failing' ? '1' : '0', PROMPT_FILE: promptFile }, durableContext: { reconstruction: 'FULL PREPARED HISTORY ONCE', continuation: 'MISSING SHARED MESSAGES ONCE' } });
       for (let i = 0; i < 200 && agentHost.hasActiveTask('durable'); i++) await new Promise(resolve => setTimeout(resolve, 10));
       assert.equal(agentHost.hasActiveTask('durable'), false);
-      assert.equal(record.state, 'completed');
+      assert.equal(record.state, 'completed', mode);
       assert.equal(await readFile(promptFile, 'utf8'), native ? 'MISSING SHARED MESSAGES ONCE' : 'FULL PREPARED HISTORY ONCE');
       assert.equal(record.teamChatContextDelivery, native ? 'native' : 'reconstruction');
     }

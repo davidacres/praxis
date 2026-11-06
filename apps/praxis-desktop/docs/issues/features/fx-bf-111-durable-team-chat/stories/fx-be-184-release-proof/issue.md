@@ -28,3 +28,5 @@ FX-BE-183
 ## Validation and close conditions
 
 Follow the canonical story and its task-specific tests; close only when all criteria have linked evidence. No external issue has been created.
+
+TASK-486 deterministic matrix (2026-11-06): [verification report](../../../../../../../../docs/praxis-tests/fx-be-184-verification-report.md#task-486-failure-matrix-2026-11-06). Real-provider checks not run; release acceptance stays open.

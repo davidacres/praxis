@@ -1,9 +1,76 @@
 # FX-BE-184 durable team-chat release verification report
 
-**Authoritative status (supersedes every section below, which is historical):** the full functional suite has **no clean pass** (last known: 748 passed / 2 failed pointer-dependent shelf checks / 14 skipped; a single-worker rerun has no claimed result). Live API check: **skipped** (no credentials). Native CLI session reuse: **unproven** (reconstruction only). Pending-approval `interrupted` vs `outcome_unknown` matrix discrepancy: **open**. Release acceptance stays open.
+**Authoritative status (supersedes every section below, which is historical):** TASK-486 deterministic failure matrix: **complete** (see [TASK-486 failure matrix](#task-486-failure-matrix-2026-11-06); every AC maps to named assertions, all focused runners green, nothing skipped). Full functional suite: **no clean pass** (last known: 748 passed / 2 failed pointer-dependent shelf checks / 14 skipped; not rerun here — release-level, TASK-487). Live API check: **not run** (no `PRAXIS_LIVE_API_PROVIDER` / `PRAXIS_LIVE_API_KEY`; optional in scheduled runs). Real CLI continuation: **not run** in this pass; earlier receipts are historical. Native CLI session reuse: **unproven** (reconstruction only). Pending-approval `interrupted` vs `outcome_unknown` matrix discrepancy: **open** (conservative `outcome_unknown` kept). Release acceptance stays open.
 
 Production changes outside core/renderer, unrelated to any AC and made only to remove test-run flakes: `workflowWorkspace.ts` (readiness re-read when the base checkout is held) and `ticketWriteBackCommit.ts` (bounded retry on git exit 128 with an `index.lock` error). The clean-base path is unchanged.
 
+
+## TASK-486 failure matrix (2026-11-06)
+
+Workflow run WF-0742A955 (implement). This section is the current deterministic coverage map; it names assertions by **test title**, not line number, because TASK-476–485 rewrote the files the older `file:line` hints point at. Every runner below was executed in this pass; none reported a skipped test.
+
+### Commands and results
+
+| Command | Result |
+| --- | --- |
+| `npm run build:core` | exit 0 |
+| `cd packages/core && node --test out/ai/assistant/teamChat{CrashBoundaries,Transitions,Recovery,CancelRetryApproval,Coordinator,Context,Bindings,Migration}.test.js out/ai/acp/acpAgentHost.test.js` | **123 passed, 0 failed, 0 skipped** |
+| `npm run test:desktop:git` (main units, includes every main team-chat file) | **168 passed, 0 failed, 0 skipped** |
+| `npm run test:renderer` (includes `turnControlModel.test.ts`) | **93 passed, 0 failed, 0 skipped** |
+| `npm run check-types` | exit 0 |
+| `npm run test:praxis-contracts` | exit 0, 804 Playwright tests catalogued and linked |
+
+Before the product fix, the new crash-during-Stop case failed as predicted (`text-only`: actual `interrupted`, expected `cancelled`); the run is retained above only as the reason for the fix, not as a passing result.
+
+### Product fix found by the matrix
+
+A restart while a turn was `cancelling` turned the user's Stop into a retryable `interrupted` turn (Retry dev offered). `beginConversationEpoch` (`teamChatTransitions.ts`) now settles a text-only attempt on a cancelling turn as `cancelled` when no durable final result exists, matching the live abort path in the coordinator. Tool-capable or opaque attempts stay `outcome_unknown` (tool safety unchanged), and a cancelling attempt with a durable final result is still imported once.
+
+### AC1–AC12 → named assertions
+
+| AC | Named assertions (file) | Runner |
+| --- | --- | --- |
+| AC1 idempotent submit, ordered concurrent sends | "duplicate runtime events and a duplicate submit command converge to one turn and one usage reference" (crashBoundaries); "TASK-478 AC1: Two simultaneous sends produce distinct FIFO queued turns, repeated delivery produces one turn", "TASK-479 AC1: IPC timeout after durable acceptance followed by resubmission returns the original turn ID" (coordinator); "TASK-479 AC1: a lost IPC acknowledgement after durable acceptance, then resubmission of the same command ID, returns the original turn" (commands); "simultaneous sends to one chat on the file repository produce distinct FIFO turns and one turn per repeated command" (ipcRecovery); "durable submit and completion commit together and replay returns the original turn" (repository); e2e "an unconfirmed submission retries its original command after both acknowledgements are lost" | core, main, e2e (historical) |
+| AC2 four attempts, two reusable sessions, isolation | "compatible members retain one binding each across turns and chats remain isolated; usage commits once" (coordinator); "TASK-480 AC1: two compatible API tool members reuse provider sessions per binding across turns; another chat shares none", "TASK-480 AC2: a no-tools API member completes without a tool session; attempt usage stays attributable" (executionAdapter, local HTTP mock API wire). Real native CLI reuse: **unproven** | core, main |
+| AC3 window close/reload preserves work | "TASK-479 AC4 (main): closing the initiating window does not cancel accepted work; another window observes it complete" (commands); "two windows and two chats retain concurrent accepted mutations and isolate returned objects" (repository); e2e "two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work", "closing the initiating window keeps its accepted turn and pending approval observable from another window" | main, e2e (historical) |
+| AC4 every recovery boundary | crashBoundaries: "crash after acceptance with no dispatch intent…", "crash with prepared context but no dispatch intent…", "crash after dispatch intent marks text-only attempts interrupted…" ×3, "a persisted final result for the attempt imports once…", "a tool that may have run with no final reply stays outcome_unknown…", "a committed final reply whose acknowledgement was lost replays display events only", "a pending approval at crash is never reused by the replacement attempt", "late callbacks from a previous epoch never double-commit", "a fault between reserve and complete leaves the snapshot at the prior committed revision", "after a loop fault, later queued turns stay queued…", "a late completion after cancel never restarts the turn…", **new** "crash while a turn is cancelling settles text-only work as cancelled and tool-capable work as outcome_unknown…" ×2, **new** "a final result persisted for a cancelling turn imports exactly once at restart…"; "startup recovery matrix: dispatched=…" (recovery); "startup recovery reconciles a running attempt and resumes a queued turn…", "startup recovery keeps an outcome_unknown attempt blocked…", **new** "a Stop interrupted by process exit stays stopped after restart on the file repository" (ipcRecovery) | core, main |
+| AC5 bounded reconstruction on replacement | "provider replacement reconstructs an early pinned decision, its later correction and other members' replies…", "TASK-481 AC1"–"AC4" (context); "TASK-481 AC1/AC4/AC5" (coordinator); "TASK-480 AC3: a runtime without native resume reconstructs from the bounded context" (executionAdapter); **renamed** "durable ACP continuation sends only prepared context on native resume, and full reconstruction when resume is unavailable or advertised but failing" (acpAgentHost, scripted real ACP wire) | core, main |
+| AC6 binding invalidation, approval ownership | "every resolved compatibility dimension invalidates reuse and switching back stays fresh", "folder, permission-mode and provider changes each invalidate the binding and never widen tool mode" (bindings); "TASK-480 AC4: changed permissions invalidate an old binding before dispatch and it is never revalidated", "production API compatibility follows credentials, model and policy without exposing credentials" (executionAdapter); TASK-483: "approval identity is recorded on the attempt, fenced, and resolvable only by its request id", "restart invalidates the approval and restores it on the same attempt only for a live matching request", "without a live matching request the approval stays invalidated and is never transferred" (cancelRetryApproval); "startup restores a pending approval on its own attempt only for a live matching runtime request" (ipcRecovery) | core, main |
+| AC7 lossless migration, one writer | "migration is deterministic, lossless, isolated and never schedules imported history", "a title-only match never merges or links", TASK-485 "a provable legacy runtime session imports one typed link and no binding", "a runtime session key quoted in message text is never treated as a provable association" (migration); "a copied legacy fixture survives activation field-for-field and a rerun changes no byte", "backup preserves exact bytes, migration is idempotent and legacy writes are rejected" (activation); "legacy runtime links and diagnostics are validated on load" (repository). The historical G5/AC7 paragraph is left for TASK-487 | core, main |
+| AC8 sidebar rows | e2e "a standalone chat stays navigable beside the single team-chat row" (assistant.spec), "an expired legacy runtime session is linked, reconstructed and listed once" | e2e (historical; not rerun — no UI change) |
+| AC9 cancel/queue/retry/failure/context states | "cancel keeps completed replies, skips remaining members, cancels queued turns…", "retry appends one attempt for the failed member…", "an unknown-outcome retry needs acknowledgement and evidence…" (cancelRetryApproval); "active cancellation remains cancelling until execution settles and records evidence" (coordinator); TASK-484 `turnControlModel.test.ts` (renderer); **new** cancel-across-restart cases above; e2e "keyboard cancellation preserves accepted messages and cancels only the selected queued turn" | core, main, renderer |
+| AC10 storage errors visible, no lost state | "pre-rename failure preserves committed bytes and rejects acknowledgement; next mutation uses old state", "post-rename failure halts writes until receipt reconciliation", "ENOSPC and EACCES on temp write or fsync…" ×6, "a truncated file, invalid JSON, wrong schemaVersion and a duplicate conversation id each fail load without rewriting" (repository); "a pre-rename submit failure emits no acceptance…", "an uncertain commit while reserving an attempt halts dispatch and reports reload" (ipcRecovery) | main |
+| AC11 mentions, page context, previews, usage | "TASK-478 AC2" mention order, "a structured execution result and original page identity survive completion", "queued page identity and attachment references survive caller mutation before dispatch" (coordinator); "TASK-480 AC5: tool-runtime usage is attributed once per attempt and context occupancy is not spend" (executionAdapter); e2e "queued page context and staged image reach the provider after navigation and composer replacement" | core, main |
+| AC12 evidence separated, suites registered | This section; every file above is in `packages/core/package.json` `test` or `apps/praxis-desktop/main/package.json` `test:git` (no new file added); `durableTeamChat.spec.ts` is in `SMOKE_SPECS` | report |
+
+"e2e (historical)" means the assertion exists and passed in an earlier recorded run; this pass changed no UI and did not rerun Electron.
+
+### Failure categories
+
+| Category | Assertions |
+| --- | --- |
+| File-write errors | repository ENOSPC/EACCES ×6; pre-rename and post-rename failure; ipcRecovery pre-rename submit failure and uncertain submit/reserve commits |
+| Malformed data | repository truncated/invalid/wrong-schema/duplicate-id load; "corrupt and unsupported files fail visibly…"; commands "malformed control commands and unknown projects on create are rejected"; "legacy runtime links and diagnostics are validated on load"; e2e malformed team-chat file |
+| Duplicate commands/events | crashBoundaries duplicate submit and runtime events; late callbacks; commands lost-ack resubmission; e2e "subscription buffers a racing revision…" |
+| Concurrent windows | repository two windows/two chats and two instances over one file; ipcRecovery "two windows over two chats retain every accepted submit"; e2e two-window convergence |
+| Missing provider resume | bindings and executionAdapter no-resume reconstruction; **new** acpAgentHost advertised-but-failing resume on the durable path; acpAgentHost plain fallback "ACP sends reconstructed context when native resume fails or is unavailable"; e2e expired legacy session and CLI without resume |
+| Crash boundaries | every recovery-matrix row in crashBoundaries/recovery plus the **new** cancelling row (core and file-backed main) |
+
+### Fixture isolation audit
+
+Read-only search of every team-chat unit file and `durableTeamChat*.spec.ts`. Core team-chat suites are fully in-memory (no filesystem). Main suites and `acpAgentHost.test.ts` write only under `fs.mkdtemp(os.tmpdir())` roots removed in `t.after`/`finally`. The e2e specs use `launchTestApp` temporary profiles (project folder = `app.userDataDir`), and the live spec's repository is an `mkdtemp` folder. The only repository-relative writes are screenshots under `.praxis/session-artifacts/`, which is git-ignored and is not a Praxis write path. No test points a Praxis write path at `apps/praxis-desktop/docs/plans`, any `*.praxis.*` file or the user's profile.
+
+### Real-provider status
+
+Not run in this scheduled run: `PRAXIS_LIVE_API_PROVIDER` and `PRAXIS_LIVE_API_KEY` are not provided and the run policy marks live checks optional. No mock was substituted for this criterion. The earlier real CLI receipt (six attempts, `nativeReuseProved: false`) is historical evidence only. Real API continuation and native CLI reuse remain open and keep FX-BE-184 release acceptance open.
+
+### F2 correction
+
+The F2 note below says the coordinator never projects `awaiting_approval`. Since TASK-483 (`recordAttemptApproval`) it does. A crash during a permission prompt still recovers as `outcome_unknown` for a tool-capable member, because a pending prompt cannot exclude earlier tool activity in that attempt; both the pre-TASK-483 (`running`) and current (`awaiting_approval`) shapes are asserted. The difference from the design matrix's `interrupted` row remains **open**.
+
+### Not run
+
+Full functional and theme e2e suites, live API and real CLI checks, manual and visual passes (no UI change; owned by TASK-487). No screenshot was taken.
 
 ## WF-0C7166C7 resumed implementation
 
@@ -111,7 +178,7 @@ AC mapping additions: AC1/AC5/AC11 use the queued-capture assertion; AC2/AC6 use
 | F3 | The renderer unit suite (including `conversationSubscription.test.ts`) was registered but never executed by root `test`/`test:full`. | plan analysis | root `test:renderer`, run by `test` and `test:full`; AGENTS.md updated. |
 | F7 | No team-chat spec was in the smoke set, so governed runs never exercised the feature. | plan analysis | `durableTeamChat` added to `SMOKE_SPECS` (it uses no hover, mouse, drag or `toHaveScreenshot`). |
 
-**Recorded deviation (F2, not changed):** the coordinator never projects `awaiting_approval` onto the durable attempt; the runtime session holds it. A crash during a permission prompt is therefore recovered from a dispatched `running` attempt and classified `outcome_unknown` for a tool-capable member, where the design's matrix row says `interrupted`. Both states refuse automatic replay. The safety property, that the approval is never reused by a replacement attempt, is asserted (`teamChatCrashBoundaries.test.ts:171`, `durableTeamChat.spec.ts:391`).
+**Recorded deviation (F2, not changed; its first sentence is superseded by the TASK-486 correction at the top of this report):** the coordinator never projects `awaiting_approval` onto the durable attempt; the runtime session holds it. A crash during a permission prompt is therefore recovered from a dispatched `running` attempt and classified `outcome_unknown` for a tool-capable member, where the design's matrix row says `interrupted`. Both states refuse automatic replay. The safety property, that the approval is never reused by a replacement attempt, is asserted (`teamChatCrashBoundaries.test.ts:171`, `durableTeamChat.spec.ts:391`).
 
 ## AC1–AC12 → named assertions and artifacts
 

@@ -196,13 +196,16 @@ export function beginConversationEpoch(current: DurableConversation, expected: n
         invalidateAttemptApproval(attempt);
         const wasDispatched = Boolean(attempt.dispatchIntent);
         const toolCapable = !attempt.recoveryEvidence?.some(item => item.kind === 'runtime_identity' && item.data?.toolCapable === false);
-        attempt.state = wasDispatched && toolCapable ? 'outcome_unknown' : 'interrupted';
+        // A Stop the process exit finished: a text-only runtime with no durable reply has
+        // stopped, so it ends cancelled rather than as a retryable interruption.
+        const stopped = turn.state === 'cancelling' && !attempt.recoveryEvidence?.some(item => item.kind === 'final_result');
+        attempt.state = wasDispatched && toolCapable ? 'outcome_unknown' : stopped ? 'cancelled' : 'interrupted';
         attempt.completedAt = timestamp;
         attempt.recoveryEvidence ??= [];
         attempt.recoveryEvidence.push({ id: `recovery:${epoch}:${attempt.id}`, conversationId: current.id, turnId: turn.id,
           participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
           observingEpoch: epoch, kind: 'reconciliation', observedAt: timestamp, provenance: 'coordinator-startup', data: { dispatched: wasDispatched, toolCapable } });
-        turn.state = attempt.state === 'outcome_unknown' ? 'outcome_unknown' : 'interrupted';
+        turn.state = attempt.state === 'outcome_unknown' || attempt.state === 'cancelled' ? attempt.state : 'interrupted';
       }
     }
   }

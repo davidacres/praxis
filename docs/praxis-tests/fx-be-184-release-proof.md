@@ -1,6 +1,6 @@
 # FX-BE-184 release-proof node:test contracts
 
-Runner: **node:test**. These **27 supplemental source contracts, representing 34 runtime cases** (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
+Runner: **node:test**. These **30 supplemental source contracts, representing 38 runtime cases** (TASK-486 added three source contracts and four runtime cases; see [TASK-486 failure-matrix additions](#task-486-failure-matrix-additions)) (two of them existing tests strengthened here) cover crash boundaries, provider context and bindings, migration, persistence faults, activation and startup recovery. They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog; two titles are template literals and stand for their parameterized cases. The two strengthened contracts retain their earlier ids; repeated documentation of those identities in older supplements is superseded here, not counted again. No id collides with the Playwright catalog.
 
 ### PT-C2406CA182
 
@@ -61,7 +61,7 @@ Title: **a committed final reply whose acknowledgement was lost replays display 
 Automation: **node:test**, [teamChatCrashBoundaries.test.ts:171](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L171).
 Title: **a pending approval at crash is never reused by the replacement attempt**.
 
-**Given** a running full-tools manual-permission attempt, as production stores it and with an awaiting_approval projection.
+**Given** a running full-tools manual-permission attempt, in the shape files written before TASK-483 hold and with the awaiting_approval projection production records since TASK-483.
 **When** a new coordinator initializes and the user retries with reconciliation evidence and the duplicate-risk acknowledgement.
 **Then** the recovered attempt is exactly outcome_unknown because a pending prompt cannot exclude earlier tool activity (explicit discrepancy with the matrix's interrupted row); the replacement is ordinal 2 with permissionMode manual, no autoApprovePermissions and no carried evidence.
 
@@ -292,3 +292,47 @@ Execution source: `fafbacc8`, with timestamped live receipt retention in `1018ed
 The existing real CLI/API continuation assertions in `durableTeamChat.live.spec.ts` now require both members to recall the pinned codename after restart, check session isolation on all three turns, and classify native reuse only when matching session IDs are accompanied by durable `final_result.result.contextDelivery === 'native'` evidence. A matching session ID by itself cannot establish native delivery. Reconstruction remains a separate successful continuation result with native reuse explicitly unproved.
 
 No production identity fallback, permission classification, runtime checks or test registration was weakened. The conservative per-turn CLI identity and unknown-outcome reconciliation gates remain intact. Live receipts use timestamped filenames and Playwright JSON attachments to preserve prior runs. Current runner results and retained artifacts are recorded separately in the verification report.
+
+## TASK-486 failure-matrix additions
+
+Added in TASK-486 (2026-11-06). The template id below is a source-group identity; its two runtime ids follow the same rule as the parameterized table above.
+
+### PT-BAFAF71874
+
+Automation: **node:test**, [teamChatCrashBoundaries.test.ts:369](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L369).
+Title: **crash while a turn is cancelling settles text-only work as cancelled and tool-capable work as outcome_unknown, never dispatching skipped members or cancelled queued turns: ${capability}**.
+Runtime ids: PT-84EF0A45E2 (`text-only`), PT-57F44DA3DF (`tool-capable`).
+
+**Given** a two-member turn whose dev attempt is running, a second turn queued behind it, and a Stop committed (`cancelling`, lead skipped, queued turn cancelled) before the runtime acknowledges the abort.
+**When** the process dies and a new coordinator initializes over those bytes, then a second restart follows.
+**Then** no provider runs; a text-only attempt and its turn end `cancelled`, a tool-capable attempt and its turn end `outcome_unknown` and refuse a plain retry; both carry a reconciliation record from the new epoch; the skipped member and the cancelled queued turn are unchanged; the second restart changes nothing.
+
+### PT-3819088619
+
+Automation: **node:test**, [teamChatCrashBoundaries.test.ts:411](../../packages/core/src/ai/assistant/teamChatCrashBoundaries.test.ts#L411).
+Title: **a final result persisted for a cancelling turn imports exactly once at restart and never runs the members Stop skipped**.
+
+**Given** a cancelling text-only turn (lead skipped by Stop) whose running dev attempt holds a durable `final_result` that was never imported.
+**When** a new coordinator initializes, twice in succession.
+**Then** the reply is imported exactly once, the turn completes with lead still skipped, and no provider is invoked in either restart.
+
+### PT-C5D91CE0A1
+
+Automation: **node:test**, [acpAgentHost.test.ts:593](../../packages/core/src/ai/acp/acpAgentHost.test.ts#L593).
+Title: **durable ACP continuation sends only prepared context on native resume, and full reconstruction when resume is unavailable or advertised but failing**.
+Supersedes PT-1AE4FF6CEF (renamed; see [fx-be-181-provider-context.md](fx-be-181-provider-context.md#pt-c5d91ce0a1)).
+
+**Given** a temporary scripted ACP subprocess on the real wire, a prior session and distinct prepared reconstruction/continuation strings.
+**When** continuation runs with resume advertised and working, not advertised, and advertised but answered with a JSON-RPC error (`session/resume` / `session/load`).
+**Then** the native case sends only the continuation; both other cases send the full prepared reconstruction once and record `teamChatContextDelivery === 'reconstruction'`; every case completes.
+
+### PT-6A2E85CA23
+
+Automation: **node:test**, [teamChatIpcRecovery.test.ts:384](../../apps/praxis-desktop/main/src/main/teamChatIpcRecovery.test.ts#L384).
+Title: **a Stop interrupted by process exit stays stopped after restart on the file repository**.
+
+**Given** a temporary profile's `team-chats.json`, a text-only member that never settles, a queued second turn and a committed Stop (`cancelling`).
+**When** a second services instance runs startup recovery over the same file while the first execution is still unsettled.
+**Then** no provider runs; the turn and attempt are `cancelled`, the queued turn stays cancelled, no reply is written and no `turn_failed` (retry) update is emitted.
+
+Registration: unchanged. The core cases run in `packages/core/package.json` → `test`; the main case in `apps/praxis-desktop/main/package.json` → `test:git`. No Playwright spec changed, so `catalog.json` is not regenerated.
