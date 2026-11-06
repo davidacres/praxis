@@ -1,6 +1,8 @@
-import { TeamChatActivation } from './teamChatActivation';
+import { createTeamChatServices } from './teamChatServices';
+import { createTeamChatCommands } from './teamChatCommands';
+import { getProjectStore } from './projectStoreInstance';
 import { TeamChatAttachments } from './teamChatAttachments';
-import { createProductionTeamChatExecutionAdapter, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
+import { createProductionTeamChatExecutionAdapter, runtimeApprovalRequestId, type TeamChatRuntimeOptions } from './teamChatExecutionAdapter';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -11,7 +13,6 @@ import {
   conversationPayloadDigest,
   runAssistantTurn,
   runTeamReview,
-  TeamChatStore,
   TeamChatCoordinator,
   parseAssistantMention,
   DEFAULT_ASSISTANT_ROLE,
@@ -24,10 +25,10 @@ import {
   type AgentTaskDefinition,
   type AiProvider,
   type IssueDetails,
+  type LegacyRuntimeSessionEvidence,
   type ConversationUpdate,
   type SubmitConversationCommand
 } from '@praxis/core';
-import { FileTeamChatRepository } from './adapters/teamChatRepository';
 import { assistantCapabilityNote } from './assistantCapability';
 import { sanitizeImages } from './aiIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
@@ -36,54 +37,84 @@ import { broadcastToAllWindows } from './windowBroadcast';
 import { getAiSessionManager, abortActiveTask, resolveConnectionOptions, assertCanRunAgentSession } from './aiInstance';
 import { continueAgentTask, launchAgentTask, prepareAgentLaunch } from './agentSessionLauncher';
 
-const activation = new TeamChatActivation(process.env.PRAXIS_DURABLE_TEAM_CHAT !== '0');
-const activate = () => activation.activate(() => getTeamChatRepository().activate());
 const attachments = () => new TeamChatAttachments(path.join(app.getPath('userData'), 'team-chat-attachments'));
-let chatRepository: FileTeamChatRepository | undefined;
-let chatStore: TeamChatStore | undefined;
-let coordinator: TeamChatCoordinator | undefined;
 const activeToolSessions = new Set<string>();
 const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
 
-function getTeamChatRepository(): FileTeamChatRepository {
-  if (!chatRepository) chatRepository = new FileTeamChatRepository(path.join(app.getPath('userData'), 'team-chats.json'));
-  return chatRepository;
+/** The shape `toolSessionKey` gave every pre-durable Virtual Team runtime session. */
+const LEGACY_TOOL_SESSION_KEY = /^ASSISTANT-.+-(lead|dev|qa|security|product)-[0-9a-f]{16}$/;
+
+/**
+ * Structural facts about pre-durable Virtual Team runtime sessions, for migration to prove
+ * links from. Records are only read — never rewritten or deleted — and a transcript that
+ * fails to load yields no checkpoints, so that record becomes a diagnostic, never a blocker.
+ */
+async function collectLegacyRuntimeEvidence(): Promise<LegacyRuntimeSessionEvidence[]> {
+  const manager = getAiSessionManager();
+  const evidence: LegacyRuntimeSessionEvidence[] = [];
+  for (const [key, summary] of manager.getAllAgentSessions()) {
+    if (!LEGACY_TOOL_SESSION_KEY.test(key) || summary.teamChatExecution) continue;
+    let record: AgentSessionRecord = summary;
+    try { record = await manager.ensureSessionTranscript(key) ?? summary; } catch { /* no checkpoints: unprovable */ }
+    evidence.push({ issueKey: key, state: record.state,
+      ...(record.provider ? { provider: record.provider } : {}), ...(record.model ? { model: record.model } : {}),
+      ...(record.taskDefinition?.definitionOfDone ? { definitionOfDone: record.taskDefinition.definitionOfDone } : {}),
+      checkpointMessageIds: (record.events ?? []).filter(event => event.type === 'info' && event.summary === TRANSCRIPT_CHECKPOINT && event.detail)
+        .map(event => String(event.detail)) });
+  }
+  return evidence;
 }
 
 /** `userData/team-chats.json` — per-profile like the other AI stores, so e2e profiles never share chats. */
-function getTeamChatStore(): TeamChatStore {
-  if (!chatStore) chatStore = new TeamChatStore(getTeamChatRepository());
-  return chatStore;
-}
+const teamChats = createTeamChatServices({
+  filePath: () => path.join(app.getPath('userData'), 'team-chats.json'),
+  enabled: process.env.PRAXIS_DURABLE_TEAM_CHAT !== '0',
+  legacyRuntimeEvidence: collectLegacyRuntimeEvidence,
+  createCoordinator: repository => new TeamChatCoordinator({
+    repository,
+    captureRuntimeOptions: options => {
+      const settings = getSettingsBackend().read();
+      const provider = String(options.provider ?? settings.ai.activeProvider) as AiProvider;
+      const model = options.model || (provider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[provider]?.defaultModel);
+      return { ...options, provider, ...(model ? { model } : {}),
+        toolMode: options.toolMode ?? 'project-only',
+        workingDirectory: options.workingDirectory ?? settings.ai.workingDirectory };
+    },
+    onUpdate: update => {
+      broadcastToAllWindows('assistant:conversationUpdate', update);
+      broadcastToAllWindows('assistant:chatsChanged');
+    },
+    executionAdapter: createProductionTeamChatExecutionAdapter({
+      settings: () => getSettingsBackend().read(), resolveConnectionOptions, completeWithTools,
+      liveRuntimeSessions: () => getAiSessionManager().getAllAgentSessions().values(),
+      resolveAttachments: (id, refs) => attachments().resolve(id, refs),
+      resolveRuntimeConfiguration: async provider => {
+        const prepared = await prepareAgentLaunch({ provider });
+        return `${provider}:${conversationPayloadDigest(JSON.parse(JSON.stringify(prepared)))}`;
+      }
+    })
+  })
+});
+const activation = teamChats.activation;
+/** Validated durable-chat commands; see `teamChatCommands.ts` for what is checked before acceptance. */
+const teamChatCommands = createTeamChatCommands({
+  services: teamChats,
+  attachments,
+  projectExists: id => Boolean(getProjectStore().get(id)),
+  activeProvider: () => getSettingsBackend().read().ai.activeProvider,
+  assertCanRunAgentSession
+});
+const activate = teamChats.activate;
+const getTeamChatRepository = teamChats.repository;
+const getTeamChatStore = teamChats.store;
 
 export function getTeamChatCoordinator(): TeamChatCoordinator {
-  if (!coordinator) {
-    const repository = getTeamChatRepository();
-    coordinator = new TeamChatCoordinator({
-      repository,
-      captureRuntimeOptions: options => {
-        const settings = getSettingsBackend().read();
-        const provider = String(options.provider ?? settings.ai.activeProvider) as AiProvider;
-        const model = options.model || (provider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[provider]?.defaultModel);
-        return { ...options, provider, ...(model ? { model } : {}),
-          toolMode: options.toolMode ?? 'project-only',
-          workingDirectory: options.workingDirectory ?? settings.ai.workingDirectory };
-      },
-      onUpdate: update => {
-        broadcastToAllWindows('assistant:conversationUpdate', update);
-        broadcastToAllWindows('assistant:chatsChanged');
-      },
-      executionAdapter: createProductionTeamChatExecutionAdapter({
-        settings: () => getSettingsBackend().read(), resolveConnectionOptions, completeWithTools,
-        resolveAttachments: (id, refs) => attachments().resolve(id, refs),
-        resolveRuntimeConfiguration: async provider => {
-          const prepared = await prepareAgentLaunch({ provider });
-          return `${provider}:${conversationPayloadDigest(JSON.parse(JSON.stringify(prepared)))}`;
-        }
-      })
-    });
-  }
-  return coordinator;
+  return teamChats.coordinator();
+}
+
+/** Reconcile and resume durable team chats at launch, before any window asks for one. */
+export function recoverTeamChatsOnStartup(): Promise<boolean> {
+  return teamChats.recoverOnStartup();
 }
 
 /** The assistant has no ticket of its own; the runtime wants one, so give it an empty stand-in. */
@@ -152,12 +183,25 @@ async function completeWithTools(runtime: AssistantRuntimeOptions, systemPrompt:
   }
   let subscription: { dispose(): void } | undefined;
   let started = false;
+  let reportedApproval: string | undefined;
   const completed = new Promise<AgentSessionRecord>(resolve => {
     subscription = manager.onDidChangeAgentSession(record => {
       if (record.issueKey !== issue.key) return;
       if (!['completed', 'failed', 'aborted'].includes(record.state)) {
         started = true;
         if (record.responseText || record.state === 'awaiting_approval') runtime.onAccepted?.();
+        if (runtime.ownership && record.teamChatExecution?.attemptId === runtime.ownership.attemptId) {
+          const requestId = runtimeApprovalRequestId(record);
+          if (requestId && requestId !== reportedApproval) {
+            // A new head request supersedes the previous one: settle that first, then record the next.
+            if (reportedApproval) runtime.onApproval?.({ runtimeRequestId: reportedApproval, resolved: true });
+            reportedApproval = requestId;
+            runtime.onApproval?.({ runtimeRequestId: requestId });
+          } else if (!requestId && reportedApproval) {
+            runtime.onApproval?.({ runtimeRequestId: reportedApproval, resolved: true });
+            reportedApproval = undefined;
+          }
+        }
       }
       // Continuation preparation also emits the previous completed record.
       else if (started && (!runtime.ownership || record.teamChatExecution?.attemptId === runtime.ownership.attemptId)) resolve(record);
@@ -282,11 +326,10 @@ export function registerAssistantIpc(): void {
   });
   ipcMain.handle('assistant:teamReview', (_event, request: AssistantTeamReviewRequest) => runTeamReview(request, completionFor({})));
 
-  ipcMain.handle('assistant:listChats', async (_event, projectId: string) => { await activate(); return getTeamChatStore().list(projectId); });
+  ipcMain.handle('assistant:listChats', (_event, projectId: string) => teamChatCommands.listChats(projectId));
   ipcMain.handle('assistant:getChat', async (_event, chatId: string) => { await activate(); return getTeamChatStore().get(chatId); });
   ipcMain.handle('assistant:createChat', async (_event, projectId: string, issueKey?: string) => {
-    await activate();
-    const chat = await getTeamChatStore().create(projectId, issueKey);
+    const chat = await teamChatCommands.createChat(projectId, issueKey);
     changed();
     return chat;
   });
@@ -307,21 +350,17 @@ export function registerAssistantIpc(): void {
     changed();
   });
 
-  ipcMain.handle('assistant:control', (_event, command: import('@praxis/core').ConversationControlCommand) => getTeamChatCoordinator().control(command));
+  ipcMain.handle('assistant:control', async (_event, command: import('@praxis/core').ConversationControlCommand) => (await teamChatCommands.control(command)).conversation);
   ipcMain.handle('assistant:stageAttachments', async (_event, id: string, images: import('@praxis/core').WireImageAttachment[]) => {
     await activate();
     if (!getTeamChatStore().get(id)) throw new Error('Conversation was not found.');
     return attachments().stage(id, images);
   });
-  ipcMain.handle('assistant:submitTurn', async (_event, command: SubmitConversationCommand) => {
-    await activate();
-    await attachments().resolve(command.conversationId, command.attachmentRefs);
-    if (command.attachmentRefs.length) {
-      const options = command.runtimeOptions;
-      if ((options.mode ?? 'chat') === 'chat' && (options.toolMode ?? 'project-only') === 'project-only') throw new Error('Choose an image-capable agent runtime before attaching images.');
-      assertCanRunAgentSession(String(options.provider ?? getSettingsBackend().read().ai.activeProvider) as AiProvider);
-    }
-    return getTeamChatCoordinator().submitTurn(command);
-  });
-  ipcMain.handle('assistant:getConversation', async (_event, conversationId: string) => { await activate(); await getTeamChatCoordinator().initialize(); return getTeamChatCoordinator().getConversation(conversationId); });
+  // Accepted work is owned by the coordinator, never by `event.sender`: closing the window that
+  // submitted a turn cancels nothing, and every window observes it through the broadcast updates.
+  ipcMain.handle('assistant:submitTurn', (_event, command: SubmitConversationCommand) => teamChatCommands.submitTurn(command));
+  ipcMain.handle('assistant:getConversation', (_event, conversationId: string) => teamChatCommands.getConversation(conversationId));
+  ipcMain.handle('assistant:cancelTurn', (_event, command: import('@praxis/core').CancelTurnCommand) => teamChatCommands.cancelTurn(command));
+  ipcMain.handle('assistant:retryParticipant', (_event, command: import('@praxis/core').RetryParticipantCommand) => teamChatCommands.retryParticipant(command));
+  ipcMain.handle('assistant:resolveAttempt', (_event, command: import('@praxis/core').ResolveAttemptCommand) => teamChatCommands.resolveAttempt(command));
 }

@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **806 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -199,17 +199,19 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-3412C6D2C6 | assistant | deselecting every seat sends a general chat to the Tech Lead | `apps/praxis-desktop/main/e2e/assistant.spec.ts:459` |
 | PT-450D784024 | assistant | page context follows navigation, can be detached, and chats persist in the tree | `apps/praxis-desktop/main/e2e/assistant.spec.ts:471` |
 | PT-8EF93BBA0B | assistant | an update-ticket proposal requires Preview Changes before applying | `apps/praxis-desktop/main/e2e/assistant.spec.ts:548` |
-| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:566` |
-| PT-497E7C3D84 | assistant | an update-workflow proposal previews before changing the designer | `apps/praxis-desktop/main/e2e/assistant.spec.ts:581` |
-| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:620` |
-| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:640` |
-| PT-1B219DB70F | assistant | durable activation rejects stale legacy turns and transcript writers | `apps/praxis-desktop/main/e2e/assistant.spec.ts:679` |
-| PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:689` |
-| PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:706` |
-| PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:770` |
-| PT-C34A6897DE | assistant | the composer grows with its text up to the shared cap, then scrolls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:861` |
-| PT-31EBA5B105 | assistant | durable no-tools API turns retain bounded history and usage without allocating agent sessions | `apps/praxis-desktop/main/e2e/assistant.spec.ts:882` |
-| PT-691B8EDBF3 | assistant | durable tool members reuse two runtime sessions for four attempts and isolate another chat | `apps/praxis-desktop/main/e2e/assistant.spec.ts:917` |
+| PT-402505393F | assistant | Preview then Apply updates the ticket; Apply is refused on an incompatible page | `apps/praxis-desktop/main/e2e/assistant.spec.ts:566` |
+| PT-631104B8EE | assistant | a standalone chat stays navigable beside the single team-chat row | `apps/praxis-desktop/main/e2e/assistant.spec.ts:590` |
+| PT-E27C5BEA0C | assistant | a create-subtask proposal does not create a task without a composer send | `apps/praxis-desktop/main/e2e/assistant.spec.ts:624` |
+| PT-497E7C3D84 | assistant | an update-workflow proposal previews before changing the designer | `apps/praxis-desktop/main/e2e/assistant.spec.ts:639` |
+| PT-A62081453E | assistant | Git changes context carries the file list and the diff hunks | `apps/praxis-desktop/main/e2e/assistant.spec.ts:678` |
+| PT-6BA3D0980D | assistant | a chat can be renamed, survives an app restart, and the docked width persists | `apps/praxis-desktop/main/e2e/assistant.spec.ts:698` |
+| PT-1B219DB70F | assistant | durable activation rejects stale legacy turns and transcript writers | `apps/praxis-desktop/main/e2e/assistant.spec.ts:737` |
+| PT-C9FF04A5E3 | assistant | every persona renders with its own distinct colour and a readable badge | `apps/praxis-desktop/main/e2e/assistant.spec.ts:747` |
+| PT-6CF9CAE63A | assistant | the assistant's controls show a focus ring and carry tooltips | `apps/praxis-desktop/main/e2e/assistant.spec.ts:764` |
+| PT-D850AA5BDC | assistant | the assistant stays readable on every theme and surface pack | `apps/praxis-desktop/main/e2e/assistant.spec.ts:828` |
+| PT-C34A6897DE | assistant | the composer grows with its text up to the shared cap, then scrolls | `apps/praxis-desktop/main/e2e/assistant.spec.ts:919` |
+| PT-31EBA5B105 | assistant | durable no-tools API turns retain bounded history and usage without allocating agent sessions | `apps/praxis-desktop/main/e2e/assistant.spec.ts:940` |
+| PT-691B8EDBF3 | assistant | durable tool members reuse two runtime sessions for four attempts and isolate another chat | `apps/praxis-desktop/main/e2e/assistant.spec.ts:975` |
 | PT-0000309442 | auto Update | an unpackaged build reports that updates are unsupported and offers no check | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:22` |
 | PT-24D162FA28 | auto Update | shows download progress, then offers a restart once the update is ready | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:32` |
 | PT-92B7424B04 | auto Update | an update this build cannot install links to the release page | `apps/praxis-desktop/main/e2e/autoUpdate.spec.ts:48` |
@@ -320,12 +322,26 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-FEA2A13581 | coordination Wait | a person clicking in the in-app browser takes it from the agent driving it | `apps/praxis-desktop/main/e2e/coordinationWait.spec.ts:148` |
 | PT-3DF668A3C4 | css Tokens | --border-subtle follows the theme border and --radius-xs scales with the display | `apps/praxis-desktop/main/e2e/cssTokens.spec.ts:13` |
 | PT-F55156EA04 | dead Connection | an unreachable connection is skipped instead of blanking the board list | `apps/praxis-desktop/main/e2e/deadConnection.spec.ts:31` |
-| PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:12` |
-| PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:67` |
-| PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:98` |
-| PT-EA127A3852 | durable Team Chat | a migrated chat continues from imported history without reusing unproved runtime identity | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:139` |
-| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:170` |
-| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:198` |
+| PT-1D3CF0B299 | durable Team Chat.live | real CLI member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:126` |
+| PT-75844A4FF6 | durable Team Chat.live | real API member continues a durable team chat across an app restart | `apps/praxis-desktop/main/e2e/durableTeamChat.live.spec.ts:139` |
+| PT-592434CA9B | durable Team Chat | two windows converge, queue capture survives navigation and stale controls cannot cancel replacement work | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:13` |
+| PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:73` |
+| PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:104` |
+| PT-EA127A3852 | durable Team Chat | a migrated chat continues from imported history without reusing unproved runtime identity | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:145` |
+| PT-D54AE14ABC | durable Team Chat | an expired legacy runtime session is linked, reconstructed and listed once | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:177` |
+| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:247` |
+| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:280` |
+| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:333` |
+| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:369` |
+| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:400` |
+| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:469` |
+| PT-68979E242A | durable Team Chat | a malformed team-chat file is shown as a recoverable error and never replaced | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:505` |
+| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:546` |
+| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:582` |
+| PT-EE0AB4E23D | durable Team Chat | queued page context and staged image reach the provider after navigation and composer replacement | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:610` |
+| PT-6A15DADEFB | durable Team Chat | closing the initiating window keeps its accepted turn and pending approval observable from another window | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:669` |
+| PT-748A90EE31 | durable Team Chat | an over-budget current request pauses as context_required; Recheck context stays actionable and Stop cancels it | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:718` |
+| PT-AEDE2C68C0 | durable Team Chat Journey | journey: float and dock, sidebar row, queue and cancel, Stop, restart mid-reply, retry, transcript and usage survive | `apps/praxis-desktop/main/e2e/durableTeamChatJourney.spec.ts:30` |
 | PT-5D69F1868B | easymode | EasyMode exposes the shared sidebar material through its feed and header | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
 | PT-E4A060174B | easymode | legacy enableEasyMode false still uses the sole sidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:69` |
 | PT-D7A1079D36 | easymode | Preview omits retired switches and the sole sidebar stays active | `apps/praxis-desktop/main/e2e/easymode.spec.ts:79` |
@@ -341,15 +357,15 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-8C982E7F97 | easymode | automation stage sessions appear nested under automation and are excluded from sessions list | `apps/praxis-desktop/main/e2e/easymode.spec.ts:744` |
 | PT-ED816D0823 | easymode | automation rows have rename, archive, delete and run actions like a session row | `apps/praxis-desktop/main/e2e/easymode.spec.ts:879` |
 | PT-D6E1059F2C | easymode | in EasyMode selecting a session opens details in the center | `apps/praxis-desktop/main/e2e/easymode.spec.ts:980` |
-| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1155` |
-| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1377` |
-| PT-519130BC3E | easymode | easy mode divider resizes Runs with pointer and keyboard and remembers the split | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1525` |
-| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1560` |
-| PT-938AF7A1AB | easymode | easy mode groups sessions by last activity like classic mode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1591` |
-| PT-A5B22DE4DB | easymode | easy mode sessions can be grouped, reordered and restored after filtering and restart | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1620` |
-| PT-1EA437CC5C | easymode | EasyMode run history groups by completion date and keeps old active work visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1775` |
-| PT-F16E9F210F | easymode | EasyMode general conversations create without a project and retain history through project and ticket assignment | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1832` |
-| PT-EFA42D0996 | easymode | sidebar split button offers all creation paths without a separate conversation button | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1900` |
+| PT-2516802E6F | easymode | capture visual verification of redesigned EasyMode sidebar in real Electron app | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1157` |
+| PT-21C54F260E | easymode | a long session list folds behind "Show more" and leaves the Runs section on screen | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1379` |
+| PT-519130BC3E | easymode | easy mode divider resizes Runs with pointer and keyboard and remembers the split | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1527` |
+| PT-BD3466D9E5 | easymode | easy mode has no filter tabs and unfinished sessions beyond the first five stay visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1562` |
+| PT-938AF7A1AB | easymode | easy mode groups sessions by last activity like classic mode | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1593` |
+| PT-A5B22DE4DB | easymode | easy mode sessions can be grouped, reordered and restored after filtering and restart | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1622` |
+| PT-1EA437CC5C | easymode | EasyMode run history groups by completion date and keeps old active work visible | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1777` |
+| PT-F16E9F210F | easymode | EasyMode general conversations create without a project and retain history through project and ticket assignment | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1834` |
+| PT-EFA42D0996 | easymode | sidebar split button offers all creation paths without a separate conversation button | `apps/praxis-desktop/main/e2e/easymode.spec.ts:1902` |
 | PT-60D8BF1214 | edit Issue | editing a live folder issue writes the priority back to markdown | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:109` |
 | PT-B5CC8CC324 | edit Issue | changing a folder ticket parent moves it to the selected feature | `apps/praxis-desktop/main/e2e/editIssue.spec.ts:144` |
 | PT-AB88717169 | folder | folder board lists the fixture feature task | `apps/praxis-desktop/main/e2e/folder.spec.ts:65` |
@@ -771,21 +787,21 @@ This catalogue describes **790 Playwright tests** under `apps/praxis-desktop/mai
 | PT-4F95DF8F4A | workflow Run Work | cancelling the confirm deletes nothing | `apps/praxis-desktop/main/e2e/workflowRunWork.spec.ts:156` |
 | PT-93F88A4EA2 | workflow Run Workspace | a controller session starts a project run and its stage session fills the run workspace | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:182` |
 | PT-B6EB737E60 | workflow Run Workspace | deleting a live run cancels it first, then removes it | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:292` |
-| PT-69CC944489 | workflow Run Workspace | a run can be renamed from the sidebar and the name persists after reload | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:315` |
-| PT-21DA46DD55 | workflow Run Workspace | the start-run dialog opens from the Runs header with the only workflow preselected, and lands on the new run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:359` |
-| PT-F13D2F4C05 | workflow Run Workspace | the Runs header opens a new workflow run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:376` |
-| PT-50A0E46A5A | workflow Run Workspace | a long run uses a bounded gauge and exposes every step in the workflow sheet | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:408` |
-| PT-D18B652AC9 | workflow Run Workspace | a dirty checkout offers to include its changes: the run sees them, the checkout is untouched | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:495` |
-| PT-63B5C57146 | workflow Run Workspace | a dirty checkout can instead start from the last commit without its changes | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:508` |
-| PT-AC2482A561 | workflow Run Workspace | a dirty checkout can commit its changes, then the run starts from that commit | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:516` |
-| PT-26466F3922 | workflow Run Workspace | starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:526` |
-| PT-59D76BB99D | workflow Run Workspace | an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:553` |
-| PT-3C9A1A5834 | workflow Run Workspace | a stage whose AI ran out can be switched to another AI and carries on | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:615` |
-| PT-522BA7819F | workflow Run Workspace | with "Switch AI automatically" the stage moves to another AI without asking | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:651` |
-| PT-951522F605 | workflow Run Workspace | with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:665` |
-| PT-5C5F154311 | workflow Run Workspace | a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:687` |
-| PT-05BE089E81 | workflow Run Workspace | auto-approve does not widen a stage: a read-only stage still cannot write | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:753` |
-| PT-79DD10EF59 | workflow Run Workspace | a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:776` |
+| PT-69CC944489 | workflow Run Workspace | a run can be renamed from the sidebar and the name persists after reload | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:318` |
+| PT-21DA46DD55 | workflow Run Workspace | the start-run dialog opens from the Runs header with the only workflow preselected, and lands on the new run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:362` |
+| PT-F13D2F4C05 | workflow Run Workspace | the Runs header opens a new workflow run | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:379` |
+| PT-50A0E46A5A | workflow Run Workspace | a long run uses a bounded gauge and exposes every step in the workflow sheet | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:411` |
+| PT-D18B652AC9 | workflow Run Workspace | a dirty checkout offers to include its changes: the run sees them, the checkout is untouched | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:508` |
+| PT-63B5C57146 | workflow Run Workspace | a dirty checkout can instead start from the last commit without its changes | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:521` |
+| PT-AC2482A561 | workflow Run Workspace | a dirty checkout can commit its changes, then the run starts from that commit | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:529` |
+| PT-26466F3922 | workflow Run Workspace | starting a run against a workspace folder that is no longer a Git repository shows an actionable message, not raw git plumbing output | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:539` |
+| PT-59D76BB99D | workflow Run Workspace | an out-of-credits provider pauses the run instead of failing it, and resumes once credits are back | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:566` |
+| PT-3C9A1A5834 | workflow Run Workspace | a stage whose AI ran out can be switched to another AI and carries on | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:628` |
+| PT-522BA7819F | workflow Run Workspace | with "Switch AI automatically" the stage moves to another AI without asking | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:664` |
+| PT-951522F605 | workflow Run Workspace | with "Stop the run" the run ends saying which AI ran out, and can still carry on with another AI | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:678` |
+| PT-5C5F154311 | workflow Run Workspace | a run in Ask mode stops the stage for a tool permission; the same run in Auto-approve mode does not | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:700` |
+| PT-05BE089E81 | workflow Run Workspace | auto-approve does not widen a stage: a read-only stage still cannot write | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:766` |
+| PT-79DD10EF59 | workflow Run Workspace | a terminal run can be archived, removing it from the sidebar and listing it in the workflow runs browser | `apps/praxis-desktop/main/e2e/workflowRunWorkspace.spec.ts:789` |
 | PT-8B8CDC8743 | workflow Template Addon | the Security Review add-on installs and creates a workflow from its template | `apps/praxis-desktop/main/e2e/workflowTemplateAddon.spec.ts:29` |
 | PT-713053459D | workflow Themes | the designer and run monitor hold up on a dark theme | `apps/praxis-desktop/main/e2e/workflowThemes.spec.ts:64` |
 | PT-87E3840A56 | working Style | every AI gets the working style; your own wording replaces it, and it can be turned off | `apps/praxis-desktop/main/e2e/workingStyle.spec.ts:35` |

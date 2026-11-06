@@ -27,7 +27,7 @@ import { registerNotesIpc } from './notesIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiUsageIpc, startAiUsageTracking } from './aiUsageIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
-import { registerAssistantIpc } from './assistantIpc';
+import { recoverTeamChatsOnStartup, registerAssistantIpc } from './assistantIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
@@ -385,6 +385,8 @@ void app.whenReady().then(async () => {
   startAiUsageTracking();
   registerAiWorkflowIpc();
   registerAssistantIpc();
+  // Interrupted team-chat replies are reconciled and queued turns resume without waiting for a window to open the chat.
+  void recoverTeamChatsOnStartup().catch(error => console.error('Team chat recovery failed:', error));
   registerTaskDesignerIpc();
   registerWorkflowIpc();
   void recoverWorkflowRunsOnStartup().catch(error => console.error('Workflow run recovery failed:', error));

@@ -447,5 +447,18 @@ transport retries reuse the entire command. `saveChat` and legacy `turn` are fen
 after activation. Navigation hides typed `teamChatExecution` records, with only
 the narrow `ASSISTANT-` legacy fallback. Titles never establish ownership.
 
+Migration (TASK-485) runs once per profile, on the first durable request:
+the activation fence refuses new legacy `turn`/`saveChat` work, waits for
+in-flight legacy work, then reads legacy runtime session evidence and commits
+under the profile writer lock after writing `team-chats.json.v1-backup` with the
+exact source bytes. Chat and message ids, titles, order, timestamps, roles,
+actions, choices, errors and `projectId` are kept. A legacy runtime session
+becomes a typed `legacyRuntimeLinks` record only on structural proof — its key
+names the chat's exact id, it is a Virtual Team session, and a transcript
+checkpoint is that persona's non-error reply in that chat; anything else is a
+`legacyRuntimeDiagnostics` entry. Links are never bindings, so the next turn
+binds fresh and reconstructs context. Restoring the backup is allowed only
+before v2 accepts a turn; afterwards repair forward.
+
 Proposals require Preview Changes and an explicit apply on the captured entity.
 Workflow context includes its identity even when two workflows share a name.

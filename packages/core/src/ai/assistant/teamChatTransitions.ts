@@ -6,7 +6,12 @@ export function conversationPayloadDigest(payload: unknown): string {
   const canonical = (value: unknown): string => {
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
     if (typeof value === 'number' && Number.isFinite(value)) return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index++) {
+        if (!Object.hasOwn(value, index)) throw new Error('Command payload must contain only JSON values; sparse arrays are invalid.');
+      }
+      return `[${value.map(canonical).join(',')}]`;
+    }
     if (typeof value === 'object' && value && Object.getPrototypeOf(value) === Object.prototype) {
       return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
     }
@@ -74,6 +79,62 @@ export function advanceConversationAttempt(current: DurableConversation, expecte
   if (state === 'dispatching') attempt.dispatchIntent = timestamp;
   return next;
 }
+/**
+ * Record the runtime request an attempt is blocked on. Fenced by epoch and attempt; moves running -> awaiting_approval.
+ * A cancelling turn opens no new approval: cancel has already aborted the runtime that raised it.
+ */
+export function recordAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, runtimeRequestId: string, timestamp: string): DurableConversation {
+  const next = changed(current, expected);
+  const turn = next.turns.find(item => item.id === turnId);
+  const attempt = turn?.attempts.find(item => item.id === attemptId);
+  if (!runtimeRequestId?.trim() || !turn || !attempt || turn.state !== 'running' || epoch !== current.coordinatorEpoch ||
+      epoch !== attempt.coordinatorEpoch || attempt.state !== 'running' || turn.attempts.at(-1)?.id !== attemptId) throw new Error('Invalid or fenced approval request.');
+  attempt.state = 'awaiting_approval';
+  attempt.pendingApproval = { runtimeRequestId, requestedAt: timestamp, coordinatorEpoch: epoch, status: 'pending' };
+  return next;
+}
+/** Resolve the pending approval of a live attempt and let it continue. */
+export function resolveAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, runtimeRequestId: string): DurableConversation {
+  const next = changed(current, expected);
+  const turn = next.turns.find(item => item.id === turnId);
+  const attempt = turn?.attempts.find(item => item.id === attemptId);
+  if (!turn || !attempt || epoch !== current.coordinatorEpoch || epoch !== attempt.coordinatorEpoch || attempt.state !== 'awaiting_approval' ||
+      attempt.pendingApproval?.status !== 'pending' || attempt.pendingApproval.runtimeRequestId !== runtimeRequestId) throw new Error('Invalid or fenced approval resolution.');
+  attempt.pendingApproval.status = 'resolved';
+  attempt.state = 'running';
+  return next;
+}
+/**
+ * Settle a still-pending approval when its attempt ends: `resolved` when the reply completed,
+ * `invalidated` when it failed, was cancelled or interrupted. Acts only on a pending approval.
+ */
+export function settleAttemptApproval(attempt: ConversationAttempt, outcome: 'resolved' | 'invalidated'): boolean {
+  if (attempt.pendingApproval?.status !== 'pending') return false;
+  attempt.pendingApproval.status = outcome;
+  return true;
+}
+/** Invalidate unresolved approval callbacks; the request is never carried to another attempt. */
+export function invalidateAttemptApproval(attempt: ConversationAttempt): boolean {
+  return settleAttemptApproval(attempt, 'invalidated');
+}
+/**
+ * Re-request an invalidated approval only when a live runtime request with the same identity
+ * is observed for the same attempt. The attempt keeps its conservative interrupted/unknown state.
+ */
+export function restoreAttemptApproval(current: DurableConversation, expected: number, turnId: string, attemptId: string, epoch: string, liveRequestId: string, timestamp: string): DurableConversation {
+  const next = changed(current, expected);
+  const turn = next.turns.find(item => item.id === turnId);
+  const attempt = turn?.attempts.find(item => item.id === attemptId);
+  if (!turn || !attempt || epoch !== current.coordinatorEpoch || attempt.pendingApproval?.status !== 'invalidated' ||
+      attempt.pendingApproval.runtimeRequestId !== liveRequestId || !['interrupted', 'outcome_unknown'].includes(attempt.state) ||
+      turn.attempts.at(-1)?.id !== attemptId) throw new Error('Approval cannot be restored.');
+  attempt.pendingApproval.status = 'restored';
+  attempt.pendingApproval.restoredEpoch = epoch;
+  (attempt.recoveryEvidence ??= []).push({ id: `approval-restored:${epoch}:${attempt.id}`, conversationId: current.id, turnId, participantId: attempt.participantId,
+    attemptId, coordinatorEpoch: attempt.coordinatorEpoch, observingEpoch: epoch, kind: 'reconciliation', observedAt: timestamp,
+    provenance: 'runtime-live-approval', data: { approvalRequestId: liveRequestId, restored: true } });
+  return next;
+}
 const ACTIVE_ATTEMPT_STATES = new Set(['dispatching', 'running', 'awaiting_approval']);
 const RECOVERABLE_TURN_STATES = new Set(['running', 'cancelling', 'interrupted', 'outcome_unknown', 'failed']);
 const RECOVERABLE_ATTEMPT_STATES = new Set(['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed']);
@@ -95,6 +156,7 @@ export function completeConversationAttempt(current: DurableConversation, expect
       message.role !== turn.plan.participants.find(item => item.id === attempt.participantId)?.role || next.messages.some(item => item.id === message.id) ||
       message.sequence !== (current.messages.at(-1)?.sequence ?? 0) + 1 ||
       ![attempt.contextReceipt, attempt.nativeContextReceipt].some(candidate => candidate && JSON.stringify(receipt) === JSON.stringify(candidate))) throw new Error('Invalid, duplicate or fenced completion.');
+  settleAttemptApproval(attempt, 'resolved');
   attempt.contextReceipt = structuredClone(receipt);
   if (evidence?.reportedCost) attempt.reportedCost = structuredClone(evidence.reportedCost);
   if (evidence?.usage) attempt.usage = structuredClone(evidence.usage);
@@ -131,15 +193,19 @@ export function beginConversationEpoch(current: DurableConversation, expected: n
   for (const turn of next.turns) {
     for (const attempt of turn.attempts) {
       if (['prepared', 'dispatching', 'running', 'awaiting_approval'].includes(attempt.state)) {
+        invalidateAttemptApproval(attempt);
         const wasDispatched = Boolean(attempt.dispatchIntent);
         const toolCapable = !attempt.recoveryEvidence?.some(item => item.kind === 'runtime_identity' && item.data?.toolCapable === false);
-        attempt.state = wasDispatched && toolCapable ? 'outcome_unknown' : 'interrupted';
+        // A Stop the process exit finished: a text-only runtime with no durable reply has
+        // stopped, so it ends cancelled rather than as a retryable interruption.
+        const stopped = turn.state === 'cancelling' && !attempt.recoveryEvidence?.some(item => item.kind === 'final_result');
+        attempt.state = wasDispatched && toolCapable ? 'outcome_unknown' : stopped ? 'cancelled' : 'interrupted';
         attempt.completedAt = timestamp;
         attempt.recoveryEvidence ??= [];
         attempt.recoveryEvidence.push({ id: `recovery:${epoch}:${attempt.id}`, conversationId: current.id, turnId: turn.id,
           participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
           observingEpoch: epoch, kind: 'reconciliation', observedAt: timestamp, provenance: 'coordinator-startup', data: { dispatched: wasDispatched, toolCapable } });
-        turn.state = attempt.state === 'outcome_unknown' ? 'outcome_unknown' : 'interrupted';
+        turn.state = attempt.state === 'outcome_unknown' || attempt.state === 'cancelled' ? attempt.state : 'interrupted';
       }
     }
   }

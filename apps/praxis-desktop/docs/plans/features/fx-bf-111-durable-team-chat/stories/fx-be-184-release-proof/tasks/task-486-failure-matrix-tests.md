@@ -40,6 +40,15 @@ Implement tests for each criterion above using the feature validation matrix and
 
 All criteria pass with linked evidence, relevant feature commands pass, and the parent story and issue mirror record the result. Preserve unrelated WIP; do not claim unexecuted broad or real-provider checks.
 
+## Evidence
+
+2026-11-06, workflow run WF-0742A955 (implement). Full record: [TASK-486 failure matrix](../../../../../../../../../docs/praxis-tests/fx-be-184-verification-report.md#task-486-failure-matrix-2026-11-06); contracts in `docs/praxis-tests/fx-be-184-release-proof.md` → "TASK-486 failure-matrix additions".
+
+- Added: crash while cancelling (text-only → `cancelled`, tool-capable → `outcome_unknown`), a durable final result on a cancelling turn imported once, ACP resume advertised but failing on the durable path, and a file-backed Stop across restart.
+- Fixed: a restart during Stop no longer turns the Stop into a retryable interruption (`beginConversationEpoch`).
+- `npm run build:core`; focused core team-chat + `acpAgentHost` node:test files: 123 passed, 0 skipped. `npm run test:desktop:git`: 168 passed. `npm run test:renderer`: 93 passed. `npm run check-types` and `npm run test:praxis-contracts` (804 linked): exit 0.
+- Not run: live API and real CLI continuation (no credentials; optional in scheduled runs), full/theme e2e and manual passes (TASK-487). Real-provider acceptance stays open.
+
 ## Needs
 
 What this ticket needs that a scheduled run cannot provide by itself. Praxis does not read this section yet; it will ask for these before a run starts.

@@ -3,6 +3,7 @@ import { realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { actionAllowedOn, PROTOCOL_PROMPT, parseAssistantReply, getProviderDescriptor, getKnownContextLength, runProviderPrompt, TeamChatAcceptanceUnknown, type AiProvider, type AgentSessionRecord, type AgentToolMode, type AgentPermissionMode, type ReasoningEffort, type AssistantRole, type WireImageAttachment } from '@praxis/core';
 import { conversationPayloadDigest } from '@praxis/core';
+import { pendingMobilePermissions } from './mobilePermissions';
 import type { TeamChatExecutionAdapter, TeamChatExecutionParams, TeamChatExecutionResult } from '@praxis/core';
 
 /** Keeps prepared durable prompts out of the legacy assistant history clipping path. */
@@ -23,7 +24,20 @@ export function createTeamChatExecutionAdapter(
   } };
 }
 
+/**
+ * Stable identity of the permission request an awaiting_approval session is blocked on. It is the
+ * same identity the mobile permission surface uses (`pendingMobilePermissions`): the session id plus
+ * the index of the request's `permission_requested` event, taken from the head of the session's
+ * pending queue. It moves to the next queued request when one completes and is never shared
+ * between sessions.
+ */
+export function runtimeApprovalRequestId(record: AgentSessionRecord): string | undefined {
+  if (record.state !== 'awaiting_approval') return undefined;
+  return pendingMobilePermissions([record])[0]?.requestId;
+}
+
 export interface TeamChatRuntimeOptions {
+  onApproval?: (approval: { runtimeRequestId: string; resolved?: boolean }) => void;
   onAccepted?: () => void;
   onTerminal?: (record: AgentSessionRecord) => void;
   ownership?: import('@praxis/core').TeamChatExecutionOwnership;
@@ -46,9 +60,11 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
   resolveRuntimeConfiguration: (provider: AiProvider) => Promise<string>;
   settings: () => import('@praxis/core').AppSettings;
   resolveConnectionOptions: (provider: AiProvider) => Promise<{ apiKey?: string; gatewayUrl?: string; model?: string }>;
+  /** Live runtime sessions; a request survives only while its session is still awaiting approval. */
+  liveRuntimeSessions?: () => Iterable<AgentSessionRecord>;
   completeWithTools: (runtime: TeamChatRuntimeOptions, systemPrompt: string, prompt: string) => Promise<string>;
 }): TeamChatExecutionAdapter {
-  const adapter = createTeamChatExecutionAdapter(async ({ messages, conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence }, preparedPrompt) => {
+  const adapter = createTeamChatExecutionAdapter(async ({ messages, conversation, participant, turn, attempt, nativePrompt, signal, onAccepted, onEvidence, onApproval }, preparedPrompt) => {
     const parsedReply = (text: string) => {
       const parsed = parseAssistantReply(text);
       if (parsed.proposedAction && !actionAllowedOn(parsed.proposedAction, turn.plan.context)) delete parsed.proposedAction;
@@ -59,8 +75,11 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
     const selectedProvider = (options.provider as AiProvider | undefined) ?? settings.ai.activeProvider;
     const userPrompt = preparedPrompt;
     const noteAccepted = () => { void onAccepted?.().catch(() => {}); };
+    let approvalQueue: Promise<void> = Promise.resolve();
     const runtime: TeamChatRuntimeOptions = {
       onAccepted: noteAccepted,
+      // Commit approval changes in the order they were reported, so a resolve always lands before the next record.
+      onApproval: approval => { approvalQueue = approvalQueue.then(() => onApproval?.(approval)).catch(() => {}); },
       provider: selectedProvider,
       model: typeof options.model === 'string' ? options.model : (selectedProvider === 'vercel-gateway' ? settings.ai.defaultModel : settings.ai.providers[selectedProvider]?.defaultModel)?.trim() || undefined,
       personaId: participant.role,
@@ -121,7 +140,7 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
     // CLI authentication is owned by the external process. Without an authoritative
     // account reference, reuse is unsafe across turns; reconstruct a fresh binding.
     const accountReference = descriptor.kind === 'cli-agent'
-      ? String(options.accountReference ?? `${provider}:unverified-account:${turn.id}`) : connection.apiKey ?? provider;
+      ? `${provider}:unverified-account:${turn.id}` : connection.apiKey ?? provider;
     return { ...(contextLimit ? { contextLimit } : {}), conversationId: conversation.id, participantId: participant.id, providerRuntime: runtime,
       accountReference: createHash('sha256').update(accountReference).digest('hex'),
       endpoint: createHash('sha256').update(JSON.stringify([connection.gatewayUrl ?? (descriptor.kind === 'api' ? descriptor.defaultBaseUrl : settings.ai.providers[provider]?.cliPath ?? provider), descriptor.kind === 'api' ? descriptor.apiPath ?? '' : '', descriptor.kind === 'api' ? descriptor.custom?.headers ?? {} : {}])).digest('hex'),
@@ -143,6 +162,14 @@ export function createProductionTeamChatExecutionAdapter(dependencies: {
       onUsage: reported => { usage = reported; } });
     return { text: result.text, usage };
   });
+  adapter.listLiveApprovals = async attempt => {
+    const live: { requestId: string; attemptId: string }[] = [];
+    for (const record of dependencies.liveRuntimeSessions?.() ?? []) {
+      const requestId = record.teamChatExecution?.attemptId === attempt.id ? runtimeApprovalRequestId(record) : undefined;
+      if (requestId) live.push({ requestId, attemptId: attempt.id });
+    }
+    return live;
+  };
   adapter.validateAttachments = async (id, messages) => {
     const refs = messages.flatMap(m => m.attachments);
     if (!dependencies.resolveAttachments) throw new Error('Attachment storage is unavailable.');

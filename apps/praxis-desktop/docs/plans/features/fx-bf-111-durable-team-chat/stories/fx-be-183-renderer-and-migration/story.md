@@ -52,6 +52,8 @@ FX-BE-182
 
 Use the parent feature acceptance-to-suite mapping and validation commands. Each task supplies executable scenarios; record exact commands, assertion names and artifacts. This story does not close on typechecking alone.
 
+**TASK-485 result (2026-11-06):** all five migration criteria pass. Legacy chats migrate losslessly with a byte-exact backup. Provable legacy runtime sessions import as typed `legacyRuntimeLinks`, never bindings, and unprovable ones become diagnostics. Cutover waits for in-flight legacy work, and an expired legacy session reconstructs its context and is listed once. Evidence, commands and assertion names: [TASK-485](tasks/task-485-legacy-migration.md#evidence-2026-11-06-implementation-stage).
+
 ## Close when
 
 Both tasks satisfy every acceptance criterion, results are linked here and in the issue mirror, and no story-specific recovery or compatibility gap remains.

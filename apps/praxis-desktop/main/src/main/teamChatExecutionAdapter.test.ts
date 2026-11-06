@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
 import type { TeamChatExecutionParams } from '@praxis/core';
-import { createTeamChatExecutionAdapter, createProductionTeamChatExecutionAdapter } from './teamChatExecutionAdapter';
+import { createTeamChatExecutionAdapter, createProductionTeamChatExecutionAdapter, runtimeApprovalRequestId } from './teamChatExecutionAdapter';
+import { pendingMobilePermissions } from './mobilePermissions';
 
 test('dispatch consumes prepared context unchanged and preserves attempt usage', async () => {
   const adapter = createTeamChatExecutionAdapter(async (_params, prompt) => {
@@ -59,4 +60,285 @@ test('effective capability evidence is durable before runtime dispatch; evidence
   await adapter.execute(params);
   assert.equal(observed, true);
   assert.equal(launches, 1);
+});
+
+
+test('unverified CLI identity cannot be stabilized by turn or participant account references', async () => {
+  const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({}),
+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
+  });
+  for (const source of ['defaults', 'runtimeOptions'] as const) {
+    const params = {
+      conversation: { id: 'chat' },
+      participant: { id: 'lead', instructionVersion: '1', instructions: 'help',
+        defaults: source === 'defaults' ? { accountReference: 'claimed-account' } : {} },
+      turn: { id: 'first', plan: { runtimeOptions: { provider: 'claude-code-cli',
+        ...(source === 'runtimeOptions' ? { accountReference: 'claimed-account' } : {}) } } }
+    } as unknown as TeamChatExecutionParams;
+    const first = await adapter.prepare!(params);
+    assert.deepEqual(await adapter.prepare!(params), first, 'same-turn dispatch revalidation stays stable');
+    params.turn.id = 'second';
+    const second = await adapter.prepare!(params);
+    assert.notEqual(second.accountReference, first.accountReference, 'unverified identity forces reconstruction across turns');
+    assert.equal(second.providerRuntime, first.providerRuntime);
+  }
+});
+
+test('production API compatibility follows credentials, model and policy without exposing credentials', async () => {
+  const { DEFAULT_APP_SETTINGS, resolveTeamChatBinding } = await import('@praxis/core');
+  let apiKey = 'fixture-key-first';
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({ apiKey, model: 'fixture-model' }),
+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
+  });
+  const params = {
+    conversation: { id: 'chat' },
+    participant: { id: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
+    turn: { id: 'first', plan: { runtimeOptions: { provider: 'vercel-gateway', toolMode: 'project-only', permissionMode: 'manual' } } }
+  } as unknown as TeamChatExecutionParams;
+  const first = await adapter.prepare!(params);
+  const bindings: import('@praxis/core').ConversationBinding[] = [];
+  const initial = resolveTeamChatBinding(bindings, first, 'first-binding');
+  params.turn.id = 'second';
+  assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'unused'), initial);
+  assert.ok(!JSON.stringify(first).includes(apiKey), 'resolved identity must not contain the API key');
+  apiKey = 'fixture-key-second';
+  const changedAccount = await adapter.prepare!(params);
+  assert.notEqual(changedAccount.accountReference, first.accountReference);
+  assert.equal(resolveTeamChatBinding(bindings, changedAccount, 'replacement').id, 'replacement');
+  assert.equal(initial.status, 'invalid');
+  const changes: Record<string, string>[] = [{ model: 'changed-model' }, { permissionMode: 'auto' }, { toolMode: 'read-only' }];
+  for (const change of changes) {
+    const original = params.turn.plan.runtimeOptions;
+    params.turn.plan.runtimeOptions = { ...original, ...change };
+    assert.notDeepEqual(await adapter.prepare!(params), changedAccount);
+    params.turn.plan.runtimeOptions = original;
+  }
+});
+
+test('a changed provider or working folder invalidates the compatible binding', async () => {
+  const { DEFAULT_APP_SETTINGS, resolveTeamChatBinding } = await import('@praxis/core');
+  const { mkdtemp, mkdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'team-chat-binding-'));
+  const folderA = join(root, 'a');
+  const folderB = join(root, 'b');
+  await mkdir(folderA);
+  await mkdir(folderB);
+  const adapter = createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({ apiKey: 'fixture-key', model: 'fixture-model' }),
+    completeWithTools: async () => { throw new Error('prepare must not dispatch'); }
+  });
+  const params = {
+    conversation: { id: 'chat' },
+    participant: { id: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} },
+    turn: { id: 'first', plan: { runtimeOptions: { provider: 'vercel-gateway', workingDirectory: folderA } } }
+  } as unknown as TeamChatExecutionParams;
+  const bindings: import('@praxis/core').ConversationBinding[] = [];
+  const initial = resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'initial');
+  assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), 'unused'), initial);
+  for (const [id, change] of [['folder', { workingDirectory: folderB }], ['provider', { provider: 'openai' }]] as const) {
+    const original = params.turn.plan.runtimeOptions;
+    params.turn.plan.runtimeOptions = { ...original, ...change };
+    assert.equal(resolveTeamChatBinding(bindings, await adapter.prepare!(params), `replacement-${id}`).id, `replacement-${id}`);
+    params.turn.plan.runtimeOptions = original;
+  }
+  assert.equal(initial.status, 'invalid');
+});
+
+async function prodAdapter(overrides: Partial<Parameters<typeof createProductionTeamChatExecutionAdapter>[0]> = {}) {
+  const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
+  return createProductionTeamChatExecutionAdapter({
+    settings: () => structuredClone(DEFAULT_APP_SETTINGS),
+    resolveRuntimeConfiguration: async () => 'fixture-runtime',
+    resolveConnectionOptions: async () => ({ apiKey: 'fixture-key', model: 'fixture-model' }),
+    completeWithTools: async () => { throw new Error('unexpected dispatch'); },
+    ...overrides
+  });
+}
+function execParams(runtimeOptions: Record<string, unknown>, ids: { conversation: string; participant: string; turn: string; binding: string; attempt: string }, bindings: import('@praxis/core').ConversationBinding[] = []) {
+  return {
+    conversation: { id: ids.conversation, bindings, messages: [] },
+    participant: { id: ids.participant, instructionVersion: '1', instructions: 'help', defaults: {} },
+    turn: { id: ids.turn, plan: { runtimeOptions, context: {} } },
+    attempt: { id: ids.attempt, bindingId: ids.binding },
+    preparedPrompt: 'prompt', nativePrompt: 'delta'
+  } as unknown as TeamChatExecutionParams;
+}
+
+test('TASK-480 AC1: two compatible API tool members reuse provider sessions per binding across turns; another chat shares none', async () => {
+  const { resolveTeamChatBinding } = await import('@praxis/core');
+  const prefixes: string[] = [];
+  const adapter = await prodAdapter({
+    completeWithTools: async runtime => { prefixes.push(runtime.toolSessionPrefix ?? ''); return 'ok'; }
+  });
+  const opts = { provider: 'vercel-gateway', toolMode: 'full', permissionMode: 'manual' };
+  const bindings: import('@praxis/core').ConversationBinding[] = [];
+  const bindingFor = async (chat: string, member: string, turn: string) =>
+    resolveTeamChatBinding(bindings, await adapter.prepare!(execParams(opts, { conversation: chat, participant: member, turn, binding: '', attempt: '' })), `b-${chat}-${member}-${turn}`);
+  const results: string[] = [];
+  for (const turn of ['t1', 't2']) {
+    for (const member of ['a', 'b']) {
+      const binding = await bindingFor('chat1', member, turn);
+      results.push(binding.id);
+      const params = execParams(opts, { conversation: 'chat1', participant: member, turn, binding: binding.id, attempt: `${member}-${turn}` }, bindings);
+      await adapter.execute(params);
+    }
+  }
+  assert.equal(prefixes.length, 4, 'four attempts');
+  assert.equal(new Set(results).size, 2, 'two bindings reused across two turns');
+  assert.equal(new Set(prefixes).size, 2, 'two provider session keys');
+  const other = await bindingFor('chat2', 'a', 't1');
+  assert.ok(!results.includes(other.id), 'another chat shares no binding');
+});
+
+test('TASK-480 AC2: a no-tools API member completes without a tool session; attempt usage stays attributable', async () => {
+  const http = await import('node:http');
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'hello' } }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 } })}\n\n`);
+      res.end('data: [DONE]\n\n');
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as import('node:net').AddressInfo;
+  let toolCalls = 0;
+  try {
+    const adapter = await prodAdapter({
+      resolveConnectionOptions: async () => ({ apiKey: 'fixture-key', model: 'fixture-model', gatewayUrl: `http://127.0.0.1:${port}` }),
+      completeWithTools: async () => { toolCalls++; return 'unexpected'; }
+    });
+    const params = execParams({ provider: 'vercel-gateway', toolMode: 'project-only', permissionMode: 'manual' },
+      { conversation: 'c', participant: 'p', turn: 't', binding: 'b', attempt: 'attempt-1' });
+    params.conversation.bindings = [{ id: 'b', status: 'valid', compatibilityDigest: (await import('@praxis/core')).conversationPayloadDigest(await adapter.prepare!(params)) } as import('@praxis/core').ConversationBinding];
+    const result = await adapter.execute(params);
+    assert.equal(toolCalls, 0, 'no agent session path used');
+    assert.equal(result.providerSessionId, undefined);
+    assert.ok(result.text.includes('hello'));
+    assert.ok(result.usage, 'usage reported');
+    assert.deepEqual(result.usageReferences, ['attempt:attempt-1']);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('TASK-480 AC3: endpoint, instruction version and folder realpath each change the binding digest', async () => {
+  const { conversationPayloadDigest } = await import('@praxis/core');
+  const { mkdtemp, mkdir, symlink } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'task-480-ac3-'));
+  const real = join(root, 'real');
+  await mkdir(real);
+  const link = join(root, 'link');
+  await symlink(real, link);
+  let gatewayUrl = 'https://one.example';
+  const adapter = await prodAdapter({ resolveConnectionOptions: async () => ({ apiKey: 'k', model: 'm', gatewayUrl }) });
+  const ids = { conversation: 'c', participant: 'p', turn: 't', binding: '', attempt: '' };
+  const digest = async (opts: Record<string, unknown>, instructions = 'help', version = '1') => {
+    const params = execParams({ provider: 'vercel-gateway', ...opts }, ids);
+    Object.assign(params.participant, { instructions, instructionVersion: version });
+    return conversationPayloadDigest(await adapter.prepare!(params));
+  };
+  const base = await digest({ workingDirectory: real });
+  assert.equal(await digest({ workingDirectory: link }), base, 'symlinked folder resolves to the same realpath');
+  assert.notEqual(await digest({ workingDirectory: real }, 'different'), base, 'instruction text');
+  assert.notEqual(await digest({ workingDirectory: real }, 'help', '2'), base, 'instruction version');
+  gatewayUrl = 'https://two.example';
+  assert.notEqual(await digest({ workingDirectory: real }), base, 'endpoint');
+});
+
+test('TASK-480 AC3: a runtime without native resume reconstructs from the bounded context', async () => {
+  const { resolveTeamChatBinding } = await import('@praxis/core');
+  const delivered: string[] = [];
+  const adapter = await prodAdapter({
+    completeWithTools: async runtime => { delivered.push(runtime.durableContext?.reconstruction ?? ''); return 'ok'; }
+  });
+  const params = execParams({ provider: 'vercel-gateway', toolMode: 'full' }, { conversation: 'c', participant: 'p', turn: 't', binding: 'b', attempt: 'a' });
+  const binding = resolveTeamChatBinding([], await adapter.prepare!(params), 'b');
+  params.conversation.bindings = [binding];
+  const result = await adapter.execute(params);
+  assert.equal(result.contextDelivery ?? 'reconstruction', 'reconstruction');
+  assert.deepEqual(delivered, ['prompt']);
+});
+
+test('TASK-480 AC4: changed permissions invalidate an old binding before dispatch and it is never revalidated', async () => {
+  const { resolveTeamChatBinding } = await import('@praxis/core');
+  let calls = 0;
+  const adapter = await prodAdapter({ completeWithTools: async () => { calls++; return 'ok'; } });
+  const full = { provider: 'vercel-gateway', toolMode: 'full', permissionMode: 'auto' };
+  const ids = { conversation: 'c', participant: 'p', turn: 't', binding: 'old', attempt: 'a' };
+  const bindings: import('@praxis/core').ConversationBinding[] = [];
+  const old = resolveTeamChatBinding(bindings, await adapter.prepare!(execParams(full, ids)), 'old');
+  for (const revoked of [{ permissionMode: 'manual' }, { toolMode: 'read-only' }]) {
+    const params = execParams({ ...full, ...revoked }, ids, [old]);
+    await assert.rejects(adapter.execute(params), /changed before dispatch/);
+    const replacement = resolveTeamChatBinding(bindings, await adapter.prepare!(params), `new-${Object.keys(revoked)[0]}`);
+    assert.notEqual(replacement.id, 'old');
+  }
+  assert.equal(calls, 0, 'no provider invoked with revoked policy');
+  const restored = resolveTeamChatBinding(bindings, await adapter.prepare!(execParams(full, ids)), 'restored');
+  assert.equal(old.status, 'invalid');
+  assert.notEqual(restored.id, 'old', 'switching back never revives an invalidated binding');
+  await assert.rejects(adapter.execute(execParams(full, ids, [old])), /changed before dispatch/);
+});
+
+test('TASK-480 AC5: tool-runtime usage is attributed once per attempt and context occupancy is not spend', async () => {
+  const adapter = await prodAdapter({
+    completeWithTools: async runtime => {
+      runtime.onTerminal?.({ sessionId: 's', runtimeSessionId: 'rs', teamChatContextDelivery: 'native', events: [
+        { type: 'message', tokenUsage: { inputTokens: 5, outputTokens: 2, contextTokens: 9000 }, cost: 0.01 }
+      ] } as unknown as import('@praxis/core').AgentSessionRecord);
+      return 'ok';
+    }
+  });
+  const { resolveTeamChatBinding } = await import('@praxis/core');
+  const params = execParams({ provider: 'vercel-gateway', toolMode: 'full' }, { conversation: 'c', participant: 'p', turn: 't', binding: 'b', attempt: 'a1' });
+  params.conversation.bindings = [resolveTeamChatBinding([], await adapter.prepare!(params), 'b')];
+  const result = await adapter.execute(params);
+  assert.deepEqual(result.usageReferences, ['attempt:a1'], 'exactly one attribution reference');
+  assert.equal(result.providerSessionId, 'rs');
+  assert.equal(result.contextDelivery, 'native');
+});
+
+test('live approvals are reported only for the owning attempt while its session still awaits approval', async () => {
+  const { DEFAULT_APP_SETTINGS } = await import('@praxis/core');
+  type Record = import('@praxis/core').AgentSessionRecord;
+  type Event = Record['events'][number];
+  const requested = (n: number): Event => ({ type: 'permission_requested', timestamp: `t${n}`, summary: `request ${n}` }) as Event;
+  const completed = (n: number): Event => ({ type: 'permission_completed', timestamp: `t${n}`, summary: 'answered' }) as Event;
+  const session = (sessionId: string, state: string, attemptId: string, events: Event[]) => ({ sessionId, issueKey: `KEY-${sessionId}`, state,
+    teamChatExecution: { attemptId }, events }) as unknown as Record;
+  // s1 raised two requests (event indexes 0 and 2) with a message between them; the head of its queue is index 0.
+  const s1Events = [requested(0), { type: 'message', timestamp: 't1', summary: 'thinking' } as Event, requested(2)];
+  let sessions: Record[] = [session('s1', 'awaiting_approval', 'attempt-1', s1Events), session('s2', 'awaiting_approval', 'attempt-2', [requested(0)]),
+    session('s3', 'running', 'attempt-3', [requested(0)])];
+  const adapter = createProductionTeamChatExecutionAdapter({ settings: () => structuredClone(DEFAULT_APP_SETTINGS), resolveRuntimeConfiguration: async () => 'r',
+    resolveConnectionOptions: async () => ({}), completeWithTools: async () => 'unused', liveRuntimeSessions: () => sessions });
+  const list = (id: string) => adapter.listLiveApprovals!({ id } as import('@praxis/core').ConversationAttempt);
+  assert.deepEqual(await list('attempt-1'), [{ requestId: 's1:permission:0', attemptId: 'attempt-1' }]);
+  assert.equal(runtimeApprovalRequestId(sessions[0]), pendingMobilePermissions([sessions[0]])[0].requestId,
+    'the team-chat identity is the mobile permission identity of the head request');
+  sessions[0] = session('s1', 'awaiting_approval', 'attempt-1', [...s1Events, completed(3)]);
+  assert.deepEqual(await list('attempt-1'), [{ requestId: 's1:permission:2', attemptId: 'attempt-1' }], 'answering the head moves to the next queued request');
+  assert.equal(runtimeApprovalRequestId(sessions[0]), pendingMobilePermissions([sessions[0]])[0].requestId);
+  sessions[0] = session('s1', 'awaiting_approval', 'attempt-1', [...s1Events, completed(3), completed(4)]);
+  assert.deepEqual(await list('attempt-1'), [], 'an emptied queue has nothing to restore');
+  assert.deepEqual(await list('attempt-3'), []);
+  assert.deepEqual(await list('missing'), []);
+  sessions = [];
+  assert.deepEqual(await list('attempt-1'), [], 'a vanished runtime session has nothing to restore');
+  assert.equal(runtimeApprovalRequestId(session('s', 'awaiting_approval', 'a', [])), undefined);
 });

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run check-core-imports && tsc --noEmit -p . && vite build",
     "check-types": "npm run check-core-imports && tsc --noEmit -p .",
-    "test": "node --import ./test/register.mjs --test test/notesSession.test.ts test/notesTree.test.ts test/noteSendReference.test.ts test/noteSendStore.test.ts test/scheduleSpotlight.test.ts test/reportModel.test.ts test/scheduleFlow.test.ts test/conversationSubscription.test.ts",
+    "test": "node --import ./test/register.mjs --test test/notesSession.test.ts test/notesTree.test.ts test/noteSendReference.test.ts test/noteSendStore.test.ts test/scheduleSpotlight.test.ts test/reportModel.test.ts test/scheduleFlow.test.ts test/conversationSubscription.test.ts test/turnControlModel.test.ts test/assistantErrorState.test.ts test/assistantPendingSubmissions.test.ts test/assistantOwnership.test.ts test/assistantPageContextCompatibility.test.ts test/assistantShellMode.test.ts test/assistantSubmitCommand.test.ts",
     "check-core-imports": "node scripts/checkCoreImports.cjs",
     "textures": "electron scripts/generate-surface-textures.cjs"
   },

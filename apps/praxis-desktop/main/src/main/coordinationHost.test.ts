@@ -59,6 +59,48 @@ function tempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pc-'));
 }
 
+test('joining waits for a complete broker token instead of caching a partial credential', async () => {
+  for (const partial of ['', 'a'.repeat(16)]) {
+    const root = tempRoot();
+    const tokenFile = path.join(root, 'broker.token');
+    fs.writeFileSync(tokenFile, partial, { mode: 0o600 });
+    const written = new Promise<void>(resolve => setTimeout(() => {
+      fs.writeFileSync(tokenFile, 'b'.repeat(64));
+      resolve();
+    }, 25));
+    let leader: Awaited<ReturnType<typeof joinCoordination>> | undefined;
+    let follower: Awaited<ReturnType<typeof joinCoordination>> | undefined;
+    try {
+      leader = await joinCoordination(root);
+      await written;
+      follower = await joinCoordination(root);
+      assert.equal(leader.role, 'leader');
+      assert.equal(follower.role, 'follower');
+      assert.equal((await follower.send(register('follower') as never)).ok, true);
+    } finally {
+      await written;
+      await follower?.close();
+      await leader?.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test('a permanently incomplete broker token fails closed without creating a leader', async () => {
+  const root = tempRoot();
+  const tokenFile = path.join(root, 'broker.token');
+  fs.writeFileSync(tokenFile, '', { mode: 0o600 });
+  let endpoint: Awaited<ReturnType<typeof joinCoordination>> | undefined;
+  try {
+    await assert.rejects(async () => { endpoint = await joinCoordination(root); }, /token is incomplete/);
+    assert.equal(fs.readFileSync(tokenFile, 'utf8'), '');
+    assert.equal(fs.existsSync(path.join(root, 'broker.lock')), false);
+  } finally {
+    await endpoint?.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('two processes share one broker: exactly one of them gets the file', async () => {
   const root = tempRoot();
   const a = contender(root);

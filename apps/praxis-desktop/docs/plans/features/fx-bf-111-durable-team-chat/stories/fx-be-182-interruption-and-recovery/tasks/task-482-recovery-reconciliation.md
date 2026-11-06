@@ -62,3 +62,10 @@ Status: Succeeded · Duration: 3m 38s
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
+
+## Evidence
+
+- Fix: `TeamChatCoordinator` abort controllers are keyed `conversationId:turnId:attemptId`; the settling attempt deletes only its own controller; `cancel`/`cancelTurn` abort by turn prefix.
+- Core: `npm run build:core`, then `node --test out/ai/assistant/teamChat*.test.js` in `packages/core` — 77 passed, 0 failed (new: late completion after cancel; settled attempt releases only its own claim).
+- Main: `npm run test:git` in `apps/praxis-desktop/main` — 160 passed, 0 failed (new: outcome_unknown stays blocked, no provider runs, later queued turn waits).
+- Not run: full desktop e2e, theme suites, real-provider checks, manual passes. No UI change, no screenshot.

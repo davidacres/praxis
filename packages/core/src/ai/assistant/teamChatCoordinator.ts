@@ -17,6 +17,11 @@ import {
   advanceConversationAttempt,
   completeConversationAttempt,
   beginConversationEpoch,
+  invalidateAttemptApproval,
+  settleAttemptApproval,
+  recordAttemptApproval,
+  resolveAttemptApproval,
+  restoreAttemptApproval,
   conversationPayloadDigest,
   reserveConversationAttempt,
   startConversationTurn,
@@ -36,7 +41,39 @@ export function makeParticipant(role: AssistantRole): ConversationParticipant {
   };
 }
 
+function assertKnownParticipants(conversation: DurableConversation, ids: readonly string[] | undefined): void {
+  if (!ids?.length) return;
+  const knownIds = new Set(conversation.participants.map(p => p.id));
+  if (ids.some(id => !knownIds.has(id))) throw new Error('Invalid participant reference.');
+}
+
+/** An explicit mention selects only that member; no selection means lead; otherwise canonical role order. */
+function resolvePlanParticipants(conversation: DurableConversation, command: SubmitConversationCommand): ConversationParticipant[] {
+  const mention = parseAssistantMention(command.text);
+  if (mention.personaId) {
+    return [conversation.participants.find(p => p.role === mention.personaId) ?? makeParticipant(mention.personaId)];
+  }
+  if (!command.selectedParticipantIds?.length) {
+    return [conversation.participants.find(p => p.role === 'lead') ?? makeParticipant('lead')];
+  }
+  const rank = (role: AssistantRole) => {
+    const index = CANONICAL_ROLE_ORDER.indexOf(role);
+    return index >= 0 ? index : 99;
+  };
+  return command.selectedParticipantIds
+    .map(id => conversation.participants.find(p => p.id === id))
+    .filter((p): p is ConversationParticipant => Boolean(p))
+    .sort((a, b) => rank(a.role) - rank(b.role));
+}
+
 export class TeamChatAcceptanceUnknown extends Error {}
+
+/** The transition refused an attempt reservation; distinct from a storage fault. */
+class ReservationRejected extends Error {
+  constructor(readonly rejection: unknown) {
+    super(rejection instanceof Error ? rejection.message : String(rejection));
+  }
+}
 
 export interface TeamChatExecutionResult {
   text: string;
@@ -59,6 +96,8 @@ export interface TeamChatExecutionParams {
   messages: readonly ConversationMessage[];
   onAccepted?: () => Promise<void>;
   onEvidence?: (evidence: Pick<import('./assistantTypes').ConversationRecoveryEvidence, 'kind' | 'provenance' | 'data'>) => Promise<void>;
+  /** Report a runtime permission request (with its stable id) or its resolution. */
+  onApproval?: (approval: { runtimeRequestId: string; resolved?: boolean }) => Promise<void>;
   preparedPrompt?: string;
   nativePrompt?: string;
   signal?: AbortSignal;
@@ -69,6 +108,8 @@ export interface TeamChatExecutionAdapter {
   summarize?(prompt: string, params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant; signal?: AbortSignal }): Promise<TeamChatExecutionResult>;
   prepare?(params: { conversation: DurableConversation; turn: ConversationTurn; participant: ConversationParticipant }): Promise<TeamChatConfiguration>;
   execute(params: TeamChatExecutionParams): Promise<TeamChatExecutionResult>;
+  /** Live runtime permission requests for an attempt; absence or failure means nothing can be restored. */
+  listLiveApprovals?(attempt: ConversationAttempt): Promise<readonly { requestId: string; attemptId: string }[]>;
 }
 
 export type ConversationUpdateType =
@@ -81,7 +122,11 @@ export type ConversationUpdateType =
   | 'turn_failed'
   | 'turn_cancelled'
   | 'context_required'
-  | 'decision_pinned';
+  | 'decision_pinned'
+  | 'approval_restored'
+  | 'approval_invalidated'
+  /** A committed revision no typed update reported; subscribers re-read the snapshot. */
+  | 'revision_committed';
 
 export interface ConversationUpdate {
   conversationId: string;
@@ -114,7 +159,11 @@ export class TeamChatCoordinator {
   private readonly onUpdate?: (update: ConversationUpdate) => void;
   private readonly subscribers = new Map<string, Set<(update: ConversationUpdate) => void>>();
   private readonly activeLoops = new Set<string>();
+  /** Conversations whose loop stopped on a storage fault; see `processConversation`. */
+  private readonly haltedLoops = new Map<string, string>();
   private readonly abortControllers = new Map<string, AbortController>();
+  /** Highest revision each conversation's subscribers have been told about. */
+  private readonly notifiedRevisions = new Map<string, number>();
   private initialization?: Promise<void>;
 
   public constructor(options: TeamChatCoordinatorOptions) {
@@ -140,6 +189,22 @@ export class TeamChatCoordinator {
           if (attempt && ['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed'].includes(attempt.state) &&
               attempt.recoveryEvidence?.some(e => e.kind === 'final_result' && typeof (e.result?.text ?? e.data?.text) === 'string')) {
             await this.importRecoveredResult(updated.id, turn.id, attempt.id);
+          }
+        }
+        for (const turn of updated.turns) {
+          const attempt = turn.attempts.at(-1);
+          if (attempt?.pendingApproval?.status !== 'invalidated') continue;
+          const requestId = attempt.pendingApproval.runtimeRequestId;
+          let live: readonly { requestId: string; attemptId: string }[] = [];
+          try { live = await this.executionAdapter.listLiveApprovals?.(attempt) ?? []; } catch { live = []; }
+          // A live request must name this attempt; one without an attempt identity is never restored.
+          const match = live.some(item => item.requestId === requestId && item.attemptId === attempt.id);
+          if (match) {
+            const restored = await this.transitionConversation(updated.id, current =>
+              restoreAttemptApproval(current, current.revision, turn.id, attempt.id, current.coordinatorEpoch, requestId, this.clock()));
+            this.notify({ conversationId: restored.id, revision: restored.revision, type: 'approval_restored', turnId: turn.id, attemptId: attempt.id });
+          } else {
+            this.notify({ conversationId: updated.id, revision: updated.revision, type: 'approval_invalidated', turnId: turn.id, attemptId: attempt.id });
           }
         }
         updated = this.getConversation(updated.id)!;
@@ -170,6 +235,7 @@ export class TeamChatCoordinator {
   }
 
   private notify(update: ConversationUpdate): void {
+    this.notifiedRevisions.set(update.conversationId, Math.max(this.notifiedRevisions.get(update.conversationId) ?? -1, update.revision));
     try {
       this.onUpdate?.(update);
     } catch {
@@ -204,6 +270,18 @@ export class TeamChatCoordinator {
       if (draft.activation && next.turns.length > current.turns.length) draft.activation.acceptedNewTurns = true;
       draft.conversations[index] = structuredClone(next);
       return structuredClone(next);
+    }).then(committed => {
+      // Snapshots carry state, so every committed revision must reach subscribers. Most commits
+      // are followed by a typed update; a commit with none (binding, attempt bookkeeping) would
+      // leave a window holding a stale revision whose next control is refused as stale.
+      if (committed.revision > (this.notifiedRevisions.get(conversationId) ?? -1)) {
+        setTimeout(() => {
+          if (committed.revision > (this.notifiedRevisions.get(conversationId) ?? -1)) {
+            this.notify({ conversationId, revision: committed.revision, type: 'revision_committed' });
+          }
+        }, 0);
+      }
+      return committed;
     });
   }
 
@@ -250,69 +328,54 @@ export class TeamChatCoordinator {
       };
     }
 
-    // Validate participants
-    if (command.selectedParticipantIds && command.selectedParticipantIds.length > 0) {
-      const knownIds = new Set(conversation.participants.map(p => p.id));
-      for (const id of command.selectedParticipantIds) {
-        if (!knownIds.has(id)) {
-          throw new Error('Invalid participant reference.');
-        }
-      }
-    }
+    // Cheap pre-check; the authoritative check repeats inside the transaction.
+    assertKnownParticipants(conversation, command.selectedParticipantIds);
 
-    // Resolve roster & member ordering
-    const mention = parseAssistantMention(command.text);
-    let planParticipants: ConversationParticipant[] = [];
-
-    if (mention.personaId) {
-      const p = conversation.participants.find(part => part.role === mention.personaId) ?? makeParticipant(mention.personaId);
-      planParticipants = [p];
-    } else if (!command.selectedParticipantIds || command.selectedParticipantIds.length === 0) {
-      const lead = conversation.participants.find(part => part.role === 'lead') ?? makeParticipant('lead');
-      planParticipants = [lead];
-    } else {
-      const selected = command.selectedParticipantIds
-        .map(id => conversation.participants.find(p => p.id === id))
-        .filter((p): p is ConversationParticipant => Boolean(p));
-      planParticipants = selected.sort((a, b) => {
-        const orderA = CANONICAL_ROLE_ORDER.indexOf(a.role);
-        const orderB = CANONICAL_ROLE_ORDER.indexOf(b.role);
-        return (orderA >= 0 ? orderA : 99) - (orderB >= 0 ? orderB : 99);
-      });
-    }
-
+    // Side effects (IDs, settings reads) happen before the transaction so the
+    // mutation stays synchronous. Everything that depends on the conversation's
+    // current state — roster, plan, sequence — is resolved against the draft, so
+    // two sends queued behind each other each see the other's committed turn.
     const turnId = this.idSource();
     const userMessageId = this.idSource();
-    const sequence = (conversation.messages.at(-1)?.sequence ?? 0) + 1;
-
-    const turn: ConversationTurn = {
-      id: turnId,
-      commandId: command.commandId,
-      payloadDigest,
-      userMessageId,
-      acceptedSequence: sequence,
-      plan: {
-        participants: planParticipants,
-        runtimeOptions: this.captureRuntimeOptions?.(command.runtimeOptions) ?? command.runtimeOptions,
-        ...(command.context ? { context: command.context } : {})
-      },
-      state: 'queued',
-      completedParticipantIds: [],
-      attempts: []
-    };
-
-    const userMessage: ConversationMessage = {
-      id: userMessageId,
-      turnId,
-      role: 'user',
-      text: command.text,
-      createdAt: this.clock(),
-      sequence,
-      attachments: command.attachmentRefs ?? [],
-      ...(command.context ? { context: command.context, contextTitle: command.context.title } : {})
-    };
+    const runtimeOptions = this.captureRuntimeOptions?.(command.runtimeOptions) ?? command.runtimeOptions;
 
     const updated = await this.transitionConversation(command.conversationId, conv => {
+      const receipt = conv.commandReceipts.find(r => r.commandId === command.commandId);
+      if (receipt) {
+        if (receipt.payloadDigest !== payloadDigest) throw new Error('Command payload conflict.');
+        return conv;
+      }
+      assertKnownParticipants(conv, command.selectedParticipantIds);
+      const planParticipants = resolvePlanParticipants(conv, command);
+      const sequence = (conv.messages.at(-1)?.sequence ?? 0) + 1;
+
+      const turn: ConversationTurn = {
+        id: turnId,
+        commandId: command.commandId,
+        payloadDigest,
+        userMessageId,
+        acceptedSequence: sequence,
+        plan: {
+          participants: planParticipants,
+          runtimeOptions,
+          ...(command.context ? { context: command.context } : {})
+        },
+        state: 'queued',
+        completedParticipantIds: [],
+        attempts: []
+      };
+
+      const userMessage: ConversationMessage = {
+        id: userMessageId,
+        turnId,
+        role: 'user',
+        text: command.text,
+        createdAt: this.clock(),
+        sequence,
+        attachments: command.attachmentRefs ?? [],
+        ...(command.context ? { context: command.context, contextTitle: command.context.title } : {})
+      };
+
       // Ensure participants in plan exist on the conversation record
       for (const p of planParticipants) {
         if (!conv.participants.some(existing => existing.id === p.id)) {
@@ -325,6 +388,10 @@ export class TeamChatCoordinator {
     });
 
     const acceptedTurn = updated.turns.find(t => t.id === updated.commandReceipts.find(r => r.commandId === command.commandId)!.turnId)!;
+    if (acceptedTurn.id !== turnId) {
+      // A concurrent delivery of the same command won; it already announced the turn.
+      return { turnId: acceptedTurn.id, revision: updated.revision, state: acceptedTurn.state };
+    }
     const acceptedMessage = updated.messages.find(m => m.id === acceptedTurn.userMessageId)!;
     this.notify({
       conversationId: command.conversationId,
@@ -355,48 +422,65 @@ export class TeamChatCoordinator {
 
   /** Revision and target fencing plus the command receipt commit in one transaction. */
   public async control(command: import('./assistantTypes').ConversationControlCommand): Promise<DurableConversation> {
+    return (await this.controlWithOutcome(command)).conversation;
+  }
+
+  /**
+   * As `control`, but says what happened: `applied`, `duplicate` (the same command ID was already
+   * committed), or `conflict` with the reason. The conversation is always the fresh committed state.
+   */
+  public async controlWithOutcome(command: import('./assistantTypes').ConversationControlCommand): Promise<import('./assistantTypes').ConversationControlOutcome> {
     command = structuredClone(command);
     await this.initialize();
     if (!['cancel', 'retry', 'pin', 'unpin', 'resume-context', 'reconcile'].includes(command.action)) throw new Error('Invalid conversation control.');
     const digest = conversationPayloadDigest(command);
     let applied = false;
+    let rejection: { status: 'duplicate' } | { status: 'conflict'; reason: 'stale-revision' | 'stale-target' | 'not-actionable' } | undefined;
+    const reject = (conv: DurableConversation, reason: 'stale-revision' | 'stale-target' | 'not-actionable') => {
+      rejection = { status: 'conflict', reason };
+      return conv;
+    };
     const updated = await this.transitionConversation(command.conversationId, conv => {
       const receipt = conv.controlReceipts?.find(r => r.commandId === command.commandId);
       if (receipt) {
         if (receipt.payloadDigest !== digest) throw new Error('Command payload conflict.');
+        rejection = { status: 'duplicate' };
         return conv;
       }
-      if (conv.revision !== command.expectedRevision) return conv;
+      if (conv.revision !== command.expectedRevision) return reject(conv, 'stale-revision');
       if (!command.commandId.trim()) throw new Error('Command ID required.');
       const turn = conv.turns.find(t => t.id === command.turnId);
       const attempt = turn?.attempts.at(-1);
-      if (command.attemptId && attempt?.id !== command.attemptId) return conv;
+      if (command.attemptId && attempt?.id !== command.attemptId) return reject(conv, 'stale-target');
+      if (command.action === 'retry' && command.participantId && attempt?.participantId !== command.participantId) return reject(conv, 'stale-target');
       if (command.action === 'pin') pinConversationDecision(conv, command.messageId!);
       else if (command.action === 'unpin') conv.pinnedMessageIds = conv.pinnedMessageIds.filter(id => id !== command.messageId);
       else {
         if (!turn) throw new Error('Turn not found.');
         if (command.action === 'cancel') {
-          if (['completed', 'cancelled'].includes(turn.state)) return conv;
+          if (['completed', 'cancelled'].includes(turn.state)) return reject(conv, 'not-actionable');
           const active = attempt && ['dispatching', 'running', 'awaiting_approval'].includes(attempt.state);
           turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
           turn.skippedParticipantIds = turn.plan.participants.filter(p => !turn.completedParticipantIds.includes(p.id) && p.id !== (active ? attempt.participantId : undefined)).map(p => p.id);
           if (attempt?.state === 'prepared') attempt.state = 'cancelled';
+          if (attempt) invalidateAttemptApproval(attempt);
         } else if (command.action === 'reconcile') {
           if (turn.state !== 'outcome_unknown' || !attempt || attempt.id !== command.attemptId || !command.reconciliationNote?.trim()) throw new Error('Describe the reconciliation for the unknown attempt.');
           (attempt.recoveryEvidence ??= []).push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
             participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
             kind: 'reconciliation', observedAt: this.clock(), provenance: 'user', data: { note: command.reconciliationNote.trim() } });
         } else if (command.action === 'resume-context') {
-          if (turn.state !== 'context_required') return conv;
+          if (turn.state !== 'context_required') return reject(conv, 'not-actionable');
           turn.state = 'running';
           delete turn.contextRequiredReason;
         } else if (command.action === 'retry') {
-          if (!attempt || attempt.id !== command.attemptId || !['failed', 'interrupted', 'outcome_unknown'].includes(turn.state)) return conv;
+          if (!attempt || attempt.id !== command.attemptId) return reject(conv, 'stale-target');
+          if (!['failed', 'interrupted', 'outcome_unknown'].includes(turn.state)) return reject(conv, 'not-actionable');
           if (turn.state === 'outcome_unknown') {
             if (!command.acknowledgeDuplicateActionRisk || !attempt.recoveryEvidence?.some(e => e.id === command.reconciliationEvidenceId && e.kind === 'reconciliation')) throw new Error('Acknowledge duplicate-action risk after reconciliation.');
             attempt.recoveryEvidence.push({ id: command.commandId, conversationId: conv.id, turnId: turn.id,
               participantId: attempt.participantId, attemptId: attempt.id, coordinatorEpoch: attempt.coordinatorEpoch,
-              kind: 'decision', observedAt: this.clock(), provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: command.reconciliationEvidenceId! } });
+              kind: 'decision', observedAt: this.clock(), provenance: 'user', data: { retryKind: 'user-authorized-unknown', acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: command.reconciliationEvidenceId! } });
           }
           const binding = conv.bindings.find(b => b.id === attempt.bindingId);
           if (binding) binding.status = 'invalid';
@@ -409,11 +493,16 @@ export class TeamChatCoordinator {
       return conv;
     });
     if (applied) {
-      if (command.action === 'cancel') this.abortControllers.get(`${command.conversationId}:${command.turnId}`)?.abort();
+      if (command.action === 'cancel' && command.turnId) this.abortTurn(command.conversationId, command.turnId);
       this.notify({ conversationId: updated.id, revision: updated.revision, type: 'turn_accepted' });
       void this.processConversation(updated.id);
     }
-    return updated;
+    return rejection ? { ...rejection, conversation: updated } : { status: 'applied', conversation: updated };
+  }
+
+  private abortTurn(conversationId: string, turnId: string): void {
+    const prefix = `${conversationId}:${turnId}:`;
+    for (const [key, controller] of this.abortControllers) if (key.startsWith(prefix)) controller.abort();
   }
 
   public async removeConversation(conversationId: string): Promise<void> {
@@ -426,7 +515,6 @@ export class TeamChatCoordinator {
 
   public async cancelTurn(conversationId: string, turnId: string): Promise<void> {
     await this.initialize();
-    const abortKey = `${conversationId}:${turnId}`;
     // Persist the intent before signalling the runtime. An abort request is not
     // evidence that an external tool did not execute.
     const updated = await this.transitionConversation(conversationId, conv => {
@@ -437,6 +525,7 @@ export class TeamChatCoordinator {
         !turn.attempts.some(a => a.participantId === p.id && ['dispatching', 'running', 'awaiting_approval', 'outcome_unknown'].includes(a.state))).map(p => p.id);
       const active = turn.attempts.find(a => ['dispatching', 'running', 'awaiting_approval'].includes(a.state));
       turn.state = active ? 'cancelling' : turn.state === 'outcome_unknown' ? 'outcome_unknown' : 'cancelled';
+      for (const a of turn.attempts) invalidateAttemptApproval(a);
       for (const a of turn.attempts) if (a.state === 'prepared') {
         a.state = 'cancelled';
         a.completedAt = this.clock();
@@ -448,7 +537,7 @@ export class TeamChatCoordinator {
       conv.revision++;
       return conv;
     });
-    this.abortControllers.get(abortKey)?.abort();
+    this.abortTurn(conversationId, turnId);
     this.notify({ conversationId, revision: updated.revision, type: 'turn_cancelled', turnId,
       state: updated.turns.find(t => t.id === turnId)?.state });
     void this.processConversation(conversationId);
@@ -504,7 +593,7 @@ export class TeamChatCoordinator {
           }
           a.recoveryEvidence.push({ id: this.idSource(), conversationId, turnId, participantId: a.participantId,
             attemptId, coordinatorEpoch: a.coordinatorEpoch, observingEpoch: conv.coordinatorEpoch, kind: 'decision', observedAt: this.clock(),
-            provenance: 'user', data: { acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: options.reconciliationEvidenceId } });
+            provenance: 'user', data: { retryKind: 'user-authorized-unknown', acknowledgeDuplicateActionRisk: true, reconciliationEvidenceId: options.reconciliationEvidenceId } });
           const binding = conv.bindings.find(b => b.id === a.bindingId);
           if (binding) binding.status = 'invalid';
           t.state = 'running';
@@ -548,7 +637,14 @@ export class TeamChatCoordinator {
 
   private async processConversation(conversationId: string): Promise<void> {
     if (this.activeLoops.has(conversationId)) return;
+    const halted = this.haltedLoops.get(conversationId);
+    if (halted !== undefined) {
+      // Commands still commit; only dispatch waits for startup recovery.
+      this.reportLoopStop(conversationId, halted);
+      return;
+    }
     this.activeLoops.add(conversationId);
+    const loopEpoch = this.getConversation(conversationId)?.coordinatorEpoch;
 
     try {
       while (true) {
@@ -665,7 +761,7 @@ export class TeamChatCoordinator {
               });
               let reportedSummary: TeamChatExecutionResult | undefined;
               const summaryAbort = new AbortController();
-              const summaryAbortKey = `${conversationId}:${activeTurn.id}`;
+              const summaryAbortKey = `${conversationId}:${activeTurn.id}:summary`;
               this.abortControllers.set(summaryAbortKey, summaryAbort);
               try {
                 const summary = await this.executionAdapter.summarize(prompt, { conversation, turn: activeTurn, participant: nextParticipant, signal: summaryAbort.signal });
@@ -735,10 +831,17 @@ export class TeamChatCoordinator {
           currentConv = await this.transitionConversation(conversationId, conv => {
             const t = conv.turns.find(item => item.id === activeTurn!.id);
             if (!t || t.state !== 'running') return conv;
-            return reserveConversationAttempt(conv, conv.revision, attempt);
+            try {
+              return reserveConversationAttempt(conv, conv.revision, attempt);
+            } catch (rejection) {
+              throw new ReservationRejected(rejection);
+            }
           });
-        } catch {
-          break;
+        } catch (error) {
+          // A refused reservation stops this pass quietly. A storage fault (before or
+          // after the rename) must reach the halting handler so it is reported.
+          if (error instanceof ReservationRejected) break;
+          throw error;
         }
 
         if (currentConv.turns.find(t => t.id === activeTurn!.id)?.state !== 'running') {
@@ -764,7 +867,7 @@ export class TeamChatCoordinator {
         };
 
         const abortController = new AbortController();
-        const abortKey = `${conversationId}:${activeTurn.id}`;
+        const abortKey = `${conversationId}:${activeTurn.id}:${attemptId}`;
         this.abortControllers.set(abortKey, abortController);
 
         let executionError: Error | undefined;
@@ -778,7 +881,7 @@ export class TeamChatCoordinator {
               await this.transitionConversation(conversationId, conv => {
                 const t = conv.turns.find(t => t.id === activeTurn!.id);
                 const a = t?.attempts.find(a => a.id === attemptId);
-                if (!a || t?.state !== 'running' || conv.coordinatorEpoch !== attempt.coordinatorEpoch ||
+                if (!a || !t || !['running', 'cancelling'].includes(t.state) || conv.coordinatorEpoch !== attempt.coordinatorEpoch ||
                     a.coordinatorEpoch !== attempt.coordinatorEpoch || t.attempts.at(-1)?.id !== attemptId) throw new Error('Fenced runtime evidence.');
                 a.recoveryEvidence ??= [];
                 a.recoveryEvidence.push({ ...evidence, id: this.idSource(), conversationId, turnId: t.id,
@@ -786,6 +889,12 @@ export class TeamChatCoordinator {
                 conv.revision++;
                 return conv;
               });
+            },
+            onApproval: async approval => {
+              await accepted();
+              await this.transitionConversation(conversationId, conv => approval.resolved
+                ? resolveAttemptApproval(conv, conv.revision, activeTurn!.id, attemptId, attempt.coordinatorEpoch, approval.runtimeRequestId)
+                : recordAttemptApproval(conv, conv.revision, activeTurn!.id, attemptId, attempt.coordinatorEpoch, approval.runtimeRequestId, this.clock()));
             },
             turn: activeTurn,
             attempt,
@@ -799,7 +908,7 @@ export class TeamChatCoordinator {
         } catch (err) {
           executionError = err instanceof Error ? err : new Error(String(err));
         } finally {
-          this.abortControllers.delete(abortKey);
+          if (this.abortControllers.get(abortKey) === abortController) this.abortControllers.delete(abortKey);
         }
 
         if (abortController.signal.aborted) {
@@ -817,6 +926,7 @@ export class TeamChatCoordinator {
               participantId: a.participantId, attemptId, coordinatorEpoch: a.coordinatorEpoch,
               kind: 'final_result', observedAt: this.clock(), provenance: 'execution-adapter-after-abort', result });
             a.state = textOnly && !result ? 'cancelled' : 'outcome_unknown';
+            settleAttemptApproval(a, 'invalidated');
             a.completedAt = this.clock();
             t.state = a.state;
             conv.revision++;
@@ -844,6 +954,7 @@ export class TeamChatCoordinator {
                 conv.coordinatorEpoch !== attempt.coordinatorEpoch || t.attempts.at(-1)?.id !== attemptId) return conv;
             const uncertain = executionError instanceof TeamChatAcceptanceUnknown;
             a.state = uncertain ? 'outcome_unknown' : 'failed';
+            settleAttemptApproval(a, 'invalidated');
             const binding = conv.bindings.find(b => b.id === a.bindingId);
             if (binding) binding.status = 'invalid';
             a.error = executionError!.message;
@@ -922,13 +1033,46 @@ export class TeamChatCoordinator {
             attemptId,
             message: replyMessage
           });
+          // The last member's reply completes the turn in the same transaction, so the loop's own
+          // completion branch never sees it: announce it here, at the same revision.
+          if (completedConv.turns.find(t => t.id === activeTurn!.id)?.state === 'completed') {
+            this.notify({ conversationId, revision: completedConv.revision, type: 'turn_completed', turnId: activeTurn.id, state: 'completed' });
+          }
         }
       }
     } catch (error) {
-      // Deletion removes the authoritative identity; callbacks may only drain.
-      if (this.getConversation(conversationId)) throw error;
+      // Deletion removes the authoritative identity, and a newer epoch fences this
+      // loop's attempt; in both cases late callbacks may only drain.
+      const current = this.getConversation(conversationId);
+      if (!current || current.coordinatorEpoch !== loopEpoch) return;
+      // This loop runs detached, so a storage fault must be reported, not left as an
+      // unhandled rejection. What did commit stays durable for startup recovery.
+      //
+      // A fault can leave an attempt `running` with an unknown outcome. Only startup
+      // recovery (a new epoch) may reconcile it: re-entering the loop here cannot make
+      // progress, because reservation refuses a second attempt while one is open, and it
+      // would stop silently. So dispatch halts and every later command is told why.
+      // Later queued turns stay queued: they were accepted and never ran, so they are
+      // neither failed nor retried here, and startup recovery dispatches them in order.
+      const message = error instanceof Error ? error.message : String(error);
+      this.haltedLoops.set(conversationId, message);
+      this.reportLoopStop(conversationId, message);
     } finally {
       this.activeLoops.delete(conversationId);
+    }
+  }
+
+  /** Tell subscribers dispatch stopped; never throws, because the loop runs detached. */
+  private reportLoopStop(conversationId: string, message: string): void {
+    try {
+      console.error(`Team chat ${conversationId} stopped: ${message}`);
+      const current = this.getConversation(conversationId);
+      if (!current) return;
+      const turn = current.turns.find(t => !['queued', 'completed', 'cancelled'].includes(t.state));
+      this.notify({ conversationId, revision: current.revision, type: 'turn_failed', ...(turn ? { turnId: turn.id, state: turn.state } : {}),
+        error: `${message} Restart Praxis to recover this team chat.` });
+    } catch {
+      // Reporting is best effort; the committed state is what startup recovery reads.
     }
   }
 }

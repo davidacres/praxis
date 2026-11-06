@@ -58,7 +58,7 @@ Title: **an earlier turn reply committed after a queued input remains eligible**
 
 ## PT-36D88646CB
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:445](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L445).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:540](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L540).
 Title: **compatible members retain one binding each across turns and chats remain isolated; usage commits once**.
 
 **Given** two in-memory conversations and a configured stub adapter returning duplicate usage references.
@@ -67,7 +67,7 @@ Title: **compatible members retain one binding each across turns and chats remai
 
 ## PT-8322FDF906
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:466](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L466).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:582](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L582).
 Title: **context overflow pauses before any main provider attempt**.
 
 **Given** a coordinator without summarization and a dispatch counter.
@@ -76,7 +76,7 @@ Title: **context overflow pauses before any main provider attempt**.
 
 ## PT-B3B7D355CB
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:476](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L476).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:592](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L592).
 Title: **uncertain acceptance invalidates the binding and never automatically resends**.
 
 **Given** a coordinator with an adapter throwing TeamChatAcceptanceUnknown.
@@ -85,7 +85,7 @@ Title: **uncertain acceptance invalidates the binding and never automatically re
 
 ## PT-D453C7A90A
 
-Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:491](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L491).
+Automation: **node:test**, [packages/core/src/ai/assistant/teamChatCoordinator.test.ts:607](../../packages/core/src/ai/assistant/teamChatCoordinator.test.ts#L607).
 Title: **bounded summarization has separate provenance and usage; summary failure dispatches no main prompt**.
 
 **Given** 18 long historical messages, an early pin and stub summarization in success and failure modes.
@@ -121,27 +121,28 @@ Title: **current policy is revalidated immediately before provider dispatch**.
 
 ## PT-ABE894C263
 
-Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:93](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L93).
+Automation: **node:test**, [apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts:124](../../apps/praxis-desktop/main/src/main/adapters/teamChatRepository.test.ts#L124).
 Title: **provider bindings, summary provenance, usage and decision corrections survive reload in isolation**.
 
 **Given** a temporary file repository containing bindings, sources, summary provenance and a decision correction.
 **When** reload, mutate a returned copy and submit invalid source/state transactions.
 **Then** delivered source, summary usage 10, summary attempt linkage and correction survive; returned binding mutation does not affect the repository; missing pinned source and invalid summary state reject.
 
-## PT-1AE4FF6CEF
+## PT-C5D91CE0A1
 
 Automation: **node:test**, [packages/core/src/ai/acp/acpAgentHost.test.ts:593](../../packages/core/src/ai/acp/acpAgentHost.test.ts#L593).
-Title: **durable ACP continuation sends only prepared context on native resume and reconstruction fallback**.
+Title: **durable ACP continuation sends only prepared context on native resume, and full reconstruction when resume is unavailable or advertised but failing**.
+Formerly PT-1AE4FF6CEF; TASK-486 added the advertised-but-failing case and renamed the test.
 
 **Given** a temporary scripted ACP subprocess, prior session and distinct prepared reconstruction/continuation strings.
-**When** continue with resume capability advertised and then absent.
-**Then** captured prompt equals the native delta or full reconstruction respectively, record reports matching delivery mode and completes without legacy history appended.
+**When** continue with resume capability advertised, absent, and advertised but failing with a JSON-RPC error.
+**Then** captured prompt equals the native delta or (for both fallback cases) the full reconstruction, record reports matching delivery mode and completes without legacy history appended.
 
 ## PT-CCDCE2367D
 
-Automation: **node:test**, [packages/core/src/ai/aiSessionManager.test.ts:596](../../packages/core/src/ai/aiSessionManager.test.ts#L596).
+Automation: **node:test**, [packages/core/src/ai/aiSessionManager.test.ts:621](../../packages/core/src/ai/aiSessionManager.test.ts#L621).
 Title: **durable ownership and negotiated context delivery persist without aliasing the caller**.
 
 **Given** a completed session in an in-memory storage adapter.
 **When** store ownership and native delivery, mutate caller ownership and reload manager.
-**Then** attempt ID remains the original, binding ID survives reload and context delivery remains native.
+**Then** attempt ID remains the original; after reload the ownership deeply equals the original (conversation, turn, participant, attempt, binding and epoch IDs), `providerSessionId` is absent, and context delivery remains native.

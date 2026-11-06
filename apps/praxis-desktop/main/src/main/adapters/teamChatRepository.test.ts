@@ -65,29 +65,60 @@ test('corrupt and unsupported files fail visibly without replacing data; legacy 
 test('durable submit and completion commit together and replay returns the original turn', async t => {
   const { conversationPayloadDigest, submitConversationTurn, startConversationTurn, reserveConversationAttempt, completeConversationAttempt, advanceConversationAttempt } = await import('@praxis/core');
   const file = profile(t); const repository = new FileTeamChatRepository(file); const store = new TeamChatStore(repository);
-  await repository.transaction(draft => { draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] }); });
+  await repository.transaction(draft => { draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'chat', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [], messages: [], turns: [],
+    bindings: [{ id: 'b', conversationId: 'c', participantId: 'p', providerRuntime: 'fixture', compatibilityDigest: 'digest', deliveredMessageIds: [], nativeOutputMessageIds: [], status: 'valid' }],
+    summaries: [], pinnedMessageIds: [], commandReceipts: [] }); });
   const payload = { text: 'hello' };
   const turn: import('@praxis/core').ConversationTurn = { id: 't', commandId: 'cmd', payloadDigest: conversationPayloadDigest(payload), userMessageId: 'u', acceptedSequence: 1, plan: { participants: [{ id: 'p', role: 'lead', instructionVersion: '1', instructions: 'help', defaults: {} }], runtimeOptions: {} }, state: 'queued', completedParticipantIds: [], attempts: [] };
   const message: import('@praxis/core').ConversationMessage = { id: 'u', role: 'user', text: 'hello', createdAt: 'now', sequence: 1, turnId: 't', attachments: [] };
   const submit = () => store.transition('c', chat => submitConversationTurn(chat, 0, payload, turn, message));
+
+  // A pre-rename fault on submit commits none of message, plan or receipt.
+  const beforeSubmit = fs.readFileSync(file, 'utf8'); const revisionBeforeSubmit = repository.read().revision;
+  const failSubmit = t.mock.method(fs.promises, 'rename', async () => { throw new Error('submit commit failed'); });
+  await assert.rejects(submit(), /submit commit failed/);
+  failSubmit.mock.restore();
+  assert.equal(fs.readFileSync(file, 'utf8'), beforeSubmit);
+  const unsubmitted = repository.read();
+  assert.equal(unsubmitted.revision, revisionBeforeSubmit);
+  assert.deepEqual([unsubmitted.conversations[0].messages.length, unsubmitted.conversations[0].turns.length, unsubmitted.conversations[0].commandReceipts.length], [0, 0, 0]);
+
   await Promise.all([submit(), submit()]);
-  assert.equal(repository.read().conversations[0].messages.length, 1);
-  assert.equal(repository.read().conversations[0].commandReceipts[0].turnId, 't');
+  const submitted = repository.read().conversations[0];
+  assert.equal(submitted.messages.length, 1);
+  assert.equal(submitted.commandReceipts[0].turnId, 't');
+  assert.deepEqual(submitted.turns[0].plan, turn.plan, 'the frozen response plan lands with the message and receipt');
+  assert.equal(submitted.commandReceipts[0].revision, submitted.revision);
   await store.transition('c', chat => startConversationTurn(chat, 1, 't'));
-  const attempt: import('@praxis/core').ConversationAttempt = { id: 'a', turnId: 't', participantId: 'p', ordinal: 1, coordinatorEpoch: 'epoch', state: 'prepared', contextReceipt: { digest: 'context', messageIds: ['u'] }, createdAt: 'now', usageReferences: [], toolEvidenceReferences: [] };
+  const attempt: import('@praxis/core').ConversationAttempt = { id: 'a', turnId: 't', participantId: 'p', ordinal: 1, coordinatorEpoch: 'epoch', state: 'prepared', bindingId: 'b', contextReceipt: { digest: 'context', messageIds: ['u'] }, createdAt: 'now', usageReferences: [], toolEvidenceReferences: [] };
   await store.transition('c', chat => reserveConversationAttempt(chat, 2, attempt));
   await store.transition('c', chat => advanceConversationAttempt(chat, 3, 't', 'a', 'epoch', 'dispatching', 'now'));
   const finish = () => store.transition('c', chat => completeConversationAttempt(chat, 4, 't', 'a', 'epoch', { ...message, id: 'reply', role: 'lead', participantId: 'p', sequence: 2 }, attempt.contextReceipt));
-  const before = fs.readFileSync(file, 'utf8');
+  const before = fs.readFileSync(file, 'utf8'); const revisionBefore = repository.read().revision;
   const rename = t.mock.method(fs.promises, 'rename', async () => { throw new Error('completion commit failed'); });
   await assert.rejects(finish(), /completion commit failed/);
-  assert.equal(fs.readFileSync(file, 'utf8'), before);
   rename.mock.restore();
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  const unfinished = repository.read();
+  assert.equal(unfinished.revision, revisionBefore);
+  assert.equal(unfinished.conversations[0].messages.some(m => m.id === 'reply'), false, 'no reply without its outcome');
+  assert.equal(unfinished.conversations[0].turns[0].attempts[0].state, 'dispatching');
+  assert.deepEqual(unfinished.conversations[0].turns[0].completedParticipantIds, []);
+  assert.deepEqual(unfinished.conversations[0].bindings[0].deliveredMessageIds, []);
+  assert.deepEqual(unfinished.conversations[0].bindings[0].nativeOutputMessageIds, []);
+
   await finish();
-  const reloaded = new FileTeamChatRepository(file).read().conversations[0];
-  assert.equal(reloaded.messages.length, 2);
+  const reloadedSnapshot = new FileTeamChatRepository(file).read();
+  const reloaded = reloadedSnapshot.conversations[0];
+  assert.equal(reloadedSnapshot.revision, revisionBefore + 1, 'reply, outcome and context boundary share one revision');
+  assert.deepEqual(reloaded.messages.map(m => m.id), ['u', 'reply']);
   assert.equal(reloaded.turns[0].attempts[0].state, 'completed');
+  assert.equal(reloaded.turns[0].attempts[0].resultMessageId, 'reply');
+  assert.equal(reloaded.turns[0].state, 'completed');
+  assert.deepEqual(reloaded.turns[0].completedParticipantIds, ['p']);
   assert.equal(reloaded.turns[0].attempts[0].contextReceipt.digest, 'context');
+  assert.deepEqual(reloaded.bindings[0].deliveredMessageIds, ['u']);
+  assert.deepEqual(reloaded.bindings[0].nativeOutputMessageIds, ['reply']);
 });
 
 test('provider bindings, summary provenance, usage and decision corrections survive reload in isolation', async t => {
@@ -176,5 +207,135 @@ test('repository validates observation epochs separately from immutable attempt 
     snapshot.conversations[0].turns[0].attempts[0].recoveryEvidence![0] = invalid;
     fs.writeFileSync(file, JSON.stringify(snapshot));
     assert.throws(() => new FileTeamChatRepository(file), /Invalid recovery evidence/);
+  }
+});
+
+function durable(id: string, messages = 0): import('@praxis/core').DurableConversation {
+  return { schemaVersion: 2, id, title: id, createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'epoch', participants: [],
+    messages: Array.from({ length: messages }, (_, i) => ({ id: `${id}-m${i}`, role: i % 2 ? 'lead' as const : 'user' as const,
+      text: `message ${i} ${'x'.repeat(200)}`, createdAt: 'now', sequence: i + 1, turnId: `${id}-t${Math.floor(i / 2)}`, attachments: [] })),
+    turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [] };
+}
+function errno(code: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`${code}: injected`), { code });
+}
+
+for (const code of ['ENOSPC', 'EACCES']) for (const stage of ['open', 'writeFile', 'sync'] as const) {
+  test(`ENOSPC and EACCES on temp write or fsync reject the acknowledgement and preserve committed bytes: ${code} at ${stage}`, async t => {
+    const file = profile(t); const repository = new FileTeamChatRepository(file);
+    await repository.transaction(draft => { draft.conversations.push(durable('c', 2)); });
+    const committed = fs.readFileSync(file, 'utf8');
+    const originalOpen = fs.promises.open;
+    const open = t.mock.method(fs.promises, 'open', async (...args: Parameters<typeof originalOpen>) => {
+      if (!String(args[0]).endsWith('.tmp')) return originalOpen(...args);
+      if (stage === 'open') throw errno(code);
+      const handle = await originalOpen(...args);
+      return new Proxy(handle, { get(target, key) {
+        if (key === stage) return async () => { throw errno(code); };
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+    });
+    await assert.rejects(repository.transaction(draft => { draft.conversations[0].title = 'lost'; }), new RegExp(code));
+    open.mock.restore();
+    assert.equal(fs.readFileSync(file, 'utf8'), committed, 'committed bytes are untouched');
+    assert.deepEqual(fs.readdirSync(path.dirname(file)), ['team-chats.json'], 'no temp file is left behind');
+    assert.equal(repository.read().conversations[0].title, 'c');
+    // A pre-rename fault is certain: the next write proceeds from the committed state.
+    await repository.transaction(draft => { draft.conversations[0].title = 'kept'; });
+    assert.equal(new FileTeamChatRepository(file).read().conversations[0].title, 'kept');
+  });
+}
+
+test('a truncated file, invalid JSON, wrong schemaVersion and a duplicate conversation id each fail load without rewriting', async t => {
+  const file = profile(t);
+  const valid = JSON.stringify({ schemaVersion: 2, revision: 1, teamChats: [], conversations: [durable('c', 2)] }, null, 2);
+  const variants = {
+    truncated: valid.slice(0, Math.floor(valid.length / 2)),
+    invalidJson: valid.replace('"conversations"', 'conversations'),
+    wrongSchema: valid.replace('"schemaVersion": 2,\n  "revision"', '"schemaVersion": 3,\n  "revision"'),
+    duplicateConversation: JSON.stringify({ schemaVersion: 2, revision: 1, teamChats: [], conversations: [durable('c'), durable('c')] })
+  };
+  for (const [name, raw] of Object.entries(variants)) {
+    assert.notEqual(raw, valid, name);
+    fs.writeFileSync(file, raw);
+    assert.throws(() => new FileTeamChatRepository(file), TeamChatStorageError, name);
+    assert.equal(fs.readFileSync(file, 'utf8'), raw, `${name} is never rewritten`);
+  }
+  // Corruption that appears after load is refused by the next transaction, not overwritten.
+  fs.writeFileSync(file, valid);
+  const repository = new FileTeamChatRepository(file);
+  fs.writeFileSync(file, variants.truncated);
+  await assert.rejects(repository.transaction(draft => { draft.conversations[0].title = 'over corrupt'; }), TeamChatStorageError);
+  assert.equal(fs.readFileSync(file, 'utf8'), variants.truncated);
+});
+
+test('two repository instances over one file are refused or serialized', async t => {
+  const file = profile(t);
+  const windows = [new FileTeamChatRepository(file), new FileTeamChatRepository(file)];
+  await windows[0].transaction(draft => { draft.conversations.push(durable('shared')); });
+  // 20 interleaved mutations from two windows: every one lands, none is lost.
+  await Promise.all(Array.from({ length: 20 }, (_, i) => windows[i % 2].transaction(draft => {
+    const chat = draft.conversations[0];
+    chat.messages.push({ id: `w${i}`, role: 'user', text: `from window ${i % 2}`, createdAt: 'now', sequence: (chat.messages.at(-1)?.sequence ?? 0) + 1, turnId: `t${i}`, attachments: [] });
+    chat.revision++;
+  })));
+  const reloaded = new FileTeamChatRepository(file).read();
+  assert.equal(reloaded.conversations[0].messages.length, 20);
+  assert.deepEqual(reloaded.conversations[0].messages.map(m => m.sequence), Array.from({ length: 20 }, (_, i) => i + 1));
+  assert.equal(reloaded.conversations[0].revision, 20);
+  assert.equal(reloaded.revision, 21);
+});
+
+test('a 10,000-message conversation commits under concurrent mutation of another chat within a recorded bound', async t => {
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  const other = new FileTeamChatRepository(file);
+  await repository.transaction(draft => { draft.conversations.push(durable('large', 10_000), durable('small')); });
+  const timings: number[] = [];
+  await Promise.all(Array.from({ length: 5 }, async (_, i) => {
+    const started = performance.now();
+    await repository.transaction(draft => { draft.conversations[0].title = `large ${i}`; draft.conversations[0].revision++; });
+    timings.push(performance.now() - started);
+    await other.transaction(draft => { draft.conversations[1].title = `small ${i}`; draft.conversations[1].revision++; });
+  }));
+  const bytes = fs.statSync(file).size;
+  const slowest = Math.max(...timings);
+  t.diagnostic(`team-chats.json ${bytes} bytes; large-chat commits ${timings.map(ms => ms.toFixed(0)).join(', ')} ms (queued behind concurrent writes)`);
+  const reloaded = new FileTeamChatRepository(file).read();
+  assert.equal(reloaded.conversations[0].messages.length, 10_000);
+  assert.equal(reloaded.conversations[0].revision, 5);
+  assert.equal(reloaded.conversations[1].revision, 5);
+  // A ceiling to record the cost, not a speed gate.
+  assert.ok(slowest < 5_000 * 5, `slowest commit ${slowest.toFixed(0)} ms`);
+});
+
+test('legacy runtime links and diagnostics are validated on load', async t => {
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  await repository.activate();
+  await repository.transaction(draft => {
+    draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'c', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'imported',
+      participants: [{ id: 'part-dev', role: 'dev' } as never], messages: [{ id: 'm', role: 'dev', text: 'reply', createdAt: 'now', sequence: 1, turnId: 'legacy:x', attachments: [] }],
+      turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [],
+      legacyRuntimeLinks: [{ runtimeSessionKey: 'ASSISTANT-c-dev-0123456789abcdef', conversationId: 'c', participantId: 'part-dev', role: 'dev',
+        legacyConfigurationDigest: '0123456789abcdef', checkpointMessageId: 'm', status: 'imported' }] });
+    draft.legacyRuntimeDiagnostics = [{ runtimeSessionKey: 'ASSISTANT-x-dev-0123456789abcdef', reason: 'unknown-conversation' }];
+  });
+  const valid = fs.readFileSync(file, 'utf8');
+  assert.equal(new FileTeamChatRepository(file).read().conversations[0].legacyRuntimeLinks?.length, 1);
+  const corrupt = (mutate: (value: { conversations: Array<Record<string, any>>; legacyRuntimeDiagnostics: unknown[] }) => void) => {
+    const value = JSON.parse(valid); mutate(value); return JSON.stringify(value);
+  };
+  for (const [label, raw] of [
+    ['unknown checkpoint message', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].checkpointMessageId = 'missing'; })],
+    ['unknown participant', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].participantId = 'part-qa'; })],
+    ['another conversation', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].conversationId = 'other'; })],
+    ['not imported', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].status = 'valid'; })],
+    ['unknown diagnostic reason', corrupt(v => { v.legacyRuntimeDiagnostics = [{ runtimeSessionKey: 'k', reason: 'title-match' }]; })]
+  ] as const) {
+    fs.writeFileSync(file, raw);
+    assert.throws(() => new FileTeamChatRepository(file), TeamChatStorageError, label);
+    assert.equal(fs.readFileSync(file, 'utf8'), raw, `${label} is not rewritten`);
   }
 });

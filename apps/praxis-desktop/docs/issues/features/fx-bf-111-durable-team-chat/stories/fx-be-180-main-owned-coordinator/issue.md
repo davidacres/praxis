@@ -28,3 +28,8 @@ FX-BE-179
 ## Validation and close conditions
 
 Follow the canonical story and its task-specific tests; close only when all criteria have linked evidence. No external issue has been created.
+
+**TASK-478 result (2026-11-05):** all four 478 criteria pass, with linked evidence in the [canonical task](../../../../../plans/features/fx-bf-111-durable-team-chat/stories/fx-be-180-main-owned-coordinator/tasks/task-478-turn-coordinator.md#validation-evidence-2026-11-05).
+
+
+**TASK-479 result (2026-11-05):** all four criteria pass. Evidence is in [TASK-479 › Validation evidence](../../../../../plans/features/fx-bf-111-durable-team-chat/stories/fx-be-180-main-owned-coordinator/tasks/task-479-command-and-event-ipc.md#validation-evidence-2026-11-05). Stale controls now return a conflict, and commands are validated before any provider call.

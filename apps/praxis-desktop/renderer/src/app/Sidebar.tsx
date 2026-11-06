@@ -14,6 +14,7 @@ import type {
 } from '@praxis/core';
 import { agentStateLaneClass, isTerminalAgentState, sessionVisualState, sessionStatusLabel } from '../ai/aiSessionState';
 import { extractSessionAiProviders, formatElapsed, formatTokenCompact, formatTokens, isConversationSession, isSynthesizedKey, isTicketReviewKey, isWorkflowStageSession, sessionTitle } from '../ai/sessionNav';
+import { isAssistantOwnedSession, visibleSessions } from '../ai/assistantOwnership';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { providerLabel } from '../ai/modelProviders';
 import { SessionAiIcons } from '../ai/SessionAiIcons';
@@ -29,7 +30,7 @@ import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 import { ChipSelect } from '../ui/ChipSelect';
 import { SessionOrganizer } from './SessionOrganizer';
-import { TeamChatRow, useProjectTeamChats, useStartTeamChat } from '../assistant/TeamChatRow';
+import { TeamChatRow, TeamChatStorageAlert, useProjectsTeamChatsState, useStartTeamChat } from '../assistant/TeamChatRow';
 import { AssignSessionDialog } from '../components/sidebar/AssignSessionDialog';
 import { StatusGlyph } from '../ui/StatusGlyph';
 import { SessionCardActivity } from '../components/sidebar/SessionCardActivity';
@@ -399,7 +400,7 @@ function ProjectRecencyFeed({
   onNewSession: () => void;
   renderSession: (session: AgentSessionRecord) => ReactNode;
 }) {
-  const chats = useProjectTeamChats(project.id);
+  const { chats, error: chatsError, retry: retryChats } = useProjectsTeamChatsState([project.id]);
   const startTeamChat = useStartTeamChat(project.id);
   const entries = [
     ...sessions.map(session => ({ id: session.issueKey, at: sessionLastActivityAt(session), node: renderSession(session) })),
@@ -411,6 +412,7 @@ function ProjectRecencyFeed({
 
   return (
     <>
+      {chatsError && <TeamChatStorageAlert error={chatsError} onRetry={retryChats} />}
       {buckets.length === 0 && (
         <div className="project-session-empty" data-testid="project-sessions-empty"><span>No sessions yet</span></div>
       )}
@@ -1056,7 +1058,9 @@ export function Sidebar({
                     const projectDocuments = documentsByProjectId[project.id];
                     const projectRunsCollapsed = collapsed[`project:${project.id}:runs`] ?? false;
                     const projectItemKeys = new Set(project.workItems?.map(item => item.key) ?? []);
-                    const projectSessions = sessions.filter(
+                    // Defensive: a Virtual Team member's runtime execution belongs to its team chat
+                    // row, never to the project's session feed, on initial load or an incremental one.
+                    const projectSessions = visibleSessions(sessions).filter(
                       session =>
                         (!isConversationSession(session) || session.projectId === project.id) &&
                         !isWorkflowStageSession(session) &&
@@ -1416,7 +1420,7 @@ export function Sidebar({
                 onToggleCollapsed={() =>
                   setCollapsed(current => ({ ...current, 'feature:conversations': !(current['feature:conversations'] ?? false) }))
                 }
-                sessions={sessions.filter(isConversationSession)}
+                sessions={visibleSessions(sessions).filter(isConversationSession)}
                 runNames={{}}
                 activeSessionKey={activeSessionKey}
                 runningCount={featureCounts.conversations ?? 0}

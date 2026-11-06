@@ -30,6 +30,7 @@
 // `session/set_mode` can be exercised without a marker: it applies the switch
 // and confirms it with `current_mode_update`, the same as a real agent would.
 
+import { appendFileSync } from 'node:fs';
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
@@ -159,6 +160,10 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
   const promptText = ctx.params.prompt
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('');
+  // Opt-in: record every prompt so a test can check what context was delivered.
+  if (process.env.FAKE_ACP_PROMPT_LOG) {
+    appendFileSync(process.env.FAKE_ACP_PROMPT_LOG, JSON.stringify({ sessionId: ctx.params.sessionId, promptText }) + '\n');
+  }
 
   if (promptText.includes('PERMISSION_KIND_MATRIX')) {
     const outcomes = [];

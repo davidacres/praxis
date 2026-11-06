@@ -10,6 +10,10 @@ import type {
   TeamChatRecord,
   TeamChatSummary,
   SubmitConversationCommand,
+  CancelTurnCommand,
+  RetryParticipantCommand,
+  ResolveAttemptCommand,
+  ConversationControlOutcome,
   ConversationCommandResult,
   DurableConversation
 } from '../ai/assistant/assistantTypes';
@@ -1273,12 +1277,25 @@ export interface AssistantIpc {
   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
   deleteChat(chatId: string): Promise<void>;
-  /** Submits a validated turn to a durable conversation. */
+  /**
+   * Submits a turn. Main validates participants, project, page context, attachment refs and
+   * runtime before anything is accepted. The command ID is the idempotency key: resubmitting the
+   * same command (for example after an IPC timeout) returns the originally accepted turn; the
+   * same ID with a different payload is a conflict.
+   */
   submitTurn(command: SubmitConversationCommand): Promise<ConversationCommandResult>;
-  /** Retrieves a durable conversation by ID. */
+  /** The authoritative snapshot. Reading it never replays or dispatches work. */
   getConversation(conversationId: string): Promise<DurableConversation | undefined>;
-  /** Subscribes to conversation revision updates. */
+  /**
+   * Revision updates for one conversation, broadcast to every window. Subscribe before loading a
+   * snapshot; ignore updates at or below the loaded revision; a newer revision means reload the
+   * snapshot (a gap needs no special handling — the snapshot is authoritative).
+   */
   subscribeConversation(conversationId: string, listener: (update: ConversationUpdate) => void): () => void;
+  /** Revision- and target-fenced: a stale command returns `conflict` with fresh state. */
+  cancelTurn(command: CancelTurnCommand): Promise<ConversationControlOutcome>;
+  retryParticipant(command: RetryParticipantCommand): Promise<ConversationControlOutcome>;
+  resolveAttempt(command: ResolveAttemptCommand): Promise<ConversationControlOutcome>;
   /** Fires after any chat is created, saved, renamed or deleted, so the sidebar can refresh. */
   onChatsChanged(listener: () => void): () => void;
 }

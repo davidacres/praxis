@@ -78,3 +78,20 @@ Status: Succeeded · Duration: 42m 41s
 ## Scheduled delivery and verification ownership
 
 Follow the parent feature's scheduled execution contract. The process runs this task's checks and performs visual inspection immediately when visible behavior changes, retaining useful screenshots. Human review is deferred until all twelve tasks are delivered. Record the prerequisite/result commits and evidence in the task handoff; do not execute against a base missing predecessor changes or bypass an approval gate to advance the queue.
+
+## Validation evidence (2026-11-05)
+
+**Gaps closed.** Stale controls were silent no-ops; they now answer `conflict` (`stale-revision`, `stale-target`, `not-actionable`) with the fresh conversation (`controlWithOutcome`). `cancelTurn`, `retryParticipant` and `resolveAttempt` are typed, revision-fenced IPC commands. A pure adapter (`teamChatCommands.ts`) rejects an unknown participant, project, mismatched page context, unknown or tampered attachment and invalid runtime before any provider call. `createChat` rejects an unknown project. `assistant.spec.ts` now creates its legacy-fence chat with `''` on purpose.
+
+| Criterion | Test | Runner |
+| --- | --- | --- |
+| AC1 | `TASK-479 AC1` (core and `teamChatCommands.test.ts`): lost acknowledgement after durable acceptance, same command ID returns the original turn; one turn, one provider call; changed payload conflicts | core, main |
+| AC2 | `TASK-479 AC2 new window / duplicates / gap` (`conversationSubscription.test.ts`): newer revisions publish, duplicate and older revisions are ignored, a gap causes one snapshot read and no command replay | renderer |
+| AC3 | `TASK-479 AC3` (core and main): participant, project, foreign context, attachment, tampered attachment, permission, stale retry target; zero provider calls. `durableTeamChat.spec.ts` asserts `cancelTurn` with a stale revision returns `conflict` | core, main, e2e |
+| AC4 | `TASK-479 AC4` (main): initiating listener unsubscribes, turn completes, the other listener sees it. e2e `closing the initiating window keeps its accepted turn and pending approval observable from another window`: one provider prompt, approval allowed from the other window | main, e2e |
+
+**Commands run (all passed):** `npm run build:core`; `node --test` on `teamChat{Coordinator,CrashBoundaries,Transitions,Recovery,Bindings}.test.js`; `npm run test:git --workspace=@praxis/desktop-main` (153); `npm run test:renderer` (37); `npm run check-types`; renderer build, `desktop:copy-renderer`, `build:desktop`; `playwright test durableTeamChat.spec.ts assistant.spec.ts sessionTeam.spec.ts --project=functional` (42 tests; the new closed-initiator test was fixed to use a project chat and re-run, 1 passed).
+
+**Screenshot:** `.praxis/session-artifacts/durable-team-chat-closed-initiator.png` shows the pending approval in the surviving window.
+
+**Not run:** full `test:desktop`, themes, `durableTeamChat.live.spec.ts` (needs credentials). Deferred to TASK-483: stop also cancelling queued turns, aligning coordinator cancel/retry with `control`, an `accept` resolution. Deferred to TASK-484: the provider snapshot-client refactor.

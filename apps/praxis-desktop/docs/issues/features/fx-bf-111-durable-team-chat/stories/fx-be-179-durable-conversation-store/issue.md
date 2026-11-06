@@ -27,3 +27,5 @@ None; existing assistant foundation
 ## Validation and close conditions
 
 Follow the canonical story and its task-specific tests; close only when all criteria have linked evidence. No external issue has been created.
+
+**TASK-477 result (2026-11-05):** all four 477 criteria pass with linked evidence in the [canonical task](../../../../../plans/features/fx-bf-111-durable-team-chat/stories/fx-be-179-durable-conversation-store/tasks/task-477-atomic-chat-repository.md#validation-evidence-2026-11-05).

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { AgentSessionRecord, TeamChatSummary } from '@praxis/core';
 import { TeamChatRow } from '../../assistant/TeamChatRow';
+import { dedupeTeamChats, visibleSessions as navigableSessions } from '../../ai/assistantOwnership';
 import { relativeTime } from '../../app/sessionRecency';
 import { EasyModeSessionCard } from './EasyModeSessionCard';
 import { Icon } from '../../ui/Icon';
@@ -61,7 +62,9 @@ export function EasyModeSessionsList({
   // Only display user root sessions at top level; subagents appear inside their parent session's card,
   // and automation stage sessions appear under their respective automation.
   const rootSessions = useMemo(() => {
-    return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId)
+    // Assistant-owned executions (typed `teamChatExecution`, or the narrow legacy `ASSISTANT-` key)
+    // are the team chat's own runtime records; the team-chat row below already shows that work.
+    return navigableSessions(sessions).filter(s => !s.parentSessionKey && !s.workflowRunId)
       .sort((a, b) => sessionLastActivityAt(b).localeCompare(sessionLastActivityAt(a)));
   }, [sessions]);
 
@@ -85,9 +88,10 @@ export function EasyModeSessionsList({
   }, [filteredSessions, expanded, filterQuery, selectedSessionKey]);
   const hiddenCount = filteredSessions.length - visibleSessions.length;
 
-  const matchingChats = teamChats.filter(chat => !filterQuery.trim() || chat.title.toLowerCase().includes(filterQuery.toLowerCase().trim()));
+  const chats = useMemo(() => dedupeTeamChats(teamChats), [teamChats]);
+  const matchingChats = chats.filter(chat => !filterQuery.trim() || chat.title.toLowerCase().includes(filterQuery.toLowerCase().trim()));
 
-  if (rootSessions.length === 0 && teamChats.length === 0) {
+  if (rootSessions.length === 0 && chats.length === 0) {
     return (
       <div className="easymode-empty-card" data-testid="easymode-sessions-empty-card">
         <div className="easymode-empty-card__icon">
@@ -114,7 +118,7 @@ export function EasyModeSessionsList({
 
   return (
     <div className="easymode-sessions-list" data-testid="easymode-sessions-list">
-      {rootSessions.length + teamChats.length >= 3 && (
+      {rootSessions.length + chats.length >= 3 && (
         <div className="easymode-search-bar">
           <Icon name="search" size={12} />
           <input

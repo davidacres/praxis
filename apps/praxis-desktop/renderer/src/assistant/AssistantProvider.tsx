@@ -2,6 +2,11 @@ import { subscribeConversation } from './conversationSubscription';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import type { DurableConversation, SubmitConversationCommand, WireImageAttachment, AgentPermissionMode, AgentSessionRecord, AgentToolMode, AssistantMessage, AssistantProposedAction, AssistantRole, AiProvider, PageAssistantContext, ReasoningEffort } from '@praxis/core';
 import { onSessionChanged } from '../ai/sessionChangeStream';
+import * as shellMode from './assistantShellMode';
+import { resolveAssistantError } from './assistantErrorState';
+import { PendingSubmissions } from './assistantPendingSubmissions';
+import { buildSubmitCommand } from './assistantSubmitCommand';
+import { INCOMPATIBLE_PAGE_CONTEXT_MESSAGE, isCompatiblePageContext } from './assistantPageContext';
 
 export interface AssistantRuntimeOptions {
   provider?: AiProvider;
@@ -45,8 +50,8 @@ const CONTEXT_PRIORITY: Record<PageAssistantContext['pageType'], number> = {
   issue: 3
 };
 
-const DOCKED_KEY = 'tm-assistant-docked';
-const OPEN_KEY = 'tm-assistant-open';
+/** Shell mode (dock/float/open) is two persisted booleans; see `assistantShellMode.ts`. */
+const { DOCKED_KEY, OPEN_KEY } = shellMode;
 
 export interface AssistantController {
   runtimePreferences: AssistantComposerPreferences;
@@ -64,6 +69,11 @@ export interface AssistantController {
   lastToolSession?: AgentSessionRecord;
   toolUsageSessions: AgentSessionRecord[];
   error?: string;
+  /** Errors stay visible until the turn that produced them settles, or the user dismisses them. */
+  dismissError: () => void;
+  /** Show a failed command's error under the same retention rules as a turn's own error. */
+  reportError: (message: string) => void;
+  /** The open conversation's draft. Drafts are per conversation, so switching chats keeps both. */
   draft: string;
   setDraft: (draft: string) => void;
   teamMembers: readonly AssistantRole[];
@@ -94,13 +104,13 @@ const AssistantContext = createContext<AssistantController | undefined>(undefine
 
 
 function readBool(key: string, fallback: boolean): boolean {
-  const raw = localStorage.getItem(key);
-  return raw === null ? fallback : raw === '1';
+  return shellMode.readBool(localStorage, key, fallback);
 }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const [runtimePreferences, setRuntimePreferences] = useState<AssistantComposerPreferences>({ model: '', reasoningEffort: 'medium', permissionMode: 'manual', mode: 'chat', toolMode: 'project-only', workingDirectory: '' });
-  const pendingSubmissions = useRef(new Map<string, SubmitConversationCommand>());
+  /** In-flight submissions, keyed by conversation: navigation must not redirect or drop them. */
+  const pendingSubmissions = useRef(new PendingSubmissions());
   const [open, setOpenState] = useState(() => readBool(OPEN_KEY, false));
   const [docked, setDockedState] = useState(() => readBool(DOCKED_KEY, false));
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -119,11 +129,62 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (['completed', 'failed', 'aborted'].includes(record.state)) setLastToolSession(record);
     }
   }), []);
-  const [error, setError] = useState<string | undefined>();
-  const [draft, setDraft] = useState('');
+  const [error, setErrorState] = useState<string | undefined>();
+  const errorRef = useRef<string | undefined>();
+  /** The snapshot the retention rule judges against; kept in a ref so callbacks stay stable. */
+  const conversationRef = useRef<DurableConversation | undefined>();
+  const previousSnapshotRef = useRef<DurableConversation | undefined>();
+  conversationRef.current = conversation;
+  /**
+   * Raise an error. Calling it with `undefined` no longer clears anything: retention lives in
+   * `assistantErrorState`, so a snapshot that simply omits the string keeps the error on screen.
+   */
+  const setError = useCallback((incoming: string | undefined) => {
+    if (incoming === undefined) return;
+    errorRef.current = resolveAssistantError({ previous: errorRef.current, snapshot: conversationRef.current, incomingError: incoming });
+    setErrorState(errorRef.current);
+  }, []);
+  const dismissError = useCallback(() => {
+    errorRef.current = resolveAssistantError({ previous: errorRef.current, snapshot: conversationRef.current, userDismissed: true });
+    setErrorState(errorRef.current);
+  }, []);
+  /**
+   * The error a *submission* raised (a lost acceptance acknowledgement, a rejected command). Only
+   * this error is resolved by that same submission later succeeding: a storage fault reported
+   * through the subscription belongs to the turn, not to the send, and must survive the next one.
+   */
+  const submissionErrorRef = useRef<string | undefined>();
+  const clearAcknowledgedSubmissionError = useCallback(() => {
+    if (!submissionErrorRef.current || errorRef.current !== submissionErrorRef.current) { submissionErrorRef.current = undefined; return; }
+    submissionErrorRef.current = undefined;
+    errorRef.current = resolveAssistantError({ previous: errorRef.current, snapshot: conversationRef.current, submissionAcknowledged: true });
+    setErrorState(errorRef.current);
+  }, []);
+  /** Dropping the conversation the error was about is not a resolution, but it is no longer shown. */
+  const clearErrorForScopeChange = useCallback(() => {
+    errorRef.current = resolveAssistantError({ previous: errorRef.current, snapshot: conversationRef.current, conversationChanged: true });
+    setErrorState(errorRef.current);
+  }, []);
+  /**
+   * Drafts are per conversation, keyed by chat id; the empty key holds the draft of a chat that
+   * has not been created yet. `draft`/`setDraft` stay the single-conversation façade the composer
+   * has always used, so opening or creating another chat never destroys an unwritten message.
+   */
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [draftKey, setDraftKey] = useState('');
+  const draft = drafts[draftKey] ?? '';
+  const setDraft = useCallback((value: string) => {
+    setDrafts(current => ({ ...current, [draftKeyRef.current]: value }));
+  }, []);
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
   const [teamMembers, setTeamMembers] = useState<AssistantRole[]>(['dev']);
   const [projectId, setProjectIdState] = useState<string | undefined>();
   const [chatId, setChatId] = useState<string | undefined>();
+  // Bumped to re-read the open chat when the same id is opened again without a loaded transcript.
+  const [chatLoad, setChatLoad] = useState(0);
+  /** The chat id whose snapshot the subscription last delivered successfully. */
+  const loadedChatIdRef = useRef<string | undefined>();
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [detachedTitle, setDetachedTitle] = useState<string | undefined>();
   const [appliedActions, setAppliedActions] = useState<Record<string, string>>({});
@@ -139,6 +200,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   registrationsRef.current = registrations;
   projectIdRef.current = projectId;
 
+  // Docking, floating, opening and closing are shell concerns only: they persist a boolean and move
+  // the panel between containers. None of them touches the conversation, its subscription (which
+  // lives here, keyed by chat id) or any assistant command, so execution ownership is unchanged.
   const setOpen = useCallback((next: boolean) => {
     localStorage.setItem(OPEN_KEY, next ? '1' : '0');
     setOpenState(next);
@@ -182,14 +246,23 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!chatId) return;
     activeToolPrefix.current = chatId;
+    loadedChatIdRef.current = undefined;
     return subscribeConversation(window.praxis.assistant, chatId, snapshot => {
+      loadedChatIdRef.current = snapshot ? chatId : undefined;
       setConversation(snapshot);
       messagesRef.current = snapshot?.messages ?? [];
       setMessages(snapshot?.messages ?? []);
       const active = snapshot?.turns.find(t => !['completed', 'cancelled', 'queued'].includes(t.state));
       setActiveTurnStartedAt(active ? Date.parse(snapshot!.messages.find(m => m.id === active.userMessageId)?.createdAt ?? '') : undefined);
-    }, error => setError(String(error)));
-  }, [chatId]);
+      conversationRef.current = snapshot;
+      // An error clears only when the turn or attempt that produced it settled, or the user
+      // dismissed it — a snapshot that merely omits the string is not a resolution.
+      errorRef.current = resolveAssistantError({ previous: errorRef.current, ...(snapshot ? { snapshot } : {}),
+        ...(previousSnapshotRef.current ? { previousSnapshot: previousSnapshotRef.current } : {}) });
+      previousSnapshotRef.current = snapshot;
+      setErrorState(errorRef.current);
+    }, error => { setError(error instanceof Error ? error.message : String(error)); });
+  }, [chatId, chatLoad]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -211,22 +284,29 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     generation.current++;
     creation.current = undefined;
     setConversation(undefined);
+    conversationRef.current = undefined;
+    previousSnapshotRef.current = undefined;
     activeToolPrefix.current = undefined;
     messagesRef.current = [];
     chatIdRef.current = undefined;
     setMessages([]);
     setChatId(undefined);
-    setError(undefined);
+    // Another conversation's draft is not this one's to discard: only the scope changes.
+    setDraftKey('');
+    submissionErrorRef.current = undefined;
+    clearErrorForScopeChange();
     setActiveToolSession(undefined);
     setLastToolSession(undefined);
     setToolUsageSessions([]);
     setAppliedActions({});
-  }, []);
+  }, [clearErrorForScopeChange]);
 
   const setProjectId = useCallback((next: string | undefined) => {
     if (projectIdRef.current === next) return;
     projectIdRef.current = next;
     setProjectIdState(next);
+    // Pending submissions keep their own captured project: switching project must not redirect
+    // (or drop) a reply that is already in flight, so only the visible scope resets.
     reset();
   }, [reset]);
 
@@ -247,57 +327,84 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (!id) {
         creation.current ??= window.praxis.assistant.createChat(project ?? '', context?.issueKey).then(chat => chat.id);
         id = await creation.current;
+        const createdId = id;
         if (generation.current === selectedGeneration) {
-          chatIdRef.current = id;
-          setChatId(id);
+          chatIdRef.current = createdId;
+          setChatId(createdId);
+          // The unkeyed draft becomes this conversation's, so it survives the next chat switch.
+          setDraftKey(createdId);
+          setDrafts(current => ({ ...current, [createdId]: current[''] ?? '' }));
         }
       }
       const snapshot = await window.praxis.assistant.getConversation(id);
       if (!snapshot) throw new Error('Conversation was deleted.');
-      const pendingKey = `${id}:${text}`;
-      const pending = pendingSubmissions.current.get(pendingKey);
+      // A submission already in flight for this conversation+text keeps its command identity, so
+      // a retry after navigation cannot be redirected into whatever chat is open now.
+      const pending = pendingSubmissions.current.get(id, text);
+      const staged = pending ? pendingSubmissions.current.hasStagedAttachments(id, text) : false;
+      // Attachments are staged once per command: a retry reuses the refs the first attempt wrote.
       const attachmentRefs = pending?.attachmentRefs ?? (capturedRuntime.images?.length ? await window.praxis.assistant.stageAttachments(id, capturedRuntime.images) : []);
       const { images: _images, ...options } = capturedRuntime;
-      const command: SubmitConversationCommand = pending ?? {
+      const command: SubmitConversationCommand = pending ?? buildSubmitCommand({
         conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot.revision, text,
-        selectedParticipantIds: selected.map(role => `part-${role}`), attachmentRefs,
-        ...(context ? { context } : {}),
-        runtimeOptions: Object.fromEntries(Object.entries(options).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
-      };
-      pendingSubmissions.current.set(pendingKey, command);
+        members: selected, attachmentRefs, context, runtimeOptions: options
+      });
+      pendingSubmissions.current.record(command, staged || attachmentRefs.length > 0);
       // One transport retry, with exactly the same command identity and payload.
       try { await window.praxis.assistant.submitTurn(command); }
       catch { await window.praxis.assistant.submitTurn(command); }
-      pendingSubmissions.current.delete(pendingKey);
+      // Acknowledged: main accepted it (or recognised the same command id twice), so the
+      // "lost acceptance" error this submission raised is resolved and clears.
+      pendingSubmissions.current.acknowledge(command.conversationId, command.text);
+      if (chatIdRef.current === command.conversationId) clearAcknowledgedSubmissionError();
       if (generation.current === selectedGeneration) {
-        setDraft(current => current.trim() === text ? '' : current);
+        const sentDraftKey = draftKeyRef.current;
+        setDrafts(current => ((current[sentDraftKey] ?? '').trim() === text ? { ...current, [sentDraftKey]: '' } : current));
         setDetachedTitle(undefined);
-        setError(undefined);
       }
       return true;
     } catch (err) {
-      if (generation.current === selectedGeneration) setError(err instanceof Error ? err.message : String(err));
+      if (generation.current === selectedGeneration) {
+        const message = err instanceof Error ? err.message : String(err);
+        submissionErrorRef.current = message;
+        setError(message);
+      }
       return false;
     }
-  }, [teamMembers]);
+  }, [clearAcknowledgedSubmissionError, setError, teamMembers]);
 
   const loadChat = useCallback(async (id: string) => {
+    // Re-opening the open chat keeps its transcript while its subscription holds a
+    // loaded snapshot (it stays live across windows). Otherwise reload it, bumping
+    // `chatLoad` because setting the same id would not re-run the subscription.
+    if (chatIdRef.current === id && loadedChatIdRef.current === id) { setOpen(true); return; }
+    // Re-reading the same conversation keeps its error on screen: re-reading is not a resolution.
+    const scopeChanged = chatIdRef.current !== id;
+    if (chatIdRef.current === id) setChatLoad(n => n + 1);
     generation.current++;
     creation.current = undefined;
     chatIdRef.current = id;
     setChatId(id);
     setConversation(undefined);
+    conversationRef.current = undefined;
+    previousSnapshotRef.current = undefined;
     setMessages([]);
     messagesRef.current = [];
-    setError(undefined);
+    // Each conversation keeps its own draft; pending submissions are deliberately untouched, so a
+    // reply still in flight keeps its captured context and attachments and lands in its own chat.
+    setDraftKey(id);
+    if (scopeChanged) { submissionErrorRef.current = undefined; clearErrorForScopeChange(); }
     setAppliedActions({});
     setActiveToolSession(undefined);
     setLastToolSession(undefined);
     setToolUsageSessions([]);
     setOpen(true);
-  }, [setOpen]);
+  }, [clearErrorForScopeChange, setOpen]);
 
   const chatDeleted = useCallback((id: string) => {
+    // A deleted conversation can never be delivered to, so its pending submission is dropped —
+    // and only its own: another chat's in-flight reply is unaffected.
+    pendingSubmissions.current.dropConversation(id);
     if (chatIdRef.current === id) reset();
   }, [reset]);
 
@@ -306,8 +413,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       const source = messagesRef.current.find(message => message.id === messageId) as import('@praxis/core').ConversationMessage | undefined;
       const origin = source?.context;
       const current = activeRef.current?.context;
-      if (!origin || !current || origin.pageType !== current.pageType || origin.projectId !== current.projectId ||
-          origin.issueKey !== current.issueKey || origin.entityId !== current.entityId || origin.title !== current.title) throw new Error('Return to the originating page to apply this proposal.');
+      if (!isCompatiblePageContext(origin, current)) throw new Error(INCOMPATIBLE_PAGE_CONTEXT_MESSAGE);
       let outcome: string | void;
       if (action.kind === 'delegate-session') {
         if (!delegateRef.current) throw new Error('Starting a coding session is not available here.');
@@ -332,15 +438,15 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   useEffect(() => window.praxis.assistant.onChatsChanged(() => {
     const id = chatIdRef.current;
     if (!id) return;
-    void window.praxis.assistant.getChat(id).then(chat => { if (!chat && chatIdRef.current === id) reset(); });
-  }), [reset]);
+    void window.praxis.assistant.getChat(id).then(chat => { if (!chat) chatDeleted(id); });
+  }), [chatDeleted]);
 
   const value = useMemo<AssistantController>(() => ({
-    runtimePreferences, setRuntimePreferences, conversation, open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, setDraft, teamMembers, toggleTeamMember,
+    runtimePreferences, setRuntimePreferences, conversation, open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, dismissError, reportError: setError, draft, setDraft, teamMembers, toggleTeamMember,
     pageContext, availableContext, contextDetached, setContextDetached,
     projectId, setProjectId, chatId, send, newChat: reset, loadChat, chatDeleted,
     applyAction, appliedActions, register, unregister, setSessionDelegate
-  }), [runtimePreferences, conversation, open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, draft, pageContext, availableContext, contextDetached,
+  }), [runtimePreferences, conversation, open, setOpen, toggle, docked, setDocked, messages, busy, activeTurnStartedAt, activeToolSession, lastToolSession, toolUsageSessions, error, dismissError, setError, draft, setDraft, pageContext, availableContext, contextDetached,
     setContextDetached, projectId, setProjectId, chatId, send, reset, loadChat, chatDeleted, applyAction,
     teamMembers, toggleTeamMember,
     appliedActions, register, unregister, setSessionDelegate]);

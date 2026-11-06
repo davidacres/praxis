@@ -45,6 +45,8 @@ None; existing assistant foundation
 - [TASK-476: Define typed conversation, turn, attempt, and binding contracts](tasks/task-476-conversation-contracts.md)
 - [TASK-477: Implement serialized durable conversation transactions](tasks/task-477-atomic-chat-repository.md)
 
+**TASK-477 result (2026-11-05):** all four criteria pass; evidence in [TASK-477 › Validation evidence](tasks/task-477-atomic-chat-repository.md#validation-evidence-2026-11-05). Reservation storage faults now halt and report; a malformed `team-chats.json` shows a recoverable sidebar error.
+
 ## Validation
 
 Use the parent feature acceptance-to-suite mapping and validation commands. Each task supplies executable scenarios; record exact commands, assertion names and artifacts. This story does not close on typechecking alone.

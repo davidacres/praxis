@@ -15,8 +15,10 @@ import type {
 
 class MemoryTeamChatRepository implements TeamChatRepository {
   public snapshot: TeamChatSnapshot;
+  private queue: Promise<unknown> = Promise.resolve();
 
-  public constructor(initialConversations: DurableConversation[] = []) {
+  /** `deferred` runs each mutation after an await on a serial queue, like the desktop file repository. */
+  public constructor(initialConversations: DurableConversation[] = [], private readonly options: { deferred?: boolean } = {}) {
     this.snapshot = {
       schemaVersion: 2,
       revision: 0,
@@ -30,11 +32,42 @@ class MemoryTeamChatRepository implements TeamChatRepository {
   }
 
   public async transaction<T>(mutate: (draft: TeamChatSnapshot) => T): Promise<T> {
-    const draft = structuredClone(this.snapshot);
-    const result = mutate(draft);
-    this.snapshot = structuredClone(draft);
-    return result;
+    const apply = () => {
+      const draft = structuredClone(this.snapshot);
+      const result = mutate(draft);
+      this.snapshot = structuredClone(draft);
+      return result;
+    };
+    if (!this.options.deferred) return apply();
+    const run = this.queue.then(async () => {
+      await new Promise(r => setImmediate(r));
+      return apply();
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
   }
+}
+
+function gate(): { wait: Promise<void>; open: () => void } {
+  let open!: () => void;
+  const wait = new Promise<void>(resolve => { open = resolve; });
+  return { wait, open };
+}
+
+async function until(condition: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for condition.');
+    await new Promise(r => setTimeout(r, 2));
+  }
+}
+
+function turnState(coordinator: TeamChatCoordinator, turnId: string): string | undefined {
+  return coordinator.getConversation('conv-1')!.turns.find(t => t.id === turnId)?.state;
+}
+
+function planRoles(coordinator: TeamChatCoordinator, turnId: string): string[] {
+  return coordinator.getConversation('conv-1')!.turns.find(t => t.id === turnId)!.plan.participants.map(p => p.role);
 }
 
 function makeConversation(id = 'conv-1'): DurableConversation {
@@ -63,147 +96,147 @@ function makeConversation(id = 'conv-1'): DurableConversation {
 }
 
 test('TASK-478 AC1: Two simultaneous sends produce distinct FIFO queued turns, repeated delivery produces one turn', async () => {
-  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  // Deferred mutations queue behind each other, as the desktop file repository's do,
+  // so concurrent submits genuinely race on the acceptance snapshot.
+  const repo = new MemoryTeamChatRepository([makeConversation()], { deferred: true });
   const executedTurns: string[] = [];
-
-  const adapter: TeamChatExecutionAdapter = {
-    execute: async ({ turn }) => {
-      executedTurns.push(turn.id);
-      return { text: 'Done' };
-    }
-  };
+  const accepted: string[] = [];
 
   const coordinator = new TeamChatCoordinator({
     repository: repo,
-    executionAdapter: adapter
+    executionAdapter: {
+      execute: async ({ turn }) => {
+        executedTurns.push(turn.id);
+        return { text: 'Done' };
+      }
+    },
+    onUpdate: update => { if (update.type === 'turn_accepted') accepted.push(update.turnId!); }
   });
 
-  const commandA: SubmitConversationCommand = {
+  const command = (commandId: string, text: string): SubmitConversationCommand => ({
     conversationId: 'conv-1',
-    commandId: 'cmd-1',
+    commandId,
     expectedRevision: 1,
-    text: 'Hello first',
+    text,
     selectedParticipantIds: ['part-dev'],
     attachmentRefs: [],
     runtimeOptions: {}
-  };
+  });
 
-  const commandB: SubmitConversationCommand = {
-    conversationId: 'conv-1',
-    commandId: 'cmd-2',
-    expectedRevision: 1,
-    text: 'Hello second',
-    selectedParticipantIds: ['part-dev'],
-    attachmentRefs: [],
-    runtimeOptions: {}
-  };
-
-  // Repeated delivery of cmd-1
-  const res1 = await coordinator.submitTurn(commandA);
-  const res1Dup = await coordinator.submitTurn(commandA);
-
-  assert.equal(res1.turnId, res1Dup.turnId, 'Repeated delivery of one command produces one turn');
-
-  // Simultaneous sends produce distinct FIFO queued turns
-  const [simA, simB] = await Promise.all([
-    coordinator.submitTurn({ ...commandA, commandId: 'cmd-sim-1' }),
-    coordinator.submitTurn({ ...commandB, commandId: 'cmd-sim-2' })
+  const [a, b, aAgain] = await Promise.all([
+    coordinator.submitTurn(command('cmd-a', 'Hello first')),
+    coordinator.submitTurn(command('cmd-b', 'Hello second')),
+    coordinator.submitTurn(command('cmd-a', 'Hello first'))
   ]);
-  assert.notEqual(simA.turnId, simB.turnId, 'Two sends produce distinct turns');
+  // A later sequential redelivery converges too.
+  const aLater = await coordinator.submitTurn(command('cmd-a', 'Hello first'));
 
-  // Allow execution loops to complete
-  await new Promise(r => setTimeout(r, 50));
+  assert.notEqual(a.turnId, b.turnId, 'Two sends produce distinct turns');
+  assert.equal(aAgain.turnId, a.turnId, 'Concurrent repeated delivery of one command produces one turn');
+  assert.equal(aLater.turnId, a.turnId, 'Sequential repeated delivery of one command produces one turn');
 
+  await until(() => coordinator.getConversation('conv-1')!.turns.every(t => t.state === 'completed'));
   const conv = coordinator.getConversation('conv-1')!;
-  assert.equal(conv.turns.length, 3);
-  assert.equal(conv.turns[0].id, res1.turnId);
-  assert.equal(conv.turns[1].id, simA.turnId);
-  assert.equal(conv.turns[2].id, simB.turnId);
+  assert.equal(conv.turns.length, 2);
+  assert.deepEqual(conv.commandReceipts.map(r => r.commandId).sort(), ['cmd-a', 'cmd-b'], 'One receipt per command');
+  const userSequences = conv.messages.filter(m => m.role === 'user').map(m => m.sequence);
+  assert.deepEqual(userSequences, [1, 2], 'Accepted user messages carry contiguous, increasing sequences');
+  assert.deepEqual(conv.turns.map(t => t.acceptedSequence), [1, 2]);
+  assert.equal(accepted.filter(id => id === a.turnId).length, 1, 'The duplicate is announced once');
+  assert.deepEqual(accepted, conv.turns.map(t => t.id), 'Acceptance order matches the queue');
+  assert.deepEqual(executedTurns, conv.turns.map(t => t.id), 'Turns dispatch in FIFO acceptance order');
 });
 
 test('TASK-478 AC2: Selected members answer in dev, qa, security, product, lead order; mention selects only that member; empty roster resolves to lead', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
   const answeredRoles: string[] = [];
-
-  const adapter: TeamChatExecutionAdapter = {
-    execute: async ({ participant }) => {
-      answeredRoles.push(participant.role);
-      return { text: `Reply from ${participant.role}` };
-    }
-  };
+  const firstMember = gate();
+  let planSeenDuringFirstExecution: string[] | undefined;
 
   const coordinator = new TeamChatCoordinator({
     repository: repo,
-    executionAdapter: adapter
+    executionAdapter: {
+      execute: async ({ participant, turn }) => {
+        if (!planSeenDuringFirstExecution) {
+          planSeenDuringFirstExecution = repo.read().conversations[0].turns.find(t => t.id === turn.id)!.plan.participants.map(p => p.role);
+          await firstMember.wait;
+        }
+        answeredRoles.push(participant.role);
+        return { text: `Reply from ${participant.role}` };
+      }
+    }
   });
 
-  // Test 1: Out-of-order selected members (product, lead, dev, qa)
-  await coordinator.submitTurn({
+  // All five roles, deliberately scrambled.
+  const ordered = await coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-order',
     expectedRevision: 1,
     text: 'Please answer team',
-    selectedParticipantIds: ['part-product', 'part-lead', 'part-dev', 'part-qa'],
+    selectedParticipantIds: ['part-lead', 'part-product', 'part-security', 'part-qa', 'part-dev'],
     attachmentRefs: [],
     runtimeOptions: {}
   });
+  await until(() => planSeenDuringFirstExecution !== undefined);
+  assert.deepEqual(planSeenDuringFirstExecution, ['dev', 'qa', 'security', 'product', 'lead'],
+    'The response plan is committed in canonical order before the first member runs');
+  firstMember.open();
+  await until(() => turnState(coordinator, ordered.turnId) === 'completed');
+  assert.deepEqual(answeredRoles, ['dev', 'qa', 'security', 'product', 'lead'], 'Must answer in dev, qa, security, product, lead order');
 
-  await new Promise(r => setTimeout(r, 50));
-
-  assert.deepEqual(answeredRoles, ['dev', 'qa', 'product', 'lead'], 'Must answer in dev, qa, security, product, lead order');
-
-  // Test 2: Explicit mention @qa
+  // Explicit mention @qa
   answeredRoles.length = 0;
-  const currentRev = coordinator.getConversation('conv-1')!.revision;
-  await coordinator.submitTurn({
+  const mention = await coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-mention',
-    expectedRevision: currentRev,
+    expectedRevision: coordinator.getConversation('conv-1')!.revision,
     text: '@qa What is the test coverage?',
     selectedParticipantIds: ['part-dev', 'part-qa', 'part-lead'],
     attachmentRefs: [],
     runtimeOptions: {}
   });
-
-  await new Promise(r => setTimeout(r, 50));
+  await until(() => turnState(coordinator, mention.turnId) === 'completed');
+  assert.deepEqual(planRoles(coordinator, mention.turnId), ['qa'], 'Mention plan holds exactly that member');
   assert.deepEqual(answeredRoles, ['qa'], 'Explicit mention must select only that member');
 
-  // Test 3: Empty roster resolves to lead
+  // Empty roster resolves to lead
   answeredRoles.length = 0;
-  const rev3 = coordinator.getConversation('conv-1')!.revision;
-  await coordinator.submitTurn({
+  const empty = await coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-empty',
-    expectedRevision: rev3,
+    expectedRevision: coordinator.getConversation('conv-1')!.revision,
     text: 'General question without roster',
     selectedParticipantIds: [],
     attachmentRefs: [],
     runtimeOptions: {}
   });
-
-  await new Promise(r => setTimeout(r, 50));
+  await until(() => turnState(coordinator, empty.turnId) === 'completed');
+  assert.deepEqual(planRoles(coordinator, empty.turnId), ['lead']);
   assert.deepEqual(answeredRoles, ['lead'], 'Empty roster must resolve to lead');
 });
 
 test('TASK-478 AC3: Later members see earlier committed replies from their turn; no member sees queued future user messages', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
-  const messagesSeenByRole = new Map<string, string[]>();
-
-  const adapter: TeamChatExecutionAdapter = {
-    execute: async ({ participant, turn, messages }) => {
-      const key = `${participant.role}:${turn.id}`;
-      messagesSeenByRole.set(key, messages.map(m => m.text));
-      return { text: `Reply from ${participant.role}` };
-    }
-  };
+  const messagesSeen = new Map<string, string[]>();
+  const devTurn1 = gate();
+  let devTurn1Started = false;
+  let turn1Id = '';
 
   const coordinator = new TeamChatCoordinator({
     repository: repo,
-    executionAdapter: adapter
+    executionAdapter: {
+      execute: async ({ participant, turn, messages }) => {
+        messagesSeen.set(`${participant.role}:${turn.id}`, messages.map(m => m.text));
+        if (turn.id === turn1Id && participant.role === 'dev') {
+          devTurn1Started = true;
+          await devTurn1.wait;
+        }
+        return { text: `Reply from ${participant.role}` };
+      }
+    }
   });
 
-  // Submit Turn 1 with dev and qa
-  const resTurn1 = await coordinator.submitTurn({
+  const turn1 = coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-turn1',
     expectedRevision: 1,
@@ -212,52 +245,122 @@ test('TASK-478 AC3: Later members see earlier committed replies from their turn;
     attachmentRefs: [],
     runtimeOptions: {}
   });
+  turn1Id = (await turn1).turnId;
+  await until(() => devTurn1Started);
 
-  // Immediately submit Turn 2 before Turn 1 finishes
-  const revNow = coordinator.getConversation('conv-1')!.revision;
-  await coordinator.submitTurn({
+  // Turn 2 is durably accepted while turn 1's dev reply is still in flight.
+  const turn2 = await coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-turn2',
-    expectedRevision: revNow,
+    expectedRevision: coordinator.getConversation('conv-1')!.revision,
     text: 'Queued user question for turn 2',
-    selectedParticipantIds: ['part-dev'],
+    selectedParticipantIds: ['part-security'],
     attachmentRefs: [],
     runtimeOptions: {}
   });
+  assert.ok(repo.read().conversations[0].commandReceipts.some(r => r.commandId === 'cmd-turn2'), 'Turn 2 is durable before turn 1 finishes');
+  assert.equal(turnState(coordinator, turn2.turnId), 'queued');
 
-  await new Promise(r => setTimeout(r, 100));
+  devTurn1.open();
+  await until(() => turnState(coordinator, turn2.turnId) === 'completed');
 
-  const devMessages = messagesSeenByRole.get(`dev:${resTurn1.turnId}`)!;
-  const qaMessages = messagesSeenByRole.get(`qa:${resTurn1.turnId}`)!;
+  const dev = messagesSeen.get(`dev:${turn1Id}`)!;
+  const qa = messagesSeen.get(`qa:${turn1Id}`)!;
+  const security = messagesSeen.get(`security:${turn2.turnId}`)!;
 
-  assert.ok(devMessages.includes('User question for turn 1'));
-  assert.ok(!devMessages.includes('Queued user question for turn 2'), 'Dev must not see future queued user message');
+  assert.ok(dev.includes('User question for turn 1'));
+  assert.ok(!dev.includes('Queued user question for turn 2'), 'Dev must not see future queued user message');
 
-  assert.ok(qaMessages.includes('User question for turn 1'));
-  assert.ok(qaMessages.includes('Reply from dev'), 'QA must see earlier committed reply from dev');
-  assert.ok(!qaMessages.includes('Queued user question for turn 2'), 'QA must not see future queued user message');
+  assert.ok(qa.includes('User question for turn 1'));
+  assert.ok(qa.includes('Reply from dev'), 'QA must see earlier committed reply from dev');
+  assert.ok(!qa.includes('Queued user question for turn 2'), 'QA, prepared after turn 2 was accepted, must not see it');
+
+  assert.ok(security.includes('Reply from dev') && security.includes('Reply from qa'), 'Turn 2 sees both turn 1 replies');
+  assert.ok(security.includes('Queued user question for turn 2'));
 });
 
 test('TASK-478 AC4: Changing roster affects subsequent accepted turns only; failures pause the current turn and leave later turns queued', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
-  let shouldFail = true;
-
-  const adapter: TeamChatExecutionAdapter = {
-    execute: async ({ participant }) => {
-      if (participant.role === 'dev' && shouldFail) {
-        throw new Error('Dev provider failed.');
-      }
-      return { text: `Success from ${participant.role}` };
-    }
-  };
+  let defaultModel = 'model-v1';
+  const held = gate();
+  let turn1Id = '';
+  let turn1Started = false;
+  const executed: { turnId: string; role: string; model: unknown; instructions: string }[] = [];
 
   const coordinator = new TeamChatCoordinator({
     repository: repo,
-    executionAdapter: adapter
+    captureRuntimeOptions: options => ({ ...options, model: defaultModel }),
+    executionAdapter: {
+      execute: async ({ participant, turn }) => {
+        if (turn.id === turn1Id && participant.role === 'dev' && !turn1Started) {
+          turn1Started = true;
+          await held.wait;
+        }
+        executed.push({ turnId: turn.id, role: participant.role, model: turn.plan.runtimeOptions.model, instructions: participant.instructions });
+        return { text: `Success from ${participant.role}` };
+      }
+    }
   });
 
-  // Turn 1 will fail
-  await coordinator.submitTurn({
+  const submit = (commandId: string, selectedParticipantIds: string[]) => coordinator.submitTurn({
+    conversationId: 'conv-1',
+    commandId,
+    expectedRevision: coordinator.getConversation('conv-1')!.revision,
+    text: `Message ${commandId}`,
+    selectedParticipantIds,
+    attachmentRefs: [],
+    runtimeOptions: {}
+  });
+
+  turn1Id = (await submit('cmd-1', ['part-dev', 'part-qa'])).turnId;
+  await until(() => turn1Started);
+  const turn2Id = (await submit('cmd-2', ['part-dev', 'part-qa'])).turnId;
+  const originalQaInstructions = makeParticipant('qa').instructions;
+
+  // Change runtime defaults and the roster after turns 1 and 2 were accepted.
+  defaultModel = 'model-v2';
+  await repo.transaction(draft => {
+    draft.conversations[0].participants.find(p => p.id === 'part-qa')!.instructions = 'Edited QA instructions';
+  });
+  const turn3Id = (await submit('cmd-3', ['part-lead'])).turnId;
+
+  held.open();
+  await until(() => turnState(coordinator, turn3Id) === 'completed');
+
+  const conv = coordinator.getConversation('conv-1')!;
+  for (const id of [turn1Id, turn2Id]) {
+    const turn = conv.turns.find(t => t.id === id)!;
+    assert.equal(turn.plan.runtimeOptions.model, 'model-v1', 'Accepted turn keeps its runtime defaults');
+    assert.equal(turn.plan.participants.find(p => p.role === 'qa')!.instructions, originalQaInstructions, 'Accepted turn keeps its roster');
+    for (const run of executed.filter(e => e.turnId === id)) {
+      assert.equal(run.model, 'model-v1');
+      if (run.role === 'qa') assert.equal(run.instructions, originalQaInstructions);
+    }
+  }
+  const turn3 = conv.turns.find(t => t.id === turn3Id)!;
+  assert.equal(turn3.plan.runtimeOptions.model, 'model-v2', 'A later accepted turn takes the new default');
+  assert.deepEqual(turn3.plan.participants.map(p => p.role), ['lead'], 'A later accepted turn takes the new roster');
+  assert.deepEqual(executed.map(e => `${e.turnId === turn1Id ? 1 : e.turnId === turn2Id ? 2 : 3}:${e.role}`),
+    ['1:dev', '1:qa', '2:dev', '2:qa', '3:lead']);
+});
+
+test('TASK-478 AC4: A failure pauses the current turn and leaves later turns queued until retried', async () => {
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  let shouldFail = true;
+  const executedTurns: string[] = [];
+
+  const coordinator = new TeamChatCoordinator({
+    repository: repo,
+    executionAdapter: {
+      execute: async ({ participant, turn }) => {
+        executedTurns.push(turn.id);
+        if (participant.role === 'dev' && shouldFail) throw new Error('Dev provider failed.');
+        return { text: `Success from ${participant.role}` };
+      }
+    }
+  });
+
+  const failing = await coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-fail',
     expectedRevision: 1,
@@ -266,63 +369,61 @@ test('TASK-478 AC4: Changing roster affects subsequent accepted turns only; fail
     attachmentRefs: [],
     runtimeOptions: {}
   });
-
-  // Turn 2 queued behind Turn 1
-  const rev1 = coordinator.getConversation('conv-1')!.revision;
-  const turn2Res = await coordinator.submitTurn({
+  const queued = await coordinator.submitTurn({
     conversationId: 'conv-1',
     commandId: 'cmd-queued',
-    expectedRevision: rev1,
+    expectedRevision: coordinator.getConversation('conv-1')!.revision,
     text: 'Queued message',
     selectedParticipantIds: ['part-lead'],
     attachmentRefs: [],
     runtimeOptions: {}
   });
 
-  await new Promise(r => setTimeout(r, 50));
+  await until(() => turnState(coordinator, failing.turnId) === 'failed');
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(turnState(coordinator, failing.turnId), 'failed', 'Current turn must be paused on failure');
+  assert.equal(turnState(coordinator, queued.turnId), 'queued', 'Later turn must remain queued');
+  assert.ok(!executedTurns.includes(queued.turnId), 'The queued turn never dispatches while the failed turn is paused');
 
-  const conv = coordinator.getConversation('conv-1')!;
-  assert.equal(conv.turns[0].state, 'failed', 'Current turn must be paused on failure');
-  assert.equal(conv.turns[1].state, 'queued', 'Later turn must remain queued');
-  assert.equal(conv.turns[1].id, turn2Res.turnId);
-
-  // Retry the failed participant
   shouldFail = false;
-  await coordinator.retryParticipant('conv-1', conv.turns[0].id, 'part-dev');
-
-  await new Promise(r => setTimeout(r, 100));
-
-  const convRecovered = coordinator.getConversation('conv-1')!;
-  assert.equal(convRecovered.turns[0].state, 'completed');
-  assert.equal(convRecovered.turns[1].state, 'completed');
+  await coordinator.retryParticipant('conv-1', failing.turnId, 'part-dev');
+  await until(() => turnState(coordinator, queued.turnId) === 'completed');
+  assert.equal(turnState(coordinator, failing.turnId), 'completed');
+  assert.deepEqual(executedTurns, [failing.turnId, failing.turnId, queued.turnId], 'Turns complete in order after retry');
 });
 
 test('TASK-479 AC1: IPC timeout after durable acceptance followed by resubmission returns the original turn ID', async () => {
-  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  const repo = new MemoryTeamChatRepository([makeConversation()], { deferred: true });
+  const reply = gate();
+  let calls = 0;
   const coordinator = new TeamChatCoordinator({
     repository: repo,
-    executionAdapter: { execute: async () => ({ text: 'ok' }) }
+    executionAdapter: { execute: async () => { calls++; await reply.wait; return { text: 'ok' }; } }
   });
-
   const cmd: SubmitConversationCommand = {
-    conversationId: 'conv-1',
-    commandId: 'cmd-timeout-test',
-    expectedRevision: 1,
-    text: 'Message that timed out on client',
-    selectedParticipantIds: ['part-lead'],
-    attachmentRefs: [],
-    runtimeOptions: {}
+    conversationId: 'conv-1', commandId: 'cmd-timeout-test', expectedRevision: 1, text: 'Message that timed out on client',
+    selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {}
   };
+  // The caller gives up before main's reply arrives; main has already accepted and dispatched.
+  const timedOut = await Promise.race([coordinator.submitTurn(cmd).then(() => 'replied'), Promise.resolve('timeout')]);
+  assert.equal(timedOut, 'timeout');
+  await until(() => calls === 1);
+  const committed = repo.read().conversations[0];
+  assert.equal(committed.turns.length, 1, 'the turn was durably accepted before the reply was lost');
 
-  const res1 = await coordinator.submitTurn(cmd);
-  // Resubmission with same command ID
-  const res2 = await coordinator.submitTurn(cmd);
-
-  assert.equal(res1.turnId, res2.turnId);
-  assert.equal(res2.turnId, res1.turnId);
+  const again = await coordinator.submitTurn(cmd);
+  assert.equal(again.turnId, committed.turns[0].id, 'Resubmission returns the original turn ID');
+  reply.open();
+  const done = await settled(coordinator, 'conv-1');
+  assert.equal(done.messages.filter(m => m.role === 'user').length, 1, 'One user message');
+  assert.equal(done.turns.length, 1, 'One turn');
+  assert.equal(done.commandReceipts.length, 1, 'One receipt');
+  assert.equal(calls, 1, 'Provider invoked once');
+  await assert.rejects(coordinator.submitTurn({ ...cmd, text: 'different payload' }), /Command payload conflict/,
+    'Same command ID with a different payload is a conflict');
 });
 
-test('TASK-479 AC2: Subscription emits revision updates', async () => {
+test('subscription emits turn_accepted, attempt and completion revision updates', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
   const coordinator = new TeamChatCoordinator({
     repository: repo,
@@ -349,7 +450,37 @@ test('TASK-479 AC2: Subscription emits revision updates', async () => {
   assert.ok(updates.some(u => u.type === 'attempt_completed'));
 });
 
-test('TASK-479 AC3: Invalid participant, attachment reference, and permission choice are rejected before provider invocation', async () => {
+// TASK-487 regression: commits with no typed update (attempt bookkeeping) left a window on an
+// older revision; its control was then refused as stale and the window never refreshed.
+test('every committed revision reaches subscribers, so a control at the last notified revision applies', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const repo = new MemoryTeamChatRepository([makeConversation()]);
+  // A slow prepare, like main resolving the provider connection: its binding commit lands after the queued turn is accepted.
+  const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
+    prepare: async ({ conversation, participant }) => {
+      await new Promise(r => setTimeout(r, 10));
+      return { conversationId: conversation.id, participantId: participant.id, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: participant.instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat', toolPolicy: 'read-only', permissionPolicy: 'manual' };
+    },
+    execute: async () => { await gate; return { text: 'reply' }; } } });
+  let seen = -1;
+  coordinator.subscribe('conv-1', update => { seen = Math.max(seen, update.revision); });
+  const submit = (commandId: string, expectedRevision: number, text: string) => coordinator.submitTurn({ conversationId: 'conv-1', commandId, expectedRevision,
+    text, selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  const active = await submit('cmd-active', 1, 'Active');
+  const queued = await submit('cmd-queued', active.revision, 'Queued');
+  await new Promise(r => setTimeout(r, 50));
+  const stored = (await coordinator.getConversation('conv-1'))!;
+  assert.equal(seen, stored.revision, 'subscribers hold the stored revision');
+  const outcome = await coordinator.controlWithOutcome({ conversationId: 'conv-1', commandId: 'cancel-queued', expectedRevision: seen, turnId: queued.turnId, action: 'cancel' });
+  assert.equal(outcome.status, 'applied');
+  assert.equal(outcome.conversation.turns.find(t => t.id === queued.turnId)!.state, 'cancelled');
+  release();
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(seen, (await coordinator.getConversation('conv-1'))!.revision);
+});
+
+test('TASK-479 AC3: Invalid participant, attachment reference, and permission choice are rejected before provider invocation; stale retry targets conflict', async () => {
   let invoked = false;
   const repo = new MemoryTeamChatRepository([makeConversation()]);
   const coordinator = new TeamChatCoordinator({
@@ -402,7 +533,45 @@ test('TASK-479 AC3: Invalid participant, attachment reference, and permission ch
   assert.equal(invoked, false, 'Provider must not be invoked for invalid commands');
 });
 
-test('TASK-479 AC4: cancellation preserves unresolved execution as unknown', async () => {
+test('TASK-479 AC3: stale retry targets return a conflict with fresh state and dispatch nothing', async () => {
+  let calls = 0;
+  let fail = true;
+  const coordinator = new TeamChatCoordinator({
+    repository: new MemoryTeamChatRepository([makeConversation()]),
+    executionAdapter: { execute: async () => { calls++; if (fail) throw new Error('provider down'); return { text: 'ok' }; } }
+  });
+  const { turnId } = await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'c1', expectedRevision: 1, text: 'hi',
+    selectedParticipantIds: ['part-lead'], attachmentRefs: [], runtimeOptions: {} });
+  await until(() => turnState(coordinator, turnId) === 'failed');
+  const failed = coordinator.getConversation('conv-1')!;
+  const attempt = failed.turns[0].attempts.at(-1)!;
+  const before = calls;
+  const retry = { conversationId: 'conv-1', expectedRevision: failed.revision, action: 'retry' as const, turnId, attemptId: attempt.id, participantId: attempt.participantId };
+
+  const staleRevision = await coordinator.controlWithOutcome({ ...retry, commandId: 'r-rev', expectedRevision: failed.revision - 1 });
+  assert.deepEqual([staleRevision.status, staleRevision.status === 'conflict' && staleRevision.reason], ['conflict', 'stale-revision']);
+  assert.equal(staleRevision.conversation.revision, failed.revision, 'conflict carries fresh state');
+  const supersededAttempt = await coordinator.controlWithOutcome({ ...retry, commandId: 'r-att', attemptId: 'attempt-superseded' });
+  assert.deepEqual([supersededAttempt.status, supersededAttempt.status === 'conflict' && supersededAttempt.reason], ['conflict', 'stale-target']);
+  const wrongMember = await coordinator.controlWithOutcome({ ...retry, commandId: 'r-member', participantId: 'part-dev' });
+  assert.deepEqual([wrongMember.status, wrongMember.status === 'conflict' && wrongMember.reason], ['conflict', 'stale-target']);
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(calls, before, 'no stale command dispatches');
+  assert.equal(coordinator.getConversation('conv-1')!.revision, failed.revision, 'no stale command commits');
+
+  fail = false;
+  const applied = await coordinator.controlWithOutcome({ ...retry, commandId: 'r-ok' });
+  assert.equal(applied.status, 'applied');
+  assert.equal((await coordinator.controlWithOutcome({ ...retry, commandId: 'r-ok' })).status, 'duplicate');
+  await until(() => turnState(coordinator, turnId) === 'completed');
+  const completed = coordinator.getConversation('conv-1')!;
+  const late = await coordinator.controlWithOutcome({ ...retry, commandId: 'r-late', expectedRevision: completed.revision,
+    attemptId: completed.turns[0].attempts.at(-1)!.id });
+  assert.deepEqual([late.status, late.status === 'conflict' && late.reason], ['conflict', 'not-actionable'], 'retry on a completed turn');
+  assert.equal(calls, before + 1);
+});
+
+test('cancellation leaves the turn cancelled or, when execution is unresolved, outcome_unknown', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
   const coordinator = new TeamChatCoordinator({
     repository: repo,
@@ -444,9 +613,21 @@ async function settled(coordinator: TeamChatCoordinator, conversationId: string)
 
 test('compatible members retain one binding each across turns and chats remain isolated; usage commits once', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation(), makeConversation('other')]);
+  const sessions = new Map<string, string>();
   const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: {
     prepare: async ({ conversation, participant }) => ({ conversationId: conversation.id, participantId: participant.id, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion: participant.instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat', toolPolicy: 'read-only', permissionPolicy: 'manual' }),
-    execute: async ({ attempt }) => ({ text: 'Reply', usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] })
+    execute: async ({ attempt, conversation, nativePrompt }) => {
+      const binding = conversation.bindings.find(b => b.id === attempt.bindingId)!;
+      const previousSession = sessions.get(binding.id);
+      if (previousSession) {
+        assert.equal(binding.providerSessionId, previousSession, 'dispatch receives the persisted member session');
+        assert.ok(nativePrompt, 'native continuation has a prepared prompt');
+      }
+      const providerSessionId = previousSession ?? `session:${binding.id}`;
+      sessions.set(binding.id, providerSessionId);
+      return { text: 'Reply', providerSessionId, contextDelivery: previousSession ? 'native' : 'reconstruction',
+        usage: { inputTokens: 2, outputTokens: 3 }, usageReferences: [attempt.id, attempt.id] };
+    }
   } });
   for (const [conversationId, commandId] of [['conv-1', 'first'], ['conv-1', 'second'], ['other', 'third']]) {
     await coordinator.submitTurn({ conversationId, commandId, expectedRevision: 1, text: 'Hello', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
@@ -455,6 +636,15 @@ test('compatible members retain one binding each across turns and chats remain i
   const conversation = coordinator.getConversation('conv-1')!;
   assert.equal(conversation.turns.flatMap(t => t.attempts).length, 4);
   assert.equal(conversation.bindings.length, 2);
+  assert.equal(new Set(conversation.turns.flatMap(t => t.attempts).map(a => a.providerSessionId)).size, 2);
+  for (const participantId of ['part-dev', 'part-qa']) {
+    const [first, second] = conversation.turns.flatMap(t => t.attempts).filter(a => a.participantId === participantId);
+    assert.equal(second.providerSessionId, first.providerSessionId);
+    assert.equal(second.bindingId, first.bindingId);
+    assert.deepEqual(second.contextReceipt, second.nativeContextReceipt, 'completion records the context actually delivered natively');
+    assert.ok(!second.contextReceipt.messageIds.includes(conversation.turns[0].userMessageId), 'native receipt excludes history already delivered');
+  }
+  assert.equal(sessions.size, 4, 'the other conversation has independent member sessions');
   assert.equal(new Set([...conversation.bindings, ...coordinator.getConversation('other')!.bindings].map(b => b.id)).size, 4);
   for (const attempt of conversation.turns.flatMap(t => t.attempts)) {
     assert.equal(attempt.usage?.inputTokens, 2);
@@ -679,4 +869,111 @@ test('a structured execution result and original page identity survive completio
   assert.equal(message.context?.issueKey, 'P-1');
   assert.equal(message.proposedAction?.kind, 'update-ticket');
   assert.equal(message.choices?.[0].prompt, 'Continue');
+});
+
+test('queued page identity and attachment references survive caller mutation before dispatch', async () => {
+  let release!: () => void;
+  let started!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const running = new Promise<void>(resolve => { started = resolve; });
+  let captured: import('./teamChatCoordinator').TeamChatExecutionParams | undefined;
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: {
+    validateAttachments: async () => {},
+    execute: async params => {
+      if (params.turn.commandId === 'first') { started(); await gate; }
+      else captured = structuredClone({ ...params, signal: undefined, onAccepted: undefined, onEvidence: undefined, onApproval: undefined });
+      return { text: 'Reply' };
+    }
+  } });
+  const command: SubmitConversationCommand = {
+    conversationId: 'conv-1', commandId: 'first', expectedRevision: 1, text: 'First',
+    selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: {}
+  };
+  await coordinator.submitTurn(command);
+  await running;
+  try {
+    const queued: SubmitConversationCommand = { ...command, commandId: 'queued', text: 'Captured question',
+      context: { pageType: 'issue', entityId: 'original-issue', title: 'Original issue', summary: 'Original context' },
+      attachmentRefs: [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }] };
+    await coordinator.submitTurn(queued);
+    assert.equal(coordinator.getConversation('conv-1')!.turns[1].state, 'queued');
+    queued.context!.entityId = 'navigated-issue';
+    queued.context!.summary = 'Changed composer context';
+    queued.attachmentRefs[0].digest = 'replacement-digest';
+    queued.attachmentRefs.length = 0;
+    queued.text = 'Changed draft';
+  } finally { release(); }
+  const conversation = await settled(coordinator, 'conv-1');
+  assert.equal(conversation.turns[1].state, 'completed');
+  assert.equal(captured!.turn.plan.context!.entityId, 'original-issue');
+  const message = captured!.messages.find(message => message.text === 'Captured question')!;
+  assert.equal(message.context!.summary, 'Original context');
+  assert.deepEqual(message.attachments, [{ id: 'original-image', digest: 'original-digest', mediaType: 'image/png', size: 42 }]);
+});
+
+const taskConfig = (conversationId: string, participantId: string, instructionVersion: string) => ({ conversationId, participantId, providerRuntime: 'fixture', accountReference: 'account', endpoint: 'endpoint', model: 'model', reasoning: 'medium', instructionVersion, canonicalFolder: '/fixture', executionMode: 'chat' as const, toolPolicy: 'read-only' as const, permissionPolicy: 'manual' as const });
+
+test('TASK-481 AC1: second-turn native prompt repeats neither own reply nor delivered history, and carries peer reply and intervening turn once', async () => {
+  const prompts: Record<string, string> = {};
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([makeConversation()]), executionAdapter: {
+    prepare: async ({ conversation, participant }) => taskConfig(conversation.id, participant.id, participant.instructionVersion),
+    execute: async ({ attempt, conversation, participant, turn, nativePrompt }) => {
+      const binding = conversation.bindings.find(b => b.id === attempt.bindingId)!;
+      if (turn.commandId === 'second') prompts[participant.role] = nativePrompt!;
+      return { text: `REPLY-${participant.role}-${turn.commandId}`, providerSessionId: `s:${binding.id}`, contextDelivery: binding.providerSessionId ? 'native' : 'reconstruction' };
+    }
+  } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'first', expectedRevision: 1, text: 'FIRST-INPUT', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
+  await settled(coordinator, 'conv-1');
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'second', expectedRevision: coordinator.getConversation('conv-1')!.revision, text: 'SECOND-INPUT', selectedParticipantIds: ['part-dev', 'part-qa'], attachmentRefs: [], runtimeOptions: {} });
+  await settled(coordinator, 'conv-1');
+  const once = (p: string, s: string) => p.split(s).length - 1;
+  assert.ok(!prompts.dev.includes('REPLY-dev-first'));
+  assert.ok(!prompts.dev.includes('FIRST-INPUT'));
+  assert.equal(once(prompts.dev, 'REPLY-qa-first'), 1);
+  assert.equal(once(prompts.dev, 'SECOND-INPUT'), 1);
+  assert.ok(!prompts.qa.includes('REPLY-qa-first'));
+});
+
+test('TASK-481 AC4: unavailable summarizer, oversized current input and missing pinned source pause as context_required with no provider call', async () => {
+  const cases: Array<[string, (c: DurableConversation) => void, boolean]> = [
+    ['summarizer fails', c => { c.messages = Array.from({ length: 18 }, (_, i) => ({ id: `o${i}`, turnId: 'old', role: 'user' as const, text: 'x'.repeat(1500), createdAt: 'n', sequence: i + 1, attachments: [] })); }, true],
+    ['oversized current', () => undefined, false],
+    ['missing pinned', c => { c.pinnedMessageIds = ['gone']; }, false]
+  ];
+  for (const [name, setup, hasSummarizer] of cases) {
+    const conversation = makeConversation();
+    setup(conversation);
+    let calls = 0, summaries = 0;
+    const events: string[] = [];
+    const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([conversation]), onUpdate: u => events.push(u.type),
+      executionAdapter: { ...(hasSummarizer || name === 'oversized current' ? { summarize: async () => { summaries++; throw new Error('unavailable'); } } : {}), execute: async () => { calls++; return { text: 'unexpected' }; } } });
+    await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'c', expectedRevision: 1, text: name === 'oversized current' ? 'z'.repeat(40000) : 'ask', selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+    const result = await settled(coordinator, 'conv-1');
+    assert.equal(result.turns[0].state, 'context_required', name);
+    assert.equal(calls, 0, name);
+    assert.ok(events.includes('context_required'), name);
+    assert.ok(summaries <= 8, name);
+  }
+});
+
+test('TASK-481 AC5: uncertain acceptance invalidates the cursor, leaves delivery unchanged and the next fresh binding reconstructs fully', async () => {
+  const coordinatorModule = require('./teamChatCoordinator') as typeof import('./teamChatCoordinator');
+  const conversation = makeConversation();
+  let calls = 0;
+  const coordinator = new TeamChatCoordinator({ repository: new MemoryTeamChatRepository([conversation]), executionAdapter: {
+    prepare: async ({ conversation: c, participant }) => taskConfig(c.id, participant.id, participant.instructionVersion),
+    execute: async () => { calls++; throw new coordinatorModule.TeamChatAcceptanceUnknown('closed after send'); }
+  } });
+  await coordinator.submitTurn({ conversationId: 'conv-1', commandId: 'u', expectedRevision: 1, text: 'Hello', selectedParticipantIds: [], attachmentRefs: [], runtimeOptions: {} });
+  const result = await settled(coordinator, 'conv-1');
+  const binding = result.bindings.find(b => b.id === result.turns[0].attempts[0].bindingId)!;
+  assert.equal(binding.status, 'invalid');
+  assert.deepEqual(binding.deliveredMessageIds, []);
+  assert.equal(calls, 1);
+  assert.equal(result.turns[0].state, 'outcome_unknown');
+  const { resolveTeamChatBinding } = require('./teamChatBindings') as typeof import('./teamChatBindings');
+  const fresh = resolveTeamChatBinding(result.bindings, taskConfig('conv-1', 'part-lead', '1'), 'fresh');
+  assert.notEqual(fresh.id, binding.id);
+  assert.deepEqual(fresh.deliveredMessageIds, []);
 });
