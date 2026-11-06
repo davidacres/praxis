@@ -5,6 +5,7 @@ import type { KeyValueStore } from '../host/stateStore';
 import type { AiAssignment, AiProvider } from '../types';
 import type { TokenUsage, WireImageAttachment } from './gateway';
 import type {
+  ActiveTurnProgress,
   DeliverySessionMetadata,
   AgentAvailableCommand,
   AgentEventSummary,
@@ -707,8 +708,25 @@ export class AiSessionManager {
     }
     if (state === 'completed' || state === 'failed' || state === 'aborted') {
       record.completedAt = new Date().toISOString();
+      delete record.activeTurnProgress;
     }
     void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  public updateActiveTurnProgress(
+    issueKey: string,
+    progress: ActiveTurnProgress | undefined
+  ): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    if (progress) {
+      record.activeTurnProgress = progress;
+    } else {
+      delete record.activeTurnProgress;
+    }
     this._onDidChangeAgentSession.fire(record);
   }
 

@@ -72,8 +72,9 @@ export function LiveTurnActivityIndicator({
   const reportedTokens = typeof tokenCount === 'number' && Number.isFinite(tokenCount) && tokenCount >= 0
     ? Math.round(tokenCount).toLocaleString() : undefined;
   const formattedTime = formatElapsedDuration(elapsedMs);
+  const isGeneric = !statusText || statusText === 'Working…' || statusText === 'Thinking…' || statusText === 'Working' || statusText === 'Thinking';
   const word = activityWords?.length ? activityWords[Math.floor(elapsedMs / 8000) % activityWords.length] : undefined;
-  const displayText = word ? `${word.replace(/(?:…|\.\.\.)$/, '')}…` : statusText;
+  const displayText = (!isGeneric || !word) ? statusText : `${word.replace(/(?:…|\.\.\.)$/, '')}…`;
 
   return (
     <div

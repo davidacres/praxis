@@ -143,12 +143,12 @@ interface ActiveAcpTask {
   costBefore?: { amount: number; currency: string };
   /** The model the agent says it is running, for a reply whose turn names none. */
   agentModel?: string;
-  /**
-   * Tool inputs that arrived after the opening `tool_call`, by call id. claude-agent-acp opens a
-   * streamed call with no input and sends it in a later in-progress `tool_call_update`; without
-   * this the completed call carried no path, so a review's file reads were never counted as reads.
-   */
+  /** Tool inputs that arrived after the opening `tool_call`, by call id. */
   toolInputs?: Map<string, Record<string, unknown>>;
+  stepCount: number;
+  activeToolName?: string;
+  activeToolCallId?: string;
+  inFlightTokens?: TokenUsage;
 }
 
 /** What a finished ACP turn can say about itself — the fields the reply's chips read. */
@@ -730,6 +730,10 @@ export class AcpAgentHost {
     if (telemetry.tokenUsage) {
       this.sessionManager.addAgentTokenUsage(issueKey, telemetry.tokenUsage, { updateContext: false });
     }
+    this.sessionManager.updateActiveTurnProgress?.(issueKey, undefined);
+    task.activeToolName = undefined;
+    task.activeToolCallId = undefined;
+    task.inFlightTokens = undefined;
     return telemetry;
   }
 
@@ -769,6 +773,17 @@ export class AcpAgentHost {
           contextLimit: update.size,
           ...(update.cost ? { cost: { amount: update.cost.amount, currency: update.cost.currency } } : {})
         });
+        const metaTokens = (update as { _meta?: { inFlightTokens?: TokenUsage } })._meta?.inFlightTokens;
+        if (metaTokens) {
+          task.inFlightTokens = metaTokens;
+          this.sessionManager.updateActiveTurnProgress?.(issueKey, {
+            stepCount: task.stepCount,
+            activeToolName: task.activeToolName,
+            activeToolCallId: task.activeToolCallId,
+            startedAt: new Date(task.startedAt).toISOString(),
+            inFlightTokens: task.inFlightTokens
+          });
+        }
         break;
       }
       case 'agent_thought_chunk': {
@@ -793,6 +808,15 @@ export class AcpAgentHost {
         // ACP `title` is presentation text; use `name` when available so
         // downstream telemetry can identify namespaced MCP tools reliably.
         const toolName = update.name || update.title || update.toolCallId;
+        task.activeToolName = toolName;
+        task.activeToolCallId = update.toolCallId;
+        this.sessionManager.updateActiveTurnProgress?.(issueKey, {
+          stepCount: task.stepCount,
+          activeToolName: task.activeToolName,
+          activeToolCallId: task.activeToolCallId,
+          startedAt: new Date(task.startedAt).toISOString(),
+          inFlightTokens: task.inFlightTokens
+        });
         this.appendEvent(
           issueKey,
           evt('tool_start', `Running tool: ${toolName}`, undefined, {
@@ -841,6 +865,18 @@ export class AcpAgentHost {
           break;
         }
         {
+          task.stepCount += 1;
+          if (task.activeToolCallId === update.toolCallId) {
+            task.activeToolName = undefined;
+            task.activeToolCallId = undefined;
+          }
+          this.sessionManager.updateActiveTurnProgress?.(issueKey, {
+            stepCount: task.stepCount,
+            activeToolName: task.activeToolName,
+            activeToolCallId: task.activeToolCallId,
+            startedAt: new Date(task.startedAt).toISOString(),
+            inFlightTokens: task.inFlightTokens
+          });
           const ok = update.status === 'completed';
           const { fileChanges, output } = readAcpToolContent(update.content);
           const rawOutput =
@@ -946,7 +982,8 @@ export class AcpAgentHost {
       messageBuffer: '',
       startedAt: Date.now(),
       costBefore: this.sessionManager.getAgentSession(issue.key)?.cost,
-      reasoningBuffer: ''
+      reasoningBuffer: '',
+      stepCount: 0
     };
     task.ownerSessionId = sessionId;
     this.activeTasks.set(issue.key, task);
@@ -1202,7 +1239,8 @@ export class AcpAgentHost {
       messageBuffer: '',
       startedAt: Date.now(),
       costBefore: this.sessionManager.getAgentSession(issueKey)?.cost,
-      reasoningBuffer: ''
+      reasoningBuffer: '',
+      stepCount: 0
     };
     task.ownerSessionId = record.sessionId;
     this.activeTasks.set(issueKey, task);
@@ -1446,6 +1484,7 @@ export class AcpAgentHost {
     if (!task) {
       return;
     }
+    this.sessionManager.updateActiveTurnProgress?.(issueKey, undefined);
     if (!task.ending && this.backgroundTasksFor(issueKey, task).length > 0) {
       this.backgroundClients.add(task);
       task.monitorTimer ??= setTimeout(() => {

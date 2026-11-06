@@ -969,6 +969,9 @@ export function SessionsPage({
   // turn is in flight, in place of streaming every tool block. Shared with the
   // inspector's copy of the same line; see `liveActivity` in sessionNav.ts.
   const liveActivityText = selected ? liveActivity(selected) : undefined;
+  const liveTurnTokenCount = selected
+    ? ((selected.tokenUsage?.totalTokens ?? 0) + (selected.activeTurnProgress?.inFlightTokens?.totalTokens ?? 0)) || selected.tokenUsage?.totalTokens
+    : undefined;
   const activityOrbitDurationMs = liveActivityText?.startsWith('Running ') ? 14_000 : 7_000;
   // Same conversation-aware speaker lookup as the response-fallback header
   // below, so the "thinking" indicator's icon matches whichever AI actually
@@ -1791,7 +1794,7 @@ export function SessionsPage({
                   statusText={liveActivityText ?? 'Working…'}
                   activityWords={settings?.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']}
                   provider={activityProvider}
-                  tokenCount={selected.tokenUsage?.totalTokens}
+                  tokenCount={liveTurnTokenCount}
                 />}
                 {isSingleAgentRunning ? (
                   followUpCollapsed ? (
@@ -1803,7 +1806,7 @@ export function SessionsPage({
                         statusText={liveActivityText ?? 'Working…'}
                         activityWords={settings?.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']}
                         provider={activityProvider}
-                        tokenCount={selected.tokenUsage?.totalTokens}
+                        tokenCount={liveTurnTokenCount}
                       />}
                       <span className="spacer" />
                       {activeQueuedMessage ? (
@@ -1888,7 +1891,7 @@ export function SessionsPage({
                         statusText={liveActivityText}
                         activityWords={settings?.ai.activityWords ?? ['Thinking', 'Working', 'Pondering']}
                         provider={activityProvider}
-                        tokenCount={selected.tokenUsage?.totalTokens}
+                        tokenCount={liveTurnTokenCount}
                       />}
                       {composerOptions.allowModeChange !== false && selected.acpAvailableModes && selected.acpAvailableModes.length > 0 && (
                         <button

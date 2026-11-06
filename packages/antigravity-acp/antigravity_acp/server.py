@@ -186,6 +186,31 @@ def get_model_config_option(current_model: str | None = None) -> dict[str, Any]:
     }
 
 
+def classify_tool_kind(tool_name: str) -> str:
+    name = (tool_name or "").lower()
+    if name in ("run_command", "call_mcp_tool"):
+        return "execute"
+    if name in ("read_file", "read_resource", "list_resources"):
+        return "read"
+    if name in ("write_file", "edit_file"):
+        return "edit"
+    if name in ("search_web", "rip_grep_packages"):
+        return "search"
+    return "other"
+
+
+def format_tool_title(tool_name: str, params: Any) -> str:
+    name = tool_name or "tool"
+    if isinstance(params, dict):
+        if "CommandLine" in params and isinstance(params["CommandLine"], str):
+            cmd = params["CommandLine"].strip()
+            return f"Run: {cmd[:60]}" if cmd else f"Running {name}"
+        if "Path" in params and isinstance(params["Path"], str):
+            p = params["Path"].strip()
+            return f"{name}: {p}" if p else f"Running {name}"
+    return f"Running {name}"
+
+
 # ── Session state ─────────────────────────────────────────────────────────────
 
 
@@ -269,6 +294,76 @@ class Session:
                 elif event_type == "step_update":
                     su = evt.get("step_update", {})
                     step_type = su.get("step_type")
+                    state = su.get("state")
+
+                    # 1. Tool execution events
+                    if step_type == "tool":
+                        step_idx = su.get("step_index", 0)
+                        tool_name = su.get("tool_name", "")
+                        tool_info = su.get("tool_info") or {}
+                        tool_params = tool_info.get("parameters")
+                        call_id = f"step-{step_idx}"
+
+                        if state == "ACTIVE":
+                            kind = classify_tool_kind(tool_name)
+                            title = format_tool_title(tool_name, tool_params)
+                            send_notification(
+                                CLIENT_METHODS["session_update"],
+                                {
+                                    "sessionId": self.session_id,
+                                    "update": {
+                                        "sessionUpdate": "tool_call",
+                                        "toolCallId": call_id,
+                                        "name": tool_name,
+                                        "title": title,
+                                        "kind": kind,
+                                        "rawInput": tool_params if isinstance(tool_params, dict) else {},
+                                    },
+                                },
+                            )
+                        elif state == "DONE":
+                            out = tool_info.get("output") or ""
+                            out_str = str(out)
+                            out_trimmed = out_str[:20000] if len(out_str) > 20000 else out_str
+                            send_notification(
+                                CLIENT_METHODS["session_update"],
+                                {
+                                    "sessionId": self.session_id,
+                                    "update": {
+                                        "sessionUpdate": "tool_call_update",
+                                        "toolCallId": call_id,
+                                        "status": "completed",
+                                        "name": tool_name,
+                                        "title": f"Completed {tool_name}",
+                                        "rawOutput": out_trimmed,
+                                        "content": [
+                                            {
+                                                "type": "content",
+                                                "content": {
+                                                    "type": "text",
+                                                    "text": out_trimmed,
+                                                },
+                                            }
+                                        ],
+                                    },
+                                },
+                            )
+
+                    # 2. Reasoning / thought chunks
+                    thought_chunk = su.get("thought_delta") or (su.get("thought") or su.get("text_delta") if step_type == "agent_thought" else None)
+                    if thought_chunk:
+                        send_notification(
+                            CLIENT_METHODS["session_update"],
+                            {
+                                "sessionId": self.session_id,
+                                "update": {
+                                    "sessionUpdate": "agent_thought_chunk",
+                                    "content": {"type": "text", "text": str(thought_chunk)},
+                                },
+                            },
+                        )
+
+                    # 3. Response text deltas
                     text_delta = su.get("text_delta")
                     if step_type == "agent_response" and text_delta:
                         send_notification(
@@ -281,6 +376,32 @@ class Session:
                                 },
                             },
                         )
+
+                    # 4. In-flight token usage
+                    su_usage = su.get("usage")
+                    if isinstance(su_usage, dict) and su_usage:
+                        in_tok = int(su_usage.get("input_tokens") or 0)
+                        out_tok = int(su_usage.get("output_tokens") or 0)
+                        tot_tok = int(su_usage.get("total_tokens") or (in_tok + out_tok))
+                        if tot_tok > 0:
+                            send_notification(
+                                CLIENT_METHODS["session_update"],
+                                {
+                                    "sessionId": self.session_id,
+                                    "update": {
+                                        "sessionUpdate": "usage_update",
+                                        "used": tot_tok,
+                                        "size": 1_000_000,
+                                        "_meta": {
+                                            "inFlightTokens": {
+                                                "inputTokens": in_tok,
+                                                "outputTokens": out_tok,
+                                                "totalTokens": tot_tok,
+                                            }
+                                        },
+                                    },
+                                },
+                            )
 
                 elif event_type == "result":
                     res = evt.get("result", {})

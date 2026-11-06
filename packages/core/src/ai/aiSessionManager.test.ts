@@ -644,6 +644,44 @@ test('standalone sessions persist without team-chat ownership', async () => {
   assert.equal(restored.teamChatExecution, undefined);
 });
 
+test('activeTurnProgress updates in-memory and clears when terminal state is reached', () => {
+  const mgr = new AiSessionManager(storeWith({}));
+  mgr.createAgentSession('SESSION-abc', 's1', { kind: 'general', goal: 'live feedback', scope: '', definitionOfDone: '' });
+  mgr.updateAgentState('SESSION-abc', 'executing');
+
+  let firedRecord: unknown;
+  mgr.onDidChangeAgentSession(record => {
+    firedRecord = record;
+  });
+
+  // Set active turn progress
+  mgr.updateActiveTurnProgress('SESSION-abc', {
+    stepCount: 5,
+    activeToolName: 'run_command',
+    activeToolCallId: 'step-5',
+    startedAt: '2026-11-06T20:00:00Z',
+    inFlightTokens: { inputTokens: 500, outputTokens: 100, totalTokens: 600 }
+  });
+
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.activeTurnProgress?.stepCount, 5);
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.activeTurnProgress?.activeToolName, 'run_command');
+  assert.equal((firedRecord as { activeTurnProgress?: { stepCount: number } })?.activeTurnProgress?.stepCount, 5);
+
+  // Clearing progress explicitly
+  mgr.updateActiveTurnProgress('SESSION-abc', undefined);
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.activeTurnProgress, undefined);
+
+  // Re-setting progress, then completing the session
+  mgr.updateActiveTurnProgress('SESSION-abc', {
+    stepCount: 10,
+    activeToolName: 'edit_file'
+  });
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.activeTurnProgress?.stepCount, 10);
+
+  mgr.updateAgentState('SESSION-abc', 'completed');
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.activeTurnProgress, undefined, 'terminal state clears activeTurnProgress');
+});
+
 test('provider session identity survives ownership persistence', async () => {
   const storage = storeWith({ 'SESSION-abc': baseRecord('completed') });
   const manager = new AiSessionManager(storage);

@@ -427,6 +427,15 @@ export interface AgentRuntimeLaunch {
 /** Explicit purpose of a user-facing AI session. */
 export type SessionMode = 'chat' | 'analysis' | 'review';
 
+/** Real-time progress within an active turn (e.g. running tool, in-flight step count, tokens). */
+export interface ActiveTurnProgress {
+  stepCount: number;
+  activeToolName?: string;
+  activeToolCallId?: string;
+  startedAt?: string;
+  inFlightTokens?: TokenUsage;
+}
+
 /** Full persisted record for an AI agent session attached to an issue. */
 /**
  * The events a session gained since the previous `ai:sessionChanged` push:
@@ -598,6 +607,11 @@ export interface AgentSessionRecord {
   /** Conversation history for vercel-gateway resume (excludes system prompt). */
   conversationHistory?: AgentConversationMessage[];
   stepCount: number;
+  /**
+   * Real-time progress within an active turn (e.g. running tool, in-flight step count, tokens).
+   * Ephemeral; cleared when the turn completes.
+   */
+  activeTurnProgress?: ActiveTurnProgress;
   startedAt: string;
   completedAt?: string;
   /** A restart stopped this session; execution requires an explicit recovery choice. */

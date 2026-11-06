@@ -764,7 +764,7 @@ export function SessionChatThread({
       ))}
 
       {/* In-Progress Active Turn / Streaming Turn Indicator */}
-      {isExecuting && (session.reasoningText?.trim() || liveReasoningEmptyReason) && (
+      {isExecuting && (session.reasoningText?.trim() || liveReasoningEmptyReason || session.activeTurnProgress?.activeToolName) && (
         <div
           className={`session-chat-message is-assistant is-running${session.provider ? ` session-chat-provider-${session.provider}` : ''}`}
           data-testid="session-chat-live-turn"
@@ -774,7 +774,22 @@ export function SessionChatThread({
               {session.provider ? <ProviderBrandLogo provider={session.provider} size={13} /> : <Icon name="robot" size={13} />}
               <span>{session.model || (session.provider ? providerLabel(session.provider) : 'AI agent')}</span>
             </div>
+            {session.activeTurnProgress && (session.activeTurnProgress.stepCount > 0 || session.activeTurnProgress.activeToolName) && (
+              <div className="session-chat-header-actions">
+                <span className="session-live-step-badge" data-testid="session-live-step-badge">
+                  {session.activeTurnProgress.stepCount > 0 ? `Step ${session.activeTurnProgress.stepCount}` : ''}
+                  {session.activeTurnProgress.stepCount > 0 && session.activeTurnProgress.activeToolName ? ' · ' : ''}
+                  {session.activeTurnProgress.activeToolName ? session.activeTurnProgress.activeToolName : ''}
+                </span>
+              </div>
+            )}
           </div>
+          {session.activeTurnProgress?.activeToolName && (
+            <div className="session-chat-active-tool-indicator" data-testid="session-chat-active-tool">
+              <Icon name="tools" size={12} className="is-spinning" />
+              <span>Running {session.activeTurnProgress.activeToolName}…</span>
+            </div>
+          )}
           {/* Actual streamed thoughts stay in the transcript; live activity lives
               in the composer. Same widget as the settled turn, so reasoning
               doesn't collapse and move a DOM level deeper when the turn ends. */}

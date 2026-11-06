@@ -163,6 +163,7 @@ interface FakeTask {
   pendingPermissions: [];
   allowPermissionsForTask: boolean;
   messageBuffer: string;
+  startedAt: number;
 }
 
 interface HostInternals {
@@ -176,7 +177,7 @@ function host(): { host: AcpAgentHost; internals: HostInternals } {
 }
 
 function task(issueKey: string, shutdown: () => Promise<void> = async () => {}): FakeTask {
-  return { issueKey, client: { shutdown }, pendingPermissions: [], allowPermissionsForTask: false, messageBuffer: '' };
+  return { issueKey, client: { shutdown }, pendingPermissions: [], allowPermissionsForTask: false, messageBuffer: '', startedAt: Date.now() };
 }
 
 test('a failed attempt that finishes shutting down late does not forget the retry that replaced it', async () => {
@@ -761,4 +762,70 @@ test('a review with no recorded input still has no observed read', () => {
   handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call', toolCallId: 'search', name: 'ToolSearch', kind: 'other', status: 'pending' }, review);
   handler.handleSessionUpdate('review', { sessionUpdate: 'tool_call_update', toolCallId: 'search', status: 'completed', rawOutput: 'Tool: mcp__praxis-review-files__read_file' }, review);
   assert.equal(hasRepositoryInspection(events), false);
+});
+
+test('ACP updates live activeTurnProgress on tool_call, tool_call_update, and usage_update', () => {
+  const events: AgentEventSummary[] = [];
+  const progressUpdates: unknown[] = [];
+  const host = new AcpAgentHost({
+    appendAgentEvents: (_key: string, added: AgentEventSummary[]) => events.push(...added),
+    updateActiveTurnProgress: (_key: string, progress: unknown) => progressUpdates.push(progress),
+    setAgentContextUsage: () => {}
+  } as never, { appendLine: () => {} });
+  const handler = host as unknown as { handleSessionUpdate(key: string, update: unknown, task: unknown): void };
+  const activeTask = { ...task('turn-progress'), stepCount: 0 };
+
+  // 1. Tool starts
+  handler.handleSessionUpdate('turn-progress', {
+    sessionUpdate: 'tool_call',
+    toolCallId: 'step-1',
+    name: 'run_command',
+    kind: 'execute'
+  }, activeTask);
+
+  assert.equal(progressUpdates.length, 1);
+  assert.deepEqual(progressUpdates[0], {
+    stepCount: 0,
+    activeToolName: 'run_command',
+    activeToolCallId: 'step-1',
+    startedAt: new Date(activeTask.startedAt).toISOString(),
+    inFlightTokens: undefined
+  });
+
+  // 2. In-flight usage update arrives
+  handler.handleSessionUpdate('turn-progress', {
+    sessionUpdate: 'usage_update',
+    used: 1250,
+    size: 1_000_000,
+    _meta: {
+      inFlightTokens: { inputTokens: 1000, outputTokens: 250, totalTokens: 1250 }
+    }
+  }, activeTask);
+
+  assert.equal(progressUpdates.length, 2);
+  assert.deepEqual(progressUpdates[1], {
+    stepCount: 0,
+    activeToolName: 'run_command',
+    activeToolCallId: 'step-1',
+    startedAt: new Date(activeTask.startedAt).toISOString(),
+    inFlightTokens: { inputTokens: 1000, outputTokens: 250, totalTokens: 1250 }
+  });
+
+  // 3. Tool completes
+  handler.handleSessionUpdate('turn-progress', {
+    sessionUpdate: 'tool_call_update',
+    toolCallId: 'step-1',
+    status: 'completed',
+    name: 'run_command',
+    content: [{ type: 'content', content: { type: 'text', text: 'ok' } }]
+  }, activeTask);
+
+  assert.equal(progressUpdates.length, 3);
+  assert.deepEqual(progressUpdates[2], {
+    stepCount: 1,
+    activeToolName: undefined,
+    activeToolCallId: undefined,
+    startedAt: new Date(activeTask.startedAt).toISOString(),
+    inFlightTokens: { inputTokens: 1000, outputTokens: 250, totalTokens: 1250 }
+  });
 });

@@ -615,6 +615,10 @@ export function liveActivity(session: AgentSessionRecord): string | undefined {
   if (isTerminalAgentState(session.state) || session.state === 'awaiting_approval' || session.state === 'awaiting_input') {
     return undefined;
   }
+  if (session.activeTurnProgress?.activeToolName) {
+    const step = session.activeTurnProgress.stepCount ? `Step ${session.activeTurnProgress.stepCount} · ` : '';
+    return `${step}Running ${session.activeTurnProgress.activeToolName}…`;
+  }
   const events = session.events;
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i];
@@ -623,6 +627,9 @@ export function liveActivity(session: AgentSessionRecord): string | undefined {
       const tool = event.data?.toolName ?? event.summary?.replace(/^Running tool:\s*/i, '');
       return tool ? `Running ${tool}…` : 'Running a tool…';
     }
+  }
+  if (session.activeTurnProgress?.stepCount) {
+    return `Step ${session.activeTurnProgress.stepCount} · Working…`;
   }
   if (session.state === 'planning') return 'Planning…';
   if (session.provider === 'codex-cli') {
