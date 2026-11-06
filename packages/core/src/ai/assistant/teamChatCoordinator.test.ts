@@ -823,6 +823,21 @@ test('startup imports a prepared attempt result without dispatching the provider
   assert.equal(current.turns[0].attempts[0].dispatchIntent, undefined);
 });
 
+test('coordinator initialize preserves conversation updatedAt recency', async () => {
+  const original = makeConversation();
+  original.updatedAt = '2026-10-04T23:15:14.615Z';
+  const repo = new MemoryTeamChatRepository([original]);
+  let clockTime = '2026-11-06T22:00:00.000Z';
+  const coordinator = new TeamChatCoordinator({
+    repository: repo,
+    clock: () => clockTime,
+    executionAdapter: { execute: async () => ({ text: 'Done' }) }
+  });
+  await coordinator.initialize();
+  const loaded = coordinator.getConversation(original.id)!;
+  assert.equal(loaded.updatedAt, '2026-10-04T23:15:14.615Z', 'startup epoch recovery must not touch conversation updatedAt');
+});
+
 test('revisioned controls reject stale targets and persist idempotent command outcomes', async () => {
   const repo = new MemoryTeamChatRepository([makeConversation()]);
   const coordinator = new TeamChatCoordinator({ repository: repo, executionAdapter: { execute: async () => ({ text: 'Done' }) } });

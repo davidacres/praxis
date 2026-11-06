@@ -183,7 +183,8 @@ export class TeamChatCoordinator {
       const snapshot = this.repository.read();
       for (const conversation of snapshot.conversations) {
         let updated = await this.transitionConversation(conversation.id, current =>
-          beginConversationEpoch(current, current.revision, epoch, this.clock()));
+          beginConversationEpoch(current, current.revision, epoch, this.clock()),
+          { touchUpdatedAt: false });
         for (const turn of updated.turns) {
           const attempt = turn.attempts.at(-1);
           if (attempt && ['prepared', 'dispatching', 'running', 'awaiting_approval', 'interrupted', 'outcome_unknown', 'failed'].includes(attempt.state) &&
@@ -201,7 +202,8 @@ export class TeamChatCoordinator {
           const match = live.some(item => item.requestId === requestId && item.attemptId === attempt.id);
           if (match) {
             const restored = await this.transitionConversation(updated.id, current =>
-              restoreAttemptApproval(current, current.revision, turn.id, attempt.id, current.coordinatorEpoch, requestId, this.clock()));
+              restoreAttemptApproval(current, current.revision, turn.id, attempt.id, current.coordinatorEpoch, requestId, this.clock()),
+              { touchUpdatedAt: false });
             this.notify({ conversationId: restored.id, revision: restored.revision, type: 'approval_restored', turnId: turn.id, attemptId: attempt.id });
           } else {
             this.notify({ conversationId: updated.id, revision: updated.revision, type: 'approval_invalidated', turnId: turn.id, attemptId: attempt.id });
@@ -259,14 +261,16 @@ export class TeamChatCoordinator {
 
   private async transitionConversation(
     conversationId: string,
-    mutate: (current: DurableConversation) => DurableConversation
+    mutate: (current: DurableConversation) => DurableConversation,
+    options?: { touchUpdatedAt?: boolean }
   ): Promise<DurableConversation> {
     return this.repository.transaction(draft => {
       const index = draft.conversations.findIndex(c => c.id === conversationId);
       if (index < 0) throw new Error(`Conversation ${conversationId} was not found.`);
       const current = draft.conversations[index];
       const next = mutate(structuredClone(current));
-      if (next.revision > current.revision) next.updatedAt = this.clock();
+      const touchUpdatedAt = options?.touchUpdatedAt ?? true;
+      if (touchUpdatedAt && next.revision > current.revision) next.updatedAt = this.clock();
       if (draft.activation && next.turns.length > current.turns.length) draft.activation.acceptedNewTurns = true;
       draft.conversations[index] = structuredClone(next);
       return structuredClone(next);
