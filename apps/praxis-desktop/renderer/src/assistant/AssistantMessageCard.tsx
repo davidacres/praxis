@@ -16,10 +16,48 @@ function formatTime(iso: string): string {
 
 export function AssistantMessageCard({ message }: AssistantMessageCardProps) {
   const a = useAssistant();
+  const pinned = Boolean(a.conversation?.pinnedMessageIds.includes(message.id));
+  /**
+   * One pin/unpin command per click, fenced by conversation + command id + revision + message id.
+   * The marker that follows is read from the next snapshot, never from a renderer-side cache, so a
+   * pin made in another window appears here too.
+   */
+  const togglePin = () => {
+    const conversation = a.conversation;
+    if (!conversation) return;
+    void window.praxis.assistant.control({
+      conversationId: conversation.id,
+      commandId: crypto.randomUUID(),
+      expectedRevision: conversation.revision,
+      action: pinned ? 'unpin' : 'pin',
+      messageId: message.id
+    }).catch(err => a.reportError(err instanceof Error ? err.message : String(err)));
+  };
+  /**
+   * The accessible name is the visible label — the durableTeamChat spec (and a screen reader
+   * hearing the surrounding message) both rely on that. The role and message identity ride the
+   * tooltip and `data-*` instead of making the button say something the ink does not.
+   */
+  const pinButton = (
+    <button
+      type="button"
+      className="btn btn-sm assistant-pin-decision"
+      aria-pressed={pinned}
+      title={`${pinned ? 'Unpin' : 'Pin'} ${message.role === 'user' ? 'your' : `${personaMeta(message.role).name}'s`} decision (${message.id}) — pinned decisions are kept verbatim in later context`}
+      data-testid={pinned ? 'assistant-unpin-decision' : 'assistant-pin-decision'}
+      data-message-id={message.id}
+      data-message-role={message.role}
+      onClick={togglePin}
+    >{pinned ? 'Unpin decision' : 'Pin decision'}</button>
+  );
   if (message.role === 'user') {
+    // The bubble itself keeps only the message text; the pin control sits beside it in a row, so
+    // the bubble's own text content stays exactly what the user wrote.
     return (
-      <div className="assistant-message is-user" data-testid="assistant-message-user">
-        <span>{message.text}</span>
+      <div className="assistant-message-row is-user">
+        <div className="assistant-message is-user" data-testid="assistant-message-user"><span>{message.text}</span></div>
+        {pinned && <span className="assistant-pinned-marker" data-testid="assistant-pinned-marker" title="You pinned this as a decision the team keeps verbatim"><Icon name="pin" size={11} /> Pinned decision</span>}
+        {a.conversation?.messages.some(item => item.id === message.id) && pinButton}
       </div>
     );
   }
@@ -47,10 +85,10 @@ export function AssistantMessageCard({ message }: AssistantMessageCardProps) {
       )}
       {action && owned && <AssistantActionCard action={action} applied={a.appliedActions[message.id]} disabled={false} onApply={() => void a.applyAction(message.id, action)} />}
       {action && !owned && <div className="assistant-action-card"><div className="assistant-action-summary">Suggested action: {action.summary}</div></div>}
-      {owned && a.conversation && <button className="btn btn-sm" aria-pressed={a.conversation.pinnedMessageIds.includes(message.id)} onClick={() => {
-        void window.praxis.assistant.control({ conversationId: a.conversation!.id, commandId: crypto.randomUUID(), expectedRevision: a.conversation!.revision,
-          action: a.conversation!.pinnedMessageIds.includes(message.id) ? 'unpin' : 'pin', messageId: message.id });
-      }}>{a.conversation.pinnedMessageIds.includes(message.id) ? 'Unpin decision' : 'Pin decision'}</button>}
+      {owned && a.conversation && <>
+        {pinned && <span className="assistant-pinned-marker" data-testid="assistant-pinned-marker" title="You pinned this as a decision the team keeps verbatim"><Icon name="pin" size={11} /> Pinned decision</span>}
+        {pinButton}
+      </>}
     </article>
   );
 }

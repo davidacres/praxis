@@ -47,7 +47,8 @@ import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
-import { extractSubagents, isAssistantToolSession, isConversationSession, isSessionForProject, sessionTitle } from '../ai/sessionNav';
+import { extractSubagents, isConversationSession, isSessionForProject, sessionTitle } from '../ai/sessionNav';
+import { isAssistantOwnedSession, visibleSessions } from '../ai/assistantOwnership';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
@@ -1065,7 +1066,9 @@ export function App() {
       .listSessions()
       .then(sessions => {
         if (!cancelled) {
-          setAgentSessions(sessions.filter(session => !isAssistantToolSession(session)));
+          // One shared classifier (typed ownership first, the legacy `ASSISTANT-` key as the narrow
+          // fallback) applied here, before any sidebar consumer sees the list.
+          setAgentSessions(visibleSessions(sessions));
           setAgentSessionsLoaded(true);
         }
       })
@@ -1076,7 +1079,7 @@ export function App() {
     const unsubscribeChanged = onSessionChanged(record => {
       // The assistant subscribes separately for tool permissions and usage.
       // Its per-persona runtime records must never become navigable chats.
-      if (isAssistantToolSession(record)) {
+      if (isAssistantOwnedSession(record)) {
         setAgentSessions(current => current.filter(session => session.issueKey !== record.issueKey));
         return;
       }

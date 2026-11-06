@@ -21040,9 +21040,25 @@ button.session-chat-attachment {
 .assistant-chip { padding: 2px var(--space-2); border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg); color: var(--text); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .assistant-chip:hover:not(:disabled) { background: var(--bg-hover); }
 .assistant-chip:disabled { opacity: .5; cursor: default; }
-.assistant-action-card { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); }
+.assistant-action-card { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); }
+/* A queue/recovery card is a group of controls the user may need to read before acting on. */
+.assistant-action-card[role="group"] { flex-direction: row; align-items: center; }
+.assistant-action-card label { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--text-secondary); }
+.assistant-action-card input[type="text"], .assistant-action-card label input:not([type]) { padding: 2px var(--space-1); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; font-size: var(--text-xs); }
+/* A pinned decision is user-pinned, so it reads differently from a generated summary. */
+/* The user's bubble plus its pin control, aligned to the right as one row. */
+.assistant-message-row.is-user { align-self: flex-end; display: flex; align-items: center; gap: var(--space-1); max-width: 94%; }
+.assistant-message-row.is-user > .assistant-message.is-user { align-self: auto; max-width: 100%; }
+.assistant-message-row.is-user .assistant-pin-decision { margin: 0; flex: none; }
+.assistant-pinned-marker { display: inline-flex; align-items: center; gap: 4px; margin-left: var(--space-2); padding: 1px var(--space-1); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, var(--bg)); color: var(--text); font-size: var(--text-xs); }
+.assistant-pinned-decisions { display: inline-flex; align-items: center; gap: 4px; margin-top: var(--space-2); padding: 1px var(--space-2); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--accent) 10%, var(--bg-secondary)); color: var(--text-secondary); font-size: var(--text-xs); }
+.assistant-pin-decision { margin-top: var(--space-2); }
+.assistant-message.is-user .assistant-pin-decision { margin-left: var(--space-2); margin-top: 0; }
 .assistant-action-summary { display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; font-size: var(--text-xs); }
-.assistant-error { margin: 0 var(--space-3); }
+.assistant-error { margin: 0 var(--space-3); display: flex; align-items: flex-start; gap: var(--space-2); }
+/* The message keeps the theme's danger colour; dismissal is an explicit control, never automatic. */
+.assistant-error > span { flex: 1; min-width: 0; }
+.assistant-error > .icon-btn { color: var(--danger); flex: none; }
 .assistant-context-row { padding: 0 var(--space-3); display: flex; flex-direction: column; align-items: flex-start; }
 .assistant-context-pill { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-top: var(--space-2); padding: 2px var(--space-2); border: 1px solid var(--border-strong); border-radius: 999px; background: var(--bg-secondary); color: var(--text-secondary); font: inherit; font-size: var(--text-xs); cursor: pointer; }
 .assistant-context-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

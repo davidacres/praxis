@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { TeamChatSummary } from '@praxis/core';
+import { dedupeTeamChats } from '../ai/assistantOwnership';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { useAssistant } from './AssistantProvider';
@@ -39,12 +40,13 @@ export function useProjectsTeamChatsState(projectIds: string[]): TeamChatsState 
       const ids = JSON.parse(key) as string[];
       try {
         const groups = await Promise.all(ids.map(id => window.praxis.assistant.listChats(id)));
-        if (!disposed && current === revision) setResult({ key, chats: groups.flat() });
+        // One row per conversation id: a chat listed by two feeds must not appear twice.
+        if (!disposed && current === revision) setResult({ key, chats: dedupeTeamChats(groups.flat()) });
       } catch (error) {
         if (disposed || current !== revision) return;
         // Electron prefixes the channel name; the storage error that follows is what matters.
         const message = (error instanceof Error ? error.message : String(error)).replace(/^Error invoking remote method '[^']+': /, '');
-        setResult(previous => ({ key, chats: previous.key === key ? previous.chats : [], error: message }));
+        setResult(previous => ({ key, chats: previous.key === key ? dedupeTeamChats(previous.chats) : [], error: message }));
       }
     };
     const unsubscribe = window.praxis.assistant.onChatsChanged(() => { void refresh(); });

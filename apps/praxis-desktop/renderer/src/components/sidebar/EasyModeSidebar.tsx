@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AgentSessionRecord, GitStatusSnapshot, WorkflowRunSummary, ProjectRecord } from '@praxis/core';
 import { TeamChatStorageAlert, useProjectsTeamChatsState } from '../../assistant/TeamChatRow';
+import { visibleSessions } from '../../ai/assistantOwnership';
 import { SectionHeader } from './SectionHeader';
 import { EasyModeSessionsList } from './EasyModeSessionsList';
 import { EasyModeAutomationsList } from './EasyModeAutomationsList';
@@ -138,7 +139,8 @@ export function EasyModeSidebar({
   const { chats: teamChats, error: teamChatsError, retry: retryTeamChats } = useProjectsTeamChatsState(generalConversations ? [''] : projects.map(project => project.id));
 
   const rootSessions = useMemo(() => {
-    return sessions.filter(s => !s.parentSessionKey && !s.workflowRunId);
+    // Assistant-owned runtime executions never become their own row here; the team chat does.
+    return visibleSessions(sessions).filter(s => !s.parentSessionKey && !s.workflowRunId);
   }, [sessions]);
 
   return (

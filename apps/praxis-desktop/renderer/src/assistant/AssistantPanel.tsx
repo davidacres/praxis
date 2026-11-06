@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type SetStateAction } from 'react';
 import type { WireImageAttachment, AgentPermissionMode, AgentToolMode, AiProvider, AiProviderStatus, ModelOptions, ReasoningEffort } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { ProviderBrandLogo } from '../ui/ProviderBrandLogo';
@@ -16,6 +16,7 @@ import { AssistantContextBanner } from './AssistantContextBanner';
 import { AssistantMessageCard } from './AssistantMessageCard';
 import { useAssistant, type AssistantComposerPreferences, type AssistantController } from './AssistantProvider';
 import { PERSONAS } from './personaMeta';
+import { describeTurnCards, resolveTurnKeyBinding, type TurnControl, type TurnControlState } from './turnControlModel';
 
 function useRuntimePreference<K extends keyof AssistantComposerPreferences>(assistant: AssistantController, key: K): [AssistantComposerPreferences[K], Dispatch<SetStateAction<AssistantComposerPreferences[K]>>] {
   const set = useCallback<Dispatch<SetStateAction<AssistantComposerPreferences[K]>>>(value => {
@@ -40,10 +41,13 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
   const [mode, setMode] = useRuntimePreference(a, 'mode');
   const [toolMode, setToolMode] = useRuntimePreference(a, 'toolMode');
   const [workingDirectory, setWorkingDirectory] = useRuntimePreference(a, 'workingDirectory');
+  // Recovery input is keyed `${turnId}:${attemptId}`: two interrupted turns in one conversation
+  // (or a retried attempt) must never share an acknowledgement or a reconciliation note.
   const [reconciliationNotes, setReconciliationNotes] = useState<Record<string, string>>({});
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
   const [toolError, setToolError] = useState<string>();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
   const stuckToBottom = useRef(true);
 
   useEffect(() => {
@@ -115,6 +119,55 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
     setToolError(undefined);
     return a.send(text, a.teamMembers, { provider, model: model || undefined, reasoningEffort, permissionMode, mode, toolMode: turnToolMode, workingDirectory: workingDirectory || undefined, ...(images.length ? { images } : {}) });
   };
+  /** The queue/recovery cards, derived from the committed snapshot by `turnControlModel`. */
+  const turnCards = describeTurnCards(a.conversation, turn => {
+    const stateKey = `${turn.id}:${turn.attempts.at(-1)?.id ?? ''}`;
+    return {
+      reconciliationNote: reconciliationNotes[stateKey],
+      acknowledged: acknowledged[stateKey] ?? false,
+      ...(a.activeToolSession ? { activeToolSession: a.activeToolSession } : {})
+    } satisfies TurnControlState;
+  });
+  const recoveryControlRefs = useRef(new Map<string, HTMLButtonElement>());
+  // Each control issues exactly one command: one command id against the revision on screen. A
+  // stale command answers `conflict` with fresh state, which the subscription then renders.
+  const issueControl = useCallback((control: TurnControl) => {
+    if (!control.command || control.disabled) return;
+    const assistant = window.praxis.assistant;
+    const sent: Promise<unknown> =
+      control.command.method === 'cancelTurn' ? assistant.cancelTurn(control.command.payload)
+      : control.command.method === 'retryParticipant' ? assistant.retryParticipant(control.command.payload)
+      : control.command.method === 'resolveAttempt' ? assistant.resolveAttempt(control.command.payload)
+      : assistant.control(control.command.payload);
+    sent.catch(error => setToolError(String(error)));
+  }, []);
+  /** Panel-scoped key bindings; every one needs a modifier, so composer typing is never touched. */
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const control = resolveTurnKeyBinding(event, turnCards.map(entry => entry.card));
+    if (!control) return;
+    event.preventDefault();
+    event.stopPropagation();
+    issueControl(control);
+  };
+  /**
+   * A turn that needs a decision puts focus on its first recovery control, but never while the
+   * user is typing in the composer: focus only moves when the panel is not the active editing
+   * surface (nothing focused, or focus is on the panel itself / a control already there).
+   */
+  const focusedTurn = turnCards.find(entry => entry.card.needsAttention)?.turn.id;
+  useEffect(() => {
+    if (!focusedTurn) return;
+    const active = document.activeElement;
+    // The user is already working in a recovery card: never take focus from them.
+    if (active instanceof HTMLElement && active.closest('[data-testid="assistant-turn-status"]')) return;
+    // Nor while they are typing somewhere else — the composer is the active editing surface.
+    const editing = active instanceof HTMLElement && (active.isContentEditable || ['INPUT', 'TEXTAREA'].includes(active.tagName));
+    if (editing) return;
+    const card = panelRef.current?.querySelector<HTMLElement>(`[data-testid="assistant-turn-status"][data-turn-id="${focusedTurn}"]`);
+    const target = card?.querySelector<HTMLElement>('[data-recovery="true"]:not([disabled])') ?? card?.querySelector<HTMLElement>('button:not([disabled])');
+    target?.focus();
+  }, [focusedTurn]);
+
   const sendLabel = a.teamMembers.length === 0
     ? 'Send general chat'
     : a.teamMembers.length === 1
@@ -122,7 +175,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
       : `Send to selected team (${a.teamMembers.length})`;
 
   return (
-    <section className="assistant-panel" aria-label="Virtual team assistant" data-testid="assistant-panel">
+    <section ref={panelRef} className="assistant-panel" aria-label="Virtual team assistant" data-testid="assistant-panel" tabIndex={-1} onKeyDown={onKeyDown}>
       <header className="assistant-header" data-testid="assistant-drag-handle">
         <div className="assistant-header-title">
           <strong><Icon name="sparkles" size={14} /> Virtual Team</strong>
@@ -185,41 +238,60 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         ))}
       </div>
 
-      {a.conversation?.turns.filter(turn => !['completed', 'cancelled'].includes(turn.state)).map((turn, index) => {
+      {turnCards.map(({ turn, card }) => {
         const attempt = turn.attempts.at(-1);
-        const member = turn.plan.participants.find(p => !turn.completedParticipantIds.includes(p.id));
-        // Each click is one command ID against the revision on screen. A stale command answers
-        // `conflict` with fresh state, which the conversation subscription already shows.
-        const control = (action: 'cancel' | 'retry' | 'resume-context' | 'reconcile') => {
-          const assistant = window.praxis.assistant;
-          const fence = { conversationId: a.conversation!.id, commandId: crypto.randomUUID(), expectedRevision: a.conversation!.revision, turnId: turn.id };
-          const reconciliation = attempt?.recoveryEvidence?.find(e => e.kind === 'reconciliation');
-          const sent: Promise<unknown> =
-            action === 'cancel' ? assistant.cancelTurn({ ...fence, ...(attempt ? { attemptId: attempt.id } : {}) })
-            : action === 'reconcile' ? assistant.resolveAttempt({ ...fence, attemptId: attempt?.id ?? '', resolution: 'reconcile', reconciliationNote: reconciliationNotes[turn.id] ?? '' })
-            : action === 'retry' && turn.state === 'outcome_unknown' ? assistant.resolveAttempt({ ...fence, attemptId: attempt?.id ?? '', resolution: 'retry',
-              acknowledgeDuplicateActionRisk: acknowledged, ...(reconciliation ? { reconciliationEvidenceId: reconciliation.id } : {}) })
-            : action === 'retry' ? assistant.retryParticipant({ ...fence, attemptId: attempt?.id ?? '', participantId: attempt?.participantId ?? '' })
-            : assistant.control({ ...fence, action, ...(attempt ? { attemptId: attempt.id } : {}) });
-          sent.catch(error => setToolError(String(error)));
-        };
-        return <div key={turn.id} className="assistant-action-card" data-testid="assistant-turn-status">
-          <strong>{turn.state === 'queued' ? `Queued ${index + 1}` : `${member?.role ?? 'Team'}: ${turn.state.replaceAll('_', ' ')}`}</strong>
-          {attempt?.error && attempt.error !== a.error && <p role="alert">{attempt.error}</p>}
-          {turn.contextRequiredReason && turn.contextRequiredReason !== a.error && <p role="alert">{turn.contextRequiredReason}</p>}
-          {turn.state === 'outcome_unknown' && <div>
-            <label>What did you check before retrying?<input value={reconciliationNotes[turn.id] ?? ''} onChange={event => setReconciliationNotes(current => ({ ...current, [turn.id]: event.target.value }))} /></label>
-            <button className="btn btn-sm" disabled={!reconciliationNotes[turn.id]?.trim()} onClick={() => control('reconcile')}>Record reconciliation</button>
-          </div>}
-          {turn.state === 'outcome_unknown' && <label><input type="checkbox" checked={acknowledged} onChange={event => setAcknowledged(event.target.checked)} />Retry may repeat external actions. I accept this risk.</label>}
-          {['failed', 'interrupted', 'outcome_unknown'].includes(turn.state) && <button className="btn btn-sm" disabled={turn.state === 'outcome_unknown' && (!acknowledged || !attempt?.recoveryEvidence?.some(e => e.kind === 'reconciliation'))} onClick={() => control('retry')}>Retry {member?.role}</button>}
-          {turn.state === 'context_required' && <button className="btn btn-sm" onClick={() => control('resume-context')}>Recheck context</button>}
-          <button className="btn btn-sm" disabled={turn.state === 'cancelling'} onClick={() => control('cancel')}>{turn.state === 'queued' ? 'Cancel queued turn' : turn.state === 'cancelling' ? 'Stopping…' : 'Stop'}</button>
+        const stateKey = `${turn.id}:${attempt?.id ?? ''}`;
+        return <div key={turn.id} className="assistant-action-card" role="group" aria-label={card.ariaLabel} data-testid={card.testId} data-turn-id={turn.id} data-turn-state={turn.state}>
+          <strong>{card.heading}</strong>
+          {card.alert && card.alert !== a.error && <p role="alert">{card.alert}</p>}
+          {card.contextAlert && card.contextAlert !== a.error && <p role="alert">{card.contextAlert}</p>}
+          {card.controls.map(control => {
+            if (control.kind === 'reconciliation-note') {
+              return <label key={control.kind}>{control.label}<input
+                value={control.field!.value}
+                aria-label={control.ariaLabel}
+                data-testid={control.testId}
+                data-recovery="true"
+                onChange={event => setReconciliationNotes(current => ({ ...current, [stateKey]: event.target.value }))}
+              /></label>;
+            }
+            if (control.kind === 'resolve-confirmed') {
+              return <label key={control.kind}><input
+                type="checkbox"
+                checked={control.field!.checked}
+                aria-label={control.ariaLabel}
+                data-testid={control.testId}
+                data-recovery="true"
+                onChange={event => setAcknowledged(current => ({ ...current, [stateKey]: event.target.checked }))}
+              />{control.label}</label>;
+            }
+            return <button
+              key={control.kind}
+              className="btn btn-sm"
+              data-testid={control.testId}
+              aria-label={control.ariaLabel}
+              disabled={control.disabled}
+              title={control.disabled ? control.disabledReason : control.keyHint ? `${control.label} (${control.keyHint})` : undefined}
+              data-recovery={control.recovery || undefined}
+              ref={control.recovery ? node => { if (node) recoveryControlRefs.current.set(control.testId, node); } : undefined}
+              onClick={() => issueControl(control)}
+            >{control.label}</button>;
+          })}
         </div>;
       })}
 
-      {a.error && <div className="error-banner assistant-error" role="alert">{a.error}</div>}
-      {toolError && <div className="error-banner assistant-error" role="alert">{toolError}</div>}
+      {a.error && <div className="error-banner assistant-error" role="alert" data-testid="assistant-error">
+        <span>{a.error}</span>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Dismiss error" data-testid="assistant-error-dismiss" onClick={a.dismissError}>
+          <Icon name="close" size={12} />
+        </button>
+      </div>}
+      {toolError && <div className="error-banner assistant-error" role="alert" data-testid="assistant-tool-error">
+        <span>{toolError}</span>
+        <button type="button" className="icon-btn icon-btn-sm" aria-label="Dismiss error" data-testid="assistant-tool-error-dismiss" onClick={() => setToolError(undefined)}>
+          <Icon name="close" size={12} />
+        </button>
+      </div>}
       {a.activeToolSession?.state === 'awaiting_approval' && (() => {
         const events = a.activeToolSession.events;
         const lastCompleted = events.map(event => event.type).lastIndexOf('permission_completed');
@@ -240,6 +312,7 @@ export function AssistantPanel({ focusSignal }: { focusSignal: number }) {
         prompts={prompts}
         busy={false}
         onPrompt={send}
+        pinnedDecisions={a.conversation?.pinnedMessageIds.length ?? 0}
       />
 
       <div className="assistant-composer-area">
