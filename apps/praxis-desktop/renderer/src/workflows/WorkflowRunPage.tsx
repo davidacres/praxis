@@ -12,6 +12,7 @@ import { WorkflowPipelineVertical } from './WorkflowPipelineVertical';
 import { WorkflowRunsBrowser } from './WorkflowRunsBrowser';
 import { WorkflowStageSummary } from './WorkflowStageSummary';
 import { ChipSelect } from '../ui/ChipSelect';
+import { Markdown } from '../ui/Markdown';
 
 /**
  * The run workspace (replaces the old run monitor and its Runs list page).
@@ -201,13 +202,58 @@ export function WorkflowRunPage({
   const following = pinnedStageId === undefined;
   const stage = shownStage;
 
-  // A different stage (or run): any open evidence panel no longer describes
+  const availablePlanStage = useMemo(() => {
+    if (!run || !stage) return undefined;
+    const ownPlan = stage.artifacts.find(a => a.kind === 'plan');
+    if (ownPlan && stage.outcome === 'succeeded') return stage;
+    if (stage.inputs && stage.inputs.length > 0) {
+      for (const input of stage.inputs) {
+        const match = run.stages.find(
+          s => s.outcome === 'succeeded' && s.artifacts.some(a => a.contractId === input && a.kind === 'plan')
+        );
+        if (match) return match;
+      }
+    }
+    return run.stages.find(
+      s => s.outcome === 'succeeded' && s.artifacts.some(a => a.kind === 'plan')
+    );
+  }, [run, stage]);
+
+  const [viewingPlan, setViewingPlan] = useState<
+    { nodeId: string; title: string; text?: string; loading?: boolean; error?: string } | undefined
+  >();
+  const [planCopied, setPlanCopied] = useState(false);
+  const [planSaveNotice, setPlanSaveNotice] = useState<string | undefined>();
+
+  const handleOpenPlan = useCallback(async (nodeId: string, title: string) => {
+    if (!run) return;
+    setViewingPlan({ nodeId, title, loading: true });
+    try {
+      const text = await window.praxis.workflows.stageReport(run.runId, nodeId);
+      if (!text) {
+        setViewingPlan({ nodeId, title, error: "This stage's plan is no longer available." });
+      } else {
+        setViewingPlan({ nodeId, title, text });
+      }
+    } catch (err) {
+      setViewingPlan({ nodeId, title, error: err instanceof Error ? err.message : String(err) });
+    }
+  }, [run]);
+
+  const handleClosePlan = useCallback(() => {
+    setViewingPlan(undefined);
+    setPlanSaveNotice(undefined);
+    setPlanCopied(false);
+  }, []);
+
+  // A different stage (or run): any open evidence panel or plan view no longer describes
   // what's on screen, so close it rather than leave stale content under a new heading.
   useEffect(() => {
     setEvidenceKey(undefined);
     setEvidenceView(undefined);
     setEvidenceError(undefined);
     setDiagnosisMessage(undefined);
+    setViewingPlan(undefined);
   }, [runId, shownStage?.nodeId]);
 
   const act = useCallback(
@@ -391,12 +437,27 @@ export function WorkflowRunPage({
               {stage.name}
             </span>
           )}
+          {viewingPlan && (
+            <button
+              type="button"
+              className="btn btn-compact wf-run-bar-back-session"
+              data-testid="wf-plan-back-session"
+              onClick={handleClosePlan}
+              title="Return to the stage session"
+            >
+              <Icon name="chats" size={13} />
+              <span>Back to session</span>
+            </button>
+          )}
           {!following && (
             <button
               type="button"
               className="btn btn-compact"
               data-testid="wf-run-follow"
-              onClick={() => setPinnedStageId(undefined)}
+              onClick={() => {
+                setPinnedStageId(undefined);
+                setViewingPlan(undefined);
+              }}
               title="Go back to whichever step is doing the work"
             >
               Follow live
@@ -404,12 +465,79 @@ export function WorkflowRunPage({
           )}
         </header>
         <div className="wf-run-body">
+          {viewingPlan && (
+            <div className="wf-run-plan-viewer" data-testid="wf-run-plan-viewer">
+              <div className="wf-run-plan-toolbar">
+                <span className="wf-run-plan-title">
+                  <Icon name="markdown" size={14} />
+                  <span>{viewingPlan.title}</span>
+                </span>
+                {viewingPlan.text && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-compact"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(viewingPlan.text!);
+                        setPlanCopied(true);
+                        setTimeout(() => setPlanCopied(false), 2000);
+                      }}
+                    >
+                      {planCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-compact"
+                      onClick={async () => {
+                        const result = await window.praxis.workflows.saveStageReport(run.runId, viewingPlan.nodeId);
+                        if (result.saved) {
+                          setPlanSaveNotice(`Saved to ${result.path}`);
+                          setTimeout(() => setPlanSaveNotice(undefined), 3000);
+                        }
+                      }}
+                    >
+                      Save as Markdown…
+                    </button>
+                  </>
+                )}
+                {planSaveNotice && <span className="rail-sub">{planSaveNotice}</span>}
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-sm"
+                  aria-label="Back to session"
+                  title="Back to session"
+                  onClick={handleClosePlan}
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+              <div className="wf-run-plan-body">
+                {viewingPlan.loading ? (
+                  <div className="empty-state"><span>Loading plan…</span></div>
+                ) : viewingPlan.error ? (
+                  <div className="empty-state"><span>{viewingPlan.error}</span></div>
+                ) : (
+                  <Markdown text={viewingPlan.text ?? ''} testId="wf-plan-markdown" />
+                )}
+              </div>
+            </div>
+          )}
+
           {stage?.sessionKey ? (
-            <div className="wf-run-session" data-testid="wf-run-session" key={stage.sessionKey}>
+            <div
+              className="wf-run-session"
+              data-testid="wf-run-session"
+              key={stage.sessionKey}
+              style={{ display: viewingPlan ? 'none' : undefined }}
+            >
               {renderSession(stage.sessionKey)}
             </div>
           ) : stage ? (
-            <div className="wf-run-nosession-host" data-testid="wf-run-nosession">
+            <div
+              className="wf-run-nosession-host"
+              data-testid="wf-run-nosession"
+              style={{ display: viewingPlan ? 'none' : undefined }}
+            >
               <WorkflowStageSummary
                 run={run}
                 stage={stage}
@@ -697,7 +825,16 @@ export function WorkflowRunPage({
                       </p>
                     )}
 
-                    <StageArtifacts key={stage.nodeId} runId={run.runId} stage={stage} onOpenBoardItem={onOpenBoardItem} />
+                    <StageArtifacts
+                      key={stage.nodeId}
+                      runId={run.runId}
+                      stage={stage}
+                      availablePlanStage={availablePlanStage}
+                      isPlanOpen={viewingPlan?.nodeId === (availablePlanStage?.nodeId ?? stage.nodeId)}
+                      onOpenPlan={handleOpenPlan}
+                      onClosePlan={handleClosePlan}
+                      onOpenBoardItem={onOpenBoardItem}
+                    />
 
                     {stage.findings && (
                       <div className="wf-findings-section" data-testid="wf-findings-section">
