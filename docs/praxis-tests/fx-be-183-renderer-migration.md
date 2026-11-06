@@ -1,6 +1,6 @@
 # FX-BE-183 renderer subscription and legacy migration contracts
 
-Frozen snapshot: `622613fbed15edab22f77d4c2597e3bf784f1b4a` for the first 17 cases; `f27d2793958dbf817c6bea7d06ae474704ad8b55` for the TASK-484 sections and every line link in this file. Runner: **node:test**. These **67 supplemental cases** are 8 activation/repository cases, 3 migration cases, 3 coordinator cases and 3 renderer subscription cases, plus 50 TASK-484 renderer cases (18 turn controls, 11 error visibility, 6 pending submissions, 6 sidebar ownership, 4 apply-page compatibility, 5 dock/float shell). They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog, and none collides with a catalog id.
+Frozen snapshot: `622613fbed15edab22f77d4c2597e3bf784f1b4a` for the first 17 cases; `f27d2793958dbf817c6bea7d06ae474704ad8b55` for the first six TASK-484 sections; `a1f5ecbbf28dfac0de20a85fcc4ee2c3757bec77` for the submit-command section and every line link in this file (all 73 re-audited there). Runner: **node:test**. These **73 supplemental cases** are 8 activation/repository cases, 3 migration cases, 3 coordinator cases and 3 renderer subscription cases, plus 56 TASK-484 renderer cases (18 turn controls, 11 error visibility, 6 pending submissions, 6 sidebar ownership, 4 apply-page compatibility, 5 dock/float shell, 6 submit command). They sit outside the Playwright-only generator. IDs use SHA1(file + newline + exact title), the same rule as the catalog, and none collides with a catalog id.
 
 ## Activation and cutover — `apps/praxis-desktop/main/src/main/teamChatActivation.test.ts`
 
@@ -624,3 +624,61 @@ Title: **docking then floating returns to the original shell state**.
 **Given** a floating, open shell on `conv-1`.
 **When** it docks and then floats.
 **Then** the state equals the start.
+
+## TASK-484 Submit command — `apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts`
+
+Snapshot `a1f5ecbbf28dfac0de20a85fcc4ee2c3757bec77`. `AssistantProvider.send` builds every new submission through `buildSubmitCommand`; a transport retry resends the recorded pending command instead.
+
+### PT-7886057B66
+
+Automation: **node:test**, [assistantSubmitCommand.test.ts:17](../../apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts#L17).
+Title: **a detached context submits one message with no context field at all**.
+
+**Given** a send whose captured page context is `undefined` (detached, or nothing registered).
+**When** `buildSubmitCommand` builds the command.
+**Then** the command has no `context` key at all and still carries the text and command id. That the pill re-attaches for the next message is proven only by PT-450D784024 (`assistant.spec.ts:471`), not here.
+
+### PT-4ACA5F1560
+
+Automation: **node:test**, [assistantSubmitCommand.test.ts:24](../../apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts#L24).
+Title: **an attached context is captured as a copy navigation cannot change**.
+
+**Given** a send carrying a live issue context for `TEAM-12`.
+**When** the command is built and the live context object is then changed to `TEAM-99`.
+**Then** the command still holds the original `TEAM-12` context.
+
+### PT-E347BC137E
+
+Automation: **node:test**, [assistantSubmitCommand.test.ts:32](../../apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts#L32).
+Title: **a mention travels verbatim so core can route it to that member**.
+
+**Given** the text `@qa can you check the edge cases?` with members `dev` and `qa`.
+**When** the command is built.
+**Then** the text is unchanged and the participants are `part-dev`, `part-qa`. Routing the mention to `qa` is core's job and is not asserted here (finding).
+
+### PT-475E27C815
+
+Automation: **node:test**, [assistantSubmitCommand.test.ts:38](../../apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts#L38).
+Title: **the command targets the captured conversation and revision**.
+
+**Given** a send captured for conversation `chat-7` at revision 12.
+**When** the command is built.
+**Then** it targets `chat-7` with expected revision 12.
+
+### PT-E7F2147281
+
+Automation: **node:test**, [assistantSubmitCommand.test.ts:44](../../apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts#L44).
+Title: **staged attachment refs are carried and copied, not aliased**.
+
+**Given** one staged attachment ref.
+**When** the command is built.
+**Then** the command's refs equal the input but are a different array.
+
+### PT-4BA238EE4B
+
+Automation: **node:test**, [assistantSubmitCommand.test.ts:51](../../apps/praxis-desktop/renderer/test/assistantSubmitCommand.test.ts#L51).
+Title: **only string runtime options cross the bridge**.
+
+**Given** runtime options with string, number, boolean and undefined values.
+**When** the command is built.
+**Then** only `provider` and `model` (the strings) remain.
