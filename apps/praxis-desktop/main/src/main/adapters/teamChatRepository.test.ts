@@ -309,3 +309,33 @@ test('a 10,000-message conversation commits under concurrent mutation of another
   // A ceiling to record the cost, not a speed gate.
   assert.ok(slowest < 5_000 * 5, `slowest commit ${slowest.toFixed(0)} ms`);
 });
+
+test('legacy runtime links and diagnostics are validated on load', async t => {
+  const file = profile(t);
+  const repository = new FileTeamChatRepository(file);
+  await repository.activate();
+  await repository.transaction(draft => {
+    draft.conversations.push({ schemaVersion: 2, id: 'c', title: 'c', createdAt: 'now', updatedAt: 'now', revision: 0, coordinatorEpoch: 'imported',
+      participants: [{ id: 'part-dev', role: 'dev' } as never], messages: [{ id: 'm', role: 'dev', text: 'reply', createdAt: 'now', sequence: 1, turnId: 'legacy:x', attachments: [] }],
+      turns: [], bindings: [], summaries: [], pinnedMessageIds: [], commandReceipts: [],
+      legacyRuntimeLinks: [{ runtimeSessionKey: 'ASSISTANT-c-dev-0123456789abcdef', conversationId: 'c', participantId: 'part-dev', role: 'dev',
+        legacyConfigurationDigest: '0123456789abcdef', checkpointMessageId: 'm', status: 'imported' }] });
+    draft.legacyRuntimeDiagnostics = [{ runtimeSessionKey: 'ASSISTANT-x-dev-0123456789abcdef', reason: 'unknown-conversation' }];
+  });
+  const valid = fs.readFileSync(file, 'utf8');
+  assert.equal(new FileTeamChatRepository(file).read().conversations[0].legacyRuntimeLinks?.length, 1);
+  const corrupt = (mutate: (value: { conversations: Array<Record<string, any>>; legacyRuntimeDiagnostics: unknown[] }) => void) => {
+    const value = JSON.parse(valid); mutate(value); return JSON.stringify(value);
+  };
+  for (const [label, raw] of [
+    ['unknown checkpoint message', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].checkpointMessageId = 'missing'; })],
+    ['unknown participant', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].participantId = 'part-qa'; })],
+    ['another conversation', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].conversationId = 'other'; })],
+    ['not imported', corrupt(v => { v.conversations[0].legacyRuntimeLinks[0].status = 'valid'; })],
+    ['unknown diagnostic reason', corrupt(v => { v.legacyRuntimeDiagnostics = [{ runtimeSessionKey: 'k', reason: 'title-match' }]; })]
+  ] as const) {
+    fs.writeFileSync(file, raw);
+    assert.throws(() => new FileTeamChatRepository(file), TeamChatStorageError, label);
+    assert.equal(fs.readFileSync(file, 'utf8'), raw, `${label} is not rewritten`);
+  }
+});

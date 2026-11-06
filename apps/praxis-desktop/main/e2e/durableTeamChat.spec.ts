@@ -161,6 +161,7 @@ test('a migrated chat continues from imported history without reusing unproved r
   expect(before.turns).toHaveLength(0);
   expect(before.bindings).toHaveLength(0);
   expect(before.messages[0].provenance).toBe('imported-unknown');
+  expect(before.legacyRuntimeLinks).toBeUndefined(); // no runtime session evidence, so nothing to link
   await win.evaluate(async revision => window.praxis.assistant.submitTurn({ conversationId: 'legacy-fixture', commandId: 'continued', expectedRevision: revision,
     text: 'Continue the original decision', selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: { provider: 'custom:mock', model: 'mock-model', toolMode: 'project-only' } }), before.revision);
   await expect.poll(() => win.evaluate(async () => (await window.praxis.assistant.getConversation('legacy-fixture'))?.turns[0].state)).toBe('completed');
@@ -171,6 +172,76 @@ test('a migrated chat continues from imported history without reusing unproved r
   expect(JSON.parse(fs.readFileSync(`${file}.v1-backup`, 'utf8')).original).toBe(original);
   await win.reload();
   expect(await win.evaluate(async () => (await window.praxis.assistant.listChats('')).length)).toBe(1);
+});
+
+test('an expired legacy runtime session is linked, reconstructed and listed once', async () => {
+  mock = await startMockOpenAiCompatibleServer({ reply: 'Continued after the legacy session expired' });
+  const settings = { ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } };
+  app = await launchTestApp(settings, undefined, undefined, { openNewSession: false });
+  const projectId = await app.window.evaluate(async folderPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create({ name: 'Legacy project', key: 'LEG', type: 'product', purpose: '', brief: {}, startingPoint: 'existing-folder', folderPath, planningMode: 'files', workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], starterTickets: [], defaultAiToolMode: 'project-only' }, workspace.id);
+    localStorage.setItem(`praxis-last-workspace-route:${workspace.id}`, JSON.stringify({ projectId: project.id }));
+    return project.id;
+  }, app.userDataDir);
+  const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
+  await app.electronApp.close();
+  // The pre-durable shape: a saved chat, the runtime session main keyed from its id, and that
+  // session's transcript checkpoint naming the dev reply it last saw. The session is long finished.
+  const title = 'Legacy linked chat';
+  fs.writeFileSync(path.join(reuse.userDataDir, 'team-chats.json'), JSON.stringify({ teamChats: [{ id: 'legacy-linked', projectId, title,
+    createdAt: '2026-09-01T09:00:00.000Z', updatedAt: '2026-09-01T09:02:00.000Z', messages: [
+      { id: 'old-user', role: 'user', text: 'Legacy reconstruction sentinel', createdAt: '2026-09-01T09:00:00.000Z' },
+      { id: 'old-dev', role: 'dev', text: 'Legacy dev answer sentinel', createdAt: '2026-09-01T09:02:00.000Z' }] }] }, null, 2));
+  const linkedKey = 'ASSISTANT-legacy-linked-dev-0123456789abcdef';
+  // An unsaved chat's random prefix whose goal text equals the saved title: never proof.
+  const strayKey = 'ASSISTANT-6f1d2c3b-0a9e-4e7d-8c6b-5a4f3e2d1c0b-dev-fedcba9876543210';
+  const record = (issueKey: string, sessionId: string) => ({ issueKey, sessionId, title: 'Virtual Team conversation', provider: 'custom:mock', model: 'mock-model',
+    state: 'completed', startedAt: '2026-09-01T09:00:00.000Z', completedAt: '2026-09-01T09:02:00.000Z', workingDirectory: reuse.userDataDir, toolMode: 'read-only', stepCount: 1, eventCount: 1,
+    taskDefinition: { kind: 'general', sessionMode: 'chat', goal: title, scope: '', definitionOfDone: 'Respond to the Virtual Team chat with the result.' }, events: [] });
+  fs.writeFileSync(path.join(reuse.userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': {
+    [linkedKey]: record(linkedKey, 'legacy-linked-session'), [strayKey]: record(strayKey, 'legacy-stray-session') } }));
+  fs.mkdirSync(path.join(reuse.userDataDir, 'ai-transcripts'), { recursive: true });
+  for (const [sessionId, detail] of [['legacy-linked-session', 'old-dev'], ['legacy-stray-session', 'old-dev']]) {
+    fs.writeFileSync(path.join(reuse.userDataDir, 'ai-transcripts', `${sessionId}.json`), JSON.stringify({ events: [
+      { type: 'info', timestamp: '2026-09-01T09:02:00.000Z', summary: 'Virtual Team transcript checkpoint', detail }] }));
+  }
+  app = await launchTestApp(undefined, reuse, undefined, { openNewSession: false });
+  const win = app.window;
+  const before = (await win.evaluate(() => window.praxis.assistant.getConversation('legacy-linked')))!;
+  expect(before.bindings).toEqual([]);
+  expect(before.legacyRuntimeLinks).toEqual([{ runtimeSessionKey: linkedKey, conversationId: 'legacy-linked', participantId: 'part-dev', role: 'dev',
+    provider: 'custom:mock', legacyConfigurationDigest: '0123456789abcdef', checkpointMessageId: 'old-dev', status: 'imported' }]);
+  const stored = JSON.parse(fs.readFileSync(path.join(reuse.userDataDir, 'team-chats.json'), 'utf8'));
+  expect(stored.conversations).toHaveLength(1); // the title match merged nothing
+  expect(stored.legacyRuntimeDiagnostics).toEqual([{ runtimeSessionKey: strayKey, reason: 'unknown-conversation' }]);
+
+  await win.evaluate(async revision => window.praxis.assistant.submitTurn({ conversationId: 'legacy-linked', commandId: 'after-expiry', expectedRevision: revision,
+    text: 'Continue after expiry', selectedParticipantIds: ['part-dev'], attachmentRefs: [], runtimeOptions: { provider: 'custom:mock', model: 'mock-model', toolMode: 'project-only' } }), before.revision);
+  await expect.poll(() => win.evaluate(async () => (await window.praxis.assistant.getConversation('legacy-linked'))?.turns[0]?.state)).toBe('completed');
+  const after = (await win.evaluate(() => window.praxis.assistant.getConversation('legacy-linked')))!;
+  // Reconstruction: the new attempt carried the imported history rather than relying on the expired session.
+  expect(mock.requests.some(request => request.body.includes('Legacy reconstruction sentinel') && request.body.includes('Legacy dev answer sentinel'))).toBe(true);
+  expect(after.bindings.every(binding => binding.id !== linkedKey && binding.providerSessionId !== 'legacy-linked-session')).toBe(true);
+  expect(after.legacyRuntimeLinks).toEqual(before.legacyRuntimeLinks);
+  expect(after.messages.filter(message => message.role === 'dev').map(message => message.text)).toEqual(['Legacy dev answer sentinel', 'Continued after the legacy session expired']);
+
+  const listedOnce = async () => {
+    await expect(win.getByTestId('team-chat-row')).toHaveCount(1);
+    await expect(win.getByTestId('team-chat-row')).toContainText(title);
+    await expect(win.locator('[data-session-order-id^="ASSISTANT-"]')).toHaveCount(0);
+    const sessions = await win.evaluate(() => window.praxis.ai.listSessions());
+    expect(sessions.filter(session => session.issueKey === linkedKey || session.issueKey === strayKey)).toHaveLength(2); // records kept
+  };
+  await win.reload();
+  await listedOnce();
+  await win.getByTestId('team-chat-row').locator('.team-chat-main').click();
+  await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
+  const artifact = path.resolve(__dirname, '../../../../.praxis/session-artifacts/task-485-migrated-chat.png');
+  fs.mkdirSync(path.dirname(artifact), { recursive: true });
+  await win.screenshot({ path: artifact });
+  await win.reload();
+  await listedOnce();
 });
 
 test('keyboard cancellation preserves accepted messages and cancels only the selected queued turn', async () => {

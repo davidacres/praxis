@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { importLegacyTeamChat, migrateTeamChats } from './teamChatMigration';
-import type { TeamChatRecord, TeamChatSnapshot } from './assistantTypes';
+import { classifyLegacyRuntimeSession, importLegacyTeamChat, LEGACY_VIRTUAL_TEAM_DEFINITION_OF_DONE, migrateTeamChats } from './teamChatMigration';
+import type { LegacyRuntimeSessionEvidence, TeamChatRecord, TeamChatSnapshot } from './assistantTypes';
 
 const chat: TeamChatRecord = { id: 'legacy', projectId: 'p', issueKey: 'P-1', title: 'Existing', createdAt: 'then', updatedAt: 'now', messages: [
   { id: 'orphan', role: 'qa', text: 'Unknown origin', createdAt: 'then', error: true },
@@ -57,9 +57,9 @@ test('a title-only match never merges or links', () => {
   assert.equal(migrated.conversations[1].messages.length, chat.messages.length);
 });
 
-test('a legacy runtime session key is never treated as a provable association', () => {
-  // Legacy chats never recorded which runtime session served them; the only trace is a
-  // synthetic ASSISTANT-<uuid> key. Migration must not turn that into a binding.
+test('a runtime session key quoted in message text is never treated as a provable association', () => {
+  // Proof comes only from runtime session evidence (see the typed-link tests below); a key
+  // that merely appears in transcript text is neither a binding nor a link.
   const original = source();
   original.teamChats[0].messages.push({ id: 'keyed', role: 'dev', text: 'Answered by ASSISTANT-1234-dev-abcdef0123456789', createdAt: 'now' });
   const migrated = migrateTeamChats(original).conversations[0];
@@ -75,4 +75,61 @@ test('ambiguous legacy results remain diagnostics rather than invented successfu
   assert.deepEqual(migrated.legacyDiagnostics, original.legacyDiagnostics);
   assert.equal(migrated.conversations.length, 1);
   assert.equal(migrated.conversations[0].turns.length, 0);
+});
+
+const DIGEST = '0123456789abcdef';
+const evidence = (over: Partial<LegacyRuntimeSessionEvidence> = {}): LegacyRuntimeSessionEvidence => ({
+  issueKey: `ASSISTANT-legacy-dev-${DIGEST}`, provider: 'claude-code', state: 'completed',
+  definitionOfDone: LEGACY_VIRTUAL_TEAM_DEFINITION_OF_DONE, checkpointMessageIds: ['a'], ...over });
+
+test('a provable legacy runtime session imports one typed link and no binding', () => {
+  const original = source();
+  const before = structuredClone(original);
+  const items = [evidence(), evidence({ issueKey: 'standalone-session' })];
+  const migrated = migrateTeamChats(original, items);
+  assert.deepEqual(original, before, 'the source is not mutated');
+  assert.deepEqual(migrateTeamChats(original, [...items].reverse()), migrated, 'deterministic whatever the evidence order');
+  const converted = migrated.conversations[0];
+  assert.deepEqual(converted.legacyRuntimeLinks, [{ runtimeSessionKey: `ASSISTANT-legacy-dev-${DIGEST}`, conversationId: 'legacy',
+    participantId: 'part-dev', role: 'dev', provider: 'claude-code', legacyConfigurationDigest: DIGEST, checkpointMessageId: 'a', status: 'imported' }]);
+  assert.deepEqual(converted.bindings, [], 'a link never becomes a binding');
+  assert.deepEqual(converted.turns, []);
+  assert.equal(migrated.legacyRuntimeDiagnostics, undefined, 'a non-legacy key is ignored entirely');
+});
+
+test('an instruction or title match without a chat-id key is a diagnostic, never a link or merge', () => {
+  // An unsaved chat sent `ASSISTANT-<random uuid>`; its goal text may equal a saved chat's title.
+  const original = source();
+  const stray = evidence({ issueKey: `ASSISTANT-9b7f3c1e-4d2a-4f00-8e11-aa00bb11cc22-dev-${DIGEST}` });
+  const migrated = migrateTeamChats(original, [stray]);
+  assert.equal(migrated.conversations.length, 1, 'nothing merges');
+  assert.equal(migrated.conversations[0].legacyRuntimeLinks, undefined);
+  assert.deepEqual(migrated.legacyRuntimeDiagnostics, [{ runtimeSessionKey: stray.issueKey, reason: 'unknown-conversation' }]);
+  const other = evidence({ definitionOfDone: 'Review the ticket.' });
+  assert.deepEqual(classifyLegacyRuntimeSession(other, new Map([['legacy', chat]])), { kind: 'diagnostic', reason: 'not-virtual-team' });
+});
+
+test('a checkpoint that names another chat\'s message, a wrong-role message, or none, is not proof', () => {
+  const chats = new Map([['legacy', chat], ['other', { ...structuredClone(chat), id: 'other', messages: [{ id: 'foreign', role: 'dev' as const, text: 'x', createdAt: 'now' }] }]]);
+  for (const checkpointMessageIds of [['foreign'], ['u'], ['orphan'], []]) {
+    assert.deepEqual(classifyLegacyRuntimeSession(evidence({ checkpointMessageIds }), chats), { kind: 'diagnostic', reason: 'no-checkpoint' }, String(checkpointMessageIds));
+  }
+  // `orphan` is a qa message but an error: a failed reply proves nothing either.
+  assert.deepEqual(classifyLegacyRuntimeSession(evidence({ issueKey: `ASSISTANT-legacy-qa-${DIGEST}`, checkpointMessageIds: ['orphan'] }), chats),
+    { kind: 'diagnostic', reason: 'no-checkpoint' });
+  const migrated = migrateTeamChats(source(), [evidence({ checkpointMessageIds: ['u'] })]);
+  assert.equal(migrated.conversations[0].legacyRuntimeLinks, undefined);
+  assert.equal(migrated.legacyRuntimeDiagnostics?.[0].reason, 'no-checkpoint');
+});
+
+test('evidence never changes an already-activated snapshot', () => {
+  const activated = migrateTeamChats(source());
+  assert.deepEqual(migrateTeamChats(activated, [evidence()]), activated);
+  // A durable (non-legacy) conversation with a matching id is not relinked either.
+  const mixed = source();
+  mixed.teamChats = [];
+  mixed.conversations.push(importLegacyTeamChat(chat));
+  const migrated = migrateTeamChats(mixed, [evidence()]);
+  assert.equal(migrated.conversations[0].legacyRuntimeLinks, undefined);
+  assert.equal(migrated.legacyRuntimeDiagnostics, undefined);
 });

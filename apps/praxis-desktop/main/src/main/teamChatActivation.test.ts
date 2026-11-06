@@ -7,6 +7,7 @@ import { TeamChatStore } from '@praxis/core';
 import { FileTeamChatRepository, TeamChatCommitUncertainError } from './adapters/teamChatRepository';
 import { TeamChatActivation } from './teamChatActivation';
 import { TeamChatAttachments } from './teamChatAttachments';
+import { LEGACY_TEAM_CHATS_V1 } from './teamChatLegacyFixture';
 
 function fixture(t: { after(fn: () => void): void }) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-activation-'));
@@ -118,4 +119,43 @@ test('a failed commit lifts the fence so legacy work resumes and activation can 
   await activation.activate(async () => { committed = true; });
   assert.equal(committed, true);
   await assert.rejects(activation.legacy(async () => undefined), /disabled/);
+});
+
+test('a copied legacy fixture survives activation field-for-field and a rerun changes no byte', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-activation-fixture-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const file = path.join(directory, 'team-chats.json');
+  fs.writeFileSync(file, LEGACY_TEAM_CHATS_V1);
+  const legacy = JSON.parse(LEGACY_TEAM_CHATS_V1) as { teamChats: Array<Record<string, unknown> & { id: string; messages: Array<Record<string, unknown>> }> };
+  await new FileTeamChatRepository(file).activate();
+
+  assert.equal(JSON.parse(fs.readFileSync(`${file}.v1-backup`, 'utf8')).original, LEGACY_TEAM_CHATS_V1, 'the backup holds the exact source bytes');
+  const reloaded = new FileTeamChatRepository(file).read();
+  assert.deepEqual(reloaded.teamChats, []);
+  assert.deepEqual(reloaded.activation, { version: 1, acceptedNewTurns: false });
+  assert.deepEqual(reloaded.conversations.map(c => c.id), legacy.teamChats.map(c => c.id), 'every chat, in source order, ids kept');
+  for (const source of legacy.teamChats) {
+    const converted = reloaded.conversations.find(c => c.id === source.id)!;
+    for (const field of ['projectId', 'title', 'issueKey', 'createdAt', 'updatedAt']) {
+      assert.deepEqual((converted as unknown as Record<string, unknown>)[field], source[field], `${source.id}.${field}`);
+    }
+    // Every legacy field of every message, in order; only the durable additions are new.
+    assert.deepEqual(converted.messages.map(({ sequence, turnId, provenance, attachments, ...message }) => message), source.messages, `${source.id} messages`);
+    assert.deepEqual(converted.messages.map(m => m.sequence), source.messages.map((_, index) => index + 1));
+    assert.deepEqual([converted.turns, converted.bindings, converted.legacyRuntimeLinks], [[], [], undefined]);
+  }
+  const alpha = reloaded.conversations[0];
+  assert.equal(alpha.messages[0].provenance, 'imported-unknown', 'an orphan leading reply is not attributed to a turn');
+  assert.equal(alpha.messages[2].turnId, 'legacy:alpha-u1');
+  assert.equal(alpha.messages[3].error, true);
+  assert.deepEqual(reloaded.conversations.map(c => c.title).filter(title => title === 'Release planning').length, 2, 'equal titles never merge');
+  assert.deepEqual(new TeamChatStore(new FileTeamChatRepository(file)).list('project-one').map(c => c.id).sort(), ['chat-alpha', 'chat-beta']);
+  assert.deepEqual(new TeamChatStore(new FileTeamChatRepository(file)).list('project-two').map(c => c.id), ['chat-gamma']);
+  assert.equal(reloaded.conversations.find(c => c.id === 'chat-delta')?.projectId, '', 'a projectless chat stays projectless');
+
+  const committed = fs.readFileSync(file, 'utf8');
+  const backup = fs.readFileSync(`${file}.v1-backup`, 'utf8');
+  await new FileTeamChatRepository(file).activate();
+  assert.equal(fs.readFileSync(file, 'utf8'), committed, 'rerun changes no byte of the store');
+  assert.equal(fs.readFileSync(`${file}.v1-backup`, 'utf8'), backup, 'or of the backup');
 });

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { migrateTeamChats, type TeamChatRepository, type TeamChatSnapshot } from '@praxis/core';
+import { migrateTeamChats, type LegacyRuntimeSessionEvidence, type TeamChatRepository, type TeamChatSnapshot } from '@praxis/core';
 
 type Writer = { queue: Promise<void>; uncertain: boolean };
 // All windows route IPC to main. All adapter instances for a profile share this lock.
@@ -35,6 +35,8 @@ function decode(raw: string): TeamChatSnapshot {
   if (value.activation !== undefined && (value.activation?.version !== 1 || typeof value.activation.acceptedNewTurns !== 'boolean' || value.teamChats.length)) throw new Error('Invalid activation state.');
   if (value.legacyDiagnostics !== undefined && (!Array.isArray(value.legacyDiagnostics) || value.legacyDiagnostics.some((item: Record<string, unknown>) =>
       !item || typeof item.id !== 'string' || typeof item.completedAt !== 'string' || !Array.isArray(item.messages)))) throw new Error('Invalid legacy diagnostic.');
+  if (value.legacyRuntimeDiagnostics !== undefined && (!Array.isArray(value.legacyRuntimeDiagnostics) || value.legacyRuntimeDiagnostics.some((item: Record<string, unknown>) =>
+      !item || typeof item.runtimeSessionKey !== 'string' || !['unknown-conversation', 'not-virtual-team', 'no-checkpoint'].includes(String(item.reason))))) throw new Error('Invalid legacy runtime diagnostic.');
   const uniqueIds = (items: { id: string }[]) => items.every(item => item && typeof item.id === 'string' && item.id.length > 0) && new Set(items.map(item => item.id)).size === items.length;
   if (!uniqueIds(value.teamChats) || !uniqueIds(value.conversations)) throw new Error('Duplicate conversation identity.');
   for (const conversation of value.conversations) {
@@ -68,6 +70,13 @@ function decode(raw: string): TeamChatSnapshot {
     const messageIds = new Set(conversation.messages.map((message: { id: string }) => message.id));
     if (!uniqueIds(conversation.bindings) || !uniqueIds(conversation.summaries) ||
         conversation.pinnedMessageIds.some((id: string) => !messageIds.has(id))) throw new Error('Invalid binding, summary or pinned source.');
+    if (conversation.legacyRuntimeLinks !== undefined) {
+      const participantIds = new Set(conversation.participants.map((participant: { id: string }) => participant.id));
+      if (!Array.isArray(conversation.legacyRuntimeLinks) || conversation.legacyRuntimeLinks.some((link: Record<string, unknown>) =>
+        !link || typeof link.runtimeSessionKey !== 'string' || link.conversationId !== conversation.id || !participantIds.has(String(link.participantId)) ||
+        !['lead', 'dev', 'qa', 'security', 'product'].includes(String(link.role)) || (link.provider !== undefined && typeof link.provider !== 'string') ||
+        typeof link.legacyConfigurationDigest !== 'string' || !messageIds.has(String(link.checkpointMessageId)) || link.status !== 'imported')) throw new Error('Invalid legacy runtime link.');
+    }
     const currentParticipants = new Set<string>();
     for (const binding of conversation.bindings) {
       if (binding.conversationId !== conversation.id || typeof binding.participantId !== 'string' ||
@@ -139,12 +148,12 @@ export class FileTeamChatRepository implements TeamChatRepository {
     return write;
   }
   /** Backup and cutover share the writer lock with every transcript save. */
-  public activate(): Promise<void> {
+  public activate(evidence: readonly LegacyRuntimeSessionEvidence[] = []): Promise<void> {
     const activation = this.writer.queue.then(async () => {
       if (this.writer.uncertain) throw new TeamChatCommitUncertainError('Reconcile before activation.');
       const current = this.read();
       if (current.activation?.version === 1) return;
-      const candidate = migrateTeamChats(current);
+      const candidate = migrateTeamChats(current, evidence);
       candidate.revision++;
       const serialized = JSON.stringify(candidate, null, 2);
       decode(serialized);

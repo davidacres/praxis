@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { TeamChatCoordinator, makeParticipant, type ConversationUpdate, type DurableConversation, type SubmitConversationCommand, type TeamChatExecutionParams } from '@praxis/core';
+import { TeamChatCoordinator, LEGACY_VIRTUAL_TEAM_DEFINITION_OF_DONE, makeParticipant, type ConversationUpdate, type LegacyRuntimeSessionEvidence, type DurableConversation, type SubmitConversationCommand, type TeamChatExecutionParams } from '@praxis/core';
 import { createTeamChatServices } from './teamChatServices';
 import { FileTeamChatRepository, TeamChatCommitUncertainError } from './adapters/teamChatRepository';
 
@@ -299,4 +299,84 @@ test('startup restores a pending approval on its own attempt only for a live mat
     assert.equal(updates.includes('approval_restored'), live);
     assert.equal(calls.length, 0);
   }
+});
+
+const LEGACY_SOURCE = JSON.stringify({ teamChats: [{ id: 'old', projectId: 'p', title: 'Old', createdAt: 'then', updatedAt: 'then', messages: [] }] });
+
+test('a migration validation failure (identity collision) leaves source and an existing valid backup byte-identical and refuses submitTurn', async t => {
+  const file = profile(t);
+  // A half-migrated store: the legacy chat's id is already a durable conversation.
+  const source = JSON.stringify({ schemaVersion: 2, revision: 3, conversations: [conversation('old')],
+    teamChats: [{ id: 'old', projectId: 'p', title: 'Old', createdAt: 'then', updatedAt: 'then', messages: [] }] });
+  const backup = JSON.stringify({ version: 1, original: LEGACY_SOURCE });
+  fs.writeFileSync(file, source);
+  fs.writeFileSync(`${file}.v1-backup`, backup);
+  const app = launch(file, async () => ({ text: 'must not run' }));
+  await assert.rejects(app.services.submitTurn(submit('old', 'blocked', 1)), /collision/);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(app.calls.length, 0, 'durable dispatch stays disabled');
+  assert.equal(fs.readFileSync(file, 'utf8'), source, 'source untouched');
+  assert.equal(fs.readFileSync(`${file}.v1-backup`, 'utf8'), backup, 'backup untouched');
+});
+
+test('saveChat is rejected after activation even from a stale caller', async t => {
+  const file = profile(t);
+  fs.writeFileSync(file, LEGACY_SOURCE);
+  const app = launch(file, async () => ({ text: 'reply' }));
+  await app.services.activate();
+  const message = { id: 'late', role: 'user' as const, text: 'from an old window', createdAt: 'now' };
+  // The IPC handler's path (fenced) and a caller that bypasses the fence both refuse.
+  await assert.rejects(app.services.activation.legacy(() => app.services.store().saveMessages('old', [message])), /disabled/);
+  await assert.rejects(app.services.store().saveMessages('old', [message]), /replacement/);
+  assert.equal(read(file).conversations[0].messages.length, 0);
+});
+
+test('an in-flight legacy save and turn hold cutover; their writes land in the backup source and submitTurn accepts only afterwards', async t => {
+  const file = profile(t);
+  fs.writeFileSync(file, LEGACY_SOURCE);
+  const sessions: LegacyRuntimeSessionEvidence[] = [];
+  const collected: string[][] = [];
+  const calls: TeamChatExecutionParams[] = [];
+  let coordinators = 0;
+  const services = createTeamChatServices({ filePath: () => file, enabled: true,
+    legacyRuntimeEvidence: async () => { collected.push(sessions.map(s => s.issueKey)); return structuredClone(sessions); },
+    createCoordinator: repository => { coordinators++; return new TeamChatCoordinator({ repository, idSource: (() => { let n = 0; return () => `cutover-${++n}`; })(),
+      executionAdapter: { execute: async params => { calls.push(params); return { text: 'durable reply' }; } } }); } });
+
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const legacyKey = 'ASSISTANT-old-dev-0123456789abcdef';
+  // A legacy turn: its runtime session and checkpoint appear only when it finishes.
+  const turn = services.activation.legacy(async () => {
+    await gate;
+    sessions.push({ issueKey: legacyKey, state: 'completed', provider: 'claude-code', definitionOfDone: LEGACY_VIRTUAL_TEAM_DEFINITION_OF_DONE, checkpointMessageIds: ['old-dev'] });
+  });
+  const save = services.activation.legacy(async () => {
+    await gate;
+    return services.store().saveMessages('old', [
+      { id: 'old-user', role: 'user', text: 'legacy question', createdAt: 'then' },
+      { id: 'old-dev', role: 'dev', text: 'legacy answer', createdAt: 'then' }]);
+  });
+  const submitted = services.submitTurn(submit('old', 'after-cutover', 0));
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(coordinators, 0, 'no durable coordinator exists while legacy work is in flight');
+  assert.equal(calls.length, 0);
+  assert.equal(collected.length, 0, 'evidence is not read before quiescence');
+  assert.equal(fs.readFileSync(file, 'utf8'), LEGACY_SOURCE, 'nothing is migrated yet');
+  await assert.rejects(services.activation.legacy(async () => undefined), /disabled/, 'new legacy work is fenced immediately');
+
+  release();
+  await Promise.all([turn, save]);
+  const accepted = await submitted;
+  await until(() => read(file).conversations[0].turns[0]?.state === 'completed', 'durable completion');
+  const original = JSON.parse(JSON.parse(fs.readFileSync(`${file}.v1-backup`, 'utf8')).original);
+  assert.deepEqual(original.teamChats[0].messages.map((m: { id: string }) => m.id), ['old-user', 'old-dev'], 'the legacy save landed before the backup');
+  assert.deepEqual(collected, [[legacyKey]], 'evidence was read once, after the legacy turn settled');
+  const after = read(file).conversations[0];
+  assert.deepEqual(after.messages.slice(0, 2).map(m => [m.id, m.provenance]), [['old-user', 'imported'], ['old-dev', 'imported']]);
+  assert.deepEqual(after.legacyRuntimeLinks?.map(link => [link.runtimeSessionKey, link.participantId, link.checkpointMessageId]), [[legacyKey, 'part-dev', 'old-dev']]);
+  assert.equal(after.turns.length, 1); assert.equal(after.turns[0].id, accepted.turnId);
+  assert.equal(coordinators, 1);
+  assert.equal(calls.length, 1);
+  assert.ok(after.bindings.every(binding => binding.id !== legacyKey), 'the durable reply never reuses the legacy session as a binding');
 });

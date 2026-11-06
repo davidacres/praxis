@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 803,
+  "testCount": 804,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -5190,12 +5190,28 @@
       }
     },
     {
+      "id": "PT-D54AE14ABC",
+      "title": "an expired legacy runtime session is linked, reconstructed and listed once",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
+        "line": 177,
+        "project": "functional"
+      },
+      "area": "durable Team Chat",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an expired legacy runtime session is linked, reconstructed and listed once",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-829EB33638",
       "title": "keyboard cancellation preserves accepted messages and cancels only the selected queued turn",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 176,
+        "line": 247,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5211,7 +5227,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 209,
+        "line": 280,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5227,7 +5243,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 262,
+        "line": 333,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5243,7 +5259,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 298,
+        "line": 369,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5259,7 +5275,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 329,
+        "line": 400,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5275,7 +5291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 398,
+        "line": 469,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5291,7 +5307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 434,
+        "line": 505,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5307,7 +5323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 475,
+        "line": 546,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5323,7 +5339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 511,
+        "line": 582,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5339,7 +5355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 539,
+        "line": 610,
         "project": "functional"
       },
       "area": "durable Team Chat",
@@ -5355,7 +5371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts",
-        "line": 598,
+        "line": 669,
         "project": "functional"
       },
       "area": "durable Team Chat",

@@ -25,6 +25,7 @@ import {
   type AgentTaskDefinition,
   type AiProvider,
   type IssueDetails,
+  type LegacyRuntimeSessionEvidence,
   type ConversationUpdate,
   type SubmitConversationCommand
 } from '@praxis/core';
@@ -40,10 +41,35 @@ const attachments = () => new TeamChatAttachments(path.join(app.getPath('userDat
 const activeToolSessions = new Set<string>();
 const TRANSCRIPT_CHECKPOINT = 'Virtual Team transcript checkpoint';
 
+/** The shape `toolSessionKey` gave every pre-durable Virtual Team runtime session. */
+const LEGACY_TOOL_SESSION_KEY = /^ASSISTANT-.+-(lead|dev|qa|security|product)-[0-9a-f]{16}$/;
+
+/**
+ * Structural facts about pre-durable Virtual Team runtime sessions, for migration to prove
+ * links from. Records are only read — never rewritten or deleted — and a transcript that
+ * fails to load yields no checkpoints, so that record becomes a diagnostic, never a blocker.
+ */
+async function collectLegacyRuntimeEvidence(): Promise<LegacyRuntimeSessionEvidence[]> {
+  const manager = getAiSessionManager();
+  const evidence: LegacyRuntimeSessionEvidence[] = [];
+  for (const [key, summary] of manager.getAllAgentSessions()) {
+    if (!LEGACY_TOOL_SESSION_KEY.test(key) || summary.teamChatExecution) continue;
+    let record: AgentSessionRecord = summary;
+    try { record = await manager.ensureSessionTranscript(key) ?? summary; } catch { /* no checkpoints: unprovable */ }
+    evidence.push({ issueKey: key, state: record.state,
+      ...(record.provider ? { provider: record.provider } : {}), ...(record.model ? { model: record.model } : {}),
+      ...(record.taskDefinition?.definitionOfDone ? { definitionOfDone: record.taskDefinition.definitionOfDone } : {}),
+      checkpointMessageIds: (record.events ?? []).filter(event => event.type === 'info' && event.summary === TRANSCRIPT_CHECKPOINT && event.detail)
+        .map(event => String(event.detail)) });
+  }
+  return evidence;
+}
+
 /** `userData/team-chats.json` — per-profile like the other AI stores, so e2e profiles never share chats. */
 const teamChats = createTeamChatServices({
   filePath: () => path.join(app.getPath('userData'), 'team-chats.json'),
   enabled: process.env.PRAXIS_DURABLE_TEAM_CHAT !== '0',
+  legacyRuntimeEvidence: collectLegacyRuntimeEvidence,
   createCoordinator: repository => new TeamChatCoordinator({
     repository,
     captureRuntimeOptions: options => {

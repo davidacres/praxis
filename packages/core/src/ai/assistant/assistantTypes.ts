@@ -193,6 +193,35 @@ export interface ConversationSummary {
   id: string; version: number; sourceStart: number; sourceEnd: number; sourceDigest: string;
   text: string; attemptId: string; provider: string; supersedesId?: string;
 }
+/**
+ * What main observed about one pre-durable runtime session record, gathered after the
+ * activation fence settles. No title, goal or reply text: migration may not use them.
+ */
+export interface LegacyRuntimeSessionEvidence {
+  issueKey: string;
+  provider?: string;
+  model?: string;
+  state: string;
+  definitionOfDone?: string;
+  /** `detail` of every "Virtual Team transcript checkpoint" info event: the persona reply it saw last. */
+  checkpointMessageIds: string[];
+}
+/**
+ * A proven association between an imported conversation member and the runtime session that
+ * served it before cutover. It is a record, never a binding: the legacy configuration digest
+ * cannot be checked against today's runtime, so the next turn always binds fresh and rebuilds.
+ */
+export interface LegacyRuntimeLink {
+  runtimeSessionKey: string;
+  conversationId: string;
+  participantId: string;
+  role: AssistantRole;
+  provider?: string;
+  legacyConfigurationDigest: string;
+  checkpointMessageId: string;
+  status: 'imported';
+}
+export type LegacyRuntimeDiagnosticReason = 'unknown-conversation' | 'not-virtual-team' | 'no-checkpoint';
 export interface ConversationCommandReceipt {
   commandId: string; payloadDigest: string; turnId: string; revision: number; outcome: 'accepted';
 }
@@ -211,10 +240,14 @@ export interface DurableConversation extends Omit<TeamChatRecord, 'messages' | '
   pinnedMessageIds: string[];
   controlReceipts?: { commandId: string; payloadDigest: string; revision: number }[];
   commandReceipts: ConversationCommandReceipt[];
+  /** Runtime sessions migration proved served this chat; never consulted when binding. */
+  legacyRuntimeLinks?: LegacyRuntimeLink[];
 }
 export interface TeamChatSnapshot {
   /** Unprovable legacy associations stay available for forward repair, never dispatched. */
   legacyDiagnostics?: { id: string; completedAt: string; context?: PageAssistantContext; messages: AssistantMessage[] }[];
+  /** Legacy-shaped runtime sessions migration could not prove; the records themselves are kept. */
+  legacyRuntimeDiagnostics?: { runtimeSessionKey: string; reason: LegacyRuntimeDiagnosticReason }[];
   activation?: { version: 1; acceptedNewTurns: boolean };
   schemaVersion: 2;
   revision: number;

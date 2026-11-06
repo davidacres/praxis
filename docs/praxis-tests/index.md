@@ -1,6 +1,6 @@
 # Praxis Test catalogue
 
-This catalogue describes **803 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
+This catalogue describes **804 Playwright tests** under `apps/praxis-desktop/main/e2e`. Each entry is a structured English contract linked to its exact source file and line. Run `npm run test:praxis-contracts` to detect drift before QA.
 
 | ID | Area | Test | Automation |
 | --- | --- | --- | --- |
@@ -328,17 +328,18 @@ This catalogue describes **803 Playwright tests** under `apps/praxis-desktop/mai
 | PT-D8BE3D65EB | durable Team Chat | subscription buffers a racing revision and discards responses after selection changes | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:73` |
 | PT-C44D501ACA | durable Team Chat | unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:104` |
 | PT-EA127A3852 | durable Team Chat | a migrated chat continues from imported history without reusing unproved runtime identity | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:145` |
-| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:176` |
-| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:209` |
-| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:262` |
-| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:298` |
-| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:329` |
-| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:398` |
-| PT-68979E242A | durable Team Chat | a malformed team-chat file is shown as a recoverable error and never replaced | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:434` |
-| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:475` |
-| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:511` |
-| PT-EE0AB4E23D | durable Team Chat | queued page context and staged image reach the provider after navigation and composer replacement | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:539` |
-| PT-6A15DADEFB | durable Team Chat | closing the initiating window keeps its accepted turn and pending approval observable from another window | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:598` |
+| PT-D54AE14ABC | durable Team Chat | an expired legacy runtime session is linked, reconstructed and listed once | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:177` |
+| PT-829EB33638 | durable Team Chat | keyboard cancellation preserves accepted messages and cancels only the selected queued turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:247` |
+| PT-204ED6FAA3 | durable Team Chat | an unconfirmed submission retries its original command after both acknowledgements are lost | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:280` |
+| PT-2B5E9C8D8A | durable Team Chat | an app restart mid-reply leaves the turn for the user to resolve; nothing is replayed | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:333` |
+| PT-E29A82FCB9 | durable Team Chat | a queued turn resumes after restart before any chat is opened | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:369` |
+| PT-F202472C30 | durable Team Chat | a storage write failure is shown and the accepted transcript remains | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:400` |
+| PT-2467F68DB7 | durable Team Chat | re-opening a team chat whose first load failed reads its transcript again | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:469` |
+| PT-68979E242A | durable Team Chat | a malformed team-chat file is shown as a recoverable error and never replaced | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:505` |
+| PT-0DD1738998 | durable Team Chat | a tool member's pending permission is attached to its attempt and a restart never reuses the approval | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:546` |
+| PT-2633FBDC53 | durable Team Chat | a CLI member without resume capability reconstructs context on its second turn | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:582` |
+| PT-EE0AB4E23D | durable Team Chat | queued page context and staged image reach the provider after navigation and composer replacement | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:610` |
+| PT-6A15DADEFB | durable Team Chat | closing the initiating window keeps its accepted turn and pending approval observable from another window | `apps/praxis-desktop/main/e2e/durableTeamChat.spec.ts:669` |
 | PT-5D69F1868B | easymode | EasyMode exposes the shared sidebar material through its feed and header | `apps/praxis-desktop/main/e2e/easymode.spec.ts:30` |
 | PT-E4A060174B | easymode | legacy enableEasyMode false still uses the sole sidebar | `apps/praxis-desktop/main/e2e/easymode.spec.ts:69` |
 | PT-D7A1079D36 | easymode | Preview omits retired switches and the sole sidebar stays active | `apps/praxis-desktop/main/e2e/easymode.spec.ts:79` |

@@ -30,3 +30,5 @@ FX-BE-182
 ## Validation and close conditions
 
 Follow the canonical story and its task-specific tests; close only when all criteria have linked evidence. No external issue has been created.
+
+**TASK-485 result (2026-11-06):** all five migration criteria pass. Legacy chats migrate losslessly with a byte-exact backup. Provable legacy runtime sessions import as typed `legacyRuntimeLinks`, never bindings, and unprovable ones become diagnostics. Cutover waits for in-flight legacy work, and an expired legacy session reconstructs its context and is listed once. Evidence, commands and assertion names: [TASK-485](../../../../../plans/features/fx-bf-111-durable-team-chat/stories/fx-be-183-renderer-and-migration/tasks/task-485-legacy-migration.md#evidence-2026-11-06-implementation-stage).

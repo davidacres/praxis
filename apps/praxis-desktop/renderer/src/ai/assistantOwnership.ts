@@ -12,7 +12,8 @@ import { isAssistantToolSession } from './sessionNav';
  *
  * Ownership is typed (`session.teamChatExecution`) wherever the record was created after FX-BE-179;
  * the legacy `ASSISTANT-` issue-key prefix inside `isAssistantToolSession` is the narrow fallback
- * for records written before that, which TASK-485 migrates.
+ * for records written before that. TASK-485 migration links the provable ones to their
+ * conversation (or records a diagnostic) but never rewrites or deletes them, so the fallback stays.
  */
 
 /** A session the assistant owns: a Virtual Team member's runtime execution, not a user chat. */
