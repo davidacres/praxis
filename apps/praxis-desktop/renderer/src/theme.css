@@ -8546,6 +8546,12 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-console.browser-open > .session-request-dock,
 .session-console.browser-open > .session-chat-scroll,
 .session-console.browser-open > .session-chat-composer,
+.session-console.artifact-open > .session-console-header,
+.session-console.artifact-open > .session-analysis-banner,
+.session-console.artifact-open > .session-error-banner,
+.session-console.artifact-open > .session-request-dock,
+.session-console.artifact-open > .session-chat-scroll,
+.session-console.artifact-open > .session-chat-composer,
 .agent-details-page.browser-open > .agent-details-header,
 .agent-details-page.browser-open > .agent-details-subagents-bar,
 .agent-details-page.browser-open > .agent-details-body,
@@ -8556,6 +8562,8 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Maximised — the browser fills the whole console; the transcript + composer
    are hidden behind it until Restore. */
 .session-console.browser-maximized > .session-browser-dock,
+.session-console.artifact-maximized > .session-artifact-dock,
+.session-console.artifact-maximized > .session-split-dock,
 .agent-details-page.browser-maximized > .session-browser-dock {
   left: 0;
   width: auto;
@@ -8566,11 +8574,390 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-console.browser-maximized > .session-request-dock,
 .session-console.browser-maximized > .session-chat-scroll,
 .session-console.browser-maximized > .session-chat-composer,
+.session-console.artifact-maximized > .session-console-header,
+.session-console.artifact-maximized > .session-analysis-banner,
+.session-console.artifact-maximized > .session-error-banner,
+.session-console.artifact-maximized > .session-request-dock,
+.session-console.artifact-maximized > .session-chat-scroll,
+.session-console.artifact-maximized > .session-chat-composer,
 .agent-details-page.browser-maximized > .agent-details-header,
 .agent-details-page.browser-maximized > .agent-details-subagents-bar,
 .agent-details-page.browser-maximized > .agent-details-body,
 .agent-details-page.browser-maximized > .agent-details-composer-dock {
   margin-right: 0;
+}
+
+/* ── Split dock container and tabs ────────────────────────────────────────── */
+.session-split-dock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(360px, 44%, 760px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.session-split-dock.has-tabs > .session-browser-dock,
+.session-split-dock.has-tabs > .session-artifact-dock {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 37px);
+  border-left: none;
+}
+
+.session-dock-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.session-dock-tab-bar .btn-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.session-dock-tab-bar .btn-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.session-dock-tab-bar .btn-tab.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+
+/* ── Artifact Workspace Dock ─────────────────────────────────────────────── */
+.session-artifact-dock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(360px, 44%, 760px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.artifact-dock-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-surface);
+}
+
+.artifact-dock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  min-height: 42px;
+  box-sizing: border-box;
+}
+
+.artifact-dock-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.artifact-dock-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge-version {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  font-weight: 600;
+}
+
+.artifact-dock-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.artifact-dock-mode-switch .btn-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: var(--text-xs);
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.artifact-dock-mode-switch .btn-tab:hover {
+  color: var(--text-primary);
+}
+
+.artifact-dock-mode-switch .btn-tab.active {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  font-weight: 500;
+}
+
+.artifact-dock-chrome {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.artifact-dock-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--text-xs);
+  background: color-mix(in srgb, var(--tone-green) 12%, var(--bg-elevated));
+  color: var(--tone-green);
+  border-bottom: 1px solid color-mix(in srgb, var(--tone-green) 25%, transparent);
+}
+
+.artifact-dock-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--text-xs);
+  background: color-mix(in srgb, var(--tone-red) 12%, var(--bg-elevated));
+  color: var(--tone-red);
+  border-bottom: 1px solid color-mix(in srgb, var(--tone-red) 25%, transparent);
+}
+
+.artifact-dock-surface {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.artifact-dock-empty,
+.artifact-dock-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  padding: 24px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.artifact-preview-iframe-wrapper {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.artifact-preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg-canvas);
+  display: block;
+}
+
+.artifact-preview-markdown {
+  padding: 20px 24px;
+  overflow: auto;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.artifact-preview-image {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: auto;
+  background: var(--bg-canvas);
+}
+
+.artifact-preview-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.artifact-preview-fallback {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+}
+
+.artifact-preview-card {
+  max-width: 380px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.artifact-preview-card h4 {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--text-primary);
+}
+
+.artifact-preview-card p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.artifact-preview-card .artifact-hint {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.artifact-code-view,
+.artifact-diff-view {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-canvas);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.artifact-code-lines,
+.artifact-diff-lines {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  min-width: fit-content;
+}
+
+.artifact-code-line,
+.artifact-diff-line {
+  display: flex;
+  align-items: flex-start;
+  padding: 0 12px;
+  white-space: pre;
+}
+
+.artifact-code-line:hover,
+.artifact-diff-line:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.artifact-code-lineno {
+  width: 40px;
+  user-select: none;
+  text-align: right;
+  padding-right: 14px;
+  color: color-mix(in srgb, var(--text-secondary) 50%, transparent);
+  font-size: 11px;
+}
+
+.artifact-diff-indicator {
+  width: 16px;
+  user-select: none;
+  color: var(--tone-green);
+  font-weight: bold;
+}
+
+.artifact-diff-line.diff-added {
+  background: color-mix(in srgb, var(--tone-green) 10%, transparent);
+}
+
+.artifact-code-text {
+  flex: 1;
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.artifact-dock-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+.artifact-dock-path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gadget-artifact-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
 }
 
 .browser-pane {
@@ -21131,8 +21518,6 @@ button.session-chat-attachment {
 .team-chat-main .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team-chat-issue { flex-shrink: 0; padding: 0 5px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-tertiary); font-size: 10px; line-height: 16px; }
 .team-chat-personas { display: inline-flex; gap: 2px; flex-shrink: 0; }
-.team-chat-delete { opacity: 0; flex-shrink: 0; margin-right: 4px; }
-.team-chat-row:hover .team-chat-delete, .team-chat-delete:focus-visible { opacity: 1; }
 .team-chat-storage-error { display: flex; align-items: flex-start; gap: 8px; margin: 4px; padding: 8px; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, var(--bg-elevated)); color: var(--text); font-size: 12px; }
 .team-chat-storage-error__lead { flex-shrink: 0; display: inline-flex; padding-top: 1px; color: var(--danger); }
 .team-chat-storage-error__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -21353,17 +21738,24 @@ button.session-chat-attachment {
 .team-chat-row.ledger-row:hover { background: color-mix(in srgb, var(--text) 5%, var(--bg-elevated)); }
 .team-chat-row.ledger-row.active { background: color-mix(in srgb, var(--text) 8%, var(--bg-elevated)); box-shadow: inset 2px 0 0 var(--accent); }
 .team-chat-row.ledger-row .team-chat-main { align-items: flex-start; gap: 8px; padding: 6px 8px 6px var(--tree-indent-1); }
-/* Up to five 6px participant dots overlap to fit the same 14px icon column a provider mark uses. */
+/* The team icon sits in the same 14px icon column a provider mark uses. */
+.team-chat-participants { display: inline-flex; align-items: center; flex-shrink: 0; }
+.team-chat-participants:empty { display: none; }
+.team-chat-participants .team-chat-dot { flex-shrink: 0; width: 6px; height: 6px; }
+.team-chat-participants .team-chat-dot + .team-chat-dot { margin-left: 2px; }
 .team-chat-row.ledger-row .team-chat-personas { flex: 0 0 14px; width: 14px; min-width: 14px; height: 16px; margin-top: 1px; gap: 0; overflow: visible; }
-.team-chat-row.ledger-row .team-chat-dot { flex-shrink: 0; width: 6px; height: 6px; }
-.team-chat-row.ledger-row .team-chat-dot + .team-chat-dot { margin-left: -4px; }
 .ledger-body { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
 .ledger-title-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; line-height: 18px; }
 .ledger-title { overflow: hidden; flex: 1 1 auto; min-width: 0; color: var(--text); font-size: var(--text-sm, 13px); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .ledger-meta { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-tertiary); font-size: 10px; line-height: 14px; }
 .ledger-meta > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-chat-row.ledger-row .team-chat-delete { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
-.team-chat-row.ledger-row { position: relative; }
+/* Rename / archive / delete appear on hover like a session row's, faded into the row's own fill. */
+.team-chat-row.ledger-row { position: relative; --easymode-row-fade: var(--bg-elevated); }
+.team-chat-row.ledger-row:hover { --easymode-row-fade: color-mix(in srgb, var(--text) 5%, var(--bg-elevated)); }
+.team-chat-row.ledger-row.active { --easymode-row-fade: color-mix(in srgb, var(--text) 8%, var(--bg-elevated)); }
+.team-chat-row.ledger-row .team-chat-actions { right: 4px; }
+.team-chat-row:hover .team-chat-actions,
+.team-chat-row:focus-within .team-chat-actions { opacity: 1; pointer-events: auto; }
 .team-chat-row.ledger-row:hover .ledger-time { visibility: hidden; }
 
 /* The project's "New session" bar: sticky to the bottom of the sidebar while the project is in view. */

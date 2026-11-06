@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ArtifactGadgetPayload } from '@praxis/core';
+import type { ArtifactGadgetPayload, ArtifactItem } from '@praxis/core';
 import { Icon } from '../../../ui/Icon';
 import { Markdown } from '../../../ui/Markdown';
 import { GadgetActionBar, GadgetHeading } from '../controls';
@@ -43,7 +43,41 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
   const payload = payloadOf<'artifact'>(gadget) as ArtifactGadgetPayload;
   const [previewingPath, setPreviewingPath] = useState<string>();
   const [previewError, setPreviewError] = useState<string>();
+  const [saveStatus, setSaveStatus] = useState<Record<string, string>>({});
   const previewSessionId = gadget.scope.workId ?? gadget.scope.sessionId;
+
+  const openInWorkspace = (artifact: ArtifactItem) => {
+    window.dispatchEvent(
+      new CustomEvent('praxis:open-artifact', {
+        detail: {
+          artifact: {
+            ...artifact,
+            sessionId: previewSessionId
+          }
+        }
+      })
+    );
+  };
+
+  const saveArtifact = async (artifact: ArtifactItem) => {
+    try {
+      await window.praxis.ai.saveArtifactToWorkspace(
+        previewSessionId,
+        artifact.path,
+        artifact.content
+      );
+      setSaveStatus(prev => ({ ...prev, [artifact.path]: 'Saved' }));
+      setTimeout(() => {
+        setSaveStatus(prev => {
+          const next = { ...prev };
+          delete next[artifact.path];
+          return next;
+        });
+      }, 3000);
+    } catch (err) {
+      setSaveStatus(prev => ({ ...prev, [artifact.path]: 'Error saving' }));
+    }
+  };
 
   const previewHtml = async (path: string, title: string) => {
     setPreviewingPath(path);
@@ -125,6 +159,11 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
               <span className="gadget-artifact-body">
                 <div className="gadget-artifact-title-row">
                   <strong>{artifact.name}</strong>
+                  {artifact.version !== undefined && (
+                    <span className="badge badge-version" data-testid="gadget-artifact-version">
+                      v{artifact.version}
+                    </span>
+                  )}
                   {artifact.category && (
                     <span
                       className={`gadget-artifact-category-badge category-${artifact.category}`}
@@ -144,21 +183,42 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
                 </div>
                 <code className="gadget-artifact-path">{artifact.path}</code>
                 {artifact.description && <small>{artifact.description}</small>}
-                {previewableHtml && (
-                  <div className="gadget-artifact-html-actions">
+                <div className="gadget-artifact-card-actions">
+                  <button
+                    className="btn btn-sm btn-quiet"
+                    type="button"
+                    data-testid="gadget-artifact-open-dock"
+                    onClick={() => openInWorkspace(artifact)}
+                    title="Open in Artifact Workspace dock"
+                  >
+                    <Icon name="eye" size={12} />
+                    <span>Open in Workspace</span>
+                  </button>
+                  {previewableHtml && (
                     <button
-                      className="btn btn-quiet"
+                      className="btn btn-sm btn-quiet"
                       type="button"
                       data-testid="gadget-artifact-html-preview"
                       disabled={Boolean(previewingPath)}
                       onClick={() => void previewHtml(artifact.path, artifact.name)}
+                      title="Pop out in floating window"
                     >
-                      <Icon name="file" size={13} />
-                      {previewingPath === artifact.path ? 'Opening…' : 'Preview'}
+                      <Icon name="external-link" size={12} />
+                      <span>{previewingPath === artifact.path ? 'Opening…' : 'Pop Out'}</span>
                     </button>
-                    {previewError && <small role="alert">{previewError}</small>}
-                  </div>
-                )}
+                  )}
+                  <button
+                    className="btn btn-sm btn-quiet"
+                    type="button"
+                    data-testid="gadget-artifact-save"
+                    onClick={() => void saveArtifact(artifact)}
+                    title="Save artifact to workspace"
+                  >
+                    <Icon name="check" size={12} />
+                    <span>{saveStatus[artifact.path] || 'Save'}</span>
+                  </button>
+                </div>
+                {previewError && <small role="alert">{previewError}</small>}
                 {previewableImage && (
                   <div className="gadget-artifact-preview" data-testid="gadget-artifact-image-preview">
                     <Markdown

@@ -338,6 +338,79 @@ test('HTML artifacts open in an isolated in-app preview', async () => {
   expect(traversalResult).toContain('outside the session workspace');
 });
 
+test('artifact workspace dock opens, switches between preview, code, and diff, and supports saving to workspace', async () => {
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-dock-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-dashboard-preview',
+      payload: {
+        title: 'Component Deliverables',
+        artifacts: [{
+          name: 'MetricsCard.tsx',
+          path: 'src/components/MetricsCard.tsx',
+          language: 'tsx',
+          content: 'export function MetricsCard() {\n  return <div className="card">Metrics</div>;\n}',
+          version: 2,
+          category: 'deliverable'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'Here is the MetricsCard component.')
+  );
+
+  const gadget = win.locator('[data-testid="gadget-artifact"]');
+  await expect(gadget).toContainText('MetricsCard.tsx');
+  await expect(gadget.locator('[data-testid="gadget-artifact-version"]')).toHaveText('v2');
+
+  // Click Open in Workspace button
+  await gadget.locator('[data-testid="gadget-artifact-open-dock"]').click();
+
+  // The dock opens in the split pane
+  const dock = win.locator('[data-testid="session-artifact-dock"]');
+  await expect(dock).toBeVisible();
+  await expect(dock.locator('[data-testid="artifact-dock-title"]')).toHaveText('MetricsCard.tsx');
+  await expect(dock.locator('[data-testid="artifact-version-badge"]')).toHaveText('v2');
+
+  // Switch to Code tab
+  await dock.locator('[data-testid="artifact-tab-code"]').click();
+  const codeView = dock.locator('[data-testid="artifact-code-view"]');
+  await expect(codeView).toBeVisible();
+  await expect(codeView).toContainText('export function MetricsCard()');
+
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-workspace-dock.png')
+  });
+
+  // Switch to Diff tab
+  await dock.locator('[data-testid="artifact-tab-diff"]').click();
+  const diffView = dock.locator('[data-testid="artifact-diff-view"]');
+  await expect(diffView).toBeVisible();
+  await expect(diffView.locator('.diff-added').first()).toContainText('MetricsCard');
+
+  // Switch back to Preview tab
+  await dock.locator('[data-testid="artifact-tab-preview"]').click();
+  await expect(dock.locator('[data-testid="artifact-preview-fallback"]')).toBeVisible();
+
+  // Save to workspace
+  await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();
+  await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Saved to src/components/MetricsCard.tsx');
+
+  // Header toggle also works
+  const toggleBtn = win.locator('[data-testid="session-artifact-toggle"]');
+  await expect(toggleBtn).toHaveClass(/active/);
+
+  // Close dock
+  await dock.locator('[data-testid="artifact-close-btn"]').click();
+  await expect(dock).toBeHidden();
+  await expect(toggleBtn).not.toHaveClass(/active/);
+});
+
 test('internal memory citations stay persisted but do not render in the transcript', async () => {
   const rolloutId = '01a099ed-d2b7-7861-a7e0-89eee71e6e27';
   const reply = [

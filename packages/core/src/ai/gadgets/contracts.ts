@@ -307,6 +307,14 @@ export interface ArtifactItem {
   category?: ArtifactCategory;
   /** Pass/fail/review verdict for this specific artifact */
   verdict?: ArtifactVerdict;
+  /** Inline source/text content for code, components, SVG, HTML, or markdown */
+  content?: string;
+  /** Programming or markup language (e.g. tsx, html, css, markdown, mermaid) */
+  language?: string;
+  /** Version number of this artifact (e.g. 1, 2, 3) */
+  version?: number;
+  /** Stable identifier connecting versions of the same artifact */
+  identifier?: string;
 }
 
 export interface ArtifactGadgetPayload {

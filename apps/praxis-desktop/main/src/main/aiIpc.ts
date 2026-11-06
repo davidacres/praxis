@@ -894,6 +894,65 @@ export function registerAiIpc(): void {
   );
 
   ipcMain.handle(
+    'ai:readArtifactText',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string) => {
+      const record = sessionManager.getAgentSession(issueKey) ??
+        [...sessionManager.getAllAgentSessions().values()].find(candidate => candidate.sessionId === issueKey);
+      const workingDirectory = record?.worktreePath?.trim() || record?.workingDirectory?.trim();
+      const input = typeof filePath === 'string' ? filePath.trim() : '';
+      if (!record || !workingDirectory || !input || nodePath.isAbsolute(input) || /^[a-z][a-z\d+.-]*:/i.test(input)) {
+        throw new Error('Artifact is not available in the session workspace.');
+      }
+      let absolute: string;
+      try {
+        absolute = await resolveSandboxedPath(workingDirectory, input);
+        const [realRoot, realFile] = await Promise.all([fsp.realpath(workingDirectory), fsp.realpath(absolute)]);
+        const relative = nodePath.relative(realRoot, realFile);
+        if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
+          throw new Error('Artifact resolves outside the session workspace.');
+        }
+        absolute = realFile;
+      } catch (error) {
+        if (error instanceof PathSandboxError) throw new Error('Artifact is outside the session workspace.');
+        throw new Error('Artifact could not be opened from the session workspace.');
+      }
+
+      try {
+        const stat = await fsp.stat(absolute);
+        if (!stat.isFile() || stat.size > MAX_HTML_PREVIEW_BYTES) {
+          throw new Error('Artifact must be a text file no larger than 2 MB.');
+        }
+        const buffer = await readSandboxedFile(workingDirectory, absolute, MAX_HTML_PREVIEW_BYTES);
+        return buffer.toString('utf8');
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Artifact')) throw error;
+        throw new Error('Artifact could not be read.');
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'ai:saveArtifactToWorkspace',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string, content?: string) => {
+      const record = sessionManager.getAgentSession(issueKey) ??
+        [...sessionManager.getAllAgentSessions().values()].find(candidate => candidate.sessionId === issueKey);
+      const workingDirectory = record?.worktreePath?.trim() || record?.workingDirectory?.trim();
+      const input = typeof filePath === 'string' ? filePath.trim() : '';
+      if (!record || !workingDirectory || !input || nodePath.isAbsolute(input) || /^[a-z][a-z\d+.-]*:/i.test(input)) {
+        throw new Error('Invalid workspace path for saving artifact.');
+      }
+      let textToSave = typeof content === 'string' ? content : undefined;
+      if (textToSave === undefined) {
+        const absolute = await resolveSandboxedPath(workingDirectory, input);
+        const buffer = await readSandboxedFile(workingDirectory, absolute, MAX_HTML_PREVIEW_BYTES);
+        textToSave = buffer.toString('utf8');
+      }
+      await writeSandboxedFile(workingDirectory, input, textToSave);
+      return { savedPath: input };
+    }
+  );
+
+  ipcMain.handle(
     'ai:renameSession',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, title: string) =>
       sessionManager.renameAgentSession(issueKey, title)

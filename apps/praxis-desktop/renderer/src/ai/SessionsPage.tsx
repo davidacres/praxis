@@ -22,6 +22,8 @@ import { isTerminalAgentState } from './aiSessionState';
 import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane, type BrowserLinkRequest } from '../browser/BrowserPane';
+import { ArtifactDock } from './artifactWorkspace/ArtifactDock';
+import type { ActiveArtifact } from './artifactWorkspace/artifactTypes';
 import { MarkdownLinkContext } from '../ui/markdownLinks';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { providerLabel, supportsReasoningEffort } from './modelProviders';
@@ -604,6 +606,23 @@ export function SessionsPage({
   const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
   const [browserLink, setBrowserLink] = useState<BrowserLinkRequest>();
+  const [artifactDockOpen, setArtifactDockOpen] = useState(false);
+  const [artifactDockMaximized, setArtifactDockMaximized] = useState(false);
+  const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact | undefined>();
+  const [activeDockTab, setActiveDockTab] = useState<'browser' | 'artifact'>('artifact');
+
+  useEffect(() => {
+    const handleOpenArtifact = (event: Event) => {
+      const customEvent = event as CustomEvent<{ artifact: ActiveArtifact }>;
+      if (customEvent.detail?.artifact) {
+        setActiveArtifact(customEvent.detail.artifact);
+        setArtifactDockOpen(true);
+        setActiveDockTab('artifact');
+      }
+    };
+    window.addEventListener('praxis:open-artifact', handleOpenArtifact);
+    return () => window.removeEventListener('praxis:open-artifact', handleOpenArtifact);
+  }, []);
   const [isCompact, setIsCompact] = useState<boolean>(() => {
     try {
       return localStorage.getItem('praxis:easymode-chat-width') === 'compact';
@@ -928,6 +947,23 @@ export function SessionsPage({
   );
 
   const { gadgetBlocks, gadgetResults, busyGadgetId, submitGadgetAction } = useSessionGadgets(composerOnly ? undefined : selected, composerOnly ? [] : conversationEvents);
+
+  const latestArtifact = useMemo(() => {
+    const allLists = Object.values(gadgetBlocks);
+    for (let l = allLists.length - 1; l >= 0; l--) {
+      const list = allLists[l];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const block = list[i];
+        if (block.type === 'gadget' && block.gadget.kind === 'artifact') {
+          const payload = block.gadget.payload as { artifacts?: ActiveArtifact[] };
+          if (payload.artifacts && payload.artifacts.length > 0) {
+            return payload.artifacts[0];
+          }
+        }
+      }
+    }
+    return undefined;
+  }, [gadgetBlocks]);
 
   // One line describing what the agent is doing right now — shown only while a
   // turn is in flight, in place of streaming every tool block. Shared with the
@@ -2383,7 +2419,11 @@ export function SessionsPage({
       data-testid="sessions-view"
     >
       <div
-        className={`session-console${isCompact ? ' is-compact-width' : ' is-full-width'}${browserOpen && selected ? ' browser-open' : ''}${browserOpen && selected && browserMaximized ? ' browser-maximized' : ''}`}
+        className={`session-console${isCompact ? ' is-compact-width' : ' is-full-width'}${
+          (browserOpen || artifactDockOpen) && selected ? ' browser-open artifact-open' : ''
+        }${
+          (browserOpen && selected && browserMaximized) || (artifactDockOpen && selected && artifactDockMaximized) ? ' browser-maximized artifact-maximized' : ''
+        }`}
         data-testid="session-console"
       >
         {!selected && (
@@ -2477,6 +2517,27 @@ export function SessionsPage({
               </button>
               <button
                 type="button"
+                className={`icon-btn icon-btn-sm${artifactDockOpen ? ' active' : ''}`}
+                data-testid="session-artifact-toggle"
+                aria-pressed={artifactDockOpen}
+                title={artifactDockOpen ? 'Hide Artifact Workspace' : 'Show Artifact Workspace'}
+                onClick={() => {
+                  setArtifactDockOpen(prev => {
+                    const next = !prev;
+                    if (next) {
+                      setActiveDockTab('artifact');
+                      if (!activeArtifact && latestArtifact) {
+                        setActiveArtifact(latestArtifact);
+                      }
+                    }
+                    return next;
+                  });
+                }}
+              >
+                <Icon name="sparkles" size={13} />
+              </button>
+              <button
+                type="button"
                 className={`icon-btn icon-btn-sm${browserOpen ? ' active' : ''}`}
                 data-testid="session-browser-toggle"
                 aria-pressed={browserOpen}
@@ -2566,20 +2627,64 @@ export function SessionsPage({
             />
 
             {activeComposer}
-            {browserOpen && (
+            {((browserOpen && selected) || (artifactDockOpen && selected)) && (
               <div
-                className={`session-browser-dock${settings?.ai.browserTools.enabled ? ' ai-controlled' : ''}`}
-                title={settings?.ai.browserTools.enabled ? 'The AI can drive this browser' : undefined}
+                className={`session-split-dock${browserOpen && artifactDockOpen ? ' has-tabs' : ''}`}
+                data-testid="session-split-dock"
               >
-                <BrowserPane
-                  initialUrl={initialBrowserUrl}
-                  linkRequest={browserLink}
-                  onNavigate={onBrowserUrlChange}
-                  suspended={browserSuspended}
-                  maximized={browserMaximized}
-                  onToggleMaximize={() => setBrowserMaximized(value => !value)}
-                  onClose={() => setBrowserVisibility(false)}
-                />
+                {browserOpen && artifactDockOpen && (
+                  <div className="session-dock-tab-bar" role="tablist" aria-label="Split Dock Tabs">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeDockTab === 'artifact'}
+                      className={`btn-tab${activeDockTab === 'artifact' ? ' active' : ''}`}
+                      onClick={() => setActiveDockTab('artifact')}
+                      data-testid="session-dock-tab-artifact"
+                    >
+                      <Icon name="sparkles" size={12} />
+                      <span>Artifacts</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={activeDockTab === 'browser'}
+                      className={`btn-tab${activeDockTab === 'browser' ? ' active' : ''}`}
+                      onClick={() => setActiveDockTab('browser')}
+                      data-testid="session-dock-tab-browser"
+                    >
+                      <Icon name="globe" size={12} />
+                      <span>Browser</span>
+                    </button>
+                  </div>
+                )}
+                {artifactDockOpen && (!browserOpen || activeDockTab === 'artifact') && (
+                  <div className="session-artifact-dock" data-testid="session-artifact-dock">
+                    <ArtifactDock
+                      artifact={activeArtifact || latestArtifact}
+                      sessionId={selected.issueKey}
+                      onClose={() => setArtifactDockOpen(false)}
+                      maximized={artifactDockMaximized}
+                      onToggleMaximize={() => setArtifactDockMaximized(v => !v)}
+                    />
+                  </div>
+                )}
+                {browserOpen && (!artifactDockOpen || activeDockTab === 'browser') && (
+                  <div
+                    className={`session-browser-dock${settings?.ai.browserTools.enabled ? ' ai-controlled' : ''}`}
+                    title={settings?.ai.browserTools.enabled ? 'The AI can drive this browser' : undefined}
+                  >
+                    <BrowserPane
+                      initialUrl={initialBrowserUrl}
+                      linkRequest={browserLink}
+                      onNavigate={onBrowserUrlChange}
+                      suspended={browserSuspended || (artifactDockOpen && activeDockTab === 'artifact')}
+                      maximized={browserMaximized}
+                      onToggleMaximize={() => setBrowserMaximized(value => !value)}
+                      onClose={() => setBrowserVisibility(false)}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </>

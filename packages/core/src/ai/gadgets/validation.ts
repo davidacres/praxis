@@ -403,6 +403,10 @@ const PAYLOAD_VALIDATORS: { [K in GadgetKind]: (payload: Record<string, unknown>
       if (verdict !== undefined && !['passed', 'failed', 'needs-review'].includes(verdict)) {
         fail('schema-invalid', `"${path}.verdict" must be one of: passed, failed, needs-review.`, `${path}.verdict`);
       }
+      const content = readString(artifact, 'content', path, { max: GADGET_LIMITS.stringLength });
+      const language = readString(artifact, 'language', path, { max: 100 });
+      const version = readNumber(artifact, 'version', path, { min: 1 });
+      const identifier = readString(artifact, 'identifier', path, { max: 200 });
       return {
         name: readString(artifact, 'name', path, { required: true, max: 400 })!,
         path: filePath,
@@ -410,7 +414,11 @@ const PAYLOAD_VALIDATORS: { [K in GadgetKind]: (payload: Record<string, unknown>
         description: readString(artifact, 'description', path),
         sizeBytes: readNumber(artifact, 'sizeBytes', path, { min: 0 }),
         ...(category ? { category } : {}),
-        ...(verdict ? { verdict } : {})
+        ...(verdict ? { verdict } : {}),
+        ...(content !== undefined ? { content } : {}),
+        ...(language ? { language } : {}),
+        ...(version !== undefined ? { version } : {}),
+        ...(identifier ? { identifier } : {})
       };
     });
 

@@ -964,6 +964,10 @@ export interface AiIpc {
   loadImagePreview(issueKey: string, filePath: string): Promise<string | undefined>;
   /** Opens a bounded HTML file from the session's working folder in a restricted in-app preview window. */
   openHtmlArtifactPreview(issueKey: string, filePath: string, title?: string): Promise<void>;
+  /** Reads the text contents of an artifact file located in the session workspace. */
+  readArtifactText(issueKey: string, filePath: string): Promise<string>;
+  /** Saves or writes an artifact file directly into the session workspace. */
+  saveArtifactToWorkspace(issueKey: string, filePath: string, content?: string): Promise<{ savedPath: string }>;
   /** Renames a persisted session without changing its ticket binding or task goal. */
   renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
   assignSessionToProject(issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string): Promise<AgentSessionRecord>;
@@ -1276,6 +1280,8 @@ export interface AssistantIpc {
   createChat(projectId: string, issueKey?: string): Promise<TeamChatRecord>;
   saveChat(chatId: string, messages: readonly AssistantMessage[]): Promise<TeamChatRecord>;
   renameChat(chatId: string, title: string): Promise<TeamChatRecord>;
+  /** Archives or restores a team chat. Reversible: an archived chat only leaves the sidebar feeds. */
+  archiveChat(chatId: string, archived: boolean): Promise<TeamChatRecord>;
   deleteChat(chatId: string): Promise<void>;
   /**
    * Submits a turn. Main validates participants, project, page context, attachment refs and

@@ -289,6 +289,10 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,
     openHtmlArtifactPreview: (issueKey: string, filePath: string, title?: string) =>
       ipcRenderer.invoke('ai:openHtmlArtifactPreview', issueKey, filePath, title) as Promise<void>,
+    readArtifactText: (issueKey: string, filePath: string) =>
+      ipcRenderer.invoke('ai:readArtifactText', issueKey, filePath) as Promise<string>,
+    saveArtifactToWorkspace: (issueKey: string, filePath: string, content?: string) =>
+      ipcRenderer.invoke('ai:saveArtifactToWorkspace', issueKey, filePath, content) as Promise<{ savedPath: string }>,
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
     assignSessionToProject: (issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string) =>
@@ -452,6 +456,7 @@ const praxis: PraxisIpc = {
     createChat: (projectId: string, issueKey?: string) => ipcRenderer.invoke('assistant:createChat', projectId, issueKey),
     saveChat: (chatId: string, messages: unknown) => ipcRenderer.invoke('assistant:saveChat', chatId, messages),
     renameChat: (chatId: string, title: string) => ipcRenderer.invoke('assistant:renameChat', chatId, title),
+    archiveChat: (chatId: string, archived: boolean) => ipcRenderer.invoke('assistant:archiveChat', chatId, archived),
     deleteChat: (chatId: string) => ipcRenderer.invoke('assistant:deleteChat', chatId),
     submitTurn: (command: unknown) => ipcRenderer.invoke('assistant:submitTurn', command),
     getConversation: (conversationId: string) => ipcRenderer.invoke('assistant:getConversation', conversationId),
