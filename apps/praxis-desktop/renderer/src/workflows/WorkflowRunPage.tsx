@@ -214,9 +214,13 @@ export function WorkflowRunPage({
         if (match) return match;
       }
     }
-    return run.stages.find(
-      s => s.outcome === 'succeeded' && s.artifacts.some(a => a.kind === 'plan')
-    );
+    // Make the plan available while an agent-task is running
+    if (stage.type === 'agent-task' && (stage.outcome === 'running' || stage.lane === 'running')) {
+      return run.stages.find(
+        s => s.outcome === 'succeeded' && s.artifacts.some(a => a.kind === 'plan')
+      );
+    }
+    return undefined;
   }, [run, stage]);
 
   const [viewingPlan, setViewingPlan] = useState<
