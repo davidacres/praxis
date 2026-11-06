@@ -3,7 +3,7 @@ import type { CoordinationGate } from './coordination/coordinationGate';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
-import { runAgentLoop, type AgentLoopEvent, type WireImageAttachment, type WireMessage } from './agentRuntime';
+import { runAgentLoop, DEFAULT_HISTORY_BUDGET_CHARS, type AgentLoopEvent, type WireImageAttachment, type WireMessage } from './agentRuntime';
 import { AUTOPILOT_SESSION_PROMPT, BROWSER_TOOLS_PROMPT, CODE_INTELLIGENCE_PROMPT, CODE_INTELLIGENCE_SERVER_NAME, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
 import { reviewedIssueKey } from './ticketReview';
 import {
@@ -545,7 +545,7 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
     };
 
     const knownContext = getKnownContextLength(options.model, options.provider) ?? 128_000;
-    const dynamicBudget = Math.floor(knownContext * 3.5 * 0.8);
+    const dynamicBudget = Math.min(DEFAULT_HISTORY_BUDGET_CHARS, Math.floor(knownContext * 3.5 * 0.8));
 
     const result = await runAgentLoop({
       adapter: resolveProviderAdapter(options.provider),
@@ -587,9 +587,9 @@ Issue: ${reviewedIssueKey(issue.key) ?? issue.key} — ${issue.summary}${worktre
       void this.sessionManager.refreshHandoverBrief(issueKey);
     } else if (result.status === 'aborted') {
       // abortTask already sets state
-    } else if (result.status === 'step_limit' && active.autopilot) {
-      active.maxSteps = Number.MAX_SAFE_INTEGER;
-      this.appendEvent(issueKey, evt('info', 'Step limit removed automatically (autopilot mode).'));
+    } else if (result.status === 'step_limit' && active.autopilot && (active.maxSteps ?? 0) < 350) {
+      active.maxSteps = Math.min((active.maxSteps ?? 200) + 100, 350);
+      this.appendEvent(issueKey, evt('info', `Step limit extended to ${active.maxSteps} (autopilot mode).`));
       // Continue from history with raised step limit
       await this.runLoopForIssue(issueKey, {
         ...options,

@@ -1,5 +1,6 @@
 export {
   runAgentLoop,
+  DEFAULT_HISTORY_BUDGET_CHARS,
   type AgentLoopEvent,
   type AgentLoopOptions,
   type AgentLoopResult,
