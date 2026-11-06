@@ -2,7 +2,13 @@ import { useEffect, useState, useMemo } from 'react';
 import { Icon } from '../../ui/Icon';
 import { highlightCode, languageFor } from '../../ui/codeHighlight';
 import { ArtifactPreview } from './ArtifactPreview';
-import type { ActiveArtifact, ArtifactViewMode } from './artifactTypes';
+import { ArtifactCodeSurface } from './ArtifactCodeSurface';
+import {
+  type ActiveArtifact,
+  type ArtifactViewMode,
+  type ArtifactLayoutPrototype,
+  ARTIFACT_LAYOUT_PROTOTYPES
+} from './artifactTypes';
 
 export interface ArtifactDockProps {
   artifact?: ActiveArtifact;
@@ -21,6 +27,13 @@ function getIconForArtifact(artifact: ActiveArtifact) {
   return 'file';
 }
 
+const MOCK_STUDIO_FILES = [
+  { name: 'MetricsCard.tsx', path: 'src/components/MetricsCard.tsx', category: 'deliverable', size: '3.4 KB', lang: 'tsx', version: 2 },
+  { name: 'metricsCard.css', path: 'src/styles/metricsCard.css', category: 'deliverable', size: '1.2 KB', lang: 'css', version: 1 },
+  { name: 'mockMetrics.json', path: 'src/fixtures/mockMetrics.json', category: 'evidence', size: '820 B', lang: 'json', version: 1 },
+  { name: 'README.md', path: 'docs/MetricsCard.md', category: 'report', size: '2.1 KB', lang: 'markdown', version: 2 }
+];
+
 export function ArtifactDock({
   artifact,
   sessionId,
@@ -36,6 +49,35 @@ export function ArtifactDock({
   const [notice, setNotice] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Layout Prototype selection
+  const [layoutVariant, setLayoutVariant] = useState<ArtifactLayoutPrototype>(() => {
+    const saved = localStorage.getItem('praxis.artifact.layoutPrototype');
+    if (saved && ARTIFACT_LAYOUT_PROTOTYPES.some(p => p.id === saved)) {
+      return saved as ArtifactLayoutPrototype;
+    }
+    return 'classic-split';
+  });
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+
+  // Dual-Pane prototype state
+  const [dualOrientation, setDualOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
+
+  // Device-Canvas prototype state
+  const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [deviceRotated, setDeviceRotated] = useState(false);
+  const [canvasZoom, setCanvasZoom] = useState<'100%' | '75%' | 'fit'>('100%');
+  const [consoleDrawerOpen, setConsoleDrawerOpen] = useState(true);
+  const [consoleTab, setConsoleTab] = useState<'console' | 'elements' | 'transpile'>('console');
+
+  // Tabbed-Studio prototype state
+  const [studioActiveFile, setStudioActiveFile] = useState('MetricsCard.tsx');
+  const [studioDrawerOpen, setStudioDrawerOpen] = useState(true);
+
+  // Iterative-Companion prototype state
+  const [companionPrompt, setCompanionPrompt] = useState('');
+  const [companionNotice, setCompanionNotice] = useState<string | undefined>();
+  const [selectedVersion, setSelectedVersion] = useState(2);
 
   const effectiveSessionId = artifact?.sessionId ?? sessionId;
 
@@ -102,9 +144,20 @@ export function ArtifactDock({
     }
   };
 
+  const handleApplyIteration = () => {
+    if (!companionPrompt.trim()) return;
+    setCompanionNotice(`Iteration request sent: "${companionPrompt.trim()}"`);
+    setCompanionPrompt('');
+    setTimeout(() => setCompanionNotice(undefined), 3000);
+  };
+
   const lines = useMemo(() => {
     return content.split('\n');
   }, [content]);
+
+  const activeLayoutMeta = useMemo(() => {
+    return ARTIFACT_LAYOUT_PROTOTYPES.find(p => p.id === layoutVariant) || ARTIFACT_LAYOUT_PROTOTYPES[0];
+  }, [layoutVariant]);
 
   if (!artifact) {
     return (
@@ -120,7 +173,11 @@ export function ArtifactDock({
   const langLabel = artifact.language || languageFor(artifact.path);
 
   return (
-    <div className="artifact-dock-container" data-testid="artifact-dock-container">
+    <div
+      className={`artifact-dock-container layout-${layoutVariant}`}
+      data-testid="artifact-dock-container"
+      data-layout-prototype={layoutVariant}
+    >
       {/* Top Header Bar */}
       <div className="artifact-dock-header" data-testid="artifact-dock-header">
         <div className="artifact-dock-identity">
@@ -137,7 +194,56 @@ export function ArtifactDock({
           )}
         </div>
 
-        {/* View Mode Switcher */}
+        {/* Prototype Layout Switcher Dropdown */}
+        <div className="artifact-dock-layout-switcher">
+          <button
+            type="button"
+            className="btn-tab btn-layout-prototype"
+            data-testid="artifact-layout-selector"
+            title="Switch Prototype Layout (5 variations)"
+            aria-expanded={layoutMenuOpen}
+            onClick={() => setLayoutMenuOpen(v => !v)}
+          >
+            <Icon name={activeLayoutMeta.icon as any} size={12} />
+            <span className="layout-name-text">{activeLayoutMeta.name}</span>
+            <Icon name="chevron-down" size={10} />
+          </button>
+
+          {layoutMenuOpen && (
+            <div className="artifact-layout-menu-dropdown" data-testid="artifact-layout-dropdown">
+              <div className="artifact-layout-menu-header">
+                <span>LAYOUT PROTOTYPES</span>
+              </div>
+              {ARTIFACT_LAYOUT_PROTOTYPES.map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`artifact-layout-menu-item${layoutVariant === opt.id ? ' active' : ''}`}
+                  data-testid={`artifact-layout-option-${opt.id}`}
+                  onClick={() => {
+                    setLayoutVariant(opt.id);
+                    localStorage.setItem('praxis.artifact.layoutPrototype', opt.id);
+                    setLayoutMenuOpen(false);
+                  }}
+                >
+                  <div className="artifact-layout-menu-item-icon">
+                    <Icon name={opt.icon as any} size={13} />
+                  </div>
+                  <div className="artifact-layout-menu-item-info">
+                    <div className="artifact-layout-menu-item-name">
+                      <span>{opt.name}</span>
+                      {opt.badge && <span className="layout-badge">{opt.badge}</span>}
+                    </div>
+                    <span className="artifact-layout-menu-item-desc">{opt.shortDesc}</span>
+                  </div>
+                  {layoutVariant === opt.id && <Icon name="check" size={12} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* View Mode Switcher (Always mounted for testing / baseline mode switching) */}
         <div className="artifact-dock-mode-switch" role="tablist" aria-label="Artifact View Mode">
           <button
             type="button"
@@ -228,6 +334,12 @@ export function ArtifactDock({
           <span>{notice}</span>
         </div>
       )}
+      {companionNotice && (
+        <div className="artifact-dock-notice companion-notice" role="status">
+          <Icon name="sparkles" size={13} />
+          <span>{companionNotice}</span>
+        </div>
+      )}
       {error && (
         <div className="error-banner artifact-dock-error" role="alert" data-testid="artifact-dock-error">
           <Icon name="warning" size={13} />
@@ -235,58 +347,477 @@ export function ArtifactDock({
         </div>
       )}
 
-      {/* Main Dock Surface */}
+      {/* Main Dock Surface: Renders specific prototype layout */}
       <div className="artifact-dock-surface" data-testid="artifact-dock-surface">
         {loading ? (
           <div className="artifact-dock-loading">
             <Icon name="refresh" size={18} />
             <span>Loading artifact contents…</span>
           </div>
-        ) : mode === 'preview' ? (
-          <ArtifactPreview
-            artifact={artifact}
-            content={content}
-            sessionId={effectiveSessionId}
-          />
-        ) : mode === 'code' ? (
-          <div className="artifact-code-view" data-testid="artifact-code-view">
-            <div className="artifact-code-banner">
-              <div className="artifact-code-banner-left">
-                <span className="artifact-code-banner-lang">{langLabel}</span>
-                {artifact.category && (
-                  <span className={`gadget-artifact-category-badge category-${artifact.category}`}>
-                    {artifact.category}
-                  </span>
-                )}
+        ) : layoutVariant === 'classic-split' ? (
+          /* ── PROTOTYPE 1: Classic Split ────────────────────────── */
+          mode === 'preview' ? (
+            <ArtifactPreview
+              artifact={artifact}
+              content={content}
+              sessionId={effectiveSessionId}
+            />
+          ) : mode === 'code' ? (
+            <ArtifactCodeSurface
+              artifact={artifact}
+              content={content}
+              mode="code"
+            />
+          ) : (
+            <ArtifactCodeSurface
+              artifact={artifact}
+              content={content}
+              mode="diff"
+            />
+          )
+        ) : layoutVariant === 'dual-pane' ? (
+          /* ── PROTOTYPE 2: Dual-Pane Live Workbench ─────────────── */
+          <div
+            className={`artifact-dual-pane-container orientation-${dualOrientation}`}
+            data-testid="artifact-prototype-dual-pane"
+          >
+            <div className="artifact-dual-pane-subtoolbar">
+              <div className="dual-pane-orientation-switch">
+                <button
+                  type="button"
+                  className={`btn-subtab${dualOrientation === 'horizontal' ? ' active' : ''}`}
+                  onClick={() => setDualOrientation('horizontal')}
+                  title="Side-by-side layout"
+                >
+                  <Icon name="columns" size={12} />
+                  <span>Side-by-Side</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn-subtab${dualOrientation === 'vertical' ? ' active' : ''}`}
+                  onClick={() => setDualOrientation('vertical')}
+                  title="Stacked layout"
+                >
+                  <Icon name="rows" size={12} />
+                  <span>Stacked</span>
+                </button>
               </div>
-              <span className="artifact-code-banner-count">{lines.length} {lines.length === 1 ? 'line' : 'lines'}</span>
+              <div className="dual-pane-status">
+                <span className="live-sync-indicator">
+                  <span className="pulse-dot" />
+                  Live Sync (React 18 Hot Transpile)
+                </span>
+              </div>
             </div>
-            <div className="artifact-code-scroll">
-              <div className="artifact-code-lines">
-                {lines.map((line, idx) => (
-                  <div key={idx} className="artifact-code-line">
-                    <span className="artifact-code-lineno">{idx + 1}</span>
-                    <code className="artifact-code-text">{highlightCode(line) || ' '}</code>
-                  </div>
-                ))}
+
+            <div className="artifact-dual-pane-body">
+              <div className="artifact-dual-pane-half pane-preview">
+                <div className="pane-header-title">
+                  <Icon name="eye" size={12} />
+                  <span>Live Render Surface</span>
+                </div>
+                <div className="pane-content-wrapper">
+                  <ArtifactPreview
+                    artifact={artifact}
+                    content={content}
+                    sessionId={effectiveSessionId}
+                  />
+                </div>
+              </div>
+
+              <div className="artifact-dual-pane-divider" />
+
+              <div className="artifact-dual-pane-half pane-code">
+                <div className="pane-header-title">
+                  <Icon name="terminal" size={12} />
+                  <span>Syntax Highlighted Source ({langLabel})</span>
+                </div>
+                <div className="pane-content-wrapper">
+                  <ArtifactCodeSurface
+                    artifact={artifact}
+                    content={content}
+                    mode={mode === 'diff' ? 'diff' : 'code'}
+                    hideBanner
+                  />
+                </div>
               </div>
             </div>
           </div>
-        ) : (
-          <div className="artifact-diff-view" data-testid="artifact-diff-view">
-            <div className="artifact-diff-banner">
-              <span className="artifact-diff-banner-tag">Changes (+{lines.length})</span>
-              <span className="artifact-diff-banner-path">{artifact.path}</span>
-            </div>
-            <div className="artifact-diff-scroll">
-              <div className="artifact-diff-lines">
-                {lines.map((line, idx) => (
-                  <div key={idx} className="artifact-diff-line diff-added">
-                    <span className="artifact-diff-indicator">+</span>
-                    <span className="artifact-code-lineno">{idx + 1}</span>
-                    <code className="artifact-code-text">{highlightCode(line) || ' '}</code>
-                  </div>
+        ) : layoutVariant === 'tabbed-studio' ? (
+          /* ── PROTOTYPE 3: Multi-Tab Studio ─────────────────────── */
+          <div className="artifact-studio-container" data-testid="artifact-prototype-tabbed-studio">
+            {/* Top file tab bar */}
+            <div className="artifact-studio-tab-strip">
+              <button
+                type="button"
+                className={`studio-drawer-toggle${studioDrawerOpen ? ' active' : ''}`}
+                title={studioDrawerOpen ? 'Hide Asset Drawer' : 'Show Asset Drawer'}
+                onClick={() => setStudioDrawerOpen(v => !v)}
+              >
+                <Icon name="folder-open" size={13} />
+                <span>Files ({MOCK_STUDIO_FILES.length})</span>
+              </button>
+
+              <div className="studio-tabs-scroll">
+                {MOCK_STUDIO_FILES.map(file => (
+                  <button
+                    key={file.name}
+                    type="button"
+                    className={`studio-tab-item${studioActiveFile === file.name ? ' active' : ''}`}
+                    onClick={() => setStudioActiveFile(file.name)}
+                  >
+                    <Icon name={file.lang === 'tsx' ? 'sparkles' : file.lang === 'css' ? 'sliders' : file.lang === 'json' ? 'package' : 'markdown'} size={12} />
+                    <span>{file.name}</span>
+                    <span className="studio-tab-pill">v{file.version}</span>
+                  </button>
                 ))}
+              </div>
+
+              <div className="studio-batch-actions">
+                <button
+                  type="button"
+                  className="btn btn-xs btn-primary"
+                  title="Save all files to project directory"
+                  onClick={handleSaveToWorkspace}
+                >
+                  <Icon name="check" size={11} />
+                  <span>Save All</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="artifact-studio-workspace">
+              {studioDrawerOpen && (
+                <div className="artifact-studio-drawer">
+                  <div className="studio-drawer-header">
+                    <span>SESSION DELIVERABLES</span>
+                  </div>
+                  <div className="studio-drawer-list">
+                    {MOCK_STUDIO_FILES.map(file => (
+                      <div
+                        key={file.name}
+                        className={`studio-file-row${studioActiveFile === file.name ? ' active' : ''}`}
+                        onClick={() => setStudioActiveFile(file.name)}
+                      >
+                        <div className="studio-file-info">
+                          <Icon name={file.lang === 'tsx' ? 'file' : file.lang === 'css' ? 'sliders' : file.lang === 'json' ? 'package' : 'markdown'} size={13} />
+                          <div className="studio-file-meta">
+                            <span className="studio-file-title">{file.name}</span>
+                            <span className="studio-file-path">{file.path}</span>
+                          </div>
+                        </div>
+                        <span className="studio-file-size">{file.size}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="artifact-studio-canvas">
+                {mode === 'preview' && studioActiveFile === 'MetricsCard.tsx' ? (
+                  <ArtifactPreview
+                    artifact={artifact}
+                    content={content}
+                    sessionId={effectiveSessionId}
+                  />
+                ) : (
+                  <ArtifactCodeSurface
+                    artifact={{
+                      ...artifact,
+                      name: studioActiveFile,
+                      path: MOCK_STUDIO_FILES.find(f => f.name === studioActiveFile)?.path || artifact.path
+                    }}
+                    content={studioActiveFile === 'MetricsCard.tsx' ? content : `// ${studioActiveFile} source preview\n/* Auto-generated companion deliverable */`}
+                    mode={mode === 'diff' ? 'diff' : 'code'}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        ) : layoutVariant === 'device-canvas' ? (
+          /* ── PROTOTYPE 4: Device Viewport Stage ────────────────── */
+          <div className="artifact-device-stage-container" data-testid="artifact-prototype-device-canvas">
+            {/* Device Control Sub-bar */}
+            <div className="artifact-device-toolbar">
+              <div className="device-presets">
+                <button
+                  type="button"
+                  className={`btn-subtab${deviceMode === 'desktop' ? ' active' : ''}`}
+                  onClick={() => setDeviceMode('desktop')}
+                >
+                  <Icon name="window-maximize" size={12} />
+                  <span>Desktop (100%)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn-subtab${deviceMode === 'tablet' ? ' active' : ''}`}
+                  onClick={() => setDeviceMode('tablet')}
+                >
+                  <Icon name="columns" size={12} />
+                  <span>Tablet (768px)</span>
+                </button>
+                <button
+                  type="button"
+                  className={`btn-subtab${deviceMode === 'mobile' ? ' active' : ''}`}
+                  onClick={() => setDeviceMode('mobile')}
+                >
+                  <Icon name="sidebar-right" size={12} />
+                  <span>Mobile (375px)</span>
+                </button>
+              </div>
+
+              <div className="device-actions">
+                <button
+                  type="button"
+                  className={`btn-subtab${deviceRotated ? ' active' : ''}`}
+                  onClick={() => setDeviceRotated(v => !v)}
+                  title="Rotate orientation"
+                >
+                  <Icon name="refresh" size={11} />
+                  <span>{deviceRotated ? 'Landscape' : 'Portrait'}</span>
+                </button>
+                <div className="zoom-pills">
+                  <button
+                    type="button"
+                    className={`btn-subtab${canvasZoom === '100%' ? ' active' : ''}`}
+                    onClick={() => setCanvasZoom('100%')}
+                  >
+                    100%
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-subtab${canvasZoom === '75%' ? ' active' : ''}`}
+                    onClick={() => setCanvasZoom('75%')}
+                  >
+                    75%
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Dotted Canvas with Device Frame */}
+            <div className={`artifact-device-canvas zoom-${canvasZoom}`}>
+              <div
+                className={`artifact-device-frame mode-${deviceMode}${deviceRotated ? ' rotated' : ''}`}
+                data-testid="artifact-device-frame"
+              >
+                {deviceMode !== 'desktop' && (
+                  <div className="device-hardware-bar">
+                    <span className="device-status-time">9:41</span>
+                    <div className="device-notch" />
+                    <span className="device-status-icons">📶 🔋</span>
+                  </div>
+                )}
+                <div className="device-inner-screen">
+                  {mode === 'preview' ? (
+                    <ArtifactPreview
+                      artifact={artifact}
+                      content={content}
+                      sessionId={effectiveSessionId}
+                    />
+                  ) : (
+                    <ArtifactCodeSurface
+                      artifact={artifact}
+                      content={content}
+                      mode={mode === 'diff' ? 'diff' : 'code'}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsible DevTools / Console Drawer */}
+            <div className={`artifact-device-console-drawer${consoleDrawerOpen ? ' open' : ' collapsed'}`}>
+              <div className="console-drawer-header">
+                <div className="console-tabs">
+                  <button
+                    type="button"
+                    className={`console-tab-btn${consoleTab === 'console' ? ' active' : ''}`}
+                    onClick={() => setConsoleTab('console')}
+                  >
+                    <Icon name="terminal" size={11} />
+                    <span>Console (2 logs)</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`console-tab-btn${consoleTab === 'elements' ? ' active' : ''}`}
+                    onClick={() => setConsoleTab('elements')}
+                  >
+                    <Icon name="eye" size={11} />
+                    <span>DOM Inspector</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`console-tab-btn${consoleTab === 'transpile' ? ' active' : ''}`}
+                    onClick={() => setConsoleTab('transpile')}
+                  >
+                    <Icon name="zap" size={11} />
+                    <span>Transpile (12ms)</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-xs"
+                  onClick={() => setConsoleDrawerOpen(v => !v)}
+                  title={consoleDrawerOpen ? 'Collapse console' : 'Expand console'}
+                >
+                  <Icon name={consoleDrawerOpen ? 'chevron-down' : 'chevron-up'} size={11} />
+                </button>
+              </div>
+
+              {consoleDrawerOpen && (
+                <div className="console-drawer-body">
+                  {consoleTab === 'console' ? (
+                    <div className="console-log-list">
+                      <div className="console-row log-info">
+                        <span className="console-time">10:14:02.120</span>
+                        <span className="console-tag">[React18]</span>
+                        <span className="console-msg">Mounted component &lt;MetricsCard /&gt; into #root container</span>
+                      </div>
+                      <div className="console-row log-debug">
+                        <span className="console-time">10:14:02.134</span>
+                        <span className="console-tag">[MetricsCard]</span>
+                        <span className="console-msg">3 metrics cards initialized: Latency (42ms), Throughput (1.2k req/s), Error Rate (0.01%)</span>
+                      </div>
+                    </div>
+                  ) : consoleTab === 'elements' ? (
+                    <div className="console-elements-view">
+                      <code>&lt;div class="metrics-grid" style="display: flex; gap: 12px"&gt;</code>
+                      <code style={{ paddingLeft: '16px' }}>&lt;div class="metric-card"&gt;...&lt;/div&gt;</code>
+                      <code>&lt;/div&gt;</code>
+                    </div>
+                  ) : (
+                    <div className="console-transpile-view">
+                      <div className="transpile-metric"><span>JSX Transform:</span> <strong>8ms (Sucrase fast-path)</strong></div>
+                      <div className="transpile-metric"><span>Tailwind CSS:</span> <strong>Injected (34 utility rules)</strong></div>
+                      <div className="transpile-metric"><span>Lucide Icons:</span> <strong>Proxied (Activity, ShieldCheck)</strong></div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* ── PROTOTYPE 5: Iterative Companion ──────────────────── */
+          <div className="artifact-companion-container" data-testid="artifact-prototype-iterative-companion">
+            <div className="companion-main-surface">
+              <div className="companion-surface-header">
+                <span className="companion-surface-tag">Active Version: v{selectedVersion}</span>
+                <span className="companion-surface-status">● Live Preview Ready</span>
+              </div>
+              <div className="companion-surface-body">
+                {mode === 'preview' ? (
+                  <ArtifactPreview
+                    artifact={artifact}
+                    content={content}
+                    sessionId={effectiveSessionId}
+                  />
+                ) : (
+                  <ArtifactCodeSurface
+                    artifact={artifact}
+                    content={content}
+                    mode={mode === 'diff' ? 'diff' : 'code'}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="companion-sidebar">
+              <div className="companion-sidebar-header">
+                <div className="companion-header-title">
+                  <Icon name="sparkles" size={13} />
+                  <span>Iterate on Artifact</span>
+                </div>
+                <span className="companion-header-badge">v{selectedVersion} of 2</span>
+              </div>
+
+              {/* Quick refinement prompt chips */}
+              <div className="companion-chips-section">
+                <span className="companion-section-label">QUICK REFINEMENTS</span>
+                <div className="companion-chips-list">
+                  <button
+                    type="button"
+                    className="companion-chip"
+                    onClick={() => setCompanionPrompt('Add dark mode color tokens and toggle switch')}
+                  >
+                    + Dark Mode
+                  </button>
+                  <button
+                    type="button"
+                    className="companion-chip"
+                    onClick={() => setCompanionPrompt('Add interactive latency filter and time range slider')}
+                  >
+                    + Filter Controls
+                  </button>
+                  <button
+                    type="button"
+                    className="companion-chip"
+                    onClick={() => setCompanionPrompt('Add animated loading skeleton state')}
+                  >
+                    + Loading Skeleton
+                  </button>
+                  <button
+                    type="button"
+                    className="companion-chip"
+                    onClick={() => setCompanionPrompt('Export TypeScript interface with strict types')}
+                  >
+                    + TypeScript Types
+                  </button>
+                </div>
+              </div>
+
+              {/* Inline revision prompt composer */}
+              <div className="companion-composer-section">
+                <span className="companion-section-label">REQUEST REVISION</span>
+                <textarea
+                  className="companion-textarea"
+                  placeholder="Describe how to adjust this component..."
+                  value={companionPrompt}
+                  onChange={e => setCompanionPrompt(e.target.value)}
+                  rows={3}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary companion-apply-btn"
+                  disabled={!companionPrompt.trim()}
+                  onClick={handleApplyIteration}
+                >
+                  <Icon name="sparkles" size={12} />
+                  <span>Apply Iteration (v3)</span>
+                </button>
+              </div>
+
+              {/* Version History Stepper */}
+              <div className="companion-history-section">
+                <span className="companion-section-label">REVISION TIMELINE</span>
+                <div className="companion-history-list">
+                  <div
+                    className={`companion-history-item${selectedVersion === 2 ? ' current' : ''}`}
+                    onClick={() => setSelectedVersion(2)}
+                  >
+                    <div className="history-item-dot" />
+                    <div className="history-item-content">
+                      <div className="history-item-top">
+                        <strong>v2 (Current)</strong>
+                        <span>10:15 AM</span>
+                      </div>
+                      <p>Added latency bar chart, Tailwind styling, and reactive cards</p>
+                    </div>
+                  </div>
+                  <div
+                    className={`companion-history-item${selectedVersion === 1 ? ' current' : ''}`}
+                    onClick={() => setSelectedVersion(1)}
+                  >
+                    <div className="history-item-dot" />
+                    <div className="history-item-content">
+                      <div className="history-item-top">
+                        <strong>v1 (Initial)</strong>
+                        <span>10:14 AM</span>
+                      </div>
+                      <p>Initial React skeleton and props definition</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

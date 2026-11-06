@@ -402,6 +402,50 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   await dock.locator('[data-testid="artifact-tab-preview"]').click();
   await expect(previewIframe).toBeVisible();
 
+  // Test switching between the 5 prototype layouts
+  const layoutSelector = dock.locator('[data-testid="artifact-layout-selector"]');
+  await expect(layoutSelector).toBeVisible();
+
+  // 1. Switch to Dual-Pane Workbench
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-dual-pane"]').click();
+  const dualPane = dock.locator('[data-testid="artifact-prototype-dual-pane"]');
+  await expect(dualPane).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-dual-pane.png')
+  });
+
+  // 2. Switch to Multi-Tab Studio
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-tabbed-studio"]').click();
+  const tabbedStudio = dock.locator('[data-testid="artifact-prototype-tabbed-studio"]');
+  await expect(tabbedStudio).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-tabbed-studio.png')
+  });
+
+  // 3. Switch to Device Viewport Stage
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-device-canvas"]').click();
+  const deviceStage = dock.locator('[data-testid="artifact-prototype-device-canvas"]');
+  await expect(deviceStage).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-device-canvas.png')
+  });
+
+  // 4. Switch to Iterative Companion
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-iterative-companion"]').click();
+  const companion = dock.locator('[data-testid="artifact-prototype-iterative-companion"]');
+  await expect(companion).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-iterative-companion.png')
+  });
+
+  // Switch back to Classic Split
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-classic-split"]').click();
+
   // Save to workspace
   await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();
   await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Saved to src/components/MetricsCard.tsx');
