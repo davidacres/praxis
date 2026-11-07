@@ -16,6 +16,8 @@ import { MarkdownLinkContext } from '../../ui/markdownLinks';
 import { AgentActivityFeed } from './AgentActivityFeed';
 import { SessionTicketCard } from './SessionTicketCard';
 import { SessionComposer } from '../../ai/SessionComposer';
+import { ArtifactDock } from '../../ai/artifactWorkspace/ArtifactDock';
+import type { ActiveArtifact } from '../../ai/artifactWorkspace/artifactTypes';
 
 export interface AgentDetailsPageProps {
   sessionKey?: string;
@@ -60,6 +62,21 @@ export function AgentDetailsPage({
       setBrowserLink(previous => ({ url, token: (previous?.token ?? 0) + 1 }));
     }
   }), [onBrowserOpenChange]);
+  // "Open in Workspace" on an artifact gadget asks for this dock with a window event.
+  // It shares the browser's slot, so only one of the two is open at a time.
+  const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact>();
+  const [artifactOpen, setArtifactOpen] = useState(false);
+  const [artifactMaximized, setArtifactMaximized] = useState(false);
+  useEffect(() => {
+    const handleOpenArtifact = (event: Event) => {
+      const artifact = (event as CustomEvent<{ artifact?: ActiveArtifact }>).detail?.artifact;
+      if (!artifact) return;
+      setActiveArtifact(artifact);
+      setArtifactOpen(true);
+    };
+    window.addEventListener('praxis:open-artifact', handleOpenArtifact);
+    return () => window.removeEventListener('praxis:open-artifact', handleOpenArtifact);
+  }, []);
   const [stopping, setStopping] = useState(false);
   const [isCompact, setIsCompact] = useState<boolean>(() => {
     try {
@@ -173,6 +190,9 @@ export function AgentDetailsPage({
     browserDismissed.current = initialBrowserOpen === false;
     setBrowserOpen(initialBrowserOpen ?? false);
     setBrowserMaximized(false);
+    setArtifactOpen(false);
+    setArtifactMaximized(false);
+    setActiveArtifact(undefined);
   }, [browserSession?.issueKey]);
   useEffect(() => {
     if (agentUsedBrowser && !browserDismissed.current) {
@@ -262,7 +282,7 @@ export function AgentDetailsPage({
   return (
     <MarkdownLinkContext.Provider value={chatLinkHandler}>
     <div
-      className={`agent-details-page ${isCompact ? 'is-compact-width' : 'is-full-width'}${browserOpen ? ' browser-open' : ''}${browserOpen && browserMaximized ? ' browser-maximized' : ''}`}
+      className={`agent-details-page ${isCompact ? 'is-compact-width' : 'is-full-width'}${browserOpen ? ' browser-open' : ''}${browserOpen && browserMaximized ? ' browser-maximized' : ''}${artifactOpen ? ' artifact-open' : ''}${artifactOpen && artifactMaximized ? ' artifact-maximized' : ''}`}
       data-testid="agent-details-page"
       data-width-mode={isCompact ? 'compact' : 'full'}
     >
@@ -340,6 +360,20 @@ export function AgentDetailsPage({
             <Icon name={isCompact ? 'window-maximize' : 'compress'} size={14} />
           </button>
 
+          {/* Artifact Workspace Toggle — reopens the last artifact opened from the chat */}
+          {activeArtifact && (
+            <button
+              type="button"
+              className={`btn btn-ghost btn-icon agent-details-artifact-btn${artifactOpen ? ' active' : ''}`}
+              data-testid="agent-details-artifact-toggle"
+              aria-pressed={artifactOpen}
+              aria-label={artifactOpen ? 'Hide Artifact Workspace' : 'Show Artifact Workspace'}
+              onClick={() => setArtifactOpen(open => !open)}
+            >
+              <Icon name="sparkles" size={14} />
+            </button>
+          )}
+
           {/* In-App Browser Toggle */}
           <button
             type="button"
@@ -350,6 +384,7 @@ export function AgentDetailsPage({
             onClick={() => {
               const next = !browserOpen;
               browserDismissed.current = !next;
+              if (next) setArtifactOpen(false);
               setBrowserOpen(next);
               onBrowserOpenChange?.(next);
             }}
@@ -441,7 +476,7 @@ export function AgentDetailsPage({
             initialUrl={initialBrowserUrl}
             linkRequest={browserLink}
             onNavigate={onBrowserUrlChange}
-            suspended={browserSuspended}
+            suspended={browserSuspended || artifactOpen}
             maximized={browserMaximized}
             onToggleMaximize={() => setBrowserMaximized(value => !value)}
             onClose={() => {
@@ -451,6 +486,21 @@ export function AgentDetailsPage({
               onBrowserOpenChange?.(false);
             }}
           />
+        </div>
+      )}
+
+      {/* Artifact Workspace Dock — sits over the browser's slot while open */}
+      {artifactOpen && activeArtifact && (
+        <div className="session-split-dock" data-testid="session-split-dock">
+          <div className="session-artifact-dock" data-testid="session-artifact-dock">
+            <ArtifactDock
+              artifact={activeArtifact}
+              sessionId={targetSession.issueKey}
+              onClose={() => setArtifactOpen(false)}
+              maximized={artifactMaximized}
+              onToggleMaximize={() => setArtifactMaximized(value => !value)}
+            />
+          </div>
         </div>
       )}
     </div>

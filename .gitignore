@@ -13,6 +13,8 @@ apps/praxis-desktop/main/renderer/
 # Packaged extension
 *.vsix
 artifacts/
+# …but the desktop app's Artifacts page source is code, not build output.
+!apps/praxis-desktop/renderer/src/artifacts/
 
 # VS Code extension test runner (downloaded VS Code + user data)
 .vscode-test/

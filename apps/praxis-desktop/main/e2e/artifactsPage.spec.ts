@@ -109,9 +109,9 @@ test('saved artifacts land in the main checkout and are listed, previewed and de
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   const saves = win.locator('[data-testid="gadget-artifact-save"]');
   await saves.nth(0).click();
-  await expect(saves.nth(0)).toHaveText('Saved');
+  await expect(saves.nth(0)).toHaveAttribute('aria-label', 'Saved');
   await saves.nth(1).click();
-  await expect(saves.nth(1)).toHaveText('Saved');
+  await expect(saves.nth(1)).toHaveAttribute('aria-label', 'Saved');
 
   // Saved into the main checkout, byte for byte — not onto the worktree's branch.
   const published = path.join(repo, 'docs', 'published-artifacts');
@@ -247,6 +247,10 @@ test('pages are named by their title, cards drag into groups, and a group can be
   await expect(card('Release dashboard')).toHaveCount(1);
   await expect(page.locator('[data-testid="artifact-card-title"]', { hasText: 'dashboard.html' })).toHaveCount(0);
 
+  // A document's sheet shows its own opening lines, in miniature.
+  await expect(card('notes.md').locator('[data-testid="artifact-sheet-text"]')).toContainText('Rollout notes');
+  await expect(card('notes.md')).toContainText(/Modified (just now|\d+m ago)/);
+
   // Hover actions appear over the card, and are reachable by keyboard too.
   const actions = card('notes.md').locator('.artifact-card-actions');
   await expect(actions).toHaveCSS('opacity', '0');
@@ -266,11 +270,16 @@ test('pages are named by their title, cards drag into groups, and a group can be
   await card('Release dashboard').dragTo(groupCard);
   await expect(groupCard).toContainText('3 artifacts');
   await expect(page.locator('[data-testid="artifact-card-item"]')).toHaveCount(0);
-  // Every tile in the group's stack fills its quarter of the thumbnail.
-  const tiles = await groupCard.locator('.artifact-group-stack > .artifact-card-thumb').evaluateAll(nodes =>
-    nodes.map(node => Math.round(node.getBoundingClientRect().height)));
-  expect(tiles).toHaveLength(3);
-  expect(new Set(tiles).size).toBe(1);
+  // A group draws its first artifact with blank sheets fanned out behind it.
+  const sheets = groupCard.locator('[data-testid="artifact-sheet"]');
+  await expect(sheets).toHaveCount(1);
+  await expect(groupCard.locator('.artifact-sheet.is-behind')).toHaveCount(2);
+  const [front, behind] = await Promise.all([
+    sheets.evaluate(node => node.getBoundingClientRect().toJSON()),
+    groupCard.locator('.artifact-sheet.behind-2').evaluate(node => node.getBoundingClientRect().toJSON())
+  ]);
+  expect(behind.top).toBeLessThan(front.top);
+  expect(Math.abs(behind.width - front.width)).toBeLessThan(front.width * 0.15);
   await win.mouse.move(0, 0);
   await expect(groupCard.locator('.artifact-card-actions')).toHaveCSS('opacity', '0');
   await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifacts-group.png') });

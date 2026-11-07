@@ -11,7 +11,7 @@ import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { openRestrictedHtmlPreview } from './htmlArtifactPreview';
 import { sessionChangeEncoder } from './sessionChangeBroadcast';
 import { broadcastToAllWindows } from './windowBroadcast';
-import { projectForSave, rememberSavedArtifact } from './artifactLibraryIpc';
+import { pageThumbnail, projectForSave, rememberSavedArtifact } from './artifactLibraryIpc';
 import {
   clearProviderApiKey,
   discoverWorkspaceAgentWorkflows,
@@ -894,6 +894,31 @@ export function registerAiIpc(): void {
       } catch (error) {
         if (error instanceof Error && error.message.startsWith('HTML artifact')) throw error;
         throw new Error('HTML artifact could not be read.');
+      }
+    }
+  );
+
+  // A chat artifact card's picture of an HTML page: the same cached, restricted
+  // render the Artifacts page uses, but resolved inside the session's folder.
+  // A thumbnail is decoration, so anything that can't be drawn is `undefined`.
+  ipcMain.handle(
+    'ai:artifactPageThumbnail',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string) => {
+      const record = sessionManager.getAgentSession(issueKey) ??
+        [...sessionManager.getAllAgentSessions().values()].find(candidate => candidate.sessionId === issueKey);
+      const workingDirectory = record?.worktreePath?.trim() || record?.workingDirectory?.trim();
+      const input = typeof filePath === 'string' ? filePath.trim() : '';
+      if (!workingDirectory || !/\.html?$/i.test(input) || nodePath.isAbsolute(input) || /^[a-z][a-z\d+.-]*:/i.test(input)) {
+        return undefined;
+      }
+      try {
+        const absolute = await resolveSandboxedPath(workingDirectory, input);
+        const [realRoot, realFile] = await Promise.all([fsp.realpath(workingDirectory), fsp.realpath(absolute)]);
+        const relative = nodePath.relative(realRoot, realFile);
+        if (relative.startsWith('..') || nodePath.isAbsolute(relative)) return undefined;
+        return await pageThumbnail(workingDirectory, realFile);
+      } catch {
+        return undefined;
       }
     }
   );

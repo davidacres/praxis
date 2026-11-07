@@ -83,6 +83,7 @@ export type IconName =
   | 'organization'
   | 'archive'
   | 'external-link'
+  | 'download'
   | 'copy'
   | 'link'
   | 'paperclip'
@@ -210,6 +211,7 @@ const PATHS: Record<IconName, string | string[]> = {
   organization: ['M6.4 1.9h3.2v3.2H6.4zM2.1 10.9h3.2v3.2H2.1zM10.7 10.9h3.2v3.2h-3.2z', 'M8 5.1v3.2M3.7 10.9V8.3h8.6v2.6'],
   archive: ['M1.9 2.9h12.2v2.9H1.9z', 'M3.1 5.8h9.8v7.3H3.1z', 'M6.4 8.6h3.2'],
   'external-link': ['M6.4 3.4h6.2v6.2', 'M12.6 3.4 8 8', 'M10.6 9.6v3H3.4V5.4h3'],
+  download: ['M8 2.6v7.2', 'M4.9 6.9 8 10l3.1-3.1', 'M2.9 10.6v2.2h10.2v-2.2'],
   copy: ['M5.6 5.6h7.4v7.4H5.6z', 'M10.4 5.6V3H3v7.4h2.6'],
   link: ['M6.4 9.6a2.6 2.6 0 0 1 0-3.7l1.9-1.9a2.6 2.6 0 0 1 3.7 3.7l-1 1', 'M9.6 6.4a2.6 2.6 0 0 1 0 3.7l-1.9 1.9a2.6 2.6 0 0 1-3.7-3.7l1-1'],
   paperclip: ['M11.8 7.6 6.9 12.5a2.8 2.8 0 0 1-4-4l5.6-5.6a1.9 1.9 0 0 1 2.7 2.7l-5.6 5.6a1 1 0 0 1-1.4-1.4l4.6-4.6'],

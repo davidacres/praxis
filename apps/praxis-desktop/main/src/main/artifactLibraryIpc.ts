@@ -52,7 +52,7 @@ const failedThumbnails = new Set<string>();
  * `userData/artifact-thumbnails` under the file's path, size and modification
  * time — so editing the page refreshes it, and nothing else does.
  */
-async function pageThumbnail(root: string, absolute: string): Promise<string | undefined> {
+export async function pageThumbnail(root: string, absolute: string): Promise<string | undefined> {
   const stat = await fsp.stat(absolute);
   if (!stat.isFile() || stat.size > MAX_PAGE_BYTES) return undefined;
   const key = createHash('sha256').update(`${absolute}\0${stat.size}\0${stat.mtimeMs}`).digest('hex').slice(0, 40);

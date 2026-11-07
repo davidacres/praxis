@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ArtifactGadgetPayload, ArtifactItem } from '@praxis/core';
 import { Icon, type IconName } from '../../../ui/Icon';
 import { Markdown } from '../../../ui/Markdown';
@@ -39,6 +39,47 @@ function getIconForArtifactItem(artifact: ArtifactItem): IconName {
   if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext ?? '')) return 'eye';
   if (['ts', 'tsx', 'js', 'jsx', 'py', 'cs', 'sh'].includes(ext ?? '')) return 'terminal';
   return 'file';
+}
+
+/**
+ * The card's picture: an HTML page file is rendered to a cached snapshot by the
+ * host (lazily, once the card scrolls near view); anything else, or a page that
+ * can't be drawn, keeps its kind icon.
+ */
+function ArtifactCardThumb({ artifact, sessionId, iconName }: { artifact: ArtifactItem; sessionId?: string; iconName: IconName }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [src, setSrc] = useState<string>();
+  const page = Boolean(sessionId) && artifact.content === undefined && isPreviewableHtml(artifact.mediaType, artifact.path);
+
+  useEffect(() => {
+    if (!page || !sessionId || !ref.current) return;
+    let cancelled = false;
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      void window.praxis.ai.artifactPageThumbnail(sessionId, artifact.path)
+        .then(url => { if (!cancelled) setSrc(url); })
+        .catch(() => undefined);
+    }, { rootMargin: '200px' });
+    observer.observe(ref.current);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [page, sessionId, artifact.path]);
+
+  if (src) {
+    return (
+      <div ref={ref} className="gadget-artifact-thumb" data-testid="gadget-artifact-thumb">
+        <img src={src} alt="" />
+      </div>
+    );
+  }
+  return (
+    <div ref={ref} className={`gadget-artifact-icon-tile icon-${iconName}${page ? ' is-page' : ''}`}>
+      <Icon name={iconName} size={16} />
+    </div>
+  );
 }
 
 /**
@@ -183,10 +224,8 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
                   }
                 }}
               >
-                <div className="gadget-artifact-card-lead">
-                  <div className={`gadget-artifact-icon-tile icon-${iconName}`}>
-                    <Icon name={iconName} size={16} />
-                  </div>
+                <div className="gadget-artifact-card-lead" title={artifact.path}>
+                  <ArtifactCardThumb artifact={artifact} sessionId={previewSessionId} iconName={iconName} />
                   <div className="gadget-artifact-info">
                     <div className="gadget-artifact-title-row">
                       <strong className="gadget-artifact-title">{artifact.name}</strong>
@@ -212,46 +251,45 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
                         </span>
                       )}
                     </div>
-                    <div className="gadget-artifact-subrow">
-                      <code className="gadget-artifact-path">{artifact.path}</code>
-                      {artifact.description && <span className="gadget-artifact-desc">{artifact.description}</span>}
-                    </div>
+                    {artifact.description && (
+                      <div className="gadget-artifact-subrow">
+                        <span className="gadget-artifact-desc">{artifact.description}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="gadget-artifact-card-actions" onClick={e => e.stopPropagation()}>
                   <button
-                    className="btn btn-sm btn-primary gadget-btn-open"
+                    className="icon-btn gadget-artifact-action is-primary"
                     type="button"
                     data-testid="gadget-artifact-open-dock"
                     onClick={() => openInWorkspace(artifact)}
-                    title="Open in Artifact Workspace dock"
+                    aria-label="Open in Artifact Workspace"
                   >
-                    <Icon name="eye" size={12} />
-                    <span>Open in Workspace</span>
+                    <Icon name="eye" size={14} />
                   </button>
                   {previewableHtml && (
                     <button
-                      className="btn btn-sm btn-quiet"
+                      className="icon-btn gadget-artifact-action"
                       type="button"
                       data-testid="gadget-artifact-html-preview"
                       disabled={Boolean(previewingPath)}
                       onClick={() => void previewHtml(artifact.path, artifact.name)}
-                      title="Pop out in floating window"
+                      aria-label={previewingPath === artifact.path ? 'Opening…' : 'Pop out in a separate window'}
                     >
-                      <Icon name="external-link" size={12} />
-                      <span>{previewingPath === artifact.path ? 'Opening…' : 'Pop Out'}</span>
+                      <Icon name="external-link" size={14} />
                     </button>
                   )}
                   <button
-                    className="btn btn-sm btn-quiet"
+                    className={`icon-btn gadget-artifact-action${saveStatus[artifact.path] === 'Error saving' ? ' is-error' : saveStatus[artifact.path] ? ' is-done' : ''}`}
                     type="button"
                     data-testid="gadget-artifact-save"
                     onClick={() => void saveArtifact(artifact)}
+                    aria-label={saveStatus[artifact.path] || "Save to the project's artifacts folder"}
                     title={saveDetail[artifact.path] ?? "Save to the project's artifacts folder"}
                   >
-                    <Icon name="check" size={12} />
-                    <span>{saveStatus[artifact.path] || 'Save'}</span>
+                    <Icon name={saveStatus[artifact.path] === 'Error saving' ? 'warning' : saveStatus[artifact.path] ? 'check' : 'download'} size={14} />
                   </button>
                 </div>
               </div>

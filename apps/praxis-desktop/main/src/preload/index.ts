@@ -290,6 +290,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:loadImagePreview', issueKey, filePath) as Promise<string | undefined>,
     openHtmlArtifactPreview: (issueKey: string, filePath: string, title?: string) =>
       ipcRenderer.invoke('ai:openHtmlArtifactPreview', issueKey, filePath, title) as Promise<void>,
+    artifactPageThumbnail: (issueKey: string, filePath: string) =>
+      ipcRenderer.invoke('ai:artifactPageThumbnail', issueKey, filePath) as Promise<string | undefined>,
     readArtifactText: (issueKey: string, filePath: string) =>
       ipcRenderer.invoke('ai:readArtifactText', issueKey, filePath) as Promise<string>,
     saveArtifactToWorkspace: (issueKey: string, filePath: string, content?: string, details?: SaveArtifactDetails) =>

@@ -966,6 +966,8 @@ export interface AiIpc {
   /** Opens a bounded HTML file from the session's working folder in a restricted in-app preview window. */
   openHtmlArtifactPreview(issueKey: string, filePath: string, title?: string): Promise<void>;
   /** Reads the text contents of an artifact file located in the session workspace. */
+  /** A cached JPEG snapshot of an HTML page in the session's folder, as a `data:` URL; `undefined` when it can't be drawn. */
+  artifactPageThumbnail(issueKey: string, filePath: string): Promise<string | undefined>;
   readArtifactText(issueKey: string, filePath: string): Promise<string>;
   /** Saves or writes an artifact file directly into the session workspace. */
   /** Publishes an artifact into the project's artifacts folder; `savedPath` is repository-relative. */

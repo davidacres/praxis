@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import { openFromPalette } from './navigation';
+import { openSession } from './sessionNavigation';
 import * as path from 'node:path';
 import { test, expect, type Locator } from '@playwright/test';
 import {
@@ -456,7 +457,7 @@ test('HTML artifacts open in an isolated in-app preview', async () => {
   fs.writeFileSync(path.join(publishedDir, 'session-list-card-mockup.html'), '<p>an older page</p>');
   const save = win.locator('[data-testid="gadget-artifact-save"]');
   await save.click();
-  await expect(save).toHaveText('Saved');
+  await expect(save).toHaveAttribute('aria-label', 'Saved');
   await expect(save).toHaveAttribute('title', 'Saved to docs/published-artifacts/session-list-card-mockup-2.html');
   expect(fs.readFileSync(path.join(publishedDir, 'session-list-card-mockup-2.html'), 'utf8')).toBe(html);
   expect(fs.readFileSync(path.join(publishedDir, 'session-list-card-mockup.html'), 'utf8')).toBe('<p>an older page</p>');
@@ -1027,4 +1028,60 @@ test('a conflict gadget refuses to resolve until every side is chosen', async ()
   await expect(resolve).toBeEnabled();
   await resolve.click();
   await expect(gadget.locator('[data-testid="gadget-result"]')).toContainText('Recorded');
+});
+
+test('Open in Workspace opens an HTML artifact from the session page too', async () => {
+  // The session page (AgentDetailsPage) is where a session opened from the
+  // sidebar or palette lands. It once had no artifact dock, so the button
+  // dispatched its event into nothing. The page's script must also run, since
+  // a design mockup draws itself with JavaScript.
+  const html = '<!doctype html><html><head><title>Design</title></head><body><main id="root"></main>' +
+    '<script>document.getElementById("root").innerHTML = "<h1 class=\\"drawn\\">Quiet Gallery</h1>";</script></body></html>';
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-design-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-design',
+      payload: { title: 'Designs', artifacts: [{ name: 'quiet-gallery.html', path: 'quiet-gallery.html', mediaType: 'text/html' }] },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The design is attached.'),
+    { htmlFile: { fileName: 'quiet-gallery.html', contents: html } }
+  );
+  await openSession(win);
+  const page = win.locator('[data-testid="agent-details-page"]');
+  await expect(page).toBeVisible();
+
+  // The card shows a rendered snapshot of the page, the name without its path,
+  // and icon-only actions whose names are their tooltips.
+  const card = page.locator('[data-testid="gadget-artifact-card"]');
+  await expect(card.locator('[data-testid="gadget-artifact-thumb"] img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/, { timeout: 15000 });
+  await expect(card.locator('.gadget-artifact-path')).toHaveCount(0);
+  await expect(card.locator('[data-testid="gadget-artifact-open-dock"]')).toHaveAttribute('aria-label', 'Open in Artifact Workspace');
+  await expect(card.locator('[data-testid="gadget-artifact-open-dock"]')).toHaveText('');
+  await expect(card.locator('[data-testid="gadget-artifact-html-preview"]')).toHaveAttribute('aria-label', 'Pop out in a separate window');
+  await expect(card.locator('[data-testid="gadget-artifact-save"]')).toHaveText('');
+  const cardBox = await card.boundingBox();
+  if (cardBox) {
+    await win.screenshot({
+      path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-gadget-thumbnail-card.png'),
+      clip: { x: cardBox.x - 16, y: cardBox.y - 16, width: cardBox.width + 32, height: cardBox.height + 32 }
+    });
+  }
+
+  await page.locator('[data-testid="gadget-artifact-open-dock"]').click();
+  const dock = page.locator('[data-testid="session-artifact-dock"]');
+  await expect(dock).toBeVisible();
+  await expect(dock.locator('[data-testid="artifact-dock-title"]')).toHaveText('quiet-gallery.html');
+  await expect(dock.locator('[data-testid="artifact-preview-html"] iframe').contentFrame().locator('h1.drawn')).toHaveText('Quiet Gallery');
+
+  // Closing it hands the space back; the header toggle brings the same artifact back.
+  await dock.getByRole('button', { name: 'Close Artifact Workspace' }).click();
+  await expect(dock).toHaveCount(0);
+  await page.locator('[data-testid="agent-details-artifact-toggle"]').click();
+  await expect(page.locator('[data-testid="artifact-dock-title"]')).toHaveText('quiet-gallery.html');
 });
