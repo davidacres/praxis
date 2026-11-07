@@ -1,0 +1,169 @@
+{
+  "$comment": "Praxis artifact details: titles, descriptions, groups and the session each file was saved from. Paths are repository-relative. Safe to edit or delete.",
+  "version": 1,
+  "records": [
+    {
+      "path": "docs/published-artifacts/artifacts-home-1-quiet-gallery.html",
+      "title": "artifacts-home-1-quiet-gallery.html",
+      "description": "1 · Quiet Gallery (updated) — 4 columns, icon filters, no side rail",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-cea1d4c6",
+      "sessionTitle": "New Design for Artifacts Home",
+      "savedAt": "2026-11-07T16:35:12.376Z"
+    },
+    {
+      "path": "docs/published-artifacts/composer-1-command-strip.html",
+      "title": "composer-1-command-strip.html",
+      "description": "1 · Command Strip: one quiet line that grows as you type, with a / command palette and a flying send",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:38.837Z"
+    },
+    {
+      "path": "docs/published-artifacts/composer-2-dock-satellites.html",
+      "title": "composer-2-dock-satellites.html",
+      "description": "2 · Dock & Satellites: context chips float around the composer; drop files, pop chips off, pull them in on send",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:39.521Z"
+    },
+    {
+      "path": "docs/published-artifacts/composer-3-split-ledger.html",
+      "title": "composer-3-split-ledger.html",
+      "description": "3 · Split Ledger: prompt next to a live list of context with animated ticks and a budget bar",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:40.329Z"
+    },
+    {
+      "path": "docs/published-artifacts/composer-4-stack-of-cards.html",
+      "title": "composer-4-stack-of-cards.html",
+      "description": "4 · Stack of Cards: queue, fan, reorder and run follow-up prompts in order",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:41.091Z"
+    },
+    {
+      "path": "docs/published-artifacts/composer-5-ambient-canvas.html",
+      "title": "composer-5-ambient-canvas.html",
+      "description": "5 · Ambient Canvas: no box, type onto a glowing line that also shows the agent's status",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:41.983Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-1-library-spines.html",
+      "title": "shelf-1-library-spines.html",
+      "description": "1 · Library Spines: books pull out and open like a cover; swaying bookmark for running sessions",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:19.496Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-10-genie-dock.html",
+      "title": "shelf-10-genie-dock.html",
+      "description": "10 · Genie Dock: magnifying dock, bounce for attention, cards pour out of the icon with a genie effect",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T08:38:19.822Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-2-rolodex.html",
+      "title": "shelf-2-rolodex.html",
+      "description": "2 · Rolodex: spin a card wheel by scroll, drag or arrow keys; the card in the window flips down as the preview",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:18.612Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-3-filing-tabs.html",
+      "title": "shelf-3-filing-tabs.html",
+      "description": "3 · Filing Tabs: folders slide out of a drawer by their tab; status lights; click to pin with a paperclip",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:17.821Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-4-liquid-bubbles.html",
+      "title": "shelf-4-liquid-bubbles.html",
+      "description": "4 · Liquid Bubbles: droplets stretch into cards with a gooey effect; status rings; new sessions drip up the rail",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:17.054Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-5-timeline-ribbons.html",
+      "title": "shelf-5-timeline-ribbons.html",
+      "description": "5 · Timeline Ribbons: sessions hang at the time they were last active; scrub along the timeline to unroll their cards",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T09:28:16.401Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-6-aurora-glass.html",
+      "title": "shelf-6-aurora-glass.html",
+      "description": "6 · Aurora Glass: frosted rail over a moving aurora; tiles that lean toward the pointer; tilting glass cards; sparks on reply",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T08:38:14.233Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-7-neon-equalizer.html",
+      "title": "shelf-7-neon-equalizer.html",
+      "description": "7 · Neon Equalizer: synthwave; equaliser bars show status; cards trace a neon outline then flicker on",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T08:38:17.130Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-8-constellation.html",
+      "title": "shelf-8-constellation.html",
+      "description": "8 · Constellation: stars over a drifting starfield; cards warp in from a flaring star; shooting star for new sessions",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T08:38:18.132Z"
+    },
+    {
+      "path": "docs/published-artifacts/shelf-9-origami-paper.html",
+      "title": "shelf-9-origami-paper.html",
+      "description": "9 · Origami Paper: light theme; washi-tape status on paper tags; cards unfold panel by panel; paper plane for new sessions",
+      "mediaType": "text/html",
+      "sessionKey": "SESSION-ed09dc83",
+      "sessionTitle": "New session",
+      "savedAt": "2026-11-07T08:38:19.005Z"
+    }
+  ],
+  "groups": [
+    {
+      "id": "41befb02-d764-48fe-881b-8c3c66de3844",
+      "name": "Shelf Designs",
+      "paths": [
+        "docs/published-artifacts/shelf-9-origami-paper.html",
+        "docs/published-artifacts/shelf-10-genie-dock.html",
+        "docs/published-artifacts/shelf-8-constellation.html",
+        "docs/published-artifacts/shelf-7-neon-equalizer.html",
+        "docs/published-artifacts/shelf-1-library-spines.html",
+        "docs/published-artifacts/shelf-2-rolodex.html",
+        "docs/published-artifacts/shelf-3-filing-tabs.html",
+        "docs/published-artifacts/shelf-4-liquid-bubbles.html",
+        "docs/published-artifacts/shelf-5-timeline-ribbons.html",
+        "docs/published-artifacts/shelf-6-aurora-glass.html"
+      ],
+      "createdAt": "2026-11-07T09:09:34.698Z"
+    }
+  ]
+}

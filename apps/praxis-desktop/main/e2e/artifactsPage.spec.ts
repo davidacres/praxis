@@ -119,6 +119,15 @@ test('saved artifacts land in the main checkout and are listed, previewed and de
   expect(fs.readFileSync(path.join(published, 'login-screen.png')).equals(PICTURE)).toBe(true);
   expect(fs.existsSync(path.join(record.worktreePath!, 'docs', 'published-artifacts'))).toBe(false);
 
+  // The details travel with the repository: a committed file beside the
+  // artifacts, carrying no install-local project id.
+  const details = JSON.parse(fs.readFileSync(path.join(published, '.praxis-artifacts.json'), 'utf8'));
+  expect(details.records.map((entry: { path: string }) => entry.path)).toEqual([
+    'docs/published-artifacts/login-report.md',
+    'docs/published-artifacts/login-screen.png'
+  ]);
+  expect(JSON.stringify(details)).not.toContain('"projectId"');
+
   // Files added by hand are listed too.
   fs.mkdirSync(path.join(published, 'notes'), { recursive: true });
   fs.writeFileSync(path.join(published, 'notes', 'by-hand.txt'), 'written by a person');
@@ -269,6 +278,11 @@ test('pages are named by their title, cards drag into groups, and a group can be
   await expect(groupCard).toContainText('2 artifacts');
   await card('Release dashboard').dragTo(groupCard);
   await expect(groupCard).toContainText('3 artifacts');
+  // The group is written into the repository's details file, so it survives a clone.
+  await expect.poll(() => {
+    const details = JSON.parse(fs.readFileSync(path.join(published, '.praxis-artifacts.json'), 'utf8'));
+    return details.groups.map((entry: { paths: string[] }) => entry.paths.length);
+  }).toEqual([3]);
   await expect(page.locator('[data-testid="artifact-card-item"]')).toHaveCount(0);
   // A group draws its first artifact with blank sheets fanned out behind it.
   const sheets = groupCard.locator('[data-testid="artifact-sheet"]');

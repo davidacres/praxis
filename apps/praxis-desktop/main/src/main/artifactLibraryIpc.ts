@@ -21,7 +21,7 @@ import {
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { getProjectStore } from './projectStoreInstance';
 import { broadcastToAllWindows } from './windowBroadcast';
-import { SavedArtifactStore } from './savedArtifactStore';
+import { ARTIFACT_DETAILS_FILE, SavedArtifactStore } from './savedArtifactStore';
 import { captureRestrictedHtmlThumbnail } from './htmlArtifactPreview';
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
@@ -83,10 +83,46 @@ export async function pageThumbnail(root: string, absolute: string): Promise<str
   return render;
 }
 
-/** `userData/saved-artifacts.json`; `--user-data-dir` isolates the e2e profile. */
-export function getSavedArtifactStore(): SavedArtifactStore {
+/**
+ * `userData/saved-artifacts.json` — where details lived before they moved into
+ * each repository. Now only read, to seed a project's details file the first
+ * time. `--user-data-dir` isolates the e2e profile.
+ */
+function legacySavedArtifactStore(): SavedArtifactStore {
   store ??= new SavedArtifactStore(nodePath.join(app.getPath('userData'), 'saved-artifacts.json'));
   return store;
+}
+
+const projectStores = new Map<string, Promise<SavedArtifactStore>>();
+
+/**
+ * The details store for a project: `.praxis-artifacts.json` in its artifacts
+ * folder, so titles, descriptions and groups are committed with the files.
+ * Cached as a promise, so two calls at once share one store and one import.
+ */
+async function storeFor(projectId: string): Promise<SavedArtifactStore> {
+  const project = getProjectStore().get(projectId);
+  const location = project ? await projectArtifactsLocation(project) : undefined;
+  if (!location) throw new Error('This project has no folder for artifacts.');
+  const file = nodePath.join(location.root, ...location.folder.split('/'), ARTIFACT_DETAILS_FILE);
+  const key = `${projectId}\0${file}`;
+  let pending = projectStores.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const projectStore = new SavedArtifactStore(file, { projectId });
+      const legacy = legacySavedArtifactStore();
+      const [records, groups] = await Promise.all([legacy.list(projectId), legacy.listGroups(projectId)]);
+      const inFolder = (path: string) => isInsideArtifactsFolder(location.folder, path);
+      await projectStore.seedIfMissing(
+        records.filter(record => inFolder(record.path)),
+        groups.map(group => ({ ...group, paths: group.paths.filter(inFolder) })).filter(group => group.paths.length > 0)
+      );
+      return projectStore;
+    })();
+    projectStores.set(key, pending);
+    pending.catch(() => projectStores.delete(key));
+  }
+  return pending;
 }
 
 /**
@@ -119,7 +155,7 @@ export async function projectForSave(projectId: string | undefined, sessionFolde
 }
 
 export async function rememberSavedArtifact(record: SavedArtifactRecord): Promise<void> {
-  await getSavedArtifactStore().upsert(record);
+  await (await storeFor(record.projectId)).upsert(record);
   broadcastToAllWindows('artifacts:changed', record.projectId);
 }
 
@@ -171,8 +207,8 @@ export function registerArtifactLibraryIpc(): void {
     }
     const [{ entries, truncated }, records, groups] = await Promise.all([
       listArtifactsFolder(location.root, location.folder),
-      getSavedArtifactStore().list(project.id),
-      getSavedArtifactStore().listGroups(project.id)
+      storeFor(project.id).then(details => details.list(project.id)),
+      storeFor(project.id).then(details => details.listGroups(project.id))
     ]);
     return {
       available: true,
@@ -224,7 +260,7 @@ export function registerArtifactLibraryIpc(): void {
 
   ipcMain.handle('artifacts:createGroup', async (_event, projectId: unknown, name: unknown, paths: unknown) => {
     const { folder, projectId: id } = await locateProject(projectId);
-    const group = await getSavedArtifactStore().saveGroup({
+    const group = await (await storeFor(id)).saveGroup({
       id: randomUUID(),
       projectId: id,
       name: groupName(name),
@@ -238,7 +274,7 @@ export function registerArtifactLibraryIpc(): void {
 
   ipcMain.handle('artifacts:updateGroup', async (_event, projectId: unknown, groupId: unknown, change: unknown) => {
     const { folder, projectId: id } = await locateProject(projectId);
-    const store = getSavedArtifactStore();
+    const store = await storeFor(id);
     const existing = typeof groupId === 'string' ? await store.getGroup(id, groupId) : undefined;
     if (!existing) throw new Error('That group no longer exists.');
     const update = (change ?? {}) as { name?: unknown; paths?: unknown };
@@ -254,7 +290,7 @@ export function registerArtifactLibraryIpc(): void {
   ipcMain.handle('artifacts:deleteGroup', async (_event, projectId: unknown, groupId: unknown) => {
     const { projectId: id } = await locateProject(projectId);
     if (typeof groupId !== 'string') throw new Error('That group no longer exists.');
-    await getSavedArtifactStore().deleteGroup(id, groupId);
+    await (await storeFor(id)).deleteGroup(id, groupId);
     broadcastToAllWindows('artifacts:changed', id);
   });
 
@@ -263,7 +299,7 @@ export function registerArtifactLibraryIpc(): void {
     const stat = await fsp.lstat(absolute).catch(error => (notFound(error) ? undefined : Promise.reject(error)));
     if (stat && !stat.isFile()) throw new Error('Only files can be deleted from the artifacts folder.');
     if (stat) await fsp.unlink(absolute);
-    await getSavedArtifactStore().remove(projectId as string, relative);
+    await (await storeFor(projectId as string)).remove(projectId as string, relative);
     broadcastToAllWindows('artifacts:changed', projectId);
   });
 
