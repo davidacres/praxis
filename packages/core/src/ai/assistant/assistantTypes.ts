@@ -88,6 +88,8 @@ export interface TeamChatRecord {
   issueKey?: string;
   createdAt: string;
   updatedAt: string;
+  /** Hidden from the sidebar feeds; restored from the Sessions browser. */
+  archived?: boolean;
   messages: AssistantMessage[];
 }
 

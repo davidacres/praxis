@@ -27,6 +27,7 @@ export const GADGET_KINDS = [
   'progress',
   'diff',
   'artifact',
+  'image',
   'handoff',
   'conflict',
   'approval'
@@ -324,6 +325,35 @@ export interface ArtifactGadgetPayload {
   handover?: ArtifactHandoverMetadata;
 }
 
+/**
+ * One image in an image gadget.
+ *
+ * The path is workspace-relative and resolved against the session's folder by
+ * the host, exactly as an artifact's is — the renderer never reads a file.
+ */
+export interface ImageGadgetItem {
+  name: string;
+  /** Workspace-relative; an absolute path outside the scope is refused. */
+  path: string;
+  mediaType?: string;
+  sizeBytes?: number;
+  description?: string;
+  /** Inline SVG source, when the image is small enough to travel in the payload. */
+  content?: string;
+}
+
+/**
+ * Images a run produced.
+ *
+ * A separate surface from `artifact` because an image wants to be *looked at*:
+ * it renders as the picture itself, not as a file row with an "Open in
+ * Workspace" button attached to it.
+ */
+export interface ImageGadgetPayload {
+  title: string;
+  images: ImageGadgetItem[];
+}
+
 export interface HandoffGadgetPayload {
   title: string;
   fromProvider: string;
@@ -373,6 +403,7 @@ export interface GadgetPayloadMap {
   progress: ProgressGadgetPayload;
   diff: DiffGadgetPayload;
   artifact: ArtifactGadgetPayload;
+  image: ImageGadgetPayload;
   handoff: HandoffGadgetPayload;
   conflict: ConflictGadgetPayload;
   approval: ApprovalGadgetPayload;

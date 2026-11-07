@@ -20,6 +20,7 @@ export const GADGET_LIMITS = {
   diffFiles: 100,
   diffPreviewLength: 8_000,
   artifacts: 50,
+  images: 20,
   progressSteps: 40,
   conflicts: 50,
   handoffItems: 60,

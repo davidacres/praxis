@@ -10,6 +10,8 @@ export interface SessionHandoff {
   reference: SessionContextReference; instruction: string; stagedAt?: number;
   /** The dialog's saved instruction; kept until the destination takes the handoff so a lost destination loses nothing. */
   draft?: { projectId: string; source: NoteSource };
+  /** Only add the chip to the composer — never fill in text or send (artifacts added to a chat). */
+  attachOnly?: boolean;
 }
 
 /** How long after the explicit Send a staged handoff may still submit itself; later it only fills the composer. */

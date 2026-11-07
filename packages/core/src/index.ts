@@ -127,6 +127,8 @@ export * from './deployments/githubActionsObserver';
 export * from './deployments/githubActionsOrchestrator';
 export * from './deployments/githubActionsResults';
 export * from './projects/projectStore';
+export * from './projects/artifactsFolder';
+export * from './projects/artifactLibrary';
 export * from './projects/projectService';
 export * from './projects/projectConnection';
 export * from './workspaces/workspaceTypes';

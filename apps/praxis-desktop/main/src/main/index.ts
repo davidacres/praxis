@@ -25,6 +25,7 @@ import { registerBrowserIpc } from './browserIpc';
 import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerNotesIpc } from './notesIpc';
 import { registerAiIpc } from './aiIpc';
+import { registerArtifactLibraryIpc } from './artifactLibraryIpc';
 import { registerAiUsageIpc, startAiUsageTracking } from './aiUsageIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { recoverTeamChatsOnStartup, registerAssistantIpc } from './assistantIpc';
@@ -372,6 +373,7 @@ void app.whenReady().then(async () => {
   registerBrowserIpc();
   registerBoardPrefsIpc();
   registerNotesIpc();
+  registerArtifactLibraryIpc();
   registerTaskNotifications();
   registerAiIpc();
   registerCodeIntelligenceIpc();

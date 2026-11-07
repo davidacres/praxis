@@ -88,11 +88,12 @@ const INTERACTIVE_RESPONSE_SURFACES_PROMPT = `## Interactive response surfaces
 `;
 
 const VERIFICATION_EVIDENCE_PROMPT = `## Verification evidence
-- When you perform visual verification and capture a screenshot that materially helps the user judge the result, preserve it until handoff and publish it as an artifact gadget rather than deleting it as a temporary file.
+- When you perform visual verification and capture a screenshot that materially helps the user judge the result, preserve it until handoff and publish it as an image gadget rather than deleting it as a temporary file.
 - Prefer a session-relative path under .praxis/session-artifacts/, use the real media type, and publish only useful evidence rather than every diagnostic capture.
+- Use the \`image\` kind for screenshots and other pictures — it renders the picture itself. Use the \`artifact\` kind only for files that are not pictures (reports, HTML, JSON, logs).
 - Example:
 \`\`\`praxis-gadget
-{"version":1,"kind":"artifact","gadgetId":"visual-verification","payload":{"title":"Visual verification","artifacts":[{"name":"focus-mode-tabs.png","path":".praxis/session-artifacts/focus-mode-tabs.png","mediaType":"image/png","description":"Focus-mode tabs after implementation"}]},"actions":[]}
+{"version":1,"kind":"image","gadgetId":"visual-verification","payload":{"title":"Visual verification","images":[{"name":"focus-mode-tabs.png","path":".praxis/session-artifacts/focus-mode-tabs.png","mediaType":"image/png","description":"Focus-mode tabs after implementation"}]},"actions":[]}
 \`\`\`
 - If visual verification was performed but no screenshot is useful to retain, say so explicitly in the final handoff.
 `;

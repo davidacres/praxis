@@ -150,11 +150,118 @@ test('image links and filenames render as clickable chat previews', async () => 
   await expect(lightbox).toHaveCount(0);
 });
 
-test('image artifacts render as clickable chat previews', async () => {
+test('an image gadget shows the picture itself, not an artifact file row', async () => {
   const png = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     'base64'
   );
+  const image = {
+    type: 'gadget' as const,
+    blockId: 'image-block',
+    gadget: {
+      version: 1,
+      kind: 'image',
+      gadgetId: 'image-preview',
+      payload: {
+        title: 'Visual verification',
+        images: [{
+          name: 'focus-mode-tabs.png',
+          path: 'focus-mode-tabs.png',
+          mediaType: 'image/png',
+          description: 'Focus-mode tabs after implementation'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([image], 'The visual verification screenshot is attached.'),
+    { imageFile: { fileName: 'focus-mode-tabs.png', contents: png } }
+  );
+
+  const gadget = win.locator('[data-testid="gadget-image"]');
+  await expect(gadget).toBeVisible();
+  await expect(gadget).toContainText('Visual verification');
+  await expect(gadget).toContainText('Focus-mode tabs after implementation');
+
+  // The picture is the surface — there is no artifact card, and with it no
+  // "Open in Workspace" or "Save" chrome around it.
+  await expect(gadget.locator('[data-testid="gadget-artifact-card"]')).toHaveCount(0);
+  await expect(gadget.locator('[data-testid="gadget-artifact-open-dock"]')).toHaveCount(0);
+
+  const picture = gadget.locator('[data-testid="gadget-image-preview"] img.markdown-image-preview');
+  await expect(picture).toHaveCount(1);
+  await expect(gadget.locator('li.gadget-image-item')).toHaveCount(1);
+  await expect.poll(() => picture.evaluate(element => ({
+    src: element.getAttribute('src'),
+    width: (element as HTMLImageElement).naturalWidth
+  }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/png;base64,/),
+    width: 1
+  });
+
+  await win.screenshot({ path: 'output/playwright/chat-gadget-image.png', fullPage: true });
+
+  await picture.click();
+  const lightbox = win.locator('[data-testid="markdown-image-lightbox"]');
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator('[data-testid="markdown-image-lightbox-image"]')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await lightbox.locator('[data-testid="markdown-image-lightbox-close"]').click();
+  await expect(lightbox).toHaveCount(0);
+  await picture.click();
+  await expect(lightbox).toBeVisible();
+  await win.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+});
+
+test('an image gadget carries an inline SVG without asking the host for a file', async () => {
+  const image = {
+    type: 'gadget' as const,
+    blockId: 'svg-block',
+    gadget: {
+      version: 1,
+      kind: 'image',
+      gadgetId: 'image-svg',
+      payload: {
+        title: 'Diagram',
+        images: [{
+          name: 'flow.svg',
+          path: 'flow.svg',
+          mediaType: 'image/svg+xml',
+          description: 'A flow diagram',
+          content: '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([image], 'The diagram is attached.')
+  );
+
+  const gadget = win.locator('[data-testid="gadget-image"]');
+  await expect(gadget).toBeVisible();
+
+  // The SVG travels in the payload, so it is drawn from its own source rather
+  // than resolved against the session's folder.
+  const picture = gadget.locator('[data-testid="gadget-image-preview"] img.markdown-image-preview');
+  await expect(picture).toHaveCount(1);
+  await expect.poll(() => picture.evaluate(element => ({
+    src: element.getAttribute('src'),
+    width: (element as HTMLImageElement).naturalWidth
+  }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/svg\+xml/),
+    width: 4
+  });
+});
+
+test('an artifact gadget of only images is drawn on the image surface', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  // The shape an agent emits when it publishes a screenshot. It is an artifact
+  // gadget, but it holds nothing but a picture, so it is drawn as one.
   const artifact = {
     type: 'gadget' as const,
     blockId: 'artifact-image-block',
@@ -179,31 +286,35 @@ test('image artifacts render as clickable chat previews', async () => {
     { imageFile: { fileName: 'focus-mode-tabs.png', contents: png } }
   );
 
-  const gadget = win.locator('[data-testid="gadget-artifact"]');
-  await expect(gadget).toContainText('Focus-mode tabs after implementation');
-  const image = gadget.locator('[data-testid="gadget-artifact-image-preview"] img.markdown-image-preview');
-  await expect(image).toHaveCount(1);
-  await expect(gadget.locator('li.gadget-artifact-image-item')).toHaveCount(1);
-  await expect(gadget.locator('li.gadget-artifact-image-item')).toHaveCSS('border-style', 'none');
-  await expect(image).toHaveCSS('border-style', 'none');
-  await expect.poll(() => image.evaluate(element => ({
-    src: element.getAttribute('src'),
-    width: (element as HTMLImageElement).naturalWidth
-  }))).toMatchObject({
-    src: expect.stringMatching(/^data:image\/png;base64,/),
-    width: 1
-  });
+  await expect(win.locator('[data-testid="gadget-image"]')).toBeVisible();
+  await expect(win.locator('[data-testid="gadget-artifact"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="gadget-image-preview"] img.markdown-image-preview')).toHaveCount(1);
+});
 
-  await image.click();
-  const lightbox = win.locator('[data-testid="markdown-image-lightbox"]');
-  await expect(lightbox).toBeVisible();
-  await expect(lightbox.locator('[data-testid="markdown-image-lightbox-image"]')).toHaveAttribute('src', /^data:image\/png;base64,/);
-  await lightbox.locator('[data-testid="markdown-image-lightbox-close"]').click();
-  await expect(lightbox).toHaveCount(0);
-  await image.click();
-  await expect(lightbox).toBeVisible();
-  await win.keyboard.press('Escape');
-  await expect(lightbox).toHaveCount(0);
+test('an artifact gadget of mixed files stays on the artifact surface', async () => {
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-mixed-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-mixed',
+      payload: {
+        title: 'Run artifacts',
+        artifacts: [
+          { name: 'focus-mode-tabs.png', path: 'focus-mode-tabs.png', mediaType: 'image/png' },
+          { name: 'report.html', path: 'report.html', mediaType: 'text/html' }
+        ]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The run artifacts are attached.')
+  );
+
+  await expect(win.locator('[data-testid="gadget-artifact"]')).toBeVisible();
+  await expect(win.locator('[data-testid="gadget-image"]')).toHaveCount(0);
 });
 
 test('artifact gadget renders handover metadata and item category badges', async () => {
@@ -336,6 +447,20 @@ test('HTML artifacts open in an isolated in-app preview', async () => {
     }
   }, sessionId);
   expect(traversalResult).toContain('outside the session workspace');
+
+  // Save copies the file into the artifacts folder beside what is already
+  // published there, leaving the existing pages and index untouched.
+  const publishedDir = path.join(appInstance.userDataDir, 'docs', 'published-artifacts');
+  fs.mkdirSync(path.join(publishedDir, 'shots'), { recursive: true });
+  fs.writeFileSync(path.join(publishedDir, 'README.md'), '# Published artifacts');
+  fs.writeFileSync(path.join(publishedDir, 'session-list-card-mockup.html'), '<p>an older page</p>');
+  const save = win.locator('[data-testid="gadget-artifact-save"]');
+  await save.click();
+  await expect(save).toHaveText('Saved');
+  await expect(save).toHaveAttribute('title', 'Saved to docs/published-artifacts/session-list-card-mockup-2.html');
+  expect(fs.readFileSync(path.join(publishedDir, 'session-list-card-mockup-2.html'), 'utf8')).toBe(html);
+  expect(fs.readFileSync(path.join(publishedDir, 'session-list-card-mockup.html'), 'utf8')).toBe('<p>an older page</p>');
+  expect(fs.readFileSync(path.join(publishedDir, 'README.md'), 'utf8')).toBe('# Published artifacts');
 });
 
 test('artifact workspace dock opens, switches between preview, code, and diff, and supports saving to workspace', async () => {
@@ -447,8 +572,17 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   await dock.locator('[data-testid="artifact-layout-option-classic-split"]').click();
 
   // Save to workspace
+  // Saving publishes into the project's artifacts folder (default
+  // docs/published-artifacts), never back over the artifact's own path.
   await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();
-  await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Saved to src/components/MetricsCard.tsx');
+  await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Saved to docs/published-artifacts/MetricsCard.tsx');
+  const published = path.join(app!.userDataDir, 'docs', 'published-artifacts', 'MetricsCard.tsx');
+  expect(fs.readFileSync(published, 'utf8')).toContain('export function MetricsCard()');
+  expect(fs.existsSync(path.join(app!.userDataDir, 'src', 'components', 'MetricsCard.tsx'))).toBe(false);
+  // A second save finds the identical copy instead of writing a duplicate.
+  await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();
+  await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Already in docs/published-artifacts/MetricsCard.tsx');
+  expect(fs.readdirSync(path.dirname(published))).toEqual(['MetricsCard.tsx']);
 
   // Header toggle also works
   const toggleBtn = win.locator('[data-testid="session-artifact-toggle"]');
@@ -458,6 +592,70 @@ test('artifact workspace dock opens, switches between preview, code, and diff, a
   await dock.locator('[data-testid="artifact-close-btn"]').click();
   await expect(dock).toBeHidden();
   await expect(toggleBtn).not.toHaveClass(/active/);
+});
+
+// Agents publish artifacts as files in the session folder, not inline text, so
+// the dock has to read them — and say plainly when one is gone.
+test('artifact workspace dock previews a file-backed text artifact and explains a missing one', async () => {
+  const gadget = {
+    type: 'gadget' as const,
+    blockId: 'artifact-file-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-file-evidence',
+      payload: {
+        title: 'Verification evidence',
+        artifacts: [
+          { name: 'change-diff.txt', path: '.praxis/session-artifacts/change-diff.txt', mediaType: 'text/plain' },
+          { name: 'removed-report.log', path: '.praxis/session-artifacts/removed-report.log', mediaType: 'text/plain' }
+        ]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(buildGadgetFenceMessage([gadget], 'Evidence attached.'));
+  const artifactsDir = path.join(app!.userDataDir, '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifactsDir, { recursive: true });
+  fs.writeFileSync(path.join(artifactsDir, 'change-diff.txt'), 'diff --git a/x b/x\n+the real file body');
+
+  const openButtons = win.locator('[data-testid="gadget-artifact-open-dock"]');
+  await openButtons.nth(0).click();
+  const dock = win.locator('[data-testid="session-artifact-dock"]');
+  // The Preview tab shows the file itself, not a placeholder card.
+  const text = dock.locator('[data-testid="artifact-preview-text"]');
+  await expect(text).toContainText('+the real file body');
+  // The name stays readable in a narrow dock rather than clipped to a sliver.
+  // Its own box can be wide while its row clips it, so measure what shows.
+  // (Proven against the old CSS, where only "(" of the name was visible.)
+  const title = dock.locator('[data-testid="artifact-dock-title"]');
+  await expect(title).toHaveText('change-diff.txt');
+  const visibleTitleWidth = await title.evaluate(el => {
+    const own = el.getBoundingClientRect();
+    const row = el.parentElement!.getBoundingClientRect();
+    return Math.min(own.right, row.right) - own.left;
+  });
+  expect(visibleTitleWidth).toBeGreaterThan(60);
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-dock-text-preview.png')
+  });
+
+  // A file that no longer exists says so, and where it was looked for,
+  // instead of leaving the previous artifact's text under the new name.
+  await openButtons.nth(1).click();
+  await expect(title).toHaveText('removed-report.log');
+  const unavailable = dock.locator('[data-testid="artifact-dock-unavailable"]');
+  await expect(unavailable.locator('span')).toHaveText(/^Artifact file was not found in the session folder \(/);
+  await expect(unavailable).toContainText('.praxis/session-artifacts/removed-report.log');
+  await expect(dock).not.toContainText('the real file body');
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-dock-missing-file.png')
+  });
+
+  // Going back to the existing file recovers.
+  await openButtons.nth(0).click();
+  await expect(text).toContainText('+the real file body');
+  await expect(unavailable).toBeHidden();
 });
 
 test('internal memory citations stay persisted but do not render in the transcript', async () => {
@@ -508,7 +706,8 @@ test('chat producers receive the choice-gadget policy for genuine decisions', as
   expect(systemPrompt).toContain('Do not turn every numbered list into controls.');
   expect(systemPrompt).toContain('"kind":"choice"');
   expect(systemPrompt).toContain('The host adds scope and issuedAt.');
-  expect(systemPrompt).toContain('publish it as an artifact gadget');
+  expect(systemPrompt).toContain('publish it as an image gadget');
+  expect(systemPrompt).toContain('Use the `image` kind for screenshots');
   expect(systemPrompt).toContain('.praxis/session-artifacts/');
 });
 
@@ -521,7 +720,7 @@ test('Settings lists each built-in gadget with its purpose', async () => {
   await win.locator('[data-testid="settings-nav-gadgets"]').click();
 
   const section = win.locator('[data-testid="settings-gadgets"]');
-  await expect(section.locator('[data-testid^="settings-gadget-"]')).toHaveCount(12);
+  await expect(section.locator('[data-testid^="settings-gadget-"]')).toHaveCount(13);
   await expect(section.locator('[data-testid="settings-gadget-tool-completion"]')).toContainText('Tool completion');
   await expect(section.locator('[data-testid="settings-gadget-tool-completion"]')).toContainText('one expandable activity entry');
   await expect(section.locator('[data-testid="settings-gadget-choice"]')).toContainText('clear decision');

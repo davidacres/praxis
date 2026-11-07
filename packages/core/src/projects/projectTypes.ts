@@ -206,6 +206,11 @@ export interface ProjectRecord {
   icon?: ProjectIconName;
   /** One of `PROJECT_COLOR_NAMES`; undefined falls back to the sidebar/home's plain default ink. */
   color?: ProjectColorName;
+  /**
+   * Where "Save to workspace" publishes artifacts, relative to the repository
+   * root (POSIX). Undefined means `DEFAULT_ARTIFACTS_FOLDER`.
+   */
+  artifactsFolder?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -250,6 +255,8 @@ export interface UpdateProjectInput {
   defaultAiToolMode?: AgentToolMode;
   icon?: ProjectIconName;
   color?: ProjectColorName;
+  /** Repository-relative folder for published artifacts; an empty string resets it to the default. */
+  artifactsFolder?: string;
 }
 
 export interface AttachProjectFolderInput {

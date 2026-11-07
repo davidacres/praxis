@@ -10,3 +10,4 @@ export * from './gadgetService';
 export * from './blockParser';
 export * from './fixtures';
 export * from './answerText';
+export * from './imageGadget';

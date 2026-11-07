@@ -106,6 +106,19 @@ test('team chat store persists, titles from the first message, renames and delet
   assert.equal(store.list('p1').length, 0);
 });
 
+test('team chat store archives and restores a chat, legacy and durable alike', async () => {
+  for (const activation of [undefined, { version: 1 as const, acceptedNewTurns: true }]) {
+    let data: import('./assistantTypes').TeamChatSnapshot = { schemaVersion: 2, revision: 0, teamChats: [], conversations: [], ...(activation ? { activation } : {}) };
+    const store = new TeamChatStore({ read: () => structuredClone(data), transaction: async mutate => { const draft = structuredClone(data); const result = mutate(draft); data = draft; return result; } });
+    const chat = await store.create('p1');
+    assert.equal((await store.setArchived(chat.id, true)).archived, true);
+    assert.equal(store.list('p1')[0].archived, true);
+    await store.setArchived(chat.id, false);
+    assert.equal('archived' in store.list('p1')[0], false);
+    await assert.rejects(store.setArchived('missing', true), /not found/);
+  }
+});
+
 test('ticket actions are only offered on an issue page', async () => {
   const sub = 'x\n```praxis-assistant\n{"action":{"kind":"create-subtask","label":"A","summary":"s","title":"Add test","description":"d"}}\n```';
   const upd = 'x\n```praxis-assistant\n{"action":{"kind":"update-ticket","label":"A","summary":"s","description":"new"}}\n```';

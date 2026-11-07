@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../app/diagnostics.dart';
 import '../app/theme.dart';
@@ -34,9 +35,34 @@ bool _isPreviewableImage(String? mediaType, String path) {
   return _previewableImageExtension.hasMatch(withoutQuery);
 }
 
-String _markdownImageForArtifact(String name, String path) {
+/// The Markdown image for a file-backed picture, on either the artifact or the
+/// image surface. The path is resolved against the session's folder by the host.
+String _markdownImageForFile(String name, String path) {
   final alt = name.replaceAll(RegExp(r'[\[\]]'), ' ').trim();
-  return '![${alt.isNotEmpty ? alt : 'Artifact preview'}](<$path>)';
+  return '![${alt.isNotEmpty ? alt : 'Image preview'}](<$path>)';
+}
+
+/// A picture that travels inside the payload rather than on disk.
+///
+/// Inline SVG has no file in the session's folder to point at, so it is drawn
+/// directly from its source. The phone renders it with `flutter_svg` rather
+/// than through the Markdown image pipeline, which only handles raster bytes.
+class _InlineSvg extends StatelessWidget {
+  const _InlineSvg(this.name, this.source);
+  final String name;
+  final String source;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: t.s(320), maxHeight: t.s(320)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(t.s(8)),
+        child: SvgPicture.string(source, fit: BoxFit.contain),
+      ),
+    );
+  }
 }
 
 /// One gadget in a conversation. An unknown kind or version, or a body that
@@ -112,6 +138,7 @@ class GadgetViewWidget extends StatelessWidget {
       'progress' => _Progress(gadget: gadget, payload: payload, answerable: answerable, onAnswer: onAnswer),
       'diff' => _Diff(gadget: gadget, payload: payload, answerable: answerable, onAnswer: onAnswer),
       'artifact' => _Artifact(gadget: gadget, payload: payload, answerable: answerable, onAnswer: onAnswer),
+      'image' => _Image(gadget: gadget, payload: payload, answerable: answerable, onAnswer: onAnswer),
       'handoff' => _Handoff(gadget: gadget, payload: payload, answerable: answerable, onAnswer: onAnswer),
       'conflict' => _Conflict(gadget: gadget, payload: payload, answerable: answerable, onAnswer: onAnswer),
       _ => MarkdownView(gadget.fallbackText),
@@ -666,7 +693,33 @@ class _PlainState<T extends _GadgetBody> extends State<T> {
                   Padding(
                     padding: EdgeInsets.only(top: t.s(4)),
                     child: MarkdownView(
-                      _markdownImageForArtifact(_string(artifact['name']), _string(artifact['path'])),
+                      _markdownImageForFile(_string(artifact['name']), _string(artifact['path'])),
+                      imageSessionId: widget.gadget.imageSessionId,
+                    ),
+                  ),
+              ],
+            ),
+          _ActionBar(gadget: widget.gadget, answerable: widget.answerable, onAnswer: widget.onAnswer, valueFor: _noValue),
+        ]);
+      case 'image':
+        final images = _maps(payload['images']);
+        return _stack(context, [
+          _Heading(_string(payload['title'])),
+          for (final image in images)
+            _FileRow(
+              children: [
+                Text(_string(image['name']), style: ts(context, 14, weight: FontWeight.w600)),
+                if (image['description'] is String) Text(image['description'] as String, style: _dim(context)),
+                if (_string(image['content']).trim().isNotEmpty)
+                  Padding(
+                    padding: EdgeInsets.only(top: t.s(4)),
+                    child: _InlineSvg(_string(image['name']), _string(image['content'])),
+                  )
+                else if (_isPreviewableImage(image['mediaType'] as String?, _string(image['path'])))
+                  Padding(
+                    padding: EdgeInsets.only(top: t.s(4)),
+                    child: MarkdownView(
+                      _markdownImageForFile(_string(image['name']), _string(image['path'])),
                       imageSessionId: widget.gadget.imageSessionId,
                     ),
                   ),
@@ -774,6 +827,12 @@ class _Artifact extends _GadgetBody {
   const _Artifact({required super.gadget, required super.payload, required super.answerable, required super.onAnswer});
   @override
   State<_Artifact> createState() => _PlainState<_Artifact>();
+}
+
+class _Image extends _GadgetBody {
+  const _Image({required super.gadget, required super.payload, required super.answerable, required super.onAnswer});
+  @override
+  State<_Image> createState() => _PlainState<_Image>();
 }
 
 class _Handoff extends _GadgetBody {

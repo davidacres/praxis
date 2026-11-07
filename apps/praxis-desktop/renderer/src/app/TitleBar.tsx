@@ -40,6 +40,9 @@ export interface TitleBarProps {
   /** Opens the active project's What Changed view. */
   onOpenWhatChanged?: () => void;
   onOpenScheduledRuns?: () => void;
+  /** Opens the active project's Artifacts page. */
+  onOpenArtifacts?: () => void;
+  artifactsActive?: boolean;
   onNewProject?: () => void;
   onImportProjects?: () => void;
   onOpenFolder?: () => void;
@@ -96,6 +99,8 @@ export function TitleBar({
   onQuickCapture,
   onOpenWhatChanged,
   onOpenScheduledRuns,
+  onOpenArtifacts,
+  artifactsActive,
   onNewProject,
   onImportProjects,
   onOpenFolder,
@@ -496,6 +501,18 @@ export function TitleBar({
                     onClick={() => { onOpenScheduledRuns(); }}
                   >
                     <Icon name="calendar-clock" size={13} />
+                  </button>
+                )}
+                {onOpenArtifacts && (
+                  <button
+                    type="button"
+                    className={`icon-btn titlebar-action-btn${artifactsActive ? ' active' : ''}`}
+                    aria-label="Artifacts"
+                    aria-pressed={artifactsActive}
+                    data-testid="titlebar-artifacts"
+                    onClick={() => { onOpenArtifacts(); }}
+                  >
+                    <Icon name="layers" size={13} />
                   </button>
                 )}
                 {onOpenWhatChanged && (

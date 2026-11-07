@@ -24,6 +24,7 @@ import {
 } from './contracts';
 import { GADGET_LIMITS } from './limits';
 import { redactDeep } from './redaction';
+import { isImageArtifact, promoteArtifactGadgetToImage } from './imageGadget';
 import { gadgetFallbackText } from './fallback';
 
 class SchemaFailure extends Error {
@@ -465,6 +466,45 @@ const PAYLOAD_VALIDATORS: { [K in GadgetKind]: (payload: Record<string, unknown>
     };
   },
 
+  image(payload) {
+    const images = readBoundedArray(payload, 'images', 'payload', GADGET_LIMITS.images, {
+      required: true,
+      minLength: 1
+    }).map((raw, index) => {
+      const path = `payload.images[${index}]`;
+      const image = requireRecord(raw, path);
+      const filePath = readString(image, 'path', path, { required: true, max: 1_000 })!;
+      // Resolved against the session's folder by the host; refusing traversal
+      // here keeps that resolution from ever seeing `..`.
+      if (filePath.includes('..')) {
+        fail('schema-invalid', `"${path}.path" must not traverse outside the workspace.`, `${path}.path`);
+      }
+      const mediaType = readString(image, 'mediaType', path, { max: 200 });
+      const content = readString(image, 'content', path, { max: GADGET_LIMITS.stringLength });
+      // An image that cannot be displayed as one is refused rather than shown
+      // as a broken picture: the media type has to say "image", or the path has
+      // to carry a known image extension.
+      if (!isImageArtifact({ path: filePath, ...(mediaType ? { mediaType } : {}) })) {
+        fail('schema-invalid', `"${path}" must be an image (an image media type, or a known image file extension).`, `${path}.mediaType`);
+      }
+      const sizeBytes = readNumber(image, 'sizeBytes', path, { min: 0 });
+      const description = readString(image, 'description', path);
+      return {
+        name: readString(image, 'name', path, { required: true, max: 400 })!,
+        path: filePath,
+        ...(mediaType ? { mediaType } : {}),
+        ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(content !== undefined ? { content } : {})
+      };
+    });
+
+    return {
+      title: readString(payload, 'title', 'payload', { required: true, max: 400 }),
+      images
+    };
+  },
+
   handoff(payload) {
     const mapItems = (key: 'includedItems' | 'excludedItems') =>
       readBoundedArray(payload, key, 'payload', GADGET_LIMITS.handoffItems).map((raw, index) => {
@@ -694,7 +734,16 @@ export function validateGadgetEnvelope(input: unknown, options: ValidateGadgetOp
  * reason is inspectable, which is what "no silent failure" means here.
  */
 export function coerceGadgetBlock(input: unknown, blockId: string, options: ValidateGadgetOptions = {}): ChatBlock {
-  const outcome = validateGadgetEnvelope(input, options);
+  // An artifact gadget holding nothing but images is a picture, not a file
+  // list, and is drawn on the image surface instead. This happens here — at
+  // the one boundary every gadget passes through — so the desktop, the phone
+  // and the transcript all agree on which surface an artifact landed on.
+  //
+  // A client that cannot draw the image surface keeps the artifact surface
+  // rather than being refused outright: an older build showing a file row is
+  // a lesser outcome than an error, and the image is still reachable there.
+  const canDrawImages = !options.capability || options.capability.kinds.includes('image');
+  const outcome = validateGadgetEnvelope(canDrawImages ? promoteArtifactGadgetToImage(input) : input, options);
   if (outcome.ok) return { type: 'gadget', blockId, gadget: outcome.envelope };
   const declaredFallback = isRecord(input) && typeof input.fallbackText === 'string' ? input.fallbackText.trim() : '';
   return {

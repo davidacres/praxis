@@ -19,6 +19,7 @@ import type {
   DiffGadgetPayload,
   FormGadgetPayload,
   HandoffGadgetPayload,
+  ImageGadgetPayload,
   ProgressGadgetPayload,
   TableGadgetPayload
 } from './contracts';
@@ -144,6 +145,16 @@ export function gadgetFallbackText(envelope: AnyGadgetEnvelope): string {
         }
       }
       return parts.join('\n\n');
+    }
+
+    case 'image': {
+      const payload = envelope.payload as ImageGadgetPayload;
+      // An image's fallback is its name and where it lives — a text reader
+      // cannot see the picture, but it can still be told what it is.
+      const items = bullet(payload.images.map(image =>
+        `${image.name} — ${image.path}${image.description ? ` (${image.description})` : ''}`
+      ));
+      return section(payload.title, items);
     }
 
     case 'handoff': {

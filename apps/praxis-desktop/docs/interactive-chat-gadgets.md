@@ -56,7 +56,7 @@ its own authority — those are stamped host-side and overwritten if supplied.
 ### Kinds
 
 `choice` · `confirmation` · `form` · `table` · `chart` · `progress` · `diff` ·
-`artifact` · `handoff` · `conflict` · `approval`
+`artifact` · `image` · `handoff` · `conflict` · `approval`
 
 An unknown kind is not an error: it degrades to the envelope's `fallbackText`,
 which the host derives when the producer omits it.

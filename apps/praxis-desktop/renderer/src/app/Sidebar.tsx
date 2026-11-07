@@ -49,7 +49,8 @@ export type FeatureId =
   | 'git'
   | 'run'
   | 'deployments'
-  | 'schedules';
+  | 'schedules'
+  | 'artifacts';
 
 interface FeatureDef {
   id: FeatureId;

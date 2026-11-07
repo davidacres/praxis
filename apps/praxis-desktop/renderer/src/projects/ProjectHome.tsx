@@ -53,6 +53,9 @@ const TOOL_MODE_LABEL: Record<AgentToolMode, string> = {
   full: 'Full tools'
 };
 
+// Mirrors core's DEFAULT_ARTIFACTS_FOLDER (core can't be value-imported here).
+const DEFAULT_ARTIFACTS_FOLDER = 'docs/published-artifacts';
+
 export function ProjectHome({ project, boards, connections, onChanged }: { project: ProjectRecord; boards: Board[]; connections: Connection[]; onChanged: (project: ProjectRecord) => void; onOpenBoard: (boardId: string) => void; onOpenGit: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(project.name);
@@ -64,6 +67,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const [purpose, setPurpose] = useState(project.purpose);
   const [brief, setBrief] = useState(project.brief);
   const [stages, setStages] = useState<ProjectWorkflowStage[]>(project.workflowStages);
+  const [artifactsFolder, setArtifactsFolder] = useState(project.artifactsFolder ?? '');
   const [error, setError] = useState<string>();
   // Renaming the key is always allowed (see `UpdateProjectInput.key`'s doc)
   // — this is purely informational: every existing ticket's own `key`
@@ -94,7 +98,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
       ? { label: 'Git repo', on: true }
       : { label: inspection ? 'No repo' : 'Folder attached', on: false };
 
-  const cancelEdit = () => { setEditing(false); setName(project.name); setKey(project.key); setIcon(project.icon); setColor(project.color); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setError(undefined); };
+  const cancelEdit = () => { setEditing(false); setName(project.name); setKey(project.key); setIcon(project.icon); setColor(project.color); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setArtifactsFolder(project.artifactsFolder ?? ''); setError(undefined); };
 
   // How many tickets sit on each stage, so renaming or removing one can say
   // what it will move rather than silently re-resolving.
@@ -115,7 +119,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     ...current.slice(current.length - 1)
   ]);
   const removeStage = (index: number) => setStages(current => current.filter((_, i) => i !== index));
-  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { name, key, icon, color, type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
+  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { name, key, icon, color, type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages, artifactsFolder })); setEditing(false); setError(undefined); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
   const chooseAttach = async () => { const value = await window.praxis.dialog.pickFolder(attachMode === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder'); if (value) setAttachPath(value); };
   const attach = async () => { try { const result = await window.praxis.projects.attachFolder(project.id, { startingPoint: attachMode as 'new-folder' | 'existing-folder', folderPath: attachPath, folderName: folderName || undefined, createProjectFile: true }); onChanged(result.project); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
   const addOwnedBoard = async (storage: 'app' | 'folder') => {
@@ -277,6 +281,9 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
           <div className="ph-path"><Icon name="folder-open" size={14} /><div><strong>{workspaceName}</strong><code>{project.workspaceFolder}</code></div></div>
           {stack.length > 0 && <div className="ph-tags">{stack.map(item => <span key={item}>{item}</span>)}</div>}
           {inspection && stack.length === 0 && <p className="muted">No languages or frameworks detected.</p>}
+          {editing
+            ? <label className="field"><span>Artifacts folder</span><input className="input" data-testid="project-artifacts-folder-input" value={artifactsFolder} placeholder={DEFAULT_ARTIFACTS_FOLDER} spellCheck={false} onChange={e => setArtifactsFolder(e.target.value)} /><small className="muted">Where &ldquo;Save to workspace&rdquo; copies artifacts, relative to the repository root. Leave empty for the default.</small></label>
+            : <div className="ph-path" data-testid="project-artifacts-folder"><Icon name="folder" size={14} /><div><strong>Artifacts folder{project.artifactsFolder ? '' : ' (default)'}</strong><code>{project.artifactsFolder ?? DEFAULT_ARTIFACTS_FOLDER}</code></div></div>}
         </> : <>
           <p className="muted">Attach a folder to enable file and shell tools.</p>
           <div className="segmented"><button className={attachMode === 'existing-folder' ? 'segmented-btn active' : 'segmented-btn'} onClick={() => setAttachMode('existing-folder')}>Existing</button><button className={attachMode === 'new-folder' ? 'segmented-btn active' : 'segmented-btn'} onClick={() => setAttachMode('new-folder')}>New</button></div>

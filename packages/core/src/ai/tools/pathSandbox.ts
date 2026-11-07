@@ -83,9 +83,9 @@ export async function readSandboxedFile(root: string, inputPath: string, maxByte
   } finally { await handle.close(); }
 }
 
-export async function writeSandboxedFile(root: string, inputPath: string, content: string): Promise<void> {
+export async function writeSandboxedFile(root: string, inputPath: string, content: string | Uint8Array): Promise<void> {
   const handle = await openSandboxedFile(root, inputPath, true);
-  try { await handle.truncate(0); await handle.writeFile(content, 'utf8'); }
+  try { await handle.truncate(0); await (typeof content === 'string' ? handle.writeFile(content, 'utf8') : handle.writeFile(content)); }
   finally { await handle.close(); }
 }
 

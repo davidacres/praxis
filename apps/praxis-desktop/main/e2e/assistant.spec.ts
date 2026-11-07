@@ -734,6 +734,48 @@ test('a chat can be renamed, survives an app restart, and the docked width persi
   await expect(again.getByTestId('assistant-message-dev')).toBeVisible();
 });
 
+test('a team chat row offers rename, archive and delete, and an archived chat restores from the Sessions browser', async () => {
+  const win = await launch();
+  const projectId = await win.getByTestId('sidebar-project-select').getAttribute('data-value');
+  const chat = await win.evaluate(async id => {
+    const created = await window.praxis.assistant.createChat(id);
+    return window.praxis.assistant.renameChat(created.id, 'Archive me');
+  }, projectId!);
+  const sidebar = win.getByTestId('easymode-sidebar');
+  const row = sidebar.getByTestId('team-chat-row');
+  await expect(row).toContainText('Archive me');
+
+  // The same three hover actions a session row has.
+  await row.hover();
+  for (const action of ['Rename', 'Archive', 'Delete']) {
+    await expect(row.getByRole('button', { name: `${action} team chat Archive me` })).toBeVisible();
+  }
+  await row.getByRole('button', { name: 'Rename team chat Archive me' }).click();
+  await win.getByRole('dialog').getByRole('textbox').fill('Archived chat');
+  await win.getByRole('dialog').getByRole('button', { name: /^(OK|Save|Confirm|Rename)$/ }).click();
+  await expect(row).toContainText('Archived chat');
+  await row.hover();
+  await win.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/team-chat-row-actions.png') });
+
+  // Archiving keeps the record but takes it out of the feed.
+  await row.getByRole('button', { name: 'Archive team chat Archived chat' }).click();
+  await expect(row).toHaveCount(0);
+  expect((await win.evaluate(id => window.praxis.assistant.getChat(id), chat.id))?.archived).toBe(true);
+
+  // Restore it from the Sessions browser's Archived group.
+  await win.evaluate(() => {
+    const workspaceId = Object.keys(localStorage).find(key => key.startsWith('praxis-last-workspace-route:'))!;
+    localStorage.setItem(workspaceId, JSON.stringify({ feature: 'sessions' }));
+  });
+  await win.reload();
+  await win.getByTestId('session-browser-archived-toggle').click();
+  const archived = win.getByTestId('session-browser-team-chat');
+  await expect(archived).toContainText('Archived chat');
+  await archived.getByRole('button', { name: 'Restore team chat Archived chat' }).click();
+  await expect(archived).toHaveCount(0);
+  expect((await win.evaluate(id => window.praxis.assistant.getChat(id), chat.id))?.archived).toBeUndefined();
+});
+
 test('durable activation rejects stale legacy turns and transcript writers', async () => {
   app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli' } }, undefined, undefined, { openNewSession: false });
   const win = app.window;

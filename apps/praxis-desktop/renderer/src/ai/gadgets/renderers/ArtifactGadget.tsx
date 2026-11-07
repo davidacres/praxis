@@ -53,6 +53,8 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
   const [previewingPath, setPreviewingPath] = useState<string>();
   const [previewError, setPreviewError] = useState<string>();
   const [saveStatus, setSaveStatus] = useState<Record<string, string>>({});
+  // Where each save landed (or why it failed), shown as the button's tooltip.
+  const [saveDetail, setSaveDetail] = useState<Record<string, string>>({});
   const previewSessionId = gadget.scope.workId ?? gadget.scope.sessionId;
 
   const openInWorkspace = (artifact: ArtifactItem) => {
@@ -70,12 +72,14 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
 
   const saveArtifact = async (artifact: ArtifactItem) => {
     try {
-      await window.praxis.ai.saveArtifactToWorkspace(
+      const result = await window.praxis.ai.saveArtifactToWorkspace(
         previewSessionId,
         artifact.path,
-        artifact.content
+        artifact.content,
+        { title: artifact.name, description: artifact.description, mediaType: artifact.mediaType }
       );
-      setSaveStatus(prev => ({ ...prev, [artifact.path]: 'Saved' }));
+      setSaveStatus(prev => ({ ...prev, [artifact.path]: result.unchanged ? 'Already saved' : 'Saved' }));
+      setSaveDetail(prev => ({ ...prev, [artifact.path]: `${result.unchanged ? 'Already in' : 'Saved to'} ${result.savedPath}` }));
       setTimeout(() => {
         setSaveStatus(prev => {
           const next = { ...prev };
@@ -85,6 +89,7 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
       }, 3000);
     } catch (err) {
       setSaveStatus(prev => ({ ...prev, [artifact.path]: 'Error saving' }));
+      setSaveDetail(prev => ({ ...prev, [artifact.path]: err instanceof Error ? err.message : String(err) }));
     }
   };
 
@@ -243,7 +248,7 @@ export function ArtifactGadget({ gadget, actionable, busy, onSubmit }: GadgetRen
                     type="button"
                     data-testid="gadget-artifact-save"
                     onClick={() => void saveArtifact(artifact)}
-                    title="Save artifact to workspace"
+                    title={saveDetail[artifact.path] ?? "Save to the project's artifacts folder"}
                   >
                     <Icon name="check" size={12} />
                     <span>{saveStatus[artifact.path] || 'Save'}</span>

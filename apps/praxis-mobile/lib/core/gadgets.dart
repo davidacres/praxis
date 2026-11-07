@@ -5,7 +5,7 @@ import 'models.dart';
 // What the phone decides about a gadget before drawing it. Port of
 // `renderer/mobileGadgets.ts`.
 
-const mobileGadgetKinds = ['choice', 'confirmation', 'form', 'table', 'chart', 'progress', 'diff', 'artifact', 'handoff', 'conflict', 'approval'];
+const mobileGadgetKinds = ['choice', 'confirmation', 'form', 'table', 'chart', 'progress', 'diff', 'artifact', 'image', 'handoff', 'conflict', 'approval'];
 
 bool canDrawGadget(GadgetEnvelope gadget) => gadget.version == 1 && mobileGadgetKinds.contains(gadget.kind);
 

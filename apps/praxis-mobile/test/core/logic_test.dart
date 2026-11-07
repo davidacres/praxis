@@ -514,6 +514,11 @@ void main() {
       expect(canDrawGadget(GadgetEnvelope({'kind': 'hologram', 'version': 1})), false);
     });
 
+    test('the phone draws the image surface as well as the artifact one', () {
+      expect(canDrawGadget(GadgetEnvelope({'kind': 'image', 'version': 1})), true);
+      expect(canDrawGadget(GadgetEnvelope({'kind': 'artifact', 'version': 1})), true);
+    });
+
     test('an answered choice collapses to the labels it was answered with', () {
       GadgetEnvelope answered(Json answer) => GadgetEnvelope({...choice, 'answer': answer});
       expect(answeredChoiceLabels(GadgetEnvelope(choice)), isNull);

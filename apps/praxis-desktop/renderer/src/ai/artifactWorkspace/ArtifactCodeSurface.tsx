@@ -7,6 +7,8 @@ export interface ArtifactCodeSurfaceProps {
   mode?: 'code' | 'diff';
   title?: string;
   hideBanner?: boolean;
+  /** Overrides the code view's test id, e.g. when it serves as a text preview. */
+  testId?: string;
 }
 
 export function ArtifactCodeSurface({
@@ -14,7 +16,8 @@ export function ArtifactCodeSurface({
   content,
   mode = 'code',
   title,
-  hideBanner = false
+  hideBanner = false,
+  testId = 'artifact-code-view'
 }: ArtifactCodeSurfaceProps) {
   const lines = content.split('\n');
   const langLabel = artifact.language || languageFor(artifact.path);
@@ -44,7 +47,7 @@ export function ArtifactCodeSurface({
   }
 
   return (
-    <div className="artifact-code-view" data-testid="artifact-code-view">
+    <div className="artifact-code-view" data-testid={testId}>
       {!hideBanner && (
         <div className="artifact-code-banner">
           <div className="artifact-code-banner-left">

@@ -82,6 +82,7 @@ import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
 import { RunProfileEditor } from '../projects/RunProfileEditor';
 import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { ScheduledRunsPage } from '../schedule/ScheduledRunsPage';
+import { ArtifactsPage } from '../artifacts/ArtifactsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { sessionSkillRows } from '../ai/sessionSkills';
@@ -210,7 +211,8 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   git: 'Git Graph',
   run: 'Run',
   deployments: 'Deployments',
-  schedules: 'Scheduled runs'
+  schedules: 'Scheduled runs',
+  artifacts: 'Artifacts'
 };
 
 const FEATURE_ICONS: Record<FeatureId, IconName> = {
@@ -223,7 +225,8 @@ const FEATURE_ICONS: Record<FeatureId, IconName> = {
   git: 'git-branch',
   run: 'play',
   deployments: 'radio-tower',
-  schedules: 'clock'
+  schedules: 'clock',
+  artifacts: 'layers'
 };
 
 /** Legacy single-slot key. Still read once per workspace as a fallback so an
@@ -1559,8 +1562,8 @@ export function App() {
         id: `feature:${feature}`,
         label: FEATURE_TITLES[feature],
         group: 'Go to',
-        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'schedules' ? 'clock' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : feature === 'conversations' ? 'chats' : 'home',
-        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments' || feature === 'schedules' || feature === 'workflows') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
+        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'schedules' ? 'clock' : feature === 'artifacts' ? 'layers' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : feature === 'conversations' ? 'chats' : 'home',
+        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments' || feature === 'schedules' || feature === 'artifacts' || feature === 'workflows') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
       });
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
@@ -1583,6 +1586,7 @@ export function App() {
       if (settings?.preview?.enableDeployments) {
         entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
       }
+      entries.push({ id: `project-artifacts:${project.id}`, label: `${project.name}: Artifacts`, hint: project.key, group: 'Projects', icon: 'layers', keywords: 'artifacts saved published screenshots reports pages files', run: () => navigate({ projectId: project.id, feature: 'artifacts' }) });
       entries.push({ id: `project-schedules:${project.id}`, label: `${project.name}: Scheduled runs`, hint: project.key, group: 'Projects', icon: 'clock', keywords: 'schedule scheduled run queue tickets overnight batch', run: () => navigate({ projectId: project.id, feature: 'schedules' }) });
       entries.push({ id: `runs:${project.id}`, label: `${project.name} · Workflow runs`, hint: 'Browse runs and history', group: 'Workflows', icon: 'play', keywords: 'runs history list workflow archive', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs', workflowRunId: undefined }) });
       entries.push({ id: `policies:${project.id}`, label: `${project.name}: Policies`, hint: 'Workflow policy profiles', group: 'Workflows', icon: 'shield', keywords: 'policy policies gates approval trust', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'policies' }) });
@@ -1997,6 +2001,7 @@ export function App() {
     <SessionInspector
       session={inspectedSession}
       sessions={agentSessions}
+      teamChatProjectIds={['', ...workspaceProjects.map(project => project.id)]}
       onOpenAgent={profileId => navigate({ feature: 'agents', agentProfileId: profileId })}
       onOpenSkill={skillName => navigate({ feature: 'agents', skillName })}
       onSelectSession={issueKey => {
@@ -2246,7 +2251,7 @@ export function App() {
         />
       );
     }
-    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && route.feature !== 'schedules' && route.feature !== 'sessions' && route.feature !== 'conversations' && route.feature !== 'connections' && route.feature !== 'overview') {
+    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments' && route.feature !== 'schedules' && route.feature !== 'artifacts' && route.feature !== 'sessions' && route.feature !== 'conversations' && route.feature !== 'connections' && route.feature !== 'overview') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough}
         reviewPanel={<ProjectReviewPanel key={selectedProject.id} project={selectedProject} sessions={agentSessions} request={reviewRequest}
           onOpenPlanFile={relativePath => {
@@ -2351,6 +2356,32 @@ export function App() {
         );
       }
       return <DeploymentsPage project={selectedProject} />;
+    }
+    if (route.feature === 'artifacts') {
+      if (!selectedProject) {
+        return (
+          <div className="empty-state" data-testid="artifacts-no-project">
+            <Icon name="layers" size={28} />
+            <span>Pick a project to see its saved artifacts.</span>
+          </div>
+        );
+      }
+      return (
+        <ArtifactsPage
+          key={selectedProject.id}
+          project={selectedProject}
+          sessions={agentSessions}
+          onNewSession={projectId => navigate({ newSession: true, projectId })}
+          onOpenSession={sessionKey => {
+            const session = agentSessions.find(candidate => candidate.issueKey === sessionKey);
+            navigate({
+              feature: session && isConversationSession(session) ? 'conversations' : 'sessions',
+              sessionKey,
+              ...(session?.projectId ? { projectId: session.projectId } : {})
+            });
+          }}
+        />
+      );
     }
     if (route.feature === 'schedules') {
       if (!selectedProject) {
@@ -2578,6 +2609,8 @@ export function App() {
           setSidebarVisible(true);
           navigate({ projectId: reviewProject.id, feature: 'schedules' });
         } : undefined}
+        onOpenArtifacts={reviewProject ? () => navigate({ projectId: reviewProject.id, feature: 'artifacts' }) : undefined}
+        artifactsActive={route.feature === 'artifacts'}
         onOpenWhatChanged={reviewProject ? () => openProjectReview(reviewProject.id, 'changes') : undefined}
         onNewProject={() => requestAddProject()}
         onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}

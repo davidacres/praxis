@@ -16,6 +16,7 @@ import { ChartGadget } from './ChartGadget';
 import { ProgressGadget } from './ProgressGadget';
 import { DiffGadget } from './DiffGadget';
 import { ArtifactGadget } from './ArtifactGadget';
+import { ImageGadget } from './ImageGadget';
 import { HandoffGadget } from './HandoffGadget';
 import { ConflictGadget } from './ConflictGadget';
 import { ApprovalGadget } from './ApprovalGadget';
@@ -29,6 +30,7 @@ export function registerBuiltInGadgetRenderers(): void {
   registerGadgetRenderer('progress', GADGET_CONTRACT_VERSION, ProgressGadget);
   registerGadgetRenderer('diff', GADGET_CONTRACT_VERSION, DiffGadget);
   registerGadgetRenderer('artifact', GADGET_CONTRACT_VERSION, ArtifactGadget);
+  registerGadgetRenderer('image', GADGET_CONTRACT_VERSION, ImageGadget);
   registerGadgetRenderer('handoff', GADGET_CONTRACT_VERSION, HandoffGadget);
   registerGadgetRenderer('conflict', GADGET_CONTRACT_VERSION, ConflictGadget);
   registerGadgetRenderer('approval', GADGET_CONTRACT_VERSION, ApprovalGadget);
@@ -43,6 +45,7 @@ export {
   ProgressGadget,
   DiffGadget,
   ArtifactGadget,
+  ImageGadget,
   HandoffGadget,
   ConflictGadget,
   ApprovalGadget

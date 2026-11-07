@@ -59,13 +59,22 @@ function normalizeImageReferences(text: string, detectImageReferences: boolean):
   }).join('\n');
 }
 
-function createMarkdownRenderer(imageSources: Record<string, string>, loadLocalImages: boolean) {
+function createMarkdownRenderer(imageSources: Record<string, string>, loadLocalImages: boolean, allowInlineSvg = false) {
   // html:false keeps raw HTML inert — the renderer is sandboxed, but the
   // review and analysis text is model output, so never let markup through.
   const renderer = new MarkdownIt({ html: false, linkify: true, breaks: true });
   // Only explicit schemes (https://…). Fuzzy matching would turn file names such
   // as README.md or run.sh into links, because .md and .sh are country TLDs.
   renderer.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
+  // markdown-it refuses every `data:` URI except a handful of raster image
+  // types, so an inline SVG would be rejected during parsing and left as
+  // literal text. SVG is a document format, so where the caller opts in it is
+  // allowed — and nothing else is: no scripts, no other data types.
+  if (allowInlineSvg) {
+    const defaultValidateLink = renderer.validateLink.bind(renderer);
+    renderer.validateLink = (url: string) =>
+      url.startsWith('data:image/svg+xml') ? true : defaultValidateLink(url);
+  }
   renderer.renderer.rules.image = (tokens, index) => {
     const token = tokens[index];
     const source = String(token.attrGet('src') ?? '');
@@ -87,12 +96,15 @@ function createMarkdownRenderer(imageSources: Record<string, string>, loadLocalI
 export function Markdown({
   text,
   testId,
-  imageSessionId
+  imageSessionId,
+  allowInlineSvg = false
 }: {
   text: string;
   testId?: string;
   /** Enables safe loading of relative/local images from this AI session. */
   imageSessionId?: string;
+  /** Allows `data:image/svg+xml` sources, for pictures that travel in a payload. */
+  allowInlineSvg?: boolean;
 }) {
   const normalizedText = useMemo(
     () => normalizeImageReferences(normalizeStructuredReviewMarkdown(text || ''), Boolean(imageSessionId)),
@@ -133,8 +145,8 @@ export function Markdown({
   }, [imageSessionId, localImageReferences.join('\u0000')]);
 
   const html = useMemo(
-    () => createMarkdownRenderer(imageSources, Boolean(imageSessionId)).render(normalizedText),
-    [imageSessionId, imageSources, normalizedText]
+    () => createMarkdownRenderer(imageSources, Boolean(imageSessionId), allowInlineSvg).render(normalizedText),
+    [allowInlineSvg, imageSessionId, imageSources, normalizedText]
   );
 
   useEffect(() => {

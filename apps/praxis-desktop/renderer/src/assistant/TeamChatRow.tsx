@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TeamChatSummary } from '@praxis/core';
 import { dedupeTeamChats } from '../ai/assistantOwnership';
 import { Icon } from '../ui/Icon';
@@ -17,7 +17,10 @@ export function useProjectsTeamChats(projectIds: string[]): TeamChatSummary[] {
 }
 
 export interface TeamChatsState {
+  /** Chats the sidebar feeds list; archived ones are left out. */
   chats: TeamChatSummary[];
+  /** Archived chats, for the Sessions browser to restore. */
+  archived: TeamChatSummary[];
   /** Why the last read failed. Unreadable storage is never shown as an empty list. */
   error?: string;
   retry: () => void;
@@ -54,7 +57,10 @@ export function useProjectsTeamChatsState(projectIds: string[]): TeamChatsState 
     return () => { disposed = true; unsubscribe(); };
   }, [key, attempt]);
   const retry = useCallback(() => setAttempt(value => value + 1), []);
-  return result.key === key ? { chats: result.chats, error: result.error, retry } : { chats: [], retry };
+  const current = result.key === key ? result : undefined;
+  const chats = useMemo(() => (current?.chats ?? []).filter(chat => !chat.archived), [current?.chats]);
+  const archived = useMemo(() => (current?.chats ?? []).filter(chat => chat.archived), [current?.chats]);
+  return { chats, archived, error: current?.error, retry };
 }
 
 /** Shown in place of a silently empty team-chat list when storage cannot be read. */
@@ -95,19 +101,30 @@ interface TeamChatRowProps {
  */
 export function TeamChatRow({ projectId, chat, ago }: TeamChatRowProps) {
   const assistant = useAssistant();
-  const { confirm, prompt } = useDialogs();
+  const { confirmChoice, prompt } = useDialogs();
+  const [busy, setBusy] = useState(false);
   const open = () => {
     assistant.setProjectId(projectId);
     void assistant.loadChat(chat.id);
   };
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    try { await action(); } finally { setBusy(false); }
+  };
   const rename = async () => {
     const title = await prompt({ title: 'Rename team chat', label: 'Name', initialValue: chat.title, validate: value => (value.trim() ? undefined : 'A chat needs a name.') });
-    if (title) await window.praxis.assistant.renameChat(chat.id, title);
+    if (title) await run(async () => { await window.praxis.assistant.renameChat(chat.id, title); });
   };
+  const archive = () => run(async () => { await window.praxis.assistant.archiveChat(chat.id, true); });
+  // Same choice a session's delete offers: archiving keeps the transcript.
   const remove = async () => {
-    if (!(await confirm({ title: 'Delete team chat?', message: `"${chat.title}" will be removed permanently.`, confirmLabel: 'Delete', danger: true }))) return;
-    await window.praxis.assistant.deleteChat(chat.id);
-    assistant.chatDeleted(chat.id);
+    const choice = await confirmChoice({ title: 'Delete team chat?', message: `"${chat.title}" will be removed permanently.`, confirmLabel: 'Delete', tertiaryLabel: 'Archive', danger: true });
+    if (choice === 'cancel') return;
+    if (choice === 'tertiary') return archive();
+    await run(async () => {
+      await window.praxis.assistant.deleteChat(chat.id);
+      assistant.chatDeleted(chat.id);
+    });
   };
   const participants = chat.personas.length;
 
@@ -115,9 +132,7 @@ export function TeamChatRow({ projectId, chat, ago }: TeamChatRowProps) {
     <div className={`team-chat-row ledger-row${assistant.chatId === chat.id ? ' active' : ''}`} data-testid="team-chat-row">
       <button type="button" className="team-chat-main" title={chat.title} onClick={open} onDoubleClick={() => void rename()}>
         <span className="ledger-lead team-chat-personas" aria-hidden="true">
-          {participants > 0
-            ? chat.personas.map(role => <span key={role} className={`team-chat-dot persona-badge--${role}`} title={personaMeta(role).name} />)
-            : <Icon name="chats" size={14} />}
+          <Icon name="users" size={14} />
         </span>
         <span className="ledger-body">
           <span className="ledger-title-row">
@@ -126,13 +141,24 @@ export function TeamChatRow({ projectId, chat, ago }: TeamChatRowProps) {
           </span>
           <span className="ledger-meta">
             {chat.issueKey && <span className="ledger-chip">{chat.issueKey}</span>}
+            <span className="team-chat-participants" title={chat.personas.map(role => personaMeta(role).name).join(', ') || undefined}>
+              {chat.personas.map(role => <span key={role} className={`team-chat-dot persona-badge--${role}`} aria-hidden="true" />)}
+            </span>
             <span>team chat · {participants} participant{participants === 1 ? '' : 's'}</span>
           </span>
         </span>
       </button>
-      <button type="button" className="icon-btn icon-btn-sm team-chat-delete" aria-label={`Delete team chat ${chat.title}`} onClick={() => void remove()}>
-        <Icon name="trash" size={12} />
-      </button>
+      <div className="easymode-card-actions team-chat-actions">
+        <button type="button" className="easymode-card-action-btn" aria-label={`Rename team chat ${chat.title}`} title="Rename team chat" data-testid="team-chat-rename" disabled={busy} onClick={() => void rename()}>
+          <Icon name="pencil" size={11} />
+        </button>
+        <button type="button" className="easymode-card-action-btn" aria-label={`Archive team chat ${chat.title}`} title="Archive team chat" data-testid="team-chat-archive" disabled={busy} onClick={() => void archive()}>
+          <Icon name="archive" size={11} />
+        </button>
+        <button type="button" className="easymode-card-action-btn easymode-card-action-btn--delete" aria-label={`Delete team chat ${chat.title}`} title="Delete team chat" data-testid="team-chat-delete" disabled={busy} onClick={() => void remove()}>
+          <Icon name="trash" size={11} />
+        </button>
+      </div>
     </div>
   );
 }

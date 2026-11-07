@@ -1,4 +1,5 @@
 import type { KeyValueStore } from '../host/stateStore';
+import { normalizeArtifactsFolder } from './artifactsFolder';
 import type {
   ProjectBoardReference,
   ProjectRecord,
@@ -84,6 +85,7 @@ export class ProjectStore {
       ...(patch.defaultAiToolMode !== undefined ? { defaultAiToolMode: patch.defaultAiToolMode } : {}),
       ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
       ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.artifactsFolder !== undefined ? { artifactsFolder: normalizeArtifactsFolder(patch.artifactsFolder) } : {}),
       updatedAt: new Date().toISOString()
     };
     validateProjectRecord(next);

@@ -344,6 +344,12 @@ export function registerAssistantIpc(): void {
     changed();
     return chat;
   });
+  ipcMain.handle('assistant:archiveChat', async (_event, chatId: string, archived: boolean) => {
+    await activate();
+    const chat = await getTeamChatStore().setArchived(chatId, archived);
+    changed();
+    return chat;
+  });
   ipcMain.handle('assistant:deleteChat', async (_event, chatId: string) => {
     await activate();
     await getTeamChatCoordinator().removeConversation(chatId);

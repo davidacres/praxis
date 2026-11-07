@@ -42,6 +42,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
+import type { ArtifactGroup, ArtifactLibrary, SaveArtifactDetails } from '@praxis/core';
 import type { CreateNoteGroupInput, CreateNoteInput, NoteGroup, NoteRequestSnapshot, NoteSource, NotesResult, ProjectNote, UpdateNoteGroupInput, UpdateNoteInput } from '@praxis/core';
 import type { MissedResolution, SaveScheduledRunInput, ScheduledRunReadiness, ScheduledRunView, ScheduledWorkflowChoice, WindowCloseRequest } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
@@ -291,8 +292,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:openHtmlArtifactPreview', issueKey, filePath, title) as Promise<void>,
     readArtifactText: (issueKey: string, filePath: string) =>
       ipcRenderer.invoke('ai:readArtifactText', issueKey, filePath) as Promise<string>,
-    saveArtifactToWorkspace: (issueKey: string, filePath: string, content?: string) =>
-      ipcRenderer.invoke('ai:saveArtifactToWorkspace', issueKey, filePath, content) as Promise<{ savedPath: string }>,
+    saveArtifactToWorkspace: (issueKey: string, filePath: string, content?: string, details?: SaveArtifactDetails) =>
+      ipcRenderer.invoke('ai:saveArtifactToWorkspace', issueKey, filePath, content, details) as Promise<{ savedPath: string; unchanged?: boolean }>,
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
     assignSessionToProject: (issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string) =>
@@ -884,6 +885,27 @@ const praxis: PraxisIpc = {
       const handler = (_event: unknown, projectId: string) => listener(projectId);
       ipcRenderer.on('notes:changed', handler);
       return () => ipcRenderer.off('notes:changed', handler);
+    }
+  },
+  artifacts: {
+    list: (projectId: string) => ipcRenderer.invoke('artifacts:list', projectId) as Promise<ArtifactLibrary>,
+    readText: (projectId: string, path: string) => ipcRenderer.invoke('artifacts:readText', projectId, path) as Promise<string>,
+    loadImage: (projectId: string, path: string) =>
+      ipcRenderer.invoke('artifacts:loadImage', projectId, path) as Promise<string | undefined>,
+    pageThumbnail: (projectId: string, path: string) =>
+      ipcRenderer.invoke('artifacts:pageThumbnail', projectId, path) as Promise<string | undefined>,
+    createGroup: (projectId: string, name: string, paths: string[]) =>
+      ipcRenderer.invoke('artifacts:createGroup', projectId, name, paths) as Promise<ArtifactGroup>,
+    updateGroup: (projectId: string, groupId: string, change: { name?: string; paths?: string[] }) =>
+      ipcRenderer.invoke('artifacts:updateGroup', projectId, groupId, change) as Promise<ArtifactGroup | undefined>,
+    deleteGroup: (projectId: string, groupId: string) =>
+      ipcRenderer.invoke('artifacts:deleteGroup', projectId, groupId) as Promise<void>,
+    delete: (projectId: string, path: string) => ipcRenderer.invoke('artifacts:delete', projectId, path) as Promise<void>,
+    reveal: (projectId: string, path: string) => ipcRenderer.invoke('artifacts:reveal', projectId, path) as Promise<void>,
+    onChanged: (listener: (projectId: string) => void) => {
+      const handler = (_event: unknown, projectId: string) => listener(projectId);
+      ipcRenderer.on('artifacts:changed', handler);
+      return () => ipcRenderer.off('artifacts:changed', handler);
     }
   }
 };

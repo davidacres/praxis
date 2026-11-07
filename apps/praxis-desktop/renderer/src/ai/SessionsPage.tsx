@@ -35,7 +35,7 @@ import { SessionPromptScoreBar } from './SessionPromptScoreBar';
 import { SessionComposerCard, SessionComposerInput, SessionContextRing } from './SessionComposerFrame';
 import { SessionPermissionModeControl } from './SessionPermissionModeControl';
 import { SessionContextPicker } from './SessionContextPicker';
-import { withSessionContext, type SessionContextReference } from './sessionContext';
+import { contextReferenceIcon, withSessionContext, type SessionContextReference } from './sessionContext';
 import { isFreshHandoff, takeSessionHandoff, useStagedHandoff } from '../notes/noteSendStore';
 import { SessionTeamControl } from './SessionTeamControl';
 import { askSessionTeamMember, mentionedSessionTeamMember } from './sessionTeamStore';
@@ -954,10 +954,13 @@ export function SessionsPage({
       const list = allLists[l];
       for (let i = list.length - 1; i >= 0; i--) {
         const block = list[i];
-        if (block.type === 'gadget' && block.gadget.kind === 'artifact') {
-          const payload = block.gadget.payload as { artifacts?: ActiveArtifact[] };
-          if (payload.artifacts && payload.artifacts.length > 0) {
-            return payload.artifacts[0];
+        // An image gadget is the picture an image artifact gadget was
+        // promoted to, so both surfaces offer the same thing to the dock.
+        if (block.type === 'gadget' && (block.gadget.kind === 'artifact' || block.gadget.kind === 'image')) {
+          const payload = block.gadget.payload as { artifacts?: ActiveArtifact[]; images?: ActiveArtifact[] };
+          const items = payload.artifacts ?? payload.images;
+          if (items && items.length > 0) {
+            return items[0];
           }
         }
       }
@@ -1347,6 +1350,10 @@ export function SessionsPage({
     if (!handoff) return;
     const references = contextReferences.some(item => item.id === handoff.reference.id)
       ? contextReferences : [...contextReferences, handoff.reference];
+    if (handoff.attachOnly) {
+      setContextReferences(references);
+      return;
+    }
     const text = followUp.trim() ? `${followUp.trim()}\n\n${handoff.instruction}` : handoff.instruction;
     setContextReferences(references);
     setFollowUp(text);
@@ -1741,7 +1748,7 @@ export function SessionsPage({
                   {selected.workingDirectory && <span className="session-context-reference" title={selected.workingDirectory}><Icon name="folder" size={13} /><span>{basename(selected.workingDirectory)}</span>
                     <button type="button" className="icon-btn" aria-label="Detach working folder" disabled={sendingFollowUp || composerOptions.allowToolAccessChange === false || !canChangeSessionRuntime(selected)}
                       onClick={() => void window.praxis.ai.updateSessionToolAccess(selected.issueKey, { workingDirectory: null, toolMode: 'project-only' }).catch(cause => setFollowUpError(String(cause)))}><Icon name="close" size={12} /></button></span>}
-                  {contextReferences.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}><Icon name={reference.kind === 'ticket' ? 'ticket' : reference.kind === 'note' ? 'note' : reference.kind === 'note-group' ? 'folder' : 'chats'} size={13} /><span>{reference.label}</span><button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={sendingFollowUp} onClick={() => setContextReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button></span>)}
+                  {contextReferences.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}><Icon name={contextReferenceIcon(reference.kind)} size={13} /><span>{reference.label}</span><button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={sendingFollowUp} onClick={() => setContextReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button></span>)}
                 </div>}
                 <SessionComposerInput
                   leading={!followUpCollapsed && <SessionContextPicker key={selected.issueKey} session={selected} sessions={sessions} references={contextReferences} onChange={setContextReferences}

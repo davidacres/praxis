@@ -191,6 +191,23 @@ export function buildGadgetFixtures({ scope, issuedAt }: GadgetFixtureOptions): 
     },
     {
       type: 'gadget',
+      blockId: 'fixture-image',
+      gadget: envelope(
+        'image',
+        'fx-image',
+        {
+          title: 'Visual verification',
+          images: [
+            { name: 'focus-mode-tabs.png', path: '.praxis/session-artifacts/focus-mode-tabs.png', mediaType: 'image/png', description: 'Focus-mode tabs after implementation' },
+            { name: 'summary-chart.png', path: '.praxis/session-artifacts/summary-chart.png', mediaType: 'image/png', sizeBytes: 24_000 }
+          ]
+        },
+        [],
+        stamp
+      )
+    },
+    {
+      type: 'gadget',
       blockId: 'fixture-handoff',
       gadget: envelope(
         'handoff',

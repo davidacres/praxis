@@ -38,7 +38,7 @@ import { SessionCodeIntelControl } from './SessionCodeIntelControl';
 import { formatContextLength, formatModelCost, getKnownContextLength, getModelPricing, modelPriceLabel, modelPriceTitle } from './sessionNav';
 import { useSettings } from '../settings/useSettings';
 import { NEW_SESSION_HANDOFF, peekSessionHandoff, takeSessionHandoff } from '../notes/noteSendStore';
-import { withSessionContext, type SessionContextReference } from './sessionContext';
+import { contextReferenceIcon, withSessionContext, type SessionContextReference } from './sessionContext';
 import { canRunAgentSessions, isProviderUsable, isProviderUsableForSessions } from './providerAvailability';
 
 /** An explicit Settings model wins even when model curation hides it from the catalog. */
@@ -921,7 +921,7 @@ export function NewSession({
           </SessionComposerHeader>
           {references.length > 0 && <div className="session-context-references" data-testid="new-session-context-references">
             {references.map(reference => <span key={reference.id} className="session-context-reference" data-testid="session-context-reference" title={`${reference.label} · Snapshot attached`}>
-              <Icon name={reference.kind === 'note' ? 'note' : 'folder'} size={13} /><span>{reference.label}</span>
+              <Icon name={contextReferenceIcon(reference.kind)} size={13} /><span>{reference.label}</span>
               <button type="button" className="icon-btn" aria-label={`Remove context ${reference.label}`} disabled={submitting}
                 onClick={() => setReferences(current => current.filter(item => item.id !== reference.id))}><Icon name="close" size={12} /></button>
             </span>)}

@@ -23,7 +23,7 @@ export class TeamChatStore {
 
   private all(): TeamChatRecord[] {
     const snapshot = this.store.read();
-    return snapshot.activation ? snapshot.conversations.map(({ id, projectId, title, issueKey, createdAt, updatedAt, messages }) => ({ id, projectId: projectId ?? '', title, ...(issueKey ? { issueKey } : {}), createdAt, updatedAt, messages })) : snapshot.teamChats;
+    return snapshot.activation ? snapshot.conversations.map(({ id, projectId, title, issueKey, createdAt, updatedAt, archived, messages }) => ({ id, projectId: projectId ?? '', title, ...(issueKey ? { issueKey } : {}), createdAt, updatedAt, ...(archived ? { archived } : {}), messages })) : snapshot.teamChats;
   }
 
   public list(projectId: string): TeamChatSummary[] {
@@ -99,6 +99,20 @@ export class TeamChatStore {
       draft.teamChats = chats.map(chat => (chat.id === id ? next : chat));
       return structuredClone(next);
     });
+  }
+
+  /** Archives or restores a chat. Reversible: the transcript is kept and only leaves the sidebar feeds. */
+  public async setArchived(id: string, archived: boolean): Promise<TeamChatRecord> {
+    await this.store.transaction(draft => {
+      const current: { archived?: boolean; revision?: number } | undefined = draft.activation
+        ? draft.conversations.find(chat => chat.id === id)
+        : draft.teamChats.find(chat => chat.id === id);
+      if (!current) throw new Error(`Team chat ${id} was not found.`);
+      if (archived) current.archived = true;
+      else delete current.archived;
+      if (current.revision !== undefined) current.revision++;
+    });
+    return this.get(id)!;
   }
 
   public async remove(id: string): Promise<void> {

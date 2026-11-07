@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { AgentSessionRecord, WorkflowRunSummary } from '@praxis/core';
+import type { AgentSessionRecord, TeamChatSummary, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { useProjectsTeamChatsState } from '../assistant/TeamChatRow';
 import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, isTerminalAgentState, sessionVisualState, sessionStatusLabel } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
@@ -51,6 +52,8 @@ export interface SessionInspectorProps {
   onSelectSession?: (issueKey: string) => void;
   /** Archives or restores a session from the browser tab. */
   onArchiveSession?: (issueKey: string, archived: boolean) => Promise<void>;
+  /** Projects whose archived team chats the browser tab lists for restoring ('' is general conversations). */
+  teamChatProjectIds?: string[];
   /** Open this session's durable workflow run in the detailed monitor. */
   onOpenWorkflowRun?: (runId: string) => void;
   /** Open an agent profile's Agent Hub record. */
@@ -66,10 +69,12 @@ export function SessionInspector({
   sessions = [],
   onSelectSession,
   onArchiveSession,
+  teamChatProjectIds = [],
   onOpenWorkflowRun,
   onOpenAgent,
   onOpenSkill
 }: SessionInspectorProps) {
+  const { archived: archivedChats } = useProjectsTeamChatsState(teamChatProjectIds);
   const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -122,11 +127,12 @@ export function SessionInspector({
     // With sessions in the workspace but none selected (e.g. every one of
     // them archived), the browser is the one surface that can reopen one —
     // it must stay reachable rather than collapsing to a dead empty state.
-    if (sessions.length > 0) {
+    if (sessions.length > 0 || archivedChats.length > 0) {
       return (
         <section className="inspector inspector--tabbed session-inspector" aria-label="Sessions" data-testid="session-inspector">
           <SessionBrowser
             sessions={sessions}
+            archivedChats={archivedChats}
             onSelectSession={onSelectSession}
             onArchiveSession={onArchiveSession}
           />
@@ -436,11 +442,13 @@ function WorkflowExecutionSummary({
  */
 function SessionBrowser({
   sessions,
+  archivedChats = [],
   activeKey,
   onSelectSession,
   onArchiveSession
 }: {
   sessions: AgentSessionRecord[];
+  archivedChats?: TeamChatSummary[];
   activeKey?: string;
   onSelectSession?: (issueKey: string) => void;
   onArchiveSession?: (issueKey: string, archived: boolean) => Promise<void>;
@@ -453,6 +461,18 @@ function SessionBrowser({
 
   const activeSessions = sessions.filter(session => !session.archived);
   const archivedSessions = sessions.filter(session => session.archived);
+
+  const restoreChat = async (chat: TeamChatSummary) => {
+    setBusyKey(chat.id);
+    setError(undefined);
+    try {
+      await window.praxis.assistant.archiveChat(chat.id, false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusyKey(undefined);
+    }
+  };
 
   const archive = async (session: AgentSessionRecord, archived: boolean) => {
     if (!onArchiveSession) return;
@@ -501,9 +521,9 @@ function SessionBrowser({
             <Icon name={archivedCollapsed ? 'chevron-right' : 'chevron-down'} size={12} />
           </span>
           <span>Archived</span>
-          <span className="session-browser-count">{archivedSessions.length}</span>
+          <span className="session-browser-count">{archivedSessions.length + archivedChats.length}</span>
         </button>
-        {!archivedCollapsed && archivedSessions.length === 0 && (
+        {!archivedCollapsed && archivedSessions.length === 0 && archivedChats.length === 0 && (
           <span className="placeholder-text" data-testid="session-browser-archived-empty">
             Archived sessions are kept here — archive a session from its row to tidy the sidebar.
           </span>
@@ -517,6 +537,29 @@ function SessionBrowser({
             onSelect={onSelectSession}
             onArchive={onArchiveSession ? () => void archive(session, false) : undefined}
           />
+        ))}
+        {!archivedCollapsed && archivedChats.map(chat => (
+          <div key={chat.id} className="session-browser-row is-archived" data-testid="session-browser-team-chat" title={chat.title}>
+            <span className="tree-icon">
+              <Icon name="users" size={14} />
+            </span>
+            <span className="session-browser-main">
+              <span className="session-browser-title">{chat.title}</span>
+              <span className="session-browser-meta">{chat.issueKey ?? 'Team chat'}</span>
+            </span>
+            <span className="tree-badge">Archived</span>
+            <button
+              type="button"
+              className="icon-btn icon-btn-sm"
+              aria-label={`Restore team chat ${chat.title}`}
+              title="Restore this team chat"
+              data-testid="team-chat-restore-btn"
+              disabled={busyKey === chat.id}
+              onClick={() => void restoreChat(chat)}
+            >
+              <Icon name="refresh" size={12} />
+            </button>
+          </div>
         ))}
       </div>
     </div>

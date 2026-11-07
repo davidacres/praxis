@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Icon } from '../../ui/Icon';
 import { highlightCode, languageFor } from '../../ui/codeHighlight';
-import { ArtifactPreview } from './ArtifactPreview';
+import { ArtifactPreview, isImageArtifact } from './ArtifactPreview';
 import { ArtifactCodeSurface } from './ArtifactCodeSurface';
 import {
   type ActiveArtifact,
@@ -46,6 +46,8 @@ export function ArtifactDock({
   const [content, setContent] = useState<string>(artifact?.content ?? '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // Why the artifact's file could not be read; replaces the whole surface.
+  const [loadError, setLoadError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -83,26 +85,37 @@ export function ArtifactDock({
 
   useEffect(() => {
     if (!artifact) return;
+    // Start every artifact from a clean slate, so a file that fails to load
+    // never leaves the previous artifact's text on screen under its name.
+    setError(undefined);
+    setLoadError(undefined);
+    setLoading(false);
     if (artifact.content !== undefined) {
       setContent(artifact.content);
-      setError(undefined);
       return;
     }
+    setContent('');
+    // A picture is fetched by the preview itself; reading it as text would
+    // only produce garbage for the Code tab.
+    if (isImageArtifact(artifact) || !effectiveSessionId || !artifact.path) return;
 
-    if (effectiveSessionId && artifact.path) {
-      setLoading(true);
-      setError(undefined);
-      window.praxis.ai.readArtifactText(effectiveSessionId, artifact.path)
-        .then(text => {
-          setContent(text);
-        })
-        .catch(err => {
-          setError(err instanceof Error ? err.message : 'Could not read artifact file.');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    }
+    let cancelled = false;
+    setLoading(true);
+    window.praxis.ai.readArtifactText(effectiveSessionId, artifact.path)
+      .then(text => {
+        if (!cancelled) setContent(text);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Could not read artifact file.';
+        setLoadError(message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [artifact, effectiveSessionId]);
 
   const handleCopy = async () => {
@@ -121,12 +134,15 @@ export function ArtifactDock({
     setSaving(true);
     setNotice(undefined);
     try {
+      // Only inline artifacts send their text; a file-backed one is copied
+      // byte for byte by main, so a picture is never saved as decoded text.
       const res = await window.praxis.ai.saveArtifactToWorkspace(
         effectiveSessionId,
         artifact.path,
-        content
+        artifact.content,
+        { title: artifact.name, description: artifact.description, mediaType: artifact.mediaType }
       );
-      setNotice(`Saved to ${res.savedPath}`);
+      setNotice(res.unchanged ? `Already in ${res.savedPath}` : `Saved to ${res.savedPath}`);
       setTimeout(() => setNotice(undefined), 3500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save to workspace.');
@@ -353,6 +369,13 @@ export function ArtifactDock({
           <div className="artifact-dock-loading">
             <Icon name="refresh" size={18} />
             <span>Loading artifact contents…</span>
+          </div>
+        ) : loadError ? (
+          <div className="artifact-dock-empty artifact-dock-unavailable" role="alert" data-testid="artifact-dock-unavailable">
+            <Icon name="warning" size={24} />
+            <strong>This artifact can’t be shown</strong>
+            <span>{loadError}</span>
+            <code className="artifact-dock-unavailable-path">{artifact.path}</code>
           </div>
         ) : layoutVariant === 'classic-split' ? (
           /* ── PROTOTYPE 1: Classic Split ────────────────────────── */
@@ -837,6 +860,7 @@ export function ArtifactDock({
             type="button"
             className="btn btn-sm btn-primary"
             data-testid="artifact-save-workspace-btn"
+            title="Copy into the project's artifacts folder"
             disabled={saving}
             onClick={handleSaveToWorkspace}
           >

@@ -3,6 +3,7 @@ import { Markdown } from '../../ui/Markdown';
 import { Icon } from '../../ui/Icon';
 import type { ActiveArtifact } from './artifactTypes';
 import { buildComponentSandboxHtml } from './componentTranspiler';
+import { ArtifactCodeSurface } from './ArtifactCodeSurface';
 
 const IMAGE_EXTENSIONS = /\.(?:png|jpe?g|gif|webp|bmp|avif)$/i;
 const SVG_EXTENSIONS = /\.svg$/i;
@@ -43,7 +44,7 @@ function isMarkdownArtifact(artifact: ActiveArtifact): boolean {
   return false;
 }
 
-function isImageArtifact(artifact: ActiveArtifact): boolean {
+export function isImageArtifact(artifact: ActiveArtifact): boolean {
   if (IMAGE_EXTENSIONS.test(artifact.path.split(/[?#]/, 1)[0] ?? '')) return true;
   if (artifact.mediaType && artifact.mediaType.toLowerCase().startsWith('image/') && artifact.mediaType.toLowerCase() !== 'image/svg+xml') return true;
   return false;
@@ -52,11 +53,14 @@ function isImageArtifact(artifact: ActiveArtifact): boolean {
 export function ArtifactPreview({
   artifact,
   content,
-  sessionId
+  sessionId,
+  loadImage
 }: {
   artifact: ActiveArtifact;
   content: string;
   sessionId?: string;
+  /** Loads a picture from somewhere other than a session's folder (e.g. the Artifacts page). */
+  loadImage?: (path: string) => Promise<string | undefined>;
 }) {
   const [imageSrc, setImageSrc] = useState<string | undefined>();
   const [loadingImage, setLoadingImage] = useState(false);
@@ -64,16 +68,24 @@ export function ArtifactPreview({
   const effectiveSessionId = artifact.sessionId ?? sessionId;
 
   useEffect(() => {
-    if (isImageArtifact(artifact) && effectiveSessionId && artifact.path) {
-      setLoadingImage(true);
-      window.praxis.ai.loadImagePreview(effectiveSessionId, artifact.path)
-        .then(src => {
-          setImageSrc(src);
-        })
-        .catch(() => setImageSrc(undefined))
-        .finally(() => setLoadingImage(false));
-    }
-  }, [artifact.path, effectiveSessionId, artifact]);
+    if (!isImageArtifact(artifact) || !artifact.path) return;
+    const load = loadImage
+      ? loadImage(artifact.path)
+      : effectiveSessionId
+        ? window.praxis.ai.loadImagePreview(effectiveSessionId, artifact.path)
+        : undefined;
+    if (!load) return;
+    let cancelled = false;
+    setImageSrc(undefined);
+    setLoadingImage(true);
+    load
+      .then(src => { if (!cancelled) setImageSrc(src); })
+      .catch(() => { if (!cancelled) setImageSrc(undefined); })
+      .finally(() => { if (!cancelled) setLoadingImage(false); });
+    return () => {
+      cancelled = true;
+    };
+  }, [artifact.path, effectiveSessionId, artifact, loadImage]);
 
   const htmlDoc = useMemo(() => {
     if (!isHtmlArtifact(artifact) && !isSvgArtifact(artifact) && !isComponentArtifact(artifact)) return '';
@@ -198,47 +210,7 @@ export function ArtifactPreview({
     );
   }
 
-  // Fallback for code or other formats (e.g. React/TSX component deliverable)
-  return (
-    <div className="artifact-preview-fallback" data-testid="artifact-preview-fallback">
-      <div className="artifact-preview-component-frame">
-        <div className="artifact-preview-component-header">
-          <div className="artifact-preview-component-badge">
-            <Icon name="sparkles" size={14} />
-            <span>Interactive Component Sandbox</span>
-          </div>
-          <span className="badge badge-quiet">{artifact.language?.toUpperCase() || 'REACT / TSX'}</span>
-        </div>
-        <div className="artifact-preview-component-body">
-          <div className="artifact-preview-mockup-card">
-            <div className="artifact-preview-mockup-top">
-              <span className="artifact-preview-mockup-dot dot-red" />
-              <span className="artifact-preview-mockup-dot dot-yellow" />
-              <span className="artifact-preview-mockup-dot dot-green" />
-              <span className="artifact-preview-mockup-title">{artifact.name}</span>
-            </div>
-            <div className="artifact-preview-mockup-content">
-              <div className="artifact-preview-mockup-stat">
-                <Icon name="check-square" size={20} />
-                <div>
-                  <h4>{artifact.name.replace(/\.[^.]+$/, '')}</h4>
-                  <p>{artifact.description || 'Deliverable ready for project integration.'}</p>
-                </div>
-              </div>
-              <div className="artifact-preview-mockup-tags">
-                <span className="tag-pill">{artifact.category || 'deliverable'}</span>
-                {artifact.version !== undefined && <span className="tag-pill">version {artifact.version}</span>}
-                <span className="tag-pill">workspace synced</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="artifact-preview-component-footer">
-          <p className="artifact-hint">
-            To view, edit, or copy the source code, switch to the <strong>Code</strong> tab.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+  // Anything else is text — a log, a patch, JSON, plain notes — so the
+  // preview is the file itself.
+  return <ArtifactCodeSurface artifact={artifact} content={content} mode="code" testId="artifact-preview-text" />;
 }

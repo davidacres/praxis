@@ -11,6 +11,7 @@ import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { openRestrictedHtmlPreview } from './htmlArtifactPreview';
 import { sessionChangeEncoder } from './sessionChangeBroadcast';
 import { broadcastToAllWindows } from './windowBroadcast';
+import { projectForSave, rememberSavedArtifact } from './artifactLibraryIpc';
 import {
   clearProviderApiKey,
   discoverWorkspaceAgentWorkflows,
@@ -22,6 +23,7 @@ import {
   providerNeedsApiKey,
   PathSandboxError,
   isLatestEditToPath,
+  publishArtifact,
   resolveSandboxedPath,
   readSandboxedFile,
   writeSandboxedFile,
@@ -69,7 +71,8 @@ import {
   type RewritePromptFromFeedbackRequest,
   type SessionEvaluationRequest,
   type SubmitSessionFeedbackRequest,
-  type UserFeedbackInput
+  type UserFeedbackInput,
+  type SaveArtifactDetails
 } from '@praxis/core';
 import { getSessionCodeIntelligenceServer, isCodeIntelligenceEnabledFor } from './codeIntelligenceIpc';
 import { getFeedbackWorkspaceHints } from './feedbackWorkspaceHints';
@@ -252,6 +255,8 @@ const IMAGE_PREVIEW_TYPES: Record<string, string> = {
 };
 const MAX_IMAGE_PREVIEW_BYTES = 12 * 1024 * 1024;
 const MAX_HTML_PREVIEW_BYTES = 2 * 1024 * 1024;
+// Published pages embed screenshots as data URIs; the existing archive's largest is 3.5 MB.
+const MAX_PUBLISHED_ARTIFACT_BYTES = 25 * 1024 * 1024;
 
 export function trackerToolExtension(
   service: IssueTrackerService | undefined,
@@ -914,6 +919,11 @@ export function registerAiIpc(): void {
         absolute = realFile;
       } catch (error) {
         if (error instanceof PathSandboxError) throw new Error('Artifact is outside the session workspace.');
+        // The common case: a worktree that has since been removed, or a file the
+        // agent named but never wrote. Say so, and where it was looked for.
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          throw new Error(`Artifact file was not found in the session folder (${workingDirectory}).`);
+        }
         throw new Error('Artifact could not be opened from the session workspace.');
       }
 
@@ -933,7 +943,7 @@ export function registerAiIpc(): void {
 
   ipcMain.handle(
     'ai:saveArtifactToWorkspace',
-    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string, content?: string) => {
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, filePath: string, content?: string, details?: SaveArtifactDetails) => {
       const record = sessionManager.getAgentSession(issueKey) ??
         [...sessionManager.getAllAgentSessions().values()].find(candidate => candidate.sessionId === issueKey);
       const workingDirectory = record?.worktreePath?.trim() || record?.workingDirectory?.trim();
@@ -941,14 +951,42 @@ export function registerAiIpc(): void {
       if (!record || !workingDirectory || !input || nodePath.isAbsolute(input) || /^[a-z][a-z\d+.-]*:/i.test(input)) {
         throw new Error('Invalid workspace path for saving artifact.');
       }
-      let textToSave = typeof content === 'string' ? content : undefined;
-      if (textToSave === undefined) {
+      // Inline artifacts carry their text; file-backed ones are copied byte for
+      // byte, so an image survives the trip.
+      let bytes: Buffer;
+      if (typeof content === 'string') {
+        bytes = Buffer.from(content, 'utf8');
+      } else {
         const absolute = await resolveSandboxedPath(workingDirectory, input);
-        const buffer = await readSandboxedFile(workingDirectory, absolute, MAX_HTML_PREVIEW_BYTES);
-        textToSave = buffer.toString('utf8');
+        bytes = await readSandboxedFile(workingDirectory, absolute, MAX_PUBLISHED_ARTIFACT_BYTES);
       }
-      await writeSandboxedFile(workingDirectory, input, textToSave);
-      return { savedPath: input };
+      // Published into the project's artifacts folder in its main checkout —
+      // never a worktree — so it shows on the Artifacts page straight away and
+      // outlives the run's worktree. A session with no project falls back to
+      // its own (non-worktree) folder.
+      const sessionFolder = record.workingDirectory?.trim() || workingDirectory;
+      const project = await projectForSave(record.projectId, sessionFolder);
+      const result = await publishArtifact({
+        baseFolder: project?.workspaceFolder?.trim() || sessionFolder,
+        setting: project?.artifactsFolder,
+        fileName: input,
+        bytes
+      });
+      if (project) {
+        const text = (value: unknown, max: number) =>
+          typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
+        await rememberSavedArtifact({
+          projectId: project.id,
+          path: result.savedPath,
+          title: text(details?.title, 400),
+          description: text(details?.description, 2000),
+          mediaType: text(details?.mediaType, 200),
+          sessionKey: record.issueKey,
+          sessionTitle: text(record.title?.trim() || record.taskDefinition?.goal?.split('\n')[0], 400),
+          savedAt: new Date().toISOString()
+        });
+      }
+      return { savedPath: result.savedPath, unchanged: result.unchanged };
     }
   );
 

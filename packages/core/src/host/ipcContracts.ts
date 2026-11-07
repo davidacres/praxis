@@ -91,6 +91,7 @@ import type { ScheduledRunForecast } from '../scheduledRuns/scheduledRunForecast
 import type { CredentialBindingStatus } from '../projects/deploymentProfileStore';
 import type { DeploymentRun } from '../projects/deploymentRunState';
 import type { PublishManifest } from '../projects/publishManifest';
+import type { ArtifactGroup, ArtifactLibrary } from '../projects/artifactLibrary';
 import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
 import type { RunEstimate } from '../workflows/workflowEstimate';
 import type { RunParameterIssue } from '../workflows/workflowValidation';
@@ -967,7 +968,12 @@ export interface AiIpc {
   /** Reads the text contents of an artifact file located in the session workspace. */
   readArtifactText(issueKey: string, filePath: string): Promise<string>;
   /** Saves or writes an artifact file directly into the session workspace. */
-  saveArtifactToWorkspace(issueKey: string, filePath: string, content?: string): Promise<{ savedPath: string }>;
+  /** Publishes an artifact into the project's artifacts folder; `savedPath` is repository-relative. */
+  /**
+   * Copies an artifact into its project's artifacts folder in the main checkout
+   * (never a worktree), and remembers `details` for the Artifacts page.
+   */
+  saveArtifactToWorkspace(issueKey: string, filePath: string, content?: string, details?: SaveArtifactDetails): Promise<{ savedPath: string; unchanged?: boolean }>;
   /** Renames a persisted session without changing its ticket binding or task goal. */
   renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
   assignSessionToProject(issueKey: string, projectId: string, ticketKey?: string, workingDirectory?: string): Promise<AgentSessionRecord>;
@@ -1341,6 +1347,7 @@ export interface PraxisIpc {
   deployments: DeploymentsIpc;
   scheduledRuns: ScheduledRunsIpc;
   notes: NotesIpc;
+  artifacts: ArtifactsIpc;
 }
 
 /** What closing or quitting would interrupt or prevent, when the renderer is asked to confirm. */
@@ -2079,6 +2086,37 @@ export interface TaskDesignerIpc {
     connectionId: string | undefined,
     state: TaskDesignerPersistedState
   ): Promise<TaskDesignerMasterPlanResult>;
+}
+
+/** What a gadget or the dock knows about an artifact when it is saved. */
+export interface SaveArtifactDetails {
+  title?: string;
+  description?: string;
+  mediaType?: string;
+}
+
+/**
+ * A project's saved artifacts — the files in its artifacts folder in the main
+ * checkout. Every path is repository-relative and must lie inside that folder.
+ */
+export interface ArtifactsIpc {
+  list(projectId: string): Promise<ArtifactLibrary>;
+  readText(projectId: string, path: string): Promise<string>;
+  /** A `data:` URL, or undefined when the file is not a previewable image. */
+  loadImage(projectId: string, path: string): Promise<string | undefined>;
+  /** A rendered picture of an HTML page's top, as a `data:` URL; undefined when it cannot be rendered. */
+  pageThumbnail(projectId: string, path: string): Promise<string | undefined>;
+  /** Groups `paths` (taking them out of any other group). */
+  createGroup(projectId: string, name: string, paths: string[]): Promise<ArtifactGroup>;
+  /** Renames a group or replaces its files; undefined when it ends up empty and is gone. */
+  updateGroup(projectId: string, groupId: string, change: { name?: string; paths?: string[] }): Promise<ArtifactGroup | undefined>;
+  /** Ungroups — the files stay. */
+  deleteGroup(projectId: string, groupId: string): Promise<void>;
+  /** Deletes the file and forgets its saved details. */
+  delete(projectId: string, path: string): Promise<void>;
+  reveal(projectId: string, path: string): Promise<void>;
+  /** Fired with the project id after a save or delete. */
+  onChanged(listener: (projectId: string) => void): () => void;
 }
 
 /** App-local notes slice, backed by `userData/notes.json`.

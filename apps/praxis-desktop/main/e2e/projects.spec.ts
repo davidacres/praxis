@@ -233,6 +233,55 @@ test('retains an existing project.praxis.md and supports local board transitions
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
 
+test('a project\'s artifacts folder defaults to docs/published-artifacts and is editable', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-artifacts-'));
+  try {
+    await app.window.evaluate(async folderPath => {
+      const workspaceId = (await window.praxis.workspaces.list())[0].id;
+      await window.praxis.projects.create({
+        name: 'Artifact Home', key: 'ARTF', type: 'software', purpose: '', brief: {},
+        startingPoint: 'existing-folder', folderPath,
+        workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+        starterTickets: [], defaultAiToolMode: 'full'
+      }, workspaceId);
+    }, folder);
+    await app.window.reload();
+    const page = app.window;
+    const stored = async () => (await page.evaluate(() => window.praxis.projects.list()))
+      .find(project => project.key === 'ARTF')?.artifactsFolder;
+    await openProject(page, 'Artifact Home');
+    const row = page.getByTestId('project-artifacts-folder');
+    await expect(row).toContainText('Artifacts folder (default)');
+    await expect(row).toContainText('docs/published-artifacts');
+
+    await page.getByRole('button', { name: 'Edit project' }).click();
+    const input = page.getByTestId('project-artifacts-folder-input');
+    await expect(input).toHaveAttribute('placeholder', 'docs/published-artifacts');
+    await input.fill('../outside');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('cannot go above the repository root')).toBeVisible();
+    expect(await stored()).toBeUndefined();
+
+    await input.fill('design\\pages/');
+    await input.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/project-artifacts-folder-edit.png') });
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(row).toContainText('design/pages');
+    // A successful save clears the earlier refusal.
+    await expect(page.getByText('cannot go above the repository root')).toHaveCount(0);
+    await expect(row).not.toContainText('(default)');
+    expect(await stored()).toBe('design/pages');
+    await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/project-artifacts-folder.png') });
+
+    // Clearing the field goes back to the default.
+    await page.getByRole('button', { name: 'Edit project' }).click();
+    await input.fill('');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(row).toContainText('Artifacts folder (default)');
+    expect(await stored()).toBeUndefined();
+  } finally { fs.rmSync(folder, { recursive: true, force: true }); }
+});
+
 test('uses a folder connection for an existing-folder project with plans', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-plans-'));
   const featureFolder = path.join(folder, 'docs', 'plans', 'features', 'feature-01-imported');

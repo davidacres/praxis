@@ -6,6 +6,7 @@ import 'package:praxis_mobile/app/store.dart';
 import 'package:praxis_mobile/app/theme.dart';
 import 'package:praxis_mobile/core/models.dart';
 import 'package:praxis_mobile/ui/gadget_view.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:praxis_mobile/ui/image_lightbox.dart';
 import 'package:praxis_mobile/ui/kit.dart';
 import 'package:praxis_mobile/ui/transcript.dart';
@@ -160,6 +161,61 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ImageLightbox), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'renders an inline SVG image gadget without asking the host for a file',
+    (tester) async {
+      final theme = ThemeController();
+      final store = _ImageStore(theme: theme);
+      addTearDown(store.dispose);
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AppStore>.value(
+          value: store,
+          child: MaterialApp(
+            home: PraxisTheme(
+              data: theme.data,
+              child: Scaffold(
+                body: GadgetViewWidget(
+                  view: GadgetView({
+                    'state': 'active',
+                    'gadget': {
+                      'version': 1,
+                      'gadgetId': 'g-svg',
+                      'kind': 'image',
+                      'scope': {'hostId': 'host-1', 'sessionId': 's1'},
+                      'fallbackText': 'A flow diagram.',
+                      'payload': {
+                        'title': 'Diagram',
+                        'images': [
+                          {
+                            'name': 'flow.svg',
+                            'path': 'artifacts/flow.svg',
+                            'mediaType': 'image/svg+xml',
+                            'content': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+                          },
+                        ],
+                      },
+                      'actions': <Object?>[],
+                    },
+                  }),
+                  connected: true,
+                  onAnswer: (_, _, _) async {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The picture travels in the payload, so the host is never asked for a file.
+      expect(store.previews, isEmpty);
+      expect(find.byType(SvgPicture), findsOneWidget);
     },
   );
 

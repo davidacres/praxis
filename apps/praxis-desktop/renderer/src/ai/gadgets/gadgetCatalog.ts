@@ -73,6 +73,12 @@ export const BUILT_IN_GADGET_CATALOG: readonly GadgetCatalogEntry[] = [
     icon: 'package'
   },
   {
+    id: 'image',
+    name: 'Image',
+    purpose: 'Shows a screenshot or other picture directly, without the file rows and workspace actions an artifact carries.',
+    icon: 'eye'
+  },
+  {
     id: 'handoff',
     name: 'Handoff',
     purpose: 'Makes provider-to-provider context transfer reviewable before it happens.',
