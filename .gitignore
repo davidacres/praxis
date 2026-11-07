@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+/target/
 
 # TypeScript build output (extension entry: out/extension.js)
 out/

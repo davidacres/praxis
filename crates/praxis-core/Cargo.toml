@@ -1,0 +1,26 @@
+[package]
+name = "praxis-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+praxis-contracts.workspace = true
+chrono.workspace = true
+flate2.workspace = true
+jsonc-parser.workspace = true
+notify.workspace = true
+pulldown-cmark.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+tar.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+zip.workspace = true

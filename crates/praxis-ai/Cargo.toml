@@ -1,0 +1,23 @@
+[package]
+name = "praxis-ai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+praxis-contracts.workspace = true
+praxis-core.workspace = true
+praxis-trackers.workspace = true
+praxis-workflows.workspace = true
+async-trait.workspace = true
+eventsource-stream.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true

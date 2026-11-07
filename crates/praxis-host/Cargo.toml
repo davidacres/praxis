@@ -1,0 +1,28 @@
+[package]
+name = "praxis-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+napi-addon = ["dep:napi", "dep:napi-derive"]
+
+[dependencies]
+praxis-ai.workspace = true
+praxis-contracts.workspace = true
+praxis-core.workspace = true
+praxis-mobile.workspace = true
+praxis-trackers.workspace = true
+praxis-workflows.workspace = true
+axum.workspace = true
+napi = { workspace = true, optional = true }
+napi-derive = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true

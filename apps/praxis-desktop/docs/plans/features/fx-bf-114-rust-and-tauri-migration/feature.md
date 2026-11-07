@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:20:22.380Z
 id: FX-BF-114
 type: Feature
-status: To Do
+status: In Progress
 ---
 
 # Rust Backend Migration behind Thin Electron Shell (with Optional Tauri v2 Follow-Up)
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Feature
 **Priority:** Critical
 
