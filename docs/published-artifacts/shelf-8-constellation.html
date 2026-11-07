@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 8 · Constellation</title>
+<style>
+:root{--bg:#04050c;--text:#eef0ff;--muted:#8d93b5;--bubble:rgba(140,160,255,.10);--agent:#d9ddf5;--field:rgba(255,255,255,.04);--field-line:rgba(160,175,255,.22);--run:#8fb4ff;--wait:#ffcc66;--ok:#7dffc4;--bad:#ff7a8a;--pause:#b99cff;--note:#ffe9a8;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:radial-gradient(1200px 800px at 0% 30%,#121a3d,#04050c 60%);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}.k-new{--c:var(--run)}.k-note{--c:var(--note)}
+#sky{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+.mock{position:absolute;inset:0 0 0 96px;z-index:1;padding:24px 34px}
+.mock-top{display:flex;gap:12px;align-items:center;font-size:16px;font-weight:600;margin-bottom:6px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pillx{font-size:11px;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 45%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px;max-width:620px}
+.sk{height:9px;border-radius:5px;background:rgba(140,160,255,.08);margin:13px 0}
+/* rail */
+.rail{position:fixed;left:0;top:0;bottom:0;width:96px;z-index:10;background:linear-gradient(90deg,rgba(10,14,36,.85),rgba(10,14,36,0));}
+.lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.lines path{fill:none;stroke:rgba(170,185,255,.35);stroke-width:1;stroke-dasharray:2 5;animation:flow 3s linear infinite}
+.lines path.trace{stroke:rgba(200,210,255,.8);stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:trace 1s ease-out forwards}
+@keyframes flow{to{stroke-dashoffset:-28}}
+@keyframes trace{to{stroke-dashoffset:0}}
+.star{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;cursor:pointer;outline:none;transition:left .6s var(--spring),top .6s var(--spring)}
+.star .core{position:absolute;left:50%;top:50%;width:var(--sz,8px);height:var(--sz,8px);margin:calc(var(--sz,8px)/-2);border-radius:50%;background:#fff;box-shadow:0 0 6px 1px #fff,0 0 14px 4px var(--c),0 0 30px 8px color-mix(in srgb,var(--c) 40%,transparent);animation:twinkle var(--tw,3s) ease-in-out infinite;transition:transform .4s var(--spring)}
+@keyframes twinkle{50%{opacity:.65;transform:scale(.8)}}
+.star .rays{position:absolute;inset:0;transition:transform .5s var(--spring),opacity .3s;opacity:.55}
+.star .rays::before,.star .rays::after{content:"";position:absolute;left:50%;top:50%;background:linear-gradient(90deg,transparent,#fff,transparent);height:1px;width:34px;margin:0 0 0 -17px}
+.star .rays::after{transform:rotate(90deg)}
+.st-executing.star .rays{animation:spin 6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.st-executing.star{--sz:10px}
+.st-awaiting_input.star .core{animation:pulse 1.3s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 6px 1px #fff,0 0 20px 8px var(--c),0 0 48px 16px color-mix(in srgb,var(--c) 45%,transparent)}}
+.st-paused.star{opacity:.6}.st-failed.star{--sz:6px}
+.star .name{position:absolute;left:30px;top:50%;transform:translate(-6px,-50%);font-size:11px;white-space:nowrap;color:#dfe4ff;opacity:0;transition:all .3s;pointer-events:none;text-shadow:0 0 8px #000}
+.star:hover .name{opacity:1;transform:translate(0,-50%)}
+.star.active .name{opacity:0}
+.star:hover .core,.star.active .core{transform:scale(1.6)}
+.star:hover .rays,.star.active .rays{transform:scale(1.8) rotate(45deg);opacity:1}
+.shock{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px;border-radius:50%;border:1.5px solid var(--c);animation:shock .8s ease-out forwards;pointer-events:none}
+@keyframes shock{to{transform:scale(7);opacity:0}}
+.foot{position:absolute;left:0;width:64px;bottom:16px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.orb{width:34px;height:34px;border-radius:50%;border:1px solid color-mix(in srgb,var(--c) 55%,transparent);background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 45%,transparent),transparent 70%);color:var(--c);font-size:16px;cursor:pointer;box-shadow:0 0 16px color-mix(in srgb,var(--c) 35%,transparent);transition:transform .3s var(--spring)}
+.orb:hover{transform:scale(1.15) rotate(15deg)}
+.meteor{position:fixed;width:140px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#fff);box-shadow:0 0 10px #cfe0ff;z-index:30;pointer-events:none;transform-origin:right center}
+/* card */
+.card{position:fixed;left:104px;width:340px;padding:16px;border-radius:18px;z-index:20;background:radial-gradient(400px 200px at 0% 0%,color-mix(in srgb,var(--c) 14%,transparent),transparent),rgba(10,13,32,.9);backdrop-filter:blur(10px);border:1px solid rgba(170,185,255,.18);box-shadow:0 30px 80px #000c,0 0 0 1px rgba(255,255,255,.03) inset;transition:top .5s var(--spring)}
+.card[hidden]{display:none}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background-image:radial-gradient(1px 1px at 20% 30%,#fff8,transparent),radial-gradient(1px 1px at 70% 80%,#fff6,transparent),radial-gradient(1px 1px at 85% 20%,#fff7,transparent),radial-gradient(1px 1px at 40% 90%,#fff5,transparent);opacity:.8}
+.card.warp{animation:warp .6s cubic-bezier(.16,1,.3,1)}
+@keyframes warp{0%{opacity:0;transform:scale(.05);filter:blur(10px) brightness(3)}60%{filter:blur(0) brightness(1.3)}100%{opacity:1;transform:none;filter:none}}
+.card.unwarp{animation:unwarp .3s ease-in forwards}
+@keyframes unwarp{to{opacity:0;transform:scale(.05);filter:blur(8px) brightness(2)}}
+.card.warp>*{animation:fadeup .5s .2s both}
+@keyframes fadeup{from{opacity:0;transform:translateY(6px)}}
+/* internals */
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:7px;height:7px;border-radius:50%;background:#fff;flex:none;box-shadow:0 0 8px 2px var(--c)}
+.st-executing .c-dot{animation:twinkle 1.2s infinite}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 15px}
+.c-body{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.c-user{align-self:flex-end;background:var(--bubble);padding:7px 11px;border-radius:12px 12px 4px 12px;max-width:88%;border:1px solid rgba(170,185,255,.15)}
+.c-agent{color:var(--agent);max-width:95%}
+.c-body .new{animation:pop .4s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.95)}}
+.dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c);animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;padding-top:10px;border-top:1px solid rgba(170,185,255,.12)}
+.c-reply input,.start-in{flex:1;min-width:0;background:var(--field);border:1px solid var(--field-line);border-radius:10px;color:var(--text);padding:8px 11px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.c-reply input:focus,.start-in:focus{border-color:var(--c);box-shadow:0 0 14px color-mix(in srgb,var(--c) 30%,transparent)}
+.c-reply button,.btn{border:0;border-radius:10px;background:linear-gradient(135deg,#fff,var(--c));color:#0a0d20;font-weight:800;cursor:pointer}
+.c-reply button{width:36px}
+.start-in{width:100%;margin:12px 0 10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{padding:6px 14px;font:inherit;font-weight:700}
+.note-paper{width:100%;height:150px;resize:none;border:1px solid rgba(255,233,168,.25);outline:0;font:inherit;line-height:24px;color:var(--text);background:repeating-linear-gradient(transparent 0 23px,rgba(255,233,168,.14) 23px 24px);border-radius:10px;padding:0 12px;margin-top:12px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pillx">In progress</span></div>
+  <div class="mock-hint">Concept 8 · Constellation: your sessions are stars joined into a constellation, over a starfield that shifts as you move the pointer.
+    <br>• Running stars spin their rays, and ones that need you pulse.
+    <br>• Hovering a star makes it flare, and the card warps in from that point of light.
+    <br>• A new session arrives as a shooting star and the constellation redraws itself.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail"><svg class="lines" id="lines"></svg><div id="stars"></div>
+  <div class="foot"><button class="orb k-new" id="newBtn" title="New session">✦</button><button class="orb k-note" id="noteBtn" title="Note">✎</button></div>
+</aside>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+const NEW_HTML=btn=>`<div class="c-head"><span class="c-dot"></span><b>New session</b><span class="c-time">Opus 5.5</span></div><form class="c-start"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">${btn}</button></div></form>`;
+let noteText='';
+const NOTE_HTML=()=>`<div class="c-head"><span class="c-dot"></span><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;
+function wireNote(card){const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+function setStateClass(el,state){if(!el)return;[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState,onSend){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';onSend&&onSend(f.querySelector('button'));
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+function fill(card,key,base,{onState,onStart,onSend}){
+  card.className=base;
+  if(key==='new'){card.classList.add('k-new');card.innerHTML=NEW_HTML('Start');card.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(v)onStart(v)})}
+  else if(key==='note'){card.classList.add('k-note');card.innerHTML=NOTE_HTML();wireNote(card)}
+  else{const s=SESSIONS.find(x=>x.id===key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);wireCard(card,s,onState,onSend)}
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea')?.focus(),150);
+}
+function shelfController({card,rail,open,close}){
+  let cur=null,ht,ct;const creator=k=>k==='new'||k==='note';
+  const holds=()=>creator(cur)||(card.contains(document.activeElement)&&!!document.activeElement.value);
+  const api={get current(){return cur},
+    open(k){clearTimeout(ct);clearTimeout(ht);if(cur===k)return;const prev=cur;cur=k;open(k,prev)},
+    close(){clearTimeout(ht);if(!cur)return;const prev=cur;cur=null;close(prev)},
+    hover(k){if(creator(cur))return;clearTimeout(ct);clearTimeout(ht);ht=setTimeout(()=>api.open(k),110)},
+    leave(){clearTimeout(ht);clearTimeout(ct);ct=setTimeout(()=>{if(!holds())api.close()},220)},
+    toggle(k){cur===k?api.close():api.open(k)}};
+  card.addEventListener('mouseenter',()=>clearTimeout(ct));card.addEventListener('mouseleave',api.leave);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')api.close()});
+  document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))api.close()});
+  return api;
+}
+const newSession=v=>({id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'});
+
+/* ── starfield ── */
+const sky=document.getElementById('sky'),sx=sky.getContext('2d');let stars=[],mx=0,my=0,pmx=0,pmy=0;
+function sizeSky(){const d=devicePixelRatio||1;sky.width=innerWidth*d;sky.height=innerHeight*d;sx.setTransform(d,0,0,d,0,0);stars=Array.from({length:220},()=>({x:Math.random()*innerWidth,y:Math.random()*innerHeight,z:Math.random()*.9+.1,t:Math.random()*6}))}
+addEventListener('pointermove',e=>{mx=(e.clientX/innerWidth-.5);my=(e.clientY/innerHeight-.5)});
+const still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function drawSky(){pmx+=(mx-pmx)*.05;pmy+=(my-pmy)*.05;sx.clearRect(0,0,innerWidth,innerHeight);
+  for(const s of stars){if(!still){s.x-=s.z*.08;s.t+=.02}if(s.x<-5)s.x=innerWidth+5;const x=s.x-pmx*40*s.z,y=s.y-pmy*30*s.z;const a=.35+.45*Math.sin(s.t)*s.z;sx.fillStyle=`rgba(210,220,255,${Math.max(.08,a)})`;sx.fillRect(x,y,s.z*1.6,s.z*1.6)}
+  requestAnimationFrame(drawSky)}
+sizeSky();drawSky();addEventListener('resize',()=>{sizeSky();layout()});
+
+/* ── Constellation shelf ── */
+const rail=document.getElementById('rail'),starsEl=document.getElementById('stars'),lines=document.getElementById('lines'),card=document.getElementById('card');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn');
+const els={};const XS=[30,58,26,52,34,60];
+function makeStar(s){
+  const el=document.createElement('div');el.className='star st-'+s.state;el.tabIndex=0;el.style.setProperty('--tw',(2.4+Math.random()*2)+'s');
+  el.innerHTML='<div class="rays"></div><div class="core"></div><div class="name"></div>';el.querySelector('.name').textContent=s.title;
+  el.addEventListener('mouseenter',()=>ctl.hover(s.id));el.addEventListener('mouseleave',()=>ctl.leave());
+  el.addEventListener('focus',()=>ctl.open(s.id));el.addEventListener('click',()=>ctl.open(s.id));
+  starsEl.appendChild(el);els[s.id]=el;return el;
+}
+function layout(trace){
+  const gap=Math.min(92,(innerHeight-180)/Math.max(1,SESSIONS.length-1));
+  const pts=SESSIONS.map((s,i)=>{const x=XS[i%XS.length],y=40+i*gap;const el=els[s.id]||makeStar(s);el.style.left=x+'px';el.style.top=y+'px';el._x=x;el._y=y;return[x,y]});
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join(' ');
+  lines.innerHTML=`<path d="${d}"/>`;
+  if(trace){const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',d);p.classList.add('trace');lines.appendChild(p);const len=p.getTotalLength();p.style.setProperty('--len',len);setTimeout(()=>p.remove(),1100)}
+}
+const anchor=k=>k==='new'?newBtn:k==='note'?noteBtn:els[k];
+function flare(el){const s=document.createElement('div');s.className='shock';el.appendChild(s);setTimeout(()=>s.remove(),800)}
+const ctl=shelfController({card,rail,
+  open(k){
+    Object.values(els).forEach(e=>e.classList.toggle('active',e===anchor(k)));
+    card.hidden=false;fill(card,k,'card',{onState:s=>setStateClass(els[s.id],s.state),onStart:start});
+    const a=anchor(k).getBoundingClientRect(),ax=a.left+a.width/2,ay=a.top+a.height/2,h=card.offsetHeight;
+    if(els[k])flare(els[k]);
+    const top=Math.max(14,Math.min(innerHeight-h-14,k==='new'||k==='note'?ay-h+20:ay-30));
+    card.style.top=top+'px';card.style.transformOrigin=`${ax-card.offsetLeft}px ${ay-top}px`;
+    void card.offsetWidth;card.classList.add('warp');
+  },
+  close(){Object.values(els).forEach(e=>e.classList.remove('active'));card.classList.remove('warp');card.classList.add('unwarp');setTimeout(()=>{if(!ctl.current)card.hidden=true},300)}
+});
+function start(v){
+  ctl.close();const s=newSession(v);SESSIONS.unshift(s);
+  if(SESSIONS.length>5){const old=SESSIONS.pop();const e=els[old.id];delete els[old.id];e.animate([{opacity:1},{opacity:0,transform:'scale(3)',filter:'blur(4px)'}],{duration:500,fill:'forwards'}).onfinish=()=>e.remove()}
+  const m=document.createElement('div');m.className='meteor';document.body.appendChild(m);
+  const tx=XS[0],ty=40;const fx=innerWidth*.75,fy=-30;const ang=Math.atan2(ty-fy,tx-fx);
+  m.style.left=(fx-140)+'px';m.style.top=fy+'px';m.style.transform=`rotate(${ang}rad)`;
+  m.animate([{left:(fx-140)+'px',top:fy+'px',opacity:1},{left:(tx-140)+'px',top:ty+'px',opacity:1}],{duration:700,easing:'cubic-bezier(.5,0,.9,.6)',fill:'forwards'}).onfinish=()=>{
+    m.animate([{opacity:1},{opacity:0}],{duration:200,fill:'forwards'}).onfinish=()=>m.remove();
+    const el=makeStar(s);el.style.left=tx+'px';el.style.top=ty+'px';flare(el);flare(el);
+    layout(true);setTimeout(()=>ctl.open(s.id),700);
+  };
+}
+newBtn.addEventListener('click',()=>ctl.toggle('new'));noteBtn.addEventListener('click',()=>ctl.toggle('note'));
+layout(true);
+</script>
+</body>
+</html>

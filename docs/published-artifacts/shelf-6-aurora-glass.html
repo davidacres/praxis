@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 6 · Aurora Glass</title>
+<style>
+@property --a{syntax:'<angle>';initial-value:0deg;inherits:false}
+:root{--bg:#060812;--text:#eef1ff;--muted:#9aa3c0;--bubble:rgba(255,255,255,.09);--agent:#d6dbf0;--field:rgba(255,255,255,.06);--field-line:rgba(255,255,255,.14);--run:#7aa2ff;--wait:#ffc46b;--ok:#5ef0b0;--bad:#ff6b8b;--pause:#c08bff;--note:#ffe17a;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}.k-new{--c:var(--run)}.k-note{--c:var(--note)}
+/* aurora */
+.aurora{position:fixed;inset:-25%;z-index:0;filter:blur(70px);opacity:.8;pointer-events:none}
+.aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen}
+.aurora i:nth-child(1){width:55vmax;height:55vmax;left:-5%;top:0;background:radial-gradient(circle,#3550ff,transparent 62%);animation:d1 16s ease-in-out infinite alternate}
+.aurora i:nth-child(2){width:45vmax;height:45vmax;left:5%;top:45%;background:radial-gradient(circle,#ff2f8e,transparent 62%);animation:d2 20s ease-in-out infinite alternate}
+.aurora i:nth-child(3){width:40vmax;height:40vmax;left:25%;top:15%;background:radial-gradient(circle,#00d9c0,transparent 60%);animation:d3 14s ease-in-out infinite alternate}
+@keyframes d1{to{transform:translate(18vw,22vh) scale(1.25)}}
+@keyframes d2{to{transform:translate(25vw,-25vh) scale(.85)}}
+@keyframes d3{to{transform:translate(-15vw,25vh) scale(1.2)}}
+.grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.06;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
+/* mock */
+.mock{position:absolute;inset:12px 12px 12px 92px;z-index:2;padding:22px 30px;border-radius:22px;background:rgba(8,10,22,.55);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.06)}
+.mock-top{display:flex;gap:10px;align-items:center;font-size:16px;font-weight:600;margin-bottom:6px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pillx{font-size:11px;font-weight:500;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 40%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:26px;max-width:620px}
+.sk{height:10px;border-radius:5px;background:rgba(255,255,255,.06);margin:12px 0}
+/* rail */
+.rail{position:fixed;left:12px;top:12px;bottom:12px;width:66px;border-radius:24px;background:rgba(255,255,255,.06);backdrop-filter:blur(24px) saturate(1.8);border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 60px #0009,inset 0 1px 0 rgba(255,255,255,.2);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:12px;z-index:10}
+.pills{display:flex;flex-direction:column;gap:12px;align-items:center}
+.pill{position:relative;width:44px;height:44px;border-radius:15px;display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.02em;color:#fff;cursor:pointer;outline:none;
+  background:linear-gradient(140deg,color-mix(in srgb,var(--c) 55%,transparent),rgba(255,255,255,.04) 80%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 10px 22px -8px color-mix(in srgb,var(--c) 80%,transparent);
+  transition:translate .35s var(--spring),scale .35s var(--spring),box-shadow .3s}
+.pill::before{content:"";position:absolute;inset:-2px;border-radius:17px;padding:2px;background:conic-gradient(from var(--a),var(--c),transparent 35%,transparent 65%,var(--c));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:.45}
+.st-executing.pill::before{animation:rot 2s linear infinite;opacity:1}
+@keyframes rot{to{--a:360deg}}
+.st-awaiting_input.pill{animation:glow 1.8s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 0 26px 3px color-mix(in srgb,var(--c) 75%,transparent)}}
+.pill:hover,.pill.active{scale:1.1}
+.pill.active::after{content:"";position:absolute;left:-12px;top:12px;width:4px;height:20px;border-radius:2px;background:var(--c);box-shadow:0 0 12px var(--c);animation:bar .4s var(--spring)}
+@keyframes bar{from{transform:scaleY(0)}}
+.pill.k-new,.pill.k-note{font-size:18px;font-weight:400}
+.pill.born{animation:born .8s var(--spring)}
+@keyframes born{from{transform:scale(0) rotate(-120deg);opacity:0}}
+.ripple{position:absolute;inset:0;border-radius:15px;border:2px solid var(--c);animation:ripple .9s ease-out forwards;pointer-events:none}
+@keyframes ripple{to{transform:scale(2.4);opacity:0}}
+.sep{flex:1}
+/* card */
+.card{position:fixed;left:94px;width:340px;padding:16px;border-radius:22px;z-index:20;color:var(--text);
+  background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.04));backdrop-filter:blur(28px) saturate(1.8);
+  border:1px solid rgba(255,255,255,.18);box-shadow:0 30px 80px -10px #000d,inset 0 1px 0 rgba(255,255,255,.25);
+  transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg));transition:transform .25s ease-out,top .5s var(--spring)}
+.card[hidden]{display:none}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(280px circle at var(--mx,30%) var(--my,0%),rgba(255,255,255,.16),transparent 60%);pointer-events:none}
+.card::before{content:"";position:absolute;left:18px;right:18px;top:-1px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--c),transparent);box-shadow:0 0 14px var(--c)}
+.card.in{animation:glassIn .65s var(--spring)}
+@keyframes glassIn{from{opacity:0;filter:blur(16px);scale:.72;translate:-46px 0}}
+.card.in>*{animation:rise .55s var(--spring) both}
+.card.in>*:nth-child(2){animation-delay:.07s}.card.in>*:nth-child(3){animation-delay:.14s}.card.in>*:nth-child(4){animation-delay:.21s}
+@keyframes rise{from{opacity:0;translate:0 12px}}
+.card.out{animation:glassOut .28s ease-in forwards}
+@keyframes glassOut{to{opacity:0;filter:blur(12px);scale:.86;translate:-36px 0}}
+.spark{position:fixed;width:6px;height:6px;border-radius:50%;pointer-events:none;z-index:30;background:var(--c);box-shadow:0 0 10px var(--c)}
+/* shared card internals */
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none;box-shadow:0 0 10px var(--c)}
+.st-executing .c-dot{animation:beat 1.4s ease-in-out infinite}
+@keyframes beat{50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--c) 25%,transparent)}}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 16px}
+.c-body{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.c-user{align-self:flex-end;background:var(--bubble);padding:7px 11px;border-radius:12px 12px 4px 12px;max-width:88%;border:1px solid rgba(255,255,255,.08)}
+.c-agent{color:var(--agent);max-width:95%}
+.c-body .new{animation:pop .4s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.95)}}
+.dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c);animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1)}
+.c-reply input,.start-in{flex:1;min-width:0;background:var(--field);border:1px solid var(--field-line);border-radius:12px;color:var(--text);padding:8px 12px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.c-reply input:focus,.start-in:focus{border-color:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 18%,transparent)}
+.c-reply button{border:0;border-radius:12px;background:var(--c);color:#0b0d18;font-weight:800;width:36px;cursor:pointer;transition:transform .2s var(--spring)}
+.c-reply button:active{transform:scale(.85)}
+.start-in{width:100%;margin:12px 0 10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{border:0;border-radius:12px;background:var(--c);color:#0b0d18;padding:6px 14px;cursor:pointer;font:inherit;font-weight:700}
+.note-paper{width:100%;height:150px;resize:none;border:1px solid rgba(255,255,255,.12);outline:0;font:inherit;line-height:24px;color:var(--text);background:repeating-linear-gradient(transparent 0 23px,rgba(255,225,122,.18) 23px 24px),rgba(255,225,122,.06);border-radius:12px;padding:0 12px;margin-top:12px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="grain"></div>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pillx">In progress</span></div>
+  <div class="mock-hint">Concept 6 · Aurora Glass: a frosted glass rail floats over a slowly moving aurora.
+    <br>• Session tiles lean toward your pointer, and running sessions have a spinning light around the edge.
+    <br>• Cards blur into focus and tilt with your pointer, with a highlight that follows it.
+    <br>• Replies give off sparks.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail"><div class="pills" id="pills"></div><div class="sep"></div><div class="pill k-new" id="newBtn" tabindex="0" title="New session">＋</div><div class="pill k-note" id="noteBtn" tabindex="0" title="Note">✎</div></aside>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+const NEW_HTML=btn=>`<div class="c-head"><span class="c-dot"></span><b>New session</b><span class="c-time">Opus 5.5</span></div><form class="c-start"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">${btn}</button></div></form>`;
+let noteText='';
+const NOTE_HTML=()=>`<div class="c-head"><span class="c-dot"></span><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;
+function wireNote(card){const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+function setStateClass(el,state){if(!el)return;[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState,onSend){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';onSend&&onSend(f.querySelector('button'));
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+function fill(card,key,base,{onState,onStart,onSend}){
+  card.className=base;
+  if(key==='new'){card.classList.add('k-new');card.innerHTML=NEW_HTML('Start');card.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(v)onStart(v)})}
+  else if(key==='note'){card.classList.add('k-note');card.innerHTML=NOTE_HTML();wireNote(card)}
+  else{const s=SESSIONS.find(x=>x.id===key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);wireCard(card,s,onState,onSend)}
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea')?.focus(),150);
+}
+function shelfController({card,rail,open,close}){
+  let cur=null,ht,ct;const creator=k=>k==='new'||k==='note';
+  const holds=()=>creator(cur)||(card.contains(document.activeElement)&&!!document.activeElement.value);
+  const api={get current(){return cur},
+    open(k){clearTimeout(ct);clearTimeout(ht);if(cur===k)return;const prev=cur;cur=k;open(k,prev)},
+    close(){clearTimeout(ht);if(!cur)return;const prev=cur;cur=null;close(prev)},
+    hover(k){if(creator(cur))return;clearTimeout(ct);clearTimeout(ht);ht=setTimeout(()=>api.open(k),110)},
+    leave(){clearTimeout(ht);clearTimeout(ct);ct=setTimeout(()=>{if(!holds())api.close()},220)},
+    toggle(k){cur===k?api.close():api.open(k)}};
+  card.addEventListener('mouseenter',()=>clearTimeout(ct));card.addEventListener('mouseleave',api.leave);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')api.close()});
+  document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))api.close()});
+  return api;
+}
+const newSession=v=>({id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'});
+
+/* ── Aurora Glass ── */
+const rail=document.getElementById('rail'),pillsEl=document.getElementById('pills'),card=document.getElementById('card');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn');
+const els={};
+function magnet(el){
+  el.addEventListener('pointermove',e=>{const r=el.getBoundingClientRect();el.style.translate=`${(e.clientX-r.left-r.width/2)*.28}px ${(e.clientY-r.top-r.height/2)*.28}px`});
+  el.addEventListener('pointerleave',()=>el.style.translate='0 0');
+}
+function makePill(s){
+  const p=document.createElement('div');p.className='pill st-'+s.state;p.tabIndex=0;p.title=s.title;p.textContent=initials(s.title);
+  magnet(p);p.addEventListener('mouseenter',()=>ctl.hover(s.id));p.addEventListener('mouseleave',()=>ctl.leave());
+  p.addEventListener('focus',()=>ctl.open(s.id));p.addEventListener('click',()=>ctl.open(s.id));
+  els[s.id]=p;return p;
+}
+const anchor=k=>k==='new'?newBtn:k==='note'?noteBtn:els[k];
+function burst(btn){const r=btn.getBoundingClientRect();const c=getComputedStyle(card).getPropertyValue('--c');for(let i=0;i<14;i++){const s=document.createElement('div');s.className='spark';s.style.setProperty('--c',c);s.style.left=r.left+r.width/2+'px';s.style.top=r.top+r.height/2+'px';document.body.appendChild(s);const a=Math.random()*Math.PI*2,d=24+Math.random()*40;s.animate([{transform:'translate(-50%,-50%) scale(1)',opacity:1},{transform:`translate(calc(-50% + ${Math.cos(a)*d}px),calc(-50% + ${Math.sin(a)*d}px)) scale(0)`,opacity:0}],{duration:600+Math.random()*300,easing:'cubic-bezier(.1,.8,.2,1)'}).onfinish=()=>s.remove()}}
+const ctl=shelfController({card,rail,
+  open(k){
+    Object.values(els).concat(newBtn,noteBtn).forEach(e=>e.classList.toggle('active',e===anchor(k)));
+    card.hidden=false;
+    fill(card,k,'card',{onState:s=>setStateClass(els[s.id],s.state),onSend:burst,onStart:start});
+    const a=anchor(k).getBoundingClientRect(),h=card.offsetHeight;
+    const top=k==='new'||k==='note'?a.bottom-h+4:a.top-10;
+    card.style.top=Math.max(14,Math.min(innerHeight-h-14,top))+'px';
+    void card.offsetWidth;card.classList.add('in');
+  },
+  close(){Object.values(els).concat(newBtn,noteBtn).forEach(e=>e.classList.remove('active'));card.classList.remove('in');card.classList.add('out');setTimeout(()=>{if(!ctl.current)card.hidden=true},280)}
+});
+card.addEventListener('mousemove',e=>{const r=card.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;card.style.setProperty('--ry',((x-.5)*9)+'deg');card.style.setProperty('--rx',(-(y-.5)*7)+'deg');card.style.setProperty('--mx',x*100+'%');card.style.setProperty('--my',y*100+'%')});
+card.addEventListener('mouseleave',()=>{card.style.setProperty('--rx','0deg');card.style.setProperty('--ry','0deg')});
+function start(v){
+  ctl.close();const s=newSession(v);SESSIONS.unshift(s);
+  setTimeout(()=>{
+    const before=new Map([...pillsEl.children].map(el=>[el,el.getBoundingClientRect().top]));
+    const p=makePill(s);p.classList.add('born');pillsEl.prepend(p);const r=document.createElement('span');r.className='ripple';p.appendChild(r);setTimeout(()=>{r.remove();p.classList.remove('born')},900);
+    before.forEach((t,el)=>{const d=t-el.getBoundingClientRect().top;if(d)el.animate([{transform:`translateY(${d}px)`},{transform:'none'}],{duration:500,easing:'cubic-bezier(.34,1.5,.64,1)'})});
+    if(SESSIONS.length>5){const old=SESSIONS.pop();const e=els[old.id];delete els[old.id];e.animate([{opacity:1},{opacity:0,transform:'scale(.3)',filter:'blur(6px)'}],{duration:350,fill:'forwards'}).onfinish=()=>e.remove()}
+    setTimeout(()=>ctl.open(s.id),450);
+  },300);
+}
+[newBtn,noteBtn].forEach(b=>magnet(b));
+newBtn.addEventListener('click',()=>ctl.toggle('new'));noteBtn.addEventListener('click',()=>ctl.toggle('note'));
+SESSIONS.forEach(s=>pillsEl.appendChild(makePill(s)));
+</script>
+</body>
+</html>

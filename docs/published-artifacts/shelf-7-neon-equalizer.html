@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 7 · Neon Equalizer</title>
+<style>
+:root{--bg:#07040d;--text:#f6ecff;--muted:#a08cc0;--bubble:rgba(255,70,210,.10);--agent:#eadfff;--field:rgba(255,255,255,.04);--field-line:rgba(255,90,220,.35);--run:#2ef2ff;--wait:#ffd23f;--ok:#39ff9c;--bad:#ff3860;--pause:#c06bff;--note:#ff5ccf;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.5 "Avenir Next","Futura",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}.k-new{--c:var(--run)}.k-note{--c:var(--note)}
+/* synthwave backdrop */
+.sun{position:fixed;left:74%;bottom:30vh;width:240px;height:240px;margin-left:-120px;border-radius:50%;background:linear-gradient(#ffd23f,#ff3d9a 60%,#8a2be2);-webkit-mask:repeating-linear-gradient(#000 0 14px,transparent 14px 18px);mask:linear-gradient(#000 45%,transparent 45%) ,repeating-linear-gradient(#000 0 16px,transparent 16px 21px);mask-composite:add;opacity:.42;filter:drop-shadow(0 0 40px #ff3d9a);z-index:0;animation:sunpulse 6s ease-in-out infinite alternate}
+@keyframes sunpulse{to{filter:drop-shadow(0 0 70px #ff3d9a);transform:translateY(-8px)}}
+.floor{position:fixed;left:-50%;right:-50%;bottom:0;height:36vh;z-index:0;background:linear-gradient(transparent 0 94%,#ff3dcf 94%),linear-gradient(90deg,transparent 0 96%,#ff3dcf 96%);background-size:60px 40px;transform:perspective(260px) rotateX(62deg);transform-origin:bottom;animation:floor 1.2s linear infinite;opacity:.55;-webkit-mask:linear-gradient(transparent,#000 40%)}
+@keyframes floor{to{background-position:0 40px,0 0}}
+.scan{position:fixed;inset:0;z-index:50;pointer-events:none;background:repeating-linear-gradient(transparent 0 2px,rgba(0,0,0,.22) 2px 3px);mix-blend-mode:multiply}
+.mock{position:absolute;inset:0 0 0 70px;z-index:1;padding:24px 34px}
+.mock-top{display:flex;gap:12px;align-items:center;font-size:16px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;text-shadow:0 0 12px #ff3dcf88}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--run);text-shadow:0 0 8px var(--run);letter-spacing:0}
+.mock-top .pillx{font-size:10px;color:var(--run);border:1px solid var(--run);border-radius:99px;padding:0 8px;box-shadow:0 0 8px var(--run),inset 0 0 6px var(--run)}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px;max-width:620px}
+.sk{height:8px;border-radius:4px;background:rgba(255,61,207,.12);margin:13px 0;box-shadow:0 0 8px rgba(255,61,207,.15)}
+/* rail */
+.rail{position:fixed;left:0;top:0;bottom:0;width:70px;background:linear-gradient(90deg,#0c0717,#120a22);z-index:10;display:flex;flex-direction:column;padding:16px 0;box-shadow:1px 0 0 #ff3dcf,0 0 18px #ff3dcf66}
+.rows{display:flex;flex-direction:column;gap:6px}
+.eq{position:relative;height:46px;padding:6px 0 0 12px;cursor:pointer;outline:none}
+.eq small{display:block;font-size:9px;font-weight:700;letter-spacing:.15em;color:var(--c);text-shadow:0 0 6px var(--c);margin-bottom:3px;opacity:.85}
+.eq i{display:block;height:4px;margin:2px 0;border-radius:2px;background:var(--c);box-shadow:0 0 4px var(--c),0 0 12px var(--c);width:var(--w,30px);transition:width .3s var(--spring)}
+.st-executing.eq i{animation:eq .7s ease-in-out infinite alternate}
+.st-executing.eq i:nth-of-type(2){animation-duration:.53s;animation-delay:-.2s}
+.st-executing.eq i:nth-of-type(3){animation-duration:.81s;animation-delay:-.4s}
+@keyframes eq{from{width:10px}to{width:46px}}
+.st-awaiting_input.eq i{--w:34px;animation:seq 1.5s steps(1) infinite}
+.st-awaiting_input.eq i:nth-of-type(2){animation-delay:.25s}.st-awaiting_input.eq i:nth-of-type(3){animation-delay:.5s}
+@keyframes seq{0%{opacity:1}50%{opacity:.15}}
+.st-completed.eq i:nth-of-type(1){--w:46px}.st-completed.eq i:nth-of-type(2){--w:40px}.st-completed.eq i:nth-of-type(3){--w:34px}
+.st-failed.eq i:nth-of-type(1){--w:30px;animation:broken 3.2s infinite}.st-failed.eq i:nth-of-type(2){--w:12px}.st-failed.eq i:nth-of-type(3){--w:22px;animation:broken 2.3s infinite .7s}
+@keyframes broken{0%,7%,9%,40%,42%,100%{opacity:1}8%,41%{opacity:.1}}
+.st-paused.eq{opacity:.5}.st-paused.eq i{--w:20px}
+.eq:hover i,.eq.active i{width:52px!important;animation-play-state:paused}
+.eq.active small{opacity:1}
+.eq.boot{animation:boot .9s steps(1)}
+@keyframes boot{0%{opacity:0}10%{opacity:1}15%{opacity:0}30%{opacity:1}35%{opacity:.2}50%,100%{opacity:1}}
+.spacer{flex:1}
+.sign{background:none;border:0;cursor:pointer;font-size:22px;line-height:1;color:var(--c);text-shadow:0 0 6px var(--c),0 0 18px var(--c);padding:6px 0;animation:idle 7s infinite;transition:transform .3s var(--spring)}
+.sign:hover{transform:scale(1.2)}
+.sign.note{animation-delay:3s}
+@keyframes idle{0%,92%,96%,100%{opacity:1}94%{opacity:.25}}
+/* wire + card */
+.wire{position:fixed;left:62px;height:2px;width:22px;background:var(--c);box-shadow:0 0 8px var(--c),0 0 16px var(--c);transform-origin:left;transform:scaleX(0);transition:transform .2s ease-out,top .35s var(--spring);z-index:19}
+.wire.on{transform:scaleX(1)}
+.card{position:fixed;left:84px;width:340px;padding:16px;border-radius:14px;z-index:20;background:rgba(9,4,18,0);transition:background .3s,top .35s var(--spring)}
+.card[hidden]{display:none}
+.card .outline{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.card .outline rect{fill:none;stroke:var(--c);stroke-width:2;stroke-dasharray:100;stroke-dashoffset:100;filter:drop-shadow(0 0 4px var(--c)) drop-shadow(0 0 10px var(--c))}
+.card.drawing .outline rect{animation:draw .5s cubic-bezier(.6,0,.3,1) forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.card.lit{background:#0b0616;box-shadow:0 0 40px -6px var(--c),0 30px 70px #000c}
+.card.lit .outline rect{stroke-dashoffset:0}
+.card>:not(.outline){opacity:0}
+.card.lit>:not(.outline){animation:flickon .6s linear forwards}
+.card.lit>:nth-child(3){animation-delay:.05s}.card.lit>:nth-child(4){animation-delay:.1s}.card.lit>:nth-child(5){animation-delay:.15s}
+@keyframes flickon{0%{opacity:0}8%{opacity:1}12%{opacity:.1}22%{opacity:1}28%{opacity:.35}36%,100%{opacity:1}}
+.card.off{background:rgba(9,4,18,0);box-shadow:none}
+.card.off>:not(.outline){opacity:0;transition:opacity .1s}
+.card.off .outline rect{animation:undraw .25s ease-in forwards}
+@keyframes undraw{from{stroke-dashoffset:0}to{stroke-dashoffset:-100}}
+/* card internals */
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 10px var(--c)}
+.c-time{color:var(--muted);font-size:11px;font-family:ui-monospace,monospace}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none;box-shadow:0 0 6px var(--c),0 0 14px var(--c)}
+.st-executing .c-dot{animation:seq .8s steps(1) infinite}
+.c-state{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--c);text-shadow:0 0 8px var(--c);margin:2px 0 0 16px}
+.c-body{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.c-user{align-self:flex-end;background:var(--bubble);padding:7px 11px;border-radius:10px 10px 2px 10px;max-width:88%;border:1px solid rgba(255,90,220,.35);box-shadow:inset 0 0 12px rgba(255,61,207,.15)}
+.c-agent{color:var(--agent);max-width:95%}
+.c-body .new{animation:pop .35s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateX(10px)}}
+.dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c);box-shadow:0 0 6px var(--c);animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.4}}
+.c-reply{display:flex;gap:6px;padding-top:10px;border-top:1px solid rgba(255,90,220,.25)}
+.c-reply input,.start-in{flex:1;min-width:0;background:var(--field);border:1px solid var(--field-line);border-radius:8px;color:var(--text);padding:8px 11px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.c-reply input:focus,.start-in:focus{border-color:var(--c);box-shadow:0 0 10px color-mix(in srgb,var(--c) 50%,transparent),inset 0 0 8px color-mix(in srgb,var(--c) 25%,transparent)}
+.c-reply button,.btn{border:1px solid var(--c);border-radius:8px;background:transparent;color:var(--c);font-weight:800;cursor:pointer;text-shadow:0 0 6px var(--c);box-shadow:0 0 8px color-mix(in srgb,var(--c) 60%,transparent),inset 0 0 8px color-mix(in srgb,var(--c) 40%,transparent);transition:background .2s,color .2s}
+.c-reply button{width:38px}
+.c-reply button:hover,.btn:hover{background:var(--c);color:#0b0614;text-shadow:none}
+.start-in{width:100%;margin:12px 0 10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{padding:5px 14px;font:inherit;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.note-paper{width:100%;height:150px;resize:none;border:1px solid rgba(255,92,207,.4);outline:0;font:inherit;line-height:24px;color:var(--text);background:repeating-linear-gradient(transparent 0 23px,rgba(255,92,207,.25) 23px 24px);border-radius:8px;padding:0 12px;margin-top:12px;box-shadow:inset 0 0 14px rgba(255,92,207,.15)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="sun"></div><div class="floor"></div>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pillx">In progress</span></div>
+  <div class="mock-hint">Concept 7 · Neon Equalizer: each session is a little equaliser.
+    <br>• Running sessions bounce, ones that need you blink in sequence, a failed one flickers like a broken tube and a paused one dims.
+    <br>• Hover to run a neon wire out to the card, which traces its own outline and then flickers on.
+    <br>• A new session's bars power up with a flicker.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail"><div class="rows" id="rows"></div><div class="spacer"></div><button class="sign k-new" id="newBtn" title="New session">＋</button><button class="sign note k-note" id="noteBtn" title="Note">✎</button></aside>
+<div class="wire" id="wire"></div>
+<div class="card" id="card" hidden></div>
+<div class="scan"></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+const NEW_HTML=btn=>`<div class="c-head"><span class="c-dot"></span><b>New session</b><span class="c-time">Opus 5.5</span></div><form class="c-start"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">${btn}</button></div></form>`;
+let noteText='';
+const NOTE_HTML=()=>`<div class="c-head"><span class="c-dot"></span><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;
+function wireNote(card){const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+function setStateClass(el,state){if(!el)return;[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState,onSend){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';onSend&&onSend(f.querySelector('button'));
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+function fill(card,key,base,{onState,onStart,onSend}){
+  card.className=base;
+  if(key==='new'){card.classList.add('k-new');card.innerHTML=NEW_HTML('Start');card.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(v)onStart(v)})}
+  else if(key==='note'){card.classList.add('k-note');card.innerHTML=NOTE_HTML();wireNote(card)}
+  else{const s=SESSIONS.find(x=>x.id===key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);wireCard(card,s,onState,onSend)}
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea')?.focus(),150);
+}
+function shelfController({card,rail,open,close}){
+  let cur=null,ht,ct;const creator=k=>k==='new'||k==='note';
+  const holds=()=>creator(cur)||(card.contains(document.activeElement)&&!!document.activeElement.value);
+  const api={get current(){return cur},
+    open(k){clearTimeout(ct);clearTimeout(ht);if(cur===k)return;const prev=cur;cur=k;open(k,prev)},
+    close(){clearTimeout(ht);if(!cur)return;const prev=cur;cur=null;close(prev)},
+    hover(k){if(creator(cur))return;clearTimeout(ct);clearTimeout(ht);ht=setTimeout(()=>api.open(k),110)},
+    leave(){clearTimeout(ht);clearTimeout(ct);ct=setTimeout(()=>{if(!holds())api.close()},220)},
+    toggle(k){cur===k?api.close():api.open(k)}};
+  card.addEventListener('mouseenter',()=>clearTimeout(ct));card.addEventListener('mouseleave',api.leave);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')api.close()});
+  document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))api.close()});
+  return api;
+}
+const newSession=v=>({id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'});
+
+/* ── Neon Equalizer ── */
+const rail=document.getElementById('rail'),rowsEl=document.getElementById('rows'),card=document.getElementById('card'),wire=document.getElementById('wire');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn');
+const els={};
+function makeRow(s){
+  const r=document.createElement('div');r.className='eq st-'+s.state;r.tabIndex=0;r.title=s.title;
+  r.innerHTML=`<small>${esc(initials(s.title))}</small><i></i><i></i><i></i>`;
+  r.addEventListener('mouseenter',()=>ctl.hover(s.id));r.addEventListener('mouseleave',()=>ctl.leave());
+  r.addEventListener('focus',()=>ctl.open(s.id));r.addEventListener('click',()=>ctl.open(s.id));
+  els[s.id]=r;return r;
+}
+const anchor=k=>k==='new'?newBtn:k==='note'?noteBtn:els[k];
+let drawT;
+const ctl=shelfController({card,rail,
+  open(k){
+    Object.values(els).forEach(e=>e.classList.toggle('active',e===anchor(k)));
+    card.hidden=false;clearTimeout(drawT);
+    fill(card,k,'card',{onState:s=>setStateClass(els[s.id],s.state),onStart:start});
+    card.insertAdjacentHTML('afterbegin','<svg class="outline"><rect x="1" y="1" rx="14" pathLength="100"/></svg>');
+    const a=anchor(k).getBoundingClientRect(),h=card.offsetHeight,w=card.offsetWidth;
+    const rect=card.querySelector('rect');rect.setAttribute('width',w-2);rect.setAttribute('height',h-2);
+    const ay=a.top+a.height/2;
+    const top=Math.max(14,Math.min(innerHeight-h-14,k==='new'||k==='note'?ay-h+30:ay-30));
+    card.style.top=top+'px';
+    wire.style.setProperty('--c',getComputedStyle(card).getPropertyValue('--c'));wire.style.top=(Math.max(top+14,Math.min(top+h-14,ay))-1)+'px';wire.classList.add('on');
+    card.classList.add('drawing');
+    drawT=setTimeout(()=>{card.classList.remove('drawing');card.classList.add('lit')},480);
+  },
+  close(){
+    clearTimeout(drawT);Object.values(els).forEach(e=>e.classList.remove('active'));wire.classList.remove('on');
+    card.classList.remove('drawing','lit');card.classList.add('off');setTimeout(()=>{if(!ctl.current)card.hidden=true},260);
+  }
+});
+function start(v){
+  ctl.close();const s=newSession(v);SESSIONS.unshift(s);
+  setTimeout(()=>{
+    const before=new Map([...rowsEl.children].map(el=>[el,el.getBoundingClientRect().top]));
+    const r=makeRow(s);r.classList.add('boot');rowsEl.prepend(r);setTimeout(()=>r.classList.remove('boot'),900);
+    before.forEach((t,el)=>{const d=t-el.getBoundingClientRect().top;if(d)el.animate([{transform:`translateY(${d}px)`},{transform:'none'}],{duration:400,easing:'cubic-bezier(.34,1.5,.64,1)'})});
+    if(SESSIONS.length>5){const old=SESSIONS.pop();const e=els[old.id];delete els[old.id];e.animate([{opacity:1},{opacity:0},{opacity:.6},{opacity:0}],{duration:400,fill:'forwards'}).onfinish=()=>e.remove()}
+    setTimeout(()=>ctl.open(s.id),800);
+  },300);
+}
+newBtn.addEventListener('click',()=>ctl.toggle('new'));noteBtn.addEventListener('click',()=>ctl.toggle('note'));
+SESSIONS.forEach(s=>rowsEl.appendChild(makeRow(s)));
+</script>
+</body>
+</html>

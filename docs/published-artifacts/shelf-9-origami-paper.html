@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 9 · Origami Paper</title>
+<style>
+:root{--bg:#efe8dc;--text:#2b2620;--muted:#8a7f70;--bubble:#f3ebdc;--agent:#3d362d;--field:#fbf7ef;--field-line:#ddd1bd;--run:#5b7fd6;--wait:#e0a030;--ok:#5e9f78;--bad:#d2584f;--pause:#9a7cc4;--note:#e8c547;--spring:cubic-bezier(.34,1.56,.64,1);--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;color:var(--text);overflow:hidden;
+  background:radial-gradient(900px 500px at 70% -10%,#fffaf0,transparent),repeating-linear-gradient(0deg,#0000 0 3px,#00000005 3px 4px),var(--bg)}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}.k-new{--c:var(--run)}.k-note{--c:var(--note)}
+.mock{position:absolute;inset:0 0 0 70px;padding:26px 40px}
+.mock-top{display:flex;gap:12px;align-items:baseline;font:600 20px/1.2 var(--serif);margin-bottom:8px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pillx{font:500 11px -apple-system,sans-serif;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 45%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12.5px;margin-bottom:26px;max-width:620px}
+.sk{height:9px;border-radius:5px;background:#e2d8c7;margin:13px 0}
+/* rail: kraft strip */
+.rail{position:fixed;left:0;top:0;bottom:0;width:70px;z-index:10;display:flex;flex-direction:column;padding:16px 0 14px;
+  background:linear-gradient(90deg,#c9b088,#d8c29c 60%,#cdb58e),repeating-linear-gradient(90deg,#0000 0 2px,#0000000a 2px 3px);background-blend-mode:multiply;box-shadow:inset -1px 0 0 #b49a72,4px 0 14px #0000001f}
+.tags{display:flex;flex-direction:column;gap:12px}
+.tag{position:relative;width:58px;height:46px;margin-left:8px;cursor:pointer;outline:none;transform-origin:left center;transition:transform .45s var(--spring),filter .3s;filter:drop-shadow(1px 2px 1px #0000002a)}
+.tag .paper{position:absolute;inset:0;clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,0 100%);background:color-mix(in srgb,var(--c) 30%,#fbf6ea)}
+.tag .paper::after{content:"";position:absolute;right:0;top:0;width:14px;height:14px;background:linear-gradient(225deg,transparent 50%,color-mix(in srgb,var(--c) 45%,#c8bba3) 50%);filter:drop-shadow(-1px 1px 1px #0003)}
+.tag .washi{position:absolute;left:0;top:10px;width:16px;height:26px;opacity:.9}
+.st-executing.tag .washi{background:repeating-linear-gradient(45deg,var(--c) 0 4px,#fff8 4px 8px);background-size:11.3px 11.3px;animation:tape 1s linear infinite}
+@keyframes tape{to{background-position:11.3px 0}}
+.st-awaiting_input.tag .washi{background:radial-gradient(circle,var(--c) 2px,transparent 2.5px) 0 0/7px 7px,#fff6}
+.st-awaiting_input.tag{animation:flutter 2.6s ease-in-out infinite}
+@keyframes flutter{0%,70%,100%{transform:none}78%{transform:rotate(-6deg)}86%{transform:rotate(3deg)}}
+.st-completed.tag .washi{background:var(--c)}
+.st-failed.tag .paper{clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,80% 92%,62% 100%,44% 92%,26% 100%,0 94%)}
+.st-failed.tag .washi{background:repeating-linear-gradient(-45deg,var(--c) 0 3px,transparent 3px 6px)}
+.st-paused.tag .washi{background:linear-gradient(90deg,var(--c) 1px,transparent 1px) 0 0/5px 5px,linear-gradient(var(--c) 1px,transparent 1px) 0 0/5px 5px}
+.st-paused.tag{opacity:.75}
+.tag b{position:absolute;left:20px;top:13px;font:700 15px/1 var(--serif);color:color-mix(in srgb,var(--c) 70%,#2b2620)}
+.tag small{position:absolute;left:20px;top:30px;font-size:9px;color:#7a6f60}
+.tag:hover,.tag:focus-visible,.tag.active{transform:translateX(8px) rotate(-4deg);filter:drop-shadow(4px 6px 4px #00000033)}
+.tag.born{animation:unfoldTag .7s var(--spring)}
+@keyframes unfoldTag{from{transform:scaleX(0) rotate(-20deg)}}
+.spacer{flex:1}
+.fbtn{width:44px;height:40px;margin-left:13px;margin-top:8px;border:0;cursor:pointer;font-size:16px;color:#3a3329;background:color-mix(in srgb,var(--c) 30%,#fbf6ea);clip-path:polygon(0 0,100% 0,100% 100%,14px 100%,0 calc(100% - 14px));filter:drop-shadow(1px 2px 1px #0003);transition:transform .35s var(--spring)}
+.fbtn:hover{transform:rotate(6deg) scale(1.08)}
+.plane{position:fixed;left:0;top:0;width:34px;height:22px;z-index:40;pointer-events:none;offset-rotate:auto;filter:drop-shadow(2px 4px 2px #0003)}
+/* card */
+.card{position:fixed;left:82px;width:340px;padding:18px 18px 14px;z-index:20;border-radius:4px;background:linear-gradient(#fffdf8,#fbf6ec);box-shadow:0 1px 0 #fff inset,0 2px 4px #0000001a,0 24px 50px -12px #0000004d;transition:top .45s var(--spring)}
+.card[hidden]{display:none}
+.card::before{content:"";position:absolute;left:0;right:0;top:33.33%;height:1px;background:linear-gradient(90deg,transparent,#0000000f 20%,#0000000f 80%,transparent);box-shadow:0 calc(var(--h,300px)/3) 0 #0000000f;pointer-events:none}
+.card::after{content:"";position:absolute;right:-1px;top:-1px;width:22px;height:22px;background:linear-gradient(225deg,var(--bg) 50%,color-mix(in srgb,var(--c) 25%,#e9dfcc) 50%);box-shadow:-2px 2px 3px #0000001a}
+.card.folding{animation:foldaway .32s ease-in forwards;transform-origin:top center}
+@keyframes foldaway{to{transform:perspective(800px) rotateX(80deg) scaleY(.4);opacity:0}}
+.fold{position:fixed;z-index:21;perspective:900px;pointer-events:none}
+.fold .clip{position:absolute;left:0;width:100%;overflow:hidden;transform-origin:top center;backface-visibility:hidden}
+.fold .clip::after{content:"";position:absolute;inset:0;background:linear-gradient(#0000,#0000);animation:shade .4s ease-out forwards;animation-delay:inherit}
+@keyframes shade{from{background:linear-gradient(#00000040,#00000010)}to{background:linear-gradient(#0000,#0000)}}
+.fold .p0{animation:drop .28s ease-out both}
+.fold .p1{animation:swing .4s cubic-bezier(.3,1.3,.5,1) .2s both}
+.fold .p2{animation:swing .4s cubic-bezier(.3,1.3,.5,1) .45s both}
+@keyframes drop{from{transform:scaleY(0);opacity:.4}}
+@keyframes swing{from{transform:rotateX(-92deg)}}
+/* internals */
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font:600 16px/1.25 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:9px;height:9px;border-radius:2px;background:var(--c);flex:none;transform:rotate(45deg)}
+.st-executing .c-dot{animation:spinS 2s linear infinite}
+@keyframes spinS{to{transform:rotate(405deg)}}
+.c-state{font-size:11px;color:color-mix(in srgb,var(--c) 80%,#000);margin:1px 0 0 17px;font-style:italic;font-family:var(--serif)}
+.c-body{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:9px;margin:12px 0}
+.c-user{align-self:flex-end;background:var(--bubble);padding:7px 11px;border-radius:3px;max-width:88%;border:1px solid #e3d8c4;box-shadow:1px 1px 0 #e3d8c4}
+.c-agent{color:var(--agent);max-width:95%;font-family:var(--serif);font-size:14px}
+.c-body .new{animation:pop .4s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(8px) rotate(-1deg)}}
+.dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c);animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;padding-top:11px;border-top:1px dashed #d8ccb6}
+.c-reply input,.start-in{flex:1;min-width:0;background:var(--field);border:1px solid var(--field-line);border-radius:4px;color:var(--text);padding:8px 11px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.c-reply input:focus,.start-in:focus{border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 18%,transparent)}
+.c-reply button,.btn{border:0;border-radius:4px;background:var(--c);color:#fff;font-weight:700;cursor:pointer;box-shadow:0 2px 0 color-mix(in srgb,var(--c) 60%,#000);transition:transform .15s}
+.c-reply button:active,.btn:active{transform:translateY(2px);box-shadow:none}
+.c-reply button{width:36px}
+.start-in{width:100%;margin:12px 0 10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{padding:6px 14px;font:inherit;font-weight:700}
+.note-paper{width:100%;height:150px;resize:none;border:0;outline:0;font:15px/24px var(--serif);color:#3b331f;background:repeating-linear-gradient(#fff6c9 0 23px,#e9d98d 23px 24px);border-radius:2px;padding:0 12px;margin-top:12px;box-shadow:2px 3px 0 #e6d68a}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pillx">In progress</span></div>
+  <div class="mock-hint">Concept 9 · Origami Paper: a light, tactile take, with sessions as folded paper tags on a strip of kraft paper.
+    <br>• Washi tape shows status: moving stripes mean running, dots mean it needs you, and a torn tag means it failed.
+    <br>• Hovering lifts the tag, and its card unfolds one panel at a time.
+    <br>• A new session flies in as a paper plane.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail"><div class="tags" id="tags"></div><div class="spacer"></div><button class="fbtn k-new" id="newBtn" title="New session">✈︎</button><button class="fbtn k-note" id="noteBtn" title="Note">✎</button></aside>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+const NEW_HTML=btn=>`<div class="c-head"><span class="c-dot"></span><b>New session</b><span class="c-time">Opus 5.5</span></div><form class="c-start"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">${btn}</button></div></form>`;
+let noteText='';
+const NOTE_HTML=()=>`<div class="c-head"><span class="c-dot"></span><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;
+function wireNote(card){const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+function setStateClass(el,state){if(!el)return;[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState,onSend){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';onSend&&onSend(f.querySelector('button'));
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+function fill(card,key,base,{onState,onStart,onSend}){
+  card.className=base;
+  if(key==='new'){card.classList.add('k-new');card.innerHTML=NEW_HTML('Start');card.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(v)onStart(v)})}
+  else if(key==='note'){card.classList.add('k-note');card.innerHTML=NOTE_HTML();wireNote(card)}
+  else{const s=SESSIONS.find(x=>x.id===key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);wireCard(card,s,onState,onSend)}
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea')?.focus(),150);
+}
+function shelfController({card,rail,open,close}){
+  let cur=null,ht,ct;const creator=k=>k==='new'||k==='note';
+  const holds=()=>creator(cur)||(card.contains(document.activeElement)&&!!document.activeElement.value);
+  const api={get current(){return cur},
+    open(k){clearTimeout(ct);clearTimeout(ht);if(cur===k)return;const prev=cur;cur=k;open(k,prev)},
+    close(){clearTimeout(ht);if(!cur)return;const prev=cur;cur=null;close(prev)},
+    hover(k){if(creator(cur))return;clearTimeout(ct);clearTimeout(ht);ht=setTimeout(()=>api.open(k),110)},
+    leave(){clearTimeout(ht);clearTimeout(ct);ct=setTimeout(()=>{if(!holds())api.close()},220)},
+    toggle(k){cur===k?api.close():api.open(k)}};
+  card.addEventListener('mouseenter',()=>clearTimeout(ct));card.addEventListener('mouseleave',api.leave);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')api.close()});
+  document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))api.close()});
+  return api;
+}
+const newSession=v=>({id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'});
+
+/* ── Origami ── */
+const rail=document.getElementById('rail'),tagsEl=document.getElementById('tags'),card=document.getElementById('card');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn');
+const els={};let foldEl,foldT;
+function makeTag(s){
+  const t=document.createElement('div');t.className='tag st-'+s.state;t.tabIndex=0;t.title=s.title;
+  t.innerHTML=`<div class="paper"></div><div class="washi"></div><b>${esc(initials(s.title))}</b><small>${esc(s.time)}</small>`;
+  t.addEventListener('mouseenter',()=>ctl.hover(s.id));t.addEventListener('mouseleave',()=>ctl.leave());
+  t.addEventListener('focus',()=>ctl.open(s.id));t.addEventListener('click',()=>ctl.open(s.id));
+  els[s.id]=t;return t;
+}
+const anchor=k=>k==='new'?newBtn:k==='note'?noteBtn:els[k];
+function clearFold(){clearTimeout(foldT);if(foldEl){foldEl.remove();foldEl=null}card.style.visibility='';if(!card.hidden&&(ctl.current==='new'||ctl.current==='note'))card.querySelector('input,textarea')?.focus()}
+function unfold(){
+  clearFold();
+  const w=card.offsetWidth,h=card.offsetHeight,ph=h/3;card.style.setProperty('--h',h+'px');
+  foldEl=document.createElement('div');foldEl.className='fold';Object.assign(foldEl.style,{left:card.offsetLeft+'px',top:card.style.top,width:w+'px',height:h+'px'});
+  for(let i=0;i<3;i++){const c=document.createElement('div');c.className='clip p'+i;c.style.top=(i*ph)+'px';c.style.height=Math.ceil(ph)+'px';
+    const clone=card.cloneNode(true);clone.removeAttribute('id');clone.hidden=false;Object.assign(clone.style,{position:'absolute',left:'0',top:(-i*ph)+'px',visibility:'visible',transition:'none',width:w+'px'});c.appendChild(clone);foldEl.appendChild(c)}
+  card.style.visibility='hidden';document.body.appendChild(foldEl);
+  foldT=setTimeout(clearFold,900);
+}
+const ctl=shelfController({card,rail,
+  open(k){
+    Object.values(els).forEach(e=>e.classList.toggle('active',e===anchor(k)));
+    card.hidden=false;fill(card,k,'card',{onState:s=>setStateClass(els[s.id],s.state),onStart:start});
+    const a=anchor(k).getBoundingClientRect(),h=card.offsetHeight;
+    const top=Math.max(14,Math.min(innerHeight-h-14,k==='new'||k==='note'?a.bottom-h:a.top-8));
+    card.style.top=top+'px';unfold();
+  },
+  close(){clearFold();Object.values(els).forEach(e=>e.classList.remove('active'));card.classList.add('folding');setTimeout(()=>{if(!ctl.current)card.hidden=true},320)}
+});
+function start(v){
+  ctl.close();const s=newSession(v);SESSIONS.unshift(s);
+  const b=newBtn.getBoundingClientRect(),sx=b.left+b.width/2,sy=b.top,tx=37,ty=40;
+  const plane=document.createElementNS('http://www.w3.org/2000/svg','svg');plane.setAttribute('viewBox','0 0 34 22');plane.classList.add('plane');
+  plane.innerHTML='<polygon points="0,11 34,0 14,14" fill="#fffdf6" stroke="#bfae8f" stroke-width=".8"/><polygon points="14,14 34,0 18,22" fill="#e8dcc6" stroke="#bfae8f" stroke-width=".8"/>';
+  plane.style.offsetPath=`path('M ${sx} ${sy} C ${sx+380} ${sy-120}, ${sx+300} ${ty+260}, ${sx+160} ${ty+140} S ${tx+120} ${ty-30}, ${tx} ${ty}')`;
+  document.body.appendChild(plane);
+  plane.animate([{offsetDistance:'0%',opacity:1},{offsetDistance:'92%',opacity:1},{offsetDistance:'100%',opacity:0}],{duration:1500,easing:'cubic-bezier(.45,.05,.4,1)',fill:'forwards'}).onfinish=()=>{
+    plane.remove();
+    const before=new Map([...tagsEl.children].map(el=>[el,el.getBoundingClientRect().top]));
+    const t=makeTag(s);t.classList.add('born');tagsEl.prepend(t);setTimeout(()=>t.classList.remove('born'),700);
+    before.forEach((top,el)=>{const d=top-el.getBoundingClientRect().top;if(d)el.animate([{transform:`translateY(${d}px)`},{transform:'none'}],{duration:450,easing:'cubic-bezier(.34,1.5,.64,1)'})});
+    if(SESSIONS.length>5){const old=SESSIONS.pop();const e=els[old.id];delete els[old.id];e.animate([{opacity:1},{opacity:0,transform:'translateY(30px) rotate(25deg)'}],{duration:450,fill:'forwards'}).onfinish=()=>e.remove()}
+    setTimeout(()=>ctl.open(s.id),500);
+  };
+}
+newBtn.addEventListener('click',()=>ctl.toggle('new'));noteBtn.addEventListener('click',()=>ctl.toggle('note'));
+SESSIONS.forEach(s=>tagsEl.appendChild(makeTag(s)));
+</script>
+</body>
+</html>

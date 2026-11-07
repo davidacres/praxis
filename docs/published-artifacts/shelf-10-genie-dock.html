@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 10 · Genie Dock</title>
+<style>
+:root{--text:#f2f3f7;--muted:#a5aabb;--bubble:rgba(255,255,255,.1);--agent:#dfe2ec;--field:rgba(255,255,255,.07);--field-line:rgba(255,255,255,.14);--run:#6f8dff;--wait:#ffa54a;--ok:#2fd39a;--bad:#ff5d73;--pause:#a58bfa;--note:#ffd34d;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,sans-serif;color:var(--text);overflow:hidden;
+  background:radial-gradient(900px 600px at 10% 20%,#3a2a7a,transparent 60%),radial-gradient(800px 600px at 90% 90%,#0d5d72,transparent 60%),radial-gradient(700px 500px at 60% 10%,#7a2a5c,transparent 55%),#14121f}
+.st-executing{--c:var(--run);--g1:#5b8cff;--g2:#8a5bff}.st-awaiting_input{--c:var(--wait);--g1:#ffbf4a;--g2:#ff6f45}.st-completed{--c:var(--ok);--g1:#3ee08f;--g2:#13a8a0}.st-failed{--c:var(--bad);--g1:#ff6a7a;--g2:#d42c6b}.st-paused{--c:var(--pause);--g1:#b49cff;--g2:#6d5bd0}
+.k-new{--c:var(--run);--g1:#e9edf7;--g2:#aab3c9}.k-note{--c:var(--note);--g1:#ffe27a;--g2:#f5b500}
+.mock{position:absolute;inset:16px 16px 16px 104px;padding:22px 30px;border-radius:14px;background:rgba(20,20,30,.55);backdrop-filter:blur(30px) saturate(1.4);border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 60px #0006}
+.mock::before{content:"";position:absolute;left:14px;top:14px;width:52px;height:12px;background:radial-gradient(circle at 6px 6px,#ff5f57 5.5px,transparent 6px),radial-gradient(circle at 26px 6px,#febc2e 5.5px,transparent 6px),radial-gradient(circle at 46px 6px,#28c840 5.5px,transparent 6px)}
+.mock-top{display:flex;gap:12px;align-items:center;font-size:16px;font-weight:600;margin:18px 0 6px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pillx{font-size:11px;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 45%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px;max-width:620px}
+.sk{height:9px;border-radius:5px;background:rgba(255,255,255,.07);margin:13px 0}
+/* dock */
+.dock{position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:10;padding:8px;border-radius:20px;background:rgba(40,40,56,.45);backdrop-filter:blur(26px) saturate(1.8);border:1px solid rgba(255,255,255,.16);box-shadow:0 20px 50px #0008,inset 0 1px 0 rgba(255,255,255,.18);display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.app{position:relative;width:calc(46px*var(--s,1));height:calc(46px*var(--s,1));border-radius:calc(12px*var(--s,1));cursor:pointer;outline:none;display:grid;place-items:center;font-weight:700;font-size:calc(14px*var(--s,1));color:#fff;text-shadow:0 1px 2px #0005;
+  background:linear-gradient(145deg,var(--g1),var(--g2));box-shadow:0 calc(4px*var(--s,1)) calc(10px*var(--s,1)) #0006,inset 0 1px 0 rgba(255,255,255,.4)}
+.app::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.35),transparent 48%);pointer-events:none}
+.app.k-new,.app.k-note{color:#2a2f40;text-shadow:none;font-size:calc(20px*var(--s,1));font-weight:400}
+.app.k-note{color:#5a4100}
+.app .run{position:absolute;left:-7px;top:50%;width:4px;height:4px;margin-top:-2px;border-radius:50%;background:#fff;box-shadow:0 0 6px #fff;opacity:0;transition:opacity .3s}
+.st-executing.app .run{opacity:1;animation:runpulse 1.4s ease-in-out infinite}
+@keyframes runpulse{50%{opacity:.3}}
+.st-awaiting_input.app{animation:attention 3.2s ease-in-out infinite}
+@keyframes attention{0%,62%,100%{translate:0}68%{translate:14px}74%{translate:0}80%{translate:8px}86%{translate:0}}
+.app.launch{animation:launch .7s ease}
+@keyframes launch{20%{translate:16px}40%{translate:0}60%{translate:9px}80%{translate:0}}
+.app.born{animation:born .6s var(--spring)}
+@keyframes born{from{transform:scale(0);opacity:0}}
+.lbl{position:absolute;left:calc(100% + 14px);top:50%;transform:translate(-6px,-50%);white-space:nowrap;font-size:12px;font-weight:500;color:#fff;text-shadow:none;padding:3px 10px;border-radius:7px;background:rgba(30,30,40,.85);border:1px solid rgba(255,255,255,.12);opacity:0;pointer-events:none;transition:opacity .15s,transform .2s}
+.lbl::before{content:"";position:absolute;left:-5px;top:50%;margin-top:-5px;border:5px solid transparent;border-left:0;border-right-color:rgba(30,30,40,.85)}
+.app:hover .lbl{opacity:1;transform:translate(0,-50%)}
+.app.active .lbl{opacity:0}
+.sep{width:46px;height:1px;background:rgba(255,255,255,.2);margin:3px 0}
+/* card */
+.card{position:fixed;width:340px;padding:16px;border-radius:16px;z-index:20;background:rgba(32,33,46,.78);backdrop-filter:blur(30px) saturate(1.8);border:1px solid rgba(255,255,255,.14);box-shadow:0 30px 70px #000a,inset 0 1px 0 rgba(255,255,255,.12);transition:top .45s var(--spring)}
+.card[hidden]{display:none}
+.card .hdr-strip{position:absolute;left:0;right:0;top:0;height:3px;border-radius:16px 16px 0 0;background:linear-gradient(90deg,var(--g1,var(--c)),var(--g2,var(--c)))}
+/* internals */
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.st-executing .c-dot{animation:runpulse 1.2s infinite}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 16px}
+.c-body{max-height:190px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.c-user{align-self:flex-end;background:linear-gradient(145deg,var(--run),#5b4dff);color:#fff;padding:7px 11px;border-radius:16px 16px 4px 16px;max-width:88%}
+.c-agent{align-self:flex-start;background:var(--bubble);color:var(--agent);padding:7px 11px;border-radius:16px 16px 16px 4px;max-width:92%}
+.c-body .new{animation:pop .4s var(--spring)}
+@keyframes pop{from{opacity:0;transform:scale(.6);transform-origin:right bottom}}
+.dots{display:inline-flex;gap:3px;margin-left:5px;vertical-align:middle}
+.dots i{width:5px;height:5px;border-radius:50%;background:#cfd3e0;animation:dot 1.1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)}
+.c-reply input,.start-in{flex:1;min-width:0;background:var(--field);border:1px solid var(--field-line);border-radius:18px;color:var(--text);padding:7px 13px;font:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.c-reply input:focus,.start-in:focus{border-color:var(--run);box-shadow:0 0 0 3px color-mix(in srgb,var(--run) 30%,transparent)}
+.c-reply button,.btn{border:0;border-radius:50%;background:linear-gradient(145deg,var(--run),#5b4dff);color:#fff;font-weight:800;cursor:pointer;transition:transform .2s var(--spring)}
+.c-reply button{width:32px;height:32px}
+.c-reply button:active{transform:scale(.85)}
+.start-in{width:100%;margin:12px 0 10px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{border-radius:18px;padding:6px 16px;font:inherit;font-weight:700}
+.note-paper{width:100%;height:150px;resize:none;border:0;outline:0;font:inherit;line-height:24px;color:#3b3214;background:repeating-linear-gradient(#fff7cf 0 23px,#efdf8f 23px 24px);border-radius:10px;padding:0 12px;margin-top:12px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pillx">In progress</span></div>
+  <div class="mock-hint">Concept 10 · Genie Dock: a vertical dock, like the macOS Dock, that magnifies under the pointer.
+    <br>• Running apps show a glowing dot, and sessions that need you bounce for attention.
+    <br>• Clicking or hovering pours the card out of the icon with a genie effect, and closing sucks it back in.
+    <br>• A new session pops into the dock.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<nav class="dock" id="dock"><div id="apps" style="display:flex;flex-direction:column;gap:7px"></div><div class="sep"></div>
+  <div class="app k-new" id="newBtn" tabindex="0">＋<span class="lbl">New session</span></div>
+  <div class="app k-note" id="noteBtn" tabindex="0">✎<span class="lbl">Note</span></div>
+</nav>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+const NEW_HTML=btn=>`<div class="c-head"><span class="c-dot"></span><b>New session</b><span class="c-time">Opus 5.5</span></div><form class="c-start"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">${btn}</button></div></form>`;
+let noteText='';
+const NOTE_HTML=()=>`<div class="c-head"><span class="c-dot"></span><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;
+function wireNote(card){const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+function setStateClass(el,state){if(!el)return;[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState,onSend){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';onSend&&onSend(f.querySelector('button'));
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+function fill(card,key,base,{onState,onStart,onSend}){
+  card.className=base;
+  if(key==='new'){card.classList.add('k-new');card.innerHTML=NEW_HTML('Start');card.querySelector('form').addEventListener('submit',e=>{e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(v)onStart(v)})}
+  else if(key==='note'){card.classList.add('k-note');card.innerHTML=NOTE_HTML();wireNote(card)}
+  else{const s=SESSIONS.find(x=>x.id===key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);wireCard(card,s,onState,onSend)}
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea')?.focus(),150);
+}
+function shelfController({card,rail,open,close}){
+  let cur=null,ht,ct;const creator=k=>k==='new'||k==='note';
+  const holds=()=>creator(cur)||(card.contains(document.activeElement)&&!!document.activeElement.value);
+  const api={get current(){return cur},
+    open(k){clearTimeout(ct);clearTimeout(ht);if(cur===k)return;const prev=cur;cur=k;open(k,prev)},
+    close(){clearTimeout(ht);if(!cur)return;const prev=cur;cur=null;close(prev)},
+    hover(k){if(creator(cur))return;clearTimeout(ct);clearTimeout(ht);ht=setTimeout(()=>api.open(k),110)},
+    leave(){clearTimeout(ht);clearTimeout(ct);ct=setTimeout(()=>{if(!holds())api.close()},220)},
+    toggle(k){cur===k?api.close():api.open(k)}};
+  card.addEventListener('mouseenter',()=>clearTimeout(ct));card.addEventListener('mouseleave',api.leave);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')api.close()});
+  document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))api.close()});
+  return api;
+}
+const newSession=v=>({id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'});
+
+/* ── Genie Dock ── */
+const dock=document.getElementById('dock'),appsEl=document.getElementById('apps'),card=document.getElementById('card');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn');
+const els={};let pointerY=null;const scale=new Map();
+function makeApp(s){
+  const a=document.createElement('div');a.className='app st-'+s.state;a.tabIndex=0;
+  a.innerHTML=`<span class="run"></span>${esc(initials(s.title))}<span class="lbl"></span>`;a.querySelector('.lbl').textContent=s.title;
+  a.addEventListener('mouseenter',()=>ctl.hover(s.id));a.addEventListener('mouseleave',()=>ctl.leave());
+  a.addEventListener('focus',()=>ctl.open(s.id));
+  a.addEventListener('click',()=>{a.classList.remove('launch');void a.offsetWidth;a.classList.add('launch');ctl.open(s.id)});
+  els[s.id]=a;return a;
+}
+const all=()=>[...appsEl.children,newBtn,noteBtn];
+// Fisheye: icons near the pointer grow, pushing neighbours apart.
+dock.addEventListener('mousemove',e=>pointerY=e.clientY);
+dock.addEventListener('mouseleave',()=>pointerY=null);
+function fisheye(){
+  all().forEach(el=>{const r=el.getBoundingClientRect();const cy=r.top+r.height/2;const target=pointerY==null?1:1+.62*Math.max(0,1-Math.abs(pointerY-cy)/120)**1.6;
+    const cur=scale.get(el)??1;const next=cur+(target-cur)*.22;scale.set(el,next);el.style.setProperty('--s',next.toFixed(3))});
+  requestAnimationFrame(fisheye);
+}
+const anchor=k=>k==='new'?newBtn:k==='note'?noteBtn:els[k];
+let genieAnim;
+function genie(open,iconY){
+  const h=card.offsetHeight,top=parseFloat(card.style.top);const a=Math.max(-20,Math.min(120,(iconY-top)/h*100));
+  const p=(tl,tr,br,bl)=>`polygon(${tl}, ${tr}, ${br}, ${bl})`;
+  const k=[
+    {clipPath:p(`0% ${a-5}%`,`3% ${a-4}%`,`3% ${a+4}%`,`0% ${a+5}%`),transform:'translateX(-40px)',opacity:.6},
+    {clipPath:p(`0% ${a-10}%`,`60% ${Math.max(0,a-40)}%`,`60% ${Math.min(100,a+40)}%`,`0% ${a+10}%`),transform:'translateX(-14px)',opacity:1,offset:.45},
+    {clipPath:p('0% 0%','100% 0%','100% 100%','0% 100%'),transform:'none',opacity:1}
+  ];
+  genieAnim?.cancel();
+  genieAnim=card.animate(open?k:k.slice().reverse(),{duration:open?520:360,easing:open?'cubic-bezier(.2,.8,.2,1)':'cubic-bezier(.6,0,.8,.4)',fill:open?'none':'forwards'});
+  return genieAnim;
+}
+const ctl=shelfController({card,rail:dock,
+  open(k){
+    all().forEach(e=>e.classList.toggle('active',e===anchor(k)));
+    card.hidden=false;fill(card,k,'card',{onState:s=>setStateClass(els[s.id],s.state),onStart:start});
+    card.insertAdjacentHTML('afterbegin','<div class="hdr-strip"></div>');
+    const d=dock.getBoundingClientRect(),r=anchor(k).getBoundingClientRect(),iy=r.top+r.height/2,h=card.offsetHeight;
+    card.style.left=(d.left+46*1.62+16+18)+'px';
+    card.style.top=Math.max(14,Math.min(innerHeight-h-14,iy-h*.35))+'px';
+    genie(true,iy);
+  },
+  close(prev){all().forEach(e=>e.classList.remove('active'));const el=anchor(prev);const r=el?el.getBoundingClientRect():{top:0,height:0};
+    genie(false,r.top+r.height/2).onfinish=()=>{if(!ctl.current){card.hidden=true;genieAnim.cancel()}}}
+});
+function start(v){
+  ctl.close();const s=newSession(v);SESSIONS.unshift(s);
+  setTimeout(()=>{
+    const a=makeApp(s);a.classList.add('born');appsEl.prepend(a);setTimeout(()=>a.classList.remove('born'),600);
+    if(SESSIONS.length>5){const old=SESSIONS.pop();const e=els[old.id];delete els[old.id];e.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(0)'}],{duration:300,fill:'forwards'}).onfinish=()=>e.remove()}
+    setTimeout(()=>ctl.open(s.id),450);
+  },380);
+}
+newBtn.addEventListener('click',()=>ctl.toggle('new'));noteBtn.addEventListener('click',()=>ctl.toggle('note'));
+SESSIONS.forEach(s=>appsEl.appendChild(makeApp(s)));
+fisheye();
+</script>
+</body>
+</html>
