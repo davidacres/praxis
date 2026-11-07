@@ -5,7 +5,7 @@ type: Task
 status: To Do
 ---
 
-# Build praxis-test-host loopback server for Playwright E2E
+# Build praxis-host Rust service container and RPC dispatcher
 
 **Status:** To Do
 **Type:** Task
@@ -13,12 +13,12 @@ status: To Do
 
 ## Description
 
-Create the `praxis-test-host` binary in `crates/praxis-host` using `axum` to serve the built renderer static assets (`apps/praxis-desktop/renderer/dist`) and expose the `praxis_rpc` / `praxis_event` WebSocket endpoint on an ephemeral `127.0.0.1` port. Update `apps/praxis-desktop/main/e2e/launchTestApp.ts` to support launching `praxis-test-host` with isolated `--user-data-dir` and connecting a Playwright Chromium `BrowserContext`. Can be developed in parallel with `TASK-512` once `TASK-511` lands.
+Create `crates/praxis-host` to hold the shell-agnostic Rust service container (`HostContext`), typed channel dispatcher (`dispatch_rpc(channel, payload)`), broadcast event bus (`HostEventBus`), and isolated `--user-data-dir` / `safeStorage`-unlocked secret store integration. Expose both an N-API binding (`napi-rs`) for in-process Electron calls and a standalone test harness so Rust integration tests and Playwright E2E workers run with complete per-worker directory isolation. Can be developed in parallel with `TASK-512` once `TASK-511` lands.
 
 ## Acceptance Criteria
 
-- `praxis-test-host` honors `--user-data-dir`, `--settings`, `--demo`, and test environment variables (`PRAXIS_E2E=1`).
-- Playwright tests can invoke `window.praxis` methods and receive pushed events in Chromium with full isolation between parallel test workers.
+- `crates/praxis-host` initializes cleanly with an isolated `user_data_dir`, settings path, and demo flag (`PRAXIS_E2E=1`).
+- Electron main process and Rust integration tests can invoke typed RPC methods on `praxis-host` and subscribe to emitted domain events.
 
 ## Dependencies
 

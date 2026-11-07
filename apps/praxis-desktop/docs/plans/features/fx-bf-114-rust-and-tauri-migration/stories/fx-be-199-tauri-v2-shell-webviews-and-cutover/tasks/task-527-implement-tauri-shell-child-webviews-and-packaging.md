@@ -5,15 +5,15 @@ type: Task
 status: To Do
 ---
 
-# Implement Tauri v2 child webviews, capabilities ACL, and installers
+# Optional Phase 2: Implement Tauri v2 shell, child webview guard proxy, and installers
 
 **Status:** To Do
 **Type:** Task
-**Priority:** High
+**Priority:** Low
 
 ## Description
 
-Implement `apps/praxis-desktop/src-tauri/src/webviews/` using Tauri v2 child webviews (`WebviewBuilder::proxy_url` + initialization scripts) and a loopback Rust HTTP/CONNECT guard proxy that blocks unapproved private IPs/ports (`previewAccessBlockedReason` / `resolvedBrowserUrlBlockReason` with DNS resolution before socket connect) and feeds `BrowserDiagnosticsRecorder`. Configure `src-tauri/capabilities/` ACLs (`main.json` vs. `child-browsers.json`), wire `keyring` secret storage, `tauri-plugin-single-instance`, `tauri-plugin-deep-link` (`praxis://`), and `tauri-plugin-updater`, and update `npm run licenses` to include Rust crates in `LICENSING.md`.
+**Optional Phase 2 follow-up once the Rust backend (`Waves 1–3`) is shipping inside the thin Electron shell.** Implement `apps/praxis-desktop/src-tauri/src/webviews/` using Tauri v2 child webviews (`WebviewBuilder::proxy_url` + initialization scripts) and a loopback Rust HTTP/CONNECT guard proxy that blocks unapproved private IPs/ports (`previewAccessBlockedReason` / `resolvedBrowserUrlBlockReason` with DNS resolution before socket connect) and feeds `BrowserDiagnosticsRecorder`. Configure `src-tauri/capabilities/` ACLs (`main.json` vs. `child-browsers.json`), wire `keyring` secret storage, `tauri-plugin-single-instance`, `tauri-plugin-deep-link` (`praxis://`), and `tauri-plugin-updater`, and ensure `npm run licenses` includes all Rust crates in `LICENSING.md`.
 
 ## Acceptance Criteria
 

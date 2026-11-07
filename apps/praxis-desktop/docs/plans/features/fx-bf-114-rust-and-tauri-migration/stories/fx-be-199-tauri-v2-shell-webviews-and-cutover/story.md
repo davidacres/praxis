@@ -5,24 +5,24 @@ type: Story
 status: To Do
 ---
 
-# Build Tauri v2 Shell, Multi-Webview Proxy, and Packaging Cutover
+# Optional Phase 2: Tauri v2 Shell and Multi-Webview Proxy Cutover
 
 **Status:** To Do
 **Type:** Story
-**Priority:** High
+**Priority:** Low
 
 ## Description
 
-Complete `apps/praxis-desktop/src-tauri` with Tauri v2 multi-webview management for `previewBrowser` and `aiBrowser` (backed by the loopback SSRF/subresource guard proxy and capability ACLs), native OS keychain integration (`keyring`), single-instance and `praxis://` deep-link handling, detached chat windows, OS installer packaging (`.dmg`, NSIS `.exe`, `.deb`/`.AppImage`), and `LICENSING.md` generation for Cargo dependencies.
+**Optional Phase 2 follow-up after Waves 1–3 complete the Rust backend inside the thin Electron shell.** If replacing the ~90 MB Chromium/Electron wrapper with an OS-native webview shell is desired later, create `apps/praxis-desktop/src-tauri` wrapping `crates/praxis-host`, implement Tauri v2 multi-webview management for `previewBrowser` and `aiBrowser` (backed by a loopback SSRF/subresource guard proxy and capability ACLs), native OS keychain integration (`keyring`), single-instance and `praxis://` deep-link handling, and Tauri installer packaging.
 
-### Execution Order & Parallelism (Wave 4 — Final Shell Cutover, with Early Prototyping in Wave 3)
+### Execution Order & Parallelism (Wave 4 — Optional Phase 2 Follow-Up)
 
-- **Early Parallel Prototyping**: The `src-tauri/src/webviews/` child-webview positioning, loopback SSRF guard proxy, and `capabilities/` ACLs depend only on `FX-BE-194` and `TASK-517` (`networkAddress`), so they can be developed in parallel during Wave 3.
-- **Final Cutover Gate**: Removing Electron and switching packaging/CI over to `tauri build` is gated on `FX-BE-196`, `FX-BE-197`, and `FX-BE-198` completing all backend IPC channels.
+- **Decoupled from Primary Delivery**: Waves 1–3 (`FX-BE-194` through `FX-BE-198`) deliver the complete Rust backend inside the existing thin Electron shell with 100% Playwright `_electron.launch()` and `WebContentsView` compatibility.
+- **Optional Cutover Gate**: `FX-BE-199` is `Low` priority and only starts if/when the team decides to trade Electron's bundled Chromium for Tauri v2's smaller OS-webview footprint.
 
 ## Tasks
 
-- `TASK-527` (`High`, Wave 4 Cutover) — Implement Tauri v2 child webviews, capabilities ACL, and installers
+- `TASK-527` (`Low`, Wave 4 Optional Follow-Up) — Optional Phase 2: Implement Tauri v2 shell, child webview guard proxy, and installers
 
 ## Acceptance Criteria
 

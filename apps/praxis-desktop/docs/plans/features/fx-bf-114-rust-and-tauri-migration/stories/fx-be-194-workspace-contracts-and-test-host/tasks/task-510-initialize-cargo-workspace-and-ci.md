@@ -13,7 +13,7 @@ status: To Do
 
 ## Description
 
-Create the root `Cargo.toml` workspace alongside `package.json` with member crates (`praxis-contracts`, `praxis-core`, `praxis-trackers`, `praxis-workflows`, `praxis-ai`, `praxis-mobile`, `praxis-host`, and `apps/praxis-desktop/src-tauri`). Configure workspace-wide dependencies (`serde`, `tokio`, `reqwest`, `specta`, `pulldown-cmark`, `notify`, `portable-pty`, `ed25519-dalek`, `tauri`), `rustfmt.toml`, and Clippy lints, and wire `cargo test --workspace` into root npm scripts.
+Create the root `Cargo.toml` workspace alongside `package.json` with member crates (`praxis-contracts`, `praxis-core`, `praxis-trackers`, `praxis-workflows`, `praxis-ai`, `praxis-mobile`, and `praxis-host`). Configure workspace-wide dependencies (`serde`, `tokio`, `reqwest`, `specta`, `pulldown-cmark`, `notify`, `portable-pty`, `ed25519-dalek`, `napi` / `napi-derive`), `rustfmt.toml`, and Clippy lints, and wire `cargo test --workspace` into root npm scripts.
 
 ## Acceptance Criteria
 

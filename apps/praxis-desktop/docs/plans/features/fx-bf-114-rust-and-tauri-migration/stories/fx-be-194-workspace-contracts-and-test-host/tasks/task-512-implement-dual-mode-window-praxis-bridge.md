@@ -5,7 +5,7 @@ type: Task
 status: To Do
 ---
 
-# Implement Tauri and WebSocket window.praxis renderer adapter
+# Bridge Electron trustedIpcMain and window.praxis events to Rust host
 
 **Status:** To Do
 **Type:** Task
@@ -13,14 +13,12 @@ status: To Do
 
 ## Description
 
-Create `apps/praxis-desktop/renderer/src/host/installPraxisBridge.ts` to populate `window.praxis` (`PraxisIpc`) when not already injected by Electron preload. Support two runtime transports behind a unified `RpcTransport` interface:
-1. Tauri v2 runtime (`window.__TAURI_INTERNALS__`) using `@tauri-apps/api/core` `invoke('praxis_rpc', ...)` and a synchronous-unsubscribe event multiplexer over `@tauri-apps/api/event`.
-2. Playwright E2E WebSocket mode (`window.__PRAXIS_E2E_WS_URL__`) for `praxis-test-host`.
+Implement the Electron-to-Rust host adapter in `apps/praxis-desktop/main/src/main/rustHostBridge.ts` so `trustedIpcMain.handle(channel, ...)` delegates migrated channels directly to `crates/praxis-host` (via `napi-rs` in-process binding or loopback RPC) and forwards Rust-emitted domain events (`settings:changed`, `workflow:*`, `ai:*`, `terminal:*`) to `mainWindow.webContents.send(...)` and detached chat windows. Keep `preload/index.ts`, `window.praxis`, and `checkTrustedIpc.cjs` sender verification 100% intact.
 
 ## Acceptance Criteria
 
-- All `window.praxis.*` methods and `on*` event subscriptions in `PraxisIpc` work identically across Electron preload, Tauri v2 IPC, and the E2E WebSocket bridge.
-- Synchronous `() => void` unsubscribe callbacks returned by `on*` methods cleanly detach listeners without race conditions in React `useEffect` cleanup hooks.
+- Migrated IPC channels can be switched from TypeScript handlers to `rustHostBridge` one domain at a time without touching `preload/index.ts` or `@praxis/desktop-renderer`.
+- `npm run check-trusted-ipc` and `_electron.launch()` Playwright E2E tests pass with full sender isolation against untrusted child `WebContentsView` instances.
 
 ## Dependencies
 
