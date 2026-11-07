@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 1 · Library Spines</title>
+<style>
+:root{--rail:50px;--bg:#101217;--panel:#181b22;--panel2:#20242e;--line:#2b303c;--text:#e8eaf0;--muted:#8b93a5;--run:#7c9cff;--wait:#f2b45a;--ok:#62d39b;--bad:#ff6b6b;--pause:#b48cff;--note:#f7d774;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}
+.mock{position:absolute;inset:0 0 0 var(--rail);padding:22px 36px;overflow:hidden}
+.mock-top{display:flex;gap:10px;align-items:center;font-size:15px;font-weight:600;margin-bottom:4px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pill{font-size:11px;font-weight:500;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 40%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px}
+.sk{height:10px;border-radius:5px;background:var(--panel2);margin:12px 0}
+.card{position:absolute;width:310px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 60px #000b;padding:12px 12px 10px;z-index:20}
+.card[hidden]{display:none}
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.st-executing .c-dot{animation:beat 1.4s ease-in-out infinite}
+@keyframes beat{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 25%,transparent)}}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 16px}
+.c-body{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.c-user{align-self:flex-end;background:var(--panel2);padding:6px 10px;border-radius:10px 10px 3px 10px;max-width:88%}
+.c-agent{color:#cdd2dc;max-width:95%}
+.c-body .new{animation:pop .35s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}}
+.dots{display:inline-flex;gap:3px;margin-left:4px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c,var(--run));animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:9px}
+.c-reply input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 10px;font:inherit;outline:none;transition:border-color .2s}
+.c-reply input:focus{border-color:var(--c,var(--run))}
+.c-reply button{border:0;border-radius:8px;background:var(--c,var(--run));color:#111;font-weight:700;width:30px;cursor:pointer}
+.note-paper{width:100%;height:150px;resize:none;border:0;outline:0;font:inherit;line-height:24px;color:#2a2410;background:repeating-linear-gradient(#fdf3c4 0 23px,#e8d98f 23px 24px);border-radius:6px;padding:0 10px;margin-top:10px}
+.start-in{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font:inherit;outline:none;margin:10px 0 8px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{border:0;border-radius:8px;background:var(--run);color:#111;padding:5px 12px;cursor:pointer;font:inherit;font-weight:600}
+.list-item{display:flex;gap:8px;align-items:center;padding:6px 4px;border-radius:6px;cursor:pointer}
+.list-item:hover{background:var(--panel2)}
+
+/* ── Library spines ── */
+.rail{position:absolute;left:0;top:0;bottom:0;width:var(--rail);background:linear-gradient(90deg,#17130e,#20190f 70%,#2a2016);border-right:3px solid #3b2d1b;box-shadow:inset -6px 0 10px #0007;display:flex;flex-direction:column;z-index:10;perspective:500px}
+.spines{flex:1;display:flex;flex-direction:column;gap:6px;padding:12px 0 0 7px;overflow:visible;min-height:0}
+.spine{position:relative;flex:none;width:32px;border-radius:3px 4px 4px 3px;cursor:pointer;outline:none;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--c) 28%,#0b0b0b) 0 8%,color-mix(in srgb,var(--c) 52%,#141414) 30% 70%,color-mix(in srgb,var(--c) 30%,#0b0b0b));
+  box-shadow:inset 0 7px 0 -4px color-mix(in srgb,var(--c) 70%,#fff3),inset 0 -7px 0 -4px color-mix(in srgb,var(--c) 70%,#fff3),2px 1px 4px #000a;
+  color:#f5f1e8;font-size:11px;font-weight:600;letter-spacing:.02em;transform-origin:left center;transition:transform .35s var(--spring),filter .3s}
+.spine span{position:absolute;inset:9px 0;display:block;line-height:32px;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spine:hover,.spine:focus-visible,.spine.active{transform:translateX(12px) rotateY(-20deg);filter:brightness(1.2);z-index:3}
+.spine.st-awaiting_input{animation:nudge 3s ease-in-out infinite}
+@keyframes nudge{0%,80%,100%{translate:0}88%{translate:6px}}
+.spine.st-executing::after{content:"";position:absolute;bottom:-14px;left:13px;width:7px;height:20px;background:var(--c);clip-path:polygon(0 0,100% 0,100% 100%,50% 72%,0 100%);transform-origin:top;animation:sway 1.6s ease-in-out infinite alternate;z-index:2}
+@keyframes sway{from{transform:rotate(-10deg)}to{transform:rotate(10deg)}}
+.spine.st-failed::before{content:"";position:absolute;top:0;right:0;width:10px;height:10px;background:var(--bad);clip-path:polygon(0 0,100% 0,100% 100%)}
+.spine.drop{animation:dropIn .7s var(--spring)}
+@keyframes dropIn{from{transform:translate(-26px,-50px) rotate(-30deg);opacity:0}}
+.foot{display:flex;flex-direction:column;gap:6px;padding:8px 0 12px;align-items:center;border-top:3px solid #3b2d1b}
+.cell{width:34px;height:30px;border-radius:7px;border:1px solid;cursor:pointer;font-size:15px;transition:transform .25s var(--spring)}
+.cell:hover,.cell.active{transform:translateX(5px)}
+.cell.new{background:color-mix(in srgb,var(--run) 18%,transparent);border-color:color-mix(in srgb,var(--run) 45%,transparent);color:var(--run)}
+.cell.note{background:color-mix(in srgb,var(--note) 16%,transparent);border-color:color-mix(in srgb,var(--note) 45%,transparent);color:var(--note)}
+.more{background:none;border:0;color:#c8b08e;font-size:11px;cursor:pointer;padding:2px}
+#card{left:calc(var(--rail) + 16px);border-left:6px solid var(--c,var(--run));transform-origin:left center}
+#card::after{content:"";position:absolute;top:5px;bottom:5px;right:-6px;width:5px;background:repeating-linear-gradient(90deg,#d9d4c7 0 1px,#8e887b 1px 2px);border-radius:0 3px 3px 0;opacity:.4}
+#card.opening{animation:cover .5s cubic-bezier(.2,.9,.3,1.12)}
+@keyframes cover{from{transform:perspective(1000px) rotateY(-95deg);opacity:.2}}
+#card.closing{animation:coverClose .24s ease-in forwards}
+@keyframes coverClose{to{transform:perspective(1000px) rotateY(-95deg);opacity:0}}
+#card.opening .c-body,#card.opening .c-reply,#card.opening form,#card.opening textarea{animation:pageIn .35s .2s both ease-out}
+@keyframes pageIn{from{opacity:0;transform:translateX(-10px)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pill">In progress</span></div>
+  <div class="mock-hint">Concept 1 · Library Spines: each session is a book on the shelf. Hover a spine to pull the book out and open its cover. ＋ starts a session (a new book drops onto the shelf) and ✎ opens a note.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail">
+  <div class="spines" id="spines"></div>
+  <div class="foot"><button class="more" id="more">+2 more</button><button class="cell new" id="newBtn" title="New session">＋</button><button class="cell note" id="noteBtn" title="Note">✎</button></div>
+</aside>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const OLDER=[{title:'Theme accent audit',state:'completed',time:'Mon'},{title:'Sidebar notes race',state:'failed',time:'Sun'}];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+function setStateClass(el,state){[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+
+const rail=document.getElementById('rail'),spinesEl=document.getElementById('spines'),card=document.getElementById('card');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn'),moreBtn=document.getElementById('more');
+const elById={};let openKey=null,hoverT,closeT,noteText='';
+const byId=id=>SESSIONS.find(s=>s.id===id);
+function makeSpine(s){
+  const el=document.createElement('div');el.className='spine st-'+s.state;el.tabIndex=0;
+  el.style.height=(74+Math.min(46,s.title.length*1.5))+'px';
+  el.innerHTML='<span></span>';el.firstChild.textContent=s.title;el.title=s.title;
+  el.addEventListener('mouseenter',()=>hover(s.id));el.addEventListener('mouseleave',leave);
+  el.addEventListener('focus',()=>openCard(s.id));el.addEventListener('click',()=>openCard(s.id));
+  elById[s.id]=el;return el;
+}
+SESSIONS.forEach(s=>spinesEl.appendChild(makeSpine(s)));
+const holds=()=>openKey==='new'||openKey==='note'||card.contains(document.activeElement);
+function hover(key){if(openKey==='new'||openKey==='note')return;clearTimeout(closeT);clearTimeout(hoverT);hoverT=setTimeout(()=>openCard(key),120)}
+function leave(){clearTimeout(hoverT);clearTimeout(closeT);closeT=setTimeout(()=>{if(!holds())closeCard()},160)}
+function anchorFor(key){return key==='new'?newBtn:key==='note'?noteBtn:key==='list'?moreBtn:elById[key]}
+function openCard(key){
+  clearTimeout(closeT);if(openKey===key)return;openKey=key;
+  Object.entries(elById).forEach(([k,e])=>e.classList.toggle('active',k===key));
+  [newBtn,noteBtn].forEach(b=>b.classList.toggle('active',anchorFor(key)===b));
+  card.hidden=false;card.className='card';card.style.removeProperty('--c');
+  if(key==='new'){
+    card.style.setProperty('--c','var(--run)');
+    card.innerHTML=`<div class="c-head"><b>New session</b><span class="c-time">Opus 5.5</span></div><form id="startForm"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">Start</button></div></form>`;
+    card.querySelector('#startForm').addEventListener('submit',startSession);
+  }else if(key==='note'){
+    card.style.setProperty('--c','var(--note)');
+    card.innerHTML=`<div class="c-head"><b>Note</b><span class="c-time" id="saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;
+    const ta=card.querySelector('textarea'),saved=card.querySelector('#saved');ta.value=noteText;let t;
+    ta.addEventListener('input',()=>{noteText=ta.value;saved.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>saved.textContent='Saved ✓',600)});
+  }else if(key==='list'){
+    card.style.setProperty('--c','#c8b08e');
+    card.innerHTML=`<div class="c-head"><b>Older sessions</b></div><div style="margin-top:8px">${OLDER.map(o=>`<div class="list-item st-${o.state}"><span class="c-dot"></span><span style="flex:1">${esc(o.title)}</span><span class="c-time">${o.time}</span></div>`).join('')}</div>`;
+  }else{
+    const s=byId(key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);
+    wireCard(card,s,st=>setStateClass(elById[st.id],st.state));
+  }
+  const a=anchorFor(key).getBoundingClientRect(),h=card.offsetHeight;
+  const top=(key==='new'||key==='note'||key==='list')?a.bottom-h:a.top-6;
+  card.style.top=Math.max(10,Math.min(innerHeight-h-10,top))+'px';
+  void card.offsetWidth;card.classList.add('opening');
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea')?.focus(),60);
+}
+function closeCard(){
+  if(!openKey)return;openKey=null;
+  Object.values(elById).forEach(e=>e.classList.remove('active'));[newBtn,noteBtn].forEach(b=>b.classList.remove('active'));
+  card.classList.remove('opening');card.classList.add('closing');
+  setTimeout(()=>{if(!openKey)card.hidden=true},240);
+}
+function startSession(e){
+  e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(!v)return;
+  const s={id:'n'+Date.now(),title:v.length>34?v.slice(0,32)+'…':v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'};
+  SESSIONS.unshift(s);
+  const before=new Map([...spinesEl.children].map(el=>[el,el.getBoundingClientRect().top]));
+  const el=makeSpine(s);spinesEl.prepend(el);
+  before.forEach((top,old)=>{const d=top-old.getBoundingClientRect().top;if(d)old.animate([{transform:`translateY(${d}px)`},{transform:'none'}],{duration:450,easing:'cubic-bezier(.34,1.4,.64,1)'})});
+  el.classList.add('drop');setTimeout(()=>el.classList.remove('drop'),700);
+  if(SESSIONS.length>5){const old=SESSIONS.pop();OLDER.unshift({title:old.title,state:old.state,time:old.time});const oe=elById[old.id];delete elById[old.id];oe.animate([{opacity:1},{opacity:0,transform:"translateY(20px) rotate(8deg)"}],{duration:300,fill:"forwards"}).onfinish=()=>oe.remove();moreBtn.textContent="+"+OLDER.length+" more";}
+  openKey=null;setTimeout(()=>openCard(s.id),350);
+}
+newBtn.addEventListener('click',()=>openKey==='new'?closeCard():openCard('new'));
+noteBtn.addEventListener('click',()=>openKey==='note'?closeCard():openCard('note'));
+moreBtn.addEventListener('click',()=>openKey==='list'?closeCard():openCard('list'));
+card.addEventListener('mouseenter',()=>clearTimeout(closeT));
+card.addEventListener('mouseleave',leave);
+document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))closeCard()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeCard()});
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 5 · Timeline Ribbons</title>
+<style>
+:root{--rail:44px;--bg:#0f1015;--panel:#181b22;--panel2:#20242e;--line:#2b303c;--text:#e8eaf0;--muted:#8b93a5;--run:#7c9cff;--wait:#f2b45a;--ok:#62d39b;--bad:#ff6b6b;--pause:#b48cff;--note:#f7d774;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}
+.mock{position:absolute;inset:0 0 0 var(--rail);padding:22px 36px 22px 60px;overflow:hidden}
+.mock-top{display:flex;gap:10px;align-items:center;font-size:15px;font-weight:600;margin-bottom:4px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pill{font-size:11px;font-weight:500;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 40%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px;max-width:640px}
+.sk{height:10px;border-radius:5px;background:var(--panel2);margin:12px 0}
+.card{position:absolute;width:310px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 60px #000b;padding:12px 12px 10px;z-index:20}
+.card[hidden]{display:none}
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.st-executing .c-dot{animation:beat 1.4s ease-in-out infinite}
+@keyframes beat{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 25%,transparent)}}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 16px}
+.c-body{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.c-user{align-self:flex-end;background:var(--panel2);padding:6px 10px;border-radius:10px 10px 3px 10px;max-width:88%}
+.c-agent{color:#cdd2dc;max-width:95%}
+.c-body .new{animation:pop .35s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}}
+.dots{display:inline-flex;gap:3px;margin-left:4px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c,var(--run));animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:9px}
+.c-reply input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 10px;font:inherit;outline:none;transition:border-color .2s}
+.c-reply input:focus{border-color:var(--c,var(--run))}
+.c-reply button{border:0;border-radius:8px;background:var(--c,var(--run));color:#111;font-weight:700;width:30px;cursor:pointer}
+.note-paper{width:100%;height:150px;resize:none;border:0;outline:0;font:inherit;line-height:24px;color:#2a2410;background:repeating-linear-gradient(#fdf3c4 0 23px,#e8d98f 23px 24px);border-radius:6px;padding:0 10px;margin-top:10px}
+.start-in{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font:inherit;outline:none;margin:10px 0 8px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{border:0;border-radius:8px;background:var(--run);color:#111;padding:5px 12px;cursor:pointer;font:inherit;font-weight:600}
+
+/* ── Timeline ── */
+.rail{position:absolute;left:0;top:0;bottom:0;width:var(--rail);background:linear-gradient(90deg,#0b0c10,#121419);border-right:1px solid #1d2029;z-index:10}
+.spine-line{position:absolute;left:21px;top:44px;bottom:52px;width:2px;background:linear-gradient(var(--run),#3a4050 30%,#262a33)}
+.tick{position:absolute;left:14px;width:16px;height:1px;background:#3a4050}
+.tick span{position:absolute;left:0;top:-6px;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:#596073;transform:translateX(-2px) translateY(-8px);white-space:nowrap}
+.nowBtn{position:absolute;left:9px;top:12px;width:26px;height:26px;border-radius:50%;border:1px solid color-mix(in srgb,var(--run) 50%,transparent);background:color-mix(in srgb,var(--run) 18%,transparent);color:var(--run);cursor:pointer;font-size:14px;z-index:12;transition:transform .25s var(--spring)}
+.nowBtn:hover{transform:scale(1.12)}
+.nowBtn::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:1px solid var(--run);opacity:0;animation:ping 2.4s ease-out infinite}
+@keyframes ping{0%{transform:scale(.8);opacity:.6}100%{transform:scale(1.5);opacity:0}}
+.noteBtn{position:absolute;left:9px;bottom:14px;width:26px;height:26px;border-radius:7px;border:1px solid color-mix(in srgb,var(--note) 50%,transparent);background:color-mix(in srgb,var(--note) 16%,transparent);color:var(--note);cursor:pointer;z-index:12;transition:transform .25s var(--spring)}
+.noteBtn:hover{transform:rotate(-12deg) scale(1.1)}
+.ribbon{position:absolute;left:22px;height:20px;margin-top:-10px;width:40px;z-index:11;cursor:pointer;transform-origin:left center;transition:width .4s var(--spring),top .5s var(--spring);outline:none}
+.ribbon .band{position:absolute;inset:0;background:linear-gradient(90deg,color-mix(in srgb,var(--c) 55%,#000),var(--c));clip-path:polygon(0 0,100% 0,calc(100% - 8px) 50%,100% 100%,0 100%);animation:wave var(--w,3s) ease-in-out infinite alternate;transform-origin:left center;overflow:hidden}
+@keyframes wave{from{transform:skewY(-3deg) scaleY(.92)}to{transform:skewY(3deg) scaleY(1.04)}}
+.ribbon .band::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,#fff6 50%,transparent 70%);background-size:250% 100%;opacity:0}
+.st-executing.ribbon .band::after{opacity:1;animation:shine 1.6s linear infinite}
+@keyframes shine{from{background-position:150% 0}to{background-position:-100% 0}}
+.st-awaiting_input.ribbon{animation:tug 2.6s ease-in-out infinite}
+@keyframes tug{0%,75%,100%{translate:0}82%{translate:6px}90%{translate:2px}}
+.ribbon .label{position:absolute;left:10px;right:14px;top:0;line-height:20px;font-size:11px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;opacity:0;transition:opacity .2s}
+.ribbon.hot{width:200px}
+.ribbon.hot .label{opacity:1;transition-delay:.12s}
+.ribbon.hot .band{animation-play-state:paused}
+.ribbon.fresh{animation:fall .7s var(--spring)}
+@keyframes fall{from{transform:translateY(-40px) scaleX(0)}}
+.cursor{position:absolute;left:0;width:calc(var(--rail) + 18px);height:1px;background:linear-gradient(90deg,transparent,#fff8);z-index:13;pointer-events:none;opacity:0;transition:opacity .2s}
+.cursor span{position:absolute;right:-4px;top:-9px;transform:translateX(100%);font-size:10px;color:#cfd3dd;background:#000a;border-radius:4px;padding:0 5px;white-space:nowrap}
+.rail:hover .cursor{opacity:1}
+#card{left:calc(var(--rail) + 20px)}
+#card.unroll{animation:unroll .55s cubic-bezier(.2,.8,.2,1)}
+@keyframes unroll{from{clip-path:inset(0 100% 0 0 round 12px)}to{clip-path:inset(0 0 0 0 round 12px)}}
+#card.unroll::before{content:"";position:absolute;top:0;bottom:0;width:18px;border-radius:9px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--c,var(--run)) 50%,#fff6),transparent);animation:curl .55s cubic-bezier(.2,.8,.2,1) forwards;pointer-events:none}
+@keyframes curl{from{left:0;opacity:1}to{left:100%;opacity:0}}
+#card.rollup{animation:rollup .25s ease-in forwards}
+@keyframes rollup{to{clip-path:inset(0 100% 0 0 round 12px)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pill">In progress</span></div>
+  <div class="mock-hint">Concept 5 · Timeline Ribbons: the edge is a timeline, with now at the top. Each session hangs as a ribbon at the time it was last active. Move the pointer down the timeline to scrub through time, and the nearest ribbon unfurls with its card. Running ribbons shimmer and ones that need you tug. ＋ at “now” ties on a new ribbon.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail">
+  <button class="nowBtn" id="nowBtn" title="New session (now)">＋</button>
+  <div class="spine-line" id="line"></div>
+  <div class="cursor" id="cursor"><span></span></div>
+  <button class="noteBtn" id="noteBtn" title="Note">✎</button>
+</aside>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',ago:2,user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',ago:14,user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',ago:60,user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',ago:180,user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',ago:1500,user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+function setStateClass(el,state){[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+
+const rail=document.getElementById('rail'),line=document.getElementById('line'),cursor=document.getElementById('cursor'),card=document.getElementById('card');
+const nowBtn=document.getElementById('nowBtn'),noteBtn=document.getElementById('noteBtn');
+const MAX_AGO=2880;let ribbons=new Map(),openKey=null,hoverT,closeT,noteText='';
+const TICKS=[[0,'now'],[15,'15m'],[60,'1h'],[360,'6h'],[1440,'1d']];
+function bounds(){const r=line.getBoundingClientRect();return{top:r.top+4,h:r.height-8}}
+const yFor=ago=>{const b=bounds();return b.top+b.h*Math.log1p(ago)/Math.log1p(MAX_AGO)};
+const agoFor=y=>{const b=bounds();return Math.expm1(Math.max(0,Math.min(1,(y-b.top)/b.h))*Math.log1p(MAX_AGO))};
+const fmt=m=>m<1?'now':m<60?Math.round(m)+'m ago':m<1440?Math.round(m/60)+'h ago':'yesterday';
+function drawTicks(){rail.querySelectorAll('.tick').forEach(t=>t.remove());TICKS.forEach(([a,l])=>{const t=document.createElement('div');t.className='tick';t.style.top=yFor(a)+'px';t.innerHTML=`<span>${l}</span>`;if(a)rail.appendChild(t)})}
+function makeRibbon(s){
+  const r=document.createElement('div');r.className='ribbon st-'+s.state;r.tabIndex=0;r.style.setProperty('--w',(2.4+Math.random()*1.4)+'s');
+  r.innerHTML='<div class="band"></div><div class="label"></div>';r.querySelector('.label').textContent=s.title;
+  r.addEventListener('mouseenter',()=>hover(s.id));r.addEventListener('mouseleave',leave);
+  r.addEventListener('focus',()=>open(s.id));r.addEventListener('click',()=>open(s.id));
+  rail.appendChild(r);ribbons.set(s.id,r);return r;
+}
+function layout(){
+  drawTicks();let last=-1e9;
+  SESSIONS.forEach(s=>{let y=yFor(s.ago);y=Math.max(y,last+30);last=y;const r=ribbons.get(s.id)||makeRibbon(s);r.style.top=y+'px';r._y=y});
+  if(openKey)place(openKey);
+}
+function anchorY(key){if(key==='new')return nowBtn.getBoundingClientRect().top+13;if(key==='note')return noteBtn.getBoundingClientRect().top+13;return ribbons.get(key)._y}
+function place(key){const h=card.offsetHeight,y=anchorY(key);card.style.top=Math.max(10,Math.min(innerHeight-h-10,key==='note'?y-h+20:key==='new'?y-20:y+16))+'px'}
+function open(key){
+  clearTimeout(closeT);if(openKey===key)return;openKey=key;
+  ribbons.forEach((r,k)=>r.classList.toggle('hot',k===key));
+  card.hidden=false;card.className='card';card.style.removeProperty('--c');
+  if(key==='new'){card.style.setProperty('--c','var(--run)');card.innerHTML=`<div class="c-head"><b>New session · now</b><span class="c-time">Opus 5.5</span></div><form><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">Tie it on</button></div></form>`;card.querySelector('form').addEventListener('submit',start)}
+  else if(key==='note'){card.style.setProperty('--c','var(--note)');card.innerHTML=`<div class="c-head"><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+  else{const s=SESSIONS.find(x=>x.id===key);card.classList.add('st-'+s.state);card.innerHTML=sessionCard(s);wireCard(card,s,st=>setStateClass(ribbons.get(st.id),st.state))}
+  place(key);void card.offsetWidth;card.classList.add('unroll');
+  if(key==='new'||key==='note')setTimeout(()=>card.querySelector('input,textarea').focus(),80);
+}
+function close(){if(!openKey)return;openKey=null;ribbons.forEach(r=>r.classList.remove('hot'));card.classList.remove('unroll');card.classList.add('rollup');setTimeout(()=>{if(!openKey)card.hidden=true},250)}
+const holds=()=>openKey==='new'||openKey==='note'||card.contains(document.activeElement)&&document.activeElement.value;
+function hover(key){if(openKey==='new'||openKey==='note')return;clearTimeout(closeT);clearTimeout(hoverT);hoverT=setTimeout(()=>open(key),120)}
+function leave(){clearTimeout(hoverT);clearTimeout(closeT);closeT=setTimeout(()=>{if(!holds())close()},200)}
+// Scrub: the cursor shows the time under the pointer and pulls the nearest ribbon open.
+rail.addEventListener('mousemove',e=>{
+  cursor.style.top=e.clientY+'px';cursor.querySelector('span').textContent=fmt(agoFor(e.clientY));
+  if(e.target.closest('button'))return;
+  let best=null,bd=34;ribbons.forEach((r,k)=>{const d=Math.abs(r._y-e.clientY);if(d<bd){bd=d;best=k}});
+  if(best&&best!==openKey)hover(best);
+});
+rail.addEventListener('mouseleave',leave);
+card.addEventListener('mouseenter',()=>clearTimeout(closeT));card.addEventListener('mouseleave',leave);
+nowBtn.addEventListener('click',()=>openKey==='new'?close():open('new'));
+noteBtn.addEventListener('click',()=>openKey==='note'?close():open('note'));
+function start(e){
+  e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(!v)return;
+  const s={id:'n'+Date.now(),title:v,state:'executing',time:'now',ago:0,user:v,agent:'Starting up — reading the ticket first'};
+  SESSIONS.unshift(s);openKey=null;card.hidden=true;
+  if(SESSIONS.length>5){const old=SESSIONS.pop();const r=ribbons.get(old.id);ribbons.delete(old.id);r.style.transition='opacity .3s,transform .3s';r.style.opacity=0;r.style.transform='translateY(20px)';setTimeout(()=>r.remove(),300)}
+  const r=makeRibbon(s);r.classList.add('fresh');layout();setTimeout(()=>{r.classList.remove('fresh');open(s.id)},650);
+}
+document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))close()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+layout();window.addEventListener('resize',layout);
+</script>
+</body>
+</html>

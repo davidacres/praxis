@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 2 · Rolodex</title>
+<style>
+:root{--rail:68px;--bg:#0f1116;--panel:#181b22;--panel2:#20242e;--line:#2b303c;--text:#e8eaf0;--muted:#8b93a5;--run:#7c9cff;--wait:#f2b45a;--ok:#62d39b;--bad:#ff6b6b;--pause:#b48cff;--note:#f7d774;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}
+.mock{position:absolute;inset:0 0 0 var(--rail);padding:22px 36px;overflow:hidden}
+.mock-top{display:flex;gap:10px;align-items:center;font-size:15px;font-weight:600;margin-bottom:4px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pill{font-size:11px;font-weight:500;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 40%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px;max-width:640px}
+.sk{height:10px;border-radius:5px;background:var(--panel2);margin:12px 0}
+.card{position:absolute;width:310px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 20px 60px #000b;padding:12px 12px 10px;z-index:20}
+.card[hidden]{display:none}
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.st-executing .c-dot{animation:beat 1.4s ease-in-out infinite}
+@keyframes beat{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 25%,transparent)}}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 16px}
+.c-body{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.c-user{align-self:flex-end;background:var(--panel2);padding:6px 10px;border-radius:10px 10px 3px 10px;max-width:88%}
+.c-agent{color:#cdd2dc;max-width:95%}
+.c-body .new{animation:pop .35s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}}
+.dots{display:inline-flex;gap:3px;margin-left:4px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c,var(--run));animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;border-top:1px solid var(--line);padding-top:9px}
+.c-reply input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:6px 10px;font:inherit;outline:none;transition:border-color .2s}
+.c-reply input:focus{border-color:var(--c,var(--run))}
+.c-reply button{border:0;border-radius:8px;background:var(--c,var(--run));color:#111;font-weight:700;width:30px;cursor:pointer}
+.note-paper{width:100%;height:150px;resize:none;border:0;outline:0;font:inherit;line-height:24px;color:#2a2410;background:repeating-linear-gradient(#fdf3c4 0 23px,#e8d98f 23px 24px);border-radius:6px;padding:0 10px;margin-top:10px}
+.start-in{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:8px 10px;font:inherit;outline:none;margin:10px 0 8px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{border:0;border-radius:8px;background:var(--run);color:#111;padding:5px 12px;cursor:pointer;font:inherit;font-weight:600}
+
+/* ── Rolodex ── */
+.rail{position:absolute;left:0;top:0;bottom:0;width:var(--rail);background:#13161c;border-right:1px solid var(--line);z-index:10;display:flex;flex-direction:column;user-select:none}
+.wheel{position:relative;flex:1;perspective:520px;cursor:grab;overflow:hidden;touch-action:none}
+.wheel:active{cursor:grabbing}
+.wheel::before,.wheel::after{content:"";position:absolute;left:0;right:0;height:38%;z-index:3;pointer-events:none}
+.wheel::before{top:0;background:linear-gradient(#13161c,#13161c00)}
+.wheel::after{bottom:0;background:linear-gradient(#13161c00,#13161c)}
+.axle{position:absolute;left:4px;right:4px;top:calc(50% - 2px);height:4px;border-radius:2px;background:linear-gradient(90deg,#444b5a,#6b7385,#444b5a);z-index:0}
+.drum{position:absolute;inset:0;transform-style:preserve-3d}
+.tile{position:absolute;left:7px;right:7px;top:calc(50% - 25px);height:50px;border-radius:7px;background:linear-gradient(#f3efe4,#e2dccb);color:#2a2a2a;backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;box-shadow:0 1px 0 #fff8 inset,0 2px 6px #0007;border-top:3px solid var(--c)}
+.tile b{font-size:13px;letter-spacing:.04em}
+.tile small{font-size:9px;color:#6b665a}
+.tile.older{filter:grayscale(.6) brightness(.8)}
+.tile.st-executing b::after{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--c);margin-left:4px;vertical-align:middle;animation:beat 1.2s infinite}
+.lens{position:absolute;left:2px;right:2px;top:calc(50% - 30px);height:60px;border-radius:10px;border:1.5px solid var(--c,var(--run));box-shadow:0 0 18px color-mix(in srgb,var(--c,var(--run)) 40%,transparent);z-index:4;pointer-events:none;transition:border-color .3s,box-shadow .3s}
+.foot{display:flex;flex-direction:column;gap:6px;padding:10px 0 12px;align-items:center;border-top:1px solid var(--line);background:#13161c;z-index:5}
+.cell{width:40px;height:30px;border-radius:7px;border:1px solid;cursor:pointer;font-size:15px;transition:transform .25s var(--spring)}
+.cell:hover,.cell.active{transform:translateX(5px)}
+.cell.new{background:color-mix(in srgb,var(--run) 18%,transparent);border-color:color-mix(in srgb,var(--run) 45%,transparent);color:var(--run)}
+.cell.note{background:color-mix(in srgb,var(--note) 16%,transparent);border-color:color-mix(in srgb,var(--note) 45%,transparent);color:var(--note)}
+.counter{font-size:10px;color:var(--muted);text-align:center;padding:4px 0;font-variant-numeric:tabular-nums}
+#card{left:calc(var(--rail) + 14px);transform-origin:50% 0;border-top:4px solid var(--c,var(--run));padding-top:18px}
+#card::before,#card::after{content:"";position:absolute;top:6px;width:9px;height:9px;border-radius:50%;background:var(--bg);box-shadow:inset 0 1px 2px #000}
+#card::before{left:30%}#card::after{right:30%}
+#card.flip{animation:flip .45s cubic-bezier(.2,.9,.3,1.15)}
+@keyframes flip{from{transform:perspective(900px) rotateX(-85deg);opacity:.3}}
+#card.closing{animation:fold .22s ease-in forwards}
+@keyframes fold{to{transform:perspective(900px) rotateX(-85deg);opacity:0}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pill">In progress</span></div>
+  <div class="mock-hint">Concept 2 · Rolodex: sessions sit on a rotary card index. Scroll over it, drag it, or use ↑ ↓ to spin it. The card in the window flips down as a preview. ＋ adds a new card to the front and spins to it.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<aside class="rail" id="rail">
+  <div class="wheel" id="wheel" tabindex="0"><div class="axle"></div><div class="drum" id="drum"></div><div class="lens" id="lens"></div></div>
+  <div class="counter" id="counter"></div>
+  <div class="foot"><button class="cell new" id="newBtn" title="New session">＋</button><button class="cell note" id="noteBtn" title="Note">✎</button></div>
+</aside>
+<div class="card" id="card" hidden></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'},
+  {id:'o1',title:'Theme accent audit',state:'completed',time:'Mon',user:'Audit accent contrast in all themes.',agent:'All four themes pass AA now.',older:true},
+  {id:'o2',title:'Sidebar notes race',state:'failed',time:'Sun',user:'Why do sidebar notes sometimes vanish?',agent:'Could not reproduce reliably — the run stopped.',older:true}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+function setStateClass(el,state){[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight},1400)});
+}
+
+const STEP=32,R=92;
+const rail=document.getElementById('rail'),wheel=document.getElementById('wheel'),drum=document.getElementById('drum'),lens=document.getElementById('lens'),card=document.getElementById('card'),counter=document.getElementById('counter');
+const newBtn=document.getElementById('newBtn'),noteBtn=document.getElementById('noteBtn');
+let tiles=[],rot=0,target=0,vel=0,shownIdx=-1,mode=null,closeT,noteText='';
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function build(){
+  drum.innerHTML='';
+  tiles=SESSIONS.map((s,i)=>{const t=document.createElement('div');t.className='tile st-'+s.state+(s.older?' older':'');t.innerHTML=`<b>${esc(initials(s.title))}</b><small>${esc(s.time)}</small>`;t.title=s.title;t.addEventListener('click',()=>{if(!dragMoved)go(i)});drum.appendChild(t);return t});
+}
+const idx=()=>Math.max(0,Math.min(SESSIONS.length-1,Math.round(target/STEP)));
+function go(i){target=Math.max(0,Math.min(SESSIONS.length-1,i))*STEP}
+function paint(){
+  drum.style.transform=`translateZ(${-R}px) rotateX(${rot}deg)`;
+  tiles.forEach((t,i)=>{const a=i*STEP,d=a-rot;t.style.transform=`rotateX(${-a}deg) translateZ(${R}px)`;t.style.opacity=Math.max(0,1-Math.abs(d)/105)});
+}
+function tick(){
+  if(!dragging){vel=(vel+(target-rot)*.12)*.68;rot+=vel;if(Math.abs(target-rot)<.05&&Math.abs(vel)<.05){rot=target;vel=0}}
+  paint();
+  const i=Math.round(rot/STEP);const cur=SESSIONS[Math.max(0,Math.min(SESSIONS.length-1,i))];
+  if(cur){lens.className='lens st-'+cur.state;counter.textContent=`${Math.min(SESSIONS.length,Math.max(1,i+1))} / ${SESSIONS.length}`}
+  if(mode==='session'&&Math.abs(target-rot)<6&&idx()!==shownIdx)showSession(idx());
+  requestAnimationFrame(tick);
+}
+function placeCard(){const w=wheel.getBoundingClientRect();const h=card.offsetHeight;card.style.top=Math.max(10,Math.min(innerHeight-h-10,w.top+w.height/2-34))+'px'}
+function flip(){card.classList.remove('flip','closing');void card.offsetWidth;card.classList.add('flip')}
+function showSession(i){
+  shownIdx=i;const s=SESSIONS[i];mode='session';
+  card.hidden=false;card.className='card st-'+s.state;card.style.removeProperty('--c');card.innerHTML=sessionCard(s);
+  wireCard(card,s,st=>{setStateClass(tiles[SESSIONS.indexOf(st)],st.state)});
+  placeCard();flip();[newBtn,noteBtn].forEach(b=>b.classList.remove('active'));
+}
+function showCreate(kind){
+  mode=kind;shownIdx=-1;card.hidden=false;card.className='card';
+  [newBtn,noteBtn].forEach(b=>b.classList.toggle('active',b===(kind==='new'?newBtn:noteBtn)));
+  if(kind==='new'){card.style.setProperty('--c','var(--run)');card.innerHTML=`<div class="c-head"><b>New card</b><span class="c-time">Opus 5.5</span></div><form id="startForm"><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">Start</button></div></form>`;card.querySelector('form').addEventListener('submit',start)}
+  else{card.style.setProperty('--c','var(--note)');card.innerHTML=`<div class="c-head"><b>Note</b><span class="c-time" id="saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;const ta=card.querySelector('textarea'),sv=card.querySelector('#saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+  placeCard();flip();setTimeout(()=>card.querySelector('input,textarea').focus(),60);
+}
+function close(){if(!mode)return;mode=null;shownIdx=-1;[newBtn,noteBtn].forEach(b=>b.classList.remove('active'));card.classList.remove('flip');card.classList.add('closing');setTimeout(()=>{if(!mode)card.hidden=true},220)}
+function start(e){
+  e.preventDefault();const v=card.querySelector('.start-in').value.trim();if(!v)return;
+  SESSIONS.unshift({id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'});
+  build();rot+=STEP;target=rot;paint();         // keep the old front card in place…
+  setTimeout(()=>{target=0;mode='session';shownIdx=-1},120); // …then spin round to the new one
+}
+const holds=()=>mode==='new'||mode==='note'||card.contains(document.activeElement);
+function leave(){clearTimeout(closeT);closeT=setTimeout(()=>{if(!holds())close()},180)}
+wheel.addEventListener('mouseenter',()=>{clearTimeout(closeT);if(!holds()&&mode!=='session'){showSession(idx())}});
+wheel.addEventListener('mouseleave',leave);
+card.addEventListener('mouseenter',()=>clearTimeout(closeT));card.addEventListener('mouseleave',leave);
+let acc=0;
+wheel.addEventListener('wheel',e=>{e.preventDefault();acc+=e.deltaY;if(Math.abs(acc)>30){go(idx()+Math.sign(acc));acc=0;if(mode!=='session')mode='session'}},{passive:false});
+let dragging=false,dragMoved=false,startY=0,startRot=0,lastY=0,lastT=0,flick=0;
+wheel.addEventListener('pointerdown',e=>{dragging=true;dragMoved=false;startY=lastY=e.clientY;startRot=rot;lastT=performance.now();wheel.setPointerCapture(e.pointerId)});
+wheel.addEventListener('pointermove',e=>{if(!dragging)return;const dy=e.clientY-startY;if(Math.abs(dy)>3)dragMoved=true;rot=Math.max(-STEP,Math.min((SESSIONS.length)*STEP,startRot-dy*.7));const now=performance.now();flick=(lastY-e.clientY)/(now-lastT+1);lastY=e.clientY;lastT=now});
+wheel.addEventListener('pointerup',()=>{if(!dragging)return;dragging=false;target=Math.round((rot+flick*120)/STEP)*STEP;go(Math.round(target/STEP));vel=0;if(dragMoved)mode='session'});
+wheel.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();go(idx()+1);mode='session'}if(e.key==='ArrowUp'){e.preventDefault();go(idx()-1);mode='session'}if(e.key==='Escape')close()});
+newBtn.addEventListener('click',()=>mode==='new'?close():showCreate('new'));
+noteBtn.addEventListener('click',()=>mode==='note'?close():showCreate('note'));
+document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!rail.contains(e.target))close()});
+build();paint();tick();
+</script>
+</body>
+</html>

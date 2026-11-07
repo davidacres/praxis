@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shelf concept 4 · Liquid Bubbles</title>
+<style>
+:root{--rail:58px;--bg:#0d0f14;--panel:#1b1f29;--panel2:#252a36;--line:#2b303c;--text:#e8eaf0;--muted:#8b93a5;--run:#7c9cff;--wait:#f2b45a;--ok:#62d39b;--bad:#ff6b6b;--pause:#b48cff;--note:#f7d774;--spring:cubic-bezier(.34,1.56,.64,1);--goo:#1e2330}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+.st-executing{--c:var(--run)}.st-awaiting_input{--c:var(--wait)}.st-completed{--c:var(--ok)}.st-failed{--c:var(--bad)}.st-paused{--c:var(--pause)}
+.mock{position:absolute;inset:0 0 0 var(--rail);padding:22px 36px;overflow:hidden}
+.mock-top{display:flex;gap:10px;align-items:center;font-size:15px;font-weight:600;margin-bottom:4px}
+.mock-top .key{font:12px ui-monospace,monospace;color:var(--muted)}
+.mock-top .pill{font-size:11px;font-weight:500;color:var(--run);border:1px solid color-mix(in srgb,var(--run) 40%,transparent);border-radius:99px;padding:0 8px}
+.mock-hint{color:var(--muted);font-size:12px;margin-bottom:24px;max-width:640px}
+.sk{height:10px;border-radius:5px;background:#1a1d25;margin:12px 0}
+.c-head{display:flex;gap:8px;align-items:center}
+.c-head b{flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-time{color:var(--muted);font-size:11px}
+.c-dot{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none}
+.st-executing .c-dot{animation:beat 1.4s ease-in-out infinite}
+@keyframes beat{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 25%,transparent)}}
+.c-state{font-size:11px;color:var(--c);margin:1px 0 0 16px}
+.c-body{max-height:180px;overflow:auto;display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.c-user{align-self:flex-end;background:var(--panel2);padding:6px 10px;border-radius:10px 10px 3px 10px;max-width:88%}
+.c-agent{color:#cdd2dc;max-width:95%}
+.c-body .new{animation:pop .35s var(--spring)}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.97)}}
+.dots{display:inline-flex;gap:3px;margin-left:4px;vertical-align:middle}
+.dots i{width:4px;height:4px;border-radius:50%;background:var(--c,var(--run));animation:dot 1s infinite}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{transform:translateY(-4px);opacity:.5}}
+.c-reply{display:flex;gap:6px;border-top:1px solid #ffffff12;padding-top:9px}
+.c-reply input{flex:1;min-width:0;background:var(--panel2);border:1px solid #ffffff10;border-radius:8px;color:var(--text);padding:6px 10px;font:inherit;outline:none;transition:border-color .2s}
+.c-reply input:focus{border-color:var(--c,var(--run))}
+.c-reply button{border:0;border-radius:8px;background:var(--c,var(--run));color:#111;font-weight:700;width:30px;cursor:pointer}
+.note-paper{width:100%;height:150px;resize:none;border:0;outline:0;font:inherit;line-height:24px;color:#2a2410;background:repeating-linear-gradient(#fdf3c4 0 23px,#e8d98f 23px 24px);border-radius:6px;padding:0 10px;margin-top:10px}
+.start-in{width:100%;background:var(--panel2);border:1px solid #ffffff10;border-radius:8px;color:var(--text);padding:8px 10px;font:inherit;outline:none;margin:10px 0 8px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.btn{border:0;border-radius:8px;background:var(--run);color:#111;padding:5px 12px;cursor:pointer;font:inherit;font-weight:600}
+
+/* ── Liquid ── */
+.rail{position:absolute;left:0;top:0;bottom:0;width:var(--rail);background:#0a0c10;border-right:1px solid #1c2029}
+.goo,.over{position:absolute;inset:0;pointer-events:none}
+.goo{filter:url(#goo);z-index:2}
+.over{z-index:3}
+.blob{position:absolute;background:var(--goo);border-radius:50%;transition:left .5s var(--spring),top .5s var(--spring),width .5s var(--spring),height .5s var(--spring),border-radius .5s,transform .3s var(--spring)}
+.blob.hot{transform:scale(1.18)}
+.bridge{position:absolute;height:18px;background:var(--goo);border-radius:9px;transition:top .5s var(--spring),width .45s var(--spring),left .45s var(--spring)}
+.cardbg{position:absolute;background:var(--goo);border-radius:50%;transition:left .55s var(--spring),top .55s var(--spring),width .55s var(--spring),height .55s var(--spring),border-radius .4s}
+.cardbg.open{border-radius:16px}
+.bub{position:absolute;width:38px;height:38px;border-radius:50%;pointer-events:auto;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#dfe3ec;outline:none;transition:top .5s var(--spring)}
+.bub svg{position:absolute;inset:-3px;width:44px;height:44px;transform:rotate(-90deg)}
+.bub circle{fill:none;stroke:var(--c);stroke-width:2.2;stroke-linecap:round}
+.st-executing.bub circle{stroke-dasharray:60 200;animation:spin 1.3s linear infinite;transform-origin:22px 22px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.st-awaiting_input.bub circle{animation:breathe 1.4s ease-in-out infinite}
+@keyframes breathe{50%{stroke-width:4;opacity:.5}}
+.bub.new{--c:var(--run);font-size:18px;font-weight:400}
+.bub.note{--c:var(--note);font-size:15px;font-weight:400}
+.card{position:absolute;width:300px;padding:14px;pointer-events:auto;opacity:0;transition:opacity .2s,top .55s var(--spring);visibility:hidden}
+.card.show{opacity:1;visibility:visible;transition:opacity .3s .22s,top .55s var(--spring)}
+.drip{position:absolute;width:30px;height:30px;border-radius:50%;background:var(--goo)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:100ms!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs><filter id="goo"><feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/><feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -8" result="g"/><feComposite in="SourceGraphic" in2="g" operator="atop"/></filter></defs></svg>
+<div class="mock">
+  <div class="mock-top"><span class="key">PRX-S111-181</span>Record run outcome<span class="pill">In progress</span></div>
+  <div class="mock-hint">Concept 4 · Liquid Bubbles: sessions are droplets on the edge. Hover one and it stretches into its card like liquid. Move between bubbles and the card slides along with them. The ring shows status: spinning means running and breathing means it needs you. ＋ drips a new droplet onto the top of the shelf.</div>
+  <div class="sk" style="width:62%"></div><div class="sk" style="width:80%"></div><div class="sk" style="width:48%"></div><div class="sk" style="width:70%"></div>
+</div>
+<div class="rail"></div>
+<div class="goo" id="goo"><div class="bridge" id="bridge"></div><div class="cardbg" id="cardbg"></div></div>
+<div class="over" id="over"><div class="card" id="card"></div></div>
+<script>
+const LABEL={executing:'Running',awaiting_input:'Needs your input',completed:'Done',failed:'Failed',paused:'Paused'};
+const SESSIONS=[
+  {id:'s1',title:'Fix coordinator updatedAt',state:'executing',time:'2m',user:'The conversation timestamp jumps on startup — find out why.',agent:'Found it: initialisation rewrites updatedAt. Patching the engine and adding a regression test'},
+  {id:'s2',title:'ACP tool input arrives late',state:'awaiting_input',time:'14m',user:'Tool args are missing in the inspector.',agent:'They arrive in in-progress updates. Should I also read them from tool_complete?'},
+  {id:'s3',title:'Artifact layouts',state:'completed',time:'1h',user:'Make Classic Split the default layout.',agent:'Done. Classic Split is now the default and the e2e spec is updated.'},
+  {id:'s4',title:'Marketplace flaky test',state:'failed',time:'3h',user:'Investigate marketplace:271.',agent:'The run failed: the registry fixture timed out after 30s.'},
+  {id:'s5',title:'Weekly run report',state:'paused',time:'Yesterday',user:'Draft the weekly run report.',agent:'Paused after collecting 12 runs. Resume when you are ready.'}
+];
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function sessionCard(s){return `<div class="c-head"><span class="c-dot"></span><b>${esc(s.title)}</b><span class="c-time">${esc(s.time)}</span></div><div class="c-state">${LABEL[s.state]}</div><div class="c-body"><div class="c-user">${esc(s.user)}</div><div class="c-agent">${esc(s.agent)}${s.state==='executing'?'<span class="dots"><i></i><i></i><i></i></span>':''}</div></div><form class="c-reply"><input placeholder="Quick reply…"><button title="Send">↵</button></form>`}
+function setStateClass(el,state){[...el.classList].filter(c=>c.startsWith('st-')).forEach(c=>el.classList.remove(c));el.classList.add('st-'+state)}
+function wireCard(card,s,onState){
+  const f=card.querySelector('form.c-reply');if(!f)return;
+  f.addEventListener('submit',e=>{e.preventDefault();const i=f.querySelector('input'),v=i.value.trim();if(!v)return;i.value='';
+    const body=card.querySelector('.c-body');const u=document.createElement('div');u.className='c-user new';u.textContent=v;body.appendChild(u);
+    const a=document.createElement('div');a.className='c-agent new';a.innerHTML='<span class="dots"><i></i><i></i><i></i></span>';body.appendChild(a);body.scrollTop=body.scrollHeight;
+    s.user=v;s.state='executing';setStateClass(card,'executing');card.querySelector('.c-state').textContent=LABEL.executing;onState&&onState(s);
+    setTimeout(()=>{a.textContent='On it — I’ll pick that up next.';s.agent=a.textContent;body.scrollTop=body.scrollHeight;sizeCard()},1400);sizeCard()});
+}
+
+const goo=document.getElementById('goo'),over=document.getElementById('over'),bridge=document.getElementById('bridge'),cardbg=document.getElementById('cardbg'),card=document.getElementById('card');
+const X=10,SIZE=38,STEP=52,TOP=16,CARD_X=86,CARD_W=300;
+let items=[],openItem=null,hoverT,closeT,noteText='';
+const initials=t=>t.split(/\s+/).filter(w=>/^[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+function makeItem(kind,s){
+  const blob=document.createElement('div');blob.className='blob';goo.appendChild(blob);
+  const bub=document.createElement('div');bub.className='bub '+(kind==='session'?'st-'+s.state:kind);bub.tabIndex=0;
+  bub.innerHTML=`<svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="20"/></svg><span>${kind==='session'?esc(initials(s.title)):kind==='new'?'＋':'✎'}</span>`;
+  bub.title=kind==='session'?s.title:kind==='new'?'New session':'Note';
+  over.appendChild(bub);
+  const it={kind,s,blob,bub,y:0};
+  bub.addEventListener('mouseenter',()=>{blob.classList.add('hot');hover(it)});
+  bub.addEventListener('mouseleave',()=>{blob.classList.remove('hot');leave()});
+  bub.addEventListener('focus',()=>open(it));
+  bub.addEventListener('click',()=>openItem===it&&it.kind!=='session'?close():open(it));
+  return it;
+}
+function setY(it,y){it.y=y;it.blob.style.left=X+'px';it.blob.style.top=y+'px';it.blob.style.width=it.blob.style.height=SIZE+'px';it.bub.style.left=X+'px';it.bub.style.top=y+'px'}
+function layout(){
+  const ss=items.filter(i=>i.kind==='session'),cs=items.filter(i=>i.kind!=='session');
+  ss.forEach((it,i)=>setY(it,TOP+i*STEP));
+  cs.forEach((it,i)=>setY(it,innerHeight-16-SIZE-(cs.length-1-i)*STEP));
+  if(openItem)sizeCard();
+}
+function fill(it){
+  card.className='card show';card.style.removeProperty('--c');
+  if(it.kind==='session'){card.classList.add('st-'+it.s.state);card.innerHTML=sessionCard(it.s);wireCard(card,it.s,st=>setStateClass(it.bub,st.state))}
+  else if(it.kind==='new'){card.style.setProperty('--c','var(--run)');card.innerHTML=`<div class="c-head"><b>New session</b><span class="c-time">Opus 5.5</span></div><form><input class="start-in" placeholder="What should we work on?"><div class="row"><span class="c-time">Context: PRX-S111-181</span><button class="btn">Start</button></div></form>`;card.querySelector('form').addEventListener('submit',e=>{e.preventDefault();start(card.querySelector('input').value.trim())})}
+  else{card.style.setProperty('--c','var(--note)');card.innerHTML=`<div class="c-head"><b>Note</b><span class="c-time saved">${noteText?'Saved ✓':''}</span></div><textarea class="note-paper" placeholder="Jot something down…"></textarea>`;const ta=card.querySelector('textarea'),sv=card.querySelector('.saved');ta.value=noteText;let t;ta.addEventListener('input',()=>{noteText=ta.value;sv.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>sv.textContent='Saved ✓',600)})}
+}
+function sizeCard(){
+  if(!openItem)return;const h=card.offsetHeight,cy=openItem.y+SIZE/2;
+  const top=Math.max(10,Math.min(innerHeight-h-10,cy-34));
+  card.style.left=CARD_X+'px';card.style.top=top+'px';
+  Object.assign(cardbg.style,{left:CARD_X+'px',top:top+'px',width:CARD_W+'px',height:h+'px'});cardbg.classList.add('open');
+  Object.assign(bridge.style,{left:(X+SIZE/2)+'px',top:(cy-9)+'px',width:(CARD_X-X-SIZE/2+24)+'px'});
+}
+function open(it){
+  clearTimeout(closeT);if(openItem===it)return;const first=!openItem;openItem=it;
+  if(first){const cy=it.y+SIZE/2;cardbg.style.transition='none';bridge.style.transition='none';Object.assign(cardbg.style,{left:(X+SIZE/2)+'px',top:cy+'px',width:'0px',height:'0px'});Object.assign(bridge.style,{left:(X+SIZE/2)+'px',top:(cy-9)+'px',width:'0px'});void cardbg.offsetWidth;cardbg.style.transition='';bridge.style.transition=''}
+  fill(it);sizeCard();
+  if(it.kind!=='session')setTimeout(()=>card.querySelector('input,textarea').focus(),300);
+}
+function close(){
+  if(!openItem)return;const cy=openItem.y+SIZE/2;openItem=null;
+  card.classList.remove('show');cardbg.classList.remove('open');
+  Object.assign(cardbg.style,{left:(X+SIZE/2)+'px',top:cy+'px',width:'0px',height:'0px'});bridge.style.width='0px';
+}
+const holds=()=>openItem&&(openItem.kind!=='session'||card.contains(document.activeElement)&&document.activeElement.value);
+function hover(it){if(openItem&&openItem.kind!=='session')return;clearTimeout(closeT);clearTimeout(hoverT);hoverT=setTimeout(()=>open(it),120)}
+function leave(){clearTimeout(hoverT);clearTimeout(closeT);closeT=setTimeout(()=>{if(!holds())close()},200)}
+card.addEventListener('mouseenter',()=>clearTimeout(closeT));card.addEventListener('mouseleave',leave);
+function start(v){
+  if(!v)return;const from=openItem;close();
+  const s={id:'n'+Date.now(),title:v,state:'executing',time:'now',user:v,agent:'Starting up — reading the ticket first'};
+  SESSIONS.unshift(s);
+  // a droplet travels from the + bubble up the rail to the top slot
+  const d=document.createElement('div');d.className='drip';d.style.left=(X+4)+'px';d.style.top=(from.y+4)+'px';goo.appendChild(d);
+  d.animate([{top:(from.y+4)+'px',transform:'scale(1,1)'},{transform:'scale(.7,1.4)',offset:.5},{top:(TOP+4)+'px',transform:'scale(1,1)'}],{duration:650,easing:'cubic-bezier(.5,0,.3,1)',fill:'forwards'}).onfinish=()=>{
+    d.remove();const it=makeItem('session',s);items.unshift(it);setY(it,TOP);
+    const ss=items.filter(i=>i.kind==='session');
+    if(ss.length>5){const old=ss[ss.length-1];items=items.filter(i=>i!==old);old.blob.style.transform='scale(0)';old.bub.style.transition='opacity .3s';old.bub.style.opacity=0;setTimeout(()=>{old.blob.remove();old.bub.remove()},400)}
+    layout();setTimeout(()=>open(it),350);
+  };
+}
+document.addEventListener('mousedown',e=>{if(!card.contains(e.target)&&!e.target.closest('.bub'))close()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')close()});
+items=[...SESSIONS.map(s=>makeItem('session',s)),makeItem('new'),makeItem('note')];
+over.appendChild(card);layout();window.addEventListener('resize',layout);
+</script>
+</body>
+</html>

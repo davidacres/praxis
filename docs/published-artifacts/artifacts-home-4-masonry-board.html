@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Artifacts home concept 4 · Masonry Board</title>
+<style>
+:root{--bg:#101217;--panel:#181b22;--panel2:#20242e;--panel3:#272c38;--line:#2b303c;--text:#e8eaf0;--muted:#8b93a5;--faint:#5d6578;--accent:#7c9cff;--accent2:#b48cff;--ok:#62d39b;--bad:#ff6b6b;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit}
+code{font:12px ui-monospace,"SF Mono",Menlo,monospace;color:var(--muted)}
+.ic{flex:none;display:block}
+/* concept switcher */
+.concepts{display:flex;align-items:center;gap:4px;padding:7px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);background:#0b0d11;flex:none}
+.concepts b{color:var(--text);font-weight:600;margin-right:10px}
+.concepts a{color:var(--muted);text-decoration:none;padding:2px 10px;border-radius:99px;border:1px solid transparent}
+.concepts a:hover{color:var(--text)}
+.concepts a.on{color:var(--text);border-color:var(--line);background:var(--panel)}
+.concepts .tag{margin-left:auto;font-size:11.5px}
+/* shell */
+.app{flex:1;display:flex;min-height:0}
+.rail{width:50px;flex:none;border-right:1px solid var(--line);background:#0d0f13;display:flex;flex-direction:column;align-items:center;gap:6px;padding-top:12px}
+.rail i{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--faint)}
+.rail i.on{background:var(--panel2);color:var(--text);box-shadow:inset 2px 0 0 var(--accent)}
+.page{flex:1;min-width:0;overflow:auto;container-type:inline-size;scrollbar-color:var(--panel3) transparent}
+.wrap{max-width:1240px;margin:0 auto;padding:26px 34px 60px}
+/* controls */
+.search{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:0 10px;height:32px;color:var(--muted);transition:border-color .2s,box-shadow .2s}
+.search:focus-within{border-color:color-mix(in srgb,var(--accent) 60%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+.search input{background:none;border:0;outline:0;color:var(--text);font:inherit;width:100%}
+.search input::placeholder{color:var(--faint)}
+.search kbd{font:11px ui-monospace,monospace;color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pills button{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:99px;padding:3px 11px;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.pills button:hover{color:var(--text)}
+.pills button.on{background:var(--panel2);color:var(--text);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.pills .n{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+.pills button.on .n{color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#0b0d12;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.btn.danger:hover{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 50%,var(--line))}
+.iconbtn{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.iconbtn:hover{background:var(--panel3);color:var(--text)}
+.iconbtn.danger:hover{color:var(--bad)}
+.muted{color:var(--muted)}
+.link{color:var(--accent);cursor:pointer;background:none;border:0;padding:0}
+.link:hover{text-decoration:underline}
+/* hover actions over a thumbnail */
+.acts{position:absolute;top:8px;right:8px;display:flex;gap:2px;padding:2px;border-radius:9px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(8px);border:1px solid var(--line);opacity:0;transform:translateY(-4px);transition:opacity .15s,transform .25s var(--spring);z-index:3}
+.card:hover .acts,.card:focus-within .acts{opacity:1;transform:none}
+.acts .iconbtn{width:26px;height:26px}
+.card{cursor:pointer;outline:none}
+.card:focus-visible .th{box-shadow:0 0 0 2px var(--accent)}
+/* thumbnails */
+.th{position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:var(--panel2);--c:hsl(var(--h) 75% 68%);--cd:hsl(var(--h) 30% 24%);border:1px solid #ffffff0d;transition:transform .3s var(--spring),box-shadow .25s}
+.th .kind{position:absolute;left:8px;bottom:8px;font:600 9.5px/1 ui-monospace,monospace;letter-spacing:.04em;padding:4px 6px;border-radius:5px;background:#0b0d12cc;color:#cfd4df;z-index:2}
+.th-image{background:linear-gradient(135deg,hsl(var(--h) 45% 30%),hsl(calc(var(--h) + 50) 40% 14%))}
+.th-image .win{position:absolute;inset:16% 9% -2% 9%;border-radius:6px 6px 0 0;background:#11141a;display:flex;box-shadow:0 10px 28px #0008;overflow:hidden}
+.th-image .side{width:20%;background:#0c0e13;border-right:1px solid #ffffff0f;padding:8% 0;display:flex;flex-direction:column;gap:8%;align-items:center}
+.th-image .side b{width:46%;aspect-ratio:1;border-radius:3px;background:#ffffff14}
+.th-image .side b:first-child{background:var(--c)}
+.th-image .main{flex:1;display:grid;grid-template-columns:repeat(var(--cols,2),1fr);gap:6%;padding:7%;align-content:start}
+.th-image .main b{aspect-ratio:4/3;border-radius:3px;background:var(--cd)}
+.th-image .main b.hot{background:var(--c);opacity:.75}
+.th-page{background:#0f1218}
+.th-page .bar{position:absolute;inset:0 0 auto;height:11%;background:#1a1e27;display:flex;align-items:center;gap:3%;padding:0 4%}
+.th-page .bar b{width:4.5%;aspect-ratio:1;border-radius:50%;background:#ffffff26}
+.th-page .bar u{flex:1;height:38%;border-radius:99px;background:#ffffff10;margin-left:4%;text-decoration:none}
+.th-page .body{position:absolute;inset:11% 0 0;padding:8% 9%;display:flex;flex-direction:column;gap:6%}
+.th-page .h{height:9%;width:var(--w1,58%);border-radius:3px;background:linear-gradient(90deg,var(--c),hsl(calc(var(--h) + 50) 70% 70%))}
+.th-page .p{height:4%;width:var(--w2,80%);border-radius:2px;background:#ffffff1c}
+.th-page .cols{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:5%;margin-top:3%}
+.th-page .cols b{border-radius:4px;background:var(--cd);border:1px solid #ffffff0d}
+.th-page .cols b:first-child{background:color-mix(in srgb,var(--c) 30%,var(--cd))}
+.th-document{background:linear-gradient(160deg,#2a2f3b,#1b1f28)}
+.th-document .paper{position:absolute;inset:10% 16% -6%;background:#ecebe6;border-radius:4px 4px 0 0;box-shadow:0 10px 30px #0009;padding:9% 10%;display:flex;flex-direction:column;gap:5%;color:#2a2d33;overflow:hidden}
+.th-document .paper em{font:700 clamp(7px,1.15cqi,11px)/1.2 -apple-system,sans-serif;font-style:normal;color:#1f2228;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th-document .paper i{height:3.2%;min-height:3px;border-radius:2px;background:#b9b6ad}
+.th-document .paper i.s{background:hsl(var(--h) 45% 55%);width:34%}
+.th-data{background:#10141b}
+.th-data svg{position:absolute;inset:14% 8% 16%;width:84%;height:70%}
+.th-data .tot{position:absolute;left:8%;top:6%;font:600 10px ui-monospace,monospace;color:var(--c)}
+.th-other{background:radial-gradient(circle at 50% 45%,var(--cd),#14171d 70%)}
+.th-other .ext{position:absolute;inset:0;display:grid;place-items:center}
+.th-other .ext span{font:700 15px ui-monospace,monospace;color:var(--c);border:1.5px solid color-mix(in srgb,var(--c) 50%,transparent);border-radius:10px;padding:14px 16px;background:#0b0d12aa}
+/* stacked group thumb */
+.stack{position:relative}
+.stack::before,.stack::after{content:"";position:absolute;inset:0;border-radius:10px;background:var(--panel3);border:1px solid var(--line);transition:transform .35s var(--spring)}
+.stack::before{transform:translate(7px,-7px) rotate(2.2deg)}
+.stack::after{transform:translate(3.5px,-3.5px) rotate(1deg);background:var(--panel2)}
+.stack .th{z-index:1}
+.card:hover .stack::before{transform:translate(12px,-10px) rotate(4deg)}
+.card:hover .stack::after{transform:translate(6px,-5px) rotate(2deg)}
+/* viewer */
+.viewer{width:400px;flex:none;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0;animation:slide .32s var(--spring)}
+.app:not(.has-sel) .viewer{display:none}
+@keyframes slide{from{transform:translateX(24px);opacity:0}}
+.v-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+.v-head .sp{flex:1}
+.v-body{flex:1;overflow:auto;padding:16px 18px 20px}
+.v-body h2{margin:0 0 2px;font-size:17px;font-weight:600}
+.v-path{margin-bottom:14px}
+.v-body .th{aspect-ratio:16/11}
+.v-desc{color:#c8cdd8;margin:14px 0}
+.v-meta{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:12px}
+.v-meta dt{color:var(--muted)}.v-meta dd{margin:0}
+.v-acts{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
+.v-acts .btn.primary{flex:1;justify-content:center}
+/* group header */
+.crumb{display:flex;align-items:center;gap:10px;margin:0 0 18px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.crumb h2{margin:0;font-size:15px;font-weight:600;flex:1}
+.crumb .n{color:var(--muted);font-weight:400;font-size:12px;margin-left:6px}
+.empty{padding:70px 0;text-align:center;color:var(--muted)}
+.empty .ic{margin:0 auto 10px;color:var(--faint)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:var(--panel3);border:1px solid var(--line);padding:8px 14px;border-radius:10px;box-shadow:0 12px 30px #0009;opacity:0;transition:opacity .2s,transform .3s var(--spring);pointer-events:none;z-index:50}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:80ms!important}}
+
+/* ── concept 4 ── */
+.hd{display:flex;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap}
+.hd h1{margin:0;font-size:22px;font-weight:650;margin-right:10px}
+.hd .search{margin-left:auto;width:260px}
+.sort{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;border:1px solid var(--line);border-radius:8px;padding:0 10px;height:32px}
+.board{columns:3;column-gap:18px}
+@container (max-width:720px){.board{columns:2}}
+.card{position:relative;break-inside:avoid;margin-bottom:18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:transform .3s var(--spring),box-shadow .25s,border-color .2s;animation:rise .45s var(--spring) both;animation-delay:calc(var(--i)*30ms)}
+@keyframes rise{from{opacity:0;transform:translateY(10px) scale(.98)}}
+.card:hover{transform:translateY(-3px) rotate(-.25deg);box-shadow:0 18px 40px #000a;border-color:#3a4150}
+.card.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card .th{border-radius:0;border:0}
+.card.k-image .th{aspect-ratio:16/11}
+.card.k-page .th{aspect-ratio:4/5}
+.card.k-data .th{aspect-ratio:2/1}
+.card.k-document .th{aspect-ratio:auto;height:0;display:none}
+.card .meta{padding:11px 14px 13px}
+.card .meta b{display:block;font-weight:600;font-size:13.5px}
+.card .meta .line{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;margin-top:4px}
+.card .meta .line .k{color:hsl(var(--h) 70% 70%)}
+/* documents read as text right on the board */
+.doc{padding:16px 16px 4px;background:linear-gradient(180deg,hsl(var(--h) 25% 15%),var(--panel))}
+.doc .eyebrow{font:600 10px ui-monospace,monospace;letter-spacing:.06em;color:hsl(var(--h) 70% 70%)}
+.doc q{display:block;font:500 15px/1.45 Georgia,"Iowan Old Style",serif;color:#dfe2ea;margin:8px 0 2px;quotes:none}
+/* data cards carry a headline number */
+.kpi{display:flex;gap:16px;padding:10px 14px 0}
+.kpi div{font-size:11px;color:var(--muted)}
+.kpi b{display:block;font:600 16px ui-monospace,monospace;color:var(--text)}
+/* groups fan out */
+.fan{position:relative;height:190px;background:radial-gradient(circle at 50% 120%,#7c9cff22,transparent 70%)}
+.fan .th{position:absolute;width:52%;left:24%;top:16%;aspect-ratio:4/3;border-radius:8px;box-shadow:0 10px 24px #0009;transition:transform .4s var(--spring)}
+.fan .th .kind{display:none}
+.fan .th:nth-child(1){transform:rotate(-9deg) translateX(-34%)}
+.fan .th:nth-child(2){transform:rotate(9deg) translateX(34%)}
+.fan .th:nth-child(3){z-index:2}
+.card:hover .fan .th:nth-child(1){transform:rotate(-14deg) translateX(-46%)}
+.card:hover .fan .th:nth-child(2){transform:rotate(14deg) translateX(46%)}
+.card:hover .fan .th:nth-child(3){transform:translateY(-6px)}
+.card.k-other{display:flex;align-items:center}
+.card.k-other .th{width:76px;flex:none;aspect-ratio:1;margin:10px 0 10px 10px;border-radius:10px}
+.card.k-other .th span{font-size:11px;padding:8px}
+.card.k-other .th .kind{display:none}
+
+</style>
+</head>
+<body>
+<nav class="concepts"><b>Artifacts home</b><a href="artifacts-home-1-quiet-gallery.html" class="">1 · Quiet Gallery</a><a href="artifacts-home-2-home-sections.html" class="">2 · Home Sections</a><a href="artifacts-home-3-session-timeline.html" class="">3 · Session Timeline</a><a href="artifacts-home-4-masonry-board.html" class="on">4 · Masonry Board</a><a href="artifacts-home-5-bento-spotlight.html" class="">5 · Bento Spotlight</a><span class="tag">Three-column board where each kind shows its own best face</span></nav>
+<div class="app" id="app">
+  <nav class="rail" id="rail"><i class="" data-r="home"></i><i class="" data-r="board"></i><i class="" data-r="chat"></i><i class="on" data-r="layers"></i><i class="" data-r="gear"></i></nav>
+  <main class="page">
+<div class="wrap">
+  <header class="hd"><h1>Artifacts</h1><div id="pills" class="pills"></div>
+    <label class="search"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search the board"><kbd>/</kbd></label>
+    <span class="sort"><svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Newest first</span></header>
+  <div id="crumb"></div>
+  <div id="board" class="board"></div>
+</div>
+
+  </main>
+  <aside class="viewer" id="viewer"></aside>
+</div>
+<script>
+const H = 36e5, D = 24 * H;
+const SESSIONS = {
+  s1: { title: 'Shelf redesign exploration', key: 'PRX-S111-181' },
+  s2: { title: 'Artifacts page & dock previews', key: 'PRX-S111-177' },
+  s3: { title: 'Semantic search model eval', key: 'PRX-S111-169' },
+  s4: { title: 'Scheduled runs report', key: 'PRX-S111-160' },
+  s5: { title: 'Onboarding & mobile audit', key: 'PRX-S111-152' }
+};
+const GROUPS = [
+  { id: 'g1', name: 'Shelf concepts' },
+  { id: 'g2', name: 'Composer concepts' }
+];
+const ITEMS = [
+  { id: 'a1', title: 'Shelf · Library Spines', name: 'shelf-1-library-spines.html', kind: 'page', session: 's1', age: .3 * H, size: 16770, group: 'g1', hue: 222, desc: 'Sessions as book spines on a rail; hovering one pulls it out to show the latest turn.' },
+  { id: 'a2', title: 'Shelf · Rolodex', name: 'shelf-2-rolodex.html', kind: 'page', session: 's1', age: .35 * H, size: 15102, group: 'g1', hue: 268, desc: 'A flip-through card stack, one live session per card.' },
+  { id: 'a3', title: 'Shelf · Filing Tabs', name: 'shelf-3-filing-tabs.html', kind: 'page', session: 's1', age: .4 * H, size: 14388, group: 'g1', hue: 32, desc: 'Folder tabs along the top edge; status rides on the tab colour.' },
+  { id: 'a4', title: 'Shelf · Liquid Bubbles', name: 'shelf-4-liquid-bubbles.html', kind: 'page', session: 's1', age: .45 * H, size: 18920, group: 'g1', hue: 190, desc: 'Sessions float as bubbles that swell while an agent is working.' },
+  { id: 'a5', title: 'Shelf · Timeline Ribbons', name: 'shelf-5-timeline-ribbons.html', kind: 'page', session: 's1', age: .5 * H, size: 17004, group: 'g1', hue: 145, desc: 'Each session is a ribbon across a shared time axis.' },
+  { id: 'c1', title: 'Artifacts page — first pass', name: 'artifacts-page-dark.png', kind: 'image', session: 's2', age: 1.6 * H, size: 412000, hue: 222, cols: 3, desc: 'Screenshot of the Artifacts page with the viewer open beside the grid.' },
+  { id: 'c2', title: 'Dock preview — hover state', name: 'dock-preview-hover.png', kind: 'image', session: 's2', age: 2.4 * H, size: 286000, hue: 300, cols: 2, desc: 'The dock thumbnail expanding into a live preview on hover.' },
+  { id: 'b1', title: 'Composer · Command Strip', name: 'composer-1-command-strip.html', kind: 'page', session: 's2', age: 5 * H, size: 12400, group: 'g2', hue: 230, desc: 'One quiet line that grows a tool row and a slash-command palette.' },
+  { id: 'b2', title: 'Composer · Dock Satellites', name: 'composer-2-dock-satellites.html', kind: 'page', session: 's2', age: 5.2 * H, size: 13950, group: 'g2', hue: 285, desc: 'Model, mode and attachments orbit the input as satellites.' },
+  { id: 'b3', title: 'Composer · Split Ledger', name: 'composer-3-split-ledger.html', kind: 'page', session: 's2', age: 5.4 * H, size: 15210, group: 'g2', hue: 18, desc: 'Prompt on the left, running context ledger on the right.' },
+  { id: 'c3', title: 'Retrieval eval — bge-small vs MiniLM', name: 'retrieval-eval.csv', kind: 'data', session: 's3', age: 1.1 * D, size: 48200, hue: 160, desc: 'Recall@10 and MRR per query set, vector-only and hybrid.' },
+  { id: 'c4', title: 'Eval findings', name: 'eval-findings.md', kind: 'document', session: 's3', age: 1.2 * D, size: 9100, hue: 200, desc: 'bge-small wins vector-only; hybrid is unchanged because lexical dominates the fusion.' },
+  { id: 'c5', title: 'Weekly scheduled-runs report', name: 'scheduled-runs-report.md', kind: 'document', session: 's4', age: 2.3 * D, size: 6400, hue: 40, desc: 'Runs, failures and median duration for the week, with the two flaky monitors called out.' },
+  { id: 'c6', title: 'Run durations', name: 'run-durations.json', kind: 'data', session: 's4', age: 2.4 * D, size: 22800, hue: 30, desc: 'Per-run wall time for every scheduled monitor since October.' },
+  { id: 'c10', title: 'Release notes 0.42', name: 'release-notes-0.42.md', kind: 'document', session: 's4', age: 3 * D, size: 5200, hue: 260, desc: 'Artifacts page, dock previews, chat attachments and the ACP feedback work.' },
+  { id: 'c7', title: 'Onboarding funnel', name: 'onboarding-funnel.png', kind: 'image', session: 's5', age: 4 * D, size: 530000, hue: 20, cols: 3, desc: 'Where new users drop between workspace, project and first session.' },
+  { id: 'c8', title: 'Mobile pairing flow', name: 'mobile-pairing.png', kind: 'image', session: 's5', age: 4.2 * D, size: 391000, hue: 175, cols: 2, desc: 'The three pairing screens from the iOS simulator.' },
+  { id: 'c9', title: 'praxis-midnight-theme.zip', name: 'praxis-midnight-theme.zip', kind: 'other', session: 's5', age: 5 * D, size: 1240000, hue: 250, desc: 'Packaged theme add-on, ready to install.' }
+];
+const KINDS = [['all', 'All'], ['page', 'Pages'], ['image', 'Images'], ['document', 'Documents'], ['data', 'Data'], ['other', 'Other']];
+const KIND_LABEL = { page: 'Page', image: 'Image', document: 'Document', data: 'Data', other: 'File' };
+const ICONS = {
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>',
+  package: '<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  open: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v1"/><path d="M3 7v10a2 2 0 0 0 2 2h12l3-8H7l-3 8"/>',
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  back: '<path d="M15 18l-6-6 6-6"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  board: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/>',
+  home: '<path d="m3 11 9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+  pin: '<path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/>',
+  ungroup: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'
+};
+const KIND_ICON = { image: 'image', page: 'globe', document: 'file', data: 'table', other: 'package' };
+const icon = (n, s = 14) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
+const ext = it => it.name.split('.').pop().toUpperCase();
+const ago = ms => ms < H ? `${Math.max(1, Math.round(ms / 6e4))}m ago` : ms < D ? `${Math.round(ms / H)}h ago` : ms < 2 * D ? 'yesterday' : `${Math.round(ms / D)}d ago`;
+const fsize = b => b < 1024 ? `${b} B` : b < 1048576 ? `${Math.round(b / 1024)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function rng(seed) { let h = 2166136261; for (const ch of seed) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296; }
+const sessionOf = it => SESSIONS[it.session];
+const groupItems = g => ITEMS.filter(it => it.group === g.id);
+const groupById = id => GROUPS.find(g => g.id === id);
+
+/** A drawn preview of an artifact — stands in for the real thumbnail. */
+function thumb(it, { badge = true } = {}) {
+  const r = rng(it.id);
+  let inner = '';
+  if (it.kind === 'image') {
+    const n = (it.cols || 2) * 2, hot = 1 + Math.floor(r() * n);
+    inner = `<div class="win"><div class="side"><b></b><b></b><b></b><b></b></div><div class="main" style="--cols:${it.cols || 2}">${Array.from({ length: n }, (_, i) => `<b class="${i + 1 === hot ? 'hot' : ''}"></b>`).join('')}</div></div>`;
+  } else if (it.kind === 'page') {
+    inner = `<div class="bar"><b></b><b></b><b></b><u></u></div><div class="body" style="--w1:${40 + r() * 30}%;--w2:${60 + r() * 30}%"><i class="h"></i><i class="p"></i><i class="p" style="width:${40 + r() * 30}%"></i><div class="cols"><b></b><b></b><b></b></div></div>`;
+  } else if (it.kind === 'document') {
+    const lines = Array.from({ length: 11 }, (_, i) => i === 4 ? '<i class="s"></i>' : `<i style="width:${i % 5 === 3 ? 45 + r() * 20 : 78 + r() * 22}%"></i>`).join('');
+    inner = `<div class="paper"><em>${esc(it.title)}</em>${lines}</div>`;
+  } else if (it.kind === 'data') {
+    const bars = Array.from({ length: 9 }, (_, i) => { const h = 18 + r() * 72; return `<rect x="${i * 11 + 1}" y="${100 - h}" width="8" height="${h}" rx="1.5" fill="hsl(${it.hue} 70% ${i % 3 === 0 ? 68 : 45}%)"/>`; }).join('');
+    inner = `<span class="tot">${it.name.endsWith('csv') ? 'R@10 .847' : 'p50 3m12s'}</span><svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0 25h100M0 50h100M0 75h100" stroke="#ffffff10" stroke-width=".6" vector-effect="non-scaling-stroke"/>${bars}</svg>`;
+  } else {
+    inner = `<div class="ext"><span>.${ext(it).toLowerCase()}</span></div>`;
+  }
+  return `<div class="th th-${it.kind}" style="--h:${it.hue}">${inner}${badge ? `<span class="kind">${ext(it)}</span>` : ''}</div>`;
+}
+
+function cardActions(it) {
+  return `<div class="acts"><button class="iconbtn" title="Add to chat" data-act="chat" data-id="${it.id}">${icon('chat', 13)}</button><button class="iconbtn" title="Show in folder" data-act="reveal" data-id="${it.id}">${icon('open', 13)}</button><button class="iconbtn danger" title="Delete" data-act="delete" data-id="${it.id}">${icon('trash', 13)}</button></div>`;
+}
+function groupActions(g) {
+  return `<div class="acts"><button class="iconbtn" title="Add group to chat" data-act="chat-group" data-gid="${g.id}">${icon('chat', 13)}</button><button class="iconbtn" title="Ungroup" data-act="ungroup" data-gid="${g.id}">${icon('ungroup', 13)}</button></div>`;
+}
+
+// ── state ────────────────────────────────────────────────
+const S = { filter: 'all', query: '', sel: null, group: null };
+const searching = () => S.filter !== 'all' || S.query.trim() !== '';
+function matches(it) {
+  const q = S.query.trim().toLowerCase();
+  return (S.filter === 'all' || it.kind === S.filter) && (!q || [it.title, it.name, it.desc, sessionOf(it).title].some(v => v.toLowerCase().includes(q)));
+}
+/** Mirrors the real page: groups collapse on the home view; a filter or search lists every match flat. */
+function visible() {
+  if (S.group) return { groups: [], items: ITEMS.filter(it => it.group === S.group).filter(matches) };
+  if (searching()) return { groups: [], items: ITEMS.filter(matches) };
+  return { groups: GROUPS, items: ITEMS.filter(it => !it.group) };
+}
+function set(patch) { Object.assign(S, patch); paint(); }
+
+function paintPills() {
+  const el = document.getElementById('pills'); if (!el) return;
+  const counts = { all: ITEMS.length };
+  for (const it of ITEMS) counts[it.kind] = (counts[it.kind] || 0) + 1;
+  el.innerHTML = KINDS.filter(([k]) => counts[k]).map(([k, label]) => `<button class="${S.filter === k ? 'on' : ''}" data-act="filter" data-k="${k}">${label}<span class="n">${counts[k]}</span></button>`).join('');
+}
+function crumbHTML() {
+  const g = groupById(S.group); if (!g) return '';
+  return `<div class="crumb"><button class="iconbtn" data-act="back" title="All artifacts">${icon('back', 16)}</button>${icon('folder', 15)}<h2>${esc(g.name)}<span class="n">${groupItems(g).length} artifacts</span></h2><button class="btn" data-act="chat-group" data-gid="${g.id}">${icon('chat', 13)} Add to chat</button><button class="btn ghost" data-act="ungroup" data-gid="${g.id}">${icon('ungroup', 13)} Ungroup</button></div>`;
+}
+const emptyHTML = () => `<div class="empty">${icon('search', 28)}No artifacts match.</div>`;
+
+function paintViewer() {
+  const el = document.getElementById('viewer');
+  const it = ITEMS.find(i => i.id === S.sel);
+  document.getElementById('app').classList.toggle('has-sel', !!it);
+  if (!it) { el.innerHTML = ''; return; }
+  const s = sessionOf(it), g = it.group && groupById(it.group);
+  el.innerHTML = `<div class="v-head">${icon(KIND_ICON[it.kind], 13)}${KIND_LABEL[it.kind]} · ${ext(it)}<span class="sp"></span><button class="iconbtn" data-act="close" title="Close (Esc)">${icon('x', 15)}</button></div>
+  <div class="v-body"><h2>${esc(it.title)}</h2><div class="v-path"><code>artifacts/${esc(it.name)}</code></div>${thumb(it, { badge: false })}
+  <p class="v-desc">${esc(it.desc)}</p>
+  <dl class="v-meta"><dt>Saved</dt><dd>${ago(it.age)}</dd><dt>Size</dt><dd>${fsize(it.size)}</dd><dt>From</dt><dd><button class="link" data-act="session" data-id="${it.id}">${esc(s.title)}</button> <code>${s.key}</code></dd>${g ? `<dt>Group</dt><dd><button class="link" data-act="group" data-gid="${g.id}">${esc(g.name)}</button></dd>` : ''}</dl></div>
+  <div class="v-acts"><button class="btn primary" data-act="chat" data-id="${it.id}">${icon('chat', 13)} Add to chat</button><button class="btn" data-act="reveal" data-id="${it.id}">${icon('open', 13)}</button><button class="btn danger" data-act="delete" data-id="${it.id}">${icon('trash', 13)}</button></div>`;
+}
+function paint() { paintPills(); render(); paintViewer(); }
+
+let toastTimer;
+function toast(msg) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; document.body.append(t); }
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 1800);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]'); if (!t) return;
+  const it = ITEMS.find(i => i.id === t.dataset.id), g = groupById(t.dataset.gid);
+  e.stopPropagation();
+  switch (t.dataset.act) {
+    case 'open': return set({ sel: S.sel === it.id ? null : it.id });
+    case 'group': return set({ group: g.id, sel: null });
+    case 'back': return set({ group: null });
+    case 'filter': return set({ filter: t.dataset.k });
+    case 'close': return set({ sel: null });
+    case 'chat': return toast(`“${it.title}” attached to a new chat`);
+    case 'chat-group': return toast(`${groupItems(g).length} artifacts from “${g.name}” attached to a new chat`);
+    case 'session': return toast(`Opening session “${sessionOf(it).title}”`);
+    case 'reveal': return toast(`Revealed ${it.name} in Finder`);
+    case 'delete': return toast(`Would ask to confirm deleting ${it.name}`);
+    case 'ungroup': return toast(`Would ungroup “${g.name}”`);
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (S.sel) set({ sel: null }); else if (S.group) set({ group: null }); }
+  if (e.key === '/' && document.activeElement?.id !== 'q') { e.preventDefault(); document.getElementById('q')?.focus(); }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.card[data-act]')) { e.preventDefault(); e.target.click(); }
+});
+document.getElementById('q')?.addEventListener('input', e => set({ query: e.target.value }));
+
+document.querySelectorAll('#rail i').forEach(el => el.innerHTML = icon(el.dataset.r === 'chat' ? 'chat' : el.dataset.r, 17));
+// ── concept 4 ──
+function card(it, i) {
+  const s = sessionOf(it);
+  const meta = `<div class="meta"><b>${esc(it.title)}</b><div class="line"><span class="k">${icon(KIND_ICON[it.kind], 12)}</span>${ago(it.age)} · ${esc(s.title)}</div></div>`;
+  let top = thumb(it);
+  if (it.kind === 'document') top = `<div class="doc"><span class="eyebrow">${ext(it)} · ${fsize(it.size)}</span><q>${esc(it.desc)}</q></div>`;
+  if (it.kind === 'data') top = thumb(it) + `<div class="kpi">${it.name.endsWith('csv') ? '<div><b>.847</b>recall@10</div><div><b>.712</b>MRR</div><div><b>312</b>queries</div>' : '<div><b>3m12s</b>median</div><div><b>41</b>runs</div><div><b>2</b>failed</div>'}</div>`;
+  if (it.kind === 'other') return `<div class="card k-other${S.sel === it.id ? ' sel' : ''}" tabindex="0" style="--i:${i};--h:${it.hue}" data-act="open" data-id="${it.id}">${thumb(it)}${cardActions(it)}${meta}</div>`;
+  return `<div class="card k-${it.kind}${S.sel === it.id ? ' sel' : ''}" tabindex="0" style="--i:${i};--h:${it.hue}" data-act="open" data-id="${it.id}">${top}${cardActions(it)}${meta}</div>`;
+}
+function groupCard(g, i) {
+  const m = groupItems(g);
+  return `<div class="card" tabindex="0" style="--i:${i}" data-act="group" data-gid="${g.id}"><div class="fan">${m.slice(1, 3).map(x => thumb(x)).join('')}${thumb(m[0])}</div>${groupActions(g)}<div class="meta"><b>${esc(g.name)}</b><div class="line">${icon('folder', 12)}${m.length} artifacts · ${ago(Math.min(...m.map(x => x.age)))}</div></div></div>`;
+}
+function render() {
+  document.getElementById('crumb').innerHTML = crumbHTML();
+  const { groups, items } = visible();
+  // Interleave groups among the newest items so they don't all pile into the first column.
+  const out = [...items].sort((a, b) => a.age - b.age).map(card);
+  groups.forEach((g, n) => out.splice(1 + n * 3, 0, groupCard(g, 1 + n * 3)));
+  document.getElementById('board').innerHTML = out.join('') || emptyHTML();
+}
+paint();
+
+</script>
+</body>
+</html>

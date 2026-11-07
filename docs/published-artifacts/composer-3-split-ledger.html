@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Composer concept 3 · Split Ledger</title>
+<style>
+:root{--bg:#0f1013;--panel:#17191f;--panel2:#1e2129;--line:#2b2f3a;--text:#e9e9ee;--muted:#8d93a3;--accent:#f0b35a;--ok:#62d39b;--warn:#f2b45a;--bad:#ff6b6b;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline}
+header b{font-weight:600}
+header span{color:var(--muted);font-size:12px}
+.thread{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:12px;max-width:900px;width:100%;margin:0 auto}
+.msg{padding:10px 14px;border-radius:10px;max-width:80%;animation:fade .3s ease}
+.msg.agent{background:var(--panel);border:1px solid var(--line);align-self:flex-start}
+.msg.user{background:var(--panel2);border-left:3px solid var(--accent);align-self:flex-end}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}}
+.composer{max-width:900px;width:calc(100% - 48px);margin:0 auto 24px;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+.split{display:grid;grid-template-columns:1.4fr 1fr;transition:grid-template-columns .45s cubic-bezier(.2,.8,.2,1);min-height:190px}
+.split.collapsed{grid-template-columns:1fr 8px}
+.left{padding:12px 14px;display:flex;flex-direction:column;position:relative}
+.label{font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;resize:none;min-height:120px}
+textarea::placeholder{color:var(--muted)}
+.try{display:flex;gap:6px;flex-wrap:wrap}
+.try button{font:inherit;font-size:11px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;cursor:pointer}
+.try button:hover{color:var(--accent)}
+.right{border-left:1px solid var(--line);background:var(--panel2);padding:12px 14px;position:relative;overflow:hidden;min-width:0}
+.collapsed .right{padding:0}
+.collapsed .right .inner{opacity:0;pointer-events:none}
+.inner{transition:opacity .2s;min-width:220px}
+.rail{position:absolute;inset:0;background:var(--fillc,var(--ok));opacity:0;transition:opacity .3s,background-color .4s}
+.collapsed .rail{opacity:.9}
+.toggle{margin-left:auto;border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px}
+.rows{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}
+.r{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 4px;border-radius:6px;animation:tick .35s var(--spring)}
+.r.off{color:var(--muted)}
+.r .t{margin-left:auto;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.r.flash{background:color-mix(in srgb,var(--accent) 18%,transparent)}
+.r.leave{animation:out .25s ease forwards}
+@keyframes tick{from{opacity:0;transform:translateX(10px)}}
+@keyframes out{to{opacity:0;transform:translateX(-10px);height:0;padding:0;margin:0}}
+.ck{width:14px;height:14px;flex:none}
+.ck path{fill:none;stroke:var(--ok);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:20;stroke-dashoffset:20;animation:draw .3s .1s ease-out forwards}
+.ck circle{fill:none;stroke:var(--muted);stroke-width:1.5}
+@keyframes draw{to{stroke-dashoffset:0}}
+.r.off .toggle-row{cursor:pointer}
+.budget .head{display:flex;font-size:11px;color:var(--muted);margin-bottom:4px}
+.budget .head b{margin-left:auto;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums}
+.track{height:8px;border-radius:99px;background:#0003;overflow:hidden}
+.fill{height:100%;width:0;border-radius:99px;background-color:var(--fillc,var(--ok));transition:width .6s cubic-bezier(.2,.8,.2,1),background-color .4s;position:relative;overflow:hidden}
+.fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,#fff5,transparent);background-size:60% 100%;background-repeat:no-repeat;animation:liquid 1.8s linear infinite}
+@keyframes liquid{from{background-position:-60% 0}to{background-position:160% 0}}
+.foot{display:flex;align-items:center;gap:14px;padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.effort{display:flex;gap:3px;cursor:pointer}
+.effort i{width:6px;height:12px;border-radius:2px;background:var(--line);transition:background .2s,transform .2s var(--spring)}
+.effort i.on{background:var(--accent)}
+.effort i:hover{transform:scaleY(1.25)}
+.send{margin-left:auto;border:0;border-radius:8px;padding:5px 14px;background:var(--accent);color:#111;font-weight:600;cursor:pointer}
+.ghost{position:fixed;z-index:20;font-size:12px;padding:1px 7px;border-radius:6px;background:var(--accent);color:#111;pointer-events:none;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:120ms!important}}
+</style>
+</head>
+<body>
+<header><b>3 · Split Ledger</b><span>Write on the left; the right shows exactly what the agent will receive · mention files with @name.ext and tickets with #KEY-123</span></header>
+<main class="thread" id="thread">
+  <div class="msg agent">The ledger on the right updates as you type, so you can see what goes into the context before you send.</div>
+</main>
+<div class="composer">
+  <div class="split" id="split">
+    <div class="left">
+      <div class="label">Prompt</div>
+      <textarea id="ta" placeholder="Describe the change… try mentioning @assistantIpc.ts or #PRX-S111-181"></textarea>
+      <div class="try"><span class="label" style="margin:0">insert:</span>
+        <button data-ins="@assistantIpc.ts ">@assistantIpc.ts</button>
+        <button data-ins="@teamChatStore.ts ">@teamChatStore.ts</button>
+        <button data-ins="#PRX-S111-181 ">#PRX-S111-181</button>
+        <button data-ins="@SessionInspector.tsx ">@SessionInspector.tsx</button>
+      </div>
+    </div>
+    <div class="right" id="right">
+      <div class="rail"></div>
+      <div class="inner">
+        <div class="label">Context ledger <button class="toggle" id="toggle" title="Collapse to rail">⇥</button></div>
+        <div class="rows" id="rows"></div>
+        <div class="budget"><div class="head">Context budget<b id="pct">0%</b></div><div class="track"><div class="fill" id="fill"></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <span>Opus 5.5 ▾</span>
+    <span style="display:flex;gap:6px;align-items:center">effort <span class="effort" id="effort"><i></i><i></i><i></i><i></i></span></span>
+    <span>tools: project-only</span>
+    <button class="send" id="send">Send ⏎</button>
+  </div>
+</div>
+<script>
+const ta=document.getElementById('ta'),rowsEl=document.getElementById('rows'),fill=document.getElementById('fill'),pct=document.getElementById('pct'),split=document.getElementById('split'),thread=document.getElementById('thread');
+const BUDGET=12000;
+let shelf=false,effort=2,shown=new Map();
+const check='<svg class="ck" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></svg>';
+const empty='<svg class="ck" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg>';
+function est(name){let h=0;for(const c of name)h=(h*31+c.charCodeAt(0))%997;return 300+h*2}
+function items(){
+  const list=[{key:'sys',label:'System: free-form chat',tok:1100}];
+  const seen=new Set();
+  for(const m of ta.value.matchAll(/#([A-Z]+-[\w-]+)/g)){if(seen.has(m[1]))continue;seen.add(m[1]);list.push({key:'t:'+m[1],label:'🎫 '+m[1],tok:650})}
+  for(const m of ta.value.matchAll(/@([\w.\/-]+\.\w+)/g)){if(seen.has(m[1]))continue;seen.add(m[1]);list.push({key:'f:'+m[1],label:'📄 '+m[1],tok:est(m[1])})}
+  list.push({key:'shelf',label:'🗒 Shelf notes',tok:shelf?900:0,off:!shelf});
+  list.push({key:'prompt',label:'✎ Your prompt',tok:Math.ceil(ta.value.length/4)});
+  return list;
+}
+function render(newKeys){
+  const list=items(),keys=new Set(list.map(i=>i.key));
+  for(const [k,el] of shown)if(!keys.has(k)){el.classList.add('leave');setTimeout(()=>el.remove(),250);shown.delete(k)}
+  list.forEach(it=>{
+    let el=shown.get(it.key);
+    if(!el){el=document.createElement('div');el.className='r';shown.set(it.key,el);if(it.key==='shelf')el.addEventListener('click',()=>{shelf=!shelf;render()})}
+    const wasOff=el.classList.contains('off');
+    el.classList.toggle('off',!!it.off);
+    if(!el.innerHTML||wasOff!==!!it.off)el.innerHTML=(it.off?empty:check)+'<span></span><span class="t"></span>';
+    el.children[1].textContent=it.label+(it.key==='shelf'?(it.off?' (off · click)':' (click to drop)'):'');
+    el.children[2].textContent=it.off?'—':(it.tok/1000).toFixed(1)+'k';
+    el.style.cursor=it.key==='shelf'?'pointer':'';
+    if(!el.isConnected){const anchor=shown.get('shelf');rowsEl.insertBefore(el,anchor&&anchor.isConnected?anchor:null)}
+  });
+  const total=list.reduce((s,i)=>s+(i.off?0:i.tok),0);
+  const p=Math.min(100,Math.round(total/BUDGET*100));
+  fill.style.width=p+'%';pct.textContent=p+'% · '+(total/1000).toFixed(1)+'k';
+  const c=p>=95?'var(--bad)':p>=80?'var(--warn)':'var(--ok)';
+  document.documentElement.style.setProperty('--fillc',c);
+  return list;
+}
+function caret(){
+  const cs=getComputedStyle(ta),r=ta.getBoundingClientRect();
+  const m=document.createElement('div');
+  for(const k of['fontFamily','fontSize','lineHeight','padding','width','letterSpacing'])m.style[k]=cs[k];
+  m.style.cssText+=';position:fixed;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;left:'+r.left+'px;top:'+r.top+'px';
+  m.textContent=ta.value.slice(0,ta.selectionStart);const s=document.createElement('span');s.textContent='​';m.appendChild(s);
+  document.body.appendChild(m);const sr=s.getBoundingClientRect();m.remove();
+  return{x:sr.left,y:sr.top-ta.scrollTop};
+}
+let prevKeys=new Set(items().map(i=>i.key));
+function onInput(){
+  const before=prevKeys;const list=render();prevKeys=new Set(list.map(i=>i.key));
+  list.filter(i=>!before.has(i.key)&&/^[ft]:/.test(i.key)).forEach(i=>{
+    const target=shown.get(i.key);const from=caret();
+    const g=document.createElement('div');g.className='ghost';g.textContent=i.label;document.body.appendChild(g);
+    g.style.left=from.x+'px';g.style.top=from.y+'px';
+    requestAnimationFrame(()=>{const tr=target.getBoundingClientRect();const dx=tr.left-from.x,dy=tr.top-from.y;
+      g.animate([{transform:'translate(0,0) scale(.8)',opacity:.4},{transform:`translate(${dx*.5}px,${dy*.5-40}px) scale(1.1)`,opacity:1},{transform:`translate(${dx}px,${dy}px) scale(1)`,opacity:.2}],{duration:600,easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>{g.remove();target.classList.add('flash');setTimeout(()=>target.classList.remove('flash'),500)}});
+  });
+}
+ta.addEventListener('input',onInput);
+document.querySelectorAll('[data-ins]').forEach(b=>b.addEventListener('click',()=>{const pos=ta.selectionStart??ta.value.length;ta.value=ta.value.slice(0,pos)+b.dataset.ins+ta.value.slice(pos);ta.focus();ta.selectionStart=ta.selectionEnd=pos+b.dataset.ins.length;onInput()}));
+document.getElementById('toggle').addEventListener('click',e=>{e.stopPropagation();split.classList.add('collapsed')});
+document.getElementById('right').addEventListener('click',()=>{if(split.classList.contains('collapsed'))split.classList.remove('collapsed')});
+const ef=[...document.querySelectorAll('#effort i')];
+function drawEffort(){ef.forEach((i,n)=>i.classList.toggle('on',n<=effort))}
+ef.forEach((i,n)=>i.addEventListener('click',()=>{effort=n;drawEffort()}));drawEffort();
+function send(){
+  const text=ta.value.trim();if(!text)return;
+  const n=items().filter(i=>!i.off&&i.key!=='prompt').length;
+  const d=document.createElement('div');d.className='msg user';d.textContent=text;thread.appendChild(d);
+  ta.value='';onInput();thread.scrollTop=thread.scrollHeight;
+  setTimeout(()=>{const a=document.createElement('div');a.className='msg agent';a.textContent=`Received your prompt with ${n} context item${n===1?'':'s'}.`;thread.appendChild(a);thread.scrollTop=thread.scrollHeight},700);
+}
+document.getElementById('send').addEventListener('click',send);
+ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});
+render();
+</script>
+</body>
+</html>

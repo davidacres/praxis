@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Composer concept 2 · Dock &amp; Satellites</title>
+<style>
+:root{--bg:#0d0f14;--panel:#161a22;--panel2:#202634;--line:#2b3140;--text:#e8eaf0;--muted:#8a93a6;--accent:#6ee7c8;--accent2:#7c9cff;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:radial-gradient(1200px 500px at 50% 110%,#13202a,var(--bg));color:var(--text);display:flex;flex-direction:column;overflow:hidden}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline}
+header b{font-weight:600}
+header span{color:var(--muted);font-size:12px}
+.thread{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:12px;max-width:760px;width:100%;margin:0 auto}
+.msg{padding:10px 14px;border-radius:12px;max-width:80%;animation:fade .35s ease}
+.msg.agent{background:var(--panel);border:1px solid var(--line);align-self:flex-start}
+.msg.user{background:var(--panel2);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));align-self:flex-end}
+.msg small{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.stage{position:relative;height:300px;flex:none}
+.dock{position:absolute;left:50%;top:50%;width:min(500px,64vw);transform:translate(-50%,-50%);background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:14px 16px 12px;box-shadow:0 20px 60px #0008;transition:box-shadow .3s,border-color .3s;z-index:2}
+.dock.glow{border-color:var(--accent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 18%,transparent),0 0 80px color-mix(in srgb,var(--accent) 35%,transparent)}
+.dock.pulse{animation:pulse .5s var(--spring)}
+@keyframes pulse{40%{transform:translate(-50%,-50%) scale(1.04)}}
+textarea{width:100%;background:none;border:0;outline:0;color:var(--text);font:inherit;resize:none;height:44px}
+textarea::placeholder{color:var(--muted)}
+.bar{display:flex;gap:8px;align-items:center;margin-top:6px}
+.pill{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 10px;cursor:pointer;user-select:none;transition:all .2s}
+.pill.on{color:var(--bg);background:var(--accent);border-color:var(--accent)}
+.count{font-size:12px;color:var(--muted);margin-left:auto}
+.send{border:0;border-radius:999px;padding:5px 14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0d12;font-weight:600;cursor:pointer}
+.send:active{transform:scale(.94)}
+.sat{position:absolute;left:0;top:0;transform:translate(-50%,-50%);z-index:3}
+.sat .body{display:flex;align-items:center;gap:6px;padding:5px 8px 5px 11px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:12px;white-space:nowrap;box-shadow:0 6px 18px #0007;animation:float var(--dur) ease-in-out infinite alternate;animation-delay:var(--delay)}
+.sat .x{border:0;background:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:0 2px;border-radius:50%}
+.sat .x:hover{color:#ff7b7b}
+.sat.add .body{background:none;border-style:dashed;color:var(--muted);cursor:pointer;padding-right:11px}
+.sat.add .body:hover{color:var(--accent);border-color:var(--accent)}
+@keyframes float{from{transform:translateY(-1.5px)}to{transform:translateY(1.5px)}}
+.tether{position:absolute;inset:0;pointer-events:none;z-index:1}
+.tether line{stroke:color-mix(in srgb,var(--accent) 35%,transparent);stroke-width:1;stroke-dasharray:3 5;animation:march 1.2s linear infinite}
+@keyframes march{to{stroke-dashoffset:-16}}
+.spark{position:fixed;width:5px;height:5px;border-radius:50%;background:var(--accent);pointer-events:none;z-index:20}
+.hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);font-size:11px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:120ms!important}}
+</style>
+</head>
+<body>
+<header><b>2 · Dock &amp; Satellites</b><span>Context orbits the composer · drop files onto the dock · “＋ add context” · × to remove · Send pulls everything in</span></header>
+<main class="thread" id="thread">
+  <div class="msg agent">Everything orbiting the dock goes along with your next message.</div>
+</main>
+<section class="stage" id="stage">
+  <svg class="tether" id="tether"></svg>
+  <div class="dock" id="dock">
+    <textarea id="ta" placeholder="What should change in the coordinator?"></textarea>
+    <div class="bar">
+      <span class="pill on">Opus 5.5</span>
+      <span class="pill" id="plan">plan mode</span>
+      <span class="count" id="count"></span>
+      <button class="send" id="send">Send ➤</button>
+    </div>
+  </div>
+  <div class="hint">Tip: drag a file from Finder onto the dock</div>
+</section>
+<script>
+const stage=document.getElementById('stage'),dock=document.getElementById('dock'),ta=document.getElementById('ta'),thread=document.getElementById('thread'),tether=document.getElementById('tether'),count=document.getElementById('count');
+const ANGLES=[-140,-40,140,40,-90,90,-160,-20];
+const pool=[['📄','SessionInspector.tsx'],['📄','teamChatStore.ts'],['🎫','PRX-S111-181'],['🗒','Shelf: retry notes'],['📘','AGENTS.md'],['📄','assistantTypes.ts']];
+let sats=[];let poolIdx=0;
+const addBtn=makeSat('＋','add context',true);
+function center(){const s=stage.getBoundingClientRect(),d=dock.getBoundingClientRect();return{cx:d.left-s.left+d.width/2,cy:d.top-s.top+d.height/2,rx:d.width/2+40,ry:d.height/2+46}}
+function slot(i){const c=center();const a=ANGLES[i%ANGLES.length]*Math.PI/180;const ring=1+Math.floor(i/ANGLES.length)*.25;return{x:c.cx+Math.cos(a)*c.rx*ring,y:c.cy+Math.sin(a)*c.ry*ring}}
+function makeSat(icon,label,isAdd){
+  const el=document.createElement('div');el.className='sat'+(isAdd?' add':'');
+  el.innerHTML=`<div class="body" style="--dur:${2+Math.random()*1.5}s;--delay:-${Math.random()*2}s"><span>${icon}</span><span></span>${isAdd?'':'<button class="x" title="Remove">×</button>'}</div>`;
+  el.querySelector('span:nth-child(2)').textContent=label;
+  stage.appendChild(el);
+  if(isAdd)el.addEventListener('click',()=>{const names=sats.map(s=>s.querySelector('span:nth-child(2)').textContent);let p=pool[poolIdx++%pool.length];for(let n=0;n<pool.length&&names.includes(p[1]);n++)p=pool[poolIdx++%pool.length];const r=el.getBoundingClientRect(),s=stage.getBoundingClientRect();addSat(p[0],p[1],r.left-s.left+r.width/2,r.top-s.top+r.height/2)});
+  else el.querySelector('.x').addEventListener('click',e=>{e.stopPropagation();removeSat(el)});
+  return el;
+}
+function place(el,p){el.style.left=p.x+'px';el.style.top=p.y+'px'}
+function layout(animate){
+  const all=[...sats,addBtn];
+  all.forEach((el,i)=>{
+    const p=slot(i);
+    if(animate&&el._placed){const ox=parseFloat(el.style.left),oy=parseFloat(el.style.top);place(el,p);el.animate([{transform:`translate(-50%,-50%) translate(${ox-p.x}px,${oy-p.y}px)`},{transform:'translate(-50%,-50%)'}],{duration:450,easing:'cubic-bezier(.34,1.4,.64,1)'})}
+    else place(el,p);
+    el._placed=true;
+  });
+  drawTethers();
+  count.textContent=sats.length?`${sats.length} in orbit`:'no context';
+}
+function drawTethers(){const c=center();tether.innerHTML=sats.map(el=>`<line x1="${c.cx}" y1="${c.cy}" x2="${el.style.left}" y2="${el.style.top}"/>`).join('')}
+function addSat(icon,label,fromX,fromY){
+  const el=makeSat(icon,label,false);sats.push(el);
+  layout(true);
+  const p=slot(sats.length-1);const dx=fromX-p.x,dy=fromY-p.y;
+  const mx=dx*.5+(dy>0?-60:60),my=dy*.5-70;
+  el.animate([
+    {transform:`translate(-50%,-50%) translate(${dx}px,${dy}px) scale(.4)`,opacity:0},
+    {transform:`translate(-50%,-50%) translate(${mx}px,${my}px) scale(1.1)`,opacity:1,offset:.55},
+    {transform:'translate(-50%,-50%) scale(1)'}
+  ],{duration:700,easing:'cubic-bezier(.22,.9,.3,1)'});
+}
+function burst(x,y,n=10){for(let i=0;i<n;i++){const s=document.createElement('div');s.className='spark';s.style.left=x+'px';s.style.top=y+'px';document.body.appendChild(s);const a=Math.random()*Math.PI*2,d=20+Math.random()*30;s.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d}px) scale(.2)`,opacity:0}],{duration:450+Math.random()*200,easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>s.remove()}}
+function removeSat(el){
+  sats=sats.filter(s=>s!==el);
+  const b=el.querySelector('.body');
+  b.animate([{transform:'scale(1,1)'},{transform:'scale(1.3,.8)',offset:.45},{transform:'scale(0)',opacity:0}],{duration:320,easing:'ease-in'}).onfinish=()=>{const r=el.getBoundingClientRect();burst(r.left+r.width/2,r.top+r.height/2);el.remove();layout(true)};
+}
+function add(kind,text,note){const d=document.createElement('div');d.className='msg '+kind;d.textContent=text;if(note){const s=document.createElement('small');s.textContent=note;d.appendChild(s)}thread.appendChild(d);thread.scrollTop=thread.scrollHeight}
+function send(){
+  const text=ta.value.trim();if(!text){ta.focus();dock.animate([{transform:'translate(-50%,-50%)'},{transform:'translate(calc(-50% - 6px),-50%)'},{transform:'translate(calc(-50% + 6px),-50%)'},{transform:'translate(-50%,-50%)'}],{duration:260});return}
+  const c=center();const names=sats.map(s=>s.querySelector('span:nth-child(2)').textContent);
+  const going=sats;sats=[];tether.innerHTML='';
+  going.forEach((el,i)=>{const dx=c.cx-parseFloat(el.style.left),dy=c.cy-parseFloat(el.style.top);
+    el.animate([{transform:'translate(-50%,-50%)'},{transform:`translate(-50%,-50%) translate(${dx}px,${dy}px) scale(.1)`,opacity:0}],{duration:420,delay:i*60,easing:'cubic-bezier(.55,0,.8,.3)',fill:'forwards'}).onfinish=()=>el.remove()});
+  setTimeout(()=>{dock.classList.remove('pulse');void dock.offsetWidth;dock.classList.add('pulse');add('user',text,names.length?'with '+names.join(' · '):'');ta.value='';layout(true);
+    setTimeout(()=>add('agent','Got it — I have the context you sent along.'),700)},420+going.length*60);
+}
+document.getElementById('send').addEventListener('click',send);
+document.getElementById('plan').addEventListener('click',e=>e.target.classList.toggle('on'));
+ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
+['dragenter','dragover'].forEach(t=>stage.addEventListener(t,e=>{e.preventDefault();dock.classList.add('glow')}));
+stage.addEventListener('dragleave',e=>{if(!stage.contains(e.relatedTarget))dock.classList.remove('glow')});
+stage.addEventListener('drop',e=>{e.preventDefault();dock.classList.remove('glow');const s=stage.getBoundingClientRect();const files=[...(e.dataTransfer.files||[])];(files.length?files.map(f=>f.name):['dropped item']).forEach((n,i)=>setTimeout(()=>addSat('📄',n,e.clientX-s.left,e.clientY-s.top),i*120))});
+window.addEventListener('resize',()=>layout(false));
+layout(false);
+setTimeout(()=>addSat('📄','assistantIpc.ts',stage.clientWidth,0),300);
+setTimeout(()=>addSat('🎫','PRX-S111-181',0,0),550);
+setTimeout(()=>addSat('🗒','Shelf note',stage.clientWidth/2,stage.clientHeight),800);
+</script>
+</body>
+</html>

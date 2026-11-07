@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Composer concept 5 · Ambient Canvas</title>
+<style>
+:root{--bg:#07080c;--panel:#12141b;--line:#232633;--text:#eef0f6;--muted:#7d8499;--accent:#8b7bff;--warn:#ffb454}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
+header{padding:14px 20px;display:flex;gap:12px;align-items:baseline;position:relative;z-index:2}
+header b{font-weight:600}
+header span{color:var(--muted);font-size:12px}
+.states{margin-left:auto;display:flex;gap:6px}
+.states button{font:inherit;font-size:11px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:99px;padding:1px 9px;cursor:pointer}
+.states button.on{color:var(--text);border-color:var(--muted)}
+.thread{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:14px;max-width:720px;width:100%;margin:0 auto;position:relative;z-index:2;mask-image:linear-gradient(to bottom,transparent,#000 40px)}
+.msg{max-width:85%;animation:fade .5s ease}
+.msg.agent{color:#cfd3e0;align-self:flex-start}
+.msg.user{align-self:flex-end;color:var(--text);padding:8px 14px;border-radius:14px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent)}
+@keyframes fade{from{opacity:0;filter:blur(4px);transform:translateY(8px)}}
+.canvas-wrap{position:relative;height:230px;flex:none;cursor:text}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.field{position:absolute;left:50%;top:120px;transform:translateX(-50%);width:min(640px,calc(100% - 48px))}
+.mirror,textarea{font:300 22px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;letter-spacing:.01em;padding:0;margin:0;border:0;width:100%;white-space:pre-wrap;overflow-wrap:break-word}
+textarea{position:absolute;inset:0;background:none;outline:0;resize:none;color:transparent;caret-color:var(--accent);height:62px;overflow:hidden}
+.mirror{pointer-events:none;min-height:62px;color:var(--text)}
+.mirror .ph{color:var(--muted);transition:opacity .4s}
+.mirror .c{display:inline;animation:ink .6s ease-out}
+@keyframes ink{from{opacity:.25;filter:blur(2px);color:var(--accent)}}
+.mirror .c.dissolve{display:inline-block;white-space:pre;animation:dissolve .7s ease-in forwards;animation-delay:var(--d)}
+@keyframes dissolve{to{opacity:0;transform:translate(var(--x),var(--y)) scale(.6);filter:blur(6px)}}
+.meta{position:absolute;right:24px;bottom:14px;font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center}
+.meta .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .4s}
+.approve{position:absolute;left:50%;bottom:16px;transform:translate(-50%,20px);opacity:0;pointer-events:none;transition:all .4s cubic-bezier(.34,1.56,.64,1);font-size:12px;background:var(--panel);border:1px solid color-mix(in srgb,var(--warn) 50%,var(--line));border-radius:99px;padding:4px 6px 4px 14px;display:flex;gap:10px;align-items:center}
+.approve.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.approve button{font:inherit;font-size:12px;border:0;border-radius:99px;padding:2px 10px;background:var(--warn);color:#111;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:120ms!important}}
+</style>
+</head>
+<body>
+<header><b>5 · Ambient Canvas</b><span>No box — type straight onto the horizon · Enter to send</span>
+  <div class="states" id="states"><button data-s="idle" class="on">idle</button><button data-s="thinking">thinking</button><button data-s="approval">needs approval</button></div>
+</header>
+<main class="thread" id="thread">
+  <div class="msg agent">The horizon is the composer and the status light. It breathes when idle, races while I think, and turns amber when I need your approval.</div>
+</main>
+<section class="canvas-wrap" id="wrap">
+  <canvas id="cv"></canvas>
+  <div class="field">
+    <div class="mirror" id="mirror"></div>
+    <textarea id="ta" spellcheck="false"></textarea>
+  </div>
+  <div class="approve" id="approve">Tool wants to run <code>npm test</code><button id="allow">Allow</button></div>
+  <div class="meta"><span class="dot" id="dot"></span><span id="stateLabel">ready</span><span>· Opus 5.5 · ⏎ to send</span></div>
+</section>
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),wrap=document.getElementById('wrap'),ta=document.getElementById('ta'),mirror=document.getElementById('mirror'),thread=document.getElementById('thread');
+const approveEl=document.getElementById('approve'),dot=document.getElementById('dot'),stateLabel=document.getElementById('stateLabel');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const STATES={
+  idle:{amp:4,speed:.5,glow:.45,col:[139,123,255],label:'ready'},
+  focus:{amp:6,speed:.8,glow:.85,col:[139,123,255],label:'listening'},
+  thinking:{amp:16,speed:3.2,glow:1,col:[110,200,255],label:'thinking…'},
+  approval:{amp:9,speed:1.4,glow:1,col:[255,180,84],label:'needs your approval'}
+};
+let state='idle',cur={...STATES.idle,col:[...STATES.idle.col]},t=0,grid=0,focused=false;
+function setState(s){state=s;stateLabel.textContent=STATES[s].label;document.querySelectorAll('#states button').forEach(b=>b.classList.toggle('on',b.dataset.s===s||(s==='focus'&&b.dataset.s==='idle')));approveEl.classList.toggle('show',s==='approval');}
+function resize(){const r=wrap.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;ctx.setTransform(d,0,0,d,0,0)}
+const lerp=(a,b,k)=>a+(b-a)*k;
+function frame(){
+  const w=cv.clientWidth,h=cv.clientHeight,T=STATES[state];
+  const k=.05;cur.amp=lerp(cur.amp,T.amp,k);cur.speed=lerp(cur.speed,T.speed,k);cur.glow=lerp(cur.glow,T.glow,k);cur.col=cur.col.map((v,i)=>lerp(v,T.col[i],k));
+  grid=lerp(grid,(focused||state!=='idle')?1:0,.06);
+  t+=reduce?0:.016*cur.speed;
+  ctx.clearRect(0,0,w,h);
+  const [r,g,b]=cur.col.map(Math.round);const base=96;
+  // dot grid that rises behind the text on focus
+  if(grid>.01){for(let x=12;x<w;x+=22)for(let y=base+8;y<h;y+=22){const fall=1-(y-base)/(h-base);const a=grid*.18*fall;ctx.fillStyle=`rgba(${r},${g},${b},${a})`;ctx.fillRect(x,y+(1-grid)*20,1.4,1.4)}}
+  // glow below the horizon
+  const grad=ctx.createLinearGradient(0,base-40,0,h);grad.addColorStop(0,'rgba(0,0,0,0)');grad.addColorStop(.25,`rgba(${r},${g},${b},${.12*cur.glow})`);grad.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=grad;ctx.fillRect(0,base-40,w,h);
+  // three layered waves
+  for(let L=0;L<3;L++){
+    ctx.beginPath();
+    for(let x=0;x<=w;x+=4){const edge=Math.sin(Math.PI*x/w);const y=base+edge*(Math.sin(x*.012+t*(1+L*.3)+L)*cur.amp+Math.sin(x*.031-t*1.7+L*2)*cur.amp*.35);x?ctx.lineTo(x,y):ctx.moveTo(x,y)}
+    const lg=ctx.createLinearGradient(0,0,w,0);lg.addColorStop(0,`rgba(${r},${g},${b},0)`);lg.addColorStop(.5,`rgba(${r},${g},${b},${(.9-L*.28)*cur.glow})`);lg.addColorStop(1,`rgba(${r},${g},${b},0)`);
+    ctx.strokeStyle=lg;ctx.lineWidth=L?1:1.6;ctx.shadowColor=`rgba(${r},${g},${b},${.8*cur.glow})`;ctx.shadowBlur=L?0:14;ctx.stroke();
+  }
+  ctx.shadowBlur=0;dot.style.background=`rgb(${r},${g},${b})`;
+  requestAnimationFrame(frame);
+}
+let prev='';
+function renderMirror(){
+  const v=ta.value;mirror.textContent='';
+  if(!v){const p=document.createElement('span');p.className='ph';p.textContent='What do you want to explore?';mirror.appendChild(p);prev='';return}
+  // keep the unchanged prefix as plain text, ink-in only the new characters
+  let same=0;while(same<v.length&&same<prev.length&&v[same]===prev[same])same++;
+  mirror.appendChild(document.createTextNode(v.slice(0,same)));
+  for(const ch of v.slice(same)){const s=document.createElement('span');s.className='c';s.textContent=ch;mirror.appendChild(s)}
+  prev=v;
+}
+function add(kind,text){const d=document.createElement('div');d.className='msg '+kind;d.textContent=text;thread.appendChild(d);thread.scrollTop=thread.scrollHeight}
+let busy=false;
+async function send(){
+  const text=ta.value.trim();if(!text||busy)return;busy=true;
+  // dissolve every character upward
+  mirror.textContent='';[...ta.value].forEach(ch=>{const s=document.createElement('span');s.className='c dissolve';s.textContent=ch;s.style.setProperty('--d',(Math.random()*.25).toFixed(2)+'s');s.style.setProperty('--x',(Math.random()*30-15).toFixed(0)+'px');s.style.setProperty('--y',(-40-Math.random()*50).toFixed(0)+'px');mirror.appendChild(s)});
+  ta.value='';prev='';setState('thinking');
+  await wait(750);add('user',text);renderMirror();
+  await wait(2200);setState('approval');
+  await new Promise(r=>{const done=()=>{clearTimeout(tm);document.getElementById('allow').removeEventListener('click',done);r()};const tm=setTimeout(done,3500);document.getElementById('allow').addEventListener('click',done)});
+  setState('thinking');await wait(1200);
+  add('agent','Tests pass. Here’s what I found…');setState(focused?'focus':'idle');busy=false;
+}
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+ta.addEventListener('input',renderMirror);
+ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
+ta.addEventListener('focus',()=>{focused=true;if(state==='idle')setState('focus')});
+ta.addEventListener('blur',()=>{focused=false;if(state==='focus')setState('idle')});
+wrap.addEventListener('click',()=>ta.focus());
+document.querySelectorAll('#states button').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();if(!busy)setState(b.dataset.s)}));
+document.getElementById('allow').addEventListener('click',e=>e.stopPropagation());
+window.addEventListener('resize',resize);
+resize();renderMirror();frame();
+</script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Composer concept 1 · Command Strip</title>
+<style>
+:root{--bg:#0e1014;--panel:#161920;--panel2:#1f2430;--line:#2a303c;--text:#e7e9ef;--muted:#8b93a5;--accent:#7c9cff;--accent2:#b48cff;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline}
+header b{font-weight:600}
+header span{color:var(--muted);font-size:12px}
+.thread{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:12px;max-width:760px;width:100%;margin:0 auto}
+.msg{padding:10px 14px;border-radius:12px;max-width:80%}
+.msg.agent{background:var(--panel);border:1px solid var(--line);align-self:flex-start;animation:fade .3s ease}
+.msg.user{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0d12;align-self:flex-end;animation:land .35s var(--spring)}
+@keyframes land{from{transform:scale(.92)}}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}}
+.dock{max-width:760px;width:100%;margin:0 auto;padding:0 24px 24px;position:relative}
+.strip{background:var(--panel);border:1px solid var(--line);border-radius:14px;transition:border-color .2s,box-shadow .25s}
+.strip:focus-within{border-color:color-mix(in srgb,var(--accent) 60%,var(--line));box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 14%,transparent)}
+.row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px}
+.glyph{color:var(--muted);font-size:13px;line-height:22px;transition:color .2s,transform .3s var(--spring)}
+.strip:focus-within .glyph{color:var(--accent);transform:rotate(-12deg)}
+textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;line-height:22px;resize:none;height:22px;max-height:180px;overflow:hidden;transition:height .3s var(--spring);padding:0}
+textarea::placeholder{color:var(--muted)}
+.model{color:var(--muted);font-size:12px;line-height:20px;padding:0 8px;border-radius:6px;border:1px solid var(--line);white-space:nowrap;cursor:pointer}
+.send{border:0;background:var(--accent);color:#0b0d12;border-radius:8px;width:30px;height:22px;font-weight:700;cursor:pointer;transition:transform .15s,opacity .2s;opacity:.35}
+.has-text .send{opacity:1}
+.send:active{transform:scale(.88)}
+.tools-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .35s var(--spring)}
+.expanded .tools-wrap{grid-template-rows:1fr}
+.tools{overflow:hidden;min-height:0;display:flex;gap:8px;align-items:center;padding:0 12px;border-top:1px solid transparent;transition:border-color .2s,padding .3s}
+.expanded .tools{padding:8px 12px;border-top-color:var(--line)}
+.chip{font-size:12px;color:var(--muted);padding:2px 9px;border-radius:999px;background:var(--panel2);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .35s var(--spring)}
+.expanded .chip{opacity:1;transform:none;transition-delay:calc(var(--i)*30ms)}
+.tok{margin-left:auto;font-variant-numeric:tabular-nums}
+.palette{position:absolute;left:24px;right:24px;bottom:calc(100% + 8px);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px;box-shadow:0 16px 40px #0009;opacity:0;transform:translateY(8px) scale(.98);transform-origin:bottom center;pointer-events:none;transition:opacity .18s,transform .3s var(--spring)}
+.palette.open{opacity:1;transform:none;pointer-events:auto}
+.cmd{display:flex;gap:10px;padding:7px 10px;border-radius:8px;opacity:0;transform:translateY(-4px);cursor:pointer}
+.palette.open .cmd{animation:drop .28s var(--spring) forwards;animation-delay:calc(var(--i)*35ms)}
+@keyframes drop{to{opacity:1;transform:none}}
+.cmd.active{background:var(--panel2)}
+.cmd b{color:var(--accent);font-weight:500;min-width:90px}
+.cmd span{color:var(--muted)}
+.cmd[hidden]{display:none}
+.flyer{position:fixed;z-index:10;padding:8px 14px;border-radius:999px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0d12;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px;pointer-events:none;box-shadow:0 10px 30px #0008}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:120ms!important}}
+</style>
+</head>
+<body>
+<header><b>1 · Command Strip</b><span>Type to expand · start with “/” for commands · Enter to send · Shift+Enter for a new line</span></header>
+<main class="thread" id="thread">
+  <div class="msg agent">Hi! I’m ready when you are. The composer stays as one quiet line until you start typing.</div>
+</main>
+<div class="dock">
+  <div class="palette" id="palette">
+    <div class="cmd" style="--i:0" data-cmd="/plan"><b>/plan</b><span>Switch to plan mode</span></div>
+    <div class="cmd" style="--i:1" data-cmd="/model"><b>/model</b><span>Pick a model for this session</span></div>
+    <div class="cmd" style="--i:2" data-cmd="/attach"><b>/attach</b><span>Attach files or a ticket</span></div>
+    <div class="cmd" style="--i:3" data-cmd="/shelf"><b>/shelf</b><span>Include shelf notes</span></div>
+    <div class="cmd" style="--i:4" data-cmd="/effort"><b>/effort</b><span>Set reasoning effort</span></div>
+  </div>
+  <div class="strip" id="strip">
+    <div class="row">
+      <span class="glyph">⌘</span>
+      <textarea id="ta" rows="1" placeholder="Ask, or type / for commands…" autofocus></textarea>
+      <span class="model">Opus 5.5 ▾</span>
+      <button class="send" id="send" title="Send">⏎</button>
+    </div>
+    <div class="tools-wrap"><div class="tools">
+      <span class="chip" style="--i:0">📎 2 files</span>
+      <span class="chip" style="--i:1">🗒 shelf</span>
+      <span class="chip" style="--i:2">◐ effort: medium</span>
+      <span class="chip" style="--i:3">🛡 project-only</span>
+      <span class="chip tok" style="--i:4" id="tok">0 tok</span>
+    </div></div>
+  </div>
+</div>
+<script>
+const ta=document.getElementById('ta'),strip=document.getElementById('strip'),pal=document.getElementById('palette'),thread=document.getElementById('thread'),tok=document.getElementById('tok');
+const cmds=[...pal.querySelectorAll('.cmd')];
+let active=0;
+const mirror=document.createElement('div');
+mirror.style.cssText='position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;font:14px/22px -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif';
+document.body.appendChild(mirror);
+function visibleCmds(){return cmds.filter(c=>!c.hidden)}
+function fit(){
+  mirror.style.width=ta.clientWidth+'px';
+  mirror.textContent=ta.value+'​';
+  const natural=mirror.offsetHeight;
+  ta.style.height=Math.min(Math.max(natural,22),180)+'px';
+  ta.style.overflowY=natural>180?'auto':'hidden';
+  const has=ta.value.trim().length>0;
+  strip.classList.toggle('has-text',has);
+  strip.classList.toggle('expanded',has&&!/^\/\w*$/.test(ta.value));
+  tok.textContent=Math.ceil(ta.value.length/4)+' tok';
+  const m=/^\/(\w*)$/.exec(ta.value);
+  if(m){cmds.forEach(c=>c.hidden=!c.dataset.cmd.startsWith('/'+m[1]));active=0;mark()}
+  pal.classList.toggle('open',!!m&&visibleCmds().length>0);
+}
+function mark(){visibleCmds().forEach((c,i)=>c.classList.toggle('active',i===active))}
+function pick(c){ta.value=c.dataset.cmd+' ';pal.classList.remove('open');fit();ta.focus()}
+cmds.forEach(c=>c.addEventListener('mousedown',e=>{e.preventDefault();pick(c)}));
+function add(kind,text){const d=document.createElement('div');d.className='msg '+kind;d.textContent=text;thread.appendChild(d);thread.scrollTop=thread.scrollHeight}
+function send(){
+  const text=ta.value.trim();if(!text)return;
+  const r=ta.getBoundingClientRect(),tr=thread.getBoundingClientRect();
+  const f=document.createElement('div');f.className='flyer';f.textContent=text;document.body.appendChild(f);
+  f.style.left=r.left+'px';f.style.top=r.top+'px';
+  const last=thread.lastElementChild;
+  const ty=Math.min(last?last.getBoundingClientRect().bottom+12:tr.top+24,tr.bottom-50);
+  const tx=tr.right-24-f.offsetWidth;
+  const dx=tx-r.left,dy=ty-r.top;
+  ta.value='';fit();
+  f.animate([
+    {transform:'translate(0,0) scale(.96)',borderRadius:'999px'},
+    {transform:`translate(${dx*.55}px,${dy*.7-30}px) scale(1.05)`,offset:.6},
+    {transform:`translate(${dx}px,${dy}px) scale(1)`,borderRadius:'12px'}
+  ],{duration:540,easing:'cubic-bezier(.2,.8,.2,1)'}).onfinish=()=>{
+    f.remove();add('user',text);
+    setTimeout(()=>add('agent','On it — reading the relevant files now.'),650);
+  };
+}
+ta.addEventListener('input',fit);
+ta.addEventListener('keydown',e=>{
+  if(pal.classList.contains('open')){
+    const v=visibleCmds();
+    if(e.key==='ArrowDown'){e.preventDefault();active=(active+1)%v.length;mark();return}
+    if(e.key==='ArrowUp'){e.preventDefault();active=(active-1+v.length)%v.length;mark();return}
+    if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();pick(v[active]);return}
+    if(e.key==='Escape'){pal.classList.remove('open');return}
+  }
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
+});
+document.getElementById('send').addEventListener('click',send);
+window.addEventListener('resize',fit);
+fit();
+</script>
+</body>
+</html>

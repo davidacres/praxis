@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Composer concept 4 · Stack of Cards</title>
+<style>
+:root{--bg:#101014;--panel:#1a1a21;--panel2:#22222b;--line:#30303c;--text:#ececf2;--muted:#8f8fa3;--accent:#ff8a65;--accent2:#ffcf6b;--spring:cubic-bezier(.34,1.56,.64,1)}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;padding:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:baseline}
+header b{font-weight:600}
+header span{color:var(--muted);font-size:12px}
+.thread{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:12px;max-width:760px;width:100%;margin:0 auto}
+.msg{padding:10px 14px;border-radius:12px;max-width:80%;animation:fade .3s ease}
+.msg.agent{background:var(--panel);border:1px solid var(--line);align-self:flex-start}
+.msg.user{background:var(--panel2);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));align-self:flex-end}
+.msg .n{font-size:10px;color:var(--accent);display:block;letter-spacing:.08em}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.deck{position:relative;max-width:620px;width:calc(100% - 48px);margin:0 auto 24px;height:270px;perspective:900px}
+.card{position:absolute;left:0;right:0;bottom:0;height:160px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:0 10px 30px #0007;
+  transform-origin:50% 100%;
+  transform:translateY(calc(var(--i)*-32px)) scale(calc(1 - var(--i)*.05));
+  z-index:calc(100 - var(--i));filter:brightness(calc(1 - var(--i)*.14));
+  transition:transform .45s var(--spring),opacity .3s,border-color .3s;display:flex;flex-direction:column}
+.deck:has(.card.back:hover) .card.back{transform:translate(calc(var(--i)*36px),calc(var(--i)*-34px)) rotate(calc(var(--i)*3.5deg));filter:none}
+.card.back{cursor:default;overflow:hidden;padding-top:6px;background:#1f1f27}
+.card.back .text{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.label{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.card.back .label{color:var(--text)}
+.top{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);height:20px}
+.badge{font-size:10px;font-weight:700;letter-spacing:.06em;padding:1px 7px;border-radius:99px;background:var(--panel2);color:var(--accent)}
+.card.front .badge{background:var(--accent);color:#1a1a1a}
+.tbtn{border:0;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 3px;opacity:0;transition:opacity .2s}
+.card.back:hover .tbtn{opacity:1}
+.tbtn:hover{color:var(--text)}
+.top .sp{margin-left:auto}
+textarea{flex:1;background:none;border:0;outline:0;color:var(--text);font:inherit;resize:none;margin-top:6px}
+textarea::placeholder{color:var(--muted)}
+.actions{display:flex;gap:8px;align-items:center}
+.btn{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:8px;padding:4px 10px;cursor:pointer;transition:transform .15s}
+.btn:active{transform:scale(.94)}
+.btn.primary{margin-left:auto;border:0;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#1a1a1a;font-weight:600}
+.btn[disabled]{opacity:.4;cursor:default}
+.card.enter{animation:rise .5s var(--spring)}
+@keyframes rise{from{transform:translateY(60px) scale(.96);opacity:0}}
+.card.flipback{animation:flip .5s ease}
+@keyframes flip{0%{transform:translateY(0) rotateX(0)}40%{transform:translateY(-30px) rotateX(14deg)}}
+.card.shake{animation:shake .3s}
+@keyframes shake{25%{translate:-6px 0}75%{translate:6px 0}}
+.card.working{border-color:var(--accent)}
+.card.working::before{content:"";position:absolute;left:14px;right:14px;top:-1px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent),var(--accent2),transparent);background-size:50% 100%;background-repeat:no-repeat;animation:shimmer 1s linear infinite}
+@keyframes shimmer{from{background-position:-50% 0}to{background-position:150% 0}}
+.card.peel{animation:peel .55s cubic-bezier(.5,0,.75,0) forwards}
+@keyframes peel{0%{clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}40%{transform:translateY(-10px) rotate(-2deg);clip-path:polygon(0 0,100% 0,100% 70%,85% 100%,0 100%)}100%{transform:translate(-30px,-160px) rotate(-14deg);opacity:0;clip-path:polygon(0 0,100% 0,100% 0,0 100%,0 100%)}}
+.card.flick{transition:none;animation:flick .4s cubic-bezier(.5,0,.9,.5) forwards}
+@keyframes flick{to{transform:translate(140%,-40px) rotate(22deg);opacity:0}}
+.status{position:absolute;left:0;top:0;font-size:11px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:120ms!important}}
+</style>
+</head>
+<body>
+<header><b>4 · Stack of Cards</b><span>Write a prompt, “＋ Queue next” to stack it · hover the cards behind to fan them · ↑ to move earlier · × to flick away · “Run stack” sends them in order</span></header>
+<main class="thread" id="thread">
+  <div class="msg agent">Queue up follow-ups as cards. When you run the stack, I’ll work through them one at a time.</div>
+</main>
+<div class="deck" id="deck"><div class="status" id="status"></div></div>
+<script>
+const deck=document.getElementById('deck'),thread=document.getElementById('thread'),status=document.getElementById('status');
+let seq=0,running=false;
+// Visual order, front first. Front card is the draft being written.
+let cards=[];
+function mk(text,draft){
+  const id=++seq;const el=document.createElement('div');el.className='card';el.dataset.id=id;
+  el.innerHTML=`<div class="top"><span class="badge"></span><span class="label"></span><span class="sp"></span><button class="tbtn up" title="Move earlier">↑</button><button class="tbtn del" title="Remove">×</button></div>
+  <textarea placeholder="What should happen next?"></textarea><div class="text"></div>
+  <div class="actions"><button class="btn q">＋ Queue next</button><button class="btn primary run">▶ Run stack</button></div>`;
+  const c={id,el,text:text||'',order:id};
+  el.querySelector('textarea').value=c.text;
+  el.querySelector('textarea').addEventListener('input',e=>{c.text=e.target.value;sync()});
+  el.querySelector('textarea').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();queue()}});
+  el.querySelector('.q').addEventListener('click',queue);
+  el.querySelector('.run').addEventListener('click',run);
+  el.querySelector('.del').addEventListener('click',()=>remove(c));
+  el.querySelector('.up').addEventListener('click',()=>moveEarlier(c));
+  deck.appendChild(el);return c;
+}
+// Send order: earliest queued first = deepest card first.
+function sendOrder(){return cards.slice(1).reverse()}
+function sync(){
+  const order=sendOrder();
+  cards.forEach((c,i)=>{
+    const el=c.el,front=i===0&&!running;
+    el.style.setProperty('--i',i);
+    el.classList.toggle('front',i===0);el.classList.toggle('back',i>0);
+    el.querySelector('textarea').style.display=front?'':'none';
+    el.querySelector('.actions').style.display=front?'':'none';
+    el.querySelector('.text').style.display='none';
+    el.querySelector('.text').textContent=c.text;
+    const n=order.indexOf(c);
+    el.querySelector('.badge').textContent=i===0&&!running?'DRAFT':'#'+(running?i+1:n+1);
+    el.querySelector('.label').textContent=i===0&&!running?(order.length?`${order.length} queued behind`:'nothing queued yet'):(running&&i===0?'running… '+c.text:c.text);
+  });
+  const runBtn=cards[0]&&cards[0].el.querySelector('.run');
+  if(runBtn)runBtn.disabled=!(sendOrder().length||cards[0].text.trim());
+}
+function queue(){
+  const f=cards[0];
+  if(!f.text.trim()){f.el.classList.remove('shake');void f.el.offsetWidth;f.el.classList.add('shake');return}
+  f.el.classList.add('flipback');setTimeout(()=>f.el.classList.remove('flipback'),500);
+  const n=mk('',true);n.el.classList.add('enter');setTimeout(()=>n.el.classList.remove('enter'),500);
+  cards.unshift(n);sync();n.el.querySelector('textarea').focus();
+}
+function remove(c){
+  c.el.classList.add('flick');
+  setTimeout(()=>{c.el.remove();cards=cards.filter(x=>x!==c);sync()},400);
+}
+function moveEarlier(c){
+  const i=cards.indexOf(c);if(i<cards.length-1){[cards[i],cards[i+1]]=[cards[i+1],cards[i]];sync()}
+}
+function add(kind,text,n){const d=document.createElement('div');d.className='msg '+kind;if(n){const s=document.createElement('span');s.className='n';s.textContent=n;d.appendChild(s)}d.appendChild(document.createTextNode(text));thread.appendChild(d);thread.scrollTop=thread.scrollHeight}
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function run(){
+  if(running)return;
+  if(!cards[0].text.trim())cards[0].el.remove(),cards.shift();
+  if(!cards.length){reset();return}
+  running=true;
+  // Shuffle into send order (earliest at the front); transitions animate the reorder.
+  cards=cards.slice().reverse();sync();
+  await wait(550);
+  let k=1;const total=cards.length;
+  while(cards.length){
+    const c=cards[0];status.textContent=`Running ${k} of ${total}`;
+    c.el.classList.add('working');add('user',c.text,'CARD '+k);
+    await wait(1400);
+    add('agent',`Done with card ${k}.`);
+    c.el.classList.remove('working');c.el.classList.add('peel');
+    await wait(550);
+    c.el.remove();cards.shift();sync();k++;
+    await wait(250);
+  }
+  status.textContent='Stack complete ✓';running=false;reset();
+  setTimeout(()=>status.textContent='',2000);
+}
+function reset(){const n=mk('',true);n.el.classList.add('enter');cards=[n];sync()}
+// Seed with a couple of queued cards so the stack is visible straight away.
+const a=mk('Fix the updatedAt regression in the coordinator');const b=mk('Add a unit test that covers it');const d=mk('');
+cards=[d,b,a];sync();
+</script>
+</body>
+</html>
