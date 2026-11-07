@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Code Intelligence</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column with wide "figure" bands for diagrams and tables; a sticky section index on wide screens. */
+:root {
+  --bg: #f4f6f5;
+  --surface: #ffffff;
+  --ink: #17201f;
+  --muted: #56625f;
+  --rule: #d8dfdc;
+  --accent: #0f6b62;
+  --accent-soft: #dcefeb;
+  --lexical: #2f5fb3;
+  --vector: #0f8a7d;
+  --exact: #b07012;
+  --alias: #a8456b;
+  --good: #1f7a3d;
+  --warn: #9a6a00;
+  --code-bg: #eaf0ee;
+  --display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111716; --surface: #18201f; --ink: #e4ecea; --muted: #9aa9a5; --rule: #2b3634;
+    --accent: #5cc4b5; --accent-soft: #1d3532; --lexical: #7fa6ec; --vector: #4fd0bf; --exact: #e2a64a; --alias: #e486ab;
+    --good: #6fd08f; --warn: #e2b44a; --code-bg: #1e2827; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111716; --surface: #18201f; --ink: #e4ecea; --muted: #9aa9a5; --rule: #2b3634;
+  --accent: #5cc4b5; --accent-soft: #1d3532; --lexical: #7fa6ec; --vector: #4fd0bf; --exact: #e2a64a; --alias: #e486ab;
+  --good: #6fd08f; --warn: #e2b44a; --code-bg: #1e2827; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.page { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 56px; }
+@media (max-width: 900px) { .page { grid-template-columns: minmax(0, 1fr); gap: 0; } nav.index { display: none; } }
+nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; padding-top: 112px; font-size: 13px; }
+nav.index ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; border-left: 1px solid var(--rule); }
+nav.index a { display: block; padding: 2px 0 2px 14px; color: var(--muted); text-decoration: none; margin-left: -1px; border-left: 2px solid transparent; }
+nav.index a:hover, nav.index a:focus-visible { color: var(--ink); border-left-color: var(--accent); outline: none; }
+main { min-width: 0; }
+header.hero { padding-block: 72px 32px; border-bottom: 1px solid var(--rule); }
+.eyebrow { font: 500 12px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(36px, 6vw, 58px)/1.02 var(--display); letter-spacing: -.02em; margin: 12px 0 18px; text-wrap: balance; }
+h2 { font: 600 28px/1.15 var(--display); letter-spacing: -.01em; margin: 0 0 12px; text-wrap: balance; }
+h3 { font: 600 18px/1.3 var(--display); margin: 0 0 6px; }
+p { margin: 0; max-width: 66ch; }
+.lede { font-size: 19px; color: var(--muted); max-width: 60ch; }
+section { padding-block: 48px 8px; display: grid; gap: 18px; scroll-margin-top: 16px; }
+.muted { color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: .88em; }
+:not(pre) > code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+a { color: var(--accent); }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin-top: 28px; }
+.fact { background: var(--surface); padding: 16px 18px; display: grid; gap: 2px; align-content: start; }
+.fact b { font: 600 24px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.fact span { font-size: 13px; color: var(--muted); }
+
+.figure { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 20px; overflow-x: auto; }
+.figure figcaption { font-size: 13px; color: var(--muted); margin-top: 12px; }
+pre.mermaid { margin: 0; background: transparent; text-align: center; min-width: 560px; }
+
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: step; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 14px; padding: 16px 0; border-top: 1px solid var(--rule); }
+ol.steps li:first-child { border-top: 0; }
+ol.steps li::before { content: counter(step); font: 600 15px/26px var(--mono); width: 28px; height: 28px; border-radius: 50%; text-align: center; background: var(--accent-soft); color: var(--accent); }
+ol.steps p { font-size: 15px; }
+
+.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.channel { border: 1px solid var(--rule); border-top: 3px solid var(--c); border-radius: 8px; padding: 14px 16px; background: var(--surface); display: grid; gap: 6px; align-content: start; }
+.channel .w { font: 500 12px/1 var(--mono); color: var(--c); }
+.channel p { font-size: 14px; }
+
+.formula { font: 500 15px/1.6 var(--mono); background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; white-space: nowrap; }
+
+.rank { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.rank ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: r; }
+.rank li { counter-increment: r; display: grid; grid-template-columns: 26px minmax(0,1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; padding: 5px 8px; border-radius: 6px; }
+.rank li::before { content: counter(r); font: 500 12px var(--mono); color: var(--muted); }
+.rank li .tag { font: 500 11px var(--mono); color: var(--c); }
+.rank li.hit { background: var(--accent-soft); font-weight: 600; }
+.rank h3 { font-size: 15px; }
+
+.tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 24px; }
+.tool { padding: 10px 0; border-top: 1px solid var(--rule); display: grid; gap: 2px; }
+.tool code { font-size: 14px; background: none; padding: 0; color: var(--accent); font-weight: 500; }
+.tool span { font-size: 14px; color: var(--muted); }
+
+.cmd { display: flex; gap: 8px; align-items: stretch; }
+.cmd pre { flex: 1; min-width: 0; margin: 0; background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font: 400 13.5px/1.55 var(--mono); }
+.cmd button { font: 500 13px var(--body); border: 1px solid var(--rule); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 0 14px; cursor: pointer; }
+.cmd button:hover { border-color: var(--accent); }
+.cmd button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--rule); vertical-align: top; }
+thead th { border-top: 0; font: 600 12px var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; background: var(--bg); }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.up { color: var(--good); font-weight: 600; }
+.pill { display: inline-block; font: 500 11px/1 var(--mono); padding: 4px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.ok { color: var(--good); }
+.pill.open { color: var(--warn); }
+
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; font-size: 15px; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 70ch; }
+footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <nav class="index" aria-label="Sections">
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#indexing">Indexing</a></li>
+      <li><a href="#search">Search</a></li>
+      <li><a href="#tools">Agent tools</a></li>
+      <li><a href="#access">Access and setup</a></li>
+      <li><a href="#consistency">Freshness</a></li>
+      <li><a href="#evidence">Measured results</a></li>
+      <li><a href="#limits">Limits and open work</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="hero" id="overview">
+      <div class="eyebrow">services/code-intelligence · search plan 8</div>
+      <h1>Praxis Code Intelligence</h1>
+      <p class="lede">A local index of a repository's symbols, call graph and meaning. AI agents query it through eleven read-only tools instead of rebuilding their understanding of the code with grep and file reads every session.</p>
+      <div class="facts" role="list">
+        <div class="fact" role="listitem"><b>C# + TS/JS</b><span>Roslyn and the TypeScript 7 compiler</span></div>
+        <div class="fact" role="listitem"><b>134 ms</b><span>hybrid search p95 at 50,000 symbols</span></div>
+        <div class="fact" role="listitem"><b>0.924</b><span>Recall@10 on the held-out Maze corpus</span></div>
+        <div class="fact" role="listitem"><b>11 tools</b><span>read-only, over MCP or the desktop</span></div>
+        <div class="fact" role="listitem"><b>On device</b><span>no source leaves the machine to build the index</span></div>
+      </div>
+    </header>
+
+    <section id="architecture" aria-labelledby="h-arch">
+      <h2 id="h-arch">Architecture</h2>
+      <p>One owner process per user holds the index. The desktop app, the command line and every agent's MCP bridge talk to it over a private socket (a current-user named pipe on Windows) with a random token. Language analysis runs in-process for C# and in a Node sidecar for TypeScript. Embeddings come from a pinned local ONNX model.</p>
+      <figure class="figure">
+        <pre class="mermaid">
+flowchart LR
+  subgraph Clients
+    D[Praxis desktop]
+    C[CLI]
+    M[MCP bridge<br/>one per agent]
+  end
+  subgraph Owner["Owner process (one per user)"]
+    Q[Query service<br/>11 tools]
+    S[Durable job scheduler]
+    R[Roslyn analyser<br/>C#]
+    E[ONNX embeddings<br/>bge-small-en-v1.5]
+  end
+  T[TS sidecar<br/>TypeScript 7 compiler]
+  DB[(SQLite index<br/>symbols · edges · FTS5 · vectors)]
+  F[Repository files<br/>git-ignore aware watcher]
+  D -- socket + token --> Q
+  C -- socket + token --> Q
+  M -- socket + token --> Q
+  Q --> DB
+  S --> R
+  S --> T
+  S --> E
+  R --> DB
+  T -- streamed records --> S
+  E --> DB
+  F --> S
+        </pre>
+        <figcaption>Agents never read the index database directly: every request goes through the owner, which checks the client's grant on each query.</figcaption>
+      </figure>
+    </section>
+
+    <section id="indexing" aria-labelledby="h-index">
+      <h2 id="h-index">How a repository is indexed</h2>
+      <p>Registering a folder starts a durable job. Each stage below runs in order, and a later edit re-runs only what changed.</p>
+      <ol class="steps">
+        <li><div><h3>Scan</h3><p>Walks the folder, honours <code>.gitignore</code>, and skips <code>node_modules</code>, <code>bin</code>, <code>obj</code> and <code>dist</code>. Limits: 25,000 source files, 256 MB of source and 50,000 symbols per repository.</p></div></li>
+        <li><div><h3>Analyse</h3><p>C# projects are analysed with Roslyn from a passive project manifest; it never builds or restores anything. TypeScript and JavaScript go to the sidecar, which opens every <code>tsconfig</code> project and streams back one record per line. Imports of a workspace package resolve to its source, not its compiled <code>.d.ts</code>, and <code>&lt;Component /&gt;</code> usage counts as a call.</p></div></li>
+        <li><div><h3>Publish</h3><p>Symbols, call and type edges, source locations and the full-text index are written in one transaction. That raises the repository's generation and query epoch together, so a reader always sees one consistent snapshot.</p></div></li>
+        <li><div><h3>Embed</h3><p>Each symbol's name, signature, documentation and a bounded source excerpt become up to four 384-dimension vectors. They are committed every 1,000 symbols, so coverage climbs during the build. A first build stays inactive until the final commit, so search never uses half a model.</p></div></li>
+        <li><div><h3>Watch</h3><p>A file watcher and a one-minute safety reconcile catch edits. Changed symbols are republished and re-embedded. Unchanged vectors are reused, never rewritten.</p></div></li>
+      </ol>
+    </section>
+
+    <section id="search" aria-labelledby="h-search">
+      <h2 id="h-search">How search ranks results</h2>
+      <p><code>search_code</code> runs several retrieval channels and merges their rankings with reciprocal rank fusion (RRF). Exact name matches always come first.</p>
+      <div class="channels">
+        <div class="channel" style="--c: var(--exact)"><span class="w">exact · always first</span><h3>Exact name</h3><p>The query equals a symbol's name, qualified name or signature.</p></div>
+        <div class="channel" style="--c: var(--lexical)"><span class="w">weight 4</span><h3>Lexical</h3><p>SQLite FTS5 with BM25 over names, signatures, docs and descriptions.</p></div>
+        <div class="channel" style="--c: var(--vector)"><span class="w">weight 1 · floor 1</span><h3>Vector</h3><p>Cosine similarity against the bge-small embeddings. Finds code described in different words.</p></div>
+        <div class="channel" style="--c: var(--alias)"><span class="w">weight 0.5</span><h3>Alias</h3><p>Phrases a team has attached to a symbol, matched exactly.</p></div>
+      </div>
+      <div class="formula" aria-label="RRF score formula">score(symbol) = Σ<sub>channel</sub> weight<sub>channel</sub> ÷ (60 + rank<sub>channel</sub>)</div>
+      <p>Lexical matches outweigh vector matches four to one, because keyword hits are usually right when they exist. That has one failure: when ten weak keyword hits exist, a paraphrased question whose answer only the model finds never reaches the first page. Search plan 8 adds a <strong>vector floor</strong>: the best vector candidate always takes the tenth place if it ranked lower, and the candidate it displaces moves to the next page.</p>
+      <div class="figure">
+        <div class="rank">
+          <div>
+            <h3>Plan 7, without the floor</h3>
+            <ol>
+              <li><span>RunProfile.steps</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li><span>checkoutIdentity</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li><span>createUnifiedDiff</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li><span>… seven more keyword matches</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li class="muted"><span>preserveUncommittedWork (rank 14)</span><span class="tag" style="--c: var(--vector)">vector #1</span></li>
+            </ol>
+          </div>
+          <div>
+            <h3>Plan 8, with the floor</h3>
+            <ol>
+              <li><span>RunProfile.steps</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li><span>checkoutIdentity</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li><span>createUnifiedDiff</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li><span>… six more keyword matches</span><span class="tag" style="--c: var(--lexical)">lexical</span></li>
+              <li class="hit"><span>preserveUncommittedWork</span><span class="tag" style="--c: var(--vector)">vector #1</span></li>
+            </ol>
+          </div>
+        </div>
+        <figcaption>Illustration for the query “save leftover edits as a commit before a checkout is deleted”. Neither the query nor the answer shares a keyword, so only the vector channel ranks the answer highly.</figcaption>
+      </div>
+      <p class="muted">The weights and the floor were chosen by a pre-registered experiment on a separate tuning set, then accepted on corpora that played no part in choosing them. The figures are under <a href="#evidence">Measured results</a>.</p>
+    </section>
+
+    <section id="tools" aria-labelledby="h-tools">
+      <h2 id="h-tools">The eleven agent tools</h2>
+      <p>Every tool is read-only and returns evidence: source paths, ranges, content hashes and the index generation the answer came from. Static call edges show what code <em>can</em> call, not what it does at runtime.</p>
+      <div class="tools">
+        <div class="tool"><code>search_code</code><span>Hybrid search by meaning, keywords or names</span></div>
+        <div class="tool"><code>find_symbol</code><span>Look up a symbol by name or qualified name</span></div>
+        <div class="tool"><code>get_symbol</code><span>A symbol's kind, signature and declarations</span></div>
+        <div class="tool"><code>get_source</code><span>Bounded, hash-checked source for a symbol</span></div>
+        <div class="tool"><code>explain_symbol</code><span>Compiler facts about a symbol, with evidence</span></div>
+        <div class="tool"><code>get_callers</code><span>Who calls it, each caller named, paged</span></div>
+        <div class="tool"><code>get_callees</code><span>What it calls, including across projects</span></div>
+        <div class="tool"><code>trace_flow</code><span>A bounded static path through the call graph</span></div>
+        <div class="tool"><code>find_related</code><span>Implements, inherits, overrides and references</span></div>
+        <div class="tool"><code>summarize_project</code><span>The shape of a project for orientation</span></div>
+        <div class="tool"><code>get_index_status</code><span>Coverage, freshness, jobs and model state</span></div>
+      </div>
+    </section>
+
+    <section id="access" aria-labelledby="h-access">
+      <h2 id="h-access">Access and setup</h2>
+      <div class="split">
+        <div class="note"><p><strong>Grants decide what leaves the machine.</strong> Indexing is entirely local. Tool results go into an AI provider's context, so each repository is granted to a named client (for example <code>claude-cli</code>). The owner re-checks the grant's root and nonce on every query, and moving or unregistering a repository revokes it.</p></div>
+        <div class="note"><p><strong>Inside Praxis it is automatic.</strong> An agent session started on a folder registers it, grants that provider, and receives a <code>code_intelligence</code> MCP server scoped to the folder.</p></div>
+      </div>
+      <p>For Claude Code in a terminal, one MCP server serves every repository granted to it. Connect each repository once:</p>
+      <div class="cmd"><pre id="cmd-connect">npm run connect:code-intelligence -- /path/to/repo</pre><button type="button" data-copy="cmd-connect">Copy</button></div>
+      <p class="muted">It registers the folder, grants <code>claude-cli</code>, waits for the index, activates the semantic model if it is downloaded, and adds the <code>code-intelligence</code> server to Claude Code the first time. In a session, <code>list_repositories</code> shows what is available, and every tool takes a <code>repository</code> name.</p>
+      <div class="cmd"><pre id="cmd-list">npm run connect:code-intelligence -- --list
+npm run connect:code-intelligence -- --disconnect /path/to/repo</pre><button type="button" data-copy="cmd-list">Copy</button></div>
+    </section>
+
+    <section id="consistency" aria-labelledby="h-fresh">
+      <h2 id="h-fresh">Freshness and consistency</h2>
+      <ul class="plain">
+        <li><strong>Generation</strong> counts structural publications. <strong>Query epoch</strong> moves on anything that changes results: publication, stale marking, a model switch or newly ready vectors.</li>
+        <li>Paging cursors carry the epoch and expire only when results could differ. Background bookkeeping, such as the one-minute reconcile, no longer invalidates them.</li>
+        <li>Source reads verify content hashes. A file changed since indexing fails closed instead of returning text that no longer matches the evidence.</li>
+        <li>If the model is missing, hybrid search falls back to keywords with a warning. Vector-only search reports <code>MODEL_UNAVAILABLE</code>.</li>
+      </ul>
+    </section>
+
+    <section id="evidence" aria-labelledby="h-evidence">
+      <h2 id="h-evidence">Measured results</h2>
+      <p>Retrieval quality, as Recall@10 / MRR@10 on queries never used for tuning:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Corpus</th><th>Category</th><th class="num">Plan 7</th><th class="num">Plan 8</th></tr></thead>
+          <tbody>
+            <tr><td>Maze, C# (80 held-out)</td><td>All</td><td class="num">0.894 / 0.687</td><td class="num up">0.924 / 0.734</td></tr>
+            <tr><td></td><td>Terminology</td><td class="num">0.615 / 0.308</td><td class="num up">0.692 / 0.413</td></tr>
+            <tr><td></td><td>Behaviour</td><td class="num">0.933 / 0.734</td><td class="num up">1.000 / 0.760</td></tr>
+            <tr><td></td><td>Exact names</td><td class="num">1.000 / 1.000</td><td class="num">1.000 / 1.000</td></tr>
+            <tr><td>Praxis, TypeScript (40 labelled)</td><td>All</td><td class="num">0.787 / 0.718</td><td class="num up">0.838 / 0.782</td></tr>
+            <tr><td></td><td>Terminology</td><td class="num">0.500 / 0.308</td><td class="num up">0.667 / 0.398</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Performance and memory on a 12-core Mac:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Measurement</th><th class="num">Result</th><th>Gate</th></tr></thead>
+          <tbody>
+            <tr><td>Hybrid search p95, 50k symbols</td><td class="num">134 ms</td><td><span class="pill ok">≤ 500 ms</span></td></tr>
+            <tr><td>Retrieval-only p95, 50k symbols</td><td class="num">122 ms</td><td><span class="pill ok">≤ 250 ms</span></td></tr>
+            <tr><td>Query matrix, 40 processes, 1–4 readers</td><td class="num">40 / 40 pass</td><td><span class="pill ok">all gates</span></td></tr>
+            <tr><td>Peak memory, 25 concurrent edits at 50k</td><td class="num">1.65 GB</td><td><span class="pill ok">≤ 2 GiB</span></td></tr>
+            <tr><td>Indexing Praxis (40k symbols): owner / sidecar</td><td class="num">419 / 793 MiB</td><td><span class="pill ok">within budget</span></td></tr>
+            <tr><td>First vector build, 40k symbols</td><td class="num">≈ 23 min</td><td><span class="pill open">no gate</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">A real Claude Code session answered caller and rendering questions about this repository correctly using only these tools, in 17 turns. Before call results named their callers it took 32.</p>
+    </section>
+
+    <section id="limits" aria-labelledby="h-limits">
+      <h2 id="h-limits">Limits and open work</h2>
+      <ul class="plain">
+        <li>All performance figures come from one 12-core Mac. The 8-core, 16 GiB reference machine is unmeasured.</li>
+        <li>Real agent adapters (Claude Code, Codex, Copilot) are exercised, not yet formally qualified.</li>
+        <li>Files outside any <code>tsconfig</code>, such as Playwright specs, get declarations but no call graph.</li>
+        <li>The repository limit is 50,000 symbols; Praxis already uses 80% of it.</li>
+        <li>The TypeScript compiler process peaks near 1.3 GB while analysing a large monorepo.</li>
+        <li>Data flow through general delegates is not resolved, and NuGet package names are not inferred.</li>
+      </ul>
+    </section>
+
+    <footer>Source of truth: <code>services/code-intelligence/docs/release-evidence.md</code>, <code>specification-v1.2.md</code> and the evaluation reports under <code>docs/evaluations</code>. Model: BAAI/bge-small-en-v1.5 (MIT), pinned by revision and SHA-256.</footer>
+  </main>
+</div>
+
+<script>
+document.querySelectorAll('button[data-copy]').forEach(function (button) {
+  button.addEventListener('click', function () {
+    var source = document.getElementById(button.getAttribute('data-copy'));
+    var text = source.textContent;
+    var done = function () { button.textContent = 'Copied'; setTimeout(function () { button.textContent = 'Copy'; }, 1500); };
+    var select = function () { var range = document.createRange(); range.selectNodeContents(source); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); button.textContent = 'Selected'; };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, select);
+      else select();
+    } catch (error) { select(); }
+  });
+});
+</script>
+
+<!--claude-mermaid-runtime-begin:3477-->
+<style>.mermaid-diagram{margin-block:4px}.mermaid-diagram svg{display:block;margin:0 auto;max-width:100%;height:auto}</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>
+<script>(function(){
+var CFG={"palettes":{"light":{"surface":"#f4efe4","text":"#42392e","line":"#8a7f6d","border":"#7a6c52","bg":"#fffdf8"},"dark":{"surface":"#262b34","text":"#f2f3f5","line":"#a8adb8","border":"#9aa4b8","bg":"#1f232b"}}};
+if(typeof mermaid==='undefined')return;
+var pres=Array.prototype.slice.call(document.querySelectorAll('pre.mermaid')).filter(function(p){if(p.hasAttribute('data-claude-mermaid-claimed'))return false;p.setAttribute('data-claude-mermaid-claimed','1');return true;});
+if(!pres.length)return;
+var mq=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+var root=document.documentElement;
+var items=pres.map(function(pre){
+var mount=document.createElement('div');mount.className='mermaid-diagram';
+return {pre:pre,mount:mount,src:pre.textContent||''};
+});
+var seq=0;
+var renderGen=0;
+var lastKey='';
+function pageBg(fallback){
+var els=[document.body,document.documentElement];
+for(var i=0;i<els.length;i++){
+var c=els[i]&&getComputedStyle(els[i]).backgroundColor;
+if(c&&c!=='transparent'&&c!=='rgba(0, 0, 0, 0)')return c;
+}
+return fallback;
+}
+function render(){
+var theme=root.getAttribute('data-theme');
+var dark=theme==='dark'||(!!(mq&&mq.matches)&&theme!=='light');
+var pal=dark?CFG.palettes.dark:CFG.palettes.light;
+var bg=pageBg(pal.bg);
+var key=(dark?'d':'l')+'|'+bg;
+if(key===lastKey)return;
+lastKey=key;
+var gen=++renderGen;
+var font=getComputedStyle(document.body).fontFamily||'sans-serif';
+var nat={useMaxWidth:false};
+mermaid.initialize({
+startOnLoad:false,securityLevel:'strict',theme:'base',
+flowchart:nat,sequence:nat,er:nat,state:nat,class:nat,pie:nat,
+gantt:nat,journey:nat,timeline:nat,gitGraph:nat,mindmap:nat,xyChart:nat,
+quadrantChart:nat,sankey:nat,c4:nat,requirement:nat,block:nat,
+packet:nat,kanban:nat,architecture:nat,radar:nat,
+themeVariables:{background:bg,mainBkg:pal.surface,primaryColor:pal.surface,
+primaryTextColor:pal.text,lineColor:pal.line,primaryBorderColor:pal.border,
+nodeBorder:pal.border,clusterBorder:pal.border,edgeLabelBackground:bg,
+clusterBkg:'rgba(127,127,127,0.07)',titleColor:pal.text,
+darkMode:dark,rowOdd:bg,rowEven:'rgba(127,127,127,0.07)',
+attributeBackgroundColorOdd:bg,attributeBackgroundColorEven:'rgba(127,127,127,0.07)',
+fontSize:'16px',fontFamily:font},
+themeCSS:'.node rect, .node circle, .node polygon, .node path, .cluster rect { stroke-width: 2px; }'
+});
+items.forEach(function(it){
+var id='claude-mermaid-'+seq++;
+mermaid.render(id,it.src).then(function(r){
+if(gen!==renderGen)return;
+var prev=it.pre.previousElementSibling;
+if(prev&&prev.className==='mermaid-diagram'&&prev!==it.mount)return;
+it.mount.innerHTML=r.svg;
+if(!it.mount.parentNode)it.pre.parentNode.insertBefore(it.mount,it.pre);
+it.pre.style.display='none';
+},function(){
+var scratch=document.getElementById(id);
+if(scratch)scratch.parentNode.removeChild(scratch);
+scratch=document.getElementById('d'+id);
+if(scratch)scratch.parentNode.removeChild(scratch);
+if(gen!==renderGen)return;
+if(it.mount.parentNode)it.mount.parentNode.removeChild(it.mount);
+it.pre.style.display='';
+});
+});
+}
+render();
+if(mq&&mq.addEventListener)mq.addEventListener('change',render);
+if(typeof MutationObserver!=='undefined')new MutationObserver(render).observe(root,{attributes:true,attributeFilter:['data-theme']});
+})();</script>
+<!--claude-mermaid-runtime-end-->
+
+</body>
+</html>

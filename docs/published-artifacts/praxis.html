@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F2F4F1; --surface:#FFFFFF; --sunk:#E6EAE5; --line:#D3DAD4;
+  --ink:#16201C; --muted:#56635D; --accent:#0B7A67; --accent-ink:#FFFFFF;
+  --accent-soft:#D6EDE7; --amber:#9A6A00; --amber-soft:#F6E8C4;
+  --code-bg:#16201C; --code-ink:#DCE6E1; --code-dim:#7E918A; --code-key:#6FD3BD; --code-str:#E9C46A;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0E1412; --surface:#151D1A; --sunk:#1B2521; --line:#2A3631;
+    --ink:#E3EAE6; --muted:#98A7A0; --accent:#46C9AE; --accent-ink:#06120F;
+    --accent-soft:#16332C; --amber:#E7B84C; --amber-soft:#33290F;
+    --code-bg:#0A0F0D; --code-ink:#D5E0DA; --code-dim:#6C7F77; --code-key:#6FD3BD; --code-str:#E9C46A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0E1412; --surface:#151D1A; --sunk:#1B2521; --line:#2A3631;
+  --ink:#E3EAE6; --muted:#98A7A0; --accent:#46C9AE; --accent-ink:#06120F;
+  --accent-soft:#16332C; --amber:#E7B84C; --amber-soft:#33290F;
+  --code-bg:#0A0F0D; --code-ink:#D5E0DA; --code-dim:#6C7F77; --code-key:#6FD3BD; --code-str:#E9C46A;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font-family:var(--body); font-size:17px; line-height:1.6; padding-inline:clamp(16px,4vw,48px); -webkit-font-smoothing:antialiased}
+.wrap{max-width:1160px; margin-inline:auto}
+h1,h2,h3{font-family:var(--display); text-wrap:balance; margin:0; letter-spacing:-0.02em}
+p{margin:0}
+a{color:inherit}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:4px}
+code,.mono{font-family:var(--mono); font-size:0.88em}
+.eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--accent)}
+.lede{color:var(--muted); max-width:62ch}
+
+/* nav */
+nav{display:flex; align-items:center; justify-content:space-between; gap:16px; padding-block:24px}
+.brand{display:flex; align-items:center; gap:10px; font-family:var(--display); font-weight:800; font-size:22px; letter-spacing:-0.03em; text-decoration:none}
+.brand svg{width:26px; height:26px}
+.navlinks{display:flex; gap:24px; font-size:15px; color:var(--muted)}
+.navlinks a{text-decoration:none}
+.navlinks a:hover{color:var(--ink)}
+.btn{display:inline-flex; align-items:center; gap:8px; background:var(--accent); color:var(--accent-ink); font-weight:600; font-size:15px; padding:11px 18px; border-radius:8px; text-decoration:none; border:0; cursor:pointer; font-family:var(--body)}
+.btn.ghost{background:transparent; color:var(--ink); box-shadow:inset 0 0 0 1px var(--line)}
+@media (max-width:760px){ .navlinks{display:none} }
+
+/* hero */
+.hero{display:grid; grid-template-columns:1.05fr 1fr; gap:56px; align-items:center; padding-block:48px 88px}
+.hero h1{font-size:clamp(40px,6vw,72px); line-height:1.02; font-weight:800}
+.hero h1 em{font-style:normal; color:var(--accent)}
+.hero .lede{margin-top:22px; font-size:19px}
+.hero .ctas{display:flex; flex-wrap:wrap; gap:12px; margin-top:32px}
+.agents-line{margin-top:28px; font-size:14px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.chip{font-family:var(--mono); font-size:12px; padding:3px 9px; border-radius:999px; background:var(--sunk); color:var(--ink); white-space:nowrap}
+.chip.live{background:var(--accent-soft); color:var(--accent)}
+.chip.soon{background:var(--amber-soft); color:var(--amber)}
+@media (max-width:900px){ .hero{grid-template-columns:1fr; gap:40px; padding-block:24px 64px} }
+
+/* wire transcript */
+.wire{background:var(--code-bg); color:var(--code-ink); border-radius:14px; overflow:hidden; font-family:var(--mono); font-size:13px; line-height:1.65}
+.wire-head{display:flex; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.08); color:var(--code-dim); font-size:12px}
+.wire-body{padding:16px; overflow-x:auto}
+.msg{white-space:pre; padding:6px 10px; border-radius:6px; transition:background .4s}
+.msg + .msg{margin-top:6px}
+.msg .dir{color:var(--code-dim)}
+.msg .k{color:var(--code-key)}
+.msg .s{color:var(--code-str)}
+.msg.on{background:rgba(111,211,189,0.10)}
+.wire-foot{padding:10px 16px; border-top:1px solid rgba(255,255,255,0.08); color:var(--code-dim); font-size:11.5px}
+
+/* sections */
+section.block{padding-block:88px; border-top:1px solid var(--line)}
+.sec-head{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:48px; align-items:end; margin-bottom:48px}
+.sec-head h2{font-size:clamp(30px,4vw,46px); line-height:1.08; font-weight:600; margin-top:10px}
+@media (max-width:900px){ .sec-head{grid-template-columns:1fr; gap:16px} }
+
+/* protocol diagram */
+.diagram{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px; overflow-x:auto}
+.diagram svg{display:block; width:100%; min-width:640px; height:auto}
+.d-box{fill:var(--surface); stroke:var(--line); stroke-width:1.5}
+.d-core{fill:var(--accent); }
+.d-core-t{fill:var(--accent-ink); font-family:var(--display); font-weight:800; font-size:22px}
+.d-t{fill:var(--ink); font-family:var(--body); font-weight:600; font-size:16px}
+.d-sub{fill:var(--muted); font-family:var(--mono); font-size:12px}
+.d-bus{fill:var(--accent-soft); stroke:var(--accent); stroke-width:1.5}
+.d-bus-t{fill:var(--accent); font-family:var(--mono); font-size:13px; font-weight:600; letter-spacing:0.08em}
+.d-edge{stroke:var(--muted); stroke-width:1.5; fill:none}
+.d-edge.dash{stroke-dasharray:5 5}
+.d-pill-live{fill:var(--accent-soft)} .d-pill-live-t{fill:var(--accent); font-family:var(--mono); font-size:11px}
+.d-pill-soon{fill:var(--amber-soft)} .d-pill-soon-t{fill:var(--amber); font-family:var(--mono); font-size:11px}
+.pulse{fill:var(--accent)}
+@media (prefers-reduced-motion:reduce){ .pulse{display:none} .msg{transition:none} }
+
+.points{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:32px; margin-top:40px}
+.points h3{font-size:20px; font-weight:600; margin-bottom:8px}
+.points p{color:var(--muted); font-size:16px}
+@media (max-width:820px){ .points{grid-template-columns:1fr; gap:24px} }
+
+/* suite */
+.suite{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface)}
+.suite > div{padding:32px; display:flex; flex-direction:column; gap:12px}
+.suite > div + div{border-left:1px solid var(--line)}
+.suite h3{font-size:24px; font-weight:600}
+.suite p{color:var(--muted)}
+.suite ul{margin:4px 0 0; padding-left:18px; color:var(--ink); font-size:15.5px; display:grid; gap:6px}
+@media (max-width:760px){ .suite{grid-template-columns:1fr} .suite > div + div{border-left:0; border-top:1px solid var(--line)} }
+.note{margin-top:20px; font-size:14px; color:var(--muted)}
+
+/* memory */
+.mem{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:48px; align-items:start}
+@media (max-width:900px){ .mem{grid-template-columns:1fr} }
+.tiers{display:grid; gap:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface)}
+.tier{display:grid; grid-template-columns:96px 1fr; gap:16px; padding:20px 24px; align-items:baseline}
+.tier + .tier{border-top:1px solid var(--line)}
+.tier .mono{color:var(--accent); font-weight:600; font-size:13px}
+.tier p{color:var(--muted); font-size:15.5px}
+.tier b{color:var(--ink); font-weight:600}
+
+.conflict{background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden}
+.conflict-head{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; background:var(--amber-soft); color:var(--amber); font-family:var(--mono); font-size:12.5px; font-weight:600}
+.conflict-body{padding:20px; display:grid; gap:12px}
+.claim{display:grid; grid-template-columns:72px 1fr; gap:12px; padding:12px 14px; border-radius:8px; background:var(--sunk); font-size:15px}
+.claim .mono{color:var(--muted); font-size:12px; padding-top:2px}
+.choices{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+.choice{font-family:var(--body); font-size:14px; padding:8px 12px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer}
+.choice[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+.log{font-family:var(--mono); font-size:12.5px; color:var(--muted); padding:12px 20px; border-top:1px solid var(--line); min-height:44px; white-space:pre-wrap; word-break:break-word}
+.caption{font-size:13px; color:var(--muted); margin-top:10px}
+
+/* ADR */
+.adr{display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:48px; align-items:center}
+@media (max-width:900px){ .adr{grid-template-columns:1fr} }
+.ledger{font-family:var(--mono); font-size:14px; background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow-x:auto}
+.ledger table{border-collapse:collapse; width:100%; min-width:460px}
+.ledger th,.ledger td{text-align:left; padding:12px 18px; border-bottom:1px solid var(--line); white-space:nowrap}
+.ledger th{font-weight:600; color:var(--muted); font-size:12px; letter-spacing:0.08em; text-transform:uppercase}
+.ledger tr:last-child td{border-bottom:0}
+.ledger .num{color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums}
+.ledger .st{font-size:12px}
+.adr-copy{display:grid; gap:18px}
+.adr-copy h3{font-size:20px; font-weight:600}
+.adr-copy p{color:var(--muted)}
+
+/* offline */
+.offline{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface)}
+.offline > div{padding:28px; display:grid; gap:8px; align-content:start}
+.offline > div + div{border-left:1px solid var(--line)}
+.offline h3{font-size:20px; font-weight:600}
+.offline p{color:var(--muted); font-size:15.5px}
+@media (max-width:820px){ .offline{grid-template-columns:1fr} .offline > div + div{border-left:0; border-top:1px solid var(--line)} }
+
+/* status */
+.status{overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:var(--surface)}
+.status table{border-collapse:collapse; width:100%; min-width:560px}
+.status th,.status td{text-align:left; padding:14px 20px; border-bottom:1px solid var(--line); vertical-align:top}
+.status th{font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.status tr:last-child td{border-bottom:0}
+.status td:first-child{font-weight:600}
+.status td:last-child{color:var(--muted); font-size:15px}
+
+/* cta */
+.cta{margin-block:88px 40px; background:var(--ink); color:var(--bg); border-radius:18px; padding:clamp(28px,5vw,64px); display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:40px; align-items:end}
+.cta h2{font-size:clamp(30px,4.2vw,50px); line-height:1.05; font-weight:800}
+.cta p{opacity:0.78; margin-top:16px; max-width:52ch}
+.cta .contact{display:grid; gap:10px}
+.cta .addr{font-family:var(--mono); font-size:16px; padding:14px 16px; border-radius:10px; background:rgba(127,127,127,0.18); user-select:all; word-break:break-all}
+.cta .btn{justify-self:start; background:var(--accent); color:var(--accent-ink)}
+@media (max-width:820px){ .cta{grid-template-columns:1fr} }
+footer{display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; padding-block:24px 48px; color:var(--muted); font-size:14px}
+</style>
+
+<div class="wrap">
+  <nav>
+    <a class="brand" href="#top" aria-label="Praxis home">
+      <svg viewBox="0 0 26 26" aria-hidden="true"><rect x="1" y="1" width="24" height="24" rx="6" fill="var(--accent)"/><path d="M8 19V7h6a4 4 0 0 1 0 8H8" fill="none" stroke="var(--accent-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Praxis
+    </a>
+    <div class="navlinks">
+      <a href="#protocol">Protocol</a>
+      <a href="#suite">SDLC suite</a>
+      <a href="#memory">Memory</a>
+      <a href="#decisions">Decisions</a>
+      <a href="#status">Status</a>
+    </div>
+    <a class="btn" href="#contact">Talk to us</a>
+  </nav>
+
+  <header class="hero" id="top">
+    <div>
+      <p class="eyebrow">Multi-agent orchestration for engineering teams</p>
+      <h1 style="margin-top:14px">Every coding agent. <em>One protocol.</em> Your team's rules.</h1>
+      <p class="lede">Praxis orchestrates Claude, Codex and the agents that come next through a single Agent Client Protocol layer, then puts them to work across your SDLC: review, security, and the decisions your team has already made.</p>
+      <div class="ctas">
+        <a class="btn" href="#contact">Request early access</a>
+        <a class="btn ghost" href="#protocol">How it works</a>
+      </div>
+      <div class="agents-line">
+        <span>Agents over ACP:</span>
+        <span class="chip live">claude</span>
+        <span class="chip live">codex</span>
+        <span class="chip soon">copilot --acp · planned</span>
+      </div>
+    </div>
+
+    <div class="wire" role="img" aria-label="Illustrative ACP exchange: Praxis opens sessions with Claude and Codex and sends the same prompt to both over one protocol.">
+      <div class="wire-head"><span>praxis ⇄ agents · JSON-RPC over stdio</span><span>illustrative</span></div>
+      <div class="wire-body" id="wire">
+<div class="msg"><span class="dir">→ claude </span>{<span class="k">"method"</span>:<span class="s">"initialize"</span>, <span class="k">"params"</span>:{<span class="k">"protocolVersion"</span>:1}}</div>
+<div class="msg"><span class="dir">→ codex  </span>{<span class="k">"method"</span>:<span class="s">"initialize"</span>, <span class="k">"params"</span>:{<span class="k">"protocolVersion"</span>:1}}</div>
+<div class="msg"><span class="dir">→ claude </span>{<span class="k">"method"</span>:<span class="s">"session/new"</span>, <span class="k">"params"</span>:{<span class="k">"cwd"</span>:<span class="s">"/repo"</span>}}</div>
+<div class="msg"><span class="dir">→ codex  </span>{<span class="k">"method"</span>:<span class="s">"session/new"</span>, <span class="k">"params"</span>:{<span class="k">"cwd"</span>:<span class="s">"/repo"</span>}}</div>
+<div class="msg"><span class="dir">→ both   </span>{<span class="k">"method"</span>:<span class="s">"session/prompt"</span>, <span class="k">"params"</span>:{…<span class="s">"Review PR #412"</span>}}</div>
+<div class="msg"><span class="dir">← claude </span>{<span class="k">"method"</span>:<span class="s">"session/update"</span>, …}</div>
+<div class="msg"><span class="dir">← codex  </span>{<span class="k">"method"</span>:<span class="s">"session/update"</span>, …}</div>
+      </div>
+      <div class="wire-foot">Same methods, same shapes, whichever agent answers.</div>
+    </div>
+  </header>
+
+  <section class="block" id="protocol">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">ACP-native</p>
+        <h2>One protocol layer, not a drawer of vendor SDKs</h2>
+      </div>
+      <p class="lede">Each agent runs as an ACP process and Praxis speaks to all of them the same way. Orchestration, model discovery and session handling are written once, so adding an agent is a configuration change rather than a new integration.</p>
+    </div>
+
+    <div class="diagram">
+      <svg viewBox="0 0 900 300" role="img" aria-label="Praxis sits above a single ACP layer, which connects to Claude and Codex today and Copilot as a planned agent.">
+        <rect class="d-core" x="330" y="16" width="240" height="64" rx="12"/>
+        <text class="d-core-t" x="450" y="56" text-anchor="middle">Praxis</text>
+
+        <path class="d-edge" d="M450 80 V118"/>
+        <rect class="d-bus" x="60" y="118" width="780" height="44" rx="10"/>
+        <text class="d-bus-t" x="450" y="145" text-anchor="middle">AGENT CLIENT PROTOCOL · JSON-RPC</text>
+
+        <path class="d-edge" d="M180 162 V204"/>
+        <path class="d-edge" d="M450 162 V204"/>
+        <path class="d-edge dash" d="M720 162 V204"/>
+
+        <rect class="d-box" x="80" y="204" width="200" height="80" rx="12"/>
+        <text class="d-t" x="104" y="238">Claude</text>
+        <text class="d-sub" x="104" y="262">ACP agent process</text>
+        <rect class="d-pill-live" x="214" y="222" width="48" height="22" rx="11"/>
+        <text class="d-pill-live-t" x="238" y="237" text-anchor="middle">live</text>
+
+        <rect class="d-box" x="350" y="204" width="200" height="80" rx="12"/>
+        <text class="d-t" x="374" y="238">Codex</text>
+        <text class="d-sub" x="374" y="262">ACP agent process</text>
+        <rect class="d-pill-live" x="484" y="222" width="48" height="22" rx="11"/>
+        <text class="d-pill-live-t" x="508" y="237" text-anchor="middle">live</text>
+
+        <rect class="d-box" x="620" y="204" width="200" height="80" rx="12" stroke-dasharray="5 5"/>
+        <text class="d-t" x="644" y="238">Copilot</text>
+        <text class="d-sub" x="644" y="262">copilot --acp</text>
+        <rect class="d-pill-soon" x="740" y="222" width="64" height="22" rx="11"/>
+        <text class="d-pill-soon-t" x="772" y="237" text-anchor="middle">planned</text>
+
+        <circle class="pulse" r="4" cx="450" cy="80">
+          <animate attributeName="cy" values="80;118" dur="1.6s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;0" dur="1.6s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    </div>
+
+    <div class="points">
+      <div>
+        <h3>Written once</h3>
+        <p>Orchestration logic targets the protocol, not a vendor. Claude and Codex go through exactly the same code path.</p>
+      </div>
+      <div>
+        <h3>Consistent model discovery</h3>
+        <p>What each agent can do is discovered the same way for every agent, so routing decisions compare like with like.</p>
+      </div>
+      <div>
+        <h3>No SDK tax</h3>
+        <p>Vendor SDKs mostly add convenience: a bundled CLI and native types. ACP already covers the capabilities Praxis needs, so there's one less dependency to track per vendor.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="suite">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">SDLC agent suite</p>
+        <h2>Review and security, run by the agents you already pay for</h2>
+      </div>
+      <p class="lede">Praxis ships agent workflows for the review stages most teams cover with separate SaaS tools. They run on your subscriptions, against your repositories, following your team's recorded decisions.</p>
+    </div>
+
+    <div class="suite">
+      <div>
+        <p class="eyebrow">Workflow</p>
+        <h3>Code review</h3>
+        <p>Agents review changes against the codebase and against what your team has agreed, not just generic style rules.</p>
+        <ul>
+          <li>Reviews checked against project and org decisions (ADRs)</li>
+          <li>Run the same review on more than one agent and compare</li>
+        </ul>
+      </div>
+      <div>
+        <p class="eyebrow">Workflow</p>
+        <h3>Security review</h3>
+        <p>A dedicated security pass over each change, as a workflow step in its own right rather than something bolted onto code review.</p>
+        <ul>
+          <li>Runs next to code review in the same pipeline</li>
+          <li>Findings kept with the change they apply to</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note">The suite is in active development. See <a href="#status">Status</a> for what's available today.</p>
+  </section>
+
+  <section class="block" id="memory">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Knowledge &amp; memory</p>
+        <h2>Memory that asks before it overrides</h2>
+      </div>
+      <p class="lede">An MCP knowledge server gives every agent the same context at three scopes. When two scopes disagree, Praxis doesn't pick a winner quietly. It asks you, and it records your answer.</p>
+    </div>
+
+    <div class="mem">
+      <div class="tiers">
+        <div class="tier"><span class="mono">ORG</span><p><b>Organisation-wide.</b> Standards, security policy and conventions that apply to every repository.</p></div>
+        <div class="tier"><span class="mono">PROJECT</span><p><b>One codebase.</b> Architecture, decisions and local exceptions to org policy.</p></div>
+        <div class="tier"><span class="mono">LOCAL</span><p><b>One developer.</b> Personal context and work in progress, kept on your machine.</p></div>
+      </div>
+
+      <div>
+        <div class="conflict" aria-live="polite">
+          <div class="conflict-head"><span>Conflict · org ↔ project</span><span>waiting on you</span></div>
+          <div class="conflict-body">
+            <div class="claim"><span class="mono">org</span><span>Data access goes through the shared repository layer.</span></div>
+            <div class="claim"><span class="mono">project</span><span>Reporting queries call EF Core <code>DbContext</code> directly for performance.</span></div>
+            <div class="choices" role="group" aria-label="Resolve conflict">
+              <button class="choice" id="c-org" type="button" aria-pressed="false" data-v="org rule applies">Org rule applies</button>
+              <button class="choice" id="c-proj" type="button" aria-pressed="false" data-v="project exception stands">Project exception stands</button>
+              <button class="choice" id="c-adr" type="button" aria-pressed="false" data-v="escalate to ADR">Write an ADR</button>
+            </div>
+          </div>
+          <div class="log" id="log">No direction given yet. Agents won't guess.</div>
+        </div>
+        <p class="caption">Example conflict. Pick an option to see what gets logged.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="decisions">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Architecture decision records</p>
+        <h2>Decisions numbered once, however many people write them</h2>
+      </div>
+      <p class="lede">Project and org decisions are kept as Nygard-style ADRs. A shared MCP server hands out sequence numbers atomically, so two developers drafting on separate branches can't both claim the same ADR number.</p>
+    </div>
+
+    <div class="adr">
+      <div class="ledger">
+        <table>
+          <tr><th>ADR</th><th>Title</th><th>Status</th></tr>
+          <tr><td class="num">0041</td><td>Use ACP for all agent integrations</td><td><span class="chip live st">accepted</span></td></tr>
+          <tr><td class="num">0042</td><td>Knowledge scopes: org, project, local</td><td><span class="chip live st">accepted</span></td></tr>
+          <tr><td class="num">0043</td><td>Reporting queries bypass repository layer</td><td><span class="chip soon st">proposed</span></td></tr>
+          <tr><td class="num">0044</td><td>[next number, reserved by the server]</td><td><span class="chip st">draft</span></td></tr>
+        </table>
+      </div>
+      <div class="adr-copy">
+        <div><h3>No merge-time renumbering</h3><p>The number is reserved when a draft is created, not when it merges. Duplicate IDs and the rebase that fixes them go away.</p></div>
+        <div><h3>Agents read them too</h3><p>Accepted ADRs feed the knowledge server, so review agents check changes against decisions your team has actually made.</p></div>
+      </div>
+    </div>
+    <p class="note">Example records, for illustration.</p>
+  </section>
+
+  <section class="block" id="offline">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Local-first</p>
+        <h2>Keeps working when the network doesn't</h2>
+      </div>
+      <p class="lede">A small local daemon sits between your tools and the central knowledge and ADR server. It isn't tied to any editor.</p>
+    </div>
+    <div class="offline">
+      <div><h3>Cached reads</h3><p>Knowledge and ADRs are served from a local cache, so agents keep their context offline.</p></div>
+      <div><h3>Queued writes</h3><p>Changes made offline are queued and forwarded to the central server when you reconnect.</p></div>
+      <div><h3>VS Code extension</h3><p>A thin client on the daemon for reviewing ADRs and resolving knowledge conflicts inside the editor.</p></div>
+    </div>
+  </section>
+
+  <section class="block" id="status">
+    <div class="sec-head">
+      <div>
+        <p class="eyebrow">Status</p>
+        <h2>Where Praxis is today</h2>
+      </div>
+      <p class="lede">We'd rather you knew exactly what's shipped and what isn't.</p>
+    </div>
+    <div class="status">
+      <table>
+        <tr><th>Capability</th><th>Status</th><th>Notes</th></tr>
+        <tr><td>ACP orchestration layer</td><td><span class="chip live">available</span></td><td>Single protocol for every agent</td></tr>
+        <tr><td>Claude, Codex agents</td><td><span class="chip live">available</span></td><td>Both integrated over ACP</td></tr>
+        <tr><td>Copilot agent</td><td><span class="chip soon">planned</span></td><td>Via <code>copilot --acp</code></td></tr>
+        <tr><td>Code &amp; security review</td><td><span class="chip soon">in development</span></td><td>SDLC agent suite</td></tr>
+        <tr><td>Knowledge / memory server</td><td><span class="chip soon">planned</span></td><td>Org, project and local scopes with conflict resolution</td></tr>
+        <tr><td>ADR numbering server</td><td><span class="chip soon">planned</span></td><td>Atomic sequence assignment</td></tr>
+        <tr><td>Local daemon, VS Code extension</td><td><span class="chip soon">planned</span></td><td>Offline cache and write queue</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="cta" id="contact">
+    <div>
+      <h2>Put your agents on one protocol.</h2>
+      <p>We're working with a small number of engineering teams while the SDLC suite and knowledge server take shape. Tell us about your stack and the agents you already use.</p>
+    </div>
+    <div class="contact">
+      <span class="addr" id="addr">[contact@your-domain]</span>
+      <button class="btn" id="copy" type="button">Copy address</button>
+    </div>
+  </section>
+
+  <footer>
+    <span>Praxis</span>
+    <span>ACP-native multi-agent orchestration</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  // Transcript highlight cycle (the transcript is fully visible at rest)
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var msgs = document.querySelectorAll('#wire .msg');
+  if(!reduce && msgs.length){
+    var i = 0;
+    setInterval(function(){
+      msgs.forEach(function(m){ m.classList.remove('on'); });
+      msgs[i % msgs.length].classList.add('on');
+      i++;
+    }, 1100);
+  }
+
+  // Conflict resolution demo
+  var log = document.getElementById('log');
+  var btns = document.querySelectorAll('.choice');
+  btns.forEach(function(b){
+    b.addEventListener('click', function(){
+      btns.forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+      b.setAttribute('aria-pressed','true');
+      var t = new Date().toISOString().slice(0,16).replace('T',' ');
+      log.textContent = t + '  resolved: ' + b.dataset.v + '\n' + '           scope: project · logged for every agent';
+    });
+  });
+
+  // Copy contact
+  var copy = document.getElementById('copy');
+  var addr = document.getElementById('addr');
+  copy.addEventListener('click', function(){
+    var text = addr.textContent;
+    var done = function(){ copy.textContent = 'Copied'; setTimeout(function(){ copy.textContent = 'Copy address'; }, 1600); };
+    try{
+      navigator.clipboard.writeText(text).then(done, function(){ selectAddr(); });
+    }catch(e){ selectAddr(); }
+  });
+  function selectAddr(){
+    var r = document.createRange(); r.selectNodeContents(addr);
+    var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    copy.textContent = 'Press Ctrl+C';
+  }
+})();
+</script>
+
+</body>
+</html>

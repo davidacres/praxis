@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Shelf Spine Designs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a review sheet. Today's real captures first, then ten concepts: each a rail zoom of the same five sessions and two 1:1 app frames. */
+:root {
+  --page: #f3f1ee; --ink: #23201d; --ink-2: #6d6660; --rule: #dcd6cf; --tag: #e9e4de; --good: #2f7a43;
+  --f-ui: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --m-bg: #fbf6f2; --m-pane: #f8eee8; --m-el: #fffcfa; --m-text: #2a201c; --m-text-2: #857469; --m-border: #eadcd3;
+  --m-accent: #c24a2c; --m-on-accent: #fff; --m-note: #b87c0c; --m-shadow: rgba(60, 30, 20, .16);
+  --st-run: #3767a8; --st-need: #c47a0c; --st-done: #5b8a62; --st-fail: #b8342a; --st-idle: #9a8a80; --st-ink: #fff;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #161514; --ink: #ebe7e2; --ink-2: #a39b93; --rule: #34302c; --tag: #26231f; --good: #7cc68b;
+  --m-bg: #1c1a18; --m-pane: #221f1c; --m-el: #2a2623; --m-text: #eee7e1; --m-text-2: #a0938a; --m-border: #3b3430;
+  --m-accent: #e2694a; --m-on-accent: #1c120e; --m-note: #e3b04f; --m-shadow: rgba(0, 0, 0, .5);
+  --st-run: #84aee8; --st-need: #e8a640; --st-done: #7fb889; --st-fail: #ef7a6c; --st-idle: #7d726b; --st-ink: #1c1a18;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --page: #161514; --ink: #ebe7e2; --ink-2: #a39b93; --rule: #34302c; --tag: #26231f; --good: #7cc68b;
+  --m-bg: #1c1a18; --m-pane: #221f1c; --m-el: #2a2623; --m-text: #eee7e1; --m-text-2: #a0938a; --m-border: #3b3430;
+  --m-accent: #e2694a; --m-on-accent: #1c120e; --m-note: #e3b04f; --m-shadow: rgba(0, 0, 0, .5);
+  --st-run: #84aee8; --st-need: #e8a640; --st-done: #7fb889; --st-fail: #ef7a6c; --st-idle: #7d726b; --st-ink: #1c1a18;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 14px/1.55 var(--f-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 72px; }
+.wrap { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 52px; }
+.eyebrow { font: 500 11px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -.02em; text-wrap: balance; max-width: 30ch; }
+h2 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+p { margin: 0; }
+header.intro { display: grid; gap: 14px; }
+.lede { color: var(--ink-2); font-size: 15px; max-width: 78ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; font: 12px var(--f-mono); padding: 3px 8px; border-radius: 4px; background: var(--tag); color: var(--ink-2); }
+.legend i { width: 8px; height: 8px; border-radius: 2px; }
+
+section.design { display: grid; gap: 16px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.design-head { display: grid; grid-template-columns: 34px 1fr; gap: 4px 12px; align-items: baseline; }
+.design-head .num { font: 600 13px var(--f-mono); color: var(--ink-2); }
+.design-head > p, .design-head > .uses { grid-column: 2; max-width: 86ch; }
+.design-head > p { color: var(--ink-2); }
+.uses { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.uses span { font: 11.5px var(--f-mono); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--rule); color: var(--ink-2); }
+.uses span.new { border-style: dashed; }
+.design-body { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; padding-left: 46px; }
+@media (max-width: 700px) { .design-body, .notes { padding-left: 0 !important; } .design-head { grid-template-columns: 1fr; } .design-head > * { grid-column: 1 !important; } }
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+figcaption { font: 500 11px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.notes { padding: 0 0 0 46px; margin: 0; list-style: none; font-size: 13px; color: var(--ink-2); display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 6px 26px; }
+.notes li { padding-left: 14px; position: relative; }
+.notes li::before { content: ''; position: absolute; left: 0; top: .65em; width: 6px; height: 1px; background: var(--ink-2); }
+.notes b { color: var(--ink); font-weight: 600; }
+.shots { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.shots img { display: block; border: 1px solid var(--rule); border-radius: 6px; max-width: 100%; height: auto; }
+.shots img.pix { image-rendering: pixelated; width: 90px; height: auto; }
+
+/* rail zoom */
+.zoom-box { padding: 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--m-pane); display: inline-flex; flex-direction: column; gap: 8px; width: 120px; }
+.zoom { display: flex; gap: 12px; align-items: flex-start; }
+.zoom .z1, .zoom .z3 { width: 14px; background: var(--m-bg); border-right: 1px solid var(--m-border); }
+.zoom .z3 { transform: scale(2); transform-origin: top left; margin-right: 14px; margin-bottom: var(--zh); }
+.zoom-box small { font: 10px/1.4 var(--f-mono); color: var(--ink-2); }
+.zoom-box ol { margin: 0; padding: 0 0 0 16px; font: 10px/1.6 var(--f-mono); color: var(--ink-2); }
+
+/* mock frame, 1:1 */
+.mock { position: relative; width: 360px; max-width: 100%; height: 420px; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--m-pane);
+  font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--m-text); }
+.mock .ws { position: absolute; inset: 10px 10px 10px 22px; border-radius: 8px; border: 1px solid var(--m-border); background: var(--m-bg); opacity: .7; }
+.rail { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; display: flex; flex-direction: column; background: var(--m-bg); border-right: 1px solid var(--m-border); z-index: 3; }
+.rail-spines { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 0; }
+.cells { display: flex; flex-direction: column; gap: 1px; padding: 4px 0 6px; border-top: 1px solid var(--m-border); }
+.cell { height: 24px; display: grid; place-items: center start; padding-left: 2px; }
+.cell.s { color: var(--m-accent); background: color-mix(in srgb, var(--m-accent) 10%, transparent); }
+.cell.n { color: var(--m-note); background: color-mix(in srgb, var(--m-note) 14%, transparent); }
+svg.c { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; flex: none; }
+svg.i { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- spines: shared slot ---------- */
+.sp { position: relative; height: 52px; flex: none; display: flex; align-items: center; justify-content: center; }
+.sp.open { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--sc) 12%, transparent)); }
+.sp { --sc: var(--st-idle); }
+.sp.run { --sc: var(--st-run); } .sp.appr, .sp.wait { --sc: var(--st-need); } .sp.done { --sc: var(--st-done); } .sp.fail { --sc: var(--st-fail); }
+.sp.divider { border-top: 1px solid var(--m-border); }
+
+/* today (current) */
+.v0::before { content: ''; width: 3px; height: 29px; border-radius: 3px; background: color-mix(in srgb, var(--m-accent) 62%, var(--m-text-2)); opacity: .88; }
+.v0.old::before { width: 2px; height: 19px; background: var(--m-text-2); opacity: .38; }
+.v0 .dot { position: absolute; top: 3px; width: 4px; height: 4px; border-radius: 50%; background: #d29922; }
+.v0::after { content: ''; position: absolute; bottom: 5px; width: 3px; height: 3px; border-radius: 50%; background: var(--m-accent); opacity: .75; }
+.v0.old::after { display: none; }
+
+/* 1 state lines */
+.v1::before { content: ''; width: 3px; height: 36px; border-radius: 2px; background: var(--sc); }
+.v1.old::before { width: 2px; height: 20px; opacity: .7; }
+.v1.run::before { background: repeating-linear-gradient(180deg, var(--sc) 0 6px, color-mix(in srgb, var(--sc) 35%, transparent) 6px 12px); background-size: 3px 24px; animation: flow 1.2s linear infinite; }
+.v1.wait::before { background: repeating-linear-gradient(180deg, var(--sc) 0 4px, transparent 4px 7px); }
+.v1.appr::before { width: 5px; border-radius: 1px; }
+.v1.done::before { opacity: .75; }
+@keyframes flow { to { background-position: 0 24px; } }
+
+/* 2 glyph caps */
+.v2::before { content: ''; position: absolute; top: 4px; bottom: 4px; width: 1px; background: color-mix(in srgb, var(--sc) 45%, transparent); }
+.v2.old::before { top: 14px; bottom: 14px; }
+.v2 .g { position: relative; z-index: 1; width: 13px; height: 13px; display: grid; place-items: center; background: var(--m-bg); color: var(--sc); }
+.v2 .g svg { width: 10px; height: 10px; }
+.v2.run .g svg { animation: spin 1.4s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 3 tinted books */
+.v3 { height: 46px; margin-block: 3px; }
+.v3::before { content: ''; width: 11px; height: 100%; border-radius: 2px; background: color-mix(in srgb, var(--sc) 22%, transparent); box-shadow: inset 2px 0 0 var(--sc); }
+.v3.old::before { height: 70%; background: color-mix(in srgb, var(--sc) 12%, transparent); }
+.v3.open::before { background: var(--sc); }
+.v3.cur::after { content: ''; position: absolute; right: 1px; top: 6px; border: 3px solid transparent; border-right-color: var(--m-text); }
+.v3.open { background: none; }
+.v3.run::before { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { background: color-mix(in srgb, var(--sc) 38%, transparent); } }
+
+/* 4 progress tracks */
+.v4 .track { position: relative; width: 4px; height: 40px; border-radius: 2px; background: color-mix(in srgb, var(--m-text) 10%, transparent); overflow: hidden; }
+.v4.old .track { height: 24px; }
+.v4 .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--sc); }
+.v4.run .fill { background: linear-gradient(0deg, var(--sc) 70%, color-mix(in srgb, var(--sc) 40%, white)); }
+.v4 .cap { position: absolute; left: -1px; right: -1px; height: 2px; background: var(--sc); }
+
+/* 5 attention first */
+.v5::before { content: ''; width: 3px; height: 34px; border-radius: 2px; background: var(--sc); opacity: .9; }
+.v5.old::before { width: 2px; height: 20px; opacity: .6; }
+.v5.done::before { opacity: .55; } .v5.run::before { animation: flowo 1.4s ease-in-out infinite; }
+@keyframes flowo { 50% { opacity: .45; } }
+.v5.appr::before, .v5.wait::before { width: 7px; border-radius: 2px; }
+.badge { height: 26px; display: grid; place-items: center; border-bottom: 1px solid var(--m-border); }
+.badge span { width: 12px; height: 12px; border-radius: 50%; background: var(--st-need); color: var(--st-ink); font: 700 8px/12px var(--f-mono); text-align: center; }
+
+/* 6 timeline */
+.v6rail { position: relative; flex: 1; }
+.v6rail .tick { position: absolute; left: 0; width: 3px; height: 1px; background: var(--m-text-2); opacity: .5; }
+.v6rail .now { position: absolute; left: 0; top: 8px; border: 3px solid transparent; border-left-color: var(--m-accent); }
+.v6rail .bar { position: absolute; left: 5px; width: 3px; border-radius: 2px; background: var(--sc); }
+.v6rail .bar.run { background: linear-gradient(180deg, var(--sc), color-mix(in srgb, var(--sc) 30%, transparent)); }
+.v6rail .bar.cur { box-shadow: 0 0 0 1px var(--m-bg), 0 0 0 2px var(--sc); }
+
+/* 7 whose turn */
+.v7 { flex-direction: column; gap: 2px; }
+.v7 i { width: 3px; height: 17px; border-radius: 2px; background: color-mix(in srgb, var(--m-text) 14%, transparent); }
+.v7.old i { height: 9px; }
+.v7.run i:first-child { background: var(--st-run); }
+.v7.appr i:last-child, .v7.wait i:last-child { background: var(--st-need); }
+.v7.appr i:last-child { width: 5px; }
+.v7.done i { background: color-mix(in srgb, var(--st-done) 70%, transparent); }
+.v7.fail i:first-child { background: var(--st-fail); }
+
+/* 8 pinned + overflow */
+.pinned { padding-top: 6px; border-bottom: 1px solid var(--m-border); }
+.v8::before { content: ''; width: 3px; height: 30px; border-radius: 2px; background: var(--sc); }
+.v8.old::before { width: 2px; height: 18px; opacity: .6; }
+.v8 .pin { position: absolute; top: 3px; width: 5px; height: 5px; border-radius: 50%; border: 1px solid var(--m-text-2); background: var(--m-bg); }
+.more { height: 24px; display: grid; place-items: center; font: 600 8px var(--f-mono); color: var(--m-text-2); letter-spacing: -.02em; }
+
+/* 9 diff bars */
+.v9 { justify-content: flex-start; padding-left: 3px; gap: 2px; }
+.v9::before { content: ''; width: 3px; height: 34px; border-radius: 2px; background: var(--sc); }
+.v9.old::before { width: 2px; height: 20px; opacity: .6; }
+.v9 .diff { display: flex; flex-direction: column; width: 3px; height: 16px; border-radius: 1px; overflow: hidden; }
+.v9 .diff b { display: block; background: var(--st-done); } .v9 .diff s { display: block; background: var(--st-fail); }
+
+/* 10 synthesis */
+.v10::before { content: ''; width: 3px; height: 36px; border-radius: 2px; background: var(--sc); }
+.v10.old::before { width: 2px; height: 20px; opacity: .65; }
+.v10.done::before { opacity: .7; }
+.v10.run::before { background: repeating-linear-gradient(180deg, var(--sc) 0 6px, color-mix(in srgb, var(--sc) 35%, transparent) 6px 12px); background-size: 3px 24px; animation: flow 1.2s linear infinite; }
+.v10 .g { position: absolute; top: 2px; width: 13px; height: 13px; display: grid; place-items: center; color: var(--st-ink); }
+.v10 .g::before { content: ''; position: absolute; inset: 1px 1px 1px 1px; border-radius: 3px; background: var(--sc); }
+.v10 .g svg { position: relative; width: 9px; height: 9px; }
+
+/* ---------- card ---------- */
+.card { position: absolute; left: 14px; width: 340px; z-index: 2; padding: 14px 16px 12px; background: var(--m-el); border: 1px solid var(--m-border);
+  border-left: 2px solid var(--sc, var(--m-accent)); border-radius: 0 8px 8px 0; box-shadow: 0 8px 24px var(--m-shadow); display: flex; flex-direction: column; gap: 10px; }
+.card.run { --sc: var(--st-run); } .card.appr, .card.wait { --sc: var(--st-need); } .card.done { --sc: var(--st-done); } .card.fail { --sc: var(--st-fail); } .card.list { --sc: var(--m-text-2); }
+.band { margin: -14px -16px 0; padding: 9px 16px; min-height: 40px; display: flex; align-items: center; gap: 8px; border-radius: 0 8px 0 0; background: color-mix(in srgb, var(--sc) 12%, transparent); }
+.band .k { font: 600 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: color-mix(in srgb, var(--sc) 75%, var(--m-text)); white-space: nowrap; }
+.band .t { margin-left: auto; font-size: 10px; color: var(--m-text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.band .nav { display: inline-flex; gap: 2px; margin-left: 6px; }
+.band .nav span { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--m-text-2); background: color-mix(in srgb, var(--m-text) 6%, transparent); font-size: 10px; }
+.ttl { font-size: 15px; font-weight: 600; letter-spacing: -.2px; }
+.muted { color: var(--m-text-2); } .small { font-size: 11px; } .tiny { font-size: 10px; }
+.row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.grow { flex: 1; min-width: 0; }
+.quote { padding: 9px 11px; border-radius: 6px; background: color-mix(in srgb, var(--m-text) 6%, transparent); font-size: 12px; line-height: 1.55; }
+.cmd { padding: 9px 11px; border-radius: 6px; background: color-mix(in srgb, var(--m-text) 7%, transparent); font: 12px/1.5 var(--f-mono); }
+.cmd .p { color: var(--m-text-2); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.btn.ok { background: var(--m-accent); color: var(--m-on-accent); }
+.btn.ghost { border: 1px solid var(--m-border); color: var(--m-text); font-weight: 500; }
+.btn.warn { border: 1px solid color-mix(in srgb, var(--st-fail) 45%, var(--m-border)); color: var(--st-fail); font-weight: 500; }
+.field { display: flex; align-items: center; gap: 6px; padding: 3px 3px 3px 10px; border: 1px solid var(--m-border); border-radius: 6px; font-size: 12px; min-height: 34px; }
+.send { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; background: var(--m-accent); color: var(--m-on-accent); flex: none; }
+.send.off { opacity: .4; }
+.foot { display: flex; justify-content: space-between; align-items: center; color: var(--m-text-2); font-size: 10.5px; gap: 8px; }
+.kbd { font: 10px var(--f-mono); padding: 0 4px; border: 1px solid var(--m-border); border-radius: 3px; color: var(--m-text-2); }
+.prog { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--m-text) 9%, transparent); overflow: hidden; }
+.prog i { display: block; height: 100%; background: var(--sc); }
+.steps { display: grid; gap: 3px; font-size: 12px; margin: 0; padding: 0; list-style: none; }
+.steps li { display: flex; gap: 8px; align-items: center; }
+.steps li .b { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--m-border); flex: none; display: grid; place-items: center; }
+.steps li.d .b { background: var(--st-done); border-color: var(--st-done); color: var(--st-ink); }
+.steps li.d { color: var(--m-text-2); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--m-text-2) 50%, transparent); }
+.steps li.c { font-weight: 600; } .steps li.c .b { border-color: var(--sc); box-shadow: inset 0 0 0 2px var(--m-el); background: var(--sc); }
+.steps li.x .b { border-color: var(--st-need); background: color-mix(in srgb, var(--st-need) 25%, transparent); }
+.files { display: grid; font: 11.5px var(--f-mono); }
+.files div { display: flex; gap: 8px; padding: 4px 0; border-top: 1px solid var(--m-border); }
+.files div span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.add { color: var(--st-done); } .del { color: var(--st-fail); }
+.bub { max-width: 88%; padding: 7px 10px; border-radius: 10px; font-size: 12px; line-height: 1.5; }
+.bub.me { align-self: flex-end; background: color-mix(in srgb, var(--m-accent) 12%, transparent); border-bottom-right-radius: 3px; }
+.bub.ai { background: color-mix(in srgb, var(--m-text) 6%, transparent); border-bottom-left-radius: 3px; }
+.bub .who { display: block; font-size: 10px; color: var(--m-text-2); margin-bottom: 2px; }
+.tl { display: flex; align-items: center; gap: 0; height: 14px; }
+.tl i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.tl i.me { background: var(--m-accent); } .tl i.ai { background: var(--st-run); } .tl i.x { background: var(--st-fail); }
+.tl b { flex: 1; height: 1px; background: var(--m-border); }
+.check { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--m-text-2); }
+.check i { width: 12px; height: 12px; border: 1px solid var(--m-border); border-radius: 3px; }
+.listrow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 5px; font-size: 12px; }
+.listrow.on { background: color-mix(in srgb, var(--m-text) 6%, transparent); }
+.listrow .sw { width: 3px; height: 16px; border-radius: 2px; background: var(--sc); flex: none; }
+.listrow .t { margin-left: auto; font-size: 10.5px; color: var(--m-text-2); }
+.search { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border: 1px solid var(--m-border); border-radius: 6px; font-size: 12px; color: var(--m-text-2); }
+.alert { display: flex; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 11.5px; background: color-mix(in srgb, var(--st-fail) 9%, transparent); }
+.reco { padding: 22px; border: 1px solid var(--rule); border-radius: 8px; display: grid; gap: 10px; }
+.reco ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink-2); }
+.reco b { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="c-session" viewBox="0 0 10 10"><path d="M.5 .5H8.5V6.5H4.5L2.5 8.5V6.5H.5Z"/><path d="M4.5 2V5M3 3.5H6"/></symbol>
+  <symbol id="c-note" viewBox="0 0 10 10"><path d="M1.5 .5H6.5L8.5 2.5V9.5H1.5Z"/><path d="M6.5 .5V2.5H8.5M3 5.5H7M3 7.5H6"/></symbol>
+  <!-- state glyphs, 10px pixel grid -->
+  <symbol id="g-run" viewBox="0 0 10 10"><path d="M5 1A4 4 0 1 1 1 5"/></symbol>
+  <symbol id="g-appr" viewBox="0 0 10 10"><path d="M4.5 1V6M4.5 7.5V9"/></symbol>
+  <symbol id="g-wait" viewBox="0 0 10 10"><path d="M2.5 3.5C2.5 1.5 6.5 1.5 6.5 3.5C6.5 5 4.5 5 4.5 6.5M4.5 8V9"/></symbol>
+  <symbol id="g-done" viewBox="0 0 10 10"><path d="M1.5 5L4 7.5L8.5 2.5"/></symbol>
+  <symbol id="g-fail" viewBox="0 0 10 10"><path d="M2 2L8 8M8 2L2 8"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 12 12"><path d="M4.5 1.5h3l-.5 3 2 2h-6l2-2zM6 6.5V10.5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 12 12"><circle cx="5.2" cy="5.2" r="3.4"/><path d="M7.8 7.8L10.5 10.5"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 12 12"><rect x="3" y="3" width="6" height="6" rx="1"/></symbol>
+  <symbol id="i-up" viewBox="0 0 12 12"><path d="M6 10V2.4M2.8 5.4L6 2.2l3.2 3.2"/></symbol>
+  <symbol id="i-right" viewBox="0 0 12 12"><path d="M2 6h7.6M6.4 2.8L9.6 6l-3.2 3.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 12 12"><path d="M2.4 6.3l2.3 2.3 4.9-5"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 12 12"><circle cx="3.5" cy="2.8" r="1.3"/><circle cx="3.5" cy="9.2" r="1.3"/><circle cx="8.5" cy="4.2" r="1.3"/><path d="M3.5 4.1v3.8M8.5 5.5c0 1.6-1.4 2.3-3.6 2.4"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="eyebrow">Praxis · session shelf · spines and session cards</span>
+    <h1>Ten ways to make the shelf's spines say what each session needs</h1>
+    <p class="lede">Every design shows the same five sessions, so you can compare them directly: one working, one waiting for an approval, one waiting for your reply, one finished an hour ago, and one that failed yesterday. The rail stays 14px wide. Frames are at the app's real scale.</p>
+    <div class="legend"><span><i style="background:var(--st-run)"></i>working</span><span><i style="background:var(--st-need)"></i>needs you</span><span><i style="background:var(--st-done)"></i>done</span><span><i style="background:var(--st-fail)"></i>failed</span><span><i style="background:var(--st-idle)"></i>idle</span></div>
+  </header>
+
+  <!-- ===== today ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">00</span><h2>Today, captured from the app</h2>
+      <p>The rail at 3×, then the cards for the working session and the approval. Working, approval and reply all draw the same accent line. The 4px amber dot is the only sign of state, and it sits in the gap between spines. The failed session is the same short grey line as a finished one. The approval card doesn't say what is being approved and offers only a reply box. The working card shows no activity, because tool steps aren't messages.</p></div>
+    <div class="design-body shots">
+      <figure><figcaption>Rail · 3× (captured)</figcaption><img class="pix" src="shots/spines-rail.png" alt="Today's rail at 3x: three long accent spines with amber dots between them and two short grey spines"></figure>
+      <figure><figcaption>Working card</figcaption><img src="shots/spines-card-working.png" width="420" height="508" alt="Today's working card: a Working band, the title, an agent line and a reply field, with no activity shown"></figure>
+      <figure><figcaption>Approval card</figcaption><img src="shots/spines-card-approval.png" width="420" height="508" alt="Today's approval card: Waiting for you, the title, 'Awaiting approval' and a quick reply field, with no command or approve button"></figure>
+    </div>
+  </section>
+
+  <!-- ===== 01 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">01</span><h2>State lines</h2>
+      <p>The spine's colour is the session's state and its length is how recent it is, so the dots go. A working spine has a slow travelling stripe, a reply wait is dashed, and an approval is a thicker bar. The card leads with what it needs: an approval shows the exact command with Deny and Approve.</p>
+      <div class="uses"><span>state</span><span>permission_requested</span><span>tool_start</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v1"></div><small>top to bottom: working, approval, reply, done, failed</small></div></figure>
+      <figure><figcaption>Needs approval</figcaption>
+        <div class="mock" data-rail="v1" data-open="1"><div class="ws"></div>
+          <div class="card appr" style="top:120px">
+            <div class="band"><span class="k">Needs approval</span><span class="t">asked 3 min ago</span></div>
+            <div class="ttl">Tidy the shelf CSS</div>
+            <div class="cmd"><span class="p">$</span> npm run build:renderer<br><span class="p">in apps/praxis-desktop</span></div>
+            <div class="row"><span class="check grow"><i></i>Allow for the rest of this session</span><span class="btn ghost">Deny</span><span class="btn ok">Approve</span></div>
+            <div class="foot"><span>↵ approve · esc deny</span><span>Open session ↗</span></div>
+          </div></div></figure>
+      <figure><figcaption>Working</figcaption>
+        <div class="mock" data-rail="v1" data-open="0"><div class="ws"></div>
+          <div class="card run" style="top:70px">
+            <div class="band"><span class="k">Working</span><span class="t">2:05</span></div>
+            <div class="ttl">Re-run the UI gate</div>
+            <div class="quote">Running <b>themes.spec.ts</b>, 41 of 96 passed</div>
+            <div class="field"><span class="grow muted">Add to the conversation…</span><span class="send off"><svg class="i"><use href="#i-right"/></svg></span></div>
+            <div class="foot"><span class="row" style="gap:4px"><svg class="i" style="width:10px;height:10px"><use href="#i-stop"/></svg>Stop</span><span>Open session ↗</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> the five states are five different marks with no extra elements, and failed finally looks different from done.</li><li><b>Approval is one click.</b> The command shows in full, with Deny and Approve.</li><li><b>Risk:</b> colour carries most of the meaning, so the shape cues (stripe, dash, thick bar) have to stay strong enough for colour-blind viewers.</li></ul>
+  </section>
+
+  <!-- ===== 02 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">02</span><h2>Glyph caps</h2>
+      <p>Each spine becomes a hairline with a pixel-fit state glyph at its centre: a turning arc, !, ?, ✓ and ×, drawn on the same 10px grid as the creation cells. The meaning comes from shape, so it holds in greyscale. The card repeats the glyph in its band.</p>
+      <div class="uses"><span>state</span><span>pixel glyphs (new)</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v2"></div><small>shape carries state; colour confirms it</small></div></figure>
+      <figure><figcaption>Waiting for your reply</figcaption>
+        <div class="mock" data-rail="v2" data-open="2"><div class="ws"></div>
+          <div class="card wait" style="top:170px">
+            <div class="band"><svg class="c" style="color:var(--st-need)"><use href="#g-wait"/></svg><span class="k">Your reply</span><span class="t">25 min</span></div>
+            <div class="ttl">Explain the notes store</div>
+            <div class="quote">Do you want the sidebar editor to share the same draft, or keep its own?</div>
+            <div class="row"><span class="btn ghost">Share the draft</span><span class="btn ghost">Keep its own</span></div>
+            <div class="field"><span class="grow muted">Or write a reply…</span><span class="send off"><svg class="i"><use href="#i-right"/></svg></span></div>
+          </div></div></figure>
+      <figure><figcaption>Done</figcaption>
+        <div class="mock" data-rail="v2" data-open="3"><div class="ws"></div>
+          <div class="card done" style="top:150px">
+            <div class="band"><svg class="c" style="color:var(--st-done)"><use href="#g-done"/></svg><span class="k">Done</span><span class="t">1 h ago</span></div>
+            <div class="ttl">Review changes</div>
+            <div class="quote">Three files changed; the shelf spec covers the new cells.</div>
+            <div class="field"><span class="grow muted">Follow up…</span><span class="send off"><svg class="i"><use href="#i-right"/></svg></span></div>
+            <div class="foot"><span>↵ to send</span><span>Open session ↗</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> state can be read without colour, and the glyph set extends the icon language from the creation cells.</li><li><b>Suggested answers.</b> When the agent asks a two-way question, offer both answers as buttons.</li><li><b>Risk:</b> a 10px glyph is the limit of legibility. The ? and ! need careful drawing at Large size.</li></ul>
+  </section>
+
+  <!-- ===== 03 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">03</span><h2>Tinted books</h2>
+      <p>Spines become 11px tinted blocks, the same material as the new creation cells, so the whole rail reads as one shelf of books. Recent books stand taller and fill solid while open, and the selected one carries a small bookmark notch. The card turns like a page: ↑ and ↓ step through sessions without leaving it.</p>
+      <div class="uses"><span>state</span><span>keyboard ↑↓ (new)</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v3"></div><small>block = book; notch = selected</small></div></figure>
+      <figure><figcaption>Needs approval · 2 of 5</figcaption>
+        <div class="mock" data-rail="v3" data-open="1" data-cur="3"><div class="ws"></div>
+          <div class="card appr" style="top:120px">
+            <div class="band"><span class="k">Needs approval</span><span class="t">2 of 5</span><span class="nav"><span>↑</span><span>↓</span></span></div>
+            <div class="ttl">Tidy the shelf CSS</div>
+            <div class="cmd"><span class="p">$</span> npm run build:renderer</div>
+            <div class="row"><span class="grow"></span><span class="btn ghost">Deny</span><span class="btn ok">Approve</span></div>
+          </div></div></figure>
+      <figure><figcaption>Failed · 5 of 5</figcaption>
+        <div class="mock" data-rail="v3" data-open="4" data-cur="3"><div class="ws"></div>
+          <div class="card fail" style="top:210px">
+            <div class="band"><span class="k">Failed</span><span class="t">5 of 5</span><span class="nav"><span>↑</span><span>↓</span></span></div>
+            <div class="ttl">API migration</div>
+            <div class="alert">Claude Code stopped: the rate limit was reached yesterday at 16:40.</div>
+            <div class="row"><span class="btn ghost">Switch agent</span><span class="grow"></span><span class="btn ok">Retry</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> spines match the creation cells, so the rail is one consistent object.</li><li><b>Triage with arrows.</b> Open one card and walk the whole shelf with ↑ ↓.</li><li><b>Risk:</b> five tinted blocks are heavier than today's hairlines, and the rail draws more attention at rest.</li></ul>
+  </section>
+
+  <!-- ===== 04 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">04</span><h2>Progress tracks</h2>
+      <p>Each spine is a small track that fills as the session works through its plan. A working fill glows at its leading edge, a need stops the fill with an amber cap, a failure ends it with a red cap, and a done track is full. The card shows the plan as a checklist with the current step marked.</p>
+      <div class="uses"><span>planText</span><span>stepCount</span><span>tool_start / tool_complete</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v4"></div><small>fill = plan steps done</small></div></figure>
+      <figure><figcaption>Working · step 3 of 5</figcaption>
+        <div class="mock" data-rail="v4" data-open="0"><div class="ws"></div>
+          <div class="card run" style="top:60px">
+            <div class="band"><span class="k">Working</span><span class="t">step 3 of 5 · 2:05</span></div>
+            <div class="ttl">Re-run the UI gate</div>
+            <div class="prog"><i style="width:52%"></i></div>
+            <ul class="steps"><li class="d"><span class="b"></span>Build the renderer</li><li class="d"><span class="b"></span>Copy it into the app</li><li class="c"><span class="b"></span>Run themes.spec.ts · 41/96</li><li><span class="b"></span>Compare failing snapshots</li><li><span class="b"></span>Report the diff</li></ul>
+            <div class="foot"><span>Stop</span><span>Open session ↗</span></div>
+          </div></div></figure>
+      <figure><figcaption>Approval blocks a step</figcaption>
+        <div class="mock" data-rail="v4" data-open="1"><div class="ws"></div>
+          <div class="card appr" style="top:110px">
+            <div class="band"><span class="k">Needs approval</span><span class="t">step 2 of 4</span></div>
+            <div class="ttl">Tidy the shelf CSS</div>
+            <ul class="steps"><li class="d"><span class="b"></span>Merge the duplicate rules</li><li class="x"><span class="b"></span>Rebuild the renderer · <span class="muted">waiting for you</span></li></ul>
+            <div class="cmd"><span class="p">$</span> npm run build:renderer</div>
+            <div class="row"><span class="grow"></span><span class="btn ghost">Deny</span><span class="btn ok">Approve</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> you can see how far along a session is from the rail itself.</li><li><b>Plan in context.</b> An approval shows which step it is blocking.</li><li><b>Risk:</b> plain chat sessions have no plan, so their track only knows "running" and "done". The fill can't be faked.</li></ul>
+  </section>
+
+  <!-- ===== 05 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">05</span><h2>Attention first</h2>
+      <p>Sessions that need you move to the top of the shelf, above a divider, with wide amber spines. A count badge heads the rail. Hovering the badge opens a short stack of everything that's waiting, and you can answer each one in place.</p>
+      <div class="uses"><span>state</span><span>permission_requested</span><span>user_input_requested</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v5"></div><small>badge · needs-you group · the rest</small></div></figure>
+      <figure><figcaption>The waiting stack</figcaption>
+        <div class="mock" data-rail="v5"><div class="ws"></div>
+          <div class="card appr" style="top:40px">
+            <div class="band"><span class="k">2 need you</span></div>
+            <div class="row"><span class="ttl grow" style="font-size:13px">Tidy the shelf CSS</span><span class="tiny muted">approval</span></div>
+            <div class="cmd" style="margin-top:-4px"><span class="p">$</span> npm run build:renderer</div>
+            <div class="row"><span class="check grow"><i></i>Always allow npm run</span><span class="btn ghost">Deny</span><span class="btn ok">Approve</span></div>
+            <div style="height:1px;background:var(--m-border)"></div>
+            <div class="row"><span class="ttl grow" style="font-size:13px">Explain the notes store</span><span class="tiny muted">question</span></div>
+            <div class="quote" style="margin-top:-4px">Share the same draft, or keep its own?</div>
+            <div class="field"><span class="grow muted">Reply…</span><span class="send off"><svg class="i"><use href="#i-right"/></svg></span></div>
+          </div></div></figure>
+      <figure><figcaption>Rail at rest</figcaption>
+        <div class="mock" data-rail="v5" style="width:120px"><div class="ws"></div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> everything blocking an agent is one hover away, and the order says what to do first.</li><li><b>Batch answers.</b> Clear two waits without opening either session.</li><li><b>Risk:</b> spines reorder as states change, which breaks position memory ("my session was third"). Animate the move so it can be followed.</li></ul>
+  </section>
+
+  <!-- ===== 06 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">06</span><h2>Timeline</h2>
+      <p>The rail becomes a time axis with now at the top. Each session is a bar placed where it ran and as long as it ran, with faint hour ticks on the left. Gaps show quiet periods. The card shows the session's own turns as a row of dots, so you can see its rhythm and jump to any turn.</p>
+      <div class="uses"><span>startedAt / lastActivityAt</span><span>events (turns)</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v6" style="--zh:250px"></div><small>top = now; ticks = hours</small></div></figure>
+      <figure><figcaption>Done, with its turns</figcaption>
+        <div class="mock" data-rail="v6" data-open="3"><div class="ws"></div>
+          <div class="card done" style="top:150px">
+            <div class="band"><span class="k">Done</span><span class="t">13:10 – 13:42</span></div>
+            <div class="ttl">Review changes</div>
+            <div class="tl"><i class="me"></i><b></b><i class="ai"></i><b></b><i class="ai"></i><b></b><i class="me"></i><b></b><i class="ai"></i></div>
+            <div class="row tiny muted" style="margin-top:-6px"><span class="grow">5 turns · 3 yours</span><span>32 min</span></div>
+            <div class="quote">Three files changed; the shelf spec covers the new cells.</div>
+            <div class="foot"><span>click a dot to jump there</span><span>Open session ↗</span></div>
+          </div></div></figure>
+      <figure><figcaption>Failed, with where it stopped</figcaption>
+        <div class="mock" data-rail="v6" data-open="4"><div class="ws"></div>
+          <div class="card fail" style="top:250px">
+            <div class="band"><span class="k">Failed</span><span class="t">yesterday 16:40</span></div>
+            <div class="ttl">API migration</div>
+            <div class="tl"><i class="me"></i><b></b><i class="ai"></i><b></b><i class="ai"></i><b></b><i class="x"></i></div>
+            <div class="row"><span class="btn ghost">Switch agent</span><span class="grow"></span><span class="btn ok">Retry</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> you get a sense of when things happened and how long they took, which a list can't give.</li><li><b>Honest gaps.</b> Quiet periods show as empty rail.</li><li><b>Risk:</b> one long session squeezes the others. Bars need a minimum height and the scale should compress beyond about 6 hours.</li></ul>
+  </section>
+
+  <!-- ===== 07 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">07</span><h2>Whose turn</h2>
+      <p>Each spine splits in two. The top half lights while the agent is working and the bottom half lights when it's your turn, so the rail answers the one question that matters at a glance. The card is a small chat that shows the last exchange in both voices.</p>
+      <div class="uses"><span>state</span><span>conversationHistory</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v7"></div><small>top half agent · bottom half you</small></div></figure>
+      <figure><figcaption>Your turn</figcaption>
+        <div class="mock" data-rail="v7" data-open="2"><div class="ws"></div>
+          <div class="card wait" style="top:140px">
+            <div class="band"><span class="k">Your turn</span><span class="t">25 min</span></div>
+            <div class="bub me"><span class="who">You</span>Explain how the notes store keeps a draft.</div>
+            <div class="bub ai"><span class="who">Claude Code</span>It keeps one shared draft in memory. Do you want the sidebar editor to share it, or keep its own?</div>
+            <div class="field"><span class="grow muted">Reply…</span><span class="send off"><svg class="i"><use href="#i-right"/></svg></span></div>
+          </div></div></figure>
+      <figure><figcaption>Agent's turn</figcaption>
+        <div class="mock" data-rail="v7" data-open="0"><div class="ws"></div>
+          <div class="card run" style="top:60px">
+            <div class="band"><span class="k">Agent's turn</span><span class="t">2:05</span></div>
+            <div class="bub me"><span class="who">You</span>Re-run the UI gate and compare the snapshots.</div>
+            <div class="bub ai"><span class="who">Claude Code · running a tool</span>Running themes.spec.ts, 41 of 96 passed…</div>
+            <div class="foot"><span>Stop</span><span>Open session ↗</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> the simplest mental model. Each half answers "is it me or the agent?"</li><li><b>Context in place.</b> Your own last message reminds you what you asked.</li><li><b>Risk:</b> approval and question share the bottom half, so they need the wider bar to tell them apart.</li></ul>
+  </section>
+
+  <!-- ===== 08 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">08</span><h2>Pinned and the rest</h2>
+      <p>You can pin long-running sessions to the top of the rail, marked with a small ring, so they never fall off the shelf's five. A "+4" cell at the foot opens a searchable list of everything else. The card gets a pin toggle.</p>
+      <div class="uses"><span>state</span><span class="new">pinned (new setting)</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v8"></div><small>pins · recent · overflow</small></div></figure>
+      <figure><figcaption>Every session</figcaption>
+        <div class="mock" data-rail="v8"><div class="ws"></div>
+          <div class="card list" style="bottom:40px">
+            <div class="band"><span class="k">9 sessions</span><span class="t">⌘K to search all</span></div>
+            <div class="search"><svg class="i"><use href="#i-search"/></svg>Find a session…</div>
+            <div style="display:grid;gap:1px">
+              <div class="listrow on" style="--sc:var(--st-need)"><span class="sw"></span>Tidy the shelf CSS<span class="t">approval</span></div>
+              <div class="listrow" style="--sc:var(--st-run)"><span class="sw"></span>Re-run the UI gate<span class="t">2:05</span></div>
+              <div class="listrow" style="--sc:var(--st-done)"><span class="sw"></span>Review changes<span class="t">1 h</span></div>
+              <div class="listrow" style="--sc:var(--st-fail)"><span class="sw"></span>API migration<span class="t">yesterday</span></div>
+              <div class="listrow" style="--sc:var(--st-idle)"><span class="sw"></span>Theme tokens<span class="t">3 d</span></div>
+            </div>
+          </div></div></figure>
+      <figure><figcaption>Pinned session</figcaption>
+        <div class="mock" data-rail="v8" data-open="0"><div class="ws"></div>
+          <div class="card run" style="top:20px">
+            <div class="band"><span class="k">Working</span><span class="t">2:05</span><svg class="i" style="color:var(--m-accent);margin-left:6px"><use href="#i-pin"/></svg></div>
+            <div class="ttl">Re-run the UI gate</div>
+            <div class="quote">Running <b>themes.spec.ts</b>, 41 of 96 passed</div>
+            <div class="foot"><span>Unpin</span><span>Open session ↗</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> the shelf stops silently dropping a session once it falls out of the latest five.</li><li><b>One place for all.</b> The overflow list is the shelf's own search.</li><li><b>Risk:</b> a new persisted setting. Decide whether pins belong to the project or to the person.</li></ul>
+  </section>
+
+  <!-- ===== 09 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">09</span><h2>Outcome bars</h2>
+      <p>Coding sessions are judged by what they changed, so each spine gets a tiny diff bar beside it: the green part is lines added and the red part lines removed. The card lists the changed files with counts, the branch, and a Review button that opens the diff.</p>
+      <div class="uses"><span>worktreeBranch</span><span class="new">diff summary (new git call)</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v9"></div><small>bar = + / − proportion</small></div></figure>
+      <figure><figcaption>Done, with its changes</figcaption>
+        <div class="mock" data-rail="v9" data-open="3"><div class="ws"></div>
+          <div class="card done" style="top:120px">
+            <div class="band"><span class="k">Done</span><span class="t">1 h ago</span></div>
+            <div class="ttl">Review changes</div>
+            <div class="row small muted"><svg class="i"><use href="#i-branch"/></svg>shelf-cells · 3 files · <span class="add">+120</span> <span class="del">−18</span></div>
+            <div class="files"><div><span>SessionShelf.tsx</span><span class="add">+84</span><span class="del">−12</span></div><div><span>theme.css</span><span class="add">+31</span><span class="del">−6</span></div><div><span>sessionShelfNew.spec.ts</span><span class="add">+5</span><span class="del">−0</span></div></div>
+            <div class="row"><span class="btn ghost">Open session</span><span class="grow"></span><span class="btn ok">Review diff</span></div>
+          </div></div></figure>
+      <figure><figcaption>Working, changes so far</figcaption>
+        <div class="mock" data-rail="v9" data-open="0"><div class="ws"></div>
+          <div class="card run" style="top:60px">
+            <div class="band"><span class="k">Working</span><span class="t">2:05</span></div>
+            <div class="ttl">Re-run the UI gate</div>
+            <div class="row small muted">So far: 1 file · <span class="add">+12</span> <span class="del">−3</span></div>
+            <div class="quote">Running <b>themes.spec.ts</b>, 41 of 96 passed</div>
+            <div class="foot"><span>Stop</span><span>Open session ↗</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Better:</b> you see what a session actually produced before you open it.</li><li><b>Straight to review.</b> One click from the shelf to the diff.</li><li><b>Risk:</b> needs a cheap diff summary per session (from the worktree or a recorded base), and chat-only sessions show no bar.</li></ul>
+  </section>
+
+  <!-- ===== 10 ===== -->
+  <section class="design">
+    <div class="design-head"><span class="num">10</span><h2>The combination</h2>
+      <p>Takes 01's state lines as the base and adds 02's glyphs only where you're needed: a filled ! or ? cap on the spine. The "+4" overflow from 08 sits at the foot. Each card body depends on the state: working shows the live step and Stop, approval shows the command with Deny and Approve, a question shows the answers, done shows the summary and its changes, and failed shows the error with Retry. ↑ and ↓ move between sessions. This is the one I'd build.</p>
+      <div class="uses"><span>state</span><span>permission_requested</span><span>user_input_requested</span><span>tool_start</span><span>error</span></div></div>
+    <div class="design-body">
+      <figure><figcaption>Rail · 1× / 2×</figcaption><div class="zoom-box"><div class="zoom" data-zoom="v10"></div><small>line = state · cap = needs you</small></div></figure>
+      <figure><figcaption>Needs approval</figcaption>
+        <div class="mock" data-rail="v10" data-open="1"><div class="ws"></div>
+          <div class="card appr" style="top:120px">
+            <div class="band"><span class="k">Needs approval</span><span class="t">3 min</span><span class="nav"><span>↑</span><span>↓</span></span></div>
+            <div class="ttl">Tidy the shelf CSS</div>
+            <div class="cmd"><span class="p">$</span> npm run build:renderer<br><span class="p">in apps/praxis-desktop</span></div>
+            <div class="row"><span class="check grow"><i></i>Allow for this session</span><span class="btn ghost">Deny</span><span class="btn ok">Approve</span></div>
+          </div></div></figure>
+      <figure><figcaption>Working</figcaption>
+        <div class="mock" data-rail="v10" data-open="0"><div class="ws"></div>
+          <div class="card run" style="top:60px">
+            <div class="band"><span class="k">Working</span><span class="t">2:05</span><span class="nav"><span>↑</span><span>↓</span></span></div>
+            <div class="ttl">Re-run the UI gate</div>
+            <div class="quote">Running <b>themes.spec.ts</b>, 41 of 96 passed</div>
+            <div class="field"><span class="grow muted">Add to the conversation…</span><span class="send off"><svg class="i"><use href="#i-right"/></svg></span></div>
+            <div class="foot"><span class="row" style="gap:4px"><svg class="i" style="width:10px;height:10px"><use href="#i-stop"/></svg>Stop</span><span>Open session ↗</span></div>
+          </div></div></figure>
+      <figure><figcaption>Failed</figcaption>
+        <div class="mock" data-rail="v10" data-open="4"><div class="ws"></div>
+          <div class="card fail" style="top:200px">
+            <div class="band"><span class="k">Failed</span><span class="t">yesterday</span><span class="nav"><span>↑</span><span>↓</span></span></div>
+            <div class="ttl">API migration</div>
+            <div class="alert">Claude Code stopped: the rate limit was reached.</div>
+            <div class="row"><span class="btn ghost">Switch agent</span><span class="grow"></span><span class="btn ok">Retry</span></div>
+          </div></div></figure>
+    </div>
+    <ul class="notes"><li><b>Rail:</b> five distinct states, a filled cap only where you're needed, and no dots between spines.</li><li><b>Card:</b> one layout and one body per state, so every card leads with its next action.</li><li><b>Data:</b> everything here is already on the session record. Only 09's diff bars would need new plumbing.</li></ul>
+  </section>
+
+  <section class="reco">
+    <span class="eyebrow">Recommendation</span>
+    <h2>Build 10, and keep 04 and 09 for later</h2>
+    <ol>
+      <li><b>10 first.</b> It fixes the real problems: hidden state, failed looking like done, and approval cards with nothing to approve. It needs no new data.</li>
+      <li><b>04's plan tracks</b> are worth adding once sessions reliably carry a plan. Until then the fill would mostly be empty.</li>
+      <li><b>09's diff bars</b> need a per-session diff summary first. They're the strongest idea for coding sessions once that exists.</li>
+    </ol>
+  </section>
+</div>
+
+<script>
+// One source for every rail: the same five sessions, drawn by each design's spine variant.
+(function () {
+  const S = [
+    { st: 'run', today: true }, { st: 'appr', today: true }, { st: 'wait', today: true },
+    { st: 'done', today: true }, { st: 'fail', today: false }
+  ];
+  const glyph = { run: 'g-run', appr: 'g-appr', wait: 'g-wait', done: 'g-done', fail: 'g-fail' };
+  const cells = '<div class="cells"><div class="cell s"><svg class="c"><use href="#c-session"/></svg></div><div class="cell n"><svg class="c"><use href="#c-note"/></svg></div></div>';
+  function spine(v, s, i, opts) {
+    const cls = ['sp', v, s.st, s.today ? '' : 'old', opts.open === i ? 'open' : '', opts.cur === i ? 'cur' : '', (v === 'v1' || v === 'v10' || v === 'v2' || v === 'v4') && i === 4 ? 'divider' : ''].join(' ');
+    let inner = '';
+    if (v === 'v0' && (s.st === 'appr' || s.st === 'wait')) inner = '<span class="dot"></span>';
+    if (v === 'v2') inner = `<span class="g"><svg class="c"><use href="#${glyph[s.st]}"/></svg></span>`;
+    if (v === 'v4') { const pct = { run: 55, appr: 40, wait: 70, done: 100, fail: 30 }[s.st]; inner = `<span class="track"><span class="fill" style="height:${pct}%"></span>${s.st === 'appr' || s.st === 'wait' || s.st === 'fail' ? `<span class="cap" style="bottom:${pct}%"></span>` : ''}</span>`; }
+    if (v === 'v7') inner = '<i></i><i></i>';
+    if (v === 'v9') { const d = { run: [70, 30], appr: [0, 0], wait: [0, 0], done: [85, 15], fail: [0, 0] }[s.st]; inner = d[0] ? `<span class="diff"><b style="height:${d[0]}%"></b><s style="height:${d[1]}%"></s></span>` : ''; }
+    if (v === 'v10' && (s.st === 'appr' || s.st === 'wait')) inner = `<span class="g"><svg class="c"><use href="#${glyph[s.st]}"/></svg></span>`;
+    return `<div class="${cls}">${inner}</div>`;
+  }
+  function railHTML(v, opts) {
+    if (v === 'v6') {
+      // time axis: now at top; bars at minutes-ago, height = duration
+      const bars = [[0, 26, 'run'], [9, 20, 'appr'], [25, 30, 'wait'], [80, 32, 'done'], [200, 26, 'fail']];
+      let h = '<div class="v6rail"><span class="now"></span>';
+      for (let m = 0; m <= 240; m += 60) h += `<span class="tick" style="top:${14 + m * 1.1}px"></span>`;
+      bars.forEach(([ago, len, st], i) => { h += `<span class="bar ${st}${opts.open === i ? ' cur' : ''}" style="top:${14 + ago * 1.1}px;height:${len}px;--sc:var(--st-${{ run: 'run', appr: 'need', wait: 'need', done: 'done', fail: 'fail' }[st]})"></span>`; });
+      return h + '</div>';
+    }
+    let order = S.map((s, i) => [s, i]);
+    let pre = '';
+    if (v === 'v5') {
+      order = [order[1], order[2], order[0], order[3], order[4]];
+      pre = '<div class="badge"><span>2</span></div>';
+    }
+    let html = '';
+    if (v === 'v8') {
+      html += '<div class="pinned">' + spine(v, S[0], 0, opts).replace('</div>', '<span class="pin"></span></div>') + '</div>';
+      order = order.slice(1);
+    }
+    const list = order.map(([s, i], k) => {
+      let el = spine(v, s, i, opts);
+      if (v === 'v5' && k === 2) el = el.replace('class="sp ', 'class="sp divider ');
+      return el;
+    }).join('');
+    const more = v === 'v8' || v === 'v10' ? '<div class="more">+4</div>' : '';
+    return pre + html + `<div class="rail-spines">${list}${more}</div>`;
+  }
+  document.querySelectorAll('.mock[data-rail]').forEach(m => {
+    const v = m.dataset.rail;
+    const opts = { open: m.dataset.open !== undefined ? +m.dataset.open : -1, cur: m.dataset.cur !== undefined ? +m.dataset.cur : -1 };
+    const rail = document.createElement('div');
+    rail.className = 'rail';
+    rail.innerHTML = railHTML(v, opts) + cells;
+    m.appendChild(rail);
+  });
+  document.querySelectorAll('[data-zoom]').forEach(z => {
+    const v = z.dataset.zoom;
+    const inner = `<div style="display:flex;flex-direction:column;height:var(--zh, 280px)">${railHTML(v, { open: -1, cur: v === 'v3' ? 3 : -1 })}</div>`;
+    z.innerHTML = `<div class="z1">${inner}</div><div class="z3">${inner}</div>`;
+    if (!z.style.getPropertyValue('--zh')) z.style.setProperty('--zh', '280px');
+  });
+})();
+</script>
+
+</body>
+</html>
