@@ -22,7 +22,7 @@ Port `apps/praxis-desktop/main/src/main/terminalManager.ts` to Rust using the `p
 
 ## Dependencies
 
-- `FX-BE-195`
+- `TASK-514`
 
 ## Comments
 

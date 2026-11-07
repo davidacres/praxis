@@ -22,7 +22,7 @@ Port `@praxis/mobile-protocol`, `@praxis/mobile-relay`, and `apps/praxis-desktop
 
 ## Dependencies
 
-- `FX-BE-195`
+- `TASK-514`
 
 ## Comments
 

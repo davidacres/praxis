@@ -22,6 +22,7 @@ Port `assistantEngine.ts`, `teamChatCoordinator.ts`, `teamChatBindings.ts`, `tea
 
 ## Dependencies
 
+- `TASK-521`
 - `TASK-524`
 
 ## Comments

@@ -15,9 +15,14 @@ status: To Do
 
 Complete `apps/praxis-desktop/src-tauri` with Tauri v2 multi-webview management for `previewBrowser` and `aiBrowser` (backed by the loopback SSRF/subresource guard proxy and capability ACLs), native OS keychain integration (`keyring`), single-instance and `praxis://` deep-link handling, detached chat windows, OS installer packaging (`.dmg`, NSIS `.exe`, `.deb`/`.AppImage`), and `LICENSING.md` generation for Cargo dependencies.
 
+### Execution Order & Parallelism (Wave 4 — Final Shell Cutover, with Early Prototyping in Wave 3)
+
+- **Early Parallel Prototyping**: The `src-tauri/src/webviews/` child-webview positioning, loopback SSRF guard proxy, and `capabilities/` ACLs depend only on `FX-BE-194` and `TASK-517` (`networkAddress`), so they can be developed in parallel during Wave 3.
+- **Final Cutover Gate**: Removing Electron and switching packaging/CI over to `tauri build` is gated on `FX-BE-196`, `FX-BE-197`, and `FX-BE-198` completing all backend IPC channels.
+
 ## Tasks
 
-- `TASK-527` — Implement Tauri v2 child webviews, capabilities ACL, and installers
+- `TASK-527` (`High`, Wave 4 Cutover) — Implement Tauri v2 child webviews, capabilities ACL, and installers
 
 ## Acceptance Criteria
 
@@ -27,6 +32,8 @@ Complete `apps/praxis-desktop/src-tauri` with Tauri v2 multi-webview management 
 
 ## Dependencies
 
+- `FX-BE-196`
+- `FX-BE-197`
 - `FX-BE-198`
 
 ## Comments

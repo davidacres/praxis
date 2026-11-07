@@ -22,6 +22,8 @@ Implement `apps/praxis-desktop/src-tauri/src/webviews/` using Tauri v2 child web
 
 ## Dependencies
 
+- `FX-BE-196`
+- `FX-BE-197`
 - `FX-BE-198`
 
 ## Comments

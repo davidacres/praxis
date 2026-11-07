@@ -22,7 +22,7 @@ Port `anthropicWire.ts`, `geminiWire.ts`, `wire.ts`, `customProviders.ts`, `reas
 
 ## Dependencies
 
-- `FX-BE-197`
+- `FX-BE-195`
 
 ## Comments
 

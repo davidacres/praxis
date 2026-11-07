@@ -22,7 +22,7 @@ Define the async `IssueTrackerService` trait in `crates/praxis-trackers` and imp
 
 ## Dependencies
 
-- `FX-BE-195`
+- `TASK-515`
 
 ## Comments
 

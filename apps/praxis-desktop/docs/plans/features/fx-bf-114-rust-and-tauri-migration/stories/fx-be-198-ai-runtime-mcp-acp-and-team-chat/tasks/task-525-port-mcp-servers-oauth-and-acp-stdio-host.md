@@ -22,6 +22,7 @@ Port the built-in MCP servers (`trackerMcpServer`, `browserMcpServer`, `readOnly
 
 ## Dependencies
 
+- `TASK-518`
 - `TASK-524`
 
 ## Comments

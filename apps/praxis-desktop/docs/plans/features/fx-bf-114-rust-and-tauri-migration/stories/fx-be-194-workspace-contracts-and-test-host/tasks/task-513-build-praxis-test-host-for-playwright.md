@@ -9,11 +9,11 @@ status: To Do
 
 **Status:** To Do
 **Type:** Task
-**Priority:** High
+**Priority:** Critical
 
 ## Description
 
-Create the `praxis-test-host` binary in `crates/praxis-host` using `axum` to serve the built renderer static assets (`apps/praxis-desktop/renderer/dist`) and expose the `praxis_rpc` / `praxis_event` WebSocket endpoint on an ephemeral `127.0.0.1` port. Update `apps/praxis-desktop/main/e2e/launchTestApp.ts` to support launching `praxis-test-host` with isolated `--user-data-dir` and connecting a Playwright Chromium `BrowserContext`.
+Create the `praxis-test-host` binary in `crates/praxis-host` using `axum` to serve the built renderer static assets (`apps/praxis-desktop/renderer/dist`) and expose the `praxis_rpc` / `praxis_event` WebSocket endpoint on an ephemeral `127.0.0.1` port. Update `apps/praxis-desktop/main/e2e/launchTestApp.ts` to support launching `praxis-test-host` with isolated `--user-data-dir` and connecting a Playwright Chromium `BrowserContext`. Can be developed in parallel with `TASK-512` once `TASK-511` lands.
 
 ## Acceptance Criteria
 
@@ -22,7 +22,7 @@ Create the `praxis-test-host` binary in `crates/praxis-host` using `axum` to ser
 
 ## Dependencies
 
-- `TASK-512`
+- `TASK-511`
 
 ## Comments
 

@@ -9,7 +9,7 @@ status: To Do
 
 **Status:** To Do
 **Type:** Task
-**Priority:** High
+**Priority:** Critical
 
 ## Description
 
