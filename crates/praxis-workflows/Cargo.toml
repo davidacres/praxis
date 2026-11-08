@@ -13,6 +13,7 @@ praxis-contracts.workspace = true
 praxis-core.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
 cron.workspace = true
 indexmap.workspace = true
 portable-pty.workspace = true
@@ -22,6 +23,7 @@ sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+uuid.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
