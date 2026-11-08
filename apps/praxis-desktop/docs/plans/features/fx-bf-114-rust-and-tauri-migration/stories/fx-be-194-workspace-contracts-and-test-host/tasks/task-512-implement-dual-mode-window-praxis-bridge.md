@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:20:26.707Z
 id: TASK-512
 type: Task
-status: To Do
+status: Done
 ---
 
 # Bridge Electron trustedIpcMain and window.praxis events to Rust host
 
-**Status:** To Do
+**Status:** Done
 **Type:** Task
 **Priority:** Critical
 

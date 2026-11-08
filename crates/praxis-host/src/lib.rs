@@ -1,8 +1,21 @@
 //! Shell-agnostic service container, RPC dispatcher, and event broadcast bus
 //! backing the Electron main process (via N-API / JSON-RPC) and headless test runs.
 
+pub mod config;
+pub mod context;
+pub mod events;
+#[cfg(feature = "napi-addon")]
+pub mod napi_bridge;
+pub mod secrets;
+pub mod stdio;
+
+pub use config::{HostConfig, HostConfigError};
+pub use context::{HostContext, RpcHandlerFn};
+pub use events::{EventSubscriptionId, HostEventBus};
 use praxis_contracts::RustHostStatus;
 use praxis_core::core_status;
+pub use secrets::HostSecretStore;
+pub use stdio::HostWireFrame;
 
 /// Returns the current status of the Praxis Rust host container.
 #[must_use]

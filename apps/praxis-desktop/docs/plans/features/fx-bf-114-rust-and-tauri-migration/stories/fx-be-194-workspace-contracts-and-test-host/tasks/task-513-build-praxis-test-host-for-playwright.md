@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:20:27.517Z
 id: TASK-513
 type: Task
-status: To Do
+status: Done
 ---
 
 # Build praxis-host Rust service container and RPC dispatcher
 
-**Status:** To Do
+**Status:** Done
 **Type:** Task
 **Priority:** Critical
 

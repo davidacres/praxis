@@ -63,6 +63,7 @@ import { reconcileInstalledOnLaunch } from './marketplaceInstance';
 import { initMobileHost } from './mobileListenerInstance';
 import { ensureEnvironmentPath } from './shellEnvironment';
 import { initMemoryManager } from './memoryManager';
+import { disposeRustHost } from './rustHostInstance';
 
 const isMac = process.platform === 'darwin';
 
@@ -516,4 +517,5 @@ app.on('before-quit', event => {
   void disposeUserMcp();
   // Release this process's claims and hand the broker over to whichever instance is left.
   void disposeCoordination();
+  void disposeRustHost();
 });

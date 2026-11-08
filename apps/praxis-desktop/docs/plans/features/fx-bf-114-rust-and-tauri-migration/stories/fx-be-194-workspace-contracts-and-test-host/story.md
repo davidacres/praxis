@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:20:24.318Z
 id: FX-BE-194
 type: Story
-status: In Progress
+status: Done
 ---
 
 # Cargo Workspace, IPC Contract Codegen, and Electron-to-Rust Host Bridge
 
-**Status:** In Progress
+**Status:** Done
 **Type:** Story
 **Priority:** Critical
 
