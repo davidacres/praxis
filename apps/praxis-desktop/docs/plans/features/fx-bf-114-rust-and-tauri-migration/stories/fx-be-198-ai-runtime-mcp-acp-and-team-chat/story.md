@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:22:00.750Z
 id: FX-BE-198
 type: Story
-status: To Do
+status: In Progress
 ---
 
 # Port AI Wire Providers, MCP Servers, ACP Host, and Team Chat
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Story
 **Priority:** High
 
@@ -38,3 +38,4 @@ Port the AI and agent runtime (`packages/core/src/ai/` and `apps/praxis-desktop/
 ## Comments
 
 
+- 2026-11-08: Status corrected from To Do to In Progress. `TASK-524` has seven commits of provider and usage-ledger code in `crates/praxis-ai`. Drafts for `TASK-525` (`acp/`, `mcp/`) and `TASK-526` (`team_chat/`, `gadgets/`) exist in the working tree but are not committed. `cargo test -p praxis-ai` does not compile: `team_chat/transitions.rs` defines `mod tests` eight times (E0428). Fixing that is the first step of `FX-BE-203`/`TASK-534`. No `ai:*` channel is delegated to Rust yet, and that waits on `FX-BE-203`.

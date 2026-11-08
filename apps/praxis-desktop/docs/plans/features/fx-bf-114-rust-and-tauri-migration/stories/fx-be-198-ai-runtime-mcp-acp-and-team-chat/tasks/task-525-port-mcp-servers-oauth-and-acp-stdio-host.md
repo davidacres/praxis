@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:22:00.754Z
 id: TASK-525
 type: Task
-status: To Do
+status: In Progress
 ---
 
 # Port internal MCP servers, OAuth PKCE flow, and ACP agent host
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Task
 **Priority:** High
 
@@ -28,3 +28,4 @@ Port the built-in MCP servers (`trackerMcpServer`, `browserMcpServer`, `readOnly
 ## Comments
 
 
+- 2026-11-08: Status corrected to In Progress. A draft port exists in the working tree but is not committed, and the `praxis-ai` test target does not compile (duplicate `mod tests` in `team_chat/transitions.rs`, see `TASK-534`). Treat the draft as unverified until it is committed and its tests pass.
