@@ -6,6 +6,7 @@
 pub mod ai_usage;
 pub mod check_presets;
 pub mod check_process;
+pub mod cron_scheduler;
 pub mod edges;
 pub mod exclusive_resource;
 pub mod gates;

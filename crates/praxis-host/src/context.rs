@@ -1,6 +1,6 @@
 //! Shell-agnostic service container (`HostContext`) and typed RPC channel dispatcher.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -450,6 +450,179 @@ impl HostContext {
         })
     }
 
+    fn handle_parse_plan_folder(args: &[Value]) -> Result<Value, RustRpcError> {
+        let root = args
+            .first()
+            .and_then(Value::as_str)
+            .ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folder:parsePlanFolder requires a root directory path.".to_string(),
+            })?;
+        let workflow: Option<Vec<ProjectWorkflowStage>> = args
+            .get(1)
+            .filter(|v| !v.is_null())
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|err| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: format!("Invalid workflow stages: {err}"),
+            })?;
+        let project_key = args.get(2).and_then(Value::as_str).unwrap_or("LIVE");
+        let parsed = parse_plan_folder(root, workflow.as_deref()).map_err(|msg| RustRpcError {
+            code: "FOLDER_PARSE_ERROR".to_string(),
+            message: msg,
+        })?;
+        let dep_keys = resolve_plan_dependency_keys(&parsed, project_key);
+        Ok(json!({
+            "parsed": parsed,
+            "dependencyKeys": dep_keys,
+        }))
+    }
+
+    fn handle_discover_plan_folders(args: &[Value]) -> Result<Value, RustRpcError> {
+        let root = args
+            .first()
+            .and_then(Value::as_str)
+            .ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folder:discoverPlanFolders requires a root path.".to_string(),
+            })?;
+        let folders = discover_plan_folders(root).map_err(|msg| RustRpcError {
+            code: "FOLDER_DISCOVER_ERROR".to_string(),
+            message: msg,
+        })?;
+        Ok(json!(folders))
+    }
+
+    fn handle_discover_plans(ctx: &HostContext, args: &[Value]) -> Result<Value, RustRpcError> {
+        let arg = args
+            .first()
+            .and_then(Value::as_str)
+            .ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folder:discoverPlans requires a connection id or path.".to_string(),
+            })?;
+
+        let mut roots: Vec<String> = Vec::new();
+        if Path::new(arg).exists() {
+            roots.push(arg.to_string());
+        } else {
+            let raw_settings =
+                std::fs::read_to_string(&ctx.config.settings_path).unwrap_or_default();
+            let settings_val: Value = serde_json::from_str(&raw_settings).unwrap_or(Value::Null);
+            let conn = settings_val
+                .get("connections")
+                .and_then(Value::as_array)
+                .and_then(|conns| {
+                    conns
+                        .iter()
+                        .find(|c| c.get("id").and_then(Value::as_str) == Some(arg))
+                })
+                .ok_or_else(|| RustRpcError {
+                    code: "CONNECTION_NOT_FOUND".to_string(),
+                    message: format!("Connection {arg} is not found."),
+                })?;
+
+            let mode = conn.get("mode").and_then(Value::as_str).unwrap_or("");
+            if mode != "folder" {
+                return Err(RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Connection {arg} is not a folder connection."),
+                });
+            }
+
+            let conn_settings = conn.get("settings").unwrap_or(&Value::Null);
+            if let Some(r_arr) = conn_settings.get("roots").and_then(Value::as_array) {
+                for r in r_arr {
+                    if let Some(s) = r.as_str() {
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() {
+                            roots.push(trimmed.to_string());
+                        }
+                    }
+                }
+            } else if let Some(path_str) = conn_settings.get("path").and_then(Value::as_str) {
+                let trimmed = path_str.trim();
+                if !trimmed.is_empty() {
+                    roots.push(trimmed.to_string());
+                }
+            }
+
+            if roots.is_empty() {
+                return Err(RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Folder connection {arg} has no folders configured."),
+                });
+            }
+        }
+
+        let mut seen = HashSet::new();
+        let mut discovered = Vec::new();
+        for root in roots {
+            let folders = discover_plan_folders(&root).map_err(|msg| RustRpcError {
+                code: "FOLDER_DISCOVER_ERROR".to_string(),
+                message: msg,
+            })?;
+            for folder in folders {
+                let key = folder.plans_root_path.to_lowercase();
+                if !seen.contains(&key) {
+                    seen.insert(key);
+                    discovered.push(folder);
+                }
+            }
+        }
+
+        serde_json::to_value(discovered).map_err(|err| RustRpcError {
+            code: "INTERNAL_ERROR".to_string(),
+            message: err.to_string(),
+        })
+    }
+
+    fn handle_read_board_config(args: &[Value]) -> Result<Value, RustRpcError> {
+        let root = args
+            .first()
+            .and_then(Value::as_str)
+            .ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folder:readBoardConfig requires a root path.".to_string(),
+            })?;
+        serde_json::to_value(read_board_config_file(Path::new(root))).map_err(|err| RustRpcError {
+            code: "INTERNAL_ERROR".to_string(),
+            message: err.to_string(),
+        })
+    }
+
+    fn handle_write_board_config(args: &[Value]) -> Result<Value, RustRpcError> {
+        let root = args
+            .first()
+            .and_then(Value::as_str)
+            .ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folder:writeBoardConfig requires a root path.".to_string(),
+            })?;
+        let cfg_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+            code: "INVALID_ARGUMENT".to_string(),
+            message: "folder:writeBoardConfig requires a BoardConfigFile.".to_string(),
+        })?;
+        let cfg: BoardConfigFile = serde_json::from_value(cfg_val).map_err(|err| RustRpcError {
+            code: "INVALID_ARGUMENT".to_string(),
+            message: format!("Invalid BoardConfigFile: {err}"),
+        })?;
+        write_board_config_file(Path::new(root), &cfg).map_err(|err| RustRpcError {
+            code: "IO_ERROR".to_string(),
+            message: err.to_string(),
+        })?;
+        Ok(Value::Bool(true))
+    }
+
+    fn handle_ensure_front_matter(args: &[Value]) -> Result<Value, RustRpcError> {
+        let content = args.first().and_then(Value::as_str).unwrap_or_default();
+        let kind_str = args.get(1).and_then(Value::as_str).unwrap_or("Task");
+        let issue_type = IssueType::parse_loose(kind_str).unwrap_or(IssueType::Task);
+        Ok(Value::String(ensure_front_matter(content, issue_type)))
+    }
+
     fn register_projects_and_folder_handlers(&self) {
         self.register_handler("projects:defaultWorkflow", |_ctx, _args| {
             serde_json::to_value(default_workflow()).map_err(|err| RustRpcError {
@@ -538,49 +711,24 @@ impl HostContext {
         });
 
         self.register_handler("folder:parsePlanFolder", |_ctx, args| {
-            let root = args
-                .first()
-                .and_then(Value::as_str)
-                .ok_or_else(|| RustRpcError {
-                    code: "INVALID_ARGUMENT".to_string(),
-                    message: "folder:parsePlanFolder requires a root directory path.".to_string(),
-                })?;
-            let workflow: Option<Vec<ProjectWorkflowStage>> = args
-                .get(1)
-                .filter(|v| !v.is_null())
-                .cloned()
-                .map(serde_json::from_value)
-                .transpose()
-                .map_err(|err| RustRpcError {
-                    code: "INVALID_ARGUMENT".to_string(),
-                    message: format!("Invalid workflow stages: {err}"),
-                })?;
-            let project_key = args.get(2).and_then(Value::as_str).unwrap_or("LIVE");
-            let parsed =
-                parse_plan_folder(root, workflow.as_deref()).map_err(|msg| RustRpcError {
-                    code: "FOLDER_PARSE_ERROR".to_string(),
-                    message: msg,
-                })?;
-            let dep_keys = resolve_plan_dependency_keys(&parsed, project_key);
-            Ok(json!({
-                "parsed": parsed,
-                "dependencyKeys": dep_keys,
-            }))
+            Self::handle_parse_plan_folder(args)
+        });
+        self.register_handler("plans:parsePlanFolder", |_ctx, args| {
+            Self::handle_parse_plan_folder(args)
         });
 
         self.register_handler("folder:discoverPlanFolders", |_ctx, args| {
-            let root = args
-                .first()
-                .and_then(Value::as_str)
-                .ok_or_else(|| RustRpcError {
-                    code: "INVALID_ARGUMENT".to_string(),
-                    message: "folder:discoverPlanFolders requires a root path.".to_string(),
-                })?;
-            let folders = discover_plan_folders(root).map_err(|msg| RustRpcError {
-                code: "FOLDER_DISCOVER_ERROR".to_string(),
-                message: msg,
-            })?;
-            Ok(json!(folders))
+            Self::handle_discover_plan_folders(args)
+        });
+        self.register_handler("plans:discoverPlanFolders", |_ctx, args| {
+            Self::handle_discover_plan_folders(args)
+        });
+
+        self.register_handler("folder:discoverPlans", |ctx, args| {
+            Self::handle_discover_plans(ctx, args)
+        });
+        self.register_handler("plans:discoverPlans", |ctx, args| {
+            Self::handle_discover_plans(ctx, args)
         });
 
         self.register_handler("folder:discoverRepositoryFolders", |_ctx, args| {
@@ -599,50 +747,24 @@ impl HostContext {
         });
 
         self.register_handler("folder:readBoardConfig", |_ctx, args| {
-            let root = args
-                .first()
-                .and_then(Value::as_str)
-                .ok_or_else(|| RustRpcError {
-                    code: "INVALID_ARGUMENT".to_string(),
-                    message: "folder:readBoardConfig requires a root path.".to_string(),
-                })?;
-            serde_json::to_value(read_board_config_file(Path::new(root))).map_err(|err| {
-                RustRpcError {
-                    code: "INTERNAL_ERROR".to_string(),
-                    message: err.to_string(),
-                }
-            })
+            Self::handle_read_board_config(args)
+        });
+        self.register_handler("plans:readBoardConfig", |_ctx, args| {
+            Self::handle_read_board_config(args)
         });
 
         self.register_handler("folder:writeBoardConfig", |_ctx, args| {
-            let root = args
-                .first()
-                .and_then(Value::as_str)
-                .ok_or_else(|| RustRpcError {
-                    code: "INVALID_ARGUMENT".to_string(),
-                    message: "folder:writeBoardConfig requires a root path.".to_string(),
-                })?;
-            let cfg_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
-                code: "INVALID_ARGUMENT".to_string(),
-                message: "folder:writeBoardConfig requires a BoardConfigFile.".to_string(),
-            })?;
-            let cfg: BoardConfigFile =
-                serde_json::from_value(cfg_val).map_err(|err| RustRpcError {
-                    code: "INVALID_ARGUMENT".to_string(),
-                    message: format!("Invalid BoardConfigFile: {err}"),
-                })?;
-            write_board_config_file(Path::new(root), &cfg).map_err(|err| RustRpcError {
-                code: "IO_ERROR".to_string(),
-                message: err.to_string(),
-            })?;
-            Ok(Value::Bool(true))
+            Self::handle_write_board_config(args)
+        });
+        self.register_handler("plans:writeBoardConfig", |_ctx, args| {
+            Self::handle_write_board_config(args)
         });
 
         self.register_handler("folder:ensureFrontMatter", |_ctx, args| {
-            let content = args.first().and_then(Value::as_str).unwrap_or_default();
-            let kind_str = args.get(1).and_then(Value::as_str).unwrap_or("Task");
-            let issue_type = IssueType::parse_loose(kind_str).unwrap_or(IssueType::Task);
-            Ok(Value::String(ensure_front_matter(content, issue_type)))
+            Self::handle_ensure_front_matter(args)
+        });
+        self.register_handler("plans:ensureFrontMatter", |_ctx, args| {
+            Self::handle_ensure_front_matter(args)
         });
 
         self.register_handler("folderService:getBoards", |_ctx, args| {
@@ -1597,6 +1719,172 @@ mod tests {
                 "TASK-516-port-git-cli-parser-graph-builder-and-worktree-m"
             ))
         );
+
+        let _ = std::fs::remove_dir_all(&ctx.config().user_data_dir);
+    }
+
+    #[test]
+    fn folder_and_plans_rpc_channels_roundtrip() {
+        let ctx = test_context();
+        let test_dir = format!("{}/plans-fixture", ctx.config().user_data_dir.display());
+        let features_dir = format!("{test_dir}/features");
+        let feature1_dir = format!("{features_dir}/01-feat");
+        std::fs::create_dir_all(&feature1_dir).expect("create test dirs");
+
+        let doc1 = format!("{feature1_dir}/feature.md");
+        std::fs::write(
+            &doc1,
+            "# My Feature\n\n**Status:** In Progress\n**Type:** Feature\n**Priority:** High\n\n## Description\nTesting.",
+        )
+        .expect("write doc");
+
+        // Test ensureFrontMatter under both folder and plans
+        let fm_res1 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-fm-1".to_string(),
+            channel: "folder:ensureFrontMatter".to_string(),
+            args: vec![json!("# Title\n\nBody"), json!("Story")],
+        });
+        assert!(fm_res1.ok);
+        let fm_res2 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-fm-2".to_string(),
+            channel: "plans:ensureFrontMatter".to_string(),
+            args: vec![json!("# Title\n\nBody"), json!("Story")],
+        });
+        assert!(fm_res2.ok);
+        // Each call stamps `**Created:**` with the current millisecond, so compare without it.
+        let without_created = |result: &Option<Value>| -> String {
+            result
+                .as_ref()
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .lines()
+                .filter(|line| !line.starts_with("**Created:**"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(
+            without_created(&fm_res1.result),
+            without_created(&fm_res2.result)
+        );
+        assert!(
+            fm_res1
+                .result
+                .expect("front matter result")
+                .as_str()
+                .expect("front matter text")
+                .contains("**Type:** Story")
+        );
+
+        // Test discoverPlanFolders under folder and plans
+        let disc_res1 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-disc-1".to_string(),
+            channel: "folder:discoverPlanFolders".to_string(),
+            args: vec![json!(test_dir)],
+        });
+        assert!(disc_res1.ok);
+        let disc_res2 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-disc-2".to_string(),
+            channel: "plans:discoverPlanFolders".to_string(),
+            args: vec![json!(test_dir)],
+        });
+        assert!(disc_res2.ok);
+        assert_eq!(disc_res1.result, disc_res2.result);
+
+        // Test discoverPlans by directory path under folder and plans
+        let plans_res1 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-plans-1".to_string(),
+            channel: "folder:discoverPlans".to_string(),
+            args: vec![json!(test_dir)],
+        });
+        assert!(plans_res1.ok);
+        let plans_res2 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-plans-2".to_string(),
+            channel: "plans:discoverPlans".to_string(),
+            args: vec![json!(test_dir)],
+        });
+        assert!(plans_res2.ok);
+        assert_eq!(plans_res1.result, plans_res2.result);
+
+        // Test discoverPlans with connectionId in settings.json
+        let settings_path = &ctx.config().settings_path;
+        let settings_content = json!({
+            "connections": [
+                {
+                    "id": "test-folder-conn",
+                    "mode": "folder",
+                    "settings": {
+                        "roots": [test_dir]
+                    }
+                }
+            ]
+        });
+        std::fs::write(
+            settings_path,
+            serde_json::to_string(&settings_content).expect("serialize settings"),
+        )
+        .expect("write settings");
+
+        let conn_res = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-conn-1".to_string(),
+            channel: "folder:discoverPlans".to_string(),
+            args: vec![json!("test-folder-conn")],
+        });
+        assert!(conn_res.ok);
+        assert_eq!(conn_res.result, plans_res1.result);
+
+        // Test discoverPlans with unknown connection returns CONNECTION_NOT_FOUND
+        let missing_conn = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-conn-missing".to_string(),
+            channel: "folder:discoverPlans".to_string(),
+            args: vec![json!("non-existent-conn")],
+        });
+        assert!(!missing_conn.ok);
+        assert_eq!(
+            missing_conn.error.as_ref().map(|e| e.code.as_str()),
+            Some("CONNECTION_NOT_FOUND")
+        );
+
+        // Test parsePlanFolder under folder and plans
+        let parse_res1 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-parse-1".to_string(),
+            channel: "folder:parsePlanFolder".to_string(),
+            args: vec![json!(test_dir), Value::Null, json!("PRAXIS")],
+        });
+        assert!(parse_res1.ok);
+        let parse_res2 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-parse-2".to_string(),
+            channel: "plans:parsePlanFolder".to_string(),
+            args: vec![json!(test_dir), Value::Null, json!("PRAXIS")],
+        });
+        assert!(parse_res2.ok);
+        assert_eq!(parse_res1.result, parse_res2.result);
+
+        // Test readBoardConfig and writeBoardConfig under folder and plans
+        let board_cfg = json!({
+            "projectKey": "PRAXIS",
+            "projectName": "Praxis Desktop",
+            "workflow": null
+        });
+        let write_res = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-bcfg-w".to_string(),
+            channel: "plans:writeBoardConfig".to_string(),
+            args: vec![json!(test_dir), board_cfg],
+        });
+        assert!(write_res.ok);
+
+        let read_res1 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-bcfg-r1".to_string(),
+            channel: "folder:readBoardConfig".to_string(),
+            args: vec![json!(test_dir)],
+        });
+        assert!(read_res1.ok);
+        let read_res2 = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-bcfg-r2".to_string(),
+            channel: "plans:readBoardConfig".to_string(),
+            args: vec![json!(test_dir)],
+        });
+        assert!(read_res2.ok);
+        assert_eq!(read_res1.result, read_res2.result);
 
         let _ = std::fs::remove_dir_all(&ctx.config().user_data_dir);
     }

@@ -54,7 +54,34 @@ export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
   'git:popStash',
   'git:pull',
   'git:fetch',
-  'git:push'
+  'git:push',
+  'settings:get',
+  // `settings:set` stays on TypeScript until TASK-536: its handler validates mobile
+  // subnets before writing, and delegating it to Rust would skip that check.
+  'settings:sanitize',
+  'settings:merge',
+  'folder:discoverPlans',
+  'folder:discoverPlanFolders',
+  'folder:discoverRepositoryFolders',
+  'folder:parsePlanFolder',
+  'folder:readBoardConfig',
+  'folder:writeBoardConfig',
+  'folder:ensureFrontMatter',
+  'plans:discoverPlans',
+  'plans:discoverPlanFolders',
+  'plans:parsePlanFolder',
+  'plans:readBoardConfig',
+  'plans:writeBoardConfig',
+  'plans:ensureFrontMatter',
+  'folderService:getBoards',
+  'folderService:getBoardDetails',
+  'folderService:getIssues',
+  'folderService:getIssue',
+  'folderService:getTransitions',
+  'folderService:createIssue',
+  'folderService:updateIssue',
+  'folderService:transitionIssue',
+  'folderService:addComment'
 ];
 
 /**

@@ -11,6 +11,8 @@ import {
   buildCommitGraph,
   buildPartialHunkPatch,
   buildWorktreeName,
+  discoverPlanFolders,
+  ensureFrontMatter,
   mergeAppSettings,
   normalizeWorkflowStages,
   parseGitBranches,
@@ -699,6 +701,176 @@ test('RustHostBridge.handleOrFallback: gracefully falls back to TypeScript when 
     // Should attempt Rust, receive CHANNEL_NOT_REGISTERED, and fall back to TS without throwing
     const result = await invoke(dummyEvent, 'probe');
     assert.equal(result, 'ts-fallback-probe');
+  } finally {
+    await bridge.dispose();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('DEFAULT_MIGRATED_CHANNELS contains settings:*, folder:*, plans:*, and folderService:*', () => {
+  // settings:set stays on TypeScript until its mobile-subnet validation is ported (TASK-536).
+  assert.ok(!DEFAULT_MIGRATED_CHANNELS.includes('settings:set'));
+  const expectedChannels = [
+    'settings:get',
+    'settings:sanitize',
+    'settings:merge',
+    'folder:discoverPlans',
+    'folder:discoverPlanFolders',
+    'folder:discoverRepositoryFolders',
+    'folder:parsePlanFolder',
+    'folder:readBoardConfig',
+    'folder:writeBoardConfig',
+    'folder:ensureFrontMatter',
+    'plans:discoverPlans',
+    'plans:discoverPlanFolders',
+    'plans:parsePlanFolder',
+    'plans:readBoardConfig',
+    'plans:writeBoardConfig',
+    'plans:ensureFrontMatter',
+    'folderService:getBoards',
+    'folderService:getBoardDetails',
+    'folderService:getIssues',
+    'folderService:getIssue',
+    'folderService:getTransitions',
+    'folderService:createIssue',
+    'folderService:updateIssue',
+    'folderService:transitionIssue',
+    'folderService:addComment'
+  ];
+
+  for (const channel of expectedChannels) {
+    assert.ok(
+      DEFAULT_MIGRATED_CHANNELS.includes(channel),
+      `DEFAULT_MIGRATED_CHANNELS missing ${channel}`
+    );
+  }
+
+  const prevEnv = process.env.PRAXIS_RUST_CHANNELS;
+  try {
+    process.env.PRAXIS_RUST_CHANNELS = 'settings:*,plans:*';
+    const channels = resolveInitialMigratedChannels();
+    assert.ok(channels.includes('settings:get'));
+    assert.ok(!channels.includes('settings:set'));
+    assert.ok(channels.includes('plans:parsePlanFolder'));
+    assert.ok(channels.includes('plans:discoverPlans'));
+    assert.ok(!channels.includes('git:status'));
+  } finally {
+    if (prevEnv !== undefined) {
+      process.env.PRAXIS_RUST_CHANNELS = prevEnv;
+    } else {
+      delete process.env.PRAXIS_RUST_CHANNELS;
+    }
+  }
+});
+
+test('RustHostBridge.handleOrFallback: routes settings:*, folder:*, and plans:* through Rust when migrated', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-wiring-test-'));
+  const settingsPath = path.join(userDataDir, 'test-settings.json');
+  const transport = new StdioRustHostTransport({
+    userDataDir,
+    settingsPath,
+    demoMode: true,
+    e2eMode: true
+  });
+  const bridge = new RustHostBridge({
+    transport,
+    migratedChannels: [
+      'settings:get',
+      'settings:set',
+      'folder:discoverPlans',
+      'plans:discoverPlans',
+      'folder:parsePlanFolder',
+      'plans:parsePlanFolder',
+      'plans:readBoardConfig',
+      'plans:ensureFrontMatter'
+    ]
+  });
+
+  const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
+  const mockIpc: Pick<IpcMain, 'handle'> = {
+    handle: (channel: string, listener: (event: IpcMainInvokeEvent, ...args: any[]) => any) => {
+      handlers.set(channel, listener);
+    }
+  };
+  const dummyEvent = {} as IpcMainInvokeEvent;
+
+  try {
+    await bridge.start();
+
+    let tsFallbackCalled = false;
+    bridge.handleOrFallback(
+      'settings:get',
+      async () => {
+        tsFallbackCalled = true;
+        return { tsFallback: true };
+      },
+      mockIpc
+    );
+
+    const getHandler = handlers.get('settings:get')!;
+    const settingsResult = (await getHandler(dummyEvent)) as AppSettings;
+    assert.equal(tsFallbackCalled, false, 'Should have routed to Rust, not TS fallback');
+    assert.ok(settingsResult.startup, 'Should have returned AppSettings from Rust');
+
+    bridge.handleOrFallback(
+      'settings:set',
+      async () => {
+        tsFallbackCalled = true;
+        return { tsFallback: true };
+      },
+      mockIpc
+    );
+    const setHandler = handlers.get('settings:set')!;
+    const patchResult = (await setHandler(dummyEvent, {
+      startup: { reopenLastWorkspace: false }
+    })) as AppSettings;
+    assert.equal(tsFallbackCalled, false, 'Should have routed to Rust, not TS fallback');
+    assert.equal(patchResult.startup.reopenLastWorkspace, false);
+
+    // Test plans:ensureFrontMatter
+    bridge.handleOrFallback(
+      'plans:ensureFrontMatter',
+      async (_event, content: string) => `ts-${content}`,
+      mockIpc
+    );
+    const fmHandler = handlers.get('plans:ensureFrontMatter')!;
+    const fmResult = (await fmHandler(dummyEvent, '# My Plan\n\nContent', 'Bug')) as string;
+    assert.ok(fmResult.includes('**Type:** Bug'), 'Rust plans:ensureFrontMatter injected Bug frontmatter');
+
+    // Test folder:discoverPlans with real plans directory
+    const realPlansRoot = path.resolve(__dirname, '../../../docs/plans');
+    bridge.handleOrFallback(
+      'folder:discoverPlans',
+      async () => [{ plansRootPath: 'ts-fallback' }],
+      mockIpc
+    );
+    const discHandler = handlers.get('folder:discoverPlans')!;
+    const discResult = (await discHandler(dummyEvent, realPlansRoot)) as Array<{ plansRootPath: string }>;
+    assert.ok(Array.isArray(discResult));
+    assert.ok(discResult.length > 0);
+    assert.ok(discResult[0].plansRootPath.length > 0);
+    assert.notEqual(discResult[0].plansRootPath, 'ts-fallback');
+
+    // Test plans:readBoardConfig with real plans directory
+    bridge.handleOrFallback(
+      'plans:readBoardConfig',
+      async () => ({ projectKey: 'FALLBACK' }),
+      mockIpc
+    );
+    const bcfgHandler = handlers.get('plans:readBoardConfig')!;
+    const bcfgResult = (await bcfgHandler(dummyEvent, realPlansRoot)) as { projectKey?: string };
+    assert.ok(bcfgResult.projectKey, 'Read board config from Rust plans:readBoardConfig');
+    assert.notEqual(bcfgResult.projectKey, 'FALLBACK');
+
+    // Test fallback when channel is unmigrated
+    bridge.handleOrFallback(
+      'unmigrated:channel',
+      async (_event, arg: string) => `ts-handled-${arg}`,
+      mockIpc
+    );
+    const unmigratedHandler = handlers.get('unmigrated:channel')!;
+    const unmigratedResult = await unmigratedHandler(dummyEvent, 'test');
+    assert.equal(unmigratedResult, 'ts-handled-test');
   } finally {
     await bridge.dispose();
     fs.rmSync(userDataDir, { recursive: true, force: true });
