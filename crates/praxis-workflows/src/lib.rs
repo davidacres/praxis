@@ -15,6 +15,7 @@ pub mod run_profile;
 pub mod run_profile_discovery;
 pub mod run_profile_store;
 pub mod run_reconciliation;
+pub mod run_service_manager;
 pub mod scheduler;
 pub mod stage_model;
 pub mod stage_session;
