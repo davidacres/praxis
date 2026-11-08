@@ -5,7 +5,9 @@
 //! side by side.
 
 pub mod custom_providers;
+pub mod local_runtime_detection;
 pub mod model_pricing;
 pub mod provider_limit_error;
+pub mod provider_preflight;
 pub mod reasoning_support;
 pub mod wire;
