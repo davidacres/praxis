@@ -2,8 +2,11 @@
 //! `GitLabBoardService`, `DemoService`, `StubService`) and CI evidence providers.
 
 pub mod folder_service;
+pub mod github;
 pub mod issue_tracker_service;
 pub mod stub_backend_service;
+#[cfg(test)]
+mod test_support;
 
 pub use folder_service::*;
 pub use issue_tracker_service::*;
