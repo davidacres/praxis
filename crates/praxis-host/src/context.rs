@@ -1559,11 +1559,19 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_context() -> HostContext {
+        // Parallel test threads can read the same timestamp; the counter keeps each
+        // context's settings file its own.
+        static NEXT_CONTEXT: std::sync::atomic::AtomicUsize =
+            std::sync::atomic::AtomicUsize::new(0);
+        let sequence = NEXT_CONTEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir = format!("/tmp/praxis-test-profile-{nanos}");
+        let dir = format!(
+            "/tmp/praxis-test-profile-{}-{nanos}-{sequence}",
+            std::process::id()
+        );
         let settings = format!("{dir}/test-settings.json");
         let config = HostConfig::new(&dir, &settings, true, true).expect("config");
         HostContext::new(config)
