@@ -48,8 +48,13 @@ import {
   RustHostBridge,
   RustHostRpcError,
   StdioRustHostTransport,
-  broadcastRustEventToWindows
+  broadcastRustEventToWindows,
+  hasRustHostBinary
 } from './rustHostBridge';
+import {
+  DEFAULT_MIGRATED_CHANNELS,
+  resolveInitialMigratedChannels
+} from './rustHostInstance';
 
 function createMockWindow(
   sent: Array<{ winId: string; channel: string; args: unknown[] }>,
@@ -626,6 +631,74 @@ test('StdioRustHostTransport git:* and worktree:* channels match @praxis/core an
     const tsRepoStatus = JSON.parse(JSON.stringify(await getGitStatus(repoRoot)));
     const rustRepoStatus = await bridge.invoke<GitStatusSnapshot>('git:status', repoRoot);
     assert.deepEqual(rustRepoStatus, tsRepoStatus);
+  } finally {
+    await bridge.dispose();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('hasRustHostBinary and resolveInitialMigratedChannels: environment flag and binary presence', () => {
+  assert.equal(hasRustHostBinary(), true);
+
+  const prevEnv = process.env.PRAXIS_RUST_CHANNELS;
+  try {
+    delete process.env.PRAXIS_RUST_CHANNELS;
+    const defaultChannels = resolveInitialMigratedChannels();
+    assert.ok(defaultChannels.includes('git:status'));
+    assert.ok(defaultChannels.includes('git:preflight'));
+    assert.ok(defaultChannels.includes('host:status'));
+    assert.equal(defaultChannels.length, DEFAULT_MIGRATED_CHANNELS.length);
+
+    process.env.PRAXIS_RUST_CHANNELS = 'none';
+    assert.deepEqual(resolveInitialMigratedChannels(), []);
+
+    process.env.PRAXIS_RUST_CHANNELS = 'git:*';
+    const gitOnly = resolveInitialMigratedChannels();
+    assert.ok(gitOnly.length > 0);
+    assert.ok(gitOnly.every(c => c.startsWith('git:')));
+  } finally {
+    if (prevEnv !== undefined) {
+      process.env.PRAXIS_RUST_CHANNELS = prevEnv;
+    } else {
+      delete process.env.PRAXIS_RUST_CHANNELS;
+    }
+  }
+});
+
+test('RustHostBridge.handleOrFallback: gracefully falls back to TypeScript when Rust channel is not registered', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-unregistered-fallback-'));
+  const settingsPath = path.join(userDataDir, 'test-settings.json');
+  const transport = new StdioRustHostTransport({
+    userDataDir,
+    settingsPath
+  });
+  const bridge = new RustHostBridge({ transport });
+
+  const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
+  const mockIpc: Pick<IpcMain, 'handle'> = {
+    handle: (channel: string, listener: (event: IpcMainInvokeEvent, ...args: any[]) => any) => {
+      handlers.set(channel, listener);
+    }
+  };
+
+  const dummyEvent = {} as IpcMainInvokeEvent;
+
+  try {
+    await bridge.start();
+
+    // Register a channel that does not exist on praxis-host
+    bridge.handleOrFallback(
+      'unregistered:customChannel',
+      async (_event, val: string) => `ts-fallback-${val}`,
+      mockIpc
+    );
+
+    bridge.markChannelMigrated('unregistered:customChannel');
+
+    const invoke = handlers.get('unregistered:customChannel')!;
+    // Should attempt Rust, receive CHANNEL_NOT_REGISTERED, and fall back to TS without throwing
+    const result = await invoke(dummyEvent, 'probe');
+    assert.equal(result, 'ts-fallback-probe');
   } finally {
     await bridge.dispose();
     fs.rmSync(userDataDir, { recursive: true, force: true });

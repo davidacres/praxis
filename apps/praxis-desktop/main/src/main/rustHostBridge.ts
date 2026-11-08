@@ -88,6 +88,16 @@ export function resolveRustHostBinaryPath(): string {
   );
 }
 
+/** Returns `true` if a compiled `praxis-host` binary is discoverable on this system. */
+export function hasRustHostBinary(): boolean {
+  try {
+    resolveRustHostBinaryPath();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Persistent NDJSON stdio transport talking to `crates/praxis-host` (`praxis-host --stdio`).
  * Works identically under Electron and plain Node (`node --test`) without N-API ABI coupling.
@@ -401,14 +411,25 @@ export class RustHostBridge {
    *
    * Sender verification (`isOwnRendererSender`) is enforced by `trustedIpcMain` before either path runs.
    */
-  handleOrFallback<TArgs extends unknown[], TResult>(
+  handleOrFallback<TArgs extends any[] = any[], TResult = any>(
     channel: string,
     fallback: (event: IpcMainInvokeEvent, ...args: TArgs) => Promise<TResult> | TResult,
     ipcTarget: Pick<IpcMain, 'handle'> = ipcMain
   ): void {
     ipcTarget.handle(channel, async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
       if (this.migrated.has(channel)) {
-        return this.invoke<TResult>(channel, ...args);
+        try {
+          return await this.invoke<TResult>(channel, ...args);
+        } catch (error) {
+          if (error instanceof RustHostRpcError && error.code !== 'CHANNEL_NOT_REGISTERED') {
+            throw error;
+          }
+          console.warn(
+            `[rustHostBridge] Falling back to TypeScript for channel '${channel}':`,
+            error
+          );
+          return fallback(event, ...(args as TArgs));
+        }
       }
       return fallback(event, ...(args as TArgs));
     });
