@@ -11,8 +11,15 @@ pub mod orchestrator;
 pub mod providers;
 pub mod recovery;
 pub mod run;
+pub mod run_profile;
+pub mod run_profile_discovery;
+pub mod run_profile_store;
+pub mod run_reconciliation;
 pub mod scheduler;
 pub mod stage_model;
 pub mod stage_session;
 pub mod types;
 pub mod waivers;
+
+#[cfg(test)]
+mod test_support;
