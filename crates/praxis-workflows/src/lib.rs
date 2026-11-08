@@ -11,6 +11,7 @@ pub mod deployment_profile;
 pub mod deployment_profile_store;
 pub mod deployment_run_state;
 pub mod deployment_run_store;
+pub mod direct_deployment_orchestrator;
 pub mod direct_process_executor;
 pub mod directory_target;
 pub mod edges;
