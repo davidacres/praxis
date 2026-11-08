@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 praxis-contracts.workspace = true
 praxis-core.workspace = true
+async-trait.workspace = true
 chrono.workspace = true
 cron.workspace = true
 indexmap.workspace = true

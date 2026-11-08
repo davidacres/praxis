@@ -1419,6 +1419,7 @@ dependencies = [
 name = "praxis-workflows"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "cron",
  "flate2",
