@@ -17,6 +17,8 @@ pub mod directory_target;
 pub mod edges;
 pub mod exclusive_resource;
 pub mod gates;
+pub mod github_actions_api;
+pub mod github_actions_executor;
 pub mod network_probe;
 pub mod orchestrator;
 pub mod preview_verification;
@@ -48,5 +50,7 @@ pub mod terminal_manager;
 pub mod types;
 pub mod waivers;
 
+#[cfg(test)]
+mod mock_http;
 #[cfg(test)]
 mod test_support;

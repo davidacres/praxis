@@ -1547,6 +1547,8 @@ name = "praxis-workflows"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
+ "base64 0.22.1",
  "chrono",
  "chrono-tz",
  "cron",
@@ -1556,9 +1558,12 @@ dependencies = [
  "portable-pty",
  "praxis-contracts",
  "praxis-core",
+ "praxis-trackers",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
  "thiserror 2.0.21",
  "tokio",
