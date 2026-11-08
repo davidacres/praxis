@@ -3,6 +3,7 @@
 //! edge/loop semantics, the deterministic scheduler, gates, restart recovery,
 //! the async orchestration loop, and the check process runner.
 
+pub mod ai_usage;
 pub mod check_presets;
 pub mod check_process;
 pub mod edges;
@@ -20,7 +21,9 @@ pub mod run_reconciliation;
 pub mod run_service_manager;
 pub mod scheduled_budget;
 pub mod scheduled_run;
+pub mod scheduled_run_detail;
 pub mod scheduled_run_execution;
+pub mod scheduled_run_forecast;
 pub mod scheduled_run_readiness;
 pub mod scheduled_run_request;
 pub mod scheduled_run_runner;
