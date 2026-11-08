@@ -891,12 +891,18 @@ mod tests {
     }
 
     fn init_repo() -> PathBuf {
+        // Tests run on parallel threads and macOS clocks tick in microseconds, so the
+        // timestamp alone can repeat; the counter keeps every repository distinct.
+        static NEXT_REPO: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let sequence = NEXT_REPO.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir =
-            std::env::temp_dir().join(format!("praxis-worktree-{}-{nanos}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "praxis-worktree-{}-{sequence}-{nanos}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).expect("mkdir");
         git_sync(&dir, &["init", "-b", "main"]);
         git_sync(&dir, &["config", "user.email", "test@example.com"]);

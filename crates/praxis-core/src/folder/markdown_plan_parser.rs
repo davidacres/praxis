@@ -1581,7 +1581,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir = std::env::temp_dir().join(format!("{prefix}-{nanos}"));
+        // Parallel test threads can read the same timestamp; the counter keeps paths distinct.
+        static NEXT_TEMP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let sequence = NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("{prefix}-{nanos}-{sequence}"));
         std::fs::create_dir_all(&dir).expect("mkdir");
         dir
     }

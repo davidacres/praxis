@@ -1658,8 +1658,13 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let root =
-            std::env::temp_dir().join(format!("praxis-git-svc-{}-{nanos}", std::process::id()));
+        // Parallel test threads can read the same timestamp; the counter keeps paths distinct.
+        static NEXT_TEMP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let sequence = NEXT_TEMP.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "praxis-git-svc-{}-{nanos}-{sequence}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&root).expect("mkdir root");
         let repository = root.join("repo");
         let worktree = root.join("worktree");

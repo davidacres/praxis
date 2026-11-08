@@ -616,7 +616,6 @@ mod tests {
     }
 }
 
-
 /// Parses the arguments a model wrote for a tool call.
 ///
 /// A model that wrote malformed JSON still asked for the tool, so the raw
@@ -782,108 +781,108 @@ pub async fn consume_chat_stream(
         let Ok(payload) = serde_json::from_str::<serde_json::Value>(&data) else {
             continue;
         };
-            let choice = payload
-                .get("choices")
-                .and_then(serde_json::Value::as_array)
-                .and_then(|choices| choices.first());
-            let delta = choice
-                .and_then(|choice| choice.get("delta"))
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
-            if let Some(content) = delta.get("content").and_then(serde_json::Value::as_str) {
-                if !content.is_empty() {
-                    text.push_str(content);
-                    on_event(ChatStreamEvent::Text {
-                        text: content.to_string(),
-                    });
-                }
-            }
-            for key in ["reasoning_content", "reasoning"] {
-                if let Some(reasoning) = delta.get(key).and_then(serde_json::Value::as_str) {
-                    if !reasoning.is_empty() {
-                        thought.push_str(reasoning);
-                    }
-                }
-            }
-            if let Some(calls) = delta
-                .get("tool_calls")
-                .and_then(serde_json::Value::as_array)
-            {
-                for call in calls {
-                    let index = call
-                        .get("index")
-                        .and_then(serde_json::Value::as_u64)
-                        .map(|index| index as usize)
-                        .unwrap_or(tool_calls.len());
-                    let id = call
-                        .get("id")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string);
-                    let name = call
-                        .get("function")
-                        .and_then(|function| function.get("name"))
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string);
-                    let args_delta = call
-                        .get("function")
-                        .and_then(|function| function.get("arguments"))
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string);
-                    while tool_calls.len() <= index {
-                        tool_calls.push(ToolCallDraft::default());
-                    }
-                    let entry = &mut tool_calls[index];
-                    if let Some(id) = &id {
-                        entry.id = Some(id.clone());
-                    }
-                    if let Some(name) = &name {
-                        entry.name = Some(name.clone());
-                    }
-                    if let Some(args) = &args_delta {
-                        entry.args.push_str(args);
-                    }
-                    on_event(ChatStreamEvent::ToolCall {
-                        index,
-                        id: entry.id.clone(),
-                        name: entry.name.clone(),
-                        args_delta,
-                    });
-                }
-            }
-            if let Some(reason) = choice
-                .and_then(|choice| choice.get("finish_reason"))
-                .and_then(serde_json::Value::as_str)
-            {
-                finish_reason = Some(reason.to_string());
-            }
-            if let Some(reported) = payload.get("usage").filter(|usage| !usage.is_null()) {
-                usage = TokenUsage {
-                    input_tokens: reported
-                        .get("prompt_tokens")
-                        .and_then(serde_json::Value::as_u64)
-                        .or(usage.input_tokens),
-                    output_tokens: reported
-                        .get("completion_tokens")
-                        .and_then(serde_json::Value::as_u64)
-                        .or(usage.output_tokens),
-                    total_tokens: reported
-                        .get("total_tokens")
-                        .and_then(serde_json::Value::as_u64)
-                        .or(usage.total_tokens),
-                    reasoning_tokens: reported
-                        .get("completion_tokens_details")
-                        .and_then(|details| details.get("reasoning_tokens"))
-                        .and_then(serde_json::Value::as_u64)
-                        .or(usage.reasoning_tokens),
-                    cached_input_tokens: reported
-                        .get("prompt_tokens_details")
-                        .and_then(|details| details.get("cached_tokens"))
-                        .and_then(serde_json::Value::as_u64)
-                        .or(usage.cached_input_tokens),
-                };
-                on_event(ChatStreamEvent::Usage { usage });
+        let choice = payload
+            .get("choices")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|choices| choices.first());
+        let delta = choice
+            .and_then(|choice| choice.get("delta"))
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        if let Some(content) = delta.get("content").and_then(serde_json::Value::as_str) {
+            if !content.is_empty() {
+                text.push_str(content);
+                on_event(ChatStreamEvent::Text {
+                    text: content.to_string(),
+                });
             }
         }
+        for key in ["reasoning_content", "reasoning"] {
+            if let Some(reasoning) = delta.get(key).and_then(serde_json::Value::as_str) {
+                if !reasoning.is_empty() {
+                    thought.push_str(reasoning);
+                }
+            }
+        }
+        if let Some(calls) = delta
+            .get("tool_calls")
+            .and_then(serde_json::Value::as_array)
+        {
+            for call in calls {
+                let index = call
+                    .get("index")
+                    .and_then(serde_json::Value::as_u64)
+                    .map(|index| index as usize)
+                    .unwrap_or(tool_calls.len());
+                let id = call
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let name = call
+                    .get("function")
+                    .and_then(|function| function.get("name"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                let args_delta = call
+                    .get("function")
+                    .and_then(|function| function.get("arguments"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string);
+                while tool_calls.len() <= index {
+                    tool_calls.push(ToolCallDraft::default());
+                }
+                let entry = &mut tool_calls[index];
+                if let Some(id) = &id {
+                    entry.id = Some(id.clone());
+                }
+                if let Some(name) = &name {
+                    entry.name = Some(name.clone());
+                }
+                if let Some(args) = &args_delta {
+                    entry.args.push_str(args);
+                }
+                on_event(ChatStreamEvent::ToolCall {
+                    index,
+                    id: entry.id.clone(),
+                    name: entry.name.clone(),
+                    args_delta,
+                });
+            }
+        }
+        if let Some(reason) = choice
+            .and_then(|choice| choice.get("finish_reason"))
+            .and_then(serde_json::Value::as_str)
+        {
+            finish_reason = Some(reason.to_string());
+        }
+        if let Some(reported) = payload.get("usage").filter(|usage| !usage.is_null()) {
+            usage = TokenUsage {
+                input_tokens: reported
+                    .get("prompt_tokens")
+                    .and_then(serde_json::Value::as_u64)
+                    .or(usage.input_tokens),
+                output_tokens: reported
+                    .get("completion_tokens")
+                    .and_then(serde_json::Value::as_u64)
+                    .or(usage.output_tokens),
+                total_tokens: reported
+                    .get("total_tokens")
+                    .and_then(serde_json::Value::as_u64)
+                    .or(usage.total_tokens),
+                reasoning_tokens: reported
+                    .get("completion_tokens_details")
+                    .and_then(|details| details.get("reasoning_tokens"))
+                    .and_then(serde_json::Value::as_u64)
+                    .or(usage.reasoning_tokens),
+                cached_input_tokens: reported
+                    .get("prompt_tokens_details")
+                    .and_then(|details| details.get("cached_tokens"))
+                    .and_then(serde_json::Value::as_u64)
+                    .or(usage.cached_input_tokens),
+            };
+            on_event(ChatStreamEvent::Usage { usage });
+        }
+    }
 
     let calls = tool_calls
         .iter()
