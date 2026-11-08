@@ -4,6 +4,7 @@
 
 pub mod config;
 pub mod folder;
+pub mod git;
 pub mod issues;
 pub mod network_address;
 pub mod projects;

@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:21:11.982Z
 id: TASK-516
 type: Task
-status: To Do
+status: Done
 ---
 
 # Port git CLI parser, graph builder, and worktree manager
 
-**Status:** To Do
+**Status:** Done
 **Type:** Task
 **Priority:** High
 

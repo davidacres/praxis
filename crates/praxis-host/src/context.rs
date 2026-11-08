@@ -16,6 +16,14 @@ use praxis_core::folder::{
     ensure_front_matter, parse_plan_folder, read_board_config_file, resolve_plan_dependency_keys,
     write_board_config_file,
 };
+use praxis_core::git::{
+    GitBranchInfo, GitCommitInput, GitConflictResolution, GitDiffHunk, GitDiffRequest,
+    GitHunkActionRequest, GitService, GitWorktreeManager, PrepareWorktreeOptions,
+    RemoveWorktreeOptions, WorktreeIssueInput, WorktreeTarget, build_commit_graph,
+    build_partial_hunk_patch, build_worktree_name, delete_run_work_sync,
+    ensure_worktrees_excluded_sync, inspect_run_work_sync, parse_git_branches, parse_git_diff,
+    parse_git_log, parse_git_status, parse_git_tags, remove_escaping_dependency_links_sync,
+};
 use praxis_core::projects::{
     ProjectRecord, default_workflow, normalize_workflow_stages, resolve_status,
     validate_workflow_stages, write_project_snapshot,
@@ -42,6 +50,7 @@ pub struct HostContext {
     events: HostEventBus,
     secrets: HostSecretStore,
     settings: Arc<SharedSettingsStore>,
+    git_service: GitService,
     handlers: Arc<RwLock<BTreeMap<String, Arc<RpcHandlerFn>>>>,
 }
 
@@ -60,11 +69,14 @@ impl HostContext {
     #[must_use]
     pub fn new(config: HostConfig) -> Self {
         let settings = Arc::new(SharedSettingsStore::new(&config.settings_path));
+        let initial_git_exec = settings.read().git.executable_path;
+        let git_service = GitService::with_executable(initial_git_exec);
         let ctx = Self {
             config: Arc::new(config),
             events: HostEventBus::default(),
             secrets: HostSecretStore::new(),
             settings,
+            git_service,
             handlers: Arc::new(RwLock::new(BTreeMap::new())),
         };
         ctx.register_builtin_handlers();
@@ -93,6 +105,12 @@ impl HostContext {
     #[must_use]
     pub fn settings(&self) -> &SharedSettingsStore {
         &self.settings
+    }
+
+    /// Returns the stateful [`GitService`] instance.
+    #[must_use]
+    pub fn git_service(&self) -> &GitService {
+        &self.git_service
     }
 
     /// Registers or replaces an RPC handler for `channel`.
@@ -303,6 +321,8 @@ impl HostContext {
                 code: "SETTINGS_WRITE_ERROR".to_string(),
                 message: err.to_string(),
             })?;
+            ctx.git_service
+                .set_configured_executable(updated.git.executable_path.clone());
             let payload = serde_json::to_value(&updated).map_err(|err| RustRpcError {
                 code: "INTERNAL_ERROR".to_string(),
                 message: err.to_string(),
@@ -841,6 +861,573 @@ impl HostContext {
                 })?;
             Ok(Value::Bool(true))
         });
+
+        self.register_git_handlers();
+    }
+
+    fn parse_string_vec_arg(arg: Option<&Value>, label: &str) -> Result<Vec<String>, RustRpcError> {
+        let arr = arg.and_then(Value::as_array).ok_or_else(|| RustRpcError {
+            code: "INVALID_ARGUMENT".to_string(),
+            message: format!("{label} requires a string array."),
+        })?;
+        Ok(arr
+            .iter()
+            .filter_map(Value::as_str)
+            .map(ToString::to_string)
+            .collect())
+    }
+
+    fn git_err(message: String) -> RustRpcError {
+        RustRpcError {
+            code: "GIT_ERROR".to_string(),
+            message,
+        }
+    }
+
+    fn to_json_val<T: serde::Serialize>(val: T) -> Result<Value, RustRpcError> {
+        serde_json::to_value(val).map_err(|err| RustRpcError {
+            code: "INTERNAL_ERROR".to_string(),
+            message: err.to_string(),
+        })
+    }
+
+    fn register_git_handlers(&self) {
+        self.register_handler("git:preflight", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc.block_on(svc.preflight_git_repository(repo_path));
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:initialize", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.initialize_git_repository(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:clone", |ctx, args| {
+            let repo_url = args.first().and_then(Value::as_str).unwrap_or("");
+            let target_parent = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let target_name = args.get(2).and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.clone_git_repository(repo_url, target_parent, target_name))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:open", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.load_git_repository(repo_path, false))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:refresh", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.load_git_repository(repo_path, true))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:status", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_status(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getCommit", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let hash = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_commit(repo_path, hash))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getDiff", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let hash = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let file_path = args.get(2).and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_diff(repo_path, hash, file_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getComparison", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let req_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "git:getComparison requires a GitDiffRequest.".to_string(),
+            })?;
+            let request: GitDiffRequest =
+                serde_json::from_value(req_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid GitDiffRequest: {err}"),
+                })?;
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_comparison(repo_path, request))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:applyHunk", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let req_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "git:applyHunk requires a GitHunkActionRequest.".to_string(),
+            })?;
+            let request: GitHunkActionRequest =
+                serde_json::from_value(req_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid GitHunkActionRequest: {err}"),
+                })?;
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.apply_git_hunk(repo_path, &request))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:stage", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let paths = Self::parse_string_vec_arg(args.get(1), "git:stage")?;
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.stage_git(repo_path, &paths))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:unstage", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let paths = Self::parse_string_vec_arg(args.get(1), "git:unstage")?;
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.unstage_git(repo_path, &paths))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:discard", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let paths = Self::parse_string_vec_arg(args.get(1), "git:discard")?;
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.discard_git(repo_path, &paths))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:commit", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let message = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.commit_git(repo_path, message))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:createBranch", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let name = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let start_point = args.get(2).and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.create_branch_git(repo_path, name, start_point))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:checkout", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let name = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.checkout_git(repo_path, name))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:deleteBranch", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let name = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.delete_branch_git(repo_path, name))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:renameBranch", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let old_name = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let new_name = args.get(2).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.rename_branch_git(repo_path, old_name, new_name))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:merge", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let source = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.merge_git(repo_path, source))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:rebase", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let target = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.rebase_git(repo_path, target))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getConflict", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let file_path = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_conflict(repo_path, file_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:resolveConflict", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let file_path = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let res_val = args.get(2).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "git:resolveConflict requires a GitConflictResolution.".to_string(),
+            })?;
+            let resolution: GitConflictResolution =
+                serde_json::from_value(res_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid GitConflictResolution: {err}"),
+                })?;
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.resolve_git_conflict(repo_path, file_path, &resolution))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:abortConflict", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.abort_git_conflict(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getFileContent", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let file_path = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_file_content(repo_path, file_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getFileHistory", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let file_path = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let ref_name = args.get(2).and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_file_history(repo_path, file_path, ref_name))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:getBlame", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let file_path = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let ref_name = args.get(2).and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.get_git_blame(repo_path, file_path, ref_name))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:cherryPick", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let commitish = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.cherry_pick_git(repo_path, commitish))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:revert", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let commitish = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.revert_git(repo_path, commitish))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:stash", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let message = args.get(1).and_then(Value::as_str);
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.stash_git(repo_path, message))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:popStash", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.pop_git_stash(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:pull", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.pull_git(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:fetch", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.fetch_git(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:push", |ctx, args| {
+            let repo_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let svc = ctx.git_service();
+            let res = svc
+                .block_on(svc.push_git(repo_path))
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("git:parseBranches", |_ctx, args| {
+            let raw = args.first().and_then(Value::as_str).unwrap_or("");
+            Self::to_json_val(parse_git_branches(raw))
+        });
+
+        self.register_handler("git:parseTags", |_ctx, args| {
+            let raw = args.first().and_then(Value::as_str).unwrap_or("");
+            Self::to_json_val(parse_git_tags(raw))
+        });
+
+        self.register_handler("git:parseLog", |_ctx, args| {
+            let raw = args.first().and_then(Value::as_str).unwrap_or("");
+            Self::to_json_val(parse_git_log(raw))
+        });
+
+        self.register_handler("git:parseStatus", |_ctx, args| {
+            let raw = args.first().and_then(Value::as_str).unwrap_or("");
+            let repo_path = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let branch = args.get(2).and_then(Value::as_str).map(ToString::to_string);
+            Self::to_json_val(parse_git_status(raw, repo_path, branch))
+        });
+
+        self.register_handler("git:parseDiff", |_ctx, args| {
+            let raw = args.first().and_then(Value::as_str).unwrap_or("");
+            Self::to_json_val(parse_git_diff(raw))
+        });
+
+        self.register_handler("git:buildPartialHunkPatch", |_ctx, args| {
+            let hunk_val = args.first().cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "git:buildPartialHunkPatch requires a GitDiffHunk.".to_string(),
+            })?;
+            let hunk: GitDiffHunk =
+                serde_json::from_value(hunk_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid GitDiffHunk: {err}"),
+                })?;
+            let selected: Vec<usize> = args
+                .get(1)
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_u64().map(|n| n as usize))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(Value::String(build_partial_hunk_patch(&hunk, &selected)))
+        });
+
+        self.register_handler("git:buildCommitGraph", |_ctx, args| {
+            let commits_val = args.first().cloned().unwrap_or_else(|| json!([]));
+            let commits: Vec<GitCommitInput> =
+                serde_json::from_value(commits_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid commits array: {err}"),
+                })?;
+            let refs_val = args.get(1).cloned().unwrap_or_else(|| json!({}));
+            let refs: std::collections::HashMap<String, Vec<String>> =
+                serde_json::from_value(refs_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid refs map: {err}"),
+                })?;
+            let branches_val = args.get(2).cloned().unwrap_or_else(|| json!([]));
+            let branches: Vec<GitBranchInfo> =
+                serde_json::from_value(branches_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid branches array: {err}"),
+                })?;
+            Self::to_json_val(build_commit_graph(&commits, &refs, &branches))
+        });
+
+        self.register_handler("worktree:buildName", |_ctx, args| {
+            let issue_val = args.first().cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "worktree:buildName requires a WorktreeIssueInput.".to_string(),
+            })?;
+            let issue: WorktreeIssueInput =
+                serde_json::from_value(issue_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid WorktreeIssueInput: {err}"),
+                })?;
+            Ok(Value::String(build_worktree_name(&issue)))
+        });
+
+        self.register_handler("worktree:prepare", |_ctx, args| {
+            let issue_val = args.first().cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "worktree:prepare requires a WorktreeIssueInput.".to_string(),
+            })?;
+            let issue: WorktreeIssueInput =
+                serde_json::from_value(issue_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid WorktreeIssueInput: {err}"),
+                })?;
+            let base_branch = args.get(1).and_then(Value::as_str).unwrap_or("main");
+            let workspace_path = args.get(2).and_then(Value::as_str).unwrap_or("");
+            let opts: Option<PrepareWorktreeOptions> = args
+                .get(3)
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid PrepareWorktreeOptions: {err}"),
+                })?;
+            let mgr = GitWorktreeManager::silent();
+            let prepared = mgr
+                .prepare_delivery_worktree_sync(
+                    &issue,
+                    base_branch,
+                    Path::new(workspace_path),
+                    opts.as_ref(),
+                )
+                .map_err(|err| RustRpcError {
+                    code: if err.is_conflict() {
+                        "WORKTREE_CONFLICT".to_string()
+                    } else {
+                        "WORKTREE_ERROR".to_string()
+                    },
+                    message: err.to_string(),
+                })?;
+            Self::to_json_val(prepared)
+        });
+
+        self.register_handler("worktree:remove", |_ctx, args| {
+            let context_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let target_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "worktree:remove requires a WorktreeTarget.".to_string(),
+            })?;
+            let target: WorktreeTarget =
+                serde_json::from_value(target_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid WorktreeTarget: {err}"),
+                })?;
+            let opts: Option<RemoveWorktreeOptions> = args
+                .get(2)
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid RemoveWorktreeOptions: {err}"),
+                })?;
+            let mgr = GitWorktreeManager::silent();
+            mgr.remove_delivery_worktree_sync(Path::new(context_path), &target, opts.as_ref())
+                .map_err(|err| RustRpcError {
+                    code: "WORKTREE_ERROR".to_string(),
+                    message: err.to_string(),
+                })?;
+            Ok(Value::Bool(true))
+        });
+
+        self.register_handler("worktree:ensureExcluded", |_ctx, args| {
+            let repo_root = args.first().and_then(Value::as_str).unwrap_or("");
+            ensure_worktrees_excluded_sync(Path::new(repo_root)).map_err(|err| RustRpcError {
+                code: "WORKTREE_ERROR".to_string(),
+                message: err.to_string(),
+            })?;
+            Ok(Value::Bool(true))
+        });
+
+        self.register_handler("worktree:inspectRunWork", |_ctx, args| {
+            let repo_root = args.first().and_then(Value::as_str).unwrap_or("");
+            let run_id = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let wt_path = args.get(2).and_then(Value::as_str).map(Path::new);
+            let info = inspect_run_work_sync(Path::new(repo_root), run_id, wt_path);
+            Self::to_json_val(info)
+        });
+
+        self.register_handler("worktree:deleteRunWork", |_ctx, args| {
+            let repo_root = args.first().and_then(Value::as_str).unwrap_or("");
+            let run_id = args.get(1).and_then(Value::as_str).unwrap_or("");
+            let wt_path = args.get(2).and_then(Value::as_str).map(Path::new);
+            let res = delete_run_work_sync(Path::new(repo_root), run_id, wt_path)
+                .map_err(Self::git_err)?;
+            Self::to_json_val(res)
+        });
+
+        self.register_handler("worktree:removeEscapingDependencyLinks", |_ctx, args| {
+            let wt_path = args.first().and_then(Value::as_str).unwrap_or("");
+            let removed =
+                remove_escaping_dependency_links_sync(Path::new(wt_path)).map_err(Self::git_err)?;
+            Self::to_json_val(removed)
+        });
     }
 }
 
@@ -979,5 +1566,38 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].channel, "custom:echoed");
         assert_eq!(events[0].payload, Some(json!({ "count": 2 })));
+    }
+
+    #[test]
+    fn git_and_worktree_rpc_channels_roundtrip() {
+        let ctx = test_context();
+        let preflight = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-git-1".to_string(),
+            channel: "git:preflight".to_string(),
+            args: vec![],
+        });
+        assert!(preflight.ok);
+        assert_eq!(
+            preflight.result.as_ref().and_then(|v| v.get("status")),
+            Some(&json!("no-workspace"))
+        );
+
+        let name_res = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-wt-1".to_string(),
+            channel: "worktree:buildName".to_string(),
+            args: vec![json!({
+                "key": "TASK-516",
+                "summary": "Port git CLI parser, graph builder, and worktree manager"
+            })],
+        });
+        assert!(name_res.ok);
+        assert_eq!(
+            name_res.result,
+            Some(json!(
+                "TASK-516-port-git-cli-parser-graph-builder-and-worktree-m"
+            ))
+        );
+
+        let _ = std::fs::remove_dir_all(&ctx.config().user_data_dir);
     }
 }

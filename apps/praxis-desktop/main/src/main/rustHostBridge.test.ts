@@ -8,8 +8,16 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_WORKFLOW,
+  buildCommitGraph,
+  buildPartialHunkPatch,
+  buildWorktreeName,
   mergeAppSettings,
   normalizeWorkflowStages,
+  parseGitBranches,
+  parseGitDiff,
+  parseGitLog,
+  parseGitStatus,
+  parseGitTags,
   parsePlanFolder,
   readBoardConfigFile,
   readWorkspaceFile,
@@ -21,6 +29,11 @@ import {
   toWorkspaceFile,
   validateWorkflowStages,
   type AppSettings,
+  type GitBranchInfo,
+  type GitCommitNode,
+  type GitDiffFile,
+  type GitRepositorySnapshot,
+  type GitStatusSnapshot,
   type ParsedPlanFolder,
   type ProjectRecord,
   type ProjectWorkflowStage,
@@ -28,6 +41,7 @@ import {
   type RustHostStatus,
   type WorkspaceRecord
 } from '@praxis/core';
+import { getGitStatus, loadGitRepository, preflightGitRepository } from './gitService';
 import { ProjectManager } from './projectManager';
 import { attachRendererNavigationGuard, isOwnRendererSender, rendererDir } from './rendererNavigationGuard';
 import {
@@ -510,6 +524,108 @@ test('Rust host projectWorkflow, projectSnapshot, and markdownPlanParser match @
     assert.deepEqual(rustParseResult.parsed.stories, normalizedTsStories);
     assert.deepEqual(rustParseResult.parsed.childItems, normalizedTsChildren);
     assert.deepEqual(rustParseResult.dependencyKeys, tsDepsRecord);
+  } finally {
+    await bridge.dispose();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('StdioRustHostTransport git:* and worktree:* channels match @praxis/core and gitService output', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-git-'));
+  const settingsPath = path.join(userDataDir, 'settings.json');
+  const transport = new StdioRustHostTransport({
+    userDataDir,
+    settingsPath
+  });
+  const bridge = new RustHostBridge({ transport });
+
+  try {
+    await bridge.start();
+    // 1. Parsers and graph layout parity
+    const branchFixture = 'refs/heads/main\0abc123456789\0*\0\nrefs/remotes/origin/main\0def987654321\0\0refs/remotes/origin/main\n';
+    const tsBranches = JSON.parse(JSON.stringify(parseGitBranches(branchFixture)));
+    const rustBranches = await bridge.invoke<GitBranchInfo[]>('git:parseBranches', branchFixture);
+    assert.deepEqual(rustBranches, tsBranches);
+
+    const tagFixture = 'v1.0.0\0abc123456789\n';
+    assert.deepEqual(await bridge.invoke('git:parseTags', tagFixture), parseGitTags(tagFixture));
+
+    const logFixture = 'abc123456789\0base00000000\0Alice\x002026-01-02T00:00:00Z\0feat: add widget\0body text\x1ebase00000000\0\0Alice\x002026-01-01T00:00:00Z\0initial\0\x1e';
+    const tsLog = parseGitLog(logFixture);
+    assert.deepEqual(await bridge.invoke('git:parseLog', logFixture), tsLog);
+
+    const tsGraph = buildCommitGraph(
+      tsLog,
+      new Map([['abc123456789', ['main', 'tag:v1.0.0']]]),
+      tsBranches
+    );
+    const rustGraph = await bridge.invoke<GitCommitNode[]>(
+      'git:buildCommitGraph',
+      tsLog,
+      { abc123456789: ['main', 'tag:v1.0.0'] },
+      tsBranches
+    );
+    assert.deepEqual(rustGraph, tsGraph);
+
+    const statusFixture = ' M src/index.ts\0A  src/new.ts\0UU src/conflict.ts\0';
+    const tsStatus = JSON.parse(JSON.stringify(parseGitStatus(statusFixture, '/repo', 'main')));
+    const rustStatus = await bridge.invoke<GitStatusSnapshot>('git:parseStatus', statusFixture, '/repo', 'main');
+    assert.deepEqual(rustStatus, tsStatus);
+
+    const diffFixture = [
+      'diff --git a/src/old.ts b/src/new.ts',
+      'similarity index 80%',
+      'rename from src/old.ts',
+      'rename to src/new.ts',
+      'index 1111111..2222222 100644',
+      '--- a/src/old.ts',
+      '+++ b/src/new.ts',
+      '@@ -1,3 +1,3 @@',
+      ' const stable = true;',
+      '-const oldName = 1;',
+      '+const newName = 2;',
+      ' export { stable };',
+      ''
+    ].join('\n');
+    const tsDiff = JSON.parse(JSON.stringify(parseGitDiff(diffFixture)));
+    const rustDiff = await bridge.invoke<GitDiffFile[]>('git:parseDiff', diffFixture);
+    assert.deepEqual(rustDiff, tsDiff);
+
+    const tsPartial = buildPartialHunkPatch(tsDiff[0].hunks[0], [2]);
+    const rustPartial = await bridge.invoke<string>('git:buildPartialHunkPatch', rustDiff[0].hunks[0], [2]);
+    assert.equal(rustPartial, tsPartial);
+
+    // 2. Worktree naming parity
+    for (const issue of [
+      { key: 'FX-BE-195', summary: 'FX-BE-195: Port Core Domain, Folder Board, and Git', branch: undefined },
+      { key: 'TASK-516', summary: 'Port git CLI parser, graph builder, and worktree manager', branch: undefined },
+      { key: 'BUG-42', summary: '', branch: 'fix/custom-branch' }
+    ]) {
+      assert.equal(
+        await bridge.invoke<string>('worktree:buildName', issue),
+        buildWorktreeName(issue)
+      );
+    }
+
+    // 3. Live repository preflight & open parity against this repo
+    const repoRoot = path.resolve(__dirname, '../../../../..');
+    const tsPreflight = JSON.parse(JSON.stringify(await preflightGitRepository(repoRoot)));
+    const rustPreflight = await bridge.invoke('git:preflight', repoRoot);
+    assert.deepEqual(rustPreflight, tsPreflight);
+
+    const tsSnapshot = await loadGitRepository(repoRoot, { force: true });
+    const rustSnapshot = await bridge.invoke<GitRepositorySnapshot>('git:open', repoRoot);
+    assert.equal(rustSnapshot.repositoryPath, tsSnapshot.repositoryPath);
+    assert.equal(rustSnapshot.repositoryName, tsSnapshot.repositoryName);
+    assert.equal(rustSnapshot.head, tsSnapshot.head);
+    assert.equal(rustSnapshot.currentBranch, tsSnapshot.currentBranch);
+    assert.deepEqual(rustSnapshot.branches, JSON.parse(JSON.stringify(tsSnapshot.branches)));
+    assert.deepEqual(rustSnapshot.tags, tsSnapshot.tags);
+    assert.deepEqual(rustSnapshot.commits, JSON.parse(JSON.stringify(tsSnapshot.commits)));
+
+    const tsRepoStatus = JSON.parse(JSON.stringify(await getGitStatus(repoRoot)));
+    const rustRepoStatus = await bridge.invoke<GitStatusSnapshot>('git:status', repoRoot);
+    assert.deepEqual(rustRepoStatus, tsRepoStatus);
   } finally {
     await bridge.dispose();
     fs.rmSync(userDataDir, { recursive: true, force: true });
