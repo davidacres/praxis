@@ -38,6 +38,7 @@ praxis-mobile = { path = "crates/praxis-mobile" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
 serde_yaml = "0.9"
+indexmap = { version = "2", features = ["serde"] }
 jsonc-parser = { version = "0.26", features = ["serde"] }
 specta = { version = "=2.0.0-rc.22", features = ["derive", "serde"] }
 specta-typescript = "=0.0.9"
