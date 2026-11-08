@@ -6,9 +6,12 @@ pub mod config;
 pub mod folder;
 pub mod git;
 pub mod issues;
+pub mod marketplace;
 pub mod network_address;
 pub mod projects;
+pub mod sandbox;
 pub mod ui;
+pub mod unified_diff;
 pub mod workspaces;
 
 use praxis_contracts::RustHostStatus;

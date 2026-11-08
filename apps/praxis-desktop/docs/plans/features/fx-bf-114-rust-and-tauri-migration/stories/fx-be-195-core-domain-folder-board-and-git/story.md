@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:21:07.127Z
 id: FX-BE-195
 type: Story
-status: In Progress
+status: Done
 ---
 
 # Port Core Settings, Workspaces, Folder Backend, and Git to Rust
 
-**Status:** In Progress
+**Status:** Done
 **Type:** Story
 **Priority:** Critical
 

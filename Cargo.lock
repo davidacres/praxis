@@ -1342,9 +1342,11 @@ dependencies = [
 name = "praxis-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "flate2",
  "jsonc-parser",
+ "libc",
  "notify",
  "praxis-contracts",
  "pulldown-cmark",
@@ -1352,6 +1354,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha1",
  "sha2",
  "tar",
  "thiserror 2.0.21",

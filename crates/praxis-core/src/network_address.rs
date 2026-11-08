@@ -179,30 +179,132 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sec_005_bypass_spellings_are_non_public() {
+        for address in [
+            "::ffff:127.0.0.1",
+            "::ffff:169.254.169.254",
+            "::ffff:7f00:1",
+            "fd00::1",
+            "fe80::1",
+            "fe80::1%en0",
+            "[fe80::1]",
+            "100.64.1.1",
+            "0:0:0:0:0:0:0:1",
+            "0.0.0.0",
+            "::",
+            "::127.0.0.1",
+            "224.0.0.1",
+            "240.0.0.1",
+            "ff02::1",
+        ] {
+            assert!(is_non_public_network_address(address), "{address}");
+        }
+    }
+
+    #[test]
+    fn public_addresses_stay_public_including_mapped_ones() {
+        for address in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "172.15.255.255",
+            "172.32.0.0",
+            "192.169.0.1",
+            "100.63.255.255",
+            "100.128.0.0",
+            "2001:4860:4860::8888",
+            "::ffff:8.8.8.8",
+        ] {
+            assert!(!is_non_public_network_address(address), "{address}");
+        }
+    }
+
+    #[test]
+    fn mobile_locality_is_narrower_than_browser_deny_set() {
+        for address in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.0.1",
+            "169.254.1.1",
+            "::1",
+            "fd12::1",
+            "fe80::1%en0",
+            "::ffff:192.168.1.5",
+        ] {
+            assert!(is_local_network_address(address), "{address}");
+        }
+        for address in [
+            "100.64.1.1",
+            "0.0.0.0",
+            "224.0.0.1",
+            "8.8.8.8",
+            "2001:db8::1",
+        ] {
+            assert!(!is_local_network_address(address), "{address}");
+        }
+    }
+
+    #[test]
+    fn mapped_ipv4_in_either_spelling_parses_to_same_32_bit_value() {
+        assert_eq!(
+            parse_network_address("::ffff:192.168.1.5"),
+            parse_network_address("192.168.1.5")
+        );
+        assert_eq!(
+            parse_network_address("::ffff:c0a8:105"),
+            parse_network_address("192.168.1.5")
+        );
+        assert_eq!(parse_network_address("not-an-ip"), None);
+        assert_eq!(parse_network_address("192.168.1"), None);
+    }
+
+    #[test]
+    fn cidr_edges_match_on_boundary_and_never_across_families() {
+        assert!(address_in_subnet("192.168.1.0", "192.168.1.0/24"));
+        assert!(address_in_subnet("192.168.1.255", "192.168.1.0/24"));
+        assert!(!address_in_subnet("192.168.2.0", "192.168.1.0/24"));
+        assert!(address_in_subnet("10.9.9.9", "0.0.0.0/0"));
+        assert!(address_in_subnet("10.0.0.1", "10.0.0.1"));
+        assert!(!address_in_subnet("10.0.0.2", "10.0.0.1"));
+        assert!(!address_in_subnet("::1", "0.0.0.0/0"));
+        assert!(!address_in_subnet("10.0.0.1", "10.0.0.0/33"));
+        assert!(!address_in_subnet("10.0.0.1", "10.0.0.0/-1"));
+        assert!(!address_in_subnet("10.0.0.1", "10.0.0.0/8/8"));
+        assert!(!address_in_subnet("10.0.0.1", "10.0.0.0/x"));
+    }
+
+    #[test]
     fn normalizes_mobile_subnets_and_migrates_legacy_prefixes() {
-        assert_eq!(normalize_mobile_subnet("192.168.1"), None);
+        assert_eq!(
+            normalize_mobile_subnet(" 192.168.1.0/24 "),
+            Some("192.168.1.0/24".to_string())
+        );
+        assert_eq!(
+            normalize_mobile_subnet("10."),
+            Some("10.0.0.0/8".to_string())
+        );
+        assert_eq!(
+            normalize_mobile_subnet("172.16.5."),
+            Some("172.16.5.0/24".to_string())
+        );
         assert_eq!(
             normalize_mobile_subnet("192.168.1."),
             Some("192.168.1.0/24".to_string())
         );
         assert_eq!(
-            normalize_mobile_subnet("192.168.1.0/24"),
-            Some("192.168.1.0/24".to_string())
-        );
-        assert_eq!(normalize_mobile_subnet("10.0.0.0/33"), None);
-        assert_eq!(
             normalize_mobile_subnet("fd00::/8"),
             Some("fd00::/8".to_string())
         );
-        assert_eq!(normalize_mobile_subnet("lan"), None);
-    }
-
-    #[test]
-    fn handles_ipv4_mapped_ipv6_and_locality_checks() {
-        assert!(is_local_network_address("127.0.0.1"));
-        assert!(is_local_network_address("::ffff:192.168.1.25"));
-        assert!(!is_local_network_address("8.8.8.8"));
-        assert!(is_non_public_network_address("100.64.1.1"));
-        assert!(!is_non_public_network_address("1.1.1.1"));
+        for raw in [
+            "192.168.1",
+            "256.1.",
+            "lan",
+            "",
+            "192.168.1.0/33",
+            "1.2.3.4.",
+        ] {
+            assert_eq!(normalize_mobile_subnet(raw), None, "{raw}");
+        }
     }
 }
