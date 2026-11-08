@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:20:26.706Z
 id: TASK-511
 type: Task
-status: To Do
+status: Done
 ---
 
 # Generate ipcContracts.ts from praxis-contracts Rust types
 
-**Status:** To Do
+**Status:** Done
 **Type:** Task
 **Priority:** Critical
 

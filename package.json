@@ -15,6 +15,7 @@
     "hooks:install": "git config core.hooksPath .githooks",
     "check-types": "npm run check-types --workspaces --if-present && npm run check:rust",
     "check:rust": "node scripts/cargo-workspace.mjs check",
+    "contracts:export": "node scripts/cargo-workspace.mjs export-types",
     "build:rust": "node scripts/cargo-workspace.mjs build",
     "test:rust": "node scripts/cargo-workspace.mjs test",
     "build": "npm run build:core && npm run build:code-intelligence && npm run build:mobile-protocol && npm run build:mobile-relay && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",

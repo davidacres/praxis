@@ -37,6 +37,9 @@ try {
   if (mode === 'check') {
     await runCargo(['check', '--workspace']);
     await runCargo(['clippy', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings']);
+    await runCargo(['run', '-p', 'praxis-contracts', '--bin', 'export-types', '--', '--check']);
+  } else if (mode === 'export-types') {
+    await runCargo(['run', '-p', 'praxis-contracts', '--bin', 'export-types']);
   } else if (mode === 'test') {
     await runCargo(['test', '--workspace']);
   } else if (mode === 'build') {
