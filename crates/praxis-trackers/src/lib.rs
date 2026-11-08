@@ -1,6 +1,10 @@
 //! Issue tracker backends (`FolderService`, `JiraCloudService`, `GitHubBoardService`,
 //! `GitLabBoardService`, `DemoService`, `StubService`) and CI evidence providers.
 
+pub mod folder_service;
+
+pub use folder_service::*;
+
 /// Supported backend tracker modes in Praxis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrackerBackendMode {

@@ -3,7 +3,10 @@
 //! git CLI parsing/worktrees, path sandboxing, unified diffs, and marketplace archives.
 
 pub mod config;
+pub mod folder;
+pub mod issues;
 pub mod network_address;
+pub mod projects;
 pub mod ui;
 pub mod workspaces;
 

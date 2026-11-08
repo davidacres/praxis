@@ -7,17 +7,28 @@ import { pathToFileURL } from 'node:url';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
 import {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_WORKFLOW,
   mergeAppSettings,
+  normalizeWorkflowStages,
+  parsePlanFolder,
+  readBoardConfigFile,
   readWorkspaceFile,
+  resolvePlanDependencyKeys,
   resolvePortableFolderPath,
+  resolveStatus,
   sanitizeAppSettings,
   toPortableFolderPath,
   toWorkspaceFile,
+  validateWorkflowStages,
   type AppSettings,
+  type ParsedPlanFolder,
+  type ProjectRecord,
+  type ProjectWorkflowStage,
   type RustEventEnvelope,
   type RustHostStatus,
   type WorkspaceRecord
 } from '@praxis/core';
+import { ProjectManager } from './projectManager';
 import { attachRendererNavigationGuard, isOwnRendererSender, rendererDir } from './rendererNavigationGuard';
 import {
   RustHostBridge,
@@ -375,6 +386,130 @@ test('Rust host settings and workspace channels produce byte-identical results t
       await bridge.invoke<string>('workspaces:resolvePortablePath', './apps/web', cloneDir),
       resolvePortableFolderPath('./apps/web', cloneDir)
     );
+  } finally {
+    await bridge.dispose();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('Rust host projectWorkflow, projectSnapshot, and markdownPlanParser match @praxis/core over real apps/praxis-desktop/docs/plans', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-folder-golden-'));
+  const settingsPath = path.join(userDataDir, 'settings.json');
+  const transport = new StdioRustHostTransport({
+    userDataDir,
+    settingsPath
+  });
+  const bridge = new RustHostBridge({ transport });
+
+  try {
+    await bridge.start();
+
+    // 1. Workflow resolution & normalization parity
+    const rustDefaultWf = await bridge.invoke<ProjectWorkflowStage[]>('projects:defaultWorkflow');
+    assert.deepEqual(rustDefaultWf, DEFAULT_WORKFLOW);
+
+    const customStages = [
+      { id: '1', name: 'Triage' },
+      { id: '2', name: 'Build' },
+      { id: '3', name: 'Shipped' }
+    ] as unknown as ProjectWorkflowStage[];
+    const rustNormalized = await bridge.invoke<ProjectWorkflowStage[]>(
+      'projects:normalizeWorkflowStages',
+      customStages
+    );
+    assert.deepEqual(rustNormalized, normalizeWorkflowStages(customStages));
+
+    for (const sample of ['📋 Proposed', '🔄 In Progress', '🚫 Blocked', '✅ Complete', 'Under Review', 'unknown-token']) {
+      assert.equal(
+        await bridge.invoke<string>('projects:resolveStatus', sample, rustNormalized),
+        resolveStatus(sample, rustNormalized)
+      );
+      assert.equal(
+        await bridge.invoke<string>('projects:resolveStatus', sample, null),
+        resolveStatus(sample)
+      );
+    }
+
+    assert.equal(
+      await bridge.invoke<string | null>('projects:validateWorkflowStages', rustNormalized),
+      validateWorkflowStages(rustNormalized) ?? null
+    );
+
+    // 2. writeProjectSnapshot marker safety parity in isolated temp directories
+    const tsSnapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-ts-snap-'));
+    const rustSnapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-snap-'));
+    try {
+      const sampleProject: ProjectRecord = {
+        id: 'proj-snap',
+        name: 'Snapshot Verification',
+        key: 'SNAP',
+        type: 'software',
+        purpose: 'Verify marker-protected project.praxis.md generation.',
+        brief: { constraints: 'Never overwrite unmarked files', targetUsers: 'Developers' },
+        storage: 'folder',
+        workspaceFolder: rustSnapDir,
+        workflowStages: rustNormalized,
+        defaultBoardId: '1',
+        workItems: [],
+        linkedBoards: [],
+        defaultAiToolMode: 'full',
+        createdAt: '2026-11-08T00:00:00.000Z',
+        updatedAt: '2026-11-08T00:00:00.000Z'
+      };
+      const pm = new ProjectManager({} as never);
+      await pm.refreshProjectFile({ ...sampleProject, workspaceFolder: tsSnapDir });
+      const rustStatus1 = await bridge.invoke<string>('projects:writeSnapshot', rustSnapDir, sampleProject);
+      assert.equal(rustStatus1, 'created');
+      assert.equal(
+        fs.readFileSync(path.join(rustSnapDir, 'project.praxis.md'), 'utf8'),
+        fs.readFileSync(path.join(tsSnapDir, 'project.praxis.md'), 'utf8')
+      );
+
+      // Unmarked file must be retained untouched by both
+      const unmarkedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-unmarked-snap-'));
+      fs.writeFileSync(path.join(unmarkedDir, 'project.praxis.md'), '# Hand-authored file\nDo not touch.\n', 'utf8');
+      const retainedStatus = await bridge.invoke<string>('projects:writeSnapshot', unmarkedDir, sampleProject);
+      assert.equal(retainedStatus, 'retained');
+      assert.equal(
+        fs.readFileSync(path.join(unmarkedDir, 'project.praxis.md'), 'utf8'),
+        '# Hand-authored file\nDo not touch.\n'
+      );
+      fs.rmSync(unmarkedDir, { recursive: true, force: true });
+    } finally {
+      fs.rmSync(tsSnapDir, { recursive: true, force: true });
+      fs.rmSync(rustSnapDir, { recursive: true, force: true });
+    }
+
+    // 3. Real plans folder (`apps/praxis-desktop/docs/plans`) read-only parse & dependency graph parity
+    const realPlansRoot = path.resolve(__dirname, '../../../docs/plans');
+    const boardCfg = await readBoardConfigFile(realPlansRoot);
+    const rustBoardCfg = await bridge.invoke('folder:readBoardConfig', realPlansRoot);
+    assert.deepEqual(rustBoardCfg, boardCfg);
+
+    const projectKey = boardCfg.projectKey ?? 'PRAXIS';
+    const tsParsed = await parsePlanFolder(realPlansRoot, undefined, boardCfg.workflow);
+    const tsDepsRecord = Object.fromEntries(resolvePlanDependencyKeys(tsParsed, projectKey).entries());
+
+    const rustParseResult = await bridge.invoke<{
+      parsed: ParsedPlanFolder;
+      dependencyKeys: Record<string, string[]>;
+    }>('folder:parsePlanFolder', realPlansRoot, boardCfg.workflow ?? null, projectKey);
+
+    assert.equal(rustParseResult.parsed.plansRootPath, tsParsed.plansRootPath);
+    assert.equal(rustParseResult.parsed.featuresRootPath, tsParsed.featuresRootPath);
+    assert.equal(rustParseResult.parsed.features.length, tsParsed.features.length);
+    assert.equal(rustParseResult.parsed.stories.length, tsParsed.stories.length);
+    assert.equal(rustParseResult.parsed.childItems.length, tsParsed.childItems.length);
+
+    // Strip `undefined` fields on TS objects via JSON round-trip to compare serialized shapes directly
+    const normalizedTsFeatures = JSON.parse(JSON.stringify(tsParsed.features));
+    const normalizedTsStories = JSON.parse(JSON.stringify(tsParsed.stories));
+    const normalizedTsChildren = JSON.parse(JSON.stringify(tsParsed.childItems));
+
+    assert.deepEqual(rustParseResult.parsed.features, normalizedTsFeatures);
+    assert.deepEqual(rustParseResult.parsed.stories, normalizedTsStories);
+    assert.deepEqual(rustParseResult.parsed.childItems, normalizedTsChildren);
+    assert.deepEqual(rustParseResult.dependencyKeys, tsDepsRecord);
   } finally {
     await bridge.dispose();
     fs.rmSync(userDataDir, { recursive: true, force: true });

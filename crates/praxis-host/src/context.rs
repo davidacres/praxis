@@ -1,16 +1,30 @@
 //! Shell-agnostic service container (`HostContext`) and typed RPC channel dispatcher.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::{Arc, RwLock};
 
-use praxis_contracts::{RustRpcError, RustRpcRequest, RustRpcResponse};
+use praxis_contracts::{
+    Board, BoardFilters, CreateIssueInput, IssueFilters, ProjectWorkflowStage, RustRpcError,
+    RustRpcRequest, RustRpcResponse, UpdateIssueInput,
+};
 use praxis_core::config::{
     AppSettings, SharedSettingsStore, merge_app_settings, sanitize_app_settings,
+};
+use praxis_core::folder::{
+    BoardConfigFile, IssueType, discover_plan_folders, discover_repository_folders,
+    ensure_front_matter, parse_plan_folder, read_board_config_file, resolve_plan_dependency_keys,
+    write_board_config_file,
+};
+use praxis_core::projects::{
+    ProjectRecord, default_workflow, normalize_workflow_stages, resolve_status,
+    validate_workflow_stages, write_project_snapshot,
 };
 use praxis_core::workspaces::{
     WorkspaceContents, WorkspaceRecord, read_workspace_file, resolve_portable_folder_path,
     to_portable_folder_path, to_workspace_file, workspace_file_name,
 };
+use praxis_trackers::{FolderService, StaticFolderConfig};
 use serde_json::{Value, json};
 
 use crate::config::HostConfig;
@@ -272,6 +286,7 @@ impl HostContext {
         });
 
         self.register_settings_and_workspace_handlers();
+        self.register_projects_and_folder_handlers();
     }
 
     fn register_settings_and_workspace_handlers(&self) {
@@ -378,6 +393,453 @@ impl HostContext {
                 code: "INTERNAL_ERROR".to_string(),
                 message: err.to_string(),
             })
+        });
+    }
+
+    fn parse_folder_paths_arg(arg: Option<&Value>) -> Result<Vec<String>, RustRpcError> {
+        let Some(val) = arg else {
+            return Err(RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folderService requires a folder path or array of folder paths."
+                    .to_string(),
+            });
+        };
+        if let Some(s) = val.as_str() {
+            return Ok(vec![s.to_string()]);
+        }
+        if let Some(arr) = val.as_array() {
+            let mut out = Vec::with_capacity(arr.len());
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    out.push(s.to_string());
+                }
+            }
+            return Ok(out);
+        }
+        Err(RustRpcError {
+            code: "INVALID_ARGUMENT".to_string(),
+            message: "folderPaths must be a string or string array.".to_string(),
+        })
+    }
+
+    fn make_folder_service(folder_paths: Vec<String>, allow_issue_creation: bool) -> FolderService {
+        FolderService::from_static(StaticFolderConfig {
+            folder_roots: folder_paths,
+            allow_issue_creation,
+            ..StaticFolderConfig::default()
+        })
+    }
+
+    fn register_projects_and_folder_handlers(&self) {
+        self.register_handler("projects:defaultWorkflow", |_ctx, _args| {
+            serde_json::to_value(default_workflow()).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("projects:resolveStatus", |_ctx, args| {
+            let raw = args.first().and_then(Value::as_str).unwrap_or_default();
+            let workflow: Option<Vec<ProjectWorkflowStage>> = args
+                .get(1)
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid workflow stages: {err}"),
+                })?;
+            Ok(Value::String(resolve_status(raw, workflow.as_deref())))
+        });
+
+        self.register_handler("projects:normalizeWorkflowStages", |_ctx, args| {
+            let stages: Option<Vec<ProjectWorkflowStage>> = args
+                .first()
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid workflow stages: {err}"),
+                })?;
+            serde_json::to_value(normalize_workflow_stages(stages.as_deref())).map_err(|err| {
+                RustRpcError {
+                    code: "INTERNAL_ERROR".to_string(),
+                    message: err.to_string(),
+                }
+            })
+        });
+
+        self.register_handler("projects:validateWorkflowStages", |_ctx, args| {
+            let stages_val = args
+                .first()
+                .cloned()
+                .unwrap_or_else(|| Value::Array(Vec::new()));
+            let stages: Vec<ProjectWorkflowStage> =
+                serde_json::from_value(stages_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid workflow stages: {err}"),
+                })?;
+            match validate_workflow_stages(&stages) {
+                Some(msg) => Ok(Value::String(msg)),
+                None => Ok(Value::Null),
+            }
+        });
+
+        self.register_handler("projects:writeSnapshot", |_ctx, args| {
+            let folder = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "projects:writeSnapshot requires a folder path.".to_string(),
+                })?;
+            let project_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "projects:writeSnapshot requires a ProjectRecord.".to_string(),
+            })?;
+            let project: ProjectRecord =
+                serde_json::from_value(project_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid ProjectRecord: {err}"),
+                })?;
+            let status = write_project_snapshot(Path::new(folder), &project).map_err(|err| {
+                RustRpcError {
+                    code: "IO_ERROR".to_string(),
+                    message: err.to_string(),
+                }
+            })?;
+            serde_json::to_value(status).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folder:parsePlanFolder", |_ctx, args| {
+            let root = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folder:parsePlanFolder requires a root directory path.".to_string(),
+                })?;
+            let workflow: Option<Vec<ProjectWorkflowStage>> = args
+                .get(1)
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid workflow stages: {err}"),
+                })?;
+            let project_key = args.get(2).and_then(Value::as_str).unwrap_or("LIVE");
+            let parsed =
+                parse_plan_folder(root, workflow.as_deref()).map_err(|msg| RustRpcError {
+                    code: "FOLDER_PARSE_ERROR".to_string(),
+                    message: msg,
+                })?;
+            let dep_keys = resolve_plan_dependency_keys(&parsed, project_key);
+            Ok(json!({
+                "parsed": parsed,
+                "dependencyKeys": dep_keys,
+            }))
+        });
+
+        self.register_handler("folder:discoverPlanFolders", |_ctx, args| {
+            let root = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folder:discoverPlanFolders requires a root path.".to_string(),
+                })?;
+            let folders = discover_plan_folders(root).map_err(|msg| RustRpcError {
+                code: "FOLDER_DISCOVER_ERROR".to_string(),
+                message: msg,
+            })?;
+            Ok(json!(folders))
+        });
+
+        self.register_handler("folder:discoverRepositoryFolders", |_ctx, args| {
+            let root = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folder:discoverRepositoryFolders requires a root path.".to_string(),
+                })?;
+            let repos = discover_repository_folders(root).map_err(|msg| RustRpcError {
+                code: "FOLDER_DISCOVER_ERROR".to_string(),
+                message: msg,
+            })?;
+            Ok(json!(repos))
+        });
+
+        self.register_handler("folder:readBoardConfig", |_ctx, args| {
+            let root = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folder:readBoardConfig requires a root path.".to_string(),
+                })?;
+            serde_json::to_value(read_board_config_file(Path::new(root))).map_err(|err| {
+                RustRpcError {
+                    code: "INTERNAL_ERROR".to_string(),
+                    message: err.to_string(),
+                }
+            })
+        });
+
+        self.register_handler("folder:writeBoardConfig", |_ctx, args| {
+            let root = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folder:writeBoardConfig requires a root path.".to_string(),
+                })?;
+            let cfg_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folder:writeBoardConfig requires a BoardConfigFile.".to_string(),
+            })?;
+            let cfg: BoardConfigFile =
+                serde_json::from_value(cfg_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid BoardConfigFile: {err}"),
+                })?;
+            write_board_config_file(Path::new(root), &cfg).map_err(|err| RustRpcError {
+                code: "IO_ERROR".to_string(),
+                message: err.to_string(),
+            })?;
+            Ok(Value::Bool(true))
+        });
+
+        self.register_handler("folder:ensureFrontMatter", |_ctx, args| {
+            let content = args.first().and_then(Value::as_str).unwrap_or_default();
+            let kind_str = args.get(1).and_then(Value::as_str).unwrap_or("Task");
+            let issue_type = IssueType::parse_loose(kind_str).unwrap_or(IssueType::Task);
+            Ok(Value::String(ensure_front_matter(content, issue_type)))
+        });
+
+        self.register_handler("folderService:getBoards", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let svc = Self::make_folder_service(paths, false);
+            let boards = svc
+                .get_boards(&BoardFilters::default())
+                .map_err(|msg| RustRpcError {
+                    code: "FOLDER_SERVICE_ERROR".to_string(),
+                    message: msg,
+                })?;
+            serde_json::to_value(boards).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:getBoardDetails", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let board_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folderService:getBoardDetails requires a Board.".to_string(),
+            })?;
+            let board: Board = serde_json::from_value(board_val).map_err(|err| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: format!("Invalid Board: {err}"),
+            })?;
+            let svc = Self::make_folder_service(paths, false);
+            let details = svc.get_board_details(&board).map_err(|msg| RustRpcError {
+                code: "FOLDER_SERVICE_ERROR".to_string(),
+                message: msg,
+            })?;
+            serde_json::to_value(details).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:getIssues", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let filters: IssueFilters = args
+                .get(1)
+                .filter(|v| !v.is_null())
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid IssueFilters: {err}"),
+                })?
+                .unwrap_or_default();
+            let start_at = args
+                .get(2)
+                .and_then(Value::as_u64)
+                .and_then(|v| usize::try_from(v).ok())
+                .unwrap_or(0);
+            let page_size = args
+                .get(3)
+                .and_then(Value::as_u64)
+                .and_then(|v| usize::try_from(v).ok())
+                .unwrap_or(200);
+            let svc = Self::make_folder_service(paths, false);
+            let paged = svc
+                .get_issues(&filters, start_at, page_size)
+                .map_err(|msg| RustRpcError {
+                    code: "FOLDER_SERVICE_ERROR".to_string(),
+                    message: msg,
+                })?;
+            serde_json::to_value(paged).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:getIssue", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let issue_key = args
+                .get(1)
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folderService:getIssue requires an issueKey.".to_string(),
+                })?;
+            let svc = Self::make_folder_service(paths, false);
+            let details = svc.get_issue(issue_key).map_err(|msg| RustRpcError {
+                code: "NOT_FOUND".to_string(),
+                message: msg,
+            })?;
+            serde_json::to_value(details).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:getTransitions", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let issue_key = args
+                .get(1)
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folderService:getTransitions requires an issueKey.".to_string(),
+                })?;
+            let svc = Self::make_folder_service(paths, false);
+            let transitions = svc.get_transitions(issue_key).map_err(|msg| RustRpcError {
+                code: "FOLDER_SERVICE_ERROR".to_string(),
+                message: msg,
+            })?;
+            serde_json::to_value(transitions).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:createIssue", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let input_val = args.get(1).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folderService:createIssue requires CreateIssueInput.".to_string(),
+            })?;
+            let input: CreateIssueInput =
+                serde_json::from_value(input_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid CreateIssueInput: {err}"),
+                })?;
+            let allow_creation = args.get(2).and_then(Value::as_bool).unwrap_or(true);
+            let svc = Self::make_folder_service(paths, allow_creation);
+            let created = svc.create_issue(&input).map_err(|msg| RustRpcError {
+                code: "FOLDER_SERVICE_ERROR".to_string(),
+                message: msg,
+            })?;
+            serde_json::to_value(created).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:updateIssue", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let issue_key = args
+                .get(1)
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folderService:updateIssue requires an issueKey.".to_string(),
+                })?;
+            let input_val = args.get(2).cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "folderService:updateIssue requires UpdateIssueInput.".to_string(),
+            })?;
+            let input: UpdateIssueInput =
+                serde_json::from_value(input_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid UpdateIssueInput: {err}"),
+                })?;
+            let svc = Self::make_folder_service(paths, false);
+            let updated = svc
+                .update_issue(issue_key, &input)
+                .map_err(|msg| RustRpcError {
+                    code: "FOLDER_SERVICE_ERROR".to_string(),
+                    message: msg,
+                })?;
+            serde_json::to_value(updated).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("folderService:transitionIssue", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let issue_key = args
+                .get(1)
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folderService:transitionIssue requires an issueKey.".to_string(),
+                })?;
+            let transition_id =
+                args.get(2)
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| RustRpcError {
+                        code: "INVALID_ARGUMENT".to_string(),
+                        message: "folderService:transitionIssue requires a transitionId."
+                            .to_string(),
+                    })?;
+            let svc = Self::make_folder_service(paths, false);
+            svc.transition_issue(issue_key, transition_id)
+                .map_err(|msg| RustRpcError {
+                    code: "FOLDER_SERVICE_ERROR".to_string(),
+                    message: msg,
+                })?;
+            Ok(Value::Bool(true))
+        });
+
+        self.register_handler("folderService:addComment", |_ctx, args| {
+            let paths = Self::parse_folder_paths_arg(args.first())?;
+            let issue_key = args
+                .get(1)
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folderService:addComment requires an issueKey.".to_string(),
+                })?;
+            let body = args
+                .get(2)
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "folderService:addComment requires a comment body.".to_string(),
+                })?;
+            let svc = Self::make_folder_service(paths, false);
+            svc.add_comment(issue_key, body)
+                .map_err(|msg| RustRpcError {
+                    code: "FOLDER_SERVICE_ERROR".to_string(),
+                    message: msg,
+                })?;
+            Ok(Value::Bool(true))
         });
     }
 }

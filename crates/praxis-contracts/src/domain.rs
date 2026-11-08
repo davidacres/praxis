@@ -31,19 +31,21 @@ pub enum BackendMode {
 }
 
 /// Filter scope for issue assignee filtering.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum AssigneeMode {
     Me,
+    #[default]
     All,
 }
 
 /// Issue grouping mode on board/list views.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum GroupingMode {
     Project,
     Status,
+    #[default]
     None,
 }
 
@@ -105,7 +107,9 @@ pub enum WorkflowStageCategory {
 pub struct ProjectWorkflowStage {
     pub id: String,
     pub name: String,
-    pub category: WorkflowStageCategory,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = WorkflowStageCategory)]
+    pub category: Option<WorkflowStageCategory>,
 }
 
 /// Available status transition on an issue.
@@ -266,8 +270,8 @@ pub struct CreateBoardInput {
 }
 
 /// Issue filter criteria applied to board/list queries.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase", default)]
 pub struct IssueFilters {
     pub project_keys: Vec<String>,
     pub statuses: Vec<String>,
@@ -417,6 +421,297 @@ pub struct ToolDescriptor {
     pub read_only_hint: Option<bool>,
 }
 
+/// Restriction on issue creation for a specific board (e.g. secondary plans root).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardIssueCreationRestriction {
+    pub allowed: bool,
+    pub reason: String,
+}
+
+/// Tracker board metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Board {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub board_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub created_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub project_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub project_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub location_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub connection_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub availability: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub availability_message: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = BoardIssueCreationRestriction)]
+    pub issue_creation: Option<BoardIssueCreationRestriction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = TsUnknown)]
+    pub raw: Option<serde_json::Value>,
+}
+
+/// Summary representation of an issue on a board or list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub id: Option<String>,
+    pub key: String,
+    pub summary: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub status_category: Option<String>,
+    pub issue_type: String,
+    pub project_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub project_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub parent_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = ParentIssueReference)]
+    pub parent_issue: Option<ParentIssueReference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub assignee: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub reporter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub reporter_mention: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub severity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub reported_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub complexity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub created: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub updated: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub self_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub browse_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub idea_transcript: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub planning_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<String>)]
+    pub depends_on: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub completed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<IssueAttachment>)]
+    pub attachments: Option<Vec<IssueAttachment>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = TsUnknown)]
+    pub ai_assignment: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<SubTaskSummary>)]
+    pub sub_tasks: Option<Vec<SubTaskSummary>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = u32)]
+    pub child_seq: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = IssueOrigin)]
+    pub origin: Option<IssueOrigin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = TsUnknown)]
+    pub raw: Option<serde_json::Value>,
+}
+
+/// Full details of a single issue including transitions, comments, and linked issues.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct IssueDetails {
+    #[serde(flatten)]
+    pub summary: IssueSummary,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<WorkflowTransition>)]
+    pub transitions: Option<Vec<WorkflowTransition>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<IssueComment>)]
+    pub comments: Option<Vec<IssueComment>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<LinkedIssueReference>)]
+    pub linked_issues: Option<Vec<LinkedIssueReference>>,
+}
+
+/// Input payload for creating a new issue.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateIssueInput {
+    pub project_key: String,
+    pub issue_type: String,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub idea_transcript: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub parent_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub board_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub new_parent_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub severity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = HashMap<String, String>)]
+    pub sections: Option<HashMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = IssueOrigin)]
+    pub origin: Option<IssueOrigin>,
+}
+
+fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+/// Input payload for updating an existing issue.
+///
+/// Fields with `Option<Option<String>>` distinguish absent (`None`) from explicit `null` (`Some(None)`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateIssueInput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub idea_transcript: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_double_option"
+    )]
+    #[specta(type = Option<String>)]
+    pub parent_key: Option<Option<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_double_option"
+    )]
+    #[specta(type = Option<String>)]
+    pub assignee: Option<Option<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub severity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub reported_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub issue_type: Option<String>,
+}
+
+/// Paginated list of issues returned by `getIssues`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PagedIssues {
+    pub issues: Vec<IssueSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = u32)]
+    pub total: Option<u32>,
+    pub has_more: bool,
+}
+
+/// One column on a Kanban board.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardColumn {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = String)]
+    pub status_category: Option<String>,
+    pub issues: Vec<IssueSummary>,
+}
+
+/// Full board details including columns, issues, and canonical column status order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardDetails {
+    pub board: Board,
+    pub columns: Vec<BoardColumn>,
+    pub issues: Vec<IssueSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(type = Vec<String>)]
+    pub column_status_order: Option<Vec<String>>,
+}
+
 /// Registers all foundational domain types into a [`TypeCollection`].
 pub fn register_domain_types(types: &mut TypeCollection) {
     types
@@ -448,5 +743,14 @@ pub fn register_domain_types(types: &mut TypeCollection) {
         .register::<SwimLaneGroupBy>()
         .register::<BoardViewMode>()
         .register::<BoardColumnPreferences>()
-        .register::<ToolDescriptor>();
+        .register::<ToolDescriptor>()
+        .register::<BoardIssueCreationRestriction>()
+        .register::<Board>()
+        .register::<IssueSummary>()
+        .register::<IssueDetails>()
+        .register::<CreateIssueInput>()
+        .register::<UpdateIssueInput>()
+        .register::<PagedIssues>()
+        .register::<BoardColumn>()
+        .register::<BoardDetails>();
 }

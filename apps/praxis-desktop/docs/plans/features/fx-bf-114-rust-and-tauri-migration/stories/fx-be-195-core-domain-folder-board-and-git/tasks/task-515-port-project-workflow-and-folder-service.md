@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:21:09.522Z
 id: TASK-515
 type: Task
-status: To Do
+status: Done
 ---
 
 # Port resolveStatus, markdownPlanParser, and FolderService
 
-**Status:** To Do
+**Status:** Done
 **Type:** Task
 **Priority:** Critical
 
