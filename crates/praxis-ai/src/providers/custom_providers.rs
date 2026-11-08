@@ -33,6 +33,7 @@ fn secret_name_pattern() -> &'static Regex {
 }
 
 /// A provider id, which is `custom-` followed by a slug.
+#[allow(dead_code)]
 fn slug_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| Regex::new(r"^[a-z0-9][a-z0-9-]*$").expect("the slug pattern is valid"))
@@ -341,6 +342,8 @@ mod tests {
     fn a_missing_api_key_is_reported_only_when_there_are_no_headers() {
         let mut draft = input();
         draft.api_key = "".to_string();
+        draft.headers.clear();
+        draft.header_names.clear();
         assert_eq!(
             validate_custom_provider(&draft),
             vec!["An API key or at least one custom header is required.".to_string()]

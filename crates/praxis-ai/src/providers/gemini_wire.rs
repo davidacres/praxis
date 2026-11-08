@@ -201,7 +201,7 @@ pub fn gemini_response(payload: &Value) -> ChatCompletionResult {
 /// Reads one event from a Gemini stream.
 #[must_use]
 pub fn gemini_stream_event(data: &str) -> Option<ChatStreamEvent> {
-    let payload: Value = serde_json::Value::from_str(data).ok()?;
+    let payload: Value = serde_json::from_str(data).ok()?;
     let candidate = payload
         .get("candidates")
         .and_then(Value::as_array)

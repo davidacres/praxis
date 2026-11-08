@@ -190,7 +190,7 @@ pub fn anthropic_response(payload: &Value) -> ChatCompletionResult {
 /// Reads one event from an Anthropic stream.
 #[must_use]
 pub fn anthropic_stream_event(event_type: &str, data: &str) -> Option<ChatStreamEvent> {
-    let payload: Value = serde_json::Value::from_str(data).ok()?;
+    let payload: Value = serde_json::from_str(data).ok()?;
     match event_type {
         "content_block_delta" => {
             let delta = payload.get("delta")?;

@@ -160,34 +160,36 @@ impl TokenUsage {
     }
 }
 
-/// The result of one completed turn.
+/// Everything one chat completion produced.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatCompletionResult {
     pub text: String,
-    #[serde(rename = "toolCalls")]
+    /// The model's visible reasoning, when the provider returns any.
+    #[serde(default)]
+    pub thought: String,
     pub tool_calls: Vec<ChatCompletionToolCall>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage: Option<TokenUsage>,
+    #[serde(default)]
+    pub usage: TokenUsage,
 }
 
-/// One event from a streaming chat.
+/// One piece of a streamed chat completion.
 #[derive(Debug, Clone, PartialEq)]
-pub enum StreamChatEvent {
-    /// A piece of the answer.
-    TextDelta { text: String },
-    /// A piece of the model's reasoning.
-    ThoughtDelta { text: String },
-    /// A piece of a tool call, keyed by its position in the call list.
-    ToolCallDelta {
+pub enum ChatStreamEvent {
+    /// A piece of the answer, or of the model's reasoning.
+    Text { text: String },
+    /// A tool call the model started making.
+    ToolCall {
         index: usize,
         id: Option<String>,
         name: Option<String>,
-        arguments_delta: Option<String>,
+        args_delta: Option<String>,
     },
-    /// The stream finished; carries the whole turn.
+    /// What the provider reported it has used so far.
+    Usage { usage: TokenUsage },
+    /// The completion, once the stream has ended.
     Done { result: ChatCompletionResult },
 }
 
@@ -377,6 +379,13 @@ pub fn compact_history_for_replay(history: &[WireMessage]) -> Vec<WireMessage> {
                 let call_id = message.tool_call_id.as_deref().unwrap_or_default();
                 return tool_call_ids.iter().any(|id| id == call_id);
             }
+            if message
+                .tool_calls
+                .as_ref()
+                .is_some_and(|calls| !calls.is_empty())
+            {
+                return true;
+            }
             let Some(content) = message.content.as_deref() else {
                 return false;
             };
@@ -384,13 +393,6 @@ pub fn compact_history_for_replay(history: &[WireMessage]) -> Vec<WireMessage> {
                 return false;
             }
             if message.role != WireRole::Assistant {
-                return true;
-            }
-            if message
-                .tool_calls
-                .as_ref()
-                .is_some_and(|calls| !calls.is_empty())
-            {
                 return true;
             }
             !is_transcript_note(content)
@@ -614,45 +616,6 @@ mod tests {
     }
 }
 
-/// A tool call the model asked for.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatCompletionToolCall {
-    pub id: String,
-    pub name: String,
-    pub arguments: serde_json::Value,
-}
-
-/// Everything one chat completion produced.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatCompletionResult {
-    pub text: String,
-    /// The model's visible reasoning, when the provider returns any.
-    pub thought: String,
-    pub tool_calls: Vec<ChatCompletionToolCall>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub finish_reason: Option<String>,
-    pub usage: TokenUsage,
-}
-
-/// One piece of a streamed chat completion.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ChatStreamEvent {
-    /// A piece of the answer, or of the model's reasoning.
-    Text { text: String },
-    /// A tool call the model started making.
-    ToolCall {
-        index: usize,
-        id: Option<String>,
-        name: Option<String>,
-        args_delta: Option<String>,
-    },
-    /// What the provider reported it has used so far.
-    Usage { usage: TokenUsage },
-    /// The completion, once the stream has ended.
-    Done { result: ChatCompletionResult },
-}
 
 /// Parses the arguments a model wrote for a tool call.
 ///
@@ -740,6 +703,22 @@ pub fn collect_chat_completion(payload: &serde_json::Value) -> ChatCompletionRes
     }
 }
 
+/// One event read from a server-sent event stream.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SseEvent {
+    /// The event type, from an `event:` line if present.
+    pub event: Option<String>,
+    /// The event payload, from the `data:` lines.
+    pub data: String,
+}
+
+/// A stream of server-sent events.
+#[async_trait::async_trait]
+pub trait EventStream: Send {
+    /// Yields the next event, or `None` when the stream ends.
+    async fn next_event(&mut self) -> Option<Result<SseEvent, String>>;
+}
+
 /// A provider response body, arriving in pieces.
 #[async_trait::async_trait]
 pub trait ByteStream: Send {
@@ -785,25 +764,24 @@ struct ToolCallDraft {
 
 /// Reads a streamed chat completion, reporting each piece as it arrives.
 pub async fn consume_chat_stream(
-    stream: &mut dyn ByteStream,
+    stream: &mut dyn EventStream,
     mut on_event: impl FnMut(ChatStreamEvent),
 ) -> Result<ChatCompletionResult, String> {
-    let mut reader = SseReader::new();
     let mut text = String::new();
     let mut thought = String::new();
     let mut tool_calls: Vec<ToolCallDraft> = Vec::new();
     let mut usage = TokenUsage::default();
     let mut finish_reason: Option<String> = None;
 
-    'stream: while let Some(chunk) = stream.next_chunk().await {
-        let chunk = chunk?;
-        for data in reader.push(&chunk) {
-            if data == "[DONE]" {
-                break 'stream;
-            }
-            let Ok(payload) = serde_json::Value::from_str(&data) else {
-                continue;
-            };
+    'stream: while let Some(event) = stream.next_event().await {
+        let event = event?;
+        let data = event.data;
+        if data == "[DONE]" {
+            break 'stream;
+        }
+        let Ok(payload) = serde_json::from_str::<serde_json::Value>(&data) else {
+            continue;
+        };
             let choice = payload
                 .get("choices")
                 .and_then(serde_json::Value::as_array)
@@ -906,7 +884,6 @@ pub async fn consume_chat_stream(
                 on_event(ChatStreamEvent::Usage { usage });
             }
         }
-    }
 
     let calls = tool_calls
         .iter()
@@ -951,7 +928,10 @@ mod stream_tests {
 
     impl FakeStream {
         fn new(events: Vec<SseEvent>) -> Self {
-            Self { events, index: 0 }
+            Self {
+                events: events.into_iter().map(Ok).collect(),
+                index: 0,
+            }
         }
     }
 
@@ -974,9 +954,13 @@ mod stream_tests {
         type Item = Result<bytes::Bytes, std::io::Error>;
 
         fn poll_next(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            let chunk = self.get_mut().chunks.get(self.get_mut().index)?;
-            self.get_mut().index += 1;
-            Poll::Ready(Some(Ok(chunk.clone())))
+            let this = self.get_mut();
+            if this.index >= this.chunks.len() {
+                return Poll::Ready(None);
+            }
+            let chunk = this.chunks[this.index].clone();
+            this.index += 1;
+            Poll::Ready(Some(Ok(chunk)))
         }
     }
 
@@ -1089,6 +1073,8 @@ mod stream_tests {
 
     #[tokio::test]
     async fn reads_a_payload_that_lands_across_two_chunks() {
+        use eventsource_stream::Eventsource;
+
         let body: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> =
             Box::pin(FakeBody {
                 chunks: vec![
@@ -1097,7 +1083,7 @@ mod stream_tests {
                 ],
                 index: 0,
             });
-        let mut source = eventsource_stream::EventSource::new(body);
+        let mut source = Box::pin(body.eventsource());
 
         let first = std::future::poll_fn(|context| source.as_mut().poll_next(context)).await;
 
@@ -1110,6 +1096,8 @@ mod stream_tests {
 
     #[tokio::test]
     async fn keeps_the_event_type_the_stream_named() {
+        use eventsource_stream::Eventsource;
+
         let body: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> =
             Box::pin(FakeBody {
                 chunks: vec![bytes::Bytes::from_static(
@@ -1117,14 +1105,14 @@ mod stream_tests {
                 )],
                 index: 0,
             });
-        let mut source = eventsource_stream::EventSource::new(body);
+        let mut source = Box::pin(body.eventsource());
 
         let event = std::future::poll_fn(|context| source.as_mut().poll_next(context))
             .await
             .expect("an event")
             .expect("a well-formed event");
 
-        assert_eq!(event.event.as_deref(), Some("content_block_delta"));
+        assert_eq!(event.event.as_str(), "content_block_delta");
         assert_eq!(event.data, "{\"delta\":{\"text\":\"Hi\"}}");
     }
 

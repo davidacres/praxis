@@ -1,5 +1,214 @@
 //! The usage ledger: what each AI turn cost, aggregated per model and session.
 
+use std::collections::HashMap;
+
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+
+/// Tokens consumed by one AI turn.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiUsageTokens {
+    pub input: u64,
+    pub output: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<u64>,
+}
+
+/// One turn recorded in the AI usage ledger.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiUsageEvent {
+    pub id: String,
+    pub at: String,
+    pub provider: String,
+    pub model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    pub tokens: AiUsageTokens,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
+}
+
+/// Total requests, tokens, and cost across a set of usage events.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSummary {
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cost_usd: f64,
+}
+
+impl UsageSummary {
+    /// The combined total of input and output tokens.
+    #[must_use]
+    pub fn total_tokens(&self) -> u64 {
+        self.input_tokens + self.output_tokens
+    }
+}
+
+/// Summarises request count, token count, and cost across every event.
+#[must_use]
+pub fn summarize_usage(events: &[AiUsageEvent]) -> UsageSummary {
+    let mut requests = 0u64;
+    let mut input_tokens = 0u64;
+    let mut output_tokens = 0u64;
+    let mut cost_usd = 0.0f64;
+
+    for event in events {
+        requests += 1;
+        input_tokens += event.tokens.input;
+        output_tokens += event.tokens.output;
+        if let Some(cost) = event.cost_usd {
+            cost_usd += cost;
+        }
+    }
+
+    UsageSummary {
+        requests,
+        input_tokens,
+        output_tokens,
+        cost_usd,
+    }
+}
+
+/// Usage breakdown for a specific model under a provider.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelUsageSummary {
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cost_usd: f64,
+}
+
+/// Groups and aggregates usage events by `"provider::model"`.
+#[must_use]
+pub fn summarize_usage_by_model(events: &[AiUsageEvent]) -> HashMap<String, ModelUsageSummary> {
+    let mut map = HashMap::new();
+    for event in events {
+        let key = format!("{}::{}", event.provider, event.model);
+        let entry = map.entry(key).or_insert_with(ModelUsageSummary::default);
+        entry.requests += 1;
+        entry.input_tokens += event.tokens.input;
+        entry.output_tokens += event.tokens.output;
+        if let Some(cost) = event.cost_usd {
+            entry.cost_usd += cost;
+        }
+    }
+    map
+}
+
+/// A single day's bucket in a usage trend.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageTrendPoint {
+    pub day: String,
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+/// Buckets requests and tokens into consecutive daily intervals up to `now`.
+#[must_use]
+pub fn usage_trend(
+    events: &[AiUsageEvent],
+    days: usize,
+    now: DateTime<Utc>,
+) -> Vec<UsageTrendPoint> {
+    let mut points: Vec<UsageTrendPoint> = (0..days)
+        .rev()
+        .map(|offset| {
+            let day = (now - Duration::days(offset as i64))
+                .format("%Y-%m-%d")
+                .to_string();
+            UsageTrendPoint {
+                day,
+                requests: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+            }
+        })
+        .collect();
+
+    for event in events {
+        let event_day = if let Ok(dt) = DateTime::parse_from_rfc3339(&event.at) {
+            dt.with_timezone(&Utc).format("%Y-%m-%d").to_string()
+        } else if event.at.len() >= 10 {
+            event.at[..10].to_string()
+        } else {
+            continue;
+        };
+
+        if let Some(point) = points.iter_mut().find(|p| p.day == event_day) {
+            point.requests += 1;
+            point.input_tokens += event.tokens.input;
+            point.output_tokens += event.tokens.output;
+        }
+    }
+
+    points
+}
+
+/// A single day's total requests, tokens, and cost.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyUsagePoint {
+    pub day: String,
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cost_usd: f64,
+}
+
+/// Totals requests, tokens, and costs across consecutive daily intervals up to `now`.
+#[must_use]
+pub fn daily_usage(
+    events: &[AiUsageEvent],
+    days: usize,
+    now: DateTime<Utc>,
+) -> Vec<DailyUsagePoint> {
+    let mut points: Vec<DailyUsagePoint> = (0..days)
+        .rev()
+        .map(|offset| {
+            let day = (now - Duration::days(offset as i64))
+                .format("%Y-%m-%d")
+                .to_string();
+            DailyUsagePoint {
+                day,
+                requests: 0,
+                input_tokens: 0,
+                output_tokens: 0,
+                cost_usd: 0.0,
+            }
+        })
+        .collect();
+
+    for event in events {
+        let event_day = if let Ok(dt) = DateTime::parse_from_rfc3339(&event.at) {
+            dt.with_timezone(&Utc).format("%Y-%m-%d").to_string()
+        } else if event.at.len() >= 10 {
+            event.at[..10].to_string()
+        } else {
+            continue;
+        };
+
+        if let Some(point) = points.iter_mut().find(|p| p.day == event_day) {
+            point.requests += 1;
+            point.input_tokens += event.tokens.input;
+            point.output_tokens += event.tokens.output;
+            if let Some(cost) = event.cost_usd {
+                point.cost_usd += cost;
+            }
+        }
+    }
+
+    points
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
