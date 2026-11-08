@@ -1,22 +1,8 @@
-//! Workflow stage state machine, gates, check runner, managed run services,
-//! portable-pty terminal manager, and cron scheduled run coordinator.
+//! Governed delivery workflow engine (`packages/core/src/workflows` port): contracts,
+//! finding waivers, stage model selection, check presets, and — as the port proceeds —
+//! the run state machine, scheduler, gates, and orchestrator.
 
-/// High-level execution state of a governed workflow run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WorkflowRunState {
-    Idle,
-    Running,
-    PausedAtGate,
-    Completed,
-    Failed,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn workflow_run_state_transitions_are_distinct() {
-        assert_ne!(WorkflowRunState::Idle, WorkflowRunState::Completed);
-    }
-}
+pub mod check_presets;
+pub mod stage_model;
+pub mod types;
+pub mod waivers;
