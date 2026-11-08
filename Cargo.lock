@@ -1441,10 +1441,12 @@ name = "praxis-trackers"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "chrono",
  "notify",
  "praxis-contracts",
  "praxis-core",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

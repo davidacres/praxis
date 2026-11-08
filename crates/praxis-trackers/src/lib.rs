@@ -2,8 +2,12 @@
 //! `GitLabBoardService`, `DemoService`, `StubService`) and CI evidence providers.
 
 pub mod folder_service;
+pub mod issue_tracker_service;
+pub mod stub_backend_service;
 
 pub use folder_service::*;
+pub use issue_tracker_service::*;
+pub use stub_backend_service::*;
 
 /// Supported backend tracker modes in Praxis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

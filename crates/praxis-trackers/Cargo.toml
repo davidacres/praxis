@@ -14,8 +14,12 @@ praxis-core.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 notify.workspace = true
+regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
