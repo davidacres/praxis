@@ -2,12 +2,12 @@
 **Created:** 2026-11-08T12:00:00.000Z
 id: FX-BE-203
 type: Story
-status: To Do
+status: In Progress
 ---
 
 # Harden the Electron-to-Rust Bridge and Prove Channel Parity
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Story
 **Priority:** Critical
 
@@ -18,7 +18,7 @@ Waves 1 and 2 built the bridge and ported git, settings, and the folder backend,
 What the 2026-11-08 investigation found:
 
 - **Release builds never delegate.** `resolveRustHostBinaryPath()` (`main/src/main/rustHostBridge.ts`) only looks in `target/debug`, `target/release`, or `PRAXIS_RUST_HOST_BIN`. Its doc comment mentions packaged resources, but that lookup does not exist, and no packaging step copies `praxis-host`. `resolveInitialMigratedChannels()` then quietly returns an empty list, so production is 100% TypeScript.
-- **CI never builds or tests Rust.** None of `.github/workflows/*.yml` runs `cargo`. `cargo test --workspace` currently fails to compile: `crates/praxis-ai/src/team_chat/transitions.rs` has eight duplicate `mod tests` blocks (E0428), and that stops every other crate's tests from running in the same command. Run per crate, the others pass: `praxis-core` 104, `praxis-host` 11, `praxis-workflows` 280, `praxis-trackers` 2, `praxis-contracts` 4, `praxis-mobile` 1.
+- **CI checks Rust but never tests it.** The `Typecheck` step in `.github/workflows/build.yml` runs `npm run check-types`, which includes `check:rust` (cargo check, clippy, and the contracts export check). But no CI step runs `cargo test`, so the `praxis-desktop` bridge tests always run without a Rust binary. `cargo test --workspace` also failed to compile: `crates/praxis-ai/src/team_chat/transitions.rs` had duplicate `mod tests` blocks (E0428), which stopped every other crate's tests from running in the same command. (The 2026-11-08 review first reported that CI never runs `cargo`. That was wrong: it runs indirectly through the npm script.)
 - **Local delegation depends on whatever binary happens to exist.** Any `target/debug/praxis-host`, however stale, turns delegation on for git, settings and folder, and debug is checked before release. CI end-to-end runs (no binary) exercise TypeScript while local runs exercise Rust.
 - **Delegating a channel drops the TypeScript work around it.** `settings:set` validates mobile subnets inside its fallback (`main/src/main/settingsIpc.ts`). When the channel goes to Rust, that validation is skipped, so invalid subnets are accepted. The `settings:changed` broadcast still arrives, because `SharedSettingsBackend` watches the file. But TypeScript readers can see stale settings until the watcher fires.
 - **The migrated list overstates progress.** `DEFAULT_MIGRATED_CHANNELS` (`main/src/main/rustHostInstance.ts`) includes `folderService:*` (9), `settings:sanitize` and `host:*`. The renderer cannot reach any of them: no TypeScript handler or preload entry registers them. About 50 of the app's ~340 IPC channels are actually delegated.

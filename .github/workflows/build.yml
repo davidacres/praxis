@@ -107,6 +107,12 @@ jobs:
       - name: Core unit tests
         run: npm run test:core
 
+      # Typecheck above already runs cargo fmt/check/clippy and the contract
+      # export check. This runs the Rust tests and builds praxis-host, so the
+      # bridge tests in the next desktop step talk to a real Rust host.
+      - name: Rust workspace tests
+        run: npm run test:rust
+
       - name: Repo skill mirrors match .agents/skills
         run: npm run test:skills
 

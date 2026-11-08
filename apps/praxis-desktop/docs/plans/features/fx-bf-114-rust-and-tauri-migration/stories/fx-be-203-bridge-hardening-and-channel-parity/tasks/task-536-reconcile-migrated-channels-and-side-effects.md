@@ -33,3 +33,4 @@ Make `DEFAULT_MIGRATED_CHANNELS` (`main/src/main/rustHostInstance.ts`) list exac
 
 ## Comments
 
+- 2026-11-08: As a stopgap, `settings:set` has been removed from `DEFAULT_MIGRATED_CHANNELS`, with a comment pointing here, so the TypeScript handler still validates subnets. Put it back once the validation lives in Rust.

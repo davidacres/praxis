@@ -35,6 +35,7 @@ function runCargo(args) {
 
 try {
   if (mode === 'check') {
+    await runCargo(['fmt', '--all', '--check']);
     await runCargo(['check', '--workspace']);
     await runCargo(['clippy', '--workspace', '--all-targets', '--all-features', '--', '-D', 'warnings']);
     await runCargo(['run', '-p', 'praxis-contracts', '--bin', 'export-types', '--', '--check']);
