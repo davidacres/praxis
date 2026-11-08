@@ -8,6 +8,7 @@ pub mod check_process;
 pub mod edges;
 pub mod gates;
 pub mod orchestrator;
+pub mod preview_verification;
 pub mod providers;
 pub mod recovery;
 pub mod run;
