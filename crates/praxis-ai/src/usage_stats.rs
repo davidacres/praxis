@@ -64,7 +64,7 @@ mod tests {
         assert_eq!(totals.requests, 2);
         assert_eq!(totals.input_tokens, 3000);
         assert_eq!(totals.output_tokens, 1500);
-        assert_eq!(totals.total_tokens, 4500);
+        assert_eq!(totals.total_tokens(), 4500);
         assert!((totals.cost_usd - 0.25).abs() < 1e-9);
     }
 

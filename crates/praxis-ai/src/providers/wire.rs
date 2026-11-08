@@ -613,3 +613,617 @@ mod tests {
         assert_eq!(sanitize_tool_call_id("a/b"), "a-b");
     }
 }
+
+/// A tool call the model asked for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatCompletionToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// Everything one chat completion produced.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatCompletionResult {
+    pub text: String,
+    /// The model's visible reasoning, when the provider returns any.
+    pub thought: String,
+    pub tool_calls: Vec<ChatCompletionToolCall>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
+    pub usage: TokenUsage,
+}
+
+/// One piece of a streamed chat completion.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChatStreamEvent {
+    /// A piece of the answer, or of the model's reasoning.
+    Text { text: String },
+    /// A tool call the model started making.
+    ToolCall {
+        index: usize,
+        id: Option<String>,
+        name: Option<String>,
+        args_delta: Option<String>,
+    },
+    /// What the provider reported it has used so far.
+    Usage { usage: TokenUsage },
+    /// The completion, once the stream has ended.
+    Done { result: ChatCompletionResult },
+}
+
+/// Parses the arguments a model wrote for a tool call.
+///
+/// A model that wrote malformed JSON still asked for the tool, so the raw
+/// text is kept rather than dropped.
+#[must_use]
+pub fn parse_tool_arguments(raw: &str) -> serde_json::Value {
+    serde_json::from_str(raw)
+        .unwrap_or_else(|_| serde_json::json!({ "type": "object", "raw": raw }))
+}
+
+/// Reads a whole, non-streamed chat completion.
+#[must_use]
+pub fn collect_chat_completion(payload: &serde_json::Value) -> ChatCompletionResult {
+    let choice = payload
+        .get("choices")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|choices| choices.first());
+    let message = choice
+        .and_then(|choice| choice.get("message"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let tool_calls = message
+        .get("tool_calls")
+        .and_then(serde_json::Value::as_array)
+        .map(|calls| {
+            calls
+                .iter()
+                .enumerate()
+                .map(|(index, call)| ChatCompletionToolCall {
+                    id: call
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| format!("call_{index}")),
+                    name: call
+                        .get("function")
+                        .and_then(|function| function.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    arguments: parse_tool_arguments(
+                        call.get("function")
+                            .and_then(|function| function.get("arguments"))
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default(),
+                    ),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let reported = payload.get("usage");
+    let usage = TokenUsage {
+        input_tokens: reported
+            .and_then(|usage| usage.get("prompt_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        output_tokens: reported
+            .and_then(|usage| usage.get("completion_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        total_tokens: reported
+            .and_then(|usage| usage.get("total_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        reasoning_tokens: reported
+            .and_then(|usage| usage.get("completion_tokens_details"))
+            .and_then(|details| details.get("reasoning_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        cached_input_tokens: reported
+            .and_then(|usage| usage.get("prompt_tokens_details"))
+            .and_then(|details| details.get("cached_tokens"))
+            .and_then(serde_json::Value::as_u64),
+    };
+    ChatCompletionResult {
+        text: message
+            .get("content")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        thought: String::new(),
+        tool_calls,
+        finish_reason: choice
+            .and_then(|choice| choice.get("finish_reason"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        usage,
+    }
+}
+
+/// A provider response body, arriving in pieces.
+#[async_trait::async_trait]
+pub trait ByteStream: Send {
+    /// The next piece of the body, or `None` once it has ended.
+    async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, String>>;
+}
+
+/// Pulls the `data:` payloads out of a server-sent event stream.
+#[derive(Debug, Default)]
+pub struct SseReader {
+    buffer: String,
+}
+
+impl SseReader {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Feeds a chunk of the body in, returning the payloads it completed.
+    pub fn push(&mut self, chunk: &[u8]) -> Vec<String> {
+        self.buffer.push_str(&String::from_utf8_lossy(chunk));
+        let mut payloads = Vec::new();
+        while let Some(newline) = self.buffer.find('\n') {
+            let line: String = self.buffer.drain(..=newline).collect();
+            let line = line.trim();
+            if !line.starts_with("data:") {
+                continue;
+            }
+            payloads.push(line[5..].trim().to_string());
+        }
+        payloads
+    }
+}
+
+/// A tool call as it is being streamed, before its arguments are complete.
+#[derive(Debug, Default, Clone)]
+struct ToolCallDraft {
+    id: Option<String>,
+    name: Option<String>,
+    args: String,
+}
+
+/// Reads a streamed chat completion, reporting each piece as it arrives.
+pub async fn consume_chat_stream(
+    stream: &mut dyn ByteStream,
+    mut on_event: impl FnMut(ChatStreamEvent),
+) -> Result<ChatCompletionResult, String> {
+    let mut reader = SseReader::new();
+    let mut text = String::new();
+    let mut thought = String::new();
+    let mut tool_calls: Vec<ToolCallDraft> = Vec::new();
+    let mut usage = TokenUsage::default();
+    let mut finish_reason: Option<String> = None;
+
+    'stream: while let Some(chunk) = stream.next_chunk().await {
+        let chunk = chunk?;
+        for data in reader.push(&chunk) {
+            if data == "[DONE]" {
+                break 'stream;
+            }
+            let Ok(payload) = serde_json::Value::from_str(&data) else {
+                continue;
+            };
+            let choice = payload
+                .get("choices")
+                .and_then(serde_json::Value::as_array)
+                .and_then(|choices| choices.first());
+            let delta = choice
+                .and_then(|choice| choice.get("delta"))
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            if let Some(content) = delta.get("content").and_then(serde_json::Value::as_str) {
+                if !content.is_empty() {
+                    text.push_str(content);
+                    on_event(ChatStreamEvent::Text {
+                        text: content.to_string(),
+                    });
+                }
+            }
+            for key in ["reasoning_content", "reasoning"] {
+                if let Some(reasoning) = delta.get(key).and_then(serde_json::Value::as_str) {
+                    if !reasoning.is_empty() {
+                        thought.push_str(reasoning);
+                    }
+                }
+            }
+            if let Some(calls) = delta
+                .get("tool_calls")
+                .and_then(serde_json::Value::as_array)
+            {
+                for call in calls {
+                    let index = call
+                        .get("index")
+                        .and_then(serde_json::Value::as_u64)
+                        .map(|index| index as usize)
+                        .unwrap_or(tool_calls.len());
+                    let id = call
+                        .get("id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string);
+                    let name = call
+                        .get("function")
+                        .and_then(|function| function.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string);
+                    let args_delta = call
+                        .get("function")
+                        .and_then(|function| function.get("arguments"))
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string);
+                    while tool_calls.len() <= index {
+                        tool_calls.push(ToolCallDraft::default());
+                    }
+                    let entry = &mut tool_calls[index];
+                    if let Some(id) = &id {
+                        entry.id = Some(id.clone());
+                    }
+                    if let Some(name) = &name {
+                        entry.name = Some(name.clone());
+                    }
+                    if let Some(args) = &args_delta {
+                        entry.args.push_str(args);
+                    }
+                    on_event(ChatStreamEvent::ToolCall {
+                        index,
+                        id: entry.id.clone(),
+                        name: entry.name.clone(),
+                        args_delta,
+                    });
+                }
+            }
+            if let Some(reason) = choice
+                .and_then(|choice| choice.get("finish_reason"))
+                .and_then(serde_json::Value::as_str)
+            {
+                finish_reason = Some(reason.to_string());
+            }
+            if let Some(reported) = payload.get("usage").filter(|usage| !usage.is_null()) {
+                usage = TokenUsage {
+                    input_tokens: reported
+                        .get("prompt_tokens")
+                        .and_then(serde_json::Value::as_u64)
+                        .or(usage.input_tokens),
+                    output_tokens: reported
+                        .get("completion_tokens")
+                        .and_then(serde_json::Value::as_u64)
+                        .or(usage.output_tokens),
+                    total_tokens: reported
+                        .get("total_tokens")
+                        .and_then(serde_json::Value::as_u64)
+                        .or(usage.total_tokens),
+                    reasoning_tokens: reported
+                        .get("completion_tokens_details")
+                        .and_then(|details| details.get("reasoning_tokens"))
+                        .and_then(serde_json::Value::as_u64)
+                        .or(usage.reasoning_tokens),
+                    cached_input_tokens: reported
+                        .get("prompt_tokens_details")
+                        .and_then(|details| details.get("cached_tokens"))
+                        .and_then(serde_json::Value::as_u64)
+                        .or(usage.cached_input_tokens),
+                };
+                on_event(ChatStreamEvent::Usage { usage });
+            }
+        }
+    }
+
+    let calls = tool_calls
+        .iter()
+        .filter(|call| call.id.is_some() || call.name.is_some())
+        .enumerate()
+        .map(|(index, call)| ChatCompletionToolCall {
+            id: call.id.clone().unwrap_or_else(|| format!("call_{index}")),
+            name: call.name.clone().unwrap_or_default(),
+            arguments: parse_tool_arguments(&call.args),
+        })
+        .collect();
+    let result = ChatCompletionResult {
+        text,
+        thought,
+        tool_calls: calls,
+        finish_reason,
+        usage,
+    };
+    on_event(ChatStreamEvent::Done {
+        result: result.clone(),
+    });
+    Ok(result)
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use super::{
+        ByteStream, ChatCompletionResult, ChatStreamEvent, collect_chat_completion,
+        consume_chat_stream, parse_tool_arguments,
+    };
+
+    /// A response body that hands over fixed pieces.
+    struct FakeStream {
+        chunks: Vec<Result<Vec<u8>, String>>,
+        index: usize,
+    }
+
+    impl FakeStream {
+        fn new(chunks: &[&str]) -> Self {
+            Self {
+                chunks: chunks
+                    .iter()
+                    .map(|chunk| Ok(chunk.as_bytes().to_vec()))
+                    .collect(),
+                index: 0,
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ByteStream for FakeStream {
+        async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, String>> {
+            let chunk = self.chunks.get(self.index)?.clone();
+            self.index += 1;
+            Some(chunk)
+        }
+    }
+
+    fn sse(payload: &serde_json::Value) -> String {
+        format!("data: {payload}\n\n")
+    }
+
+    #[tokio::test]
+    async fn reads_text_deltas_into_the_answer() {
+        let mut stream = FakeStream::new(&[
+            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": "Hello" } }] })),
+            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": " there" } }] })),
+            "data: [DONE]\n\n",
+        ]);
+        let mut events: Vec<ChatStreamEvent> = Vec::new();
+        let result = consume_chat_stream(&mut stream, |event| events.push(event))
+            .await
+            .expect("the stream completes");
+
+        assert_eq!(result.text, "Hello there");
+        assert!(matches!(events[0], ChatStreamEvent::Text { .. }));
+        assert!(matches!(events.last(), Some(ChatStreamEvent::Done { .. })));
+    }
+
+    #[tokio::test]
+    async fn stops_reading_at_the_done_marker() {
+        let mut stream = FakeStream::new(&[
+            "data: [DONE]\n\n",
+            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": "ignored" } }] })),
+        ]);
+        let result = consume_chat_stream(&mut stream, |_| {})
+            .await
+            .expect("the stream completes");
+
+        assert_eq!(result.text, "");
+    }
+
+    #[tokio::test]
+    async fn assembles_a_tool_call_from_its_deltas() {
+        let mut stream = FakeStream::new(&[
+            &sse(&serde_json::json!({
+                "choices": [{ "delta": { "tool_calls": [{ "index": 0, "id": "call_1", "function": { "name": "read_file", "arguments": "{\"path\":" } }] } }]
+            })),
+            &sse(&serde_json::json!({
+                "choices": [{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": "\"a.txt\"}" } }] } }]
+            })),
+        ]);
+        let result = consume_chat_stream(&mut stream, |_| {})
+            .await
+            .expect("the stream completes");
+
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(result.tool_calls[0].id, "call_1");
+        assert_eq!(result.tool_calls[0].name, "read_file");
+        assert_eq!(
+            result.tool_calls[0].arguments["path"].as_str(),
+            Some("a.txt")
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_the_usage_the_provider_sends() {
+        let mut stream = FakeStream::new(&[&sse(&serde_json::json!({
+            "choices": [{ "delta": {}, "finish_reason": "stop" }],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 30,
+                "total_tokens": 150,
+                "completion_tokens_details": { "reasoning_tokens": 12 },
+                "prompt_tokens_details": { "cached_tokens": 60 }
+            }
+        }))]);
+        let result = consume_chat_stream(&mut stream, |_| {})
+            .await
+            .expect("the stream completes");
+
+        assert_eq!(result.usage.input_tokens, Some(120));
+        assert_eq!(result.usage.output_tokens, Some(30));
+        assert_eq!(result.usage.total_tokens, Some(150));
+        assert_eq!(result.usage.reasoning_tokens, Some(12));
+        assert_eq!(result.usage.cached_input_tokens, Some(60));
+        assert_eq!(result.finish_reason.as_deref(), Some("stop"));
+    }
+
+    #[tokio::test]
+    async fn skips_a_payload_that_is_not_json() {
+        let mut stream = FakeStream::new(&[
+            "data: not json\n\n",
+            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": "ok" } }] })),
+        ]);
+        let result = consume_chat_stream(&mut stream, |_| {})
+            .await
+            .expect("the stream completes");
+
+        assert_eq!(result.text, "ok");
+    }
+
+    #[tokio::test]
+    async fn reads_a_payload_that_lands_across_two_chunks() {
+        let mut stream = FakeStream::new(&[
+            "data: {\"choices\":[{\"delta\":{\"con",
+            "tent\":\"split\"}}]}\n\n",
+        ]);
+        let result = consume_chat_stream(&mut stream, |_| {})
+            .await
+            .expect("the stream completes");
+
+        assert_eq!(result.text, "split");
+    }
+
+    #[test]
+    fn keeps_malformed_tool_arguments_as_written() {
+        let arguments = parse_tool_arguments("{not json");
+
+        assert_eq!(arguments["type"].as_str(), Some("object"));
+        assert_eq!(arguments["raw"].as_str(), Some("{not json"));
+    }
+
+    #[test]
+    fn reads_a_whole_completion() {
+        let payload = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "content": "Hello",
+                    "tool_calls": [{ "id": "call_1", "function": { "name": "read_file", "arguments": "{\"path\":\"a.txt\"}" } }]
+                },
+                "finish_reason": "tool_calls"
+            }],
+            "usage": { "prompt_tokens": 10, "completion_tokens": 5 }
+        });
+
+        let result: ChatCompletionResult = collect_chat_completion(&payload);
+
+        assert_eq!(result.text, "Hello");
+        assert_eq!(result.tool_calls.len(), 1);
+        assert_eq!(
+            result.tool_calls[0].arguments["path"].as_str(),
+            Some("a.txt")
+        );
+        assert_eq!(result.finish_reason.as_deref(), Some("tool_calls"));
+        assert_eq!(result.usage.input_tokens, Some(10));
+    }
+
+    #[test]
+    fn gives_an_unnamed_tool_call_a_generated_id() {
+        let payload = serde_json::json!({
+            "choices": [{ "message": { "tool_calls": [{ "function": { "name": "read_file", "arguments": "{}" } }] } }]
+        });
+
+        let result = collect_chat_completion(&payload);
+
+        assert_eq!(result.tool_calls[0].id, "call_0");
+    }
+}
+
+/// A response body read from `reqwest`.
+pub struct ReqwestByteStream {
+    response: reqwest::Response,
+}
+
+impl ReqwestByteStream {
+    #[must_use]
+    pub fn new(response: reqwest::Response) -> Self {
+        Self { response }
+    }
+}
+
+#[async_trait::async_trait]
+impl ByteStream for ReqwestByteStream {
+    async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, String>> {
+        match self.response.chunk().await {
+            Some(Ok(bytes)) => Some(Ok(bytes.to_vec())),
+            Some(Err(error)) => Some(Err(error.to_string())),
+            None => None,
+        }
+    }
+}
+
+/// Sends chat requests to a provider.
+#[async_trait::async_trait]
+pub trait ChatTransport: Send + Sync {
+    /// Posts a request and reads the whole answer.
+    async fn post(&self, url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String>;
+
+    /// Posts a request and reads the answer as it arrives.
+    async fn post_stream(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+    ) -> Result<Box<dyn ByteStream>, String>;
+}
+
+/// A transport that talks to a provider over HTTP.
+pub struct ReqwestChatTransport {
+    client: reqwest::Client,
+    /// Sent with every request, for the provider's authentication.
+    bearer_token: Option<String>,
+    /// Extra headers sent with every request.
+    headers: Vec<(String, String)>,
+}
+
+impl ReqwestChatTransport {
+    /// A transport that authenticates with a bearer token.
+    #[must_use]
+    pub fn with_bearer_token(token: Option<String>) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            bearer_token: token,
+            headers: Vec::new(),
+        }
+    }
+
+    /// Adds a header sent with every request.
+    #[must_use]
+    pub fn with_header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((name.to_string(), value.to_string()));
+        self
+    }
+
+    fn request(&self, url: &str, body: &serde_json::Value) -> reqwest::RequestBuilder {
+        let mut request = self.client.post(url).json(body);
+        if let Some(token) = &self.bearer_token {
+            request = request.bearer_auth(token.trim());
+        }
+        for (name, value) in &self.headers {
+            request = request.header(name, value);
+        }
+        request
+    }
+}
+
+#[async_trait::async_trait]
+impl ChatTransport for ReqwestChatTransport {
+    async fn post(&self, url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let response = self
+            .request(url, body)
+            .send()
+            .await
+            .map_err(|error| error.to_string())?;
+        let status = response.status();
+        let text = response.text().await.map_err(|error| error.to_string())?;
+        if !status.is_success() {
+            return Err(format!("The provider answered {status}: {text}"));
+        }
+        serde_json::Value::from_str(&text).map_err(|error| error.to_string())
+    }
+
+    async fn post_stream(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+    ) -> Result<Box<dyn ByteStream>, String> {
+        let response = self
+            .request(url, body)
+            .send()
+            .await
+            .map_err(|error| error.to_string())?;
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("The provider answered {status}: {text}"));
+        }
+        Ok(Box::new(ReqwestByteStream::new(response)))
+    }
+}
