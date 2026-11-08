@@ -19,6 +19,20 @@ const out = join(here, '../../../../packages/core/out/workflows');
 const run = require(join(out, 'workflowRun.js'));
 const scheduler = require(join(out, 'workflowScheduler.js'));
 const edges = require(join(out, 'workflowEdges.js'));
+const gates = require(join(out, 'workflowGates.js'));
+const recovery = require(join(out, 'workflowRecovery.js'));
+
+/** A composed policy: adds a gate, sets thresholds, allows bypass, and waives one finding. */
+const POLICY = {
+  schemaVersion: 1, id: 'policy', name: 'Policy', scope: 'global', requiredGates: ['review', 'qa'], requireHumanApproval: true,
+  allowGateBypass: true, requireTrustedAgents: false, maxAttemptsPerNode: 3, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  gateThresholds: {
+    security: [{ type: 'severity', severityLevel: 'critical', maxCount: 0 }],
+    review: [{ type: 'metric', metric: 'score', operator: '>=', value: 50 }, { type: 'severity', maxCount: 1 }]
+  },
+  waivers: [{ fingerprint: 'fp-security-1', reason: 'accepted risk', actor: 'sec', createdAt: '2026-01-01T00:00:00Z', expiresAt: '2099-01-01T00:00:00Z' }]
+};
+const TIMEOUT_NOW = '2026-09-02T09:10:00.000Z';
 
 const SCENARIOS_PER_DEFINITION = 16;
 const STEPS = 36;
@@ -52,7 +66,8 @@ const definitions = [
       { ...base('plan', 'Plan'), type: 'agent-task', agent: agent('read-only'), instructions: 'p', outputs: [{ id: 'plan-doc', kind: 'plan', required: true }], mutatesWorktree: false },
       { ...base('implement', 'Implement'), type: 'agent-task', agent: agent('full'), instructions: 'i', outputs: [{ id: 'diff', kind: 'diff', required: true }], mutatesWorktree: true, maxAttempts: 2 },
       { ...base('review', 'Review'), type: 'agent-task', agent: agent('read-only'), instructions: 'r', outputs: [{ id: 'review-report', kind: 'report', required: true }], mutatesWorktree: false, satisfiesGate: 'review' },
-      { ...base('qa', 'QA'), type: 'check', command: 'npm', outputs: [{ id: 'qa-results', kind: 'test-results', required: true }], satisfiesGate: 'qa', maxAttempts: 2 },
+      { ...base('qa', 'QA'), type: 'check', command: 'npm', outputs: [{ id: 'qa-results', kind: 'test-results', required: true }], satisfiesGate: 'qa', maxAttempts: 2, timeoutMs: 5000 },
+      { ...base('deps', 'Deps'), type: 'check', command: 'osv', outputs: [], satisfiesGate: 'security' },
       { ...base('security', 'Security'), type: 'check', command: 'npm', outputs: [{ id: 'sec', kind: 'findings', required: true }], satisfiesGate: 'security' },
       { ...base('docs', 'Docs'), type: 'agent-task', agent: agent('full'), instructions: 'd', outputs: [], mutatesWorktree: true },
       { ...base('gates', 'Gates'), type: 'join', mode: 'all-required' },
@@ -64,6 +79,8 @@ const definitions = [
       { id: 'e3', from: 'implement', to: 'qa', on: 'success', required: true },
       { id: 'e4', from: 'implement', to: 'security', on: 'success', required: true },
       { id: 'e4b', from: 'implement', to: 'docs', on: 'success', required: false },
+      { id: 'e4c', from: 'implement', to: 'deps', on: 'success', required: true },
+      { id: 'e7c', from: 'deps', to: 'gates', on: 'success', required: true },
       { id: 'e5', from: 'review', to: 'gates', on: 'success', required: true },
       { id: 'e6', from: 'qa', to: 'gates', on: 'success', required: true },
       { id: 'e7', from: 'security', to: 'gates', on: 'success', required: true },
@@ -186,6 +203,16 @@ function chooseOperation(r, current, definition, step) {
     return { op: 'command', command: { kind: 'node-interrupted', nodeId, at } };
   }
 
+  const approvals = definition.nodes.filter(node => node.type === 'approval').map(node => node.id);
+  if (approvals.length > 0 && r.chance(0.25)) {
+    const nodeId = r.pick(approvals);
+    const which = r.next();
+    if (which < 0.4) return { op: 'approve', nodeId, at, actor: 'dana', policy: r.chance(0.5) };
+    if (which < 0.65) return { op: 'bypass', nodeId, at, gate: r.pick(['review', 'qa', 'security']), actor: 'dana', reason: 'urgent', policy: r.chance(0.7) };
+    if (which < 0.85) return { op: 'reject', nodeId, at, actor: 'dana', reason: 'not yet' };
+    return { op: 'skipApproval', nodeId, at, actor: 'dana' };
+  }
+  if (r.chance(0.04)) return { op: 'recover', at };
   const extra = r.next();
   if (extra < 0.4) return { op: 'advanceJoins', at };
   const failed = ids.filter(id => current.nodes[id]?.outcome === 'failed');
@@ -216,6 +243,11 @@ function applyOperation(current, operation) {
     case 'rework': return run.reworkWorkflowRun(current, operation.nodeId, operation.at, operation.options).run;
     case 'allowAiMergeResolution': return run.allowAiMergeResolution(current, operation.nodeId, operation.at);
     case 'normalize': return run.normalizeWorkflowRun(JSON.parse(JSON.stringify(current)));
+    case 'approve': return gates.approveStage(current, operation.nodeId, { actor: operation.actor, at: operation.at }, operation.policy ? POLICY : undefined).run;
+    case 'bypass': return gates.bypassGate(current, operation.nodeId, { gate: operation.gate, actor: operation.actor, reason: operation.reason, at: operation.at }, operation.policy ? POLICY : undefined).run;
+    case 'reject': return gates.rejectStage(current, operation.nodeId, { actor: operation.actor, reason: operation.reason, at: operation.at });
+    case 'skipApproval': return gates.skipApproval(current, operation.nodeId, { actor: operation.actor, at: operation.at }).run;
+    case 'recover': return recovery.recoverWorkflowRun(current, operation.at).run;
     default: throw new Error(`unknown op ${operation.op}`);
   }
 }
@@ -229,7 +261,16 @@ function observe(current) {
     events: current.events.length,
     pendingLoop: loop ? { kind: loop.kind, edgeId: loop.status.edge.id, budget: loop.status.budget, taken: loop.status.iterationsTaken } : null,
     canRetry: Object.keys(current.nodes).filter(id => run.canRetry(current, id)),
-    stageProvider: Object.keys(current.nodes).map(id => run.stageProvider(current, id, 'fallback-ai'))
+    stageProvider: Object.keys(current.nodes).map(id => run.stageProvider(current, id, 'fallback-ai')),
+    gates: current.definition.nodes.filter(node => node.type === 'approval').map(node => ({
+      approval: node.id,
+      plain: gates.evaluateGates(current, node.id),
+      withPolicy: gates.approvalReadiness(current, node.id, POLICY)
+    })),
+    nextActions: recovery.nextActions(current),
+    timedOut: recovery.findTimedOutNodes(current, TIMEOUT_NOW),
+    failingFindings: gates.failingGateFindings(current, POLICY),
+    repairStage: gates.repairStageForFindings(current, gates.failingGateFindings(current, POLICY)) ?? null
   };
 }
 
@@ -293,7 +334,7 @@ const scriptedRuns = [
     ...improveRound(T(10), 40, 'sha-aaaaaaa5'),
     decide(T(11), 'accept', { reason: 'good enough' }),
     cmd({ kind: 'loop-restored', at: T(12), ok: true }),
-    ...finish('approve', T(13))
+    { op: 'approve', nodeId: 'approve', at: T(13), actor: 'dana', policy: false }
   ] },
   { definition: 'improve', create: { runId: 'run-loop-stop', projectId: 'p', at: T(0), parameters: { rounds: 1 } }, ops: [
     ...improveRound(T(1), 10, 'sha-bbbbbbb1'), take(T(2)),
@@ -309,11 +350,11 @@ const scriptedRuns = [
     ...improveRound(T(5), 25, 'sha-ccccccc3'), take(T(6)),
     ...improveRound(T(7), 10, 'sha-ccccccc4'),
     cmd({ kind: 'loop-restored', at: T(8), ok: true }),
-    ...finish('approve', T(9))
+    { op: 'approve', nodeId: 'approve', at: T(9), actor: 'dana', policy: false }
   ] },
   { definition: 'improve', create: { runId: 'run-skeptic-refutes', projectId: 'p', at: T(0) }, ops: [
     ...improveRound(T(1), 95, 'sha-ddddddd1', 'refuted'),
-    ...finish('approve', T(2))
+    { op: 'bypass', nodeId: 'approve', at: T(2), gate: 'review', actor: 'dana', reason: 'ok', policy: true }, { op: 'skipApproval', nodeId: 'approve', at: T(2), actor: 'dana' }
   ] },
   { definition: 'repair', create: { runId: 'run-repair-merge', projectId: 'p', at: T(0), permissionMode: 'auto' }, ops: [
     ...finish('build', T(1), { snapshotRef: 'sha-eeeeeee1' }),
@@ -352,5 +393,5 @@ for (const script of scriptedRuns) {
   scenarios.push({ seed: script.create.runId, definition: definition.id, create: script.create, steps, final });
 }
 
-writeFileSync(join(here, 'run-parity.json.gz'), gzipSync(JSON.stringify({ definitions, scenarios }), { level: 9 }));
+writeFileSync(join(here, 'run-parity.json.gz'), gzipSync(JSON.stringify({ definitions, policy: POLICY, timeoutNow: TIMEOUT_NOW, scenarios }), { level: 9 }));
 console.log(`wrote ${scenarios.length} scenarios × ${STEPS} steps`);
