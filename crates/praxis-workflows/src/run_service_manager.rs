@@ -17,13 +17,15 @@ use std::time::Duration;
 use chrono::{SecondsFormat, Utc};
 use indexmap::IndexMap;
 use serde::Serialize;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::net::TcpListener;
 use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
+use crate::network_probe::{check_http_ok, check_tcp_open};
+use crate::process_tree::signal_process_tree;
 use crate::run_profile::{
     RunProfile, RunProfileIssue, RunReadinessProbe, RunServiceDefinition, validate_run_profile,
 };
@@ -732,8 +734,10 @@ async fn await_readiness(
     match &definition.readiness_probe {
         None => tokio::time::sleep(NO_PROBE_SETTLE).await,
         Some(RunReadinessProbe::Tcp { port }) => loop {
-            if probe_tcp(*port).await {
-                return;
+            if let Ok(port) = u16::try_from(*port) {
+                if check_tcp_open("127.0.0.1", port, PROBE_CONNECT_TIMEOUT).await {
+                    return;
+                }
             }
             tokio::time::sleep(PROBE_POLL_INTERVAL).await;
         },
@@ -743,7 +747,15 @@ async fn await_readiness(
         }) => loop {
             let port = definition.port.unwrap_or_default();
             if let Ok(port) = u16::try_from(port) {
-                if check_http_ok(port, path, *expected_status, PROBE_CONNECT_TIMEOUT).await {
+                if check_http_ok(
+                    "127.0.0.1",
+                    port,
+                    path,
+                    *expected_status,
+                    PROBE_CONNECT_TIMEOUT,
+                )
+                .await
+                {
                     return;
                 }
             }
@@ -834,91 +846,16 @@ async fn is_port_available(port: u32) -> bool {
     TcpListener::bind(("127.0.0.1", port)).await.is_ok()
 }
 
-async fn probe_tcp(port: u32) -> bool {
-    let Ok(port) = u16::try_from(port) else {
-        return false;
-    };
-    matches!(
-        tokio::time::timeout(
-            PROBE_CONNECT_TIMEOUT,
-            TcpStream::connect(("127.0.0.1", port))
-        )
-        .await,
-        Ok(Ok(_))
-    )
-}
-
-/// One minimal HTTP GET against `127.0.0.1:port`. Passes on `expected_status`, or any 2xx.
-pub async fn check_http_ok(
-    port: u16,
-    probe_path: &str,
-    expected_status: Option<u16>,
-    timeout: Duration,
-) -> bool {
-    if !probe_path.starts_with('/') {
-        return false;
-    }
-    let attempt = async {
-        let mut stream = TcpStream::connect(("127.0.0.1", port)).await.ok()?;
-        let request = format!(
-            "GET {probe_path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
-        );
-        stream.write_all(request.as_bytes()).await.ok()?;
-        let mut head = [0u8; 256];
-        let read = stream.read(&mut head).await.ok()?;
-        let text = String::from_utf8_lossy(&head[..read]);
-        let status: u16 = text.split_whitespace().nth(1)?.parse().ok()?;
-        Some(match expected_status {
-            Some(expected) => status == expected,
-            None => (200..300).contains(&status),
-        })
-    };
-    matches!(tokio::time::timeout(timeout, attempt).await, Ok(Some(true)))
-}
-
 /// Ends the service's whole process tree: SIGTERM to the group, then SIGKILL after a grace period.
 async fn terminate(child: &mut Child, pid: Option<u32>) {
-    signal_tree(child, pid, false).await;
+    signal_process_tree(child, pid, false).await;
     if tokio::time::timeout(FORCE_KILL_AFTER, child.wait())
         .await
         .is_err()
     {
-        signal_tree(child, pid, true).await;
+        signal_process_tree(child, pid, true).await;
         let _ = child.wait().await;
     }
-}
-
-#[cfg(unix)]
-async fn signal_tree(child: &mut Child, pid: Option<u32>, force: bool) {
-    use nix::errno::Errno;
-    use nix::sys::signal::{Signal, killpg};
-    use nix::unistd::Pid;
-
-    let Some(pid) = pid else { return };
-    let signal = if force {
-        Signal::SIGKILL
-    } else {
-        Signal::SIGTERM
-    };
-    let group_signalled = i32::try_from(pid).is_ok_and(|raw| {
-        matches!(
-            killpg(Pid::from_raw(raw), signal),
-            Ok(()) | Err(Errno::ESRCH)
-        )
-    });
-    if !group_signalled {
-        let _ = child.start_kill();
-    }
-}
-
-#[cfg(not(unix))]
-async fn signal_tree(child: &mut Child, pid: Option<u32>, _force: bool) {
-    let _ = &child;
-    let Some(pid) = pid else { return };
-    let _ = Command::new("taskkill")
-        .args(["/pid", &pid.to_string(), "/T", "/F"])
-        .status()
-        .await;
 }
 
 #[cfg(test)]
@@ -926,6 +863,7 @@ mod tests {
     use super::*;
     use crate::test_support::ScratchDir;
     use std::time::Instant;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn service(id: &str, script: &str) -> RunServiceDefinition {
         RunServiceDefinition {
@@ -1071,11 +1009,11 @@ mod tests {
         });
 
         let timeout = Duration::from_secs(2);
-        assert!(check_http_ok(port, "/healthz", None, timeout).await);
-        assert!(!check_http_ok(port, "/missing", None, timeout).await);
-        assert!(check_http_ok(port, "/missing", Some(404), timeout).await);
+        assert!(check_http_ok("127.0.0.1", port, "/healthz", None, timeout).await);
+        assert!(!check_http_ok("127.0.0.1", port, "/missing", None, timeout).await);
+        assert!(check_http_ok("127.0.0.1", port, "/missing", Some(404), timeout).await);
         assert!(
-            !check_http_ok(port, "healthz", None, timeout).await,
+            !check_http_ok("127.0.0.1", port, "healthz", None, timeout).await,
             "path must be absolute"
         );
     }
