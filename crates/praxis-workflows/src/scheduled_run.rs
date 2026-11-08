@@ -302,7 +302,9 @@ pub enum ScheduledRunPolicy {
 }
 
 impl ScheduledRunPolicy {
-    fn workflow_id(&self) -> Option<&String> {
+    /// The workflow each ticket is started with, when one was chosen.
+    #[must_use]
+    pub fn workflow_id(&self) -> Option<&String> {
         match self {
             Self::Sequential { workflow_id } | Self::Parallel { workflow_id, .. } => {
                 workflow_id.as_ref()
