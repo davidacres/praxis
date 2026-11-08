@@ -9,12 +9,12 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
-praxis-contracts.workspace = true
-praxis-core.workspace = true
-ed25519-dalek.workspace = true
+chacha20poly1305.workspace = true
+hmac.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tokio-tungstenite.workspace = true
+x25519-dalek.workspace = true
+zeroize.workspace = true

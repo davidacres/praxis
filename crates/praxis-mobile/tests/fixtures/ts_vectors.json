@@ -1,0 +1,343 @@
+{
+ "keys": {
+  "phoneStaticPrivate": "11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3ea",
+  "phoneStaticPublic": "e52b940ad182cfed595624daaaa892f68f14d52c49ae9016b6ab870e080e8300",
+  "desktopStaticPrivate": "222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb",
+  "desktopStaticPublic": "c84d3370d9c8aaa389f0198ae98abb6e2659d9fb61cefe01b0e47e263aae3847",
+  "phoneEphemeralPrivate": "333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c",
+  "phoneEphemeralPublic": "739034ca47db791ad25277c619601febfaac6119c5acd16301017ee7de058255",
+  "desktopEphemeralPrivate": "444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d",
+  "desktopEphemeralPublic": "8568e018964674c674a0c4e1d0dd1ae761560ae8442c23d5620c900a1fdcf145"
+ },
+ "channels": [
+  {
+   "name": "prologue-empty-payloads",
+   "prologue": "Zx9-pairing_code+base64url",
+   "msg1Payload": "",
+   "msg2Payload": "",
+   "handshake1": "00000060739034ca47db791ad25277c619601febfaac6119c5acd16301017ee7de058255bbd7958ed629654badc5b949a97f5c85743e76de61d93a4c9792c175af7613a52f72f6499cfd553b09e77975d03922276d0534285a48b426c47160c2fb157831",
+   "handshake2": "000000308568e018964674c674a0c4e1d0dd1ae761560ae8442c23d5620c900a1fdcf145a708bcbf1ce92aa6cb196b5a710c6989",
+   "phoneToDesktop": [
+    {
+     "json": "{\"id\":\"pair\",\"kind\":\"pair\",\"payload\":{\"tokenId\":\"invite-123\"}}",
+     "record": "0000004e7dec983ad31dc376d0e5cf0c1171af941ff415afdae68f805d2a38605618bb71160abf28f83c8883115349773093dd1ed62706b4940268548a6ebfd82774c8a61aa1ee26f406993f75d9cc8bb030"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-1\",\"kind\":\"read\",\"payload\":{\"operation\":\"host.info\"}}",
+     "record": "00000057e56c99f7672ae082869359d8f0e9c1cddd1816f67ffd3cfdb71e5e7bee5a9fe6cb4865bc0e03f02f8e3f7ad1ae94f6498a51b2e2e98bdce73b88e923254ddc76306af77b41e1c8576ef02d8304896c9155b96856317de2"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-2\",\"kind\":\"command\",\"payload\":{\"operation\":\"workflowGates.approve\",\"note\":\"line\\nbreak \\\"quoted\\\" \\\\ tab\\t ctrl\\u0001 – ünïcode ✓ 😀  \"}}",
+     "record": "000000b5a9c9f0b2c2167c8bee08d350b658b35e24cd0792444e27e0b9d4f6a76c3bb9cf40fd15dc25d261dc2430d53cbc97e444e5569721eba22010d40b38dd5fecfd6ce824dc5aa7ee194d164ed2f4010513fe47da889b541c819e06488ce124650aac7c0c37e8717b89a12640c1b18be985bbd4c01e9e92fa957d252eb7f110935d674e62832ed40fd3ccb3339ba5bb4f29b50ac8a95dde6e2e7c7e1534a81de4f665e1fd75fd9ecf0fd5c1aebd930de30498beceadfaed"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-3\",\"kind\":\"replay\",\"payload\":{\"afterSequence\":41}}",
+     "record": "00000054e9471c9ba4c8461ac173282253995761c01c22f8b6daf30deed08e1cf44dc539055357a39225d77c17321c11c2c818aa922a8b309a08ca2b01f12d4e858d3f872d51f6f1afcad597835ac1911d98cc408c4aec41"
+    }
+   ],
+   "desktopToPhone": [
+    {
+     "json": "{\"kind\":\"status\",\"status\":{\"code\":\"pairing-required\",\"message\":\"This phone is not paired with the desktop. Scan a current pairing invitation from Settings → Mobile access.\",\"retryable\":false}}",
+     "record": "000000d2b92b680fc5ee4b383a8c56d869d574a5f27d662a8447367d16e91a3a19412b42703f7b155446ef6f0b0c1d101dac18f855544b391f507965d13222a3d5cf1f2c18cb03ccb34f1708872be69327f850f06f75263691ff779e8f7c9091b0d427439ee3bd9fb23b0a96a3715120c6213b2c9a4cf86a35dcbf82e2ef4ebd2953398d08eaa761d1d3fac2b7fcf1695a825ede4f1d335869d98867da2bff12e525920f00156aba817513f39793bd24aa1450337b32ea3bfd4f6c7edaa3aeea5196e5b63b35b480758563c5d6c9b1230ff877fb1f48"
+    },
+    {
+     "json": "{\"id\":\"pair\",\"kind\":\"reply\",\"ok\":true,\"value\":{\"paired\":true}}",
+     "record": "0000004ea575d94b38ba04c856bdf7a4dd7c08d02e76307c4ba7e8137fea98b571c398fbd5294c1e09d5afd45417547ed6c16da7ce398a64ec18ba017d8f6fc5975c4b9827d706e96fe865aa479d5a9911d1"
+    },
+    {
+     "json": "{\"kind\":\"status\",\"status\":{\"code\":\"ready\",\"message\":\"Connected.\",\"retryable\":true}}",
+     "record": "00000063b105f2b752cccf81d71eafdf08a145fb08dc83a883fc365caf26cacf739568f0dcab2aa3d81c07ca5e125388f7f11955c9651715b406cd993404c086dd5bc19c91a0e0f36bddf63b5e7996895cbd410c40d248b3defd8942d8ce34c3aceb0aa5a1eede"
+    },
+    {
+     "json": "{\"kind\":\"event\",\"envelope\":{\"sequence\":42,\"type\":\"session.updated\",\"at\":\"2026-11-08T10:00:00.000Z\",\"data\":{\"nested\":[1,2.5,null,false]}}}",
+     "record": "00000099fd0348d251a8397e731c829c99fe216d6adf1eb896e5c8dcefb19c286cf5b2b56f020d5c1e39625fd4af1e4b8fcf68b74c42534f96c51a118001db85643b2683a69a2dafca912afa1af6d67cd1844a2b64d883b21566bfd4f7f281047c9d9ee45193bf92570ceec4912e6ecdbdc46cbd90c8e6462f151f3db1eed397ea83033b0fd2940c7329a1092e5473b833ad9f9176cfc1daf32a4d8e0b"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-1\",\"kind\":\"reply\",\"ok\":true,\"value\":null}",
+     "record": "0000004b7df6f8ec196cb78580a6342f345a8c726a9c58879aafa2051f1c992494f78b63748c19919327353a8fb54cbec17b9a182625860a09dfc5dee765f0d1678ef8fe7c5bed3ffda6902fd1ecdc"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-2\",\"kind\":\"reply\",\"ok\":false,\"code\":\"pairing-pending\",\"error\":\"This phone is waiting for confirmation on the desktop.\"}",
+     "record": "00000099c71fc83ae25ab67608a2be62493ac717890a3d53363f330167efe9d759031c2b3b3cf40b87cd523e6f0f36bf252c8328682cea79be84418754cde9a4e02cf9a9c58ba199debb209b6bb5165358fde190cedb78687367fc9309b61146455518a39d0811aeb43fccb476ec9b5b5cef2e4188347273d0d751eb34e010488eeb73e6d9b275cf8ab8407ae9f8fde7609985d68cba114f0c22185e1b"
+    },
+    {
+     "json": "{\"kind\":\"status\",\"status\":{\"code\":\"device-revoked\",\"message\":\"The desktop revoked this phone’s access. Pair it again with a new invitation from Settings → Mobile access.\",\"retryable\":false}}",
+     "record": "000000d21bd7e16e17e7ca652b7951c6bd82fdade3be6df5e0ec946dc95b0ef16dea4ad8a71bdcf292c7e91be58b43f51bf82357aa81717c1714ffd65f76da5c6e27bd7b475de6bb778b35b436a93dec9b3f770d112f0cb3dcc3311d03cce3cbe3b42fae43a6debfecec6d6ac4a6c8e2bbf928e6d7c7deee9a8d2af4855a645366b3b344806030114ff354b6668c7628a170a7c59c2f92866eedbbddb01467109cacf40c9b16517ffe3bded21025b664b2ce8e2fa89a01695305d056adb1e51a1b2d598043d8e61ecfc788e1cb0e3f450b6a9362385e"
+    }
+   ],
+   "handshakeHash": "7a16b100f50462f55f762406d4986ae75eea7a9c1a5858b1ff270700af748e26"
+  },
+  {
+   "name": "no-prologue-with-payloads",
+   "prologue": null,
+   "msg1Payload": "hello from the phone",
+   "msg2Payload": "welcome",
+   "handshake1": "00000074739034ca47db791ad25277c619601febfaac6119c5acd16301017ee7de058255bbd7958ed629654badc5b949a97f5c85743e76de61d93a4c9792c175af7613a565f807677490c70ba98c0b1e791b6883911cf5d56774d7a74985305c8ff9900137ec391d86eb095c2a415ef4413cc49fe7641610",
+   "handshake2": "000000378568e018964674c674a0c4e1d0dd1ae761560ae8442c23d5620c900a1fdcf145d0997fb160f78a93e919a75217e8e2220fa46a4fa85022",
+   "phoneToDesktop": [
+    {
+     "json": "{\"id\":\"pair\",\"kind\":\"pair\",\"payload\":{\"tokenId\":\"invite-123\"}}",
+     "record": "0000004e7dec983ad31dc376d0e5cf0c1171af941ff415afdae68f805d2a38605618bb71160abf28f83c8883115349773093dd1ed62706b4940268548a6ebfd82774c8a61aa1ee26f406993f75d9cc8bb030"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-1\",\"kind\":\"read\",\"payload\":{\"operation\":\"host.info\"}}",
+     "record": "00000057e56c99f7672ae082869359d8f0e9c1cddd1816f67ffd3cfdb71e5e7bee5a9fe6cb4865bc0e03f02f8e3f7ad1ae94f6498a51b2e2e98bdce73b88e923254ddc76306af77b41e1c8576ef02d8304896c9155b96856317de2"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-2\",\"kind\":\"command\",\"payload\":{\"operation\":\"workflowGates.approve\",\"note\":\"line\\nbreak \\\"quoted\\\" \\\\ tab\\t ctrl\\u0001 – ünïcode ✓ 😀  \"}}",
+     "record": "000000b5a9c9f0b2c2167c8bee08d350b658b35e24cd0792444e27e0b9d4f6a76c3bb9cf40fd15dc25d261dc2430d53cbc97e444e5569721eba22010d40b38dd5fecfd6ce824dc5aa7ee194d164ed2f4010513fe47da889b541c819e06488ce124650aac7c0c37e8717b89a12640c1b18be985bbd4c01e9e92fa957d252eb7f110935d674e62832ed40fd3ccb3339ba5bb4f29b50ac8a95dde6e2e7c7e1534a81de4f665e1fd75fd9ecf0fd5c1aebd930de30498beceadfaed"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-3\",\"kind\":\"replay\",\"payload\":{\"afterSequence\":41}}",
+     "record": "00000054e9471c9ba4c8461ac173282253995761c01c22f8b6daf30deed08e1cf44dc539055357a39225d77c17321c11c2c818aa922a8b309a08ca2b01f12d4e858d3f872d51f6f1afcad597835ac1911d98cc408c4aec41"
+    }
+   ],
+   "desktopToPhone": [
+    {
+     "json": "{\"kind\":\"status\",\"status\":{\"code\":\"pairing-required\",\"message\":\"This phone is not paired with the desktop. Scan a current pairing invitation from Settings → Mobile access.\",\"retryable\":false}}",
+     "record": "000000d2b92b680fc5ee4b383a8c56d869d574a5f27d662a8447367d16e91a3a19412b42703f7b155446ef6f0b0c1d101dac18f855544b391f507965d13222a3d5cf1f2c18cb03ccb34f1708872be69327f850f06f75263691ff779e8f7c9091b0d427439ee3bd9fb23b0a96a3715120c6213b2c9a4cf86a35dcbf82e2ef4ebd2953398d08eaa761d1d3fac2b7fcf1695a825ede4f1d335869d98867da2bff12e525920f00156aba817513f39793bd24aa1450337b32ea3bfd4f6c7edaa3aeea5196e5b63b35b480758563c5d6c9b1230ff877fb1f48"
+    },
+    {
+     "json": "{\"id\":\"pair\",\"kind\":\"reply\",\"ok\":true,\"value\":{\"paired\":true}}",
+     "record": "0000004ea575d94b38ba04c856bdf7a4dd7c08d02e76307c4ba7e8137fea98b571c398fbd5294c1e09d5afd45417547ed6c16da7ce398a64ec18ba017d8f6fc5975c4b9827d706e96fe865aa479d5a9911d1"
+    },
+    {
+     "json": "{\"kind\":\"status\",\"status\":{\"code\":\"ready\",\"message\":\"Connected.\",\"retryable\":true}}",
+     "record": "00000063b105f2b752cccf81d71eafdf08a145fb08dc83a883fc365caf26cacf739568f0dcab2aa3d81c07ca5e125388f7f11955c9651715b406cd993404c086dd5bc19c91a0e0f36bddf63b5e7996895cbd410c40d248b3defd8942d8ce34c3aceb0aa5a1eede"
+    },
+    {
+     "json": "{\"kind\":\"event\",\"envelope\":{\"sequence\":42,\"type\":\"session.updated\",\"at\":\"2026-11-08T10:00:00.000Z\",\"data\":{\"nested\":[1,2.5,null,false]}}}",
+     "record": "00000099fd0348d251a8397e731c829c99fe216d6adf1eb896e5c8dcefb19c286cf5b2b56f020d5c1e39625fd4af1e4b8fcf68b74c42534f96c51a118001db85643b2683a69a2dafca912afa1af6d67cd1844a2b64d883b21566bfd4f7f281047c9d9ee45193bf92570ceec4912e6ecdbdc46cbd90c8e6462f151f3db1eed397ea83033b0fd2940c7329a1092e5473b833ad9f9176cfc1daf32a4d8e0b"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-1\",\"kind\":\"reply\",\"ok\":true,\"value\":null}",
+     "record": "0000004b7df6f8ec196cb78580a6342f345a8c726a9c58879aafa2051f1c992494f78b63748c19919327353a8fb54cbec17b9a182625860a09dfc5dee765f0d1678ef8fe7c5bed3ffda6902fd1ecdc"
+    },
+    {
+     "json": "{\"id\":\"m-mh0z1k2a-2\",\"kind\":\"reply\",\"ok\":false,\"code\":\"pairing-pending\",\"error\":\"This phone is waiting for confirmation on the desktop.\"}",
+     "record": "00000099c71fc83ae25ab67608a2be62493ac717890a3d53363f330167efe9d759031c2b3b3cf40b87cd523e6f0f36bf252c8328682cea79be84418754cde9a4e02cf9a9c58ba199debb209b6bb5165358fde190cedb78687367fc9309b61146455518a39d0811aeb43fccb476ec9b5b5cef2e4188347273d0d751eb34e010488eeb73e6d9b275cf8ab8407ae9f8fde7609985d68cba114f0c22185e1b"
+    },
+    {
+     "json": "{\"kind\":\"status\",\"status\":{\"code\":\"device-revoked\",\"message\":\"The desktop revoked this phone’s access. Pair it again with a new invitation from Settings → Mobile access.\",\"retryable\":false}}",
+     "record": "000000d21bd7e16e17e7ca652b7951c6bd82fdade3be6df5e0ec946dc95b0ef16dea4ad8a71bdcf292c7e91be58b43f51bf82357aa81717c1714ffd65f76da5c6e27bd7b475de6bb778b35b436a93dec9b3f770d112f0cb3dcc3311d03cce3cbe3b42fae43a6debfecec6d6ac4a6c8e2bbf928e6d7c7deee9a8d2af4855a645366b3b344806030114ff354b6668c7628a170a7c59c2f92866eedbbddb01467109cacf40c9b16517ffe3bded21025b664b2ce8e2fa89a01695305d056adb1e51a1b2d598043d8e61ecfc788e1cb0e3f450b6a9362385e"
+    }
+   ]
+  }
+ ],
+ "rekey": {
+  "key": "555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e",
+  "beforeRekey": "73dfff8ae9a186492e3c602fae675e5fa9839656c62407f28dbf1919",
+  "afterRekey": "41f61558a0c4b4d2f3c1b20346ce7e8d2d9828ee3463dda34c8e1e"
+ },
+ "frame": {
+  "payload": "alpha",
+  "framed": "00000005616c706861",
+  "empty": "00000000"
+ },
+ "statuses": [
+  {
+   "code": "ready",
+   "message": "Connected.",
+   "retryable": true,
+   "terminal": false,
+   "json": "{\"code\":\"ready\",\"message\":\"Connected.\",\"retryable\":true}"
+  },
+  {
+   "code": "pairing-required",
+   "message": "This phone is not paired with the desktop. Scan a current pairing invitation from Settings → Mobile access.",
+   "retryable": false,
+   "terminal": false,
+   "json": "{\"code\":\"pairing-required\",\"message\":\"This phone is not paired with the desktop. Scan a current pairing invitation from Settings → Mobile access.\",\"retryable\":false}"
+  },
+  {
+   "code": "pairing-pending",
+   "message": "Waiting for this phone to be confirmed in Settings → Mobile access on the desktop.",
+   "retryable": true,
+   "terminal": false,
+   "json": "{\"code\":\"pairing-pending\",\"message\":\"Waiting for this phone to be confirmed in Settings → Mobile access on the desktop.\",\"retryable\":true}"
+  },
+  {
+   "code": "pairing-rejected",
+   "message": "The desktop declined this pairing request.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"pairing-rejected\",\"message\":\"The desktop declined this pairing request.\",\"retryable\":false}"
+  },
+  {
+   "code": "invitation-expired",
+   "message": "The pairing invitation has expired. Create a new invitation in Settings → Mobile access and scan it again.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"invitation-expired\",\"message\":\"The pairing invitation has expired. Create a new invitation in Settings → Mobile access and scan it again.\",\"retryable\":false}"
+  },
+  {
+   "code": "invitation-invalid",
+   "message": "The pairing invitation does not match the one the desktop is offering. Scan the invitation currently shown in Settings → Mobile access.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"invitation-invalid\",\"message\":\"The pairing invitation does not match the one the desktop is offering. Scan the invitation currently shown in Settings → Mobile access.\",\"retryable\":false}"
+  },
+  {
+   "code": "invitation-used",
+   "message": "That pairing invitation has already been used. Create a new invitation on the desktop to pair this phone.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"invitation-used\",\"message\":\"That pairing invitation has already been used. Create a new invitation on the desktop to pair this phone.\",\"retryable\":false}"
+  },
+  {
+   "code": "device-revoked",
+   "message": "The desktop revoked this phone’s access. Pair it again with a new invitation from Settings → Mobile access.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"device-revoked\",\"message\":\"The desktop revoked this phone’s access. Pair it again with a new invitation from Settings → Mobile access.\",\"retryable\":false}"
+  },
+  {
+   "code": "host-key-reset",
+   "message": "The desktop reset its host key, so every phone must pair again. Scan a new invitation from Settings → Mobile access.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"host-key-reset\",\"message\":\"The desktop reset its host key, so every phone must pair again. Scan a new invitation from Settings → Mobile access.\",\"retryable\":false}"
+  },
+  {
+   "code": "access-disabled",
+   "message": "Mobile access is turned off on the desktop. Turn it on in Settings → Mobile access.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"access-disabled\",\"message\":\"Mobile access is turned off on the desktop. Turn it on in Settings → Mobile access.\",\"retryable\":false}"
+  },
+  {
+   "code": "access-denied",
+   "message": "The desktop’s mobile access policy does not allow connections from this network.",
+   "retryable": false,
+   "terminal": true,
+   "json": "{\"code\":\"access-denied\",\"message\":\"The desktop’s mobile access policy does not allow connections from this network.\",\"retryable\":false}"
+  },
+  {
+   "code": "host-shutdown",
+   "message": "The Praxis desktop stopped its mobile listener.",
+   "retryable": true,
+   "terminal": true,
+   "json": "{\"code\":\"host-shutdown\",\"message\":\"The Praxis desktop stopped its mobile listener.\",\"retryable\":true}"
+  }
+ ],
+ "statusOverride": {
+  "code": "ready",
+  "message": "Custom.",
+  "retryable": true
+ },
+ "statusBlankOverride": {
+  "code": "host-shutdown",
+  "message": "The Praxis desktop stopped its mobile listener.",
+  "retryable": true
+ },
+ "transportFailures": [
+  {
+   "stage": "connect",
+   "timedOut": false,
+   "cause": null,
+   "code": "unreachable",
+   "message": "Couldn’t reach the Praxis desktop at 192.168.1.20:47120. Check that Praxis is running with Mobile access on, and that the phone is on the same network.",
+   "retryable": true,
+   "detail": null
+  },
+  {
+   "stage": "connect",
+   "timedOut": false,
+   "cause": "ECONNREFUSED",
+   "code": "unreachable",
+   "message": "Couldn’t reach the Praxis desktop at 192.168.1.20:47120 (ECONNREFUSED). Check that Praxis is running with Mobile access on, and that the phone is on the same network.",
+   "retryable": true,
+   "detail": "ECONNREFUSED"
+  },
+  {
+   "stage": "connect",
+   "timedOut": true,
+   "cause": null,
+   "code": "timed-out",
+   "message": "No answer from the Praxis desktop at 192.168.1.20:47120. Check that the phone and desktop are on the same network and that Mobile access is on.",
+   "retryable": true,
+   "detail": null
+  },
+  {
+   "stage": "connect",
+   "timedOut": true,
+   "cause": "ECONNREFUSED",
+   "code": "timed-out",
+   "message": "No answer from the Praxis desktop at 192.168.1.20:47120. Check that the phone and desktop are on the same network and that Mobile access is on.",
+   "retryable": true,
+   "detail": "ECONNREFUSED"
+  },
+  {
+   "stage": "handshake",
+   "timedOut": false,
+   "cause": null,
+   "code": "handshake-rejected",
+   "message": "The desktop closed the secure handshake. Its host key may have been reset, or this phone pinned a different desktop — scan a current pairing invitation from Settings → Mobile access.",
+   "retryable": false,
+   "detail": null
+  },
+  {
+   "stage": "handshake",
+   "timedOut": false,
+   "cause": "ECONNREFUSED",
+   "code": "handshake-rejected",
+   "message": "The desktop closed the secure handshake. Its host key may have been reset, or this phone pinned a different desktop — scan a current pairing invitation from Settings → Mobile access.",
+   "retryable": false,
+   "detail": "ECONNREFUSED"
+  },
+  {
+   "stage": "handshake",
+   "timedOut": true,
+   "cause": null,
+   "code": "timed-out",
+   "message": "No answer from the Praxis desktop at 192.168.1.20:47120. Check that the phone and desktop are on the same network and that Mobile access is on.",
+   "retryable": true,
+   "detail": null
+  },
+  {
+   "stage": "handshake",
+   "timedOut": true,
+   "cause": "ECONNREFUSED",
+   "code": "timed-out",
+   "message": "No answer from the Praxis desktop at 192.168.1.20:47120. Check that the phone and desktop are on the same network and that Mobile access is on.",
+   "retryable": true,
+   "detail": "ECONNREFUSED"
+  },
+  {
+   "stage": "session",
+   "timedOut": false,
+   "cause": null,
+   "code": "connection-lost",
+   "message": "The connection to the Praxis desktop was lost. Reconnecting…",
+   "retryable": true,
+   "detail": null
+  },
+  {
+   "stage": "session",
+   "timedOut": false,
+   "cause": "ECONNREFUSED",
+   "code": "connection-lost",
+   "message": "The connection to the Praxis desktop was lost. Reconnecting…",
+   "retryable": true,
+   "detail": "ECONNREFUSED"
+  },
+  {
+   "stage": "session",
+   "timedOut": true,
+   "cause": null,
+   "code": "timed-out",
+   "message": "The Praxis desktop stopped responding. Reconnecting…",
+   "retryable": true,
+   "detail": null
+  },
+  {
+   "stage": "session",
+   "timedOut": true,
+   "cause": "ECONNREFUSED",
+   "code": "timed-out",
+   "message": "The Praxis desktop stopped responding. Reconnecting…",
+   "retryable": true,
+   "detail": "ECONNREFUSED"
+  }
+ ]
+}
