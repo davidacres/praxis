@@ -1,0 +1,33 @@
+{
+ "seed": "666b70757a7f84898e93989da2a7acb1b6bbc0c5cacfd4d9dee3e8edf2f7fc01",
+ "publicKeyHex": "b78a4e60808657f037ec5dcf38cd92fb0c53d4ab858be87ea0dd3c02182809fe",
+ "nonce": "999c9fa2a5a8abaeb1b4b7babdc0c3c6c9cccfd2d5d8dbdee1e4e7eaedf0f3f6",
+ "signature": "b53b4bc0077521b926381bd365bdcde55d255027992e721ca866cdeaefeacc5567dc8c8700c0042963876b8663040abdf872f935f7fcc4b733cd136bb5062803",
+ "channelId": "65d834d19464b055a86d791aac60a831",
+ "closeCodes": {
+  "badRequest": 4400,
+  "authFailed": 4401,
+  "hostOffline": 4404,
+  "waitTimeout": 4408,
+  "replaced": 4409,
+  "tooManyPeers": 4429,
+  "rateLimited": 4430,
+  "serverBusy": 4503
+ },
+ "defaults": {
+  "maxChannels": 1000,
+  "maxDevicesPerChannel": 8,
+  "maxPendingPerChannel": 4,
+  "maxSocketsPerAddress": 32,
+  "maxConnectsPerMinute": 60,
+  "maxMessageBytes": 1049600,
+  "maxBufferedBytes": 262144,
+  "authTimeoutMs": 10000,
+  "acceptTimeoutMs": 20000,
+  "bytesPerSecond": 4194304,
+  "burstBytes": 8388608,
+  "heartbeatMs": 30000
+ },
+ "context": "praxis-relay-v1|",
+ "version": 1
+}

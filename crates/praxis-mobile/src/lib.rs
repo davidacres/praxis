@@ -3,9 +3,12 @@
 //! A phone and the desktop talk over a Noise `IK` channel (`Noise_IK_25519_ChaChaPoly_SHA256`)
 //! carried as 4-byte big-endian length-prefixed records; inside it, every record is one JSON
 //! frame. Wire-compatible with the TypeScript package and the Flutter app — see each module.
+//! [`relay`] ports the account-free relay (`packages/mobile-relay`) that pipes those bytes
+//! between a phone and a desktop that cannot reach each other directly.
 
 pub mod client;
 pub mod noise;
+pub mod relay;
 pub mod secure_channel;
 pub mod session_mirror;
 pub mod wire;

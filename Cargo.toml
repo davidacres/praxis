@@ -52,6 +52,7 @@ eventsource-stream = "0.2"
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 axum = { version = "0.8", features = ["ws", "macros"] }
 async-trait = "0.1"
+futures-util = "0.3"
 thiserror = "2.0"
 
 # Markdown, file watching, PTY, archives & crypto
