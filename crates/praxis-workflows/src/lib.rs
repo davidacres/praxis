@@ -22,6 +22,7 @@ pub mod scheduled_budget;
 pub mod scheduled_run;
 pub mod scheduled_run_execution;
 pub mod scheduled_run_readiness;
+pub mod scheduled_run_runner;
 pub mod scheduled_run_store;
 pub mod scheduled_run_time;
 pub mod scheduled_ticket_status;

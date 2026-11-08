@@ -301,7 +301,23 @@ pub enum ScheduledRunPolicy {
     },
 }
 
+/// Whether a run works its tickets one at a time or in parallel lanes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScheduledRunPolicyMode {
+    Sequential,
+    Parallel,
+}
+
 impl ScheduledRunPolicy {
+    /// Whether the run is sequential or parallel.
+    #[must_use]
+    pub fn mode(&self) -> ScheduledRunPolicyMode {
+        match self {
+            Self::Sequential { .. } => ScheduledRunPolicyMode::Sequential,
+            Self::Parallel { .. } => ScheduledRunPolicyMode::Parallel,
+        }
+    }
+
     /// The workflow each ticket is started with, when one was chosen.
     #[must_use]
     pub fn workflow_id(&self) -> Option<&String> {
