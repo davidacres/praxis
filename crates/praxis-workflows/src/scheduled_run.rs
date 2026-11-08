@@ -528,7 +528,9 @@ fn assert_editable(run: &ScheduledRun) -> Result<(), String> {
     }
 }
 
-fn status_word(status: ScheduledRunStatus) -> &'static str {
+/// The status as a word, the way the messages that mention it phrase it.
+#[must_use]
+pub fn status_word(status: ScheduledRunStatus) -> &'static str {
     match status {
         ScheduledRunStatus::Draft => "draft",
         ScheduledRunStatus::Scheduled => "scheduled",

@@ -20,6 +20,7 @@ pub mod run_reconciliation;
 pub mod run_service_manager;
 pub mod scheduled_budget;
 pub mod scheduled_run;
+pub mod scheduled_run_execution;
 pub mod scheduled_run_readiness;
 pub mod scheduled_run_store;
 pub mod scheduled_run_time;

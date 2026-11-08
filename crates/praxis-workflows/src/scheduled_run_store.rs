@@ -11,12 +11,12 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{Map, Value};
 
 use crate::scheduled_run::{
-    MAX_SCHEDULED_CONCURRENCY, SCHEDULED_RUN_SCHEMA_VERSION, ScheduledEntryOutcome,
+    EventDraft, MAX_SCHEDULED_CONCURRENCY, SCHEDULED_RUN_SCHEMA_VERSION, ScheduledEntryOutcome,
     ScheduledEntryStatus, ScheduledPauseReason, ScheduledQueueEntry, ScheduledRun,
     ScheduledRunAttempt, ScheduledRunEvent, ScheduledRunEventKind, ScheduledRunPause,
     ScheduledRunPolicy, ScheduledRunStatus, ScheduledRunTrigger, ScheduledTicketRef,
     add_tickets_to_scheduled_run, arm_scheduled_run, reconcile_scheduled_run_on_launch,
-    rename_scheduled_run, renumber_entries, touch,
+    renumber_entries, touch,
 };
 use crate::scheduled_run_time::is_valid_time_zone;
 
@@ -285,7 +285,19 @@ impl<B: ScheduledRunBackend> ScheduledRunStore<B> {
         if next == run.name {
             return Ok(run);
         }
-        let renamed = rename_scheduled_run(run, name, at)?;
+        // Any run can be renamed to give it a descriptive label — including one that has already
+        // finished, whose queue can no longer be edited.
+        let mut renamed = run;
+        renamed.name = next.to_string();
+        let renamed = touch(
+            renamed,
+            at,
+            Some(EventDraft {
+                kind: ScheduledRunEventKind::Renamed,
+                message: format!("Renamed to \"{next}\"."),
+                entry_id: None,
+            }),
+        );
         self.save(renamed)
     }
 
@@ -691,10 +703,10 @@ mod tests {
     }
 
     #[test]
-    fn rename_updates_the_name_and_records_an_event() {
+    fn rename_updates_the_name_and_records_an_event_on_any_status() {
         let mut store = ScheduledRunStore::new(Memory::default());
         let mut run = make("Old Name", "2026-10-21T10:00:00Z", "to-rename");
-        run.status = ScheduledRunStatus::Scheduled;
+        run.status = ScheduledRunStatus::Completed;
         store.save(run).expect("save");
 
         let renamed = store
@@ -721,19 +733,22 @@ mod tests {
     }
 
     #[test]
-    fn a_run_that_can_no_longer_be_edited_is_not_renamed() {
+    fn a_blank_name_and_an_unknown_run_are_refused() {
         let mut store = ScheduledRunStore::new(Memory::default());
-        let mut run = make("Old Name", "2026-10-21T10:00:00Z", "to-rename");
-        run.status = ScheduledRunStatus::Completed;
-        store.save(run).expect("save");
-
-        let error = store
-            .rename("to-rename", "New Name", NOW)
-            .expect_err("refused");
-        assert!(error.contains("can no longer be edited"), "{error}");
-        assert_eq!(
-            store.get("to-rename").map(|r| r.name),
-            Some("Old Name".into())
+        store
+            .save(make("Old Name", "2026-10-21T10:00:00Z", "to-rename"))
+            .expect("save");
+        assert!(
+            store
+                .rename("to-rename", "   ", NOW)
+                .expect_err("blank")
+                .contains("needs a name")
+        );
+        assert!(
+            store
+                .rename("nope", "New Name", NOW)
+                .expect_err("missing")
+                .contains("was not found")
         );
     }
 }
