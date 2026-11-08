@@ -24,3 +24,5 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+futures-core = "0.3.34"
+bytes = "1.12.1"

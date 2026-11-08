@@ -933,48 +933,73 @@ pub async fn consume_chat_stream(
 
 #[cfg(test)]
 mod stream_tests {
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    use futures_core::Stream;
+
     use super::{
-        ByteStream, ChatCompletionResult, ChatStreamEvent, collect_chat_completion,
+        ChatCompletionResult, ChatStreamEvent, EventStream, SseEvent, collect_chat_completion,
         consume_chat_stream, parse_tool_arguments,
     };
 
-    /// A response body that hands over fixed pieces.
+    /// A response that hands over fixed events.
     struct FakeStream {
-        chunks: Vec<Result<Vec<u8>, String>>,
+        events: Vec<Result<SseEvent, String>>,
         index: usize,
     }
 
     impl FakeStream {
-        fn new(chunks: &[&str]) -> Self {
-            Self {
-                chunks: chunks
-                    .iter()
-                    .map(|chunk| Ok(chunk.as_bytes().to_vec()))
-                    .collect(),
-                index: 0,
-            }
+        fn new(events: Vec<SseEvent>) -> Self {
+            Self { events, index: 0 }
         }
     }
 
     #[async_trait::async_trait]
-    impl ByteStream for FakeStream {
-        async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, String>> {
-            let chunk = self.chunks.get(self.index)?.clone();
+    impl EventStream for FakeStream {
+        async fn next_event(&mut self) -> Option<Result<SseEvent, String>> {
+            let event = self.events.get(self.index)?.clone();
             self.index += 1;
-            Some(chunk)
+            Some(event)
         }
     }
 
-    fn sse(payload: &serde_json::Value) -> String {
-        format!("data: {payload}\n\n")
+    /// A body that hands over fixed pieces of bytes.
+    struct FakeBody {
+        chunks: Vec<bytes::Bytes>,
+        index: usize,
+    }
+
+    impl Stream for FakeBody {
+        type Item = Result<bytes::Bytes, std::io::Error>;
+
+        fn poll_next(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let chunk = self.get_mut().chunks.get(self.get_mut().index)?;
+            self.get_mut().index += 1;
+            Poll::Ready(Some(Ok(chunk.clone())))
+        }
+    }
+
+    fn event(payload: serde_json::Value) -> SseEvent {
+        SseEvent {
+            event: None,
+            data: payload.to_string(),
+        }
+    }
+
+    fn done() -> SseEvent {
+        SseEvent {
+            event: None,
+            data: "[DONE]".to_string(),
+        }
     }
 
     #[tokio::test]
     async fn reads_text_deltas_into_the_answer() {
-        let mut stream = FakeStream::new(&[
-            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": "Hello" } }] })),
-            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": " there" } }] })),
-            "data: [DONE]\n\n",
+        let mut stream = FakeStream::new(vec![
+            event(serde_json::json!({ "choices": [{ "delta": { "content": "Hello" } }] })),
+            event(serde_json::json!({ "choices": [{ "delta": { "content": " there" } }] })),
+            done(),
         ]);
         let mut events: Vec<ChatStreamEvent> = Vec::new();
         let result = consume_chat_stream(&mut stream, |event| events.push(event))
@@ -988,9 +1013,9 @@ mod stream_tests {
 
     #[tokio::test]
     async fn stops_reading_at_the_done_marker() {
-        let mut stream = FakeStream::new(&[
-            "data: [DONE]\n\n",
-            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": "ignored" } }] })),
+        let mut stream = FakeStream::new(vec![
+            done(),
+            event(serde_json::json!({ "choices": [{ "delta": { "content": "ignored" } }] })),
         ]);
         let result = consume_chat_stream(&mut stream, |_| {})
             .await
@@ -1001,11 +1026,11 @@ mod stream_tests {
 
     #[tokio::test]
     async fn assembles_a_tool_call_from_its_deltas() {
-        let mut stream = FakeStream::new(&[
-            &sse(&serde_json::json!({
+        let mut stream = FakeStream::new(vec![
+            event(serde_json::json!({
                 "choices": [{ "delta": { "tool_calls": [{ "index": 0, "id": "call_1", "function": { "name": "read_file", "arguments": "{\"path\":" } }] } }]
             })),
-            &sse(&serde_json::json!({
+            event(serde_json::json!({
                 "choices": [{ "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": "\"a.txt\"}" } }] } }]
             })),
         ]);
@@ -1024,7 +1049,7 @@ mod stream_tests {
 
     #[tokio::test]
     async fn reports_the_usage_the_provider_sends() {
-        let mut stream = FakeStream::new(&[&sse(&serde_json::json!({
+        let mut stream = FakeStream::new(vec![event(serde_json::json!({
             "choices": [{ "delta": {}, "finish_reason": "stop" }],
             "usage": {
                 "prompt_tokens": 120,
@@ -1048,9 +1073,12 @@ mod stream_tests {
 
     #[tokio::test]
     async fn skips_a_payload_that_is_not_json() {
-        let mut stream = FakeStream::new(&[
-            "data: not json\n\n",
-            &sse(&serde_json::json!({ "choices": [{ "delta": { "content": "ok" } }] })),
+        let mut stream = FakeStream::new(vec![
+            SseEvent {
+                event: None,
+                data: "not json".to_string(),
+            },
+            event(serde_json::json!({ "choices": [{ "delta": { "content": "ok" } }] })),
         ]);
         let result = consume_chat_stream(&mut stream, |_| {})
             .await
@@ -1061,15 +1089,43 @@ mod stream_tests {
 
     #[tokio::test]
     async fn reads_a_payload_that_lands_across_two_chunks() {
-        let mut stream = FakeStream::new(&[
-            "data: {\"choices\":[{\"delta\":{\"con",
-            "tent\":\"split\"}}]}\n\n",
-        ]);
-        let result = consume_chat_stream(&mut stream, |_| {})
-            .await
-            .expect("the stream completes");
+        let body: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> =
+            Box::pin(FakeBody {
+                chunks: vec![
+                    bytes::Bytes::from_static(b"data: {\"choices\":[{\"delta\":{\"con"),
+                    bytes::Bytes::from_static(b"tent\":\"split\"}}]}\n\n"),
+                ],
+                index: 0,
+            });
+        let mut source = eventsource_stream::EventSource::new(body);
 
-        assert_eq!(result.text, "split");
+        let first = std::future::poll_fn(|context| source.as_mut().poll_next(context)).await;
+
+        let event = first.expect("an event").expect("a well-formed event");
+        assert_eq!(
+            event.data,
+            "{\"choices\":[{\"delta\":{\"content\":\"split\"}}]}"
+        );
+    }
+
+    #[tokio::test]
+    async fn keeps_the_event_type_the_stream_named() {
+        let body: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, std::io::Error>> + Send>> =
+            Box::pin(FakeBody {
+                chunks: vec![bytes::Bytes::from_static(
+                    b"event: content_block_delta\ndata: {\"delta\":{\"text\":\"Hi\"}}\n\n",
+                )],
+                index: 0,
+            });
+        let mut source = eventsource_stream::EventSource::new(body);
+
+        let event = std::future::poll_fn(|context| source.as_mut().poll_next(context))
+            .await
+            .expect("an event")
+            .expect("a well-formed event");
+
+        assert_eq!(event.event.as_deref(), Some("content_block_delta"));
+        assert_eq!(event.data, "{\"delta\":{\"text\":\"Hi\"}}");
     }
 
     #[test]
@@ -1114,116 +1170,5 @@ mod stream_tests {
         let result = collect_chat_completion(&payload);
 
         assert_eq!(result.tool_calls[0].id, "call_0");
-    }
-}
-
-/// A response body read from `reqwest`.
-pub struct ReqwestByteStream {
-    response: reqwest::Response,
-}
-
-impl ReqwestByteStream {
-    #[must_use]
-    pub fn new(response: reqwest::Response) -> Self {
-        Self { response }
-    }
-}
-
-#[async_trait::async_trait]
-impl ByteStream for ReqwestByteStream {
-    async fn next_chunk(&mut self) -> Option<Result<Vec<u8>, String>> {
-        match self.response.chunk().await {
-            Some(Ok(bytes)) => Some(Ok(bytes.to_vec())),
-            Some(Err(error)) => Some(Err(error.to_string())),
-            None => None,
-        }
-    }
-}
-
-/// Sends chat requests to a provider.
-#[async_trait::async_trait]
-pub trait ChatTransport: Send + Sync {
-    /// Posts a request and reads the whole answer.
-    async fn post(&self, url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String>;
-
-    /// Posts a request and reads the answer as it arrives.
-    async fn post_stream(
-        &self,
-        url: &str,
-        body: &serde_json::Value,
-    ) -> Result<Box<dyn ByteStream>, String>;
-}
-
-/// A transport that talks to a provider over HTTP.
-pub struct ReqwestChatTransport {
-    client: reqwest::Client,
-    /// Sent with every request, for the provider's authentication.
-    bearer_token: Option<String>,
-    /// Extra headers sent with every request.
-    headers: Vec<(String, String)>,
-}
-
-impl ReqwestChatTransport {
-    /// A transport that authenticates with a bearer token.
-    #[must_use]
-    pub fn with_bearer_token(token: Option<String>) -> Self {
-        Self {
-            client: reqwest::Client::new(),
-            bearer_token: token,
-            headers: Vec::new(),
-        }
-    }
-
-    /// Adds a header sent with every request.
-    #[must_use]
-    pub fn with_header(mut self, name: &str, value: &str) -> Self {
-        self.headers.push((name.to_string(), value.to_string()));
-        self
-    }
-
-    fn request(&self, url: &str, body: &serde_json::Value) -> reqwest::RequestBuilder {
-        let mut request = self.client.post(url).json(body);
-        if let Some(token) = &self.bearer_token {
-            request = request.bearer_auth(token.trim());
-        }
-        for (name, value) in &self.headers {
-            request = request.header(name, value);
-        }
-        request
-    }
-}
-
-#[async_trait::async_trait]
-impl ChatTransport for ReqwestChatTransport {
-    async fn post(&self, url: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
-        let response = self
-            .request(url, body)
-            .send()
-            .await
-            .map_err(|error| error.to_string())?;
-        let status = response.status();
-        let text = response.text().await.map_err(|error| error.to_string())?;
-        if !status.is_success() {
-            return Err(format!("The provider answered {status}: {text}"));
-        }
-        serde_json::Value::from_str(&text).map_err(|error| error.to_string())
-    }
-
-    async fn post_stream(
-        &self,
-        url: &str,
-        body: &serde_json::Value,
-    ) -> Result<Box<dyn ByteStream>, String> {
-        let response = self
-            .request(url, body)
-            .send()
-            .await
-            .map_err(|error| error.to_string())?;
-        let status = response.status();
-        if !status.is_success() {
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!("The provider answered {status}: {text}"));
-        }
-        Ok(Box::new(ReqwestByteStream::new(response)))
     }
 }

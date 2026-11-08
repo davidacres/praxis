@@ -1345,8 +1345,10 @@ name = "praxis-ai"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "chrono",
  "eventsource-stream",
+ "futures-core",
  "praxis-contracts",
  "praxis-core",
  "praxis-trackers",
