@@ -64,6 +64,7 @@ ed25519-dalek = { version = "2.1", features = ["rand_core", "pkcs8"] }
 semver = { version = "1.0", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 cron = "0.15"
+url = "2.5"
 
 # Node / Electron N-API bridge
 napi = { version = "2.16", default-features = false, features = ["napi9", "async", "serde-json"] }

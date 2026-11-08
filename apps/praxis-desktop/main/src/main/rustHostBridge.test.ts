@@ -5,7 +5,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
-import type { RustEventEnvelope, RustHostStatus } from '@praxis/core';
+import {
+  DEFAULT_APP_SETTINGS,
+  mergeAppSettings,
+  readWorkspaceFile,
+  resolvePortableFolderPath,
+  sanitizeAppSettings,
+  toPortableFolderPath,
+  toWorkspaceFile,
+  type AppSettings,
+  type RustEventEnvelope,
+  type RustHostStatus,
+  type WorkspaceRecord
+} from '@praxis/core';
 import { attachRendererNavigationGuard, isOwnRendererSender, rendererDir } from './rendererNavigationGuard';
 import {
   RustHostBridge,
@@ -222,4 +234,149 @@ test('broadcastRustEventToWindows: preserves single-array payloads for detachedC
       args: [['FX-101', 'FX-102']]
     }
   ]);
+});
+
+test('Rust host settings and workspace channels produce byte-identical results to @praxis/core', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-golden-test-'));
+  const settingsPath = path.join(userDataDir, 'settings.json');
+  const transport = new StdioRustHostTransport({
+    userDataDir,
+    settingsPath
+  });
+  const bridge = new RustHostBridge({ transport });
+
+  try {
+    await bridge.start();
+
+    // 1. Fresh settings:get matches sanitizeAppSettings({})
+    const rustDefaults = await bridge.invoke<AppSettings>('settings:get');
+    assert.deepEqual(rustDefaults, sanitizeAppSettings({}));
+
+    // 2. Complex sanitize + merge golden comparison
+    const complexPatch = {
+      startup: { reopenLastWorkspace: false },
+      appearance: {
+        surfacePackId: 'graphite',
+        accentColor: '#12ABcd',
+        surface: {
+          intensity: 0.65,
+          motif: {
+            id: 'hexagon',
+            scale: 999,
+            opacity: 0.4,
+            ink: 'custom' as const,
+            inkColor: '#4ec9b0',
+            placement: 'corner' as const,
+            anchors: ['top-right' as const, 'bottom-left' as const]
+          }
+        }
+      },
+      ai: {
+        providerHandoverPercent: 85,
+        activityWords: ['Analyzing', 'Synthesizing'],
+        codeIntelligence: {
+          enabled: false,
+          projectOverrides: { '/repo/praxis': true },
+          searchMode: 'hybrid' as const
+        }
+      },
+      mobileAccess: {
+        mode: 'local-only' as const,
+        allowedSubnets: ['192.168.1.0/24', 'fd00::/8']
+      }
+    };
+
+    const rustUpdated = await bridge.invoke<AppSettings>('settings:set', complexPatch);
+    const tsExpected = JSON.parse(
+      JSON.stringify(sanitizeAppSettings(mergeAppSettings(DEFAULT_APP_SETTINGS, complexPatch)))
+    ) as AppSettings;
+    assert.deepEqual(rustUpdated, tsExpected);
+
+    // 3. Workspace file serialization, secret stripping, folderInspection removal, and portable path resolution
+    const workspace: WorkspaceRecord = {
+      id: 'ws-golden',
+      name: 'Golden Team',
+      description: 'Portable workspace test',
+      projectIds: ['proj-1'],
+      connectionIds: ['conn-1'],
+      objectives: ['Zero drift'],
+      defaultProjectId: 'proj-1',
+      storagePath: '/Users/someone/dev/praxis/golden-team.workspace.praxis.json',
+      createdAt: '2026-11-08T00:00:00.000Z',
+      updatedAt: '2026-11-08T00:00:00.000Z',
+      createdWithAppVersion: '0.1.0',
+      lastSavedWithAppVersion: '0.1.0',
+      schemaVersion: 2
+    };
+    const contents = {
+      projects: [
+        {
+          id: 'proj-1',
+          name: 'Praxis',
+          key: 'PRX',
+          type: 'software' as const,
+          purpose: '',
+          brief: {},
+          storage: 'folder' as const,
+          workspaceFolder: '/Users/someone/dev/praxis/apps/praxis-desktop',
+          workflowStages: [],
+          defaultBoardId: 'board-1',
+          workItems: [],
+          linkedBoards: [],
+          defaultAiToolMode: 'full' as const,
+          folderInspection: {
+            path: '/Users/someone/dev/praxis/apps/praxis-desktop',
+            exists: true,
+            isDirectory: true,
+            hasGit: true,
+            projectFileExists: true,
+            manifests: ['package.json'],
+            languages: ['TypeScript'],
+            frameworks: ['Electron']
+          },
+          createdAt: '2026-11-08T00:00:00.000Z',
+          updatedAt: '2026-11-08T00:00:00.000Z'
+        }
+      ],
+      connections: [
+        {
+          id: 'conn-1',
+          name: 'Plans',
+          type: 'folder' as const,
+          mode: 'folder' as const,
+          baseUrl: '',
+          HasStoredSecret: false,
+          settings: {
+            roots: ['/Users/someone/dev/praxis/docs/plans', '/opt/external/plans'],
+            apiToken: 'must-be-stripped',
+            pat: 'must-also-be-stripped'
+          }
+        }
+      ],
+      boards: []
+    };
+
+    const wsDir = '/Users/someone/dev/praxis';
+    const rustDoc = await bridge.invoke('workspaces:toFile', workspace, contents, wsDir);
+    const tsDoc = toWorkspaceFile(workspace, contents, wsDir);
+    assert.deepEqual(rustDoc, tsDoc);
+
+    const rawJson = JSON.stringify(rustDoc, null, 2);
+    const cloneDir = '/Volumes/work/cloned-praxis';
+    const rustRead = await bridge.invoke('workspaces:readFile', rawJson, cloneDir);
+    const tsRead = readWorkspaceFile(rawJson, cloneDir);
+    assert.deepEqual(rustRead, tsRead);
+
+    assert.equal(
+      await bridge.invoke<string>('workspaces:toPortablePath', '/Users/someone/dev/praxis/apps/web', wsDir),
+      toPortableFolderPath('/Users/someone/dev/praxis/apps/web', wsDir)
+    );
+    assert.equal(
+      await bridge.invoke<string>('workspaces:resolvePortablePath', './apps/web', cloneDir),
+      resolvePortableFolderPath('./apps/web', cloneDir)
+    );
+  } finally {
+    await bridge.dispose();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
 });

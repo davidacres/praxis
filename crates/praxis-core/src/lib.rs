@@ -2,6 +2,11 @@
 //! settings sanitization, workspaces, project workflows, folder markdown plans,
 //! git CLI parsing/worktrees, path sandboxing, unified diffs, and marketplace archives.
 
+pub mod config;
+pub mod network_address;
+pub mod ui;
+pub mod workspaces;
+
 use praxis_contracts::RustHostStatus;
 
 /// Returns the core crate identifier and contract protocol version.

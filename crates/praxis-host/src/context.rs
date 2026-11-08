@@ -4,6 +4,13 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
 use praxis_contracts::{RustRpcError, RustRpcRequest, RustRpcResponse};
+use praxis_core::config::{
+    AppSettings, SharedSettingsStore, merge_app_settings, sanitize_app_settings,
+};
+use praxis_core::workspaces::{
+    WorkspaceContents, WorkspaceRecord, read_workspace_file, resolve_portable_folder_path,
+    to_portable_folder_path, to_workspace_file, workspace_file_name,
+};
 use serde_json::{Value, json};
 
 use crate::config::HostConfig;
@@ -20,6 +27,7 @@ pub struct HostContext {
     config: Arc<HostConfig>,
     events: HostEventBus,
     secrets: HostSecretStore,
+    settings: Arc<SharedSettingsStore>,
     handlers: Arc<RwLock<BTreeMap<String, Arc<RpcHandlerFn>>>>,
 }
 
@@ -34,13 +42,15 @@ impl std::fmt::Debug for HostContext {
 
 impl HostContext {
     /// Initializes a new [`HostContext`] with the given isolated [`HostConfig`] and registers
-    /// built-in host diagnostic, event, and secret-bridge channels.
+    /// built-in host diagnostic, event, secret-bridge, settings, and workspace channels.
     #[must_use]
     pub fn new(config: HostConfig) -> Self {
+        let settings = Arc::new(SharedSettingsStore::new(&config.settings_path));
         let ctx = Self {
             config: Arc::new(config),
             events: HostEventBus::default(),
             secrets: HostSecretStore::new(),
+            settings,
             handlers: Arc::new(RwLock::new(BTreeMap::new())),
         };
         ctx.register_builtin_handlers();
@@ -63,6 +73,12 @@ impl HostContext {
     #[must_use]
     pub fn secrets(&self) -> &HostSecretStore {
         &self.secrets
+    }
+
+    /// Returns the shared `settings.json` store.
+    #[must_use]
+    pub fn settings(&self) -> &SharedSettingsStore {
+        &self.settings
     }
 
     /// Registers or replaces an RPC handler for `channel`.
@@ -254,21 +270,131 @@ impl HostContext {
                 })?;
             Ok(json!(ctx.secrets.seed(entries)))
         });
+
+        self.register_settings_and_workspace_handlers();
+    }
+
+    fn register_settings_and_workspace_handlers(&self) {
+        self.register_handler("settings:get", |ctx, _args| {
+            serde_json::to_value(ctx.settings.read()).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("settings:set", |ctx, args| {
+            let patch = args.first().cloned().unwrap_or_else(|| json!({}));
+            let updated = ctx.settings.write(&patch).map_err(|err| RustRpcError {
+                code: "SETTINGS_WRITE_ERROR".to_string(),
+                message: err.to_string(),
+            })?;
+            let payload = serde_json::to_value(&updated).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })?;
+            ctx.events.emit("settings:changed", Some(payload.clone()));
+            Ok(payload)
+        });
+
+        self.register_handler("settings:sanitize", |_ctx, args| {
+            let raw = args.first().cloned().unwrap_or(Value::Null);
+            serde_json::to_value(sanitize_app_settings(&raw)).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("settings:merge", |_ctx, args| {
+            let base_val = args.first().cloned().unwrap_or_else(|| json!({}));
+            let patch_val = args.get(1).cloned().unwrap_or_else(|| json!({}));
+            let base: AppSettings = serde_json::from_value(base_val)
+                .unwrap_or_else(|_| sanitize_app_settings(&Value::Null));
+            serde_json::to_value(merge_app_settings(&base, &patch_val)).map_err(|err| {
+                RustRpcError {
+                    code: "INTERNAL_ERROR".to_string(),
+                    message: err.to_string(),
+                }
+            })
+        });
+
+        self.register_handler("workspaces:fileName", |_ctx, args| {
+            let name = args.first().and_then(Value::as_str).unwrap_or_default();
+            Ok(Value::String(workspace_file_name(name)))
+        });
+
+        self.register_handler("workspaces:toPortablePath", |_ctx, args| {
+            let path = args.first().and_then(Value::as_str).unwrap_or_default();
+            let dir = args.get(1).and_then(Value::as_str).unwrap_or_default();
+            Ok(Value::String(to_portable_folder_path(path, dir)))
+        });
+
+        self.register_handler("workspaces:resolvePortablePath", |_ctx, args| {
+            let path = args.first().and_then(Value::as_str).unwrap_or_default();
+            let dir = args.get(1).and_then(Value::as_str).unwrap_or_default();
+            Ok(Value::String(resolve_portable_folder_path(path, dir)))
+        });
+
+        self.register_handler("workspaces:toFile", |_ctx, args| {
+            let ws_val = args.first().cloned().ok_or_else(|| RustRpcError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "workspaces:toFile requires a WorkspaceRecord.".to_string(),
+            })?;
+            let workspace: WorkspaceRecord =
+                serde_json::from_value(ws_val).map_err(|err| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: format!("Invalid WorkspaceRecord: {err}"),
+                })?;
+            let contents: WorkspaceContents = args
+                .get(1)
+                .cloned()
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default();
+            let dir = args.get(2).and_then(Value::as_str);
+            let doc =
+                to_workspace_file(&workspace, &contents, dir).map_err(|msg| RustRpcError {
+                    code: "VALIDATION_ERROR".to_string(),
+                    message: msg,
+                })?;
+            serde_json::to_value(doc).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
+
+        self.register_handler("workspaces:readFile", |_ctx, args| {
+            let raw = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| RustRpcError {
+                    code: "INVALID_ARGUMENT".to_string(),
+                    message: "workspaces:readFile requires raw JSON string.".to_string(),
+                })?;
+            let dir = args.get(1).and_then(Value::as_str);
+            let parsed = read_workspace_file(raw, dir).map_err(|msg| RustRpcError {
+                code: "VALIDATION_ERROR".to_string(),
+                message: msg,
+            })?;
+            serde_json::to_value(parsed).map_err(|err| RustRpcError {
+                code: "INTERNAL_ERROR".to_string(),
+                message: err.to_string(),
+            })
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn test_context() -> HostContext {
-        let config = HostConfig::new(
-            "/tmp/praxis-test-profile",
-            "/tmp/praxis-test-profile/test-settings.json",
-            true,
-            true,
-        )
-        .expect("config");
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir = format!("/tmp/praxis-test-profile-{nanos}");
+        let settings = format!("{dir}/test-settings.json");
+        let config = HostConfig::new(&dir, &settings, true, true).expect("config");
         HostContext::new(config)
     }
 
@@ -298,10 +424,53 @@ mod tests {
         let cfg_val = cfg_res.result.expect("config result");
         assert_eq!(cfg_val.get("demoMode"), Some(&json!(true)));
         assert_eq!(cfg_val.get("e2eMode"), Some(&json!(true)));
+    }
+
+    #[test]
+    fn settings_and_workspace_rpc_channels_roundtrip() {
+        let ctx = test_context();
+        let get_res = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-s1".to_string(),
+            channel: "settings:get".to_string(),
+            args: vec![],
+        });
+        assert!(get_res.ok);
         assert_eq!(
-            cfg_val.get("userDataDir"),
-            Some(&json!("/tmp/praxis-test-profile"))
+            get_res
+                .result
+                .as_ref()
+                .and_then(|v| v.get("startup"))
+                .and_then(|s| s.get("reopenLastWorkspace")),
+            Some(&json!(true))
         );
+
+        let set_res = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-s2".to_string(),
+            channel: "settings:set".to_string(),
+            args: vec![json!({ "startup": { "reopenLastWorkspace": false } })],
+        });
+        assert!(set_res.ok);
+        assert_eq!(
+            set_res
+                .result
+                .as_ref()
+                .and_then(|v| v.get("startup"))
+                .and_then(|s| s.get("reopenLastWorkspace")),
+            Some(&json!(false))
+        );
+
+        let fname_res = ctx.dispatch_rpc(RustRpcRequest {
+            id: "req-w1".to_string(),
+            channel: "workspaces:fileName".to_string(),
+            args: vec![json!("Client Work")],
+        });
+        assert!(fname_res.ok);
+        assert_eq!(
+            fname_res.result,
+            Some(json!("client-work.workspace.praxis.json"))
+        );
+
+        let _ = std::fs::remove_dir_all(&ctx.config().user_data_dir);
     }
 
     #[test]

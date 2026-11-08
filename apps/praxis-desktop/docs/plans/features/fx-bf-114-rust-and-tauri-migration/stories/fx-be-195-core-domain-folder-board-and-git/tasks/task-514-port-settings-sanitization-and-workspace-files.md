@@ -2,12 +2,12 @@
 **Created:** 2026-11-07T21:21:09.521Z
 id: TASK-514
 type: Task
-status: To Do
+status: Done
 ---
 
 # Port AppSettings sanitization and .workspace.praxis.json I/O
 
-**Status:** To Do
+**Status:** Done
 **Type:** Task
 **Priority:** Critical
 
