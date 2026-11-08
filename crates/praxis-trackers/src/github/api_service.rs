@@ -16,11 +16,11 @@ use reqwest::{Client, Method, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::rest_support::{as_string, as_u64, encode_uri_component, truncate_error_detail};
+
 pub const GITHUB_API_VERSION: &str = "2022-11-28";
 pub const DEFAULT_GITHUB_API_URL: &str = "https://api.github.com";
 pub const GITHUB_USER_AGENT: &str = "praxis";
-
-const MAX_ERROR_DETAIL_CHARS: usize = 200;
 
 /// Where and as whom the client talks to GitHub.
 #[derive(Clone, PartialEq, Eq)]
@@ -180,43 +180,6 @@ pub struct UpdateGitHubIssueInput {
     pub assignees: Option<Vec<String>>,
 }
 
-/// `String(value)` for a string, number or boolean; `None` for anything else.
-pub(crate) fn as_string(value: Option<&Value>) -> Option<String> {
-    match value? {
-        Value::String(text) => Some(text.clone()),
-        Value::Number(number) => Some(number.to_string()),
-        Value::Bool(flag) => Some(flag.to_string()),
-        _ => None,
-    }
-}
-
-fn as_number(value: Option<&Value>) -> u64 {
-    match value {
-        Some(Value::Number(number)) => number.as_u64().unwrap_or(0),
-        Some(Value::String(text)) => text.trim().parse().unwrap_or(0),
-        _ => 0,
-    }
-}
-
-/// `encodeURIComponent`: escapes everything but `A–Z a–z 0–9 - _ . ! ~ * ' ( )`.
-#[must_use]
-pub fn encode_uri_component(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric()
-            || matches!(
-                byte,
-                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
-            )
-        {
-            encoded.push(char::from(byte));
-        } else {
-            encoded.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    encoded
-}
-
 /// GitHub returns `{"message": "...", "errors": [{resource, field, code, message}]}` for
 /// validation failures and a plain `{"message": "..."}` for everything else; this keeps the
 /// UI message short rather than surfacing the raw body.
@@ -264,19 +227,6 @@ fn extract_github_error_detail(response_text: &str) -> Option<String> {
     Some(truncate_error_detail(trimmed))
 }
 
-fn truncate_error_detail(value: &str) -> String {
-    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    if normalized.chars().count() > MAX_ERROR_DETAIL_CHARS {
-        let head: String = normalized
-            .chars()
-            .take(MAX_ERROR_DETAIL_CHARS - 1)
-            .collect();
-        format!("{head}…")
-    } else {
-        normalized
-    }
-}
-
 fn normalize_user(raw: Option<&Value>) -> Option<GitHubUser> {
     let raw = raw?.as_object()?;
     let login = as_string(raw.get("login")).filter(|login| !login.is_empty())?;
@@ -310,8 +260,8 @@ fn normalize_issue(raw: Value) -> GitHubIssue {
         })
         .unwrap_or_default();
     GitHubIssue {
-        id: as_number(raw.get("id")),
-        number: as_number(raw.get("number")),
+        id: as_u64(raw.get("id")),
+        number: as_u64(raw.get("number")),
         title: as_string(raw.get("title")).unwrap_or_default(),
         state: as_string(raw.get("state")).unwrap_or_else(|| "open".to_string()),
         html_url: as_string(raw.get("html_url")),
@@ -633,8 +583,7 @@ mod tests {
 
     use super::{
         CreateGitHubIssueInput, GitHubApiConfig, GitHubApiError, GitHubApiService,
-        GitHubIssueState, UpdateGitHubIssueInput, encode_uri_component, format_github_error,
-        parse_github_next_link,
+        GitHubIssueState, UpdateGitHubIssueInput, format_github_error, parse_github_next_link,
     };
     use crate::test_support::{MockResponse, MockServer};
 
@@ -689,13 +638,6 @@ mod tests {
             message.split(": ").nth(1).map(|d| d.chars().count()),
             Some(200)
         );
-    }
-
-    #[test]
-    fn uri_components_are_encoded_like_javascript() {
-        assert_eq!(encode_uri_component("octo cat/x"), "octo%20cat%2Fx");
-        assert_eq!(encode_uri_component("a-b_c.d!~*'()"), "a-b_c.d!~*'()");
-        assert_eq!(encode_uri_component("é"), "%C3%A9");
     }
 
     #[test]

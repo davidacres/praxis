@@ -7,9 +7,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-
-use crate::issue_tracker_service::TrackerResult;
+use crate::rest_support::TrackerSecretSource;
 
 /// Host-neutral GitHub connection settings.
 pub trait GitHubConfigStore: Send + Sync {
@@ -24,12 +22,6 @@ pub trait GitHubConfigStore: Send + Sync {
     fn get_github_allow_issue_creation(&self) -> bool;
 }
 
-/// Resolves the personal access token from the host's secret store.
-#[async_trait]
-pub trait GitHubSecretSource: Send + Sync {
-    async fn get_api_key(&self) -> TrackerResult<String>;
-}
-
 /// Reads `GITHUB_TOKEN` from the process environment.
 #[must_use]
 pub fn github_token_from_env() -> Option<String> {
@@ -40,7 +32,7 @@ pub fn github_token_from_env() -> Option<String> {
 #[derive(Clone)]
 pub struct GitHubBoardServiceOptions {
     /// Takes precedence over the inline `get_github_api_key()` value when set.
-    pub secrets: Option<Arc<dyn GitHubSecretSource>>,
+    pub secrets: Option<Arc<dyn TrackerSecretSource>>,
     /// The last-resort token lookup; [`github_token_from_env`] unless a test replaces it.
     pub environment_token: fn() -> Option<String>,
 }

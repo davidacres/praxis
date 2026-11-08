@@ -13,9 +13,8 @@ use crate::ci::evidence_provider::{
     CiEvidenceProvider, CiJobLogResult, CiJobSummary, CiProviderKind, CiRunConclusion, CiRunPage,
     CiRunSummary, CiSecurityReportResult, CiSecurityReportType, CiSourceRef,
 };
-use crate::github::api_service::{
-    GitHubApiConfig, GitHubApiError, GitHubApiService, encode_uri_component,
-};
+use crate::github::api_service::{GitHubApiConfig, GitHubApiError, GitHubApiService};
+use crate::rest_support::encode_uri_component;
 
 /// Same shape as the issue client's config, but deliberately a separate value.
 pub type GitHubActionsConfig = GitHubApiConfig;

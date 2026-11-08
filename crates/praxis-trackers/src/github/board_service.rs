@@ -30,6 +30,10 @@ use crate::github::api_service::{
 };
 use crate::github::config_store::{GitHubBoardServiceOptions, GitHubConfigStore};
 use crate::issue_tracker_service::{IssueTrackerService, LogSink, TrackerResult};
+use crate::rest_support::{
+    filter_metadata_of, locale_compare, matches_board_filters, matches_issue_filters,
+    page_sorted_issues, resolve_api_token, unsupported_issue_edit_fields,
+};
 
 const ISSUE_CREATION_DISABLED_ERROR: &str = "Issue creation is disabled for this repository. Enable it on the connection to create GitHub issues.";
 const ATTACHMENTS_UNSUPPORTED: &str = "GitHub mode does not support attachments. Add files as links in the issue description or a comment instead.";
@@ -57,25 +61,6 @@ pub fn parse_github_issue_key(issue_key: &str) -> TrackerResult<u64> {
         .and_then(|captures| captures.get(1))
         .and_then(|number| number.as_str().parse().ok())
         .ok_or_else(|| format!("Invalid GitHub issue key: {issue_key}"))
-}
-
-/// `localeCompare` approximated as case-insensitive first, then lowercase before uppercase
-/// on a case-only tie, as ICU orders them.
-fn locale_compare(left: &str, right: &str) -> std::cmp::Ordering {
-    left.to_lowercase()
-        .cmp(&right.to_lowercase())
-        .then_with(|| right.cmp(left))
-}
-
-/// Most recently updated first, then by key (`board/boardColumns.ts`'s `sortIssuesByUpdated`).
-fn sort_issues_by_updated(issues: &mut [IssueSummary]) {
-    issues.sort_by(|left, right| {
-        locale_compare(
-            right.updated.as_deref().unwrap_or_default(),
-            left.updated.as_deref().unwrap_or_default(),
-        )
-        .then_with(|| locale_compare(&left.key, &right.key))
-    });
 }
 
 fn column(id: &str, name: &str, status_category: Option<&str>) -> BoardColumn {
@@ -233,32 +218,6 @@ fn build_board_transitions(
         .collect()
 }
 
-fn unsupported_issue_edit_fields(input: &UpdateIssueInput) -> Vec<&'static str> {
-    let mut unsupported = Vec::new();
-    if input.parent_key.is_some() {
-        unsupported.push("parentKey");
-    }
-    if input.priority.is_some() {
-        unsupported.push("priority");
-    }
-    if input.severity.is_some() {
-        unsupported.push("severity");
-    }
-    if input.reported_by.is_some() {
-        unsupported.push("reportedBy");
-    }
-    if input.model.is_some() {
-        unsupported.push("model");
-    }
-    if input.issue_type.is_some() {
-        unsupported.push("issueType");
-    }
-    if input.idea_transcript.is_some() {
-        unsupported.push("ideaTranscript");
-    }
-    unsupported
-}
-
 fn parse_assignee_logins(assignee: Option<&str>) -> Vec<String> {
     assignee
         .map(|value| {
@@ -270,40 +229,6 @@ fn parse_assignee_logins(assignee: Option<&str>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn matches_board_filters(board: &Board, filters: &BoardFilters) -> bool {
-    if !filters.types.is_empty() && !filters.types.contains(&board.board_type) {
-        return false;
-    }
-    if !filters.project_keys.is_empty() {
-        let board_project_key = board
-            .project_key
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or_default();
-        if board_project_key.is_empty()
-            || !filters
-                .project_keys
-                .iter()
-                .any(|key| key == board_project_key)
-        {
-            return false;
-        }
-    }
-    let search_text = filters.search_text.trim().to_lowercase();
-    if search_text.is_empty() {
-        return true;
-    }
-    format!(
-        "{} {} {} {}",
-        board.name,
-        board.project_key.as_deref().unwrap_or_default(),
-        board.project_name.as_deref().unwrap_or_default(),
-        board.location_name.as_deref().unwrap_or_default()
-    )
-    .to_lowercase()
-    .contains(&search_text)
 }
 
 #[derive(Debug, Default)]
@@ -363,25 +288,16 @@ impl GitHubBoardService {
         base.trim_end_matches('/').to_string()
     }
 
-    async fn resolve_token(&self) -> TrackerResult<String> {
-        let primary = match &self.options.secrets {
-            Some(secrets) => secrets.get_api_key().await?,
-            None => self.config_store.get_github_api_key(),
-        };
-        let primary = primary.trim();
-        if !primary.is_empty() {
-            return Ok(primary.to_string());
-        }
-        Ok((self.options.environment_token)()
-            .map(|token| token.trim().to_string())
-            .unwrap_or_default())
-    }
-
     async fn api_config(&self) -> TrackerResult<GitHubApiConfig> {
         if let Some(config) = self.cache().api_config.clone() {
             return Ok(config);
         }
-        let token = self.resolve_token().await?;
+        let token = resolve_api_token(
+            self.options.secrets.as_ref(),
+            || self.config_store.get_github_api_key(),
+            self.options.environment_token,
+        )
+        .await?;
         if token.is_empty() {
             return Err("No GitHub personal access token is configured.".to_string());
         }
@@ -521,43 +437,11 @@ impl IssueTrackerService for GitHubBoardService {
         let client = self.api_client().await?;
         let config = client.config().clone();
         let (issues, status_labels) = self.issues_and_status_labels(&client).await?;
-        let query = filters.search_text.trim().to_lowercase();
-        let mut matching: Vec<IssueSummary> = build_board_issues(&issues, &config, &status_labels)
+        let matching = build_board_issues(&issues, &config, &status_labels)
             .into_iter()
-            .filter(|issue| {
-                if !filters.statuses.is_empty() && !filters.statuses.contains(&issue.status) {
-                    return false;
-                }
-                if !filters.issue_types.is_empty()
-                    && !filters.issue_types.contains(&issue.issue_type)
-                {
-                    return false;
-                }
-                if query.is_empty() {
-                    return true;
-                }
-                format!(
-                    "{} {} {}",
-                    issue.key,
-                    issue.summary,
-                    issue.description.as_deref().unwrap_or_default()
-                )
-                .to_lowercase()
-                .contains(&query)
-            })
+            .filter(|issue| matches_issue_filters(issue, filters))
             .collect();
-        sort_issues_by_updated(&mut matching);
-        let total = matching.len();
-        let end = start_at.saturating_add(page_size);
-        Ok(PagedIssues {
-            issues: matching
-                .into_iter()
-                .skip(start_at)
-                .take(page_size)
-                .collect(),
-            total: Some(u32::try_from(total).unwrap_or(u32::MAX)),
-            has_more: end < total,
-        })
+        Ok(page_sorted_issues(matching, start_at, page_size))
     }
 
     async fn get_filter_metadata(&self, filters: &IssueFilters) -> TrackerResult<FilterMetadata> {
@@ -567,15 +451,7 @@ impl IssueTrackerService for GitHubBoardService {
             ..filters.clone()
         };
         let page = self.get_issues(&metadata_filters, 0, usize::MAX).await?;
-        let sorted_unique = |values: BTreeSet<String>| {
-            let mut list: Vec<String> = values.into_iter().collect();
-            list.sort_by(|left, right| locale_compare(left, right));
-            list
-        };
-        Ok(FilterMetadata {
-            statuses: sorted_unique(page.issues.iter().map(|i| i.status.clone()).collect()),
-            issue_types: sorted_unique(page.issues.iter().map(|i| i.issue_type.clone()).collect()),
-        })
+        Ok(filter_metadata_of(&page.issues))
     }
 
     async fn get_parent_items(

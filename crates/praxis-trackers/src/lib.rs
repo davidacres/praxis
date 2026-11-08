@@ -5,12 +5,14 @@ pub mod ci;
 pub mod folder_service;
 pub mod github;
 pub mod issue_tracker_service;
+pub mod rest_support;
 pub mod stub_backend_service;
 #[cfg(test)]
 mod test_support;
 
 pub use folder_service::*;
 pub use issue_tracker_service::*;
+pub use rest_support::{TrackerSecretSource, encode_uri_component};
 pub use stub_backend_service::*;
 
 /// Supported backend tracker modes in Praxis.
