@@ -1,6 +1,7 @@
 //! Issue tracker backends (`FolderService`, `JiraCloudService`, `GitHubBoardService`,
 //! `GitLabBoardService`, `DemoService`, `StubService`) and CI evidence providers.
 
+pub mod ci;
 pub mod folder_service;
 pub mod github;
 pub mod issue_tracker_service;

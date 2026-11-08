@@ -561,13 +561,14 @@ impl GitHubApiService {
         Ok(results)
     }
 
-    /// One JSON request against an absolute URL, returning the next-page link too.
-    pub async fn request_json_page(
+    /// Sends one request with GitHub's headers and returns the response whatever its status,
+    /// for callers that read non-JSON bodies or map statuses to their own messages.
+    pub async fn send(
         &self,
         method: Method,
         url: Url,
         body: Option<&Value>,
-    ) -> Result<GitHubJsonPage, GitHubApiError> {
+    ) -> Result<reqwest::Response, GitHubApiError> {
         let mut request = self
             .client
             .request(method, url)
@@ -579,7 +580,17 @@ impl GitHubApiService {
         if let Some(body) = body {
             request = request.body(body.to_string());
         }
-        let response = request.send().await.map_err(transport_error)?;
+        request.send().await.map_err(transport_error)
+    }
+
+    /// One JSON request against an absolute URL, returning the next-page link too.
+    pub async fn request_json_page(
+        &self,
+        method: Method,
+        url: Url,
+        body: Option<&Value>,
+    ) -> Result<GitHubJsonPage, GitHubApiError> {
+        let response = self.send(method, url, body).await?;
         let status = response.status();
         let next_url = parse_github_next_link(
             response
