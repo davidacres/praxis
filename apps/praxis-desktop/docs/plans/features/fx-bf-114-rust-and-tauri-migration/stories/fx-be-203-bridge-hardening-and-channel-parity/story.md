@@ -68,3 +68,7 @@ The stdio transport stays the default. Moving to the N-API bridge is optional an
 
 ## Comments
 
+
+### 2026-11-09 — local proof checkpoint
+
+TASK-537 now has default-channel parity, 10,000-event delivery through two real renderers, 23 TypeScript + 23 Rust-mode desktop checks, and the migrated-domain checklist. A first workflow read is prepared and tested opt-in; it is not enabled by default. See TASK-537 for exact evidence, cache-semantics limitation and CI approval blocker. This story remains In Progress until matching remote CI evidence exists; local success is not a release claim.

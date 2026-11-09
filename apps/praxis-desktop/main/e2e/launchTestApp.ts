@@ -153,6 +153,30 @@ export async function launchTestApp(
     env
   });
   testAppProcesses.set(electronApp, electronApp.process());
+  if (process.env.PRAXIS_EXPECT_RUST_MODE) {
+    const expectedMode = process.env.PRAXIS_EXPECT_RUST_MODE;
+    const diagnostic = await electronApp.evaluate(async ({ app }) => {
+      const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
+      const host = require('./rustHostInstance.js');
+      const bridge = host.getRustHostBridge();
+      const status = await bridge.invoke('host:status');
+      return { status, channels: bridge.migratedChannels(), defaults: host.DEFAULT_MIGRATED_CHANNELS };
+    });
+    const actualMode = diagnostic.status.delegation?.mode;
+    if (actualMode !== expectedMode) {
+      await electronApp.close();
+      throw new Error(`Expected ${expectedMode} backend, got ${actualMode}: ${JSON.stringify(diagnostic)}`);
+    }
+    const expectedChannels = expectedMode === 'rust'
+      ? (process.env.PRAXIS_EXPECT_RUST_CHANNELS?.split(',').map(channel => channel.trim()).filter(Boolean) ?? diagnostic.defaults)
+      : [];
+    if (JSON.stringify([...diagnostic.channels].sort()) !== JSON.stringify([...expectedChannels].sort())
+      || (expectedMode === 'rust' && (!diagnostic.status.crateVersion || diagnostic.channels.length === 0))) {
+      await electronApp.close();
+      throw new Error(`Backend channel/ready proof failed: ${JSON.stringify(diagnostic)}`);
+    }
+    console.log(`[dual-mode] Verified ${actualMode}; ${diagnostic.channels.length} delegated channels`);
+  }
   const window = await electronApp.firstWindow();
   await window.waitForLoadState('domcontentloaded');
   if (!options?.keepSplash) {
