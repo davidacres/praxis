@@ -160,6 +160,7 @@ export class StdioRustHostTransport implements RustHostTransport {
         if (!settled) {
           settled = true;
           reject(new Error(`Timed out waiting for praxis-host ready frame after ${timeoutMs}ms.`));
+          child.kill('SIGKILL');
         }
       }, timeoutMs);
 
@@ -206,7 +207,10 @@ export class StdioRustHostTransport implements RustHostTransport {
           settled = true;
           reject(err);
         }
-        this.failPending(err instanceof Error ? err : new Error(String(err)));
+        if (this.child === child) {
+          this.resetExitedTransport();
+          this.failPending(err instanceof Error ? err : new Error(String(err)));
+        }
       });
 
       child.once('exit', (code, signal) => {
@@ -218,7 +222,10 @@ export class StdioRustHostTransport implements RustHostTransport {
           settled = true;
           reject(exitError);
         }
-        this.failPending(exitError);
+        if (this.child === child) {
+          this.resetExitedTransport();
+          this.failPending(exitError);
+        }
       });
     });
 
@@ -273,6 +280,15 @@ export class StdioRustHostTransport implements RustHostTransport {
       child.stdin.end();
       child.kill('SIGTERM');
     });
+  }
+
+  private resetExitedTransport(): void {
+    this.readlineInterface?.close();
+    this.readlineInterface = undefined;
+    this.child = undefined;
+    this.startPromise = undefined;
+    this.readyStatus = undefined;
+    this.channels = [];
   }
 
   private failPending(error: Error): void {
@@ -421,7 +437,8 @@ export class RustHostBridge {
         try {
           return await this.invoke<TResult>(channel, ...args);
         } catch (error) {
-          if (error instanceof RustHostRpcError && error.code !== 'CHANNEL_NOT_REGISTERED') {
+          // Transport failure may follow a completed mutation. Never replay it in TS.
+          if (!(error instanceof RustHostRpcError) || error.code !== 'CHANNEL_NOT_REGISTERED') {
             throw error;
           }
           console.warn(

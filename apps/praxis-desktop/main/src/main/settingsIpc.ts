@@ -1,9 +1,10 @@
+import { validateSettingsPatch } from './settingsWriteValidation';
 import { app } from 'electron';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { broadcastToAllWindows } from './windowBroadcast';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { normalizeMobileSubnet, type AppSettingsPatch, type MobileCapability } from '@praxis/core';
+import { type AppSettingsPatch, type MobileCapability } from '@praxis/core';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getRustHostBridge } from './rustHostInstance';
 import { abortActiveTask, getAllActiveTaskIssueKeys, resetAiStores } from './aiInstance';
@@ -42,9 +43,7 @@ export function registerSettingsIpc(): void {
   bridge.handleOrFallback(
     'settings:set',
     async (_event, patch: AppSettingsPatch) => {
-      if (patch.mobileAccess?.allowedSubnets?.some(value => normalizeMobileSubnet(value) === undefined)) {
-        throw new Error('Allowed mobile subnets must be IP addresses or CIDRs, for example 192.168.1.0/24.');
-      }
+      validateSettingsPatch(patch);
       return getSettingsBackend().write(patch);
     },
     ipcMain

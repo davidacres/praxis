@@ -1,3 +1,4 @@
+import { validateSettingsPatch } from './settingsWriteValidation';
 import test from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
@@ -648,7 +649,7 @@ test('hasRustHostBinary and resolveInitialMigratedChannels: environment flag and
     const defaultChannels = resolveInitialMigratedChannels();
     assert.ok(defaultChannels.includes('git:status'));
     assert.ok(defaultChannels.includes('git:preflight'));
-    assert.ok(defaultChannels.includes('host:status'));
+    assert.ok(!defaultChannels.includes('host:status'));
     assert.equal(defaultChannels.length, DEFAULT_MIGRATED_CHANNELS.length);
 
     process.env.PRAXIS_RUST_CHANNELS = 'none';
@@ -707,60 +708,55 @@ test('RustHostBridge.handleOrFallback: gracefully falls back to TypeScript when 
   }
 });
 
-test('DEFAULT_MIGRATED_CHANNELS contains settings:*, folder:*, plans:*, and folderService:*', () => {
-  // settings:set stays on TypeScript until its mobile-subnet validation is ported (TASK-536).
-  assert.ok(!DEFAULT_MIGRATED_CHANNELS.includes('settings:set'));
-  const expectedChannels = [
-    'settings:get',
-    'settings:sanitize',
-    'settings:merge',
-    'folder:discoverPlans',
-    'folder:discoverPlanFolders',
-    'folder:discoverRepositoryFolders',
-    'folder:parsePlanFolder',
-    'folder:readBoardConfig',
-    'folder:writeBoardConfig',
-    'folder:ensureFrontMatter',
-    'plans:discoverPlans',
-    'plans:discoverPlanFolders',
-    'plans:parsePlanFolder',
-    'plans:readBoardConfig',
-    'plans:writeBoardConfig',
-    'plans:ensureFrontMatter',
-    'folderService:getBoards',
-    'folderService:getBoardDetails',
-    'folderService:getIssues',
-    'folderService:getIssue',
-    'folderService:getTransitions',
-    'folderService:createIssue',
-    'folderService:updateIssue',
-    'folderService:transitionIssue',
-    'folderService:addComment'
-  ];
-
-  for (const channel of expectedChannels) {
-    assert.ok(
-      DEFAULT_MIGRATED_CHANNELS.includes(channel),
-      `DEFAULT_MIGRATED_CHANNELS missing ${channel}`
-    );
-  }
-
-  const prevEnv = process.env.PRAXIS_RUST_CHANNELS;
-  try {
-    process.env.PRAXIS_RUST_CHANNELS = 'settings:*,plans:*';
-    const channels = resolveInitialMigratedChannels();
-    assert.ok(channels.includes('settings:get'));
-    assert.ok(!channels.includes('settings:set'));
-    assert.ok(channels.includes('plans:parsePlanFolder'));
-    assert.ok(channels.includes('plans:discoverPlans'));
-    assert.ok(!channels.includes('git:status'));
-  } finally {
-    if (prevEnv !== undefined) {
-      process.env.PRAXIS_RUST_CHANNELS = prevEnv;
-    } else {
-      delete process.env.PRAXIS_RUST_CHANNELS;
+test('default migrated channels have desktop registrations and preload exposure', () => {
+  const { parse } = require('@babel/parser') as typeof import('@babel/parser');
+  const sourceRoot = path.resolve(__dirname, '../../src');
+  const registered = new Set<string>();
+  const exposed = new Set<string>();
+  function collect(file: string, method: string, target: Set<string>): void {
+    const source = parse(fs.readFileSync(file, 'utf8'), { sourceType: 'module', plugins: ['typescript'] });
+    function visit(node: any): void {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'CallExpression' && node.callee?.type === 'MemberExpression'
+        && node.callee.property?.name === method && node.arguments[0]?.type === 'StringLiteral') {
+        target.add(node.arguments[0].value);
+      }
+      for (const value of Object.values(node)) {
+        if (Array.isArray(value)) value.forEach(visit);
+        else if (value && typeof value === 'object') visit(value);
+      }
     }
+    visit(source);
   }
+  for (const file of ['gitIpc.ts', 'settingsIpc.ts', 'folderIpc.ts']) {
+    collect(path.join(sourceRoot, 'main', file), 'handleOrFallback', registered);
+  }
+  collect(path.join(sourceRoot, 'preload/index.ts'), 'invoke', exposed);
+  assert.equal(new Set(DEFAULT_MIGRATED_CHANNELS).size, DEFAULT_MIGRATED_CHANNELS.length);
+  for (const channel of DEFAULT_MIGRATED_CHANNELS) {
+    assert.ok(registered.has(channel), `No desktop registration: ${channel}`);
+    assert.ok(exposed.has(channel), `No preload exposure: ${channel}`);
+  }
+  assert.ok(!DEFAULT_MIGRATED_CHANNELS.includes('settings:set'), 'TS remains the desktop settings writer');
+});
+
+test('transport failures never replay a possibly completed mutation through TypeScript', async () => {
+  let fallbackCalls = 0;
+  const bridge = new RustHostBridge({
+    transport: {
+      dispatch: async () => { throw new Error('connection lost after write'); },
+      onEvent: () => () => undefined,
+      dispose: async () => undefined
+    },
+    migratedChannels: ['git:commit']
+  });
+  const handlers = new Map<string, Function>();
+  bridge.handleOrFallback('git:commit', async () => { fallbackCalls++; }, {
+    handle: (channel: string, handler: Function) => { handlers.set(channel, handler); }
+  } as unknown as Pick<IpcMain, 'handle'>);
+  await assert.rejects(() => handlers.get('git:commit')!({}), /connection lost/);
+  assert.equal(fallbackCalls, 0);
+  await bridge.dispose();
 });
 
 test('RustHostBridge.handleOrFallback: routes settings:*, folder:*, and plans:* through Rust when migrated', async () => {
@@ -874,5 +870,46 @@ test('RustHostBridge.handleOrFallback: routes settings:*, folder:*, and plans:* 
   } finally {
     await bridge.dispose();
     fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('invalid mobile subnets are rejected before persistence in both settings paths', async () => {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-settings-validation-'));
+  const settingsPath = path.join(userDataDir, 'settings.json');
+  const bridge = new RustHostBridge({ transport: new StdioRustHostTransport({ userDataDir, settingsPath }) });
+  try {
+    const patch = { mobileAccess: { allowedSubnets: ['invalid-subnet'] } };
+    assert.throws(() => validateSettingsPatch(patch), /Allowed mobile subnets/);
+    await assert.rejects(() => bridge.invoke('settings:set', patch), /Allowed mobile subnets/);
+    assert.equal(fs.existsSync(settingsPath), false);
+    validateSettingsPatch({ mobileAccess: { allowedSubnets: ['192.168.1.0/24', '::1'] } });
+  } finally {
+    await bridge.dispose();
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('stdio transport restarts after its host exits without retaining stale readiness', async () => {
+  if (process.platform === 'win32') return; // POSIX executable fixture.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-host-restart-'));
+  const executablePath = path.join(dir, 'host');
+  fs.writeFileSync(executablePath, String.raw`#!/usr/bin/env node
+process.stdout.write(JSON.stringify({kind:'ready',status:{},registeredChannels:['probe']})+'\n');
+require('readline').createInterface({input:process.stdin}).once('line', line => {
+ const request=JSON.parse(line);
+ process.stdout.write(JSON.stringify({kind:'response',envelope:{id:request.id,ok:true,result:process.pid}})+'\n', () => process.exit(0));
+});
+`, { mode: 0o755 });
+  const transport = new StdioRustHostTransport({ executablePath, userDataDir: dir, settingsPath: path.join(dir, 'settings.json') });
+  try {
+    const first = await transport.dispatch({ id: 'first', channel: 'probe', args: [] });
+    for (let i = 0; i < 100 && transport.status !== undefined; i++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(transport.status, undefined);
+    assert.deepEqual(transport.registeredChannels(), []);
+    const second = await transport.dispatch({ id: 'second', channel: 'probe', args: [] });
+    assert.notEqual(first.result, second.result);
+  } finally {
+    await transport.dispose();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -12,16 +12,6 @@ let bridgeInstance: RustHostBridge | undefined;
  * The default set of tested channels migrated to `crates/praxis-host`.
  */
 export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
-  'host:status',
-  'host:getConfig',
-  'host:ping',
-  'host:emitEvent',
-  'host:secrets:get',
-  'host:secrets:has',
-  'host:secrets:set',
-  'host:secrets:delete',
-  'host:secrets:listKeys',
-  'host:secrets:seed',
   'git:preflight',
   'git:initialize',
   'git:clone',
@@ -56,32 +46,9 @@ export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
   'git:fetch',
   'git:push',
   'settings:get',
-  // `settings:set` stays on TypeScript until TASK-536: its handler validates mobile
-  // subnets before writing, and delegating it to Rust would skip that check.
-  'settings:sanitize',
-  'settings:merge',
-  'folder:discoverPlans',
-  'folder:discoverPlanFolders',
-  'folder:discoverRepositoryFolders',
-  'folder:parsePlanFolder',
-  'folder:readBoardConfig',
-  'folder:writeBoardConfig',
-  'folder:ensureFrontMatter',
-  'plans:discoverPlans',
-  'plans:discoverPlanFolders',
-  'plans:parsePlanFolder',
-  'plans:readBoardConfig',
-  'plans:writeBoardConfig',
-  'plans:ensureFrontMatter',
-  'folderService:getBoards',
-  'folderService:getBoardDetails',
-  'folderService:getIssues',
-  'folderService:getIssue',
-  'folderService:getTransitions',
-  'folderService:createIssue',
-  'folderService:updateIssue',
-  'folderService:transitionIssue',
-  'folderService:addComment'
+  // Keep desktop settings writes on TypeScript: it owns the synchronous cache and
+  // change notifications. Rust write cutover requires shared-file coordination (TASK-537).
+  'folder:discoverPlans'
 ];
 
 /**
