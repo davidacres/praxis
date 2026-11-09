@@ -2,12 +2,12 @@
 **Created:** 2026-11-08T12:00:00.000Z
 id: TASK-537
 type: Task
-status: To Do
+status: In Progress
 ---
 
 # Build the Rust/TypeScript channel parity harness and dual-mode e2e runs
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Task
 **Priority:** High
 
@@ -33,3 +33,17 @@ Give every delegated channel a test that checks Rust and TypeScript return the s
 
 ## Comments
 
+
+### 2026-11-09 — channel parity harness implemented
+
+Added `main/src/main/rustChannelParity.test.ts` and `npm run test:rust-parity` in the desktop-main workspace. The existing `test:git` command now includes the harness, so the current CI git-test step picks it up without a new workflow or a triggered CI run. A compiled Rust host is required; missing binaries fail instead of skipping proof.
+
+- Captures the actual registered Git/folder TypeScript fallback closures and invokes the Rust handlers over `StdioRustHostTransport`. Settings reads compare against the actual `SharedSettingsBackend` cache; read-only settings RPCs must preserve the input JSON data.
+- Covers every one of the 35 current defaults: all 33 Git channels, `settings:get`, and `folder:discoverPlans`. The final coverage assertion requires an exercised scenario for every default, so new channels cannot silently lack a fixture.
+- Independent temporary roots contain deterministic Git identities/dates, commit history, tags, branches, dirty/untracked files, index changes, conflict stages, stash/pop and local bare remotes. Push, fetch and pull transfer new commits; no network credentials or real repositories are used. Hooks are redirected to a new empty temporary directory.
+- Mutating results compare working file bytes, index entries, staged patches, porcelain status, refs/history and bare-remote refs, in addition to response shapes. Only fixture-root locations and `generatedAt`/`loadedAt` response timestamps are normalized; commit hashes and dates remain checked.
+- Settings include malformed fields and legacy surface/subnet inputs. Folder discovery uses a duplicate multi-root connection and a temporary plans tree with board configuration and a nested typed story. No Praxis write path targets the checkout.
+
+Verification: desktop compilation/trusted IPC checks and the integrated git suite pass 224/224 (including 35 channel subtests and their coverage test). The dedicated parity command passes 36/36 after adding explicit legacy settings inputs. Restricted watcher access failed in the first run; reruns with the required filesystem/localhost access passed. Initial apparent Git mismatches were fixture errors (wall-clock response metadata and a symbolic commit selector unsupported by the TS commit-details handler); no production behavior was changed to make parity pass.
+
+Scope: this completes the channel-harness suggestion, not the entire bridge gate. Still open in TASK-537: the 10,000-event renderer delivery proof, dual-mode desktop E2E/CI wiring, and the migrated-domain checklist. Shared-file coordination and cache/notification proof are required before enabling Rust settings writes. Desktop E2E, visual verification and a remote CI run were not performed for this test-only slice. TASK-537 remains In Progress.
