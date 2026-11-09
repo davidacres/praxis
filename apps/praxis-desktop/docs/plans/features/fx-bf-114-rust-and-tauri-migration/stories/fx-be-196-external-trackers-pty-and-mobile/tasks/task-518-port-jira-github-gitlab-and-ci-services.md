@@ -51,3 +51,27 @@ Deliberate differences from the TS:
 Still open: `JiraCloudService`, `GitLabBoardService` (+ `gitLabCiEvidenceProvider`), `DemoService`, `ciSecurityReports` and `ciEvidenceImport`, an `IssueTrackerService` impl for `FolderService`, routing channels to Rust (FX-BE-203), and the E2E acceptance specs.
 
 
+
+### 2026-11-09 — slice 2: GitLab board and GitLab CI evidence
+
+Ported to `crates/praxis-trackers`:
+
+- `rest_support.rs` (new, shared): the helpers slice 1 kept private to `github/` now serve both REST backends — `as_string`/`as_u64`, `encode_uri_component`, error-detail truncation, the `localeCompare` approximation, `sortIssuesByUpdated`, in-memory issue filtering/paging and filter metadata, board filters, the unsupported-edit-field check, and token resolution. `GitHubSecretSource` became the shared `TrackerSecretSource`.
+- `gitlab/gitLabApiService.ts` → `gitlab/api_service.rs`: a public `GitLabApiService` (injectable base URL; `send`, `build_url`, `request_json`, `request_json_paginated` (`x-next-page`), `encode_project_ref` public), every endpoint including the merge-request ones, plus `parse_gitlab_remote_url`, `infer_gitlab_project_from_repo`, issue-key matching, discussion-note flatten/diff, and the review/done status helpers.
+- `gitLabConfigStore.ts` → `gitlab/config_store.rs`: `GitLabConfigStore` + `StaticGitLabConfig`, and `GitLabBoardServiceOptions` (secret source, workspace-folder lookup, injectable project inference and `GITLAB_TOKEN` lookup).
+- `gitLabBoardService.ts` → `gitlab/board_service.rs`: `GitLabBoardService` implementing `IssueTrackerService`.
+- `ci/gitLabCiEvidenceProvider.ts` → `ci/gitlab_ci_evidence_provider.rs`, sending through `GitLabApiService::send`, including `getSecurityReports`.
+
+Tests: `gitLabBoardService.test.ts` (6) and `gitLabCiEvidenceProvider.test.ts` (8) are ported, plus client, board loading, transition, assignee resolution, selected-board and project-inference coverage — 90 tests in `praxis-trackers` (735 workspace-wide), against the local axum stub.
+
+Deliberate differences from the TS:
+
+- Every GitLab request sends `User-Agent: praxis`; the config types redact the token in `Debug` and are not serializable; transport errors drop the URL.
+- `GITLAB_TOKEN` and the project-from-git-remote inference are injectable options, so tests touch neither the environment nor `git`. A secret-store token is trimmed (the TS trims only the inline one).
+- Multi-project lookups (`resolveProjects`, `listBoardsForProjects`, selected boards) run sequentially instead of `Promise.all`; board + lists and issue + comments still load concurrently.
+- The board context no longer carries the unused `projectRef`.
+- GitLab's `skipped` pipeline status maps to `unknown`: the TS passed it through as a conclusion outside the shared `CiRunConclusion` vocabulary.
+- `getSecurityReports` branches on the HTTP status rather than matching `'403'` / `'read_api'` in error messages; a pipeline without an id reads as unavailable rather than run id `"undefined"`.
+- Discussion notes sort by `created_at` (the `localeCompare` approximation) then id case-insensitively, matching `sensitivity: 'base'`.
+
+Still open: `JiraCloudService`, `DemoService`, `ciSecurityReports` and `ciEvidenceImport`, an `IssueTrackerService` impl for `FolderService`, routing channels to Rust (FX-BE-203), and the E2E acceptance specs.
