@@ -34,3 +34,15 @@ PRAXIS_TS_WORKSPACE=/path/to/dependency-checkout cargo test -p praxis-mobile --l
 TASK-520 remains In Progress. Wire the desktop's real service/authorization/pairing/event/lifecycle adapters to this transport and provide its OS interface snapshot. Preserve permission ownership, workspace trust, safe file/image reads, schedule notifications and runner wake-up from the existing TypeScript composition.
 
 The earlier 110 TypeScript mobile tests and 4 desktop mobile-access checks remain baseline evidence from the draft handoff; they were not rerun here and do not exercise Rust mobile delegation. Fresh dual-mode desktop tests with diagnostics proving the mobile runtime, real Flutter interoperability, remote CI, full desktop/theme suites, release packaging/signing and packaged delegation remain unproven. No UI code or snapshots changed and no visual verification was performed in this slice.
+
+## Decision: transport-only adapter (2026-11-09)
+
+Chosen design: Rust owns Noise/TCP/relay; decoded, identity-stamped requests are forwarded to the existing TypeScript `MobileHostApplication`. The Rust service drafts stay dormant until a later cutover.
+
+Findings that shape the work:
+- `HostWireFrame` (`crates/praxis-host/src/stdio.rs`) has only `Ready`/`Response`/`Event`, and the host reads only `RustRpcRequest` lines, so there is no host-to-Electron request path. Forwarding needs new `HostCallRequest` (host to Electron) and `HostCallResponse` (Electron to host) frames, with id correlation, timeouts and cancellation on shutdown.
+- `MobileLanServerDeps` takes an injected `MobileHostApplication`; the Rust-side app handlers become thin proxies over those frames. Authorizer, pairing and unpaired-peer callbacks (`mobileAuthorizePeer`, `mobileOnUnpairedPeer`) and the event feed need the same treatment.
+- Control surface needed from Electron: start/stop with interface inventory and port, `apply_policy`, `drop_device`/`drop_public_key`, `promote_pending`, relay start/stop and state.
+- A TypeScript adapter exposing the `MobileLanServer`/`MobileRelayClient` surface used by `mobileListenerInstance.ts` and `mobilePairingInstance.ts` lets selection stay a single switch (default TypeScript, opt-in env var, as with `PRAXIS_RUST_CHANNELS`).
+
+Planned slices: (1) reverse-call frames plus tests; (2) host control methods and proxy handlers; (3) TypeScript adapter and opt-in selection; (4) dual-mode desktop tests proving which runtime served and the real-phone interop test through the adapter.
