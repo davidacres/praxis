@@ -11,6 +11,10 @@ on:
         description: 'Run desktop Playwright e2e tests on macOS runners'
         type: boolean
         default: false
+      run_rust_parity:
+        description: 'Run Rust dual-mode E2E and event-stream tests on macOS runners'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -188,4 +192,62 @@ jobs:
             apps/praxis-desktop/main/test-results/
             apps/praxis-desktop/main/playwright-report/
             apps/praxis-desktop/main/output/playwright/
+          if-no-files-found: ignore
+
+  rust-parity:
+    name: Rust Parity (${{ matrix.name }})
+    if: github.event_name == 'workflow_dispatch' && (inputs.run_rust_parity == true || inputs.run_desktop_tests == true)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: dual-mode
+            name: Dual-Mode Desktop E2E
+          - suite: event-stream
+            name: Real Renderer Event Stream (10,000 events)
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      SHELL: /bin/bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.402'
+      - name: Install dependencies and repair Electron bundle
+        run: |
+          npm ci
+          electron_app="node_modules/electron/dist/Electron.app"
+          node node_modules/electron/install.js
+          npm rebuild node-pty --build-from-source --runtime=electron --target=43.8.3 --dist-url=https://electronjs.org/headers
+          xattr -cr "$electron_app"
+          codesign --force --deep --sign - "$electron_app"
+          codesign --verify --deep --strict --verbose=2 "$electron_app"
+      - name: Build desktop and copy current renderer
+        run: npm run build
+      - name: Install Playwright Chromium
+        working-directory: apps/praxis-desktop/main
+        run: npx playwright install chromium
+      - name: Prove real renderer event delivery (10,000 events)
+        if: matrix.suite == 'event-stream'
+        working-directory: apps/praxis-desktop/main
+        run: npx playwright test rustEventStream.spec.ts --project=functional --workers=1
+      - name: Prove TypeScript and Rust desktop modes
+        if: matrix.suite == 'dual-mode'
+        working-directory: apps/praxis-desktop/main
+        run: npm run test:rust-dual-mode
+      - name: Upload parity evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-parity-${{ matrix.suite }}
+          path: |
+            apps/praxis-desktop/main/output/rust-dual-mode/
+            apps/praxis-desktop/main/test-results/
+            apps/praxis-desktop/main/playwright-report/
           if-no-files-found: ignore

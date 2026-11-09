@@ -50,6 +50,8 @@
     "reset:workspace-data": "node scripts/reset-praxis-workspace-data.mjs",
     "test:desktop:workflows": "npm run test:workflows --workspace=@praxis/desktop-main",
     "test:desktop:git": "npm run test:git --workspace=@praxis/desktop-main",
+    "test:desktop:rust-dual-mode": "npm run test:rust-dual-mode --workspace=@praxis/desktop-main",
+    "test:desktop:rust-parity": "npm run test:rust-parity --workspace=@praxis/desktop-main",
     "test:desktop:mobile": "npm run test:mobile --workspace=@praxis/desktop-main",
     "desktop:dist": "npm run dist --workspace=@praxis/desktop-main",
     "app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1",

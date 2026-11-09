@@ -14,6 +14,7 @@ User direction: complete items **2–6 and 8** from the remaining-work list. Rem
 
 Budget: the user requested work within budget, but no numeric time/token/cost limit is set. Clarification requested; continue the recorded scope without inventing a budget or calling partial work complete.
 
+- [x] **1 — Remote CI workflow wiring (TASK-537).** Added `run_rust_parity` input and `rust-parity` matrix job to `.github/workflows/build.yml` covering `dual-mode` E2E and `event-stream` (10,000 events) on `macos-14`, with evidence uploads. Added root shortcuts in `package.json`. Remote execution against pushed commits remains open.
 - [x] **2 — Settings/workflow consistency.** Authoritative cache-snapshot reads for Rust settings and workflow policies; desktop settings writes remain in TypeScript. Rebase recovery and shared write queue verified.
 - [x] **3 — Workflows/runs/deployments/scheduler.** Run and deployment profile reads, discovery, validation, preflight capabilities, and direct deployment orchestrator actions (`prepare`, `approve`, `deploy`, `rollback`, `health`) verified across runtimes.
 - [x] **4 — AI runtime.** 20 opt-in channels bridged in `crates/praxis-host/src/ai_bridge.rs` and verified in `rustAiBridge.test.ts`.
