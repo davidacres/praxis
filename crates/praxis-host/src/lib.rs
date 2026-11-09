@@ -5,6 +5,7 @@ pub mod call_client;
 pub mod config;
 pub mod context;
 pub mod events;
+pub mod mobile_bridge;
 #[cfg(feature = "napi-addon")]
 pub mod napi_bridge;
 pub mod secrets;

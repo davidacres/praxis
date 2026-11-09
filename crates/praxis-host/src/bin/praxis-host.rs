@@ -6,6 +6,7 @@ use std::io::{self, BufRead, Write};
 use std::sync::{Arc, Mutex};
 
 use praxis_contracts::RustRpcRequest;
+use praxis_host::mobile_bridge::{MobileBridge, register_mobile_channels};
 use praxis_host::{
     HostCallClient, HostConfig, HostContext, HostInboundReply, HostWireFrame, host_status,
 };
@@ -50,6 +51,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     });
 
+    // Host-to-Electron calls share stdout with responses/events; replies arrive on stdin.
+    let call_stdout = Arc::clone(&stdout);
+    let calls = HostCallClient::new(move |frame| {
+        write_frame(&call_stdout, &frame);
+        true
+    });
+
+    // The mobile listener needs an async runtime; the stdin loop below stays on this thread.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    let mobile = MobileBridge::new(runtime.handle().clone(), calls.clone());
+    register_mobile_channels(&host, &mobile);
+
     write_frame(
         &stdout,
         &HostWireFrame::Ready {
@@ -57,13 +72,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             registered_channels: host.registered_channels(),
         },
     );
-
-    // Host-to-Electron calls share stdout with responses/events; replies arrive on stdin.
-    let call_stdout = Arc::clone(&stdout);
-    let calls = HostCallClient::new(move |frame| {
-        write_frame(&call_stdout, &frame);
-        true
-    });
 
     let stdin = io::stdin();
     for line_result in stdin.lock().lines() {
@@ -93,5 +101,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Stdin closed: fail any outstanding calls so nothing waits on a dead channel.
     calls.close();
+    mobile.shutdown();
     Ok(())
 }
