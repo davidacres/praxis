@@ -1,6 +1,6 @@
 # Rust mobile host draft handoff
 
-Verified 2026-11-09 against base `781a1e32`. This completes review and integration preparation of the preserved `services.rs` and `scheduled_runs.rs` drafts. TASK-520 remains In Progress: these are library handlers over injected dependencies, not a running desktop mobile host.
+Verified 2026-11-09 against base `781a1e32`, committed as `50d82fef` and integrated into local `main` by fast-forward. This completes the preserved `services.rs` and `scheduled_runs.rs` draft handoff. TASK-520 remains In Progress: these are library handlers over injected dependencies, not a running desktop mobile host.
 
 ## Reviewed implementation
 
