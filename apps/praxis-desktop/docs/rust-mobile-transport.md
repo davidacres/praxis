@@ -1,6 +1,6 @@
 # Rust mobile transport checkpoint
 
-2026-11-09. Continues the [host-service draft handoff](rust-mobile-host-handoff.md) from `432f32d6`. The Rust library now contains a running TCP/Noise responder and outbound relay client. Desktop dependency adapters and IPC cutover remain open under TASK-520.
+2026-11-09. Continues the [host-service draft handoff](rust-mobile-host-handoff.md) from `432f32d6`, committed as `bae0753e` and integrated into local `main` by fast-forward. The Rust library now contains a running TCP/Noise responder and outbound relay client. Desktop dependency adapters and IPC cutover remain open under TASK-520.
 
 ## Implementation and boundaries
 
