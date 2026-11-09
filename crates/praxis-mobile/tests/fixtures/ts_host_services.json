@@ -1,0 +1,5807 @@
+{
+  "source": "apps/praxis-desktop/main/src/main/mobileHostServices.ts",
+  "sourceSha256": "4680f7cc603185d095811fa2e7ab5b7a87c9e4225ed8523d70a5c5f8e32f144f",
+  "session": {
+    "sessionId": "s1",
+    "sessionKey": "W-1",
+    "projectId": "p1",
+    "title": "Chat",
+    "lifecycle": "completed",
+    "mode": "chat",
+    "archived": false,
+    "provider": "anthropic",
+    "model": "sonnet",
+    "startedAt": "2026-10-01T00:00:00.000Z",
+    "sequence": 3,
+    "messages": [],
+    "pendingPermissions": [],
+    "canContinue": true,
+    "canCancel": false
+  },
+  "catalog": {
+    "defaultProvider": "anthropic",
+    "defaultModel": "sonnet",
+    "providers": [
+      {
+        "provider": "anthropic",
+        "label": "Anthropic",
+        "kind": "api",
+        "available": true
+      },
+      {
+        "provider": "openai",
+        "label": "OpenAI",
+        "kind": "api",
+        "available": false,
+        "unavailableMessage": "No key on desktop."
+      },
+      {
+        "provider": "cli",
+        "label": "CLI",
+        "kind": "cli-agent",
+        "available": true
+      }
+    ],
+    "sessionModes": [
+      {
+        "mode": "chat",
+        "available": true,
+        "toolAccess": "full"
+      },
+      {
+        "mode": "review",
+        "available": true,
+        "toolAccess": "read-only"
+      },
+      {
+        "mode": "analysis",
+        "available": false,
+        "toolAccess": "read-only",
+        "unavailableMessage": "Set an analysis prompt first."
+      }
+    ]
+  },
+  "gadget": {
+    "version": 1,
+    "kind": "choice",
+    "gadgetId": "g1",
+    "payload": {
+      "question": "Which fix?",
+      "options": [
+        {
+          "value": "b",
+          "label": "Rewrite it"
+        }
+      ]
+    },
+    "actions": [
+      {
+        "actionId": "answer",
+        "label": "Answer",
+        "effect": "informational"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "hosts.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "hosts.list"
+      },
+      "expected": {
+        "value": [
+          {
+            "hostId": "host",
+            "hostName": "Mac",
+            "online": true
+          }
+        ]
+      },
+      "calls": []
+    },
+    {
+      "name": "host.info",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "host.info"
+      },
+      "expected": {
+        "value": {
+          "hostId": "host",
+          "hostName": "Mac",
+          "protocolVersion": 1,
+          "surfaceRevision": 8,
+          "readOperations": [
+            "hosts.list",
+            "host.info",
+            "providers.list",
+            "models.list",
+            "sessions.usage",
+            "access.get",
+            "projects.snapshot",
+            "work.list",
+            "sessions.list",
+            "sessions.get",
+            "workflows.list",
+            "workflowRuns.list",
+            "workflowRuns.get",
+            "changes.get",
+            "attention.list",
+            "sessions.imagePreview"
+          ],
+          "commandOperations": [
+            "sessions.create",
+            "sessions.continue",
+            "sessions.configure",
+            "sessions.cancel",
+            "workflowRuns.start",
+            "workflowRuns.cancel",
+            "workflowRuns.retryStage",
+            "permissions.respond",
+            "workflowGates.approve",
+            "workflowGates.reject",
+            "gadgets.submit"
+          ],
+          "latestSequence": 41,
+          "hostEpoch": "epoch-1"
+        }
+      },
+      "calls": []
+    },
+    {
+      "name": "providers.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "providers.list"
+      },
+      "expected": {
+        "value": {
+          "defaultProvider": "anthropic",
+          "defaultModel": "sonnet",
+          "providers": [
+            {
+              "provider": "anthropic",
+              "label": "Anthropic",
+              "kind": "api",
+              "available": true
+            },
+            {
+              "provider": "openai",
+              "label": "OpenAI",
+              "kind": "api",
+              "available": false,
+              "unavailableMessage": "No key on desktop."
+            },
+            {
+              "provider": "cli",
+              "label": "CLI",
+              "kind": "cli-agent",
+              "available": true
+            }
+          ],
+          "sessionModes": [
+            {
+              "mode": "chat",
+              "available": true,
+              "toolAccess": "full"
+            },
+            {
+              "mode": "review",
+              "available": true,
+              "toolAccess": "read-only"
+            },
+            {
+              "mode": "analysis",
+              "available": false,
+              "toolAccess": "read-only",
+              "unavailableMessage": "Set an analysis prompt first."
+            }
+          ]
+        }
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "models.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "models.list"
+      },
+      "expected": {
+        "value": {
+          "provider": "anthropic",
+          "status": "ok",
+          "models": [
+            {
+              "modelId": "sonnet",
+              "name": "Sonnet"
+            },
+            {
+              "modelId": "opus",
+              "name": "Opus"
+            }
+          ]
+        }
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "anthropic",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "sessions.usage",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.usage"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "provider": "anthropic",
+          "providerLabel": "Anthropic",
+          "model": "sonnet",
+          "lifecycle": "completed",
+          "costStatus": "not-reported",
+          "sequence": 3
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "access.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "access.get"
+      },
+      "expected": {
+        "value": {
+          "deviceId": "phone-1",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ],
+          "projects": [
+            {
+              "projectId": "p1",
+              "name": "Praxis"
+            }
+          ],
+          "hostName": "Mac",
+          "accessMode": "local-only",
+          "transport": "noise-ik",
+          "protocolVersion": 1,
+          "surfaceRevision": 8
+        }
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ]
+      ]
+    },
+    {
+      "name": "projects.snapshot",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "projects.snapshot"
+      },
+      "expected": {
+        "value": {
+          "projectId": "p1",
+          "name": "Praxis"
+        }
+      },
+      "calls": [
+        [
+          "getProject",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "work.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "work.list"
+      },
+      "expected": {
+        "value": {
+          "ok": "listWork"
+        }
+      },
+      "calls": [
+        [
+          "listWork",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "sessions.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.list"
+      },
+      "expected": {
+        "value": []
+      },
+      "calls": [
+        [
+          "listSessions",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "sessions.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "workflows.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflows.list"
+      },
+      "expected": {
+        "value": {
+          "ok": "listWorkflows"
+        }
+      },
+      "calls": [
+        [
+          "listWorkflows",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "workflowRuns.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.list"
+      },
+      "expected": {
+        "value": {
+          "ok": "listRuns"
+        }
+      },
+      "calls": [
+        [
+          "listRuns",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "workflowRuns.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.get"
+      },
+      "expected": {
+        "value": {
+          "runId": "r1",
+          "projectId": "p1"
+        }
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "changes.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "changes.get"
+      },
+      "expected": {
+        "value": {
+          "ok": "sessionChanges"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "sessionChanges",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "attention.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "attention.list"
+      },
+      "expected": {
+        "value": {
+          "ok": "listAttention"
+        }
+      },
+      "calls": [
+        [
+          "listAttention",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "all projects",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host"
+        },
+        "operation": "projects.snapshot"
+      },
+      "expected": {
+        "value": {
+          "projects": [
+            {
+              "projectId": "p1",
+              "name": "Praxis"
+            }
+          ]
+        }
+      },
+      "calls": [
+        [
+          "listProjects"
+        ]
+      ]
+    },
+    {
+      "name": "missing project",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "missing",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "projects.snapshot"
+      },
+      "expected": {
+        "error": "Project missing was not found."
+      },
+      "calls": [
+        [
+          "getProject",
+          "missing"
+        ]
+      ]
+    },
+    {
+      "name": "appearance",
+      "kind": "read",
+      "config": {
+        "appearance": {
+          "background": "#112233"
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "host.info"
+      },
+      "expected": {
+        "value": {
+          "hostId": "host",
+          "hostName": "Mac",
+          "protocolVersion": 1,
+          "surfaceRevision": 8,
+          "readOperations": [
+            "hosts.list",
+            "host.info",
+            "providers.list",
+            "models.list",
+            "sessions.usage",
+            "access.get",
+            "projects.snapshot",
+            "work.list",
+            "sessions.list",
+            "sessions.get",
+            "workflows.list",
+            "workflowRuns.list",
+            "workflowRuns.get",
+            "changes.get",
+            "attention.list",
+            "sessions.imagePreview"
+          ],
+          "commandOperations": [
+            "sessions.create",
+            "sessions.continue",
+            "sessions.configure",
+            "sessions.cancel",
+            "workflowRuns.start",
+            "workflowRuns.cancel",
+            "workflowRuns.retryStage",
+            "permissions.respond",
+            "workflowGates.approve",
+            "workflowGates.reject",
+            "gadgets.submit"
+          ],
+          "latestSequence": 41,
+          "hostEpoch": "epoch-1",
+          "appearance": {
+            "background": "#112233"
+          }
+        }
+      },
+      "calls": []
+    },
+    {
+      "name": "usage zero cost",
+      "kind": "read",
+      "config": {
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false,
+          "cost": 0,
+          "tokenUsage": {
+            "inputTokens": 42
+          },
+          "contextTokens": 0,
+          "contextLimit": 200000
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.usage"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "provider": "anthropic",
+          "providerLabel": "Anthropic",
+          "model": "sonnet",
+          "lifecycle": "completed",
+          "tokenUsage": {
+            "inputTokens": 42
+          },
+          "contextTokens": 0,
+          "contextLimit": 200000,
+          "costStatus": "not-reported",
+          "sequence": 3
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "model refresh",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "models.list",
+        "params": {
+          "provider": "anthropic",
+          "refresh": true
+        }
+      },
+      "expected": {
+        "value": {
+          "provider": "anthropic",
+          "status": "ok",
+          "models": [
+            {
+              "modelId": "sonnet",
+              "name": "Sonnet"
+            },
+            {
+              "modelId": "opus",
+              "name": "Opus"
+            }
+          ]
+        }
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "anthropic",
+          true
+        ]
+      ]
+    },
+    {
+      "name": "model unavailable",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "models.list",
+        "params": {
+          "provider": "openai"
+        }
+      },
+      "expected": {
+        "value": {
+          "provider": "openai",
+          "status": "provider-unavailable",
+          "message": "No key on desktop.",
+          "models": []
+        }
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "model unknown",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "models.list",
+        "params": {
+          "provider": "unknown"
+        }
+      },
+      "expected": {
+        "error": "“unknown” is not an AI provider this desktop knows."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "run changes",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "changes.get"
+      },
+      "expected": {
+        "value": {
+          "ok": "listRunChanges"
+        }
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ],
+        [
+          "listRunChanges",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "session diff",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "changes.get",
+        "params": {
+          "path": " src/a.ts "
+        }
+      },
+      "expected": {
+        "value": {
+          "ok": "sessionFileDiff"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "sessionFileDiff",
+          "s1",
+          "src/a.ts"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"shot.png\"}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "shot.png"
+        }
+      },
+      "expected": {
+        "value": {}
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "sessionImagePreview",
+          "s1",
+          {
+            "path": "shot.png",
+            "offset": 0
+          }
+        ]
+      ]
+    },
+    {
+      "name": "image {\"eventIndex\":3,\"attachmentIndex\":0,\"offset\":4}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "eventIndex": 3,
+          "attachmentIndex": 0,
+          "offset": 4
+        }
+      },
+      "expected": {
+        "value": {}
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "sessionImagePreview",
+          "s1",
+          {
+            "eventIndex": 3,
+            "attachmentIndex": 0,
+            "offset": 4
+          }
+        ]
+      ]
+    },
+    {
+      "name": "image {}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {}
+      },
+      "expected": {
+        "error": "sessions.imagePreview requires either params.path or both attachment indices."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"eventIndex\":3}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "eventIndex": 3
+        }
+      },
+      "expected": {
+        "error": "sessions.imagePreview requires either params.path or both attachment indices."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"x\",\"eventIndex\":3,\"attachmentIndex\":0}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "x",
+          "eventIndex": 3,
+          "attachmentIndex": 0
+        }
+      },
+      "expected": {
+        "error": "sessions.imagePreview requires either params.path or both attachment indices."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"x\",\"offset\":-1}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "x",
+          "offset": -1
+        }
+      },
+      "expected": {
+        "error": "sessions.imagePreview params.offset must be a non-negative integer."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"x\",\"offset\":0.5}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "x",
+          "offset": 0.5
+        }
+      },
+      "expected": {
+        "error": "sessions.imagePreview params.offset must be a non-negative integer."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"x\",\"offset\":\"4\"}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "x",
+          "offset": "4"
+        }
+      },
+      "expected": {
+        "error": "sessions.imagePreview params.offset must be a non-negative integer."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"x\",\"offset\":null}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "x",
+          "offset": null
+        }
+      },
+      "expected": {
+        "value": {}
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "sessionImagePreview",
+          "s1",
+          {
+            "path": "x",
+            "offset": 0
+          }
+        ]
+      ]
+    },
+    {
+      "name": "image {\"path\":\"x\",\"offset\":9007199254740992}",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview",
+        "params": {
+          "path": "x",
+          "offset": 9007199254740992
+        }
+      },
+      "expected": {
+        "error": "sessions.imagePreview params.offset must be a non-negative integer."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "sessions.create",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "title": " Mobile ",
+          "message": " hello ",
+          "model": "opus",
+          "mode": "review"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "anthropic",
+          false
+        ],
+        [
+          "createSession",
+          {
+            "projectId": "p1",
+            "title": "Mobile",
+            "message": "hello",
+            "provider": "anthropic",
+            "model": "opus",
+            "mode": "review"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "sessions.continue",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": " continue ",
+          "actor": "forged"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.continue"
+      },
+      "expected": {
+        "value": {
+          "ok": "continueSession"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "continueSession",
+          "s1",
+          "continue",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "sessions.configure",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "model": "opus"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "anthropic",
+          false
+        ],
+        [
+          "configureSession",
+          "s1",
+          {
+            "model": "opus"
+          },
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "sessions.cancel",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.cancel"
+      },
+      "expected": {
+        "value": {
+          "ok": "cancelSession"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "cancelSession",
+          "s1",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "workflowRuns.start",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "workflowId": " ticket ",
+          "task": "Fix mobile"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.start"
+      },
+      "expected": {
+        "value": {
+          "ok": "startRun"
+        }
+      },
+      "calls": [
+        [
+          "startRun",
+          {
+            "projectId": "p1",
+            "workflowId": "ticket",
+            "task": "Fix mobile"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "workflowRuns.cancel",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "reason": "stop"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.cancel"
+      },
+      "expected": {
+        "value": {
+          "ok": "cancelRun"
+        }
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ],
+        [
+          "cancelRun",
+          "r1",
+          "stop",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "workflowRuns.retryStage",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "nodeId": " qa "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.retryStage"
+      },
+      "expected": {
+        "value": {
+          "ok": "retryStage"
+        }
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ],
+        [
+          "retryStage",
+          "r1",
+          "qa",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "permissions.respond",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "decision": "allow_always"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "permissions.respond"
+      },
+      "expected": {
+        "value": {
+          "ok": "respondToPermission"
+        }
+      },
+      "calls": [
+        [
+          "respondToPermission",
+          "q1",
+          "allow_always",
+          "dave",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "workflowGates.approve",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "note": "ok",
+          "actor": "forged"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowGates.approve"
+      },
+      "expected": {
+        "value": {
+          "ok": "approveRun"
+        }
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ],
+        [
+          "approveRun",
+          "r1",
+          "dave",
+          "ok"
+        ]
+      ]
+    },
+    {
+      "name": "workflowGates.reject",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "reason": " missing tests "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowGates.reject"
+      },
+      "expected": {
+        "value": {
+          "ok": "rejectRun"
+        }
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ],
+        [
+          "rejectRun",
+          "r1",
+          "dave",
+          "missing tests"
+        ]
+      ]
+    },
+    {
+      "name": "gadgets.submit",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "completed"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "command-0001"
+          },
+          "dave"
+        ],
+        [
+          "continueSession",
+          "s1",
+          "Gadget response — \"Which fix?\": Rewrite it.",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "cross project sessions.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project sessions.usage",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.usage"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project sessions.imagePreview",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.imagePreview"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project changes.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "changes.get"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project workflowRuns.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.get"
+      },
+      "expected": {
+        "error": "Run r1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project sessions.continue",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": " continue ",
+          "actor": "forged"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.continue"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project sessions.configure",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "model": "opus"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project sessions.cancel",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.cancel"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project gadgets.submit",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "error": "Session s1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project workflowRuns.cancel",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "reason": "stop"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.cancel"
+      },
+      "expected": {
+        "error": "Run r1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project workflowRuns.retryStage",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "nodeId": " qa "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.retryStage"
+      },
+      "expected": {
+        "error": "Run r1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project workflowGates.approve",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "note": "ok",
+          "actor": "forged"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowGates.approve"
+      },
+      "expected": {
+        "error": "Run r1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "cross project workflowGates.reject",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "reason": " missing tests "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowGates.reject"
+      },
+      "expected": {
+        "error": "Run r1 was not found in project p2."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "missing projectId",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "work.list"
+      },
+      "expected": {
+        "error": "work.list requires target.projectId."
+      },
+      "calls": []
+    },
+    {
+      "name": "missing sessionId",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "sessions.get requires target.sessionId."
+      },
+      "calls": []
+    },
+    {
+      "name": "missing runId",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.get"
+      },
+      "expected": {
+        "error": "workflowRuns.get requires target.runId."
+      },
+      "calls": []
+    },
+    {
+      "name": "not found sessions.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "missing",
+          "runId": "missing",
+          "requestId": "q1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "Session missing was not found in project p1."
+      },
+      "calls": [
+        [
+          "getSession",
+          "missing"
+        ]
+      ]
+    },
+    {
+      "name": "not found workflowRuns.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "missing",
+          "runId": "missing",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.get"
+      },
+      "expected": {
+        "error": "Run missing was not found in project p1."
+      },
+      "calls": [
+        [
+          "getRun",
+          "missing"
+        ]
+      ]
+    },
+    {
+      "name": "malformed sessions.create",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "sessions.create requires a non-empty payload.message."
+      },
+      "calls": []
+    },
+    {
+      "name": "malformed sessions.continue",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": " "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.continue"
+      },
+      "expected": {
+        "error": "sessions.continue requires a non-empty payload.message."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "malformed workflowRuns.start",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.start"
+      },
+      "expected": {
+        "error": "workflowRuns.start requires payload.workflowId."
+      },
+      "calls": []
+    },
+    {
+      "name": "malformed workflowRuns.retryStage",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.retryStage"
+      },
+      "expected": {
+        "error": "workflowRuns.retryStage requires payload.nodeId."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "malformed permissions.respond",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "decision": "maybe"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "permissions.respond"
+      },
+      "expected": {
+        "error": "permissions.respond requires payload.decision of 'allow', 'allow_always', or 'deny'."
+      },
+      "calls": []
+    },
+    {
+      "name": "malformed workflowGates.reject",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "reason": " "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowGates.reject"
+      },
+      "expected": {
+        "error": "Say why you are rejecting — the reason is recorded on the run."
+      },
+      "calls": [
+        [
+          "getRun",
+          "r1"
+        ]
+      ]
+    },
+    {
+      "name": "malformed gadgets.submit",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "error": "That answer was not in a form the desktop understands."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"provider\":\"unknown\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "provider": "unknown"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "“unknown” is not an AI provider this desktop knows. Refresh the provider list and choose another."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"provider\":\"openai\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "provider": "openai"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "No key on desktop."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"model\":\"unknown\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "model": "unknown"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "Anthropic on this desktop does not offer the model “unknown”. Refresh the model list and choose another."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "anthropic",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"mode\":\"analysis\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "mode": "analysis"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "Set an analysis prompt first."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"mode\":null}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "mode": null
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "“null” is not a session mode. Choose Chat, Analysis or Review."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"mode\":42}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "mode": 42
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "“42” is not a session mode. Choose Chat, Analysis or Review."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"provider\":\"cli\",\"model\":\"custom\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hello",
+          "provider": "cli",
+          "model": "custom"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "error": "Praxis could not confirm that CLI offers “custom” (agent did not answer). Choose the provider default instead."
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "cli",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "launch {\"message\":[null,\"hi\",[null,\"there\"]]}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": [
+            null,
+            "hi",
+            [
+              null,
+              "there"
+            ]
+          ]
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.create"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "createSession",
+          {
+            "projectId": "p1",
+            "title": ",hi,,there",
+            "message": ",hi,,there",
+            "provider": "anthropic",
+            "mode": "chat"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "configure {}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"provider\":\"cli\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "provider": "cli"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "configureSession",
+          "s1",
+          {
+            "handover": {
+              "provider": "cli"
+            }
+          },
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"mode\":\"review\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "mode": "review"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "configureSession",
+          "s1",
+          {
+            "mode": "review"
+          },
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"model\":\"sonnet\",\"mode\":\"chat\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "model": "sonnet",
+          "mode": "chat"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"provider\":\"openai\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "provider": "openai"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "No key on desktop."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"model\":\"unknown\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "model": "unknown"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "Anthropic on this desktop does not offer the model “unknown”. Refresh the model list and choose another."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ],
+        [
+          "modelCatalog",
+          "anthropic",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"mode\":\"analysis\"}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "mode": "analysis"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "Set an analysis prompt first."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "configure {\"mode\":null}",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "mode": null
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "“null” is not a session mode. Choose Chat, Analysis or Review."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "providerCatalog",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "configure state {\"canCancel\":true}",
+      "kind": "command",
+      "config": {
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": true
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "mode": "review"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "Wait for the current turn to finish before changing the provider, model or mode."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "configure state {\"lifecycle\":\"active\"}",
+      "kind": "command",
+      "config": {
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "active",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "mode": "review"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "Wait for the current turn to finish before changing the provider, model or mode."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "configure state {\"archived\":true}",
+      "kind": "command",
+      "config": {
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": true,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "mode": "review"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.configure"
+      },
+      "expected": {
+        "error": "This session is archived. Restore it on the desktop first."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "device actor fallback",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {},
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "sessions.cancel"
+      },
+      "expected": {
+        "value": {
+          "ok": "cancelSession"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "cancelSession",
+          "s1",
+          "phone-1"
+        ]
+      ]
+    },
+    {
+      "name": "workspace trust refusal",
+      "kind": "command",
+      "config": {
+        "startError": "Review workspace trust on the desktop first."
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "workflowId": " ticket ",
+          "task": "Fix mobile"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "workflowRuns.start"
+      },
+      "expected": {
+        "error": "Review workspace trust on the desktop first."
+      },
+      "calls": [
+        [
+          "startRun",
+          {
+            "projectId": "p1",
+            "workflowId": "ticket",
+            "task": "Fix mobile"
+          }
+        ]
+      ]
+    },
+    {
+      "name": "scoped device sessions.list",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.list"
+      },
+      "expected": {
+        "error": "This operation requires an authorised project."
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ]
+      ]
+    },
+    {
+      "name": "wide device sessions.list",
+      "kind": "read",
+      "config": {
+        "wide": true,
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "SESSION-abcdef12",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.list"
+      },
+      "expected": {
+        "value": []
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ],
+        [
+          "listSessions",
+          null
+        ]
+      ]
+    },
+    {
+      "name": "scoped device sessions.get",
+      "kind": "read",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "This operation requires an authorised project."
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ]
+      ]
+    },
+    {
+      "name": "wide device sessions.get",
+      "kind": "read",
+      "config": {
+        "wide": true,
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "SESSION-abcdef12",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "value": {
+          "sessionId": "s1",
+          "sessionKey": "SESSION-abcdef12",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ],
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "wide continue",
+      "kind": "command",
+      "config": {
+        "wide": true,
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "SESSION-abcdef12",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "message": "hi"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.continue"
+      },
+      "expected": {
+        "value": {
+          "ok": "continueSession"
+        }
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ],
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "continueSession",
+          "s1",
+          "hi",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "standalone refusal W-1 ",
+      "kind": "read",
+      "config": {
+        "wide": true,
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "W-1",
+          "projectId": "p1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "Session s1 was not found in standalone conversations."
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ],
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "standalone refusal TASK-1 ",
+      "kind": "read",
+      "config": {
+        "wide": true,
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "TASK-1",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "Session s1 was not found in standalone conversations."
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ],
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "standalone refusal SESSION-abcdef12 r1",
+      "kind": "read",
+      "config": {
+        "wide": true,
+        "session": {
+          "sessionId": "s1",
+          "sessionKey": "SESSION-abcdef12",
+          "title": "Chat",
+          "lifecycle": "completed",
+          "mode": "chat",
+          "archived": false,
+          "provider": "anthropic",
+          "model": "sonnet",
+          "startedAt": "2026-10-01T00:00:00.000Z",
+          "sequence": 3,
+          "messages": [],
+          "pendingPermissions": [],
+          "canContinue": true,
+          "canCancel": false,
+          "runId": "r1"
+        }
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "sessionId": "s1"
+        },
+        "operation": "sessions.get"
+      },
+      "expected": {
+        "error": "Session s1 was not found in standalone conversations."
+      },
+      "calls": [
+        [
+          "describeDevice",
+          "phone-1"
+        ],
+        [
+          "getSession",
+          "s1"
+        ]
+      ]
+    },
+    {
+      "name": "gadget accepted",
+      "kind": "command",
+      "config": {
+        "gadgetStatus": "accepted"
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "accepted"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "command-0001"
+          },
+          "dave"
+        ],
+        [
+          "continueSession",
+          "s1",
+          "Gadget response — \"Which fix?\": Rewrite it.",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "gadget completed",
+      "kind": "command",
+      "config": {
+        "gadgetStatus": "completed"
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "completed"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "command-0001"
+          },
+          "dave"
+        ],
+        [
+          "continueSession",
+          "s1",
+          "Gadget response — \"Which fix?\": Rewrite it.",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "gadget duplicate",
+      "kind": "command",
+      "config": {
+        "gadgetStatus": "duplicate"
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "duplicate"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "command-0001"
+          },
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "gadget rejected",
+      "kind": "command",
+      "config": {
+        "gadgetStatus": "rejected"
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "rejected"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "command-0001"
+          },
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "gadget explicit key",
+      "kind": "command",
+      "config": {},
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          },
+          "idempotencyKey": " stable-key "
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "completed"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "stable-key"
+          },
+          "dave"
+        ],
+        [
+          "continueSession",
+          "s1",
+          "Gadget response — \"Which fix?\": Rewrite it.",
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "gadget missing",
+      "kind": "command",
+      "config": {
+        "noGadget": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "error": "This gadget is no longer available on the desktop."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ]
+      ]
+    },
+    {
+      "name": "gadget approval 2",
+      "kind": "command",
+      "config": {
+        "approval": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "error": "This phone is not allowed to approve. Grant it the approve permission in Settings › Mobile access on the desktop."
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ]
+      ]
+    },
+    {
+      "name": "gadget approval 3",
+      "kind": "command",
+      "config": {
+        "approval": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "gadgetId": "g1",
+          "actionId": "answer",
+          "value": {
+            "kind": "choice",
+            "selected": "b"
+          }
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "gadgets.submit"
+      },
+      "expected": {
+        "value": {
+          "status": "completed"
+        }
+      },
+      "calls": [
+        [
+          "getSession",
+          "s1"
+        ],
+        [
+          "findGadget",
+          "s1",
+          "g1"
+        ],
+        [
+          "submitGadget",
+          "s1",
+          {
+            "gadgetId": "g1",
+            "actionId": "answer",
+            "value": {
+              "kind": "choice",
+              "selected": "b"
+            },
+            "idempotencyKey": "command-0001"
+          },
+          "dave"
+        ]
+      ]
+    },
+    {
+      "name": "schedules info",
+      "kind": "read",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "host.info"
+      },
+      "expected": {
+        "value": {
+          "hostId": "host",
+          "hostName": "Mac",
+          "protocolVersion": 1,
+          "surfaceRevision": 8,
+          "readOperations": [
+            "hosts.list",
+            "host.info",
+            "providers.list",
+            "models.list",
+            "sessions.usage",
+            "access.get",
+            "projects.snapshot",
+            "work.list",
+            "sessions.list",
+            "sessions.get",
+            "workflows.list",
+            "workflowRuns.list",
+            "workflowRuns.get",
+            "changes.get",
+            "attention.list",
+            "sessions.imagePreview",
+            "scheduledRuns.list"
+          ],
+          "commandOperations": [
+            "scheduledRuns.save",
+            "scheduledRuns.setArmed",
+            "scheduledRuns.resolveMissed",
+            "sessions.create",
+            "sessions.continue",
+            "sessions.configure",
+            "sessions.cancel",
+            "workflowRuns.start",
+            "workflowRuns.cancel",
+            "workflowRuns.retryStage",
+            "permissions.respond",
+            "workflowGates.approve",
+            "workflowGates.reject",
+            "gadgets.submit"
+          ],
+          "scheduledRunExecution": "planning-only",
+          "latestSequence": 41,
+          "hostEpoch": "epoch-1"
+        }
+      },
+      "calls": []
+    },
+    {
+      "name": "schedules list",
+      "kind": "read",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "requestId": "read-1",
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.list"
+      },
+      "expected": {
+        "value": [
+          {
+            "id": "schedule-1",
+            "projectId": "p1",
+            "name": "Tonight",
+            "status": "draft",
+            "scheduledStartAt": "2026-10-25T20:30:00.000Z",
+            "timezone": "Europe/London",
+            "entries": []
+          }
+        ]
+      },
+      "calls": [
+        [
+          "schedules.list",
+          "p1"
+        ]
+      ]
+    },
+    {
+      "name": "schedule scheduledRuns.save 109",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "name": "Tonight",
+          "date": "2026-10-25",
+          "time": "20:30",
+          "timezone": "Europe/London",
+          "issueKeys": [
+            "A-2",
+            "A-1"
+          ]
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.save"
+      },
+      "expected": {
+        "value": {
+          "id": "schedule-1",
+          "projectId": "p1",
+          "name": "Tonight",
+          "status": "draft",
+          "scheduledStartAt": "2026-10-25T20:30:00.000Z",
+          "timezone": "Europe/London",
+          "entries": []
+        }
+      },
+      "calls": [
+        [
+          "schedules.save",
+          "p1",
+          {
+            "name": "Tonight",
+            "date": "2026-10-25",
+            "time": "20:30",
+            "timezone": "Europe/London",
+            "issueKeys": [
+              "A-2",
+              "A-1"
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "name": "schedule scheduledRuns.setArmed 110",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "id": "schedule-1",
+          "armed": true
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.setArmed"
+      },
+      "expected": {
+        "value": {
+          "id": "schedule-1",
+          "projectId": "p1",
+          "name": "Tonight",
+          "status": "draft",
+          "scheduledStartAt": "2026-10-25T20:30:00.000Z",
+          "timezone": "Europe/London",
+          "entries": []
+        }
+      },
+      "calls": [
+        [
+          "schedules.setArmed",
+          "p1",
+          "schedule-1",
+          true
+        ]
+      ]
+    },
+    {
+      "name": "schedule scheduledRuns.resolveMissed 111",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "id": "schedule-1",
+          "resolution": "start-now"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.resolveMissed"
+      },
+      "expected": {
+        "value": {
+          "id": "schedule-1",
+          "projectId": "p1",
+          "name": "Tonight",
+          "status": "draft",
+          "scheduledStartAt": "2026-10-25T20:30:00.000Z",
+          "timezone": "Europe/London",
+          "entries": []
+        }
+      },
+      "calls": [
+        [
+          "schedules.resolveMissed",
+          "p1",
+          "schedule-1",
+          "start-now"
+        ]
+      ]
+    },
+    {
+      "name": "schedule scheduledRuns.save 112",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "name": " ",
+          "date": "2026-10-25",
+          "time": "20:30",
+          "timezone": "Europe/London",
+          "issueKeys": [
+            "A-2",
+            "A-1"
+          ]
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.save"
+      },
+      "expected": {
+        "error": "A schedule needs a name, date, time, timezone and ordered project ticket keys."
+      },
+      "calls": []
+    },
+    {
+      "name": "schedule scheduledRuns.save 113",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "name": "Tonight",
+          "date": "2026-10-25",
+          "time": "20:30",
+          "timezone": "Europe/London",
+          "issueKeys": [
+            42
+          ]
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.save"
+      },
+      "expected": {
+        "error": "A schedule needs a name, date, time, timezone and ordered project ticket keys."
+      },
+      "calls": []
+    },
+    {
+      "name": "schedule scheduledRuns.save 114",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "name": "Tonight",
+          "date": "2026-10-25",
+          "time": "20:30",
+          "timezone": "Europe/London",
+          "issueKeys": [
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1",
+            "A-1"
+          ]
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.save"
+      },
+      "expected": {
+        "error": "A schedule needs a name, date, time, timezone and ordered project ticket keys."
+      },
+      "calls": []
+    },
+    {
+      "name": "schedule scheduledRuns.setArmed 115",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "id": "schedule-1",
+          "armed": "true"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.setArmed"
+      },
+      "expected": {
+        "error": "A schedule id and armed boolean are required."
+      },
+      "calls": []
+    },
+    {
+      "name": "schedule scheduledRuns.resolveMissed 116",
+      "kind": "command",
+      "config": {
+        "schedules": true
+      },
+      "request": {
+        "protocolVersion": 1,
+        "commandId": "command-0001",
+        "issuedAt": "2026-10-01T00:00:00.000Z",
+        "payload": {
+          "id": "schedule-1",
+          "resolution": "later"
+        },
+        "caller": {
+          "deviceId": "phone-1",
+          "subject": " dave ",
+          "capabilities": [
+            "view",
+            "execute",
+            "approve"
+          ]
+        },
+        "target": {
+          "hostId": "host",
+          "projectId": "p1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "requestId": "q1"
+        },
+        "operation": "scheduledRuns.resolveMissed"
+      },
+      "expected": {
+        "error": "Choose start-now or skip for a missed schedule."
+      },
+      "calls": []
+    }
+  ]
+}

@@ -16,6 +16,8 @@ pub mod pairing_registry;
 pub mod permissions;
 pub mod protocol;
 pub mod run_projection;
+pub mod scheduled_runs;
+pub mod services;
 pub mod session_changes;
 pub mod session_projection;
 pub mod session_record;
