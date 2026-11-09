@@ -660,6 +660,11 @@ test('hasRustHostBinary and resolveInitialMigratedChannels: environment flag and
     const gitOnly = resolveInitialMigratedChannels();
     assert.ok(gitOnly.length > 0);
     assert.ok(gitOnly.every(c => c.startsWith('git:')));
+
+    process.env.PRAXIS_RUST_CHANNELS = 'workflows:listPolicies,git:getCommit';
+    assert.deepEqual(resolveInitialMigratedChannels(), ['workflows:listPolicies', 'git:getCommit']);
+    process.env.PRAXIS_RUST_CHANNELS = 'NONE';
+    assert.deepEqual(resolveInitialMigratedChannels(), []);
   } finally {
     if (prevEnv !== undefined) {
       process.env.PRAXIS_RUST_CHANNELS = prevEnv;

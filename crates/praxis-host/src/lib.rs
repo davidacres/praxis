@@ -8,6 +8,7 @@ pub mod events;
 pub mod napi_bridge;
 pub mod secrets;
 pub mod stdio;
+mod workflow_reads;
 
 pub use config::{HostConfig, HostConfigError};
 pub use context::{HostContext, RpcHandlerFn};

@@ -61,14 +61,15 @@ export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
  */
 export function resolveInitialMigratedChannels(packaged = app?.isPackaged ?? false): string[] {
   if (packaged) return [];
-  const envVal = process.env.PRAXIS_RUST_CHANNELS?.trim().toLowerCase();
-  if (envVal === 'false' || envVal === '0' || envVal === 'none' || envVal === 'off') {
+  const envVal = process.env.PRAXIS_RUST_CHANNELS?.trim();
+  const mode = envVal?.toLowerCase();
+  if (mode === 'false' || mode === '0' || mode === 'none' || mode === 'off') {
     return [];
   }
   if (!hasRustHostBinary()) {
     return [];
   }
-  if (envVal && envVal !== 'default' && envVal !== 'all' && envVal !== 'true' && envVal !== '1') {
+  if (envVal && mode !== 'default' && mode !== 'all' && mode !== 'true' && mode !== '1') {
     const requested = envVal.split(',').map(s => s.trim()).filter(Boolean);
     const channels: string[] = [];
     for (const req of requested) {

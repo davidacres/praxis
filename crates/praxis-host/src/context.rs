@@ -303,6 +303,7 @@ impl HostContext {
             Ok(json!(ctx.secrets.seed(entries)))
         });
 
+        crate::workflow_reads::register_workflow_read_handlers(self);
         self.register_settings_and_workspace_handlers();
         self.register_projects_and_folder_handlers();
     }

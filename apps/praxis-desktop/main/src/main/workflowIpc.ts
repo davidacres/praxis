@@ -1,3 +1,4 @@
+import { getRustHostBridge } from './rustHostInstance';
 import { BrowserWindow, dialog } from 'electron';
 import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import * as fs from 'node:fs';
@@ -860,9 +861,11 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     await commitWorkflowBase(projectId, message);
   });
 
-  ipcMain.handle('workflows:listPolicies', async (): Promise<WorkflowPolicyProfile[]> => {
+  // Opt-in only until bridge CI and shared-store/cache parity are proven. The Rust handler
+  // reads the durable store; the TypeScript fallback retains the existing in-memory semantics.
+  getRustHostBridge().handleOrFallback('workflows:listPolicies', async (): Promise<WorkflowPolicyProfile[]> => {
     return getWorkflowPolicyStore().list();
-  });
+  }, ipcMain);
 
   ipcMain.handle(
     'workflows:savePolicy',
