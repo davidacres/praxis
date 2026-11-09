@@ -8,9 +8,12 @@
  * allowlist change — established peers are severed and must re-authenticate.
  */
 import * as os from 'node:os';
+import { app } from 'electron';
+import { selectMobileTransport, type MobileListenerTransport, type MobileRelayTransport } from './mobileTransport';
+import { RustMobileTransport } from './rustMobileTransport';
 import { fingerprintMobileHostKey, type MobileHostApplication, type MobileListener } from '@praxis/core';
 import { getLogBus } from './logBusInstance';
-import { getSettingsBackend } from './settingsBackendInstance';
+import { getSettingsBackend, getSharedSettingsFilePath } from './settingsBackendInstance';
 import { registerMobileElectronIpc } from './mobileIpc';
 import { composeDesktopMobileHost } from './mobileHostComposition';
 import { getMobileHostId, getMobileHostIdentity, getMobileRelayIdentity } from './mobileHostIdentity';
@@ -23,7 +26,6 @@ import {
 } from './mobileDiscoveryAdvertiser';
 import {
   attachMobileLanServer,
-  lanInterfaces,
   mobileAuthorizePeer,
   mobileOnUnpairedPeer,
   notifyMobilePairingChanged,
@@ -32,10 +34,11 @@ import {
 } from './mobilePairingInstance';
 
 let current: MobileListener | undefined;
-let lanServer: MobileLanServer | undefined;
+let lanServer: MobileListenerTransport | undefined;
 let hostApp: MobileHostApplication | undefined;
-let relayClient: MobileRelayClient | undefined;
+let relayClient: MobileRelayTransport | undefined;
 let relayClientUrl: string | undefined;
+let settingsSubscription: { dispose(): void } | undefined;
 
 /** The relay to register with. An environment override for now; a Settings field is a follow-up. */
 function configuredRelayUrl(): string | undefined {
@@ -43,11 +46,12 @@ function configuredRelayUrl(): string | undefined {
   return url && isAllowedRelayUrl(url) ? url : undefined;
 }
 
-function stopRelay(): void {
-  relayClient?.stop();
+async function stopRelay(): Promise<void> {
+  const client = relayClient;
   relayClient = undefined;
   relayClientUrl = undefined;
   setMobileRelayRoute(undefined);
+  await client?.stop();
 }
 
 /**
@@ -58,41 +62,58 @@ function stopRelay(): void {
 async function applyRelay(mode: string): Promise<void> {
   const url = mode === 'internet' ? configuredRelayUrl() : undefined;
   if (!url || !lanServer) {
-    stopRelay();
+    await stopRelay();
     return;
   }
   if (relayClient && relayClientUrl === url) return;
-  stopRelay();
+  await stopRelay();
   const identity = await getMobileRelayIdentity();
-  const client: MobileRelayClient = new MobileRelayClient({
+  const options = {
     relayUrl: url,
     identity,
-    onStream: stream => lanServer?.acceptRelayedStream(stream),
-    onLog: line => getLogBus().appendLine(line),
+    onLog: (line: string) => getLogBus().appendLine(line),
     onStateChange: () => {
       if (relayClient !== client) return;
       setMobileRelayRoute(client.state === 'registered' && client.channel ? { url, channel: client.channel } : undefined);
       notifyMobilePairingChanged();
     },
-  });
+  };
+  const client: MobileRelayTransport = lanServer instanceof RustMobileTransport
+    ? lanServer.createRelay(options)
+    : new MobileRelayClient({ ...options, onStream: stream => {
+      if (lanServer instanceof MobileLanServer) lanServer.acceptRelayedStream(stream);
+    } });
   relayClient = client;
   relayClientUrl = url;
-  client.start();
+  try {
+    await client.start();
+  } catch (error) {
+    await stopRelay();
+    throw error;
+  }
 }
 
 async function createLanServer(): Promise<void> {
   if (!hostApp) return;
+  await stopRelay();
   await lanServer?.stop();
+  await lanServer?.dispose?.();
   const identity = await getMobileHostIdentity();
   const pairingCode = process.env.PRAXIS_MOBILE_PAIRING_CODE?.trim();
-  lanServer = new MobileLanServer({
+  const deps = {
     app: hostApp,
     hostStaticKey: identity,
     ...(pairingCode ? { pairingCode } : {}),
     authorizePeer: mobileAuthorizePeer,
     onUnpairedPeer: mobileOnUnpairedPeer,
-    onLog: line => getLogBus().appendLine(line),
-  });
+    onLog: (line: string) => getLogBus().appendLine(line),
+  };
+  const runtime = selectMobileTransport(app.isPackaged);
+  lanServer = runtime === 'rust' ? new RustMobileTransport(deps, {
+    host: { userDataDir: app.getPath('userData'), settingsPath: getSharedSettingsFilePath(),
+      demoMode: process.argv.includes('--demo'), e2eMode: process.env.PRAXIS_E2E === '1' },
+  }) : new MobileLanServer(deps);
+  getLogBus().appendLine(`[mobile] Selected ${runtime} transport.`);
   attachMobileLanServer(lanServer);
 }
 
@@ -104,7 +125,18 @@ function configuredMobilePort(settingsPort: number | undefined): number | undefi
   return settingsPort;
 }
 
-async function applyMobileAccessFromSettings(): Promise<void> {
+let accessChange: Promise<void> = Promise.resolve();
+function queueMobileAccess(operation: () => Promise<void>): Promise<void> {
+  const next = accessChange.then(operation);
+  accessChange = next.catch(error => getLogBus().appendLine(`[mobile] access update failed: ${String(error)}`));
+  return next;
+}
+
+function applyMobileAccessFromSettings(): Promise<void> {
+  return queueMobileAccess(applyMobileAccess);
+}
+
+async function applyMobileAccess(): Promise<void> {
   const settings = getSettingsBackend().read().mobileAccess;
   const change = resolveMobileListenerChange(current, settings, configuredMobilePort(settings.listenPort));
   current = change.listener;
@@ -121,9 +153,9 @@ async function applyMobileAccessFromSettings(): Promise<void> {
       await lanServer.stop();
     } else if (change.listener.bound && change.listener.port !== undefined) {
       await lanServer.start(change.listener.port, policy);
-      if (change.dropConnections) lanServer.applyPolicy(policy, true);
+      if (change.dropConnections) await lanServer.applyPolicy(policy, true);
     } else {
-      lanServer.applyPolicy(policy, change.dropConnections);
+      await lanServer.applyPolicy(policy, change.dropConnections);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -178,19 +210,21 @@ export async function initMobileHost(): Promise<void> {
   }
 
   await applyMobileAccessFromSettings();
-  getSettingsBackend().onDidChange(() => {
-    void applyMobileAccessFromSettings();
+  settingsSubscription = getSettingsBackend().onDidChange(() => {
+    void applyMobileAccessFromSettings().catch(() => undefined);
   });
 }
 
 export async function restartMobileLanAfterKeyRotation(): Promise<void> {
-  current = undefined;
-  try {
-    await createLanServer();
-  } catch (error) {
-    getLogBus().appendLine(`[mobile] host key rotation failed to rebind: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  await applyMobileAccessFromSettings();
+  await queueMobileAccess(async () => {
+    current = undefined;
+    try {
+      await createLanServer();
+    } catch (error) {
+      getLogBus().appendLine(`[mobile] host key rotation failed to rebind: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    await applyMobileAccess();
+  });
 }
 
 export function currentMobileListener(): MobileListener | undefined {
@@ -202,10 +236,19 @@ export function mobileLanConnectionCount(): number {
 }
 
 export async function stopMobileHost(): Promise<void> {
+  settingsSubscription?.dispose();
+  settingsSubscription = undefined;
   stopMobileDiscoveryAdvertisement();
-  await lanServer?.stop();
-  lanServer = undefined;
-  hostApp = undefined;
-  current = undefined;
-  attachMobileLanServer(undefined);
+  await accessChange;
+  try {
+    await stopRelay();
+    await lanServer?.stop();
+  } finally {
+    const server = lanServer;
+    lanServer = undefined;
+    hostApp = undefined;
+    current = undefined;
+    attachMobileLanServer(undefined);
+    await server?.dispose?.();
+  }
 }

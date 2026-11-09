@@ -60,7 +60,7 @@ import { registerTicketReviewIpc } from './ticketReviewIpc';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { registerMarketplaceIpc } from './marketplaceIpc';
 import { reconcileInstalledOnLaunch } from './marketplaceInstance';
-import { initMobileHost } from './mobileListenerInstance';
+import { initMobileHost, stopMobileHost } from './mobileListenerInstance';
 import { ensureEnvironmentPath } from './shellEnvironment';
 import { initMemoryManager } from './memoryManager';
 import { disposeRustHost } from './rustHostInstance';
@@ -517,5 +517,6 @@ app.on('before-quit', event => {
   void disposeUserMcp();
   // Release this process's claims and hand the broker over to whichever instance is left.
   void disposeCoordination();
+  void stopMobileHost().catch(error => console.error('Could not stop mobile host:', error));
   void disposeRustHost();
 });

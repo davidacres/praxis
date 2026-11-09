@@ -28,7 +28,20 @@ let cached: KeyPair | undefined;
 let cachedPairingCode: string | undefined;
 let cachedHostId: string | undefined;
 
-export async function getMobileHostIdentity(): Promise<KeyPair> {
+let identityRequest: Promise<KeyPair> | undefined;
+
+function trackIdentityRequest(request: Promise<KeyPair>): Promise<KeyPair> {
+  identityRequest = request;
+  const clear = () => { if (identityRequest === request) identityRequest = undefined; };
+  void request.then(clear, clear);
+  return request;
+}
+
+export function getMobileHostIdentity(): Promise<KeyPair> {
+  return identityRequest ?? trackIdentityRequest(loadMobileHostIdentity());
+}
+
+async function loadMobileHostIdentity(): Promise<KeyPair> {
   if (cached) return cached;
 
   const override = process.env.PRAXIS_MOBILE_HOST_KEY;
@@ -90,13 +103,17 @@ export async function getMobileHostId(): Promise<string> {
 }
 
 /** Regenerates the static key. Paired phones must distrust the new public key. Host id is unchanged. */
-export async function rotateMobileHostIdentity(): Promise<KeyPair> {
-  cached = undefined;
-  cachedPairingCode = undefined;
-  const secrets = getSecretsStore();
-  await secrets.delete(SECRET_KEY).catch(() => undefined);
-  await secrets.delete(PAIRING_CODE_KEY).catch(() => undefined);
-  return getMobileHostIdentity();
+export function rotateMobileHostIdentity(): Promise<KeyPair> {
+  // Status refreshes must wait for deletion rather than re-cache the old secret.
+  const previous = identityRequest;
+  return trackIdentityRequest((previous ?? Promise.resolve()).catch(() => undefined).then(async () => {
+    cached = undefined;
+    cachedPairingCode = undefined;
+    const secrets = getSecretsStore();
+    await secrets.delete(SECRET_KEY).catch(() => undefined);
+    await secrets.delete(PAIRING_CODE_KEY).catch(() => undefined);
+    return loadMobileHostIdentity();
+  }));
 }
 
 export function resetMobileHostIdentity(): void {

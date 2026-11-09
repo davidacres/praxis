@@ -9,6 +9,14 @@ let window: Page;
 test.beforeEach(async () => {
   app = await launchTestApp();
   window = app.window;
+  const expected = process.env.PRAXIS_EXPECT_MOBILE_TRANSPORT;
+  if (expected) {
+    await expect.poll(() => app.electronApp.evaluate(({ app }) => {
+      const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
+      return require('./logBusInstance.js').getLogBus().recent() as string[];
+    })).toContain(`[mobile] Selected ${expected} transport.`);
+    console.log(`[mobile] Verified ${expected} transport selection`);
+  }
 });
 
 test.afterEach(async () => {
@@ -30,7 +38,7 @@ test('mobile access pairing controls stay off until the listener is enabled', as
   await expect(window.locator('[data-testid="mobile-paired-devices"]')).toContainText('No paired phones yet.');
 });
 
-test('creating a pairing code shows a single-use token and never a private key', async () => {
+test('creating a pairing code shows a single-use token and never a private key', async ({}, testInfo) => {
   await openMobileAccess();
   await chooseOption(window.locator('[data-testid="mobile-access-mode"]'), 'local-only');
   await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Listening');
@@ -43,6 +51,7 @@ test('creating a pairing code shows a single-use token and never a private key',
   await expect(window.locator('[data-testid="mobile-pairing-qr"]')).toBeVisible();
   await expect(window.locator('[data-testid="mobile-host-fingerprint"]')).toHaveText(/^[0-9a-f]{16}$/);
   await expect(window.locator('[data-testid="mobile-copy-invitation"]')).toBeVisible();
+  await window.screenshot({ path: testInfo.outputPath('mobile-listening.png') });
 });
 
 test('resetting the host key asks for confirmation in-app', async () => {
@@ -52,6 +61,18 @@ test('resetting the host key asks for confirmation in-app', async () => {
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
+});
+
+test('resetting an enabled host changes its fingerprint and rebinds the listener', async () => {
+  await openMobileAccess();
+  await chooseOption(window.locator('[data-testid="mobile-access-mode"]'), 'local-only');
+  await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Listening');
+  const fingerprint = window.locator('[data-testid="mobile-host-fingerprint"]');
+  const previous = await fingerprint.textContent();
+  await window.locator('[data-testid="mobile-reset-host-key"]').click();
+  await window.getByRole('dialog', { name: 'Reset host key?' }).getByRole('button', { name: 'Reset host key', exact: true }).click();
+  await expect(fingerprint).not.toHaveText(previous!);
+  await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Listening');
 });
 
 test('an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates', async () => {

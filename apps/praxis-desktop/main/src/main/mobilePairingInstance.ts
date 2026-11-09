@@ -17,10 +17,10 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { DEFAULT_MOBILE_LISTENER_PORT } from './mobileAccessLifecycle';
 import { getProjectStore } from './projectStoreInstance';
 import { isMobileDiscoveryAdvertised } from './mobileDiscoveryAdvertiser';
-import { MobileLanServer } from './mobileLanServer';
+import type { MobileListenerTransport } from './mobileTransport';
 
 let registry: MobilePairingRegistry | undefined;
-let lanServer: MobileLanServer | undefined;
+let lanServer: MobileListenerTransport | undefined;
 let lastBindError: string | undefined;
 
 function pairingFile(): string {
@@ -51,7 +51,7 @@ export function getMobilePairingRegistry(): MobilePairingRegistry {
   return registry;
 }
 
-export function attachMobileLanServer(server: MobileLanServer | undefined): void {
+export function attachMobileLanServer(server: MobileListenerTransport | undefined): void {
   lanServer = server;
 }
 
@@ -178,7 +178,7 @@ export async function createMobilePairingInvitation(): Promise<MobilePairingSnap
   const addresses = snapshot.listener.addresses.length ? snapshot.listener.addresses : ['127.0.0.1'];
   // A new invitation voids the old one and every request waiting on it.
   for (const waiting of getMobilePairingRegistry().listPending()) {
-    lanServer?.dropPublicKey(waiting.devicePublicKey, mobileConnectionStatus('invitation-expired', 'The desktop created a new pairing invitation, which replaced the one this phone used. Scan the new invitation.'));
+    await lanServer?.dropPublicKey(waiting.devicePublicKey, mobileConnectionStatus('invitation-expired', 'The desktop created a new pairing invitation, which replaced the one this phone used. Scan the new invitation.'));
   }
   getMobilePairingRegistry().issueInvitation(snapshot.hostId, {
     displayName: snapshot.hostName,
@@ -200,9 +200,9 @@ export async function confirmMobilePairing(
   const result = getMobilePairingRegistry().confirm(requestId, grant);
   if (result.ok) {
     for (const other of getMobilePairingRegistry().takeSuperseded()) {
-      lanServer?.dropPublicKey(other.devicePublicKey, mobileConnectionStatus('invitation-used'));
+      await lanServer?.dropPublicKey(other.devicePublicKey, mobileConnectionStatus('invitation-used'));
     }
-    lanServer?.promotePending(result.device.publicKeyHex ?? '', {
+    await lanServer?.promotePending(result.device.publicKeyHex ?? '', {
       deviceId: result.device.deviceId,
       capabilities: result.device.capabilities ?? ['view'],
       ...(result.device.projectIds ? { projectIds: result.device.projectIds } : {}),
@@ -215,21 +215,21 @@ export async function confirmMobilePairing(
 export async function denyMobilePairing(requestId: string): Promise<MobilePairingSnapshot> {
   const pending = getMobilePairingRegistry().listPending().find(item => item.requestId === requestId);
   getMobilePairingRegistry().deny(requestId);
-  if (pending) lanServer?.dropPublicKey(pending.devicePublicKey, mobileConnectionStatus('pairing-rejected'));
+  if (pending) await lanServer?.dropPublicKey(pending.devicePublicKey, mobileConnectionStatus('pairing-rejected'));
   emitPairingChanged();
   return snapshotMobilePairing();
 }
 
 export async function revokeMobilePairedDevice(deviceId: string): Promise<MobilePairingSnapshot> {
   getMobilePairingRegistry().revoke(deviceId);
-  lanServer?.dropDevice(deviceId, mobileConnectionStatus('device-revoked'));
+  await lanServer?.dropDevice(deviceId, mobileConnectionStatus('device-revoked'));
   emitPairingChanged();
   return snapshotMobilePairing();
 }
 
 export async function rotateMobileHostKey(): Promise<MobilePairingSnapshot> {
   getMobilePairingRegistry().revokeAll();
-  lanServer?.dropAll(mobileConnectionStatus('host-key-reset'));
+  await lanServer?.dropAll(mobileConnectionStatus('host-key-reset'));
   await rotateMobileHostIdentity();
   emitPairingChanged();
   return snapshotMobilePairing();

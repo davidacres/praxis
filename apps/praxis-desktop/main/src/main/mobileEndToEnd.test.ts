@@ -7,6 +7,9 @@
  */
 import assert from 'node:assert/strict';
 import * as net from 'node:net';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import test from 'node:test';
 import {
   InMemoryMobileCommandLedger,
@@ -30,10 +33,23 @@ import {
   mergeSequencedSnapshot,
   type KeyPair,
 } from '@praxis/mobile-protocol';
-import { MobileLanServer } from './mobileLanServer';
+import { MobileLanServer, type MobileLanServerDeps } from './mobileLanServer';
+import { RustMobileTransport } from './rustMobileTransport';
+import type { MobileListenerTransport } from './mobileTransport';
 import { createMobileHostExecutionHandlers, createMobileHostReads, type MobileHostServiceDeps } from './mobileHostServices';
 import { appendMobileAppearanceEvent, appendMobileSessionEvent, mobileSessionSnapshot, mobileSessionSummary } from './mobileSessionProjection';
 import { readMobileImagePreview } from './mobileImagePreview';
+
+function testServer(deps: MobileLanServerDeps, t: { after: (fn: () => Promise<void>) => void }): MobileListenerTransport {
+  if (process.env.PRAXIS_TEST_RUST_MOBILE !== '1') return new MobileLanServer(deps);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-mobile-e2e-'));
+  const server = new RustMobileTransport(deps, {
+    host: { userDataDir: dir, settingsPath: path.join(dir, 'settings.json') },
+    interfaces: () => [{ interfaceName: 'lo0', address: '127.0.0.1' }],
+  });
+  t.after(async () => { await server.dispose(); fs.rmSync(dir, { recursive: true, force: true }); });
+  return server;
+}
 
 const HOST = 'host-mac';
 const PROJECT = 'p1';
@@ -207,15 +223,15 @@ async function phoneMirror(client: MobileSecureClient) {
 
 const settle = (ms = 150): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-test('the phone lists providers and models, and the desktop launches exactly the selected pair', async () => {
+test('the phone lists providers and models, and the desktop launches exactly the selected pair', async t => {
   const desktop = fakeDesktop();
   const hostKey = generateKeyPair();
   const phoneKey = generateKeyPair();
-  const server = new MobileLanServer({
+  const server = testServer({
     app: desktop.app,
     hostStaticKey: hostKey,
     authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view', 'execute', 'approve'], projectIds: [PROJECT] }),
-  });
+  }, t);
 
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   const phone = nodeClient(server.port!, hostKey, phoneKey);
@@ -260,15 +276,15 @@ test('the phone lists providers and models, and the desktop launches exactly the
   }
 });
 
-test('the phone can fetch a user-attached image through the real session snapshot and secure read path', async () => {
+test('the phone can fetch a user-attached image through the real session snapshot and secure read path', async t => {
   const desktop = fakeDesktop();
   const hostKey = generateKeyPair();
   const phoneKey = generateKeyPair();
-  const server = new MobileLanServer({
+  const server = testServer({
     app: desktop.app,
     hostStaticKey: hostKey,
     authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view', 'execute', 'approve'], projectIds: [PROJECT] }),
-  });
+  }, t);
   const imageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   const phone = nodeClient(server.port!, hostKey, phoneKey);
@@ -310,15 +326,15 @@ test('the phone can fetch a user-attached image through the real session snapsho
   }
 });
 
-test('usage streams to the phone and reconnect/replay neither duplicates nor loses session updates', async () => {
+test('usage streams to the phone and reconnect/replay neither duplicates nor loses session updates', async t => {
   const desktop = fakeDesktop();
   const hostKey = generateKeyPair();
   const phoneKey = generateKeyPair();
-  const server = new MobileLanServer({
+  const server = testServer({
     app: desktop.app,
     hostStaticKey: hostKey,
     authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view', 'execute', 'approve'], projectIds: [PROJECT] }),
-  });
+  }, t);
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   try {
     const first = nodeClient(server.port!, hostKey, phoneKey);
@@ -382,15 +398,15 @@ test('usage streams to the phone and reconnect/replay neither duplicates nor los
   }
 });
 
-test('a theme change reaches a project-scoped phone live, as a host-wide event', async () => {
+test('a theme change reaches a project-scoped phone live, as a host-wide event', async t => {
   const desktop = fakeDesktop();
   const hostKey = generateKeyPair();
   const phoneKey = generateKeyPair();
-  const server = new MobileLanServer({
+  const server = testServer({
     app: desktop.app,
     hostStaticKey: hostKey,
     authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view'], projectIds: [PROJECT] }),
-  });
+  }, t);
   await server.start(0, { mode: 'local-only', allowedInterfaces: [], allowedSubnets: [] });
   const phone = nodeClient(server.port!, hostKey, phoneKey);
   try {

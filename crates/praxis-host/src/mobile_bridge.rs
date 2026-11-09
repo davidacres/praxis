@@ -529,6 +529,14 @@ pub fn register_mobile_channels(host: &HostContext, bridge: &Arc<MobileBridge>) 
             .map_err(rpc_error)
     });
     let b = Arc::clone(bridge);
+    host.register_handler("mobile:dropAll", move |_, args| {
+        let status = MobileBridge::status_arg(&arg(args)).map_err(rpc_error)?;
+        if let Some(server) = b.server() {
+            server.drop_all(status);
+        }
+        Ok(Value::Null)
+    });
+    let b = Arc::clone(bridge);
     host.register_handler("mobile:dropDevice", move |_, args| {
         b.drop_device(&arg(args)).map_err(rpc_error)
     });
