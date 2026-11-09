@@ -4,6 +4,7 @@
 pub mod ci;
 pub mod folder_service;
 pub mod github;
+pub mod gitlab;
 pub mod issue_tracker_service;
 pub mod rest_support;
 pub mod stub_backend_service;
