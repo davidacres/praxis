@@ -232,3 +232,126 @@ async fn start_rejects_bad_keys_and_control_calls_work_before_any_server() {
     assert_eq!(outcome.2["listening"], false);
     assert_eq!(outcome.3.unwrap(), json!(0));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn relay_streams_reach_electron_and_state_changes_are_reported() {
+    use praxis_mobile::host::identity::{MobileRelayIdentity, ed25519_pkcs8_der};
+    use praxis_mobile::host::relay_client::run_relay_stream;
+    use praxis_mobile::relay::{RelayServer, RelayServerOptions};
+
+    let (calls, log, _commands) = paired_electron_with_relay_state();
+    let mut relay = RelayServer::start(RelayServerOptions {
+        address: Some("127.0.0.1:0".parse().unwrap()),
+        ..RelayServerOptions::default()
+    })
+    .await
+    .expect("relay");
+    let bridge = MobileBridge::new(tokio::runtime::Handle::current(), calls);
+    let key = KeyPair::generate();
+    let identity = MobileRelayIdentity::generate();
+    let params = json!({
+        "relayUrl": format!("ws://127.0.0.1:{}", relay.port()),
+        "relaySigningKey": hex(&ed25519_pkcs8_der(&identity.signing_key)),
+        "hostPrivateKey": hex(&*key.private_key()),
+    });
+    let b = Arc::clone(&bridge);
+    tokio::task::spawn_blocking(move || {
+        b.relay_start(params.clone()).expect("relay start");
+        // The same URL is idempotent.
+        b.relay_start(params).expect("relay restart");
+        b.apply_policy(
+            &json!({"policy": {"mode": "internet", "allowedInterfaces": [], "allowedSubnets": []}}),
+        )
+    })
+    .await
+    .unwrap()
+    .expect("policy");
+
+    let channel = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let reported = log
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(m, p)| m == "mobile.relayState" && p["state"] == "registered")
+                .map(|(_, p)| p["channel"].as_str().unwrap().to_owned())
+                .next();
+            if let Some(channel) = reported {
+                return channel;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("registered state reported to Electron");
+
+    let (phone, _notices) = phone(&key);
+    let port = relay.port();
+    phone
+        .connect(move || async move {
+            let (ws, _) = tokio_tungstenite::connect_async(format!(
+                "ws://127.0.0.1:{port}/v1/connect?channel={channel}"
+            ))
+            .await
+            .map_err(std::io::Error::other)?;
+            let (stream, far) = tokio::io::duplex(65536);
+            tokio::spawn(async move {
+                let _ = run_relay_stream(ws, far).await;
+            });
+            Ok(stream)
+        })
+        .await
+        .expect("relay phone");
+    let reply = phone
+        .read(request("work.list", "p1"))
+        .await
+        .expect("read over relay");
+    assert_eq!(reply["callerSeenByElectron"]["deviceId"], "phone-1");
+
+    let b = Arc::clone(&bridge);
+    let stopped = tokio::task::spawn_blocking(move || b.relay_stop())
+        .await
+        .unwrap();
+    assert_eq!(stopped["state"], "stopped");
+    let stopper = Arc::clone(&bridge);
+    tokio::task::spawn_blocking(move || stopper.shutdown())
+        .await
+        .unwrap();
+    relay.stop();
+}
+
+fn paired_electron_with_relay_state() -> (HostCallClient, Calls, Arc<AtomicUsize>) {
+    let commands = Arc::new(AtomicUsize::new(0));
+    let (calls, log) = electron(|method, params| match method {
+        "mobile.authorizePeer" => {
+            Ok(json!({"deviceId": "phone-1", "capabilities": ["view"], "projectIds": ["p1"]}))
+        }
+        "mobile.read" => Ok(json!({"callerSeenByElectron": params["caller"]})),
+        "mobile.relayState" => Ok(Value::Null),
+        other => Err(format!("unexpected {other}")),
+    });
+    (calls, log, commands)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn relay_start_rejects_insecure_urls_and_bad_keys() {
+    let (calls, _log) = electron(|_, _| Ok(Value::Null));
+    let bridge = MobileBridge::new(tokio::runtime::Handle::current(), calls);
+    let key = KeyPair::generate();
+    let b = Arc::clone(&bridge);
+    let host_key = hex(&*key.private_key());
+    let outcomes = tokio::task::spawn_blocking(move || {
+        let identity = praxis_mobile::host::identity::MobileRelayIdentity::generate();
+        let der = hex(&praxis_mobile::host::identity::ed25519_pkcs8_der(&identity.signing_key));
+        (
+            b.relay_start(json!({"relayUrl": "ws://relay.example", "relaySigningKey": der, "hostPrivateKey": host_key})),
+            b.relay_start(json!({"relayUrl": "wss://relay.example", "relaySigningKey": "00", "hostPrivateKey": host_key})),
+            b.status_value(),
+        )
+    })
+    .await
+    .unwrap();
+    assert!(outcomes.0.is_err(), "plain ws to a remote host is refused");
+    assert!(outcomes.1.is_err(), "a non-Ed25519 key is refused");
+    assert_eq!(outcomes.2["relay"]["state"], "stopped");
+}
