@@ -1499,11 +1499,16 @@ mod tests {
         needle: &str,
     ) -> String {
         let mut seen = String::new();
+        let deadline = tokio::time::Instant::now() + WAIT;
         while !seen.contains(needle) {
-            if let TerminalEvent::Output(event) = next_event(events).await
-                && event.session_id == session_id
-            {
-                seen.push_str(&event.data);
+            let event = tokio::time::timeout_at(deadline, events.recv()).await;
+            match event {
+                Ok(Some(TerminalEvent::Output(event))) if event.session_id == session_id => {
+                    seen.push_str(&event.data);
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => panic!("event channel closed waiting for {needle:?}; saw {seen:?}"),
+                Err(_) => panic!("timed out waiting for {needle:?}; saw {seen:?}"),
             }
         }
         seen

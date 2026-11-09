@@ -82,9 +82,10 @@ async fn serve_ok() -> u16 {
     port
 }
 
+/// A port no test can listen on: binding below 1024 needs root, so connections are
+/// refused. Binding port 0 and releasing it races with parallel tests reusing it.
 async fn unused_port() -> u16 {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).await.expect("bind");
-    listener.local_addr().expect("addr").port()
+    1
 }
 
 fn read(dir: &Path, relative: &str) -> String {
