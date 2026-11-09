@@ -6,6 +6,7 @@ pub mod folder_service;
 pub mod github;
 pub mod gitlab;
 pub mod issue_tracker_service;
+pub mod jira;
 pub mod rest_support;
 pub mod stub_backend_service;
 #[cfg(test)]

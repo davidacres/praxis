@@ -75,3 +75,15 @@ Deliberate differences from the TS:
 - Discussion notes sort by `created_at` (the `localeCompare` approximation) then id case-insensitively, matching `sensitivity: 'base'`.
 
 Still open: `JiraCloudService`, `DemoService`, `ciSecurityReports` and `ciEvidenceImport`, an `IssueTrackerService` impl for `FolderService`, routing channels to Rust (FX-BE-203), and the E2E acceptance specs.
+
+### 2026-11-09 — slice 3a: Jira response normalization
+
+Added `crates/praxis-trackers/src/jira/shape.rs`, a bounded port of `jiraShape.ts`:
+
+- Typed issue, parent, project, comment and workflow-transition normalization, preserving raw payloads and defensive scalar/default handling from the MCP responses.
+- Flat ADF description extraction (plain strings preserve whitespace; nested nodes collapse JavaScript whitespace), reporter mentions, browse URLs, MCP array/key extraction, category ranks and canonical board status ordering.
+- Twelve tests adapted from the TypeScript fixtures cover realistic, sparse, flattened and malformed payloads, ADF text, mentions, transitions, MCP wrappers, empty configured columns' status order, and URL/whitespace behavior.
+
+Verification: `cargo test -p praxis-trackers --locked` passes 102 tests; `cargo clippy -p praxis-trackers --all-targets --locked -- -D warnings` passes. No new dependencies or live host/IPC routing changes.
+
+This is not the full Jira backend. The source Jira service uses MCP, rather than the direct REST-client architecture described in earlier chat summaries. Remaining: attachment and linked-reference normalization, board-column assembly, Jira config/connection resolver, and the MCP-backed `JiraCloudService`. TASK-518 remains In Progress; E2E parity and cutover still depend on FX-BE-203.
