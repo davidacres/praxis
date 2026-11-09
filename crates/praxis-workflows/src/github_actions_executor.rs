@@ -15,7 +15,8 @@ use std::collections::BTreeMap;
 
 use base64::Engine;
 use chrono::{SecondsFormat, Utc};
-use praxis_trackers::github::{GitHubApiService, encode_uri_component};
+use praxis_trackers::encode_uri_component;
+use praxis_trackers::github::GitHubApiService;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

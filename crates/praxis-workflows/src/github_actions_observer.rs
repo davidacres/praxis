@@ -10,7 +10,8 @@
 //! match would read its entire history. The client-side SHA check stays as the stale-run
 //! guard, so the TypeScript's never-produced `stale-run` outcome is not carried over.
 
-use praxis_trackers::github::{GitHubApiService, encode_uri_component};
+use praxis_trackers::encode_uri_component;
+use praxis_trackers::github::GitHubApiService;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
