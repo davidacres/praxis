@@ -7,12 +7,17 @@
 
 pub mod access;
 pub mod application;
+pub mod gadget_text;
 pub mod identity;
+mod js_text;
 pub mod ledger;
 pub mod pairing;
 pub mod pairing_registry;
 pub mod permissions;
 pub mod protocol;
+pub mod run_projection;
+pub mod session_changes;
+pub mod session_projection;
 pub mod session_record;
 
 #[cfg(test)]
