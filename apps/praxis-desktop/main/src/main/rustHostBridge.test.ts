@@ -1,3 +1,4 @@
+import { selectRustHostBinary, isRustHostBinaryStale } from './rustHostSelection';
 import { validateSettingsPatch } from './settingsWriteValidation';
 import test from 'node:test';
 import * as assert from 'node:assert/strict';
@@ -912,4 +913,51 @@ require('readline').createInterface({input:process.stdin}).once('line', line => 
     await transport.dispose();
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('local host selection uses newest binary, release on ties, explicit override and freshness', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-binary-selection-'));
+  const name = process.platform === 'win32' ? 'praxis-host.exe' : 'praxis-host';
+  const debug = path.join(root, 'target/debug', name);
+  const release = path.join(root, 'target/release', name);
+  const source = path.join(root, 'crates/example/lib.rs');
+  try {
+    for (const file of [debug, release, source]) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, 'fixture');
+      fs.utimesSync(file, 1000, 1000);
+    }
+    assert.equal(selectRustHostBinary(root, ''), release);
+    fs.utimesSync(debug, 2000, 2000);
+    assert.equal(selectRustHostBinary(root, ''), debug);
+    assert.equal(selectRustHostBinary(root, release), release);
+    assert.equal(isRustHostBinaryStale(debug, root), false);
+    fs.utimesSync(source, 3000, 3000);
+    assert.equal(isRustHostBinaryStale(debug, root), true);
+    fs.utimesSync(source, 1000, 1000);
+    const manifest = path.join(root, 'Cargo.lock');
+    fs.writeFileSync(manifest, 'fixture');
+    fs.utimesSync(manifest, 3000, 3000);
+    assert.equal(isRustHostBinaryStale(debug, root), true);
+    assert.throws(() => selectRustHostBinary(root, root), /must point to a file/);
+    fs.unlinkSync(debug);
+    assert.equal(selectRustHostBinary(root, ''), release);
+    assert.throws(() => selectRustHostBinary(root, debug));
+    fs.unlinkSync(release);
+    assert.throws(() => selectRustHostBinary(root, ''), /No local/);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('packaged releases disable Rust and report TypeScript status without starting a host', async () => {
+  assert.deepEqual(resolveInitialMigratedChannels(true), []);
+  let dispatched = false;
+  const diagnostics = { mode: 'typescript' as const, reason: 'Packaged parity gate', delegatedChannelCount: 0 };
+  const bridge = new RustHostBridge({ diagnostics, transport: {
+    dispatch: async () => { dispatched = true; throw new Error('must not start'); },
+    onEvent: () => () => undefined,
+    dispose: () => undefined
+  } });
+  assert.deepEqual(await bridge.invoke('host:status'), { delegation: diagnostics });
+  assert.equal(dispatched, false);
+  await bridge.dispose();
 });

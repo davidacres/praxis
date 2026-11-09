@@ -1,7 +1,10 @@
+import * as path from 'node:path';
+import { isRustHostBinaryStale } from './rustHostSelection';
 import { app } from 'electron';
 import {
   RustHostBridge,
   StdioRustHostTransport,
+  resolveRustHostBinaryPath,
   hasRustHostBinary
 } from './rustHostBridge';
 import { getSharedSettingsFilePath } from './settingsBackendInstance';
@@ -56,7 +59,8 @@ export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
  * Set `PRAXIS_RUST_CHANNELS=none` (or `false`, `0`, `off`) to disable delegation.
  * Set `PRAXIS_RUST_CHANNELS=git:*` or a comma-separated list of channel names/prefixes to customize.
  */
-export function resolveInitialMigratedChannels(): string[] {
+export function resolveInitialMigratedChannels(packaged = app?.isPackaged ?? false): string[] {
+  if (packaged) return [];
   const envVal = process.env.PRAXIS_RUST_CHANNELS?.trim().toLowerCase();
   if (envVal === 'false' || envVal === '0' || envVal === 'none' || envVal === 'off') {
     return [];
@@ -89,7 +93,27 @@ export function resolveInitialMigratedChannels(): string[] {
  */
 export function getRustHostBridge(): RustHostBridge {
   if (!bridgeInstance) {
+    const migratedChannels = resolveInitialMigratedChannels();
+    const rustEnabled = migratedChannels.length > 0;
+    const binaryPath = rustEnabled ? resolveRustHostBinaryPath() : undefined;
+    const reason = app.isPackaged ? 'Packaged releases stay on TypeScript until TASK-537 parity is proven.'
+      : rustEnabled ? 'Local Rust delegation enabled.'
+      : hasRustHostBinary() ? 'Delegation disabled by PRAXIS_RUST_CHANNELS.' : 'No usable local Rust host binary.';
+    const diagnostics = { mode: rustEnabled ? 'rust' as const : 'typescript' as const,
+      reason, binaryPath, delegatedChannelCount: migratedChannels.length };
+    console.info('[rustHost] Backend selection:', diagnostics);
+    if (binaryPath) {
+      try {
+        if (isRustHostBinaryStale(binaryPath, path.resolve(__dirname, '../../../../..'))) {
+          console.warn('[rustHost] Selected binary is older than Rust sources or manifests; rebuild with npm run build:rust.', binaryPath);
+        }
+      } catch (error) {
+        console.warn('[rustHost] Could not check binary freshness.', error);
+      }
+    }
     const transport = new StdioRustHostTransport({
+      executablePath: binaryPath,
+      onReady: status => console.info('[rustHost] Running host:', { binaryPath, ...status }),
       userDataDir: app.getPath('userData'),
       settingsPath: getSharedSettingsFilePath(),
       demoMode: process.argv.includes('--demo'),
@@ -97,7 +121,8 @@ export function getRustHostBridge(): RustHostBridge {
     });
     bridgeInstance = new RustHostBridge({
       transport,
-      migratedChannels: resolveInitialMigratedChannels()
+      migratedChannels,
+      diagnostics
     });
   }
   return bridgeInstance;

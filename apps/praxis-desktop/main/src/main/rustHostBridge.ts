@@ -1,5 +1,5 @@
+import { selectRustHostBinary } from './rustHostSelection';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron';
@@ -62,30 +62,12 @@ export interface StdioRustHostOptions {
   env?: Record<string, string | undefined>;
   /** Startup handshake timeout in milliseconds (defaults to 10,000ms). */
   startupTimeoutMs?: number;
+  onReady?: (status: RustHostStatus) => void;
 }
 
-/**
- * Resolves the compiled `praxis-host` binary from `PRAXIS_RUST_HOST_BIN`, packaged resources,
- * or the Cargo workspace `target/{debug,release}` directory.
- */
+/** Resolves an explicit override or the newest local Cargo binary (release wins ties). */
 export function resolveRustHostBinaryPath(): string {
-  const exeName = process.platform === 'win32' ? 'praxis-host.exe' : 'praxis-host';
-  if (process.env.PRAXIS_RUST_HOST_BIN && fs.existsSync(process.env.PRAXIS_RUST_HOST_BIN)) {
-    return process.env.PRAXIS_RUST_HOST_BIN;
-  }
-  const repoRoot = path.resolve(__dirname, '../../../../..');
-  const candidates = [
-    path.join(repoRoot, 'target', 'debug', exeName),
-    path.join(repoRoot, 'target', 'release', exeName)
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  throw new Error(
-    `Could not locate compiled ${exeName} binary. Run "npm run build:rust" or set PRAXIS_RUST_HOST_BIN.`
-  );
+  return selectRustHostBinary(path.resolve(__dirname, '../../../../..'));
 }
 
 /** Returns `true` if a compiled `praxis-host` binary is discoverable on this system. */
@@ -179,6 +161,7 @@ export class StdioRustHostTransport implements RustHostTransport {
         if (frame.kind === 'ready') {
           this.readyStatus = frame.status;
           this.channels = frame.registeredChannels ?? [];
+          this.options.onReady?.(frame.status);
           if (!settled) {
             settled = true;
             clearTimeout(timer);
@@ -323,7 +306,15 @@ export function broadcastRustEventToWindows(
   dispatch(envelope.channel, envelope.payload);
 }
 
+export interface RustHostDiagnostics {
+  mode: 'rust' | 'typescript';
+  reason: string;
+  binaryPath?: string;
+  delegatedChannelCount: number;
+}
+
 export interface RustHostBridgeOptions {
+  diagnostics?: RustHostDiagnostics;
   transport: RustHostTransport;
   /**
    * Optional custom window resolver used when forwarding `RustEventEnvelope` notifications.
@@ -345,9 +336,11 @@ export class RustHostBridge {
   private readonly eventListeners = new Set<(envelope: RustEventEnvelope) => void>();
   private readonly unsubscribeTransport: () => void;
   private nextRequestId = 1;
+  private readonly diagnostics: RustHostDiagnostics | undefined;
 
   constructor(options: RustHostBridgeOptions) {
     this.transport = options.transport;
+    this.diagnostics = options.diagnostics;
     this.getWindows = options.getWindows;
     for (const channel of options.migratedChannels ?? []) {
       this.migrated.add(channel);
@@ -387,6 +380,9 @@ export class RustHostBridge {
 
   /** Invokes `channel` on the Rust host and unwraps the result or throws [`RustHostRpcError`]. */
   async invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T> {
+    if (channel === 'host:status' && this.diagnostics?.mode === 'typescript') {
+      return { delegation: this.diagnostics } as T;
+    }
     const id = `rpc-${this.nextRequestId++}`;
     const response = await this.transport.dispatch({
       id,
@@ -401,6 +397,9 @@ export class RustHostBridge {
           message: `Rust host call to '${channel}' failed without an error payload.`
         }
       );
+    }
+    if (channel === 'host:status' && this.diagnostics) {
+      return { ...(response.result as object), delegation: this.diagnostics } as T;
     }
     return response.result as T;
   }
