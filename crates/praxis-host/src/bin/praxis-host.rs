@@ -68,6 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     praxis_host::deployment_bridge::register_deployment_channels(&host, runtime.handle());
     praxis_host::ai_bridge::register_ai_channels(&host, runtime.handle());
     praxis_host::tracker_bridge::register_tracker_channels(&host, runtime.handle());
+    praxis_host::workflow_bridge::register_workflow_channels(&host);
     let terminal =
         praxis_host::terminal_bridge::register_terminal_channels(&host, runtime.handle());
 

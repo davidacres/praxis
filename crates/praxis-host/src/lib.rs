@@ -15,6 +15,7 @@ pub mod secrets;
 pub mod stdio;
 pub mod terminal_bridge;
 pub mod tracker_bridge;
+pub mod workflow_bridge;
 mod workflow_reads;
 
 pub use call_client::{HostCallClient, HostCallError};
@@ -25,6 +26,10 @@ use praxis_contracts::RustHostStatus;
 use praxis_core::core_status;
 pub use secrets::HostSecretStore;
 pub use stdio::{HostInboundReply, HostWireFrame};
+pub use workflow_bridge::{
+    GateActionResultDto, GateEvaluationResult, StageApproval, WorkflowPolicy,
+    register_workflow_channels,
+};
 
 /// Returns the current status of the Praxis Rust host container.
 #[must_use]

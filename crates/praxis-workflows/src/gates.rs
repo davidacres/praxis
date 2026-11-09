@@ -885,10 +885,12 @@ pub fn approval_readiness(
 }
 
 /// The result of a gate action that may be refused.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GateActionResult {
     pub run: WorkflowRun,
     pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 

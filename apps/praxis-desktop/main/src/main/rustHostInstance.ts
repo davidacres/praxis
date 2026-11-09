@@ -57,6 +57,10 @@ export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
 /** Available for explicit source testing; remote/release evidence remains a separate gate. */
 export const OPT_IN_MIGRATED_CHANNELS: readonly string[] = [
   'workflows:listPolicies',
+  'workflows:createRun', 'workflows:applyCommand', 'workflows:schedule',
+  'workflows:advanceJoins', 'workflows:deriveStatus', 'workflows:approveStage',
+  'workflows:rejectStage', 'workflows:bypassGate', 'workflows:evaluateGates',
+  'workflows:rework', 'workflows:canRetry', 'workflows:cronNext', 'workflows:cronOverdue',
   'projects:getRunProfile', 'projects:saveRunProfile', 'projects:validateRunProfile', 'projects:discoverRunServices',
   'deployments:listProfiles', 'deployments:getProfile', 'deployments:saveProfile',
   'deployments:validateProfile', 'deployments:preflightCapabilities',
@@ -94,7 +98,10 @@ export function resolveInitialMigratedChannels(packaged = app?.isPackaged ?? fal
   if (!hasRustHostBinary()) {
     return [];
   }
-  if (envVal && mode !== 'default' && mode !== 'all' && mode !== 'true' && mode !== '1') {
+  if (mode === 'all' || mode === 'true' || mode === '1') {
+    return [...new Set([...DEFAULT_MIGRATED_CHANNELS, ...OPT_IN_MIGRATED_CHANNELS])];
+  }
+  if (envVal && mode !== 'default') {
     const requested = envVal.split(',').map(s => s.trim()).filter(Boolean);
     const channels: string[] = [];
     for (const req of requested) {

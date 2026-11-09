@@ -304,6 +304,7 @@ impl HostContext {
         });
 
         crate::workflow_reads::register_workflow_read_handlers(self);
+        crate::workflow_bridge::register_workflow_channels(self);
         self.register_settings_and_workspace_handlers();
         self.register_projects_and_folder_handlers();
     }

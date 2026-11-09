@@ -4,7 +4,7 @@ import { trustedIpcMain as ipcMain } from './trustedIpcMain';
 import { broadcastToAllWindows } from './windowBroadcast';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type AppSettingsPatch, type MobileCapability } from '@praxis/core';
+import { type AppSettings, type AppSettingsPatch, type MobileCapability } from '@praxis/core';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getRustHostBridge } from './rustHostInstance';
 import { abortActiveTask, getAllActiveTaskIssueKeys, resetAiStores } from './aiInstance';
@@ -41,11 +41,16 @@ export function registerSettingsIpc(): void {
   bridge.handleOrFallback('settings:get', async () => getSettingsBackend().read(), ipcMain,
     () => [getSettingsBackend().read()]);
 
-  ipcMain.handle(
+  bridge.handleOrFallback<[patch: AppSettingsPatch], AppSettings>(
     'settings:set',
     async (_event, patch: AppSettingsPatch) => {
       validateSettingsPatch(patch);
       return getSettingsBackend().write(patch);
+    },
+    ipcMain,
+    (patch: AppSettingsPatch) => {
+      validateSettingsPatch(patch);
+      return [patch];
     }
   );
 

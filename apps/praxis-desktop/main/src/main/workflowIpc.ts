@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { projectWorkflowTrust } from './workflowProjectTrust';
 import { isCheckCommandAvailable } from './workflowCheckProcess';
 import {
+  canRetry,
   applyWorkflowRunCommand,
   approveStage,
   skipApproval,
@@ -1379,4 +1380,11 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       });
     }
   );
+
+  const bridge = getRustHostBridge();
+  bridge.handleOrFallback('workflows:cronNext', async () => null, ipcMain);
+  bridge.handleOrFallback('workflows:cronOverdue', async () => [], ipcMain);
+  bridge.handleOrFallback('workflows:canRetry', async (_event, run: unknown, nodeId: string) => {
+    return run ? canRetry(run as WorkflowRun, nodeId) : false;
+  }, ipcMain);
 }

@@ -554,25 +554,40 @@ pub enum WorkflowRunCommand {
 }
 
 /// Inputs for [`create_workflow_run`]; optional fields default to absent.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateWorkflowRunInput {
     pub run_id: String,
     pub project_id: String,
     pub definition: WorkflowDefinition,
     pub at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_connection_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheduled_launch_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shared_delivery_branch: Option<String>,
+    #[serde(default)]
     pub defer_merge: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub controller_session_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub controller_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_input: Option<WorkflowPlanInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_mode: Option<WorkflowPermissionMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uncommitted_changes: Option<WorkflowUncommittedChanges>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ai_provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ai_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_limit_policy: Option<WorkflowProviderLimitPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameters: Option<RunParameters>,
 }
 
