@@ -6,8 +6,8 @@
 //! fail closed. Electron drives lifecycle through the `mobile:*` RPC channels registered by
 //! [`register_mobile_channels`] and feeds the event log via `mobile:appendEvent`.
 //!
-//! Command-id admission and replay run in the Rust ledger on this transport; the TypeScript
-//! ledger keeps serving Electron IPC, so a phone must stay on one runtime between restarts.
+//! Electron owns command-id admission and outcomes for both this transport and mobile IPC.
+//! Rust validates and forwards every retry so a late Electron completion remains recoverable.
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -54,6 +54,14 @@ pub fn proxy_application(
     calls: HostCallClient,
     ledger: Arc<dyn MobileCommandLedger>,
 ) -> MobileHostApplication {
+    proxy_application_with_timeout(calls, ledger, COMMAND_TIMEOUT)
+}
+
+fn proxy_application_with_timeout(
+    calls: HostCallClient,
+    ledger: Arc<dyn MobileCommandLedger>,
+    command_timeout: Duration,
+) -> MobileHostApplication {
     let mut reads = MobileHostReads::new();
     for &operation in MobileReadOperation::ALL {
         let calls = calls.clone();
@@ -83,7 +91,7 @@ pub fn proxy_application(
                     let params = serde_json::to_value(&command)
                         .map_err(|error| MobileHostError::new(error.to_string()))?;
                     calls
-                        .call("mobile.command", params, COMMAND_TIMEOUT)
+                        .call("mobile.command", params, command_timeout)
                         .await
                         .map_err(|error| MobileHostError::new(error.to_string()))
                 }
@@ -286,6 +294,7 @@ impl MobileBridge {
         let ledger: Arc<dyn MobileCommandLedger> = self.ledger.clone();
         let mut deps =
             MobileLanServerDeps::new(proxy_application(self.calls.clone(), ledger), keypair);
+        deps.commands_own_ledger = true;
         deps.pairing_code = pairing_code;
         deps.authorize_peer = Some(authorizer(self.handle.clone(), self.calls.clone()));
         deps.on_unpaired_peer = Some(unpaired_handler(self.handle.clone(), self.calls.clone()));
@@ -550,4 +559,53 @@ pub fn register_mobile_channels(host: &HostContext, bridge: &Arc<MobileBridge>) 
             .map(|()| Value::Null)
             .map_err(rpc_error)
     });
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::{HostInboundReply, HostWireFrame};
+    use praxis_mobile::host::application::dispatch_mobile_command;
+    use std::sync::OnceLock;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test]
+    async fn a_timed_out_command_retry_asks_electron_for_its_late_outcome() {
+        let slot = Arc::new(OnceLock::<HostCallClient>::new());
+        let callback = Arc::clone(&slot);
+        let count = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&count);
+        let calls = HostCallClient::new(move |frame| {
+            if let HostWireFrame::Call { id, method, .. } = frame {
+                assert_eq!(method, "mobile.command");
+                if counted.fetch_add(1, Ordering::SeqCst) > 0 {
+                    if let Some(client) = callback.get() {
+                        client.handle_reply(HostInboundReply::CallResponse {
+                            id,
+                            ok: true,
+                            result: Some(json!({"completed": "late"})),
+                            error: None,
+                        });
+                    }
+                }
+            }
+            true
+        });
+        assert!(slot.set(calls.clone()).is_ok());
+        let ledger: Arc<dyn MobileCommandLedger> = Arc::new(InMemoryMobileCommandLedger::default());
+        let app = proxy_application_with_timeout(calls, ledger, Duration::from_millis(10));
+        let command: praxis_mobile::host::protocol::MobileCommand = serde_json::from_value(json!({
+            "protocolVersion": 1, "commandId": "timeout-command-001", "issuedAt": "2026-11-09T10:00:00.000Z",
+            "caller": {"deviceId": "paired-phone", "capabilities": ["execute"]},
+            "target": {"hostId": "host", "projectId": "p1"}, "operation": "sessions.create", "payload": {}
+        })).expect("command");
+        let first = dispatch_mobile_command(command.clone(), &app.commands).await;
+        assert!(first.is_err());
+        let retry = dispatch_mobile_command(command, &app.commands)
+            .await
+            .expect("late result");
+        assert_eq!(retry, json!({"completed": "late"}));
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+    }
 }

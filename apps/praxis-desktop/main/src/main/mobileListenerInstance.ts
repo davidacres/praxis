@@ -235,6 +235,12 @@ export function mobileLanConnectionCount(): number {
   return lanServer?.connectionCount() ?? 0;
 }
 
+/** Internal integration evidence, intentionally absent from renderer IPC. */
+export function mobileTransportDiagnostics() {
+  return lanServer instanceof RustMobileTransport ? lanServer.diagnostics()
+    : { mode: 'typescript' as const, listening: lanServer?.listening ?? false };
+}
+
 export async function stopMobileHost(): Promise<void> {
   settingsSubscription?.dispose();
   settingsSubscription = undefined;

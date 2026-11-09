@@ -31,6 +31,8 @@ const repo = path.resolve(__dirname, '../../..');
 const core = require(path.join(repo, 'packages/core'));
 const protocol = require(path.join(repo, 'packages/mobile-protocol'));
 const { MobileLanServer } = require(path.join(repo, 'apps/praxis-desktop/main/out/main/mobileLanServer.js'));
+const { RustMobileTransport } = require(path.join(repo, 'apps/praxis-desktop/main/out/main/rustMobileTransport.js'));
+const { selectMobileTransport } = require(path.join(repo, 'apps/praxis-desktop/main/out/main/mobileTransport.js'));
 const { createMobileHostReads, createMobileHostExecutionHandlers } = require(path.join(repo, 'apps/praxis-desktop/main/out/main/mobileHostServices.js'));
 
 const arg = (name, fallback) => {
@@ -946,7 +948,7 @@ const app = {
 const deviceIdFor = publicKeyHex => `device:${crypto.createHash('sha256').update(Buffer.from(publicKeyHex, 'hex')).digest('hex').slice(0, 24)}`;
 const peerFor = entry => ({ deviceId: entry.deviceId, capabilities: ['view', 'execute', 'approve'] });
 
-const server = new MobileLanServer({
+const listenerDeps = {
   app,
   hostStaticKey: hostKey,
   authorizePeer: publicKeyHex => {
@@ -963,12 +965,29 @@ const server = new MobileLanServer({
       const entry = { deviceId: deviceIdFor(key), label, pairedAt: new Date().toISOString() };
       paired.set(key, entry);
       savePaired();
-      server.promotePending(key, peerFor(entry));
+      Promise.resolve(server.promotePending(key, peerFor(entry))).catch(error => console.error('[stage] promotion failed:', error.message));
       console.log(`[stage] ${label} confirmed.`);
     }, 2000);
     return protocol.mobileConnectionStatus('pairing-pending', `Confirm ${label} in Settings → Mobile access on ${HOST_NAME}.`);
   },
   onLog: line => console.log(line),
+};
+const transport = selectMobileTransport(false, { ...process.env, PRAXIS_MOBILE_TRANSPORT: arg('transport', process.env.PRAXIS_MOBILE_TRANSPORT) });
+const server = transport === 'rust' ? new RustMobileTransport(listenerDeps, {
+  host: { userDataDir: STATE_DIR, settingsPath: path.join(STATE_DIR, 'settings.json') },
+}) : new MobileLanServer(listenerDeps);
+console.log(`[stage] selected ${transport} transport.`);
+
+// Release the dedicated Rust child before a test removes its temporary state directory.
+let closing = false;
+async function shutdown() {
+  if (closing) return;
+  closing = true;
+  try { await server.stop(); } finally { await server.dispose?.(); }
+  process.exit(0);
+}
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+  void shutdown().catch(error => { console.error('[stage] shutdown failed:', error.message); process.exit(1); });
 });
 
 function invitation() {

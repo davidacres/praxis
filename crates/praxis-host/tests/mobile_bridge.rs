@@ -113,7 +113,7 @@ fn paired_electron() -> (HostCallClient, Calls, Arc<AtomicUsize>) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn forwards_stamped_reads_and_replays_commands_without_re_forwarding() {
+async fn forwards_stamped_reads_and_every_command_retry_to_electron() {
     let (calls, log, commands) = paired_electron();
     let bridge = MobileBridge::new(tokio::runtime::Handle::current(), calls);
     let key = KeyPair::generate();
@@ -156,12 +156,29 @@ async fn forwards_stamped_reads_and_replays_commands_without_re_forwarding() {
     command["issuedAt"] = json!("2026-11-09T10:00:00.000Z");
     command["payload"] = json!({});
     let first = phone.command(command.clone()).await.expect("command");
-    let second = phone.command(command).await.expect("replay");
+    let second = phone.command(command.clone()).await.expect("replay");
     assert_eq!(first, second);
     assert_eq!(
         commands.load(Ordering::SeqCst),
-        1,
-        "a retry replays the recorded outcome"
+        2,
+        "Electron owns replay; Rust must not cache an older outcome"
+    );
+
+    command["operation"] = json!("permissions.respond");
+    assert!(
+        phone.command(command.clone()).await.is_err(),
+        "approve capability required"
+    );
+    command["operation"] = json!("sessions.create");
+    command["issuedAt"] = json!("invalid");
+    assert!(
+        phone.command(command).await.is_err(),
+        "envelope validation remains in Rust"
+    );
+    assert_eq!(
+        commands.load(Ordering::SeqCst),
+        2,
+        "invalid commands never reach Electron"
     );
 
     phone.close();

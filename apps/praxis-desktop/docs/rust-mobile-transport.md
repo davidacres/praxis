@@ -97,6 +97,48 @@ Fresh local verification for this slice:
 
 These are local adapter checks, not a completed mobile-domain migration. Slice 4 remains open for a full real-desktop phone request/command scenario (including schedule and approval effects), physical Flutter interoperability and matching remote CI evidence. The full desktop functional/theme suites and broad smoke suite were not run for this backend slice; the renderer was not changed, and its existing production build was copied before Electron checks rather than freshly rebuilt.
 
-Known bridge limitations remain explicit: Rust owns an independent command ledger from mobile IPC; recreation/key rotation resets that Rust ledger. A command still executing in Electron after the 120-second reverse-call deadline can finish after Rust has recorded an unknown outcome, and the current bridge cannot recover that late outcome on retry. Keep a phone on one runtime and do not treat this experimental adapter as release-ready until command outcome ownership/recovery is resolved. Numeric IPv6 link-local scope ids are not yet accepted by `mobile:start`; the adapter excludes link-local IPv6 addresses and uses the other eligible local addresses. Real WSS deployment, raw Rust relay log forwarding, signed host packaging and packaged delegation remain unproven.
+At the slice 3 checkpoint (superseded below for command outcomes), Rust owned an independent command ledger from mobile IPC; recreation/key rotation resets that Rust ledger. A command still executing in Electron after the 120-second reverse-call deadline can finish after Rust has recorded an unknown outcome, and the current bridge cannot recover that late outcome on retry. Keep a phone on one runtime and do not treat this experimental adapter as release-ready until command outcome ownership/recovery is resolved. Numeric IPv6 link-local scope ids are not yet accepted by `mobile:start`; the adapter excludes link-local IPv6 addresses and uses the other eligible local addresses. Real WSS deployment, raw Rust relay log forwarding, signed host packaging and packaged delegation remain unproven.
 
 A different, uncommitted `--mobile-stdio` adapter draft is preserved in `/private/tmp/praxis-mobile-host` on `codex/mobile-host` at `2c321f78`. Its documentation reports earlier checks, but those are not fresh evidence for the committed bridge design used here. Its alternative command-ledger design and IPv6 handling should be reviewed when closing the remaining gates; it was not merged or deleted.
+
+### Slice 4 local checkpoint: shared outcomes and real desktop/Flutter proof
+
+Continues slice 3 from `12b78c8b`. The desktop still defaults to TypeScript; Rust mobile transport remains a source-only opt-in. TASK-520 stays In Progress pending physical-device and matching remote CI evidence.
+
+#### Command outcome ownership
+
+The independent Rust command cache described in slice 3 is replaced on the transport-only path. The listener's trusted `commands_own_ledger` option defaults to `false`, preserving ordinary Rust applications. Only the Electron bridge enables it. Rust still stamps the authenticated identity, checks project access, validates the command envelope and checks capabilities, then forwards every retry. Electron's `handleMobileCommand` owns admission, conflict checks and completed/unknown outcomes, using the same process-lifetime ledger as mobile IPC.
+
+A callback can still time out after 120 seconds while an already admitted Electron mutation continues. The timeout is a transport error, not cancellation of that mutation. A subsequent retry consults Electron's current record and can retrieve a late completion; it does not reuse a stale Rust outcome. Transport disposal/key rotation no longer discards the authoritative command outcomes. This adds no persistence across an Electron restart and retains the existing accepted/unknown replay semantics.
+
+Fresh regressions cover an actual Rust callback timeout with a later result, an in-flight retry without duplicate execution, abrupt Rust child loss while Electron finishes, retrieval after explicit transport replacement, IPC/transport replay against one ledger, and refusal of a changed payload. The child-loss regression exposed an unhandled stdin `EPIPE`; the stdio transport now handles pipe errors even when a reverse-call reply finishes after the child dies. Mobile also disables the generic transport's automatic process restart, including idle child exits; the existing general IPC transport keeps its restart behavior. No mutation is automatically retried on failure.
+
+#### Real desktop and Flutter coverage
+
+`main/e2e/mobileTransport.spec.ts` uses isolated Electron profiles and temporary project folders. A real TypeScript phone client pairs through the normal Settings controls, receives a one-project grant, sees only that project, is refused access to a second project, and saves one schedule across a command retry. It then starts a real desktop session using the repository's local ACP fixture, reads its pending permission on the phone, approves it, and observes session completion. Finally it rotates the host key, checks the replacement fingerprint/listener and old-phone disconnection, disables access and verifies dedicated Rust child processes are gone after app cleanup. The AI fixture supplies protocol replies; no external model is called.
+
+Internal diagnostics expose the selected runtime, actual Rust PID/ready version and counts of forwarded reads/commands. They are not renderer IPC APIs. The Rust scenario checks that the same ready child served the phone's reads and commands, then observes a different child after key rotation.
+
+`main/scripts/runRustDualModeE2e.cjs` now includes both mobile specs and sets/asserts the mobile runtime alongside the existing general backend diagnostics. The new spec runs only the requested mode under this gate; a direct spec run exercises both modes. The gate rebuilds Rust/core/mobile packages/renderer, copies the renderer and compiles desktop before testing.
+
+The Flutter stage host accepts the same `PRAXIS_MOBILE_TRANSPORT=rust` opt-in (or `--transport rust`) and disposes the dedicated child on shutdown. `PRAXIS_STAGE_INVITATION_FILE` lets its protocol tests use an isolated stage invitation rather than an unrelated stale local file. The real Dart client/AppStore test pairs with two independent Rust-backed hosts, switches desktops, sends commands only to the selected one, and receives live schedule changes.
+
+#### Fresh evidence
+
+| Check | Result |
+| --- | --- |
+| `cargo test --workspace --locked` | 986 passed, 0 failed, 1 ignored (the existing optional Rust/TypeScript phone test). |
+| `PRAXIS_TEST_RUST_MOBILE=1 npm run test:mobile` | 127 passed, 0 failed/skipped, including late outcome and idle/active child-loss regressions. |
+| Existing `rustHostBridge` and reverse-call Node tests | 18 passed, 0 failed/skipped. General IPC restart behavior remains covered. |
+| Updated `npm run test:rust-dual-mode` | 29 passed in TypeScript mode and 29 passed in Rust mode, 0 failures. General diagnostics verified 0/35 delegated channels respectively; mobile diagnostics verified the selected runtime and the real child serving requests. Fresh Rust/core/mobile/renderer builds, renderer core-import checks and desktop compilation passed in the same gate. |
+| Direct real-desktop phone spec | 2 passed: one TypeScript and one Rust scenario, including actual permission approval. |
+| Flutter full suite with isolated Rust-backed stage host | 123 passed, 0 failed/skipped. The first full run used a stale default invitation for a stopped stage host and failed two protocol cases; the isolated rerun corrected the fixture setup and passed. |
+| Flutter analysis | Passed, no issues. |
+| Rust host/mobile all-target Clippy with `-D warnings`, Rust formatting | Passed. |
+| Visual verification | Inspected `.praxis/session-artifacts/rust-mobile-desktop-connected.png`: Rust listener shows one connection and the confirmed phone is trusted for one project. No UI layout or snapshot baseline changed. |
+
+For Dart interoperability, start `apps/praxis-mobile/tool/stage_host.cjs` with `PRAXIS_MOBILE_TRANSPORT=rust`, a temporary `--state-dir` and free listener/control ports. From the Flutter workspace run `PRAXIS_MOBILE_TRANSPORT=rust PRAXIS_STAGE_INVITATION_FILE=<temporary-state-dir>/invitation.txt flutter test --no-pub`. Stop the isolated stage host afterwards. The tests never point project write paths at the real repository.
+
+A physical iPhone is connected, but the signed iOS build failed before installation: Xcode reported **No Accounts** and no development provisioning profile for `com.acresweb.praxis.mobile.praxis`. No phone app was installed or replaced. Flutter host-side interoperability is therefore proven locally; a physical Flutter session against the running desktop remains unproven. No remote workflow was triggered, no changes were pushed, and no signed/packaged Rust delegation is claimed. Full desktop functional/theme and broad smoke suites were not run; the selected dual-mode gate is separate evidence.
+
+Numeric IPv6 link-local scope support, raw Rust relay log forwarding and real WSS deployment checks remain open as documented above. The alternate dirty worktree and its drafts remain untouched; its ledger idea informed this fix, while its separate `--mobile-stdio` protocol was not integrated.

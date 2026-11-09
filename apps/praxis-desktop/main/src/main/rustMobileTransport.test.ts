@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as net from 'node:net';
 import { generateKeyPairSync } from 'node:crypto';
-import { InMemoryMobileCommandLedger, type MobileHostApplication, type MobileReadRequest, type RustRpcRequest } from '@praxis/core';
+import { InMemoryMobileCommandLedger, handleMobileCommand, type MobileCommand, type MobileHostApplication, type MobileReadRequest, type RustRpcRequest } from '@praxis/core';
 import { generateKeyPair, mobileConnectionStatus, MobileSecureClient } from '@praxis/mobile-protocol';
 import { RelayServer, channelIdForKey } from '@praxis/mobile-relay';
 import WebSocket from 'ws';
@@ -21,7 +21,7 @@ function fixtureApp(): MobileHostApplication {
     reads: { 'projects.snapshot': async request => ({ projects: [{ projectId: 'p1' }, { projectId: 'p2' }], caller: request.caller }) },
     commands: { 'sessions.create': async command => ({ caller: command.caller }) } as MobileHostApplication['commands'],
     ledger: new InMemoryMobileCommandLedger(),
-    payloadDigest: () => 'unused-on-rust-path',
+    payloadDigest: command => JSON.stringify(command.payload),
   };
 }
 
@@ -85,16 +85,16 @@ test('adapter maps controls, seeds retained events and stops polling on disposal
   await assert.rejects(rig.adapter.start(0, policy), /disposed/);
 });
 
-test('callbacks keep TypeScript capability checks, use no second command ledger and refuse unknown calls', async () => {
+test('callbacks share the Electron command ledger, enforce capabilities and refuse unknown calls', async () => {
   const rig = stub();
   try {
     assert.equal(await rig.call('mobile.authorizePeer', { publicKey: 'unknown' }), null);
     assert.deepEqual(await rig.call('mobile.unpairedPeer', { publicKey: 'unknown', tokenId: null }), mobileConnectionStatus('access-denied'));
     await assert.rejects(rig.call('mobile.read', { ...read, caller: { deviceId: 'phone', capabilities: [] } }), /not authorised/);
-    const command = { protocolVersion: 1, operation: 'sessions.create', caller: { deviceId: 'phone', capabilities: ['execute'] }, target: { hostId: 'h', projectId: 'p1' }, commandId: 'c1', issuedAt: new Date().toISOString(), payload: {} };
+    const command = { protocolVersion: 1, operation: 'sessions.create', caller: { deviceId: 'phone', capabilities: ['execute'] }, target: { hostId: 'h', projectId: 'p1' }, commandId: 'callback-command-001', issuedAt: new Date().toISOString(), payload: {} };
     assert.deepEqual(await rig.call('mobile.command', command), { caller: command.caller });
-    assert.equal(rig.app.ledger.get('c1'), undefined);
-    await assert.rejects(rig.call('mobile.command', { ...command, caller: { deviceId: 'phone', capabilities: ['view'] } }), /not authorised/);
+    assert.equal(rig.app.ledger.get('callback-command-001')?.state, 'completed');
+    await assert.rejects(rig.call('mobile.command', { ...command, caller: { deviceId: 'phone', capabilities: ['view'] } }), /lacks the execute capability/);
     await assert.rejects(rig.call('other', {}), /Unknown mobile host call/);
   } finally { await rig.adapter.dispose(); }
 });
@@ -209,6 +209,62 @@ test('real Rust bridge promotes a pending phone and preserves the key-reset refu
   await waitFor(() => phone.status?.code === 'host-key-reset');
 });
 
+test('real Rust retry recovers an Electron completion after child loss and shares replay with IPC', { skip: process.env.PRAXIS_TEST_RUST_MOBILE !== '1', timeout: 15000 }, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-outcome-'));
+  const app = fixtureApp();
+  const hostKey = generateKeyPair();
+  let executions = 0;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  app.commands['sessions.create'] = async () => { executions++; await gate; return { completed: 'late' }; };
+  const makeAdapter = () => new RustMobileTransport({ app, hostStaticKey: hostKey,
+    authorizePeer: () => ({ deviceId: 'paired-phone', capabilities: ['view', 'execute'], projectIds: ['p1'] }),
+  }, { host: { userDataDir: dir, settingsPath: path.join(dir, 'settings.json') },
+    interfaces: () => [{ interfaceName: 'lo0', address: '127.0.0.1' }],
+  });
+  const phoneFor = (port: number) => new MobileSecureClient({
+    connect: handlers => {
+      const socket = net.createConnection({ host: '127.0.0.1', port }, () => handlers.onConnect());
+      socket.on('data', (data: Buffer) => handlers.onData(data));
+      socket.on('error', error => handlers.onError(error));
+      socket.on('close', () => handlers.onClose());
+      return { write: bytes => socket.write(bytes), destroy: () => socket.destroy() };
+    }, endpoint: 'loopback', staticKeyPair: generateKeyPair(), remoteStaticPublicKey: hostKey.publicKey,
+    connectTimeoutMs: 3000, requestTimeoutMs: 3000, legacyReadyAfterMs: 0,
+  });
+  const adapter = makeAdapter();
+  const replacement = makeAdapter();
+  let firstPhone: MobileSecureClient | undefined;
+  let secondPhone: MobileSecureClient | undefined;
+  t.after(async () => {
+    release(); firstPhone?.close(); secondPhone?.close();
+    await adapter.dispose(); await replacement.dispose(); fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const command: MobileCommand = { protocolVersion: 1, operation: 'sessions.create', caller: read.caller,
+    target: { hostId: 'h', projectId: 'p1' }, commandId: 'late-command-001', issuedAt: new Date().toISOString(), payload: {} };
+  await adapter.start(0, policy);
+  firstPhone = phoneFor(adapter.port!);
+  await firstPhone.connect();
+  const pending = firstPhone.command(command);
+  const disconnected = assert.rejects(pending);
+  await waitFor(() => executions === 1);
+  assert.equal(app.ledger.get(command.commandId)?.state, 'accepted');
+  assert.equal(await firstPhone.command(command), null, 'in-flight retry does not execute again');
+  const pid = adapter.diagnostics().pid!;
+  process.kill(pid, 'SIGKILL');
+  await disconnected;
+  release();
+  await waitFor(() => app.ledger.get(command.commandId)?.state === 'completed');
+  await adapter.dispose();
+  await replacement.start(0, policy);
+  secondPhone = phoneFor(replacement.port!);
+  await secondPhone.connect();
+  assert.deepEqual(await secondPhone.command(command), { completed: 'late' });
+  assert.deepEqual(await handleMobileCommand(app, { ...command, caller: { deviceId: 'paired-phone', capabilities: ['execute'] } }), { completed: 'late' });
+  await assert.rejects(secondPhone.command({ ...command, payload: { changed: true } }), /different payload/);
+  assert.equal(executions, 1);
+});
+
 async function waitFor(predicate: () => boolean): Promise<void> {
   const deadline = Date.now() + 4000;
   while (!predicate()) {
@@ -216,3 +272,18 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
 }
+
+test('an idle Rust child exit fails closed without an automatic replacement', { skip: process.env.PRAXIS_TEST_RUST_MOBILE !== '1', timeout: 10000 }, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-rust-idle-exit-'));
+  const adapter = new RustMobileTransport({ app: fixtureApp(), hostStaticKey: generateKeyPair() }, {
+    host: { userDataDir: dir, settingsPath: path.join(dir, 'settings.json') },
+    interfaces: () => [{ interfaceName: 'lo0', address: '127.0.0.1' }],
+  });
+  t.after(async () => { await adapter.dispose(); fs.rmSync(dir, { recursive: true, force: true }); });
+  await adapter.start(0, policy);
+  process.kill(adapter.diagnostics().pid!, 'SIGKILL');
+  await waitFor(() => adapter.bindError !== undefined);
+  assert.equal(adapter.listening, false);
+  assert.equal(adapter.diagnostics().pid, undefined);
+  await assert.rejects(adapter.start(0, policy), /exited unexpectedly/);
+});

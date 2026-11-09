@@ -11,7 +11,7 @@ import 'package:praxis_mobile/protocol/wire.dart';
 import '../hex.dart';
 
 // Runs against `node tool/stage_host.cjs`: the desktop's real LAN listener.
-final _invitationFile = File('tool/.stage-host/invitation.txt');
+final _invitationFile = File(Platform.environment['PRAXIS_STAGE_INVITATION_FILE'] ?? 'tool/.stage-host/invitation.txt');
 
 Map<String, Object?> _read(String operation, [Map<String, String> target = const {}, Map<String, Object?>? params]) => {
       'protocolVersion': 1,

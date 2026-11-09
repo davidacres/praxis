@@ -7,9 +7,13 @@ use super::access::{
     MobileAccessMode, MobileAccessPolicy, MobileAccessRefusal, MobilePeerContext,
     evaluate_mobile_access, is_private_address,
 };
-use super::application::{MobileHostApplication, handle_mobile_command, handle_mobile_read};
+use super::application::{
+    MobileHostApplication, dispatch_mobile_command, handle_mobile_command, handle_mobile_read,
+};
 use super::ledger::MOBILE_REPLAY_LIMIT;
-use super::protocol::{MobileCaller, MobileCapability, MobileReadOperation};
+use super::protocol::{
+    MobileCaller, MobileCapability, MobileReadOperation, validate_mobile_command,
+};
 use crate::noise::KeyPair;
 use crate::relay::hex;
 use crate::secure_channel::{RecordAssembler, SecureChannel, SecureChannelOptions};
@@ -42,6 +46,9 @@ pub type UnpairedPeerHandler =
 pub type MobileTransportLog = Arc<dyn Fn(&str) + Send + Sync>;
 pub struct MobileLanServerDeps {
     pub app: MobileHostApplication,
+    /// The trusted desktop handlers share admission/outcomes with other transports.
+    /// Envelope, capability and project checks still run before forwarding.
+    pub commands_own_ledger: bool,
     pub host_static_key: KeyPair,
     pub pairing_code: Option<String>,
     pub authorize_peer: Option<MobilePeerAuthorizer>,
@@ -55,6 +62,7 @@ impl MobileLanServerDeps {
     pub fn new(app: MobileHostApplication, host_static_key: KeyPair) -> Self {
         Self {
             app,
+            commands_own_ledger: false,
             host_static_key,
             pairing_code: None,
             authorize_peer: None,
@@ -524,11 +532,15 @@ async fn dispatch(
                 .is_none_or(str::is_empty);
         let mut value = match request.kind {
             MobileRequestKind::Command => {
-                handle_mobile_command(
-                    &shared.deps.app,
-                    serde_json::from_value(supplied).map_err(|e| e.to_string())?,
-                )
-                .await
+                let command = serde_json::from_value(supplied).map_err(|e| e.to_string())?;
+                if shared.deps.commands_own_ledger {
+                    validate_mobile_command(&command).map_err(|error| error.message)?;
+                    dispatch_mobile_command(command, &shared.deps.app.commands)
+                        .await
+                        .map_err(Into::into)
+                } else {
+                    handle_mobile_command(&shared.deps.app, command).await
+                }
             }
             _ => {
                 handle_mobile_read(

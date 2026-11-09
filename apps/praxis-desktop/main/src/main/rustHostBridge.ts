@@ -66,6 +66,8 @@ export interface StdioRustHostOptions {
   env?: Record<string, string | undefined>;
   /** Startup handshake timeout in milliseconds (defaults to 10,000ms). */
   startupTimeoutMs?: number;
+  /** Default true for general IPC; mobile requires explicit listener recreation after loss. */
+  restartOnExit?: boolean;
   onReady?: (status: RustHostStatus) => void;
   /**
    * Serves `call` frames the host sends to Electron. Without a handler every call is
@@ -99,6 +101,7 @@ export class StdioRustHostTransport implements RustHostTransport {
   private readlineInterface: readline.Interface | undefined;
   private startPromise: Promise<void> | undefined;
   private readyStatus: RustHostStatus | undefined;
+  private terminalError: Error | undefined;
   private channels: string[] = [];
   private readonly pending = new Map<
     string,
@@ -114,11 +117,19 @@ export class StdioRustHostTransport implements RustHostTransport {
     return this.readyStatus;
   }
 
+  /** Internal process proof for integration tests and diagnostics; never a renderer API. */
+  diagnostics() {
+    const running = this.child !== undefined && this.child.exitCode === null && !this.child.killed;
+    return { pid: running ? this.child?.pid : undefined, ready: running && this.readyStatus !== undefined,
+      crateVersion: running ? this.readyStatus?.crateVersion : undefined };
+  }
+
   registeredChannels(): readonly string[] {
     return this.channels;
   }
 
   async start(): Promise<void> {
+    if (this.terminalError) throw this.terminalError;
     if (this.startPromise) {
       return this.startPromise;
     }
@@ -145,6 +156,17 @@ export class StdioRustHostTransport implements RustHostTransport {
         env
       });
       this.child = child;
+
+      // A host can die while an Electron callback is finishing. A write callback
+      // alone does not consume the stdin stream's error event (for example EPIPE).
+      child.stdin.on('error', error => {
+        if (this.child === child) {
+          if (this.options.restartOnExit === false) this.terminalError = error;
+          this.resetExitedTransport();
+          this.failPending(error);
+          child.kill();
+        }
+      });
 
       const timeoutMs = this.options.startupTimeoutMs ?? 10_000;
       const timer = setTimeout(() => {
@@ -198,6 +220,7 @@ export class StdioRustHostTransport implements RustHostTransport {
       });
 
       child.once('error', err => {
+        if (this.options.restartOnExit === false) this.terminalError = err;
         clearTimeout(timer);
         if (!settled) {
           settled = true;
@@ -214,6 +237,7 @@ export class StdioRustHostTransport implements RustHostTransport {
         const exitError = new Error(
           `praxis-host exited unexpectedly (code=${String(code)}, signal=${String(signal)})`
         );
+        if (this.options.restartOnExit === false) this.terminalError = exitError;
         if (!settled) {
           settled = true;
           reject(exitError);

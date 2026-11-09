@@ -12,7 +12,8 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const specs = process.argv.slice(2);
 const selected = specs.length ? specs : [
   'gitGraph.spec.ts', 'gitOnboarding.spec.ts', 'settingsReset.spec.ts',
-  'folder.spec.ts', 'folderMulti.spec.ts', 'editIssue.spec.ts', 'newIssue.spec.ts'
+  'folder.spec.ts', 'folderMulti.spec.ts', 'editIssue.spec.ts', 'newIssue.spec.ts',
+  'mobileAccess.spec.ts', 'mobileTransport.spec.ts'
 ];
 
 function run(command, args, cwd, env, logPath) {
@@ -40,6 +41,7 @@ function run(command, args, cwd, env, logPath) {
     const dir = path.join(outputRoot, mode);
     fs.mkdirSync(dir, { recursive: true });
     const env = { ...process.env, PRAXIS_RUST_CHANNELS: channels,
+      PRAXIS_MOBILE_TRANSPORT: mode, PRAXIS_EXPECT_MOBILE_TRANSPORT: mode,
       PRAXIS_EXPECT_RUST_MODE: mode, PRAXIS_E2E_WORKERS: '1',
       PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(dir, 'results.json') };
     // Do not inherit a developer's binary override: this run just built the local host.

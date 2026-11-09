@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import {
-  dispatchMobileCommand,
+  handleMobileCommand,
   handleMobileRead,
   type MobileAccessPolicy,
   type MobileCommand,
@@ -44,10 +44,13 @@ export class RustMobileTransport implements MobileListenerTransport {
   private failure?: Error;
   private disposed = false;
   private relayState?: (snapshot: RelaySnapshot) => void;
+  private readCalls = 0;
+  private commandCalls = 0;
 
   constructor(private readonly deps: MobileLanServerDeps, private readonly options: RustMobileTransportOptions) {
     this.transport = (options.createTransport ?? (opts => new StdioRustHostTransport(opts)))({
       ...options.host,
+      restartOnExit: false,
       onReady: status => {
         options.host.onReady?.(status);
         deps.onLog?.(`[mobile] Rust transport host ready: ${JSON.stringify(status)}`);
@@ -62,6 +65,11 @@ export class RustMobileTransport implements MobileListenerTransport {
   get bindError(): string | undefined { return this.failure?.message ?? this.snapshot.bindError ?? undefined; }
   connectionCount(): number { return this.snapshot.connectionCount; }
 
+  diagnostics() {
+    return { mode: 'rust' as const, ...(this.transport instanceof StdioRustHostTransport ? this.transport.diagnostics() : {}),
+      listening: this.listening, readCalls: this.readCalls, commandCalls: this.commandCalls };
+  }
+
   private async invoke<T>(channel: string, params?: unknown): Promise<T> {
     if (this.disposed) throw new Error('Rust mobile transport is disposed.');
     if (this.failure) throw this.failure;
@@ -72,7 +80,7 @@ export class RustMobileTransport implements MobileListenerTransport {
         timer = setTimeout(() => reject(new Error(`Rust mobile control timed out: ${channel}`)), this.options.requestTimeoutMs ?? 10_000);
       }),
     ]).catch(error => {
-      // A host restart loses its replay ledger. Never silently respawn and retry mutations.
+      // Fail closed on transport loss; listener recreation must remain explicit.
       this.failure = error instanceof Error ? error : new Error(String(error));
       this.snapshot = { listening: false, addresses: [], connectionCount: 0 };
       clearInterval(this.timer);
@@ -88,13 +96,13 @@ export class RustMobileTransport implements MobileListenerTransport {
   private async onCall(method: string, params: unknown): Promise<unknown> {
     if (this.disposed || this.failure) throw new Error('Rust mobile transport is unavailable.');
     switch (method) {
-      case 'mobile.read': return handleMobileRead(this.deps.app, params as MobileReadRequest);
-      case 'mobile.command': {
-        // Rust owns admission/replay; preserve the TypeScript execution/capability boundary.
-        const result = await dispatchMobileCommand(params as MobileCommand, this.deps.app.commands);
-        if (!result.ok) throw new Error(result.error.message);
-        return result.value;
-      }
+      case 'mobile.read':
+        this.readCalls++;
+        return handleMobileRead(this.deps.app, params as MobileReadRequest);
+      // One Electron ledger serves IPC and transport retries, including late completion.
+      case 'mobile.command':
+        this.commandCalls++;
+        return handleMobileCommand(this.deps.app, params as MobileCommand);
       case 'mobile.authorizePeer': return this.deps.authorizePeer?.((params as { publicKey: string }).publicKey) ?? null;
       case 'mobile.unpairedPeer': {
         const { publicKey, tokenId } = params as { publicKey: string; tokenId?: string | null };
