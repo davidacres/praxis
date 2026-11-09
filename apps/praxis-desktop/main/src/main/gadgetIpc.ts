@@ -7,7 +7,11 @@ import {
   approveStage,
   isGadgetActionValue,
   parseChatBlocks,
+  parseLenientJson,
+  redactDeep,
+  redactSecrets,
   resolveApprovalTarget,
+  validateGadgetEnvelope,
   WorkflowRunStore,
   type GadgetAction,
   type GadgetActionResult,
@@ -20,6 +24,7 @@ import { getGadgetService, resolveSessionScope } from './gadgetInstance';
 import { getWorkflowBackingStore, getWorkflowPolicyStore } from './workflowStoreInstance';
 import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
 import { applyTicketReview } from './ticketReviewApply';
+import { getRustHostBridge } from './rustHostInstance';
 
 const gadgetListeners = new Set<(sessionId: string) => void>();
 
@@ -212,12 +217,33 @@ export function registerGadgetIpc(): void {
     // blocks keeps a stale transcript readable without minting anything new.
     if (!scope) return getGadgetService().getBlocks(sessionId);
 
-    const parsed = parseChatBlocks(text ?? '', { scope, issuedAt: new Date().toISOString(), idPrefix });
+    const bridge = getRustHostBridge();
+    const options = { scope, issuedAt: new Date().toISOString(), idPrefix };
+    const parsed = bridge.isChannelMigrated('gadgets:parseChatBlocks')
+      ? await bridge.invoke<ReturnType<typeof parseChatBlocks>>('gadgets:parseChatBlocks', text ?? '', options)
+      : parseChatBlocks(text ?? '', options);
     if (!parsed.containsGadget) return getGadgetService().getBlocks(sessionId);
 
     const published = getGadgetService().publish(sessionId, parsed.blocks);
     broadcast(sessionId);
     return published;
+  });
+
+  const bridge = getRustHostBridge();
+  bridge.handleOrFallback('gadgets:parseChatBlocks', (_event, rawText: string, options: Parameters<typeof parseChatBlocks>[1]) =>
+    parseChatBlocks(rawText ?? '', options)
+  );
+  bridge.handleOrFallback('gadgets:validate', (_event, envelope: Parameters<typeof validateGadgetEnvelope>[0]) =>
+    validateGadgetEnvelope(envelope)
+  );
+  bridge.handleOrFallback('gadgets:repairJson', (_event, rawText: string) =>
+    parseLenientJson(rawText ?? '')
+  );
+  bridge.handleOrFallback('gadgets:redactSecrets', (_event, target: unknown) => {
+    if (typeof target === 'string') return redactSecrets(target);
+    const hits = new Set<string>();
+    const value = redactDeep(target, hits);
+    return { value, count: hits.size };
   });
 
   ipcMain.handle('gadgets:submit', async (_event, request: GadgetSubmitRequest) => submitGadgetAction(request, 'desktop-user'));

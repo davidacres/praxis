@@ -13,6 +13,8 @@ pub mod stub_backend_service;
 mod test_support;
 
 pub use folder_service::*;
+pub use github::{GitHubBoardService, StaticGitHubConfig};
+pub use gitlab::{GitLabBoardService, StaticGitLabConfig};
 pub use issue_tracker_service::*;
 pub use rest_support::{TrackerSecretSource, encode_uri_component};
 pub use stub_backend_service::*;

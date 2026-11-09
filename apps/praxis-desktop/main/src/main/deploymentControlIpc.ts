@@ -16,6 +16,7 @@ import {
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getDeploymentRunStore, getDeploymentTargetLocks } from './deploymentManagerInstance';
+import { getRustHostBridge } from './rustHostInstance';
 
 /**
  * Direct deployment action IPC (FX-BE-059 / TASK-158) — prepare, approve,
@@ -63,16 +64,21 @@ export interface PrepareDirectDeploymentContext {
 }
 
 export function registerDeploymentControlIpc(): void {
+  const bridge = getRustHostBridge();
+
   ipcMain.handle(
     'deployments:prepare',
     async (
       _event,
-      _projectId: string,
+      projectId: string,
       runId: string,
       profile: DeploymentProfile,
       artifact: PublishedArtifact,
       context: PrepareDirectDeploymentContext = {}
     ): Promise<DeploymentRun> => {
+      if (bridge.isChannelMigrated('deployments:prepare')) {
+        return bridge.invoke<DeploymentRun>('deployments:prepare', projectId, runId, profile, artifact, context);
+      }
       return prepareDirectDeployment({
         store: getDeploymentRunStore(),
         runId,
@@ -88,12 +94,15 @@ export function registerDeploymentControlIpc(): void {
     'deployments:approve',
     async (
       _event,
-      _projectId: string,
+      projectId: string,
       runId: string,
       profile: DeploymentProfile,
       artifact: PublishedArtifact,
       actor: string
     ): Promise<ApproveDirectDeploymentResult> => {
+      if (bridge.isChannelMigrated('deployments:approve')) {
+        return bridge.invoke<ApproveDirectDeploymentResult>('deployments:approve', projectId, runId, profile, artifact, actor);
+      }
       return approveDirectDeployment({
         store: getDeploymentRunStore(),
         runId,
@@ -116,6 +125,17 @@ export function registerDeploymentControlIpc(): void {
       manifest: PublishManifest,
       options: DirectDeployOptions = {}
     ): Promise<RunDirectDeploymentResult> => {
+      if (bridge.isChannelMigrated('deployments:deploy')) {
+        return bridge.invoke<RunDirectDeploymentResult>(
+          'deployments:deploy',
+          projectFolder(projectId),
+          runId,
+          profile,
+          artifact,
+          manifest,
+          options
+        );
+      }
       return runDirectDeployment({
         store: getDeploymentRunStore(),
         locks: getDeploymentTargetLocks(),
@@ -137,14 +157,24 @@ export function registerDeploymentControlIpc(): void {
   );
 
   ipcMain.handle('deployments:getRun', async (_event, runId: string): Promise<DeploymentRun | undefined> => {
+    if (bridge.isChannelMigrated('deployments:getRun')) {
+      const run = await bridge.invoke<DeploymentRun | null>('deployments:getRun', runId);
+      return run ?? undefined;
+    }
     return getDeploymentRunStore().get(runId);
   });
 
   ipcMain.handle('deployments:listRuns', async (_event, deploymentProfileId: string): Promise<DeploymentRun[]> => {
+    if (bridge.isChannelMigrated('deployments:listRuns')) {
+      return bridge.invoke<DeploymentRun[]>('deployments:listRuns', deploymentProfileId);
+    }
     return getDeploymentRunStore().forProfile(deploymentProfileId);
   });
 
   ipcMain.handle('deployments:health', async (_event, runId: string): Promise<DeploymentHealthResult> => {
+    if (bridge.isChannelMigrated('deployments:health')) {
+      return bridge.invoke<DeploymentHealthResult>('deployments:health', runId);
+    }
     const run = getDeploymentRunStore().get(runId);
     if (!run) throw new Error(`Deployment run ${runId} was not found.`);
     return deploymentHealthResult(run);
@@ -159,6 +189,15 @@ export function registerDeploymentControlIpc(): void {
       profile: DeploymentProfile,
       options: DirectRollbackOptions = {}
     ): Promise<RollbackDirectDeploymentResult> => {
+      if (bridge.isChannelMigrated('deployments:rollback')) {
+        return bridge.invoke<RollbackDirectDeploymentResult>(
+          'deployments:rollback',
+          projectFolder(projectId),
+          runId,
+          profile,
+          options
+        );
+      }
       return rollbackDirectDeployment({
         store: getDeploymentRunStore(),
         runId,

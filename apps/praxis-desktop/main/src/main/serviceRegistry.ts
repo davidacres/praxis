@@ -18,6 +18,8 @@ import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvi
 import { DesktopGitHubConfigProvider } from './adapters/desktopGitHubConfigProvider';
 import { getProjectStore } from './projectStoreInstance';
 import { broadcastToAllWindows } from './windowBroadcast';
+import { getRustHostBridge } from './rustHostInstance';
+import { RustTrackerService } from './adapters/rustTrackerService';
 
 const folderServices = new Map<string, FolderService>();
 const jiraServices = new Map<string, JiraService>();
@@ -245,6 +247,44 @@ async function resolveServiceForConnection(
   if (!connection) {
     console.warn(`serviceRegistry — unknown connection id "${connectionId}"`);
     return getStubService('demo');
+  }
+
+  if (getRustHostBridge().isChannelMigrated('tracker:getIssues')) {
+    if (connection.mode === 'folder') {
+      let cached = folderServices.get(connectionId);
+      if (!cached) {
+        cached = new RustTrackerService(connection) as unknown as FolderService;
+        folderServices.set(connectionId, cached);
+      }
+      return cached;
+    }
+    if (connection.mode === 'github') {
+      let cached = gitHubServices.get(connectionId);
+      if (!cached) {
+        const store = getConnectionStore();
+        const pat =
+          (await store.getSecret(connectionId, 'pat')) ??
+          (typeof connection.settings.pat === 'string' ? connection.settings.pat : undefined);
+        cached = new RustTrackerService(connection, pat) as unknown as GitHubBoardService;
+        gitHubServices.set(connectionId, cached);
+      }
+      return cached;
+    }
+    if (connection.mode === 'gitlab') {
+      let cached = gitLabServices.get(connectionId);
+      if (!cached) {
+        const store = getConnectionStore();
+        const apiKey =
+          (await store.getSecret(connectionId, 'gitlabApiKey')) ??
+          (await store.getSecret(connectionId, 'apiKey')) ??
+          (typeof connection.settings.apiKey === 'string'
+            ? connection.settings.apiKey
+            : undefined);
+        cached = new RustTrackerService(connection, apiKey) as unknown as GitLabBoardService;
+        gitLabServices.set(connectionId, cached);
+      }
+      return cached;
+    }
   }
 
   switch (connection.mode) {

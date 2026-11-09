@@ -72,15 +72,18 @@ pub struct CustomProviderConfig {
 }
 
 /// A custom provider being edited, before it is saved.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CustomProviderInput {
     pub name: String,
     pub base_url: String,
     pub api_key: String,
     pub model: String,
     /// Header names whose value is a secret.
+    #[serde(default)]
     pub headers: HashMap<String, String>,
     /// Header names whose value is not a secret.
+    #[serde(default)]
     pub header_names: Vec<String>,
 }
 

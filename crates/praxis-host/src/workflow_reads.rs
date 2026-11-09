@@ -12,7 +12,10 @@ use crate::HostContext;
 const POLICIES_KEY: &str = "praxis.workflowPolicies.v1";
 
 pub(crate) fn register_workflow_read_handlers(ctx: &HostContext) {
-    ctx.register_handler("workflows:listPolicies", |ctx, _args| {
+    ctx.register_handler("workflows:listPolicies", |ctx, args| {
+        if let Some(document) = args.first() {
+            return list_policies(document);
+        }
         let file = ctx.config().user_data_dir.join("workflows.json");
         let document = std::fs::read_to_string(file)
             .ok()

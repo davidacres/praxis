@@ -7,6 +7,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::rest_support::TrackerSecretSource;
 
 /// Host-neutral GitHub connection settings.
@@ -54,14 +56,25 @@ impl fmt::Debug for GitHubBoardServiceOptions {
     }
 }
 
+fn default_page_size() -> usize {
+    25
+}
+
 /// Fixed GitHub settings.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StaticGitHubConfig {
+    #[serde(default = "default_page_size")]
     pub default_page_size: usize,
+    #[serde(default)]
     pub api_url: String,
+    #[serde(default)]
     pub owner: String,
+    #[serde(default)]
     pub repo: String,
+    #[serde(default)]
     pub api_key: String,
+    #[serde(default)]
     pub allow_issue_creation: bool,
 }
 

@@ -27,6 +27,7 @@ import { alibabaCodingPlanUsageSnapshot, isAlibabaCodingPlanEndpoint, regionForE
 import { alibabaConsoleTransport, isAlibabaConsoleSignedIn, signInToAlibabaConsole, signOutOfAlibabaConsole } from './alibabaConsoleSession';
 import { enabledUsageProviders, readProviderSnapshots } from './providerUsageBatch';
 import { fetchApiUsageHistory } from './providerUsageHistory';
+import { getRustHostBridge } from './rustHostInstance';
 
 const USAGE_SECRET_PREFIX = 'ai-usage:';
 
@@ -223,6 +224,33 @@ export function registerAiUsageIpc(): void {
   );
   ipcMain.handle('aiUsage:dashboardSummary', async () => dashboardSummary());
   ipcMain.handle('aiUsage:listEvents', async () => getAiUsageLog().list());
+
+  const bridge = getRustHostBridge();
+  bridge.handleOrFallback('aiUsage:summarize', (_event, events: any[]) => {
+    let requests = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let costUsd = 0;
+    for (const ev of events ?? []) {
+      requests++;
+      inputTokens += Number(ev?.tokens?.input ?? 0);
+      outputTokens += Number(ev?.tokens?.output ?? 0);
+      if (typeof ev?.costUsd === 'number') costUsd += ev.costUsd;
+    }
+    return { requests, inputTokens, outputTokens, costUsd };
+  });
+  bridge.handleOrFallback('aiUsage:byModel', (_event, events: any[]) => {
+    const map: Record<string, { requests: number; inputTokens: number; outputTokens: number; costUsd: number }> = {};
+    for (const ev of events ?? []) {
+      const key = `${ev.provider}::${ev.model}`;
+      if (!map[key]) map[key] = { requests: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+      map[key].requests++;
+      map[key].inputTokens += Number(ev?.tokens?.input ?? 0);
+      map[key].outputTokens += Number(ev?.tokens?.output ?? 0);
+      if (typeof ev?.costUsd === 'number') map[key].costUsd += ev.costUsd;
+    }
+    return map;
+  });
   ipcMain.handle('aiUsage:providerHistory', async (_event, provider: AiProvider) => providerHistory(provider));
   ipcMain.handle('aiUsage:providerSnapshot', async (_event, provider: AiProvider) => providerSnapshot(provider));
   ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers?: AiProvider[]) => {

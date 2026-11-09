@@ -122,7 +122,8 @@ fn is_openai_reasoning_model(normalized: &str) -> bool {
 /// `anthropic/claude-sonnet-4.6` still needs Anthropic's `thinking` shape, not
 /// OpenAI's `reasoning_effort`, even though the HTTP request goes to an
 /// OpenAI-compatible endpoint.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ReasoningFamily {
     Anthropic,
     Gemini,
@@ -255,7 +256,8 @@ pub fn gemini_thinking_budget(level: Option<ReasoningEffort>) -> Option<u32> {
 /// - `Text` — the route returns readable reasoning; show it.
 /// - `Opaque` — the model reasons but this route never returns the text.
 /// - `NotRequested` — the session asked for no reasoning (`effort: 'off'`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ReasoningAvailability {
     Text,
     Opaque,

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use crate::gitlab::api_service::{GitLabProjectRemote, infer_gitlab_project_from_repo};
 use crate::rest_support::TrackerSecretSource;
@@ -93,15 +94,27 @@ impl fmt::Debug for GitLabBoardServiceOptions {
     }
 }
 
+fn default_page_size() -> usize {
+    25
+}
+
 /// Fixed GitLab settings.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StaticGitLabConfig {
+    #[serde(default = "default_page_size")]
     pub default_page_size: usize,
+    #[serde(default)]
     pub url: String,
+    #[serde(default)]
     pub project_path: String,
+    #[serde(default)]
     pub list_all_accessible_boards: bool,
+    #[serde(default)]
     pub selected_board_refs: Vec<String>,
+    #[serde(default)]
     pub api_key: String,
+    #[serde(default)]
     pub allow_issue_creation: bool,
 }
 

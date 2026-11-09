@@ -309,8 +309,11 @@ impl HostContext {
     }
 
     fn register_settings_and_workspace_handlers(&self) {
-        self.register_handler("settings:get", |ctx, _args| {
-            serde_json::to_value(ctx.settings.read()).map_err(|err| RustRpcError {
+        self.register_handler("settings:get", |ctx, args| {
+            let settings = args
+                .first()
+                .map_or_else(|| ctx.settings.read(), sanitize_app_settings);
+            serde_json::to_value(settings).map_err(|err| RustRpcError {
                 code: "INTERNAL_ERROR".to_string(),
                 message: err.to_string(),
             })

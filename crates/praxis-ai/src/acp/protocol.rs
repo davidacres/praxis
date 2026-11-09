@@ -58,6 +58,7 @@ impl AcpToolKind {
 #[serde(rename_all = "camelCase")]
 pub struct AcpPermissionRequest {
     pub tool_call_id: String,
+    #[serde(default)]
     pub title: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,

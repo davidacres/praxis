@@ -38,15 +38,15 @@ async function removeUserDataFile(name: string): Promise<void> {
 export function registerSettingsIpc(): void {
   const bridge = getRustHostBridge();
 
-  bridge.handleOrFallback('settings:get', async () => getSettingsBackend().read(), ipcMain);
+  bridge.handleOrFallback('settings:get', async () => getSettingsBackend().read(), ipcMain,
+    () => [getSettingsBackend().read()]);
 
-  bridge.handleOrFallback(
+  ipcMain.handle(
     'settings:set',
     async (_event, patch: AppSettingsPatch) => {
       validateSettingsPatch(patch);
       return getSettingsBackend().write(patch);
-    },
-    ipcMain
+    }
   );
 
   ipcMain.handle('settings:getMobileHostInfo', async () => snapshotMobilePairing());

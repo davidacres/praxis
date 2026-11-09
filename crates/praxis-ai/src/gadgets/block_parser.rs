@@ -1,6 +1,7 @@
 //! Markdown and gadget block parser (`block_parser.rs`).
 
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::LazyLock;
 
@@ -17,12 +18,16 @@ static GADGET_FENCE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         .expect("valid fence regex")
 });
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatBlockParseOptions {
     pub scope: GadgetScope,
     pub issued_at: String,
     pub id_prefix: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ParsedChatBlocks {
     pub blocks: Vec<ChatBlock>,
     pub contains_gadget: bool,

@@ -65,7 +65,7 @@ struct LaunchSettingsProfile {
 #[derive(Deserialize)]
 struct LaunchSettingsFile {
     #[serde(default)]
-    profiles: BTreeMap<String, LaunchSettingsProfile>,
+    profiles: indexmap::IndexMap<String, LaunchSettingsProfile>,
 }
 
 /// The first `;`-separated bind URL and its explicit port, read without a URL parser.

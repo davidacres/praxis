@@ -4,13 +4,15 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::issue_tracker_service::{IssueTrackerService, TrackerResult};
+use async_trait::async_trait;
 use chrono::Utc;
 use praxis_contracts::{
     BackendMode, Board, BoardColumn, BoardDetails, BoardFilters, BoardIssueCreationRestriction,
-    ConnectionCheck, ConnectionCheckStatus, CreateIssueInput, FilterMetadata, IssueComment,
-    IssueDetails, IssueFilters, IssueSummary, PagedIssues, ParentIssueReference,
-    ParentItemQueryOptions, Project, ProjectWorkflowStage, UpdateIssueInput, WorkflowStageCategory,
-    WorkflowTransition,
+    ConnectionCheck, ConnectionCheckStatus, CreateBoardInput, CreateIssueInput, FilterMetadata,
+    IssueAttachment, IssueComment, IssueDetails, IssueFilters, IssueSummary, PagedIssues,
+    ParentIssueReference, ParentItemQueryOptions, Project, ProjectWorkflowStage, UpdateBoardInput,
+    UpdateIssueInput, WorkflowStageCategory, WorkflowTransition,
 };
 use praxis_core::folder::{
     BoardConfigFile, FolderWatcher, GenerateOptions, IssueType, ParsedPlanFolder,
@@ -1837,6 +1839,150 @@ impl FolderService {
 
 impl Drop for FolderService {
     fn drop(&mut self) {
+        self.dispose();
+    }
+}
+
+#[async_trait]
+impl IssueTrackerService for FolderService {
+    fn mode(&self) -> BackendMode {
+        BackendMode::Folder
+    }
+
+    fn get_default_page_size(&self) -> usize {
+        self.get_default_page_size()
+    }
+
+    async fn reset(&self) -> TrackerResult<()> {
+        self.reset()
+    }
+
+    async fn check_connection(&self) -> TrackerResult<ConnectionCheck> {
+        Ok(self.check_connection())
+    }
+
+    async fn get_projects(&self, _force_refresh: bool) -> TrackerResult<Vec<Project>> {
+        self.get_projects()
+    }
+
+    async fn get_issues(
+        &self,
+        filters: &IssueFilters,
+        start_at: usize,
+        page_size: usize,
+    ) -> TrackerResult<PagedIssues> {
+        self.get_issues(filters, start_at, page_size)
+    }
+
+    async fn get_filter_metadata(&self, filters: &IssueFilters) -> TrackerResult<FilterMetadata> {
+        self.get_filter_metadata(filters)
+    }
+
+    async fn get_parent_items(
+        &self,
+        filters: &IssueFilters,
+        search_text: Option<&str>,
+        options: Option<&ParentItemQueryOptions>,
+    ) -> TrackerResult<Vec<IssueSummary>> {
+        self.get_parent_items(filters, search_text, options)
+    }
+
+    async fn supports_boards(&self) -> TrackerResult<bool> {
+        Ok(true)
+    }
+
+    async fn get_boards(&self, filters: &BoardFilters) -> TrackerResult<Vec<Board>> {
+        self.get_boards(filters)
+    }
+
+    async fn get_board_details(&self, board: &Board) -> TrackerResult<BoardDetails> {
+        self.get_board_details(board)
+    }
+
+    async fn create_board(&self, _input: &CreateBoardInput) -> TrackerResult<Board> {
+        Err("Folder mode does not support creating boards.".to_string())
+    }
+
+    async fn update_board(
+        &self,
+        _board_id: &str,
+        _input: &UpdateBoardInput,
+    ) -> TrackerResult<Board> {
+        Err("Folder mode does not support updating boards.".to_string())
+    }
+
+    async fn delete_board(&self, _board_id: &str) -> TrackerResult<()> {
+        Err("Folder mode does not support deleting boards.".to_string())
+    }
+
+    async fn get_issue(&self, issue_key: &str) -> TrackerResult<IssueDetails> {
+        self.get_issue(issue_key)
+    }
+
+    async fn create_issue(&self, input: &CreateIssueInput) -> TrackerResult<IssueDetails> {
+        self.create_issue(input)
+    }
+
+    async fn update_issue(
+        &self,
+        issue_key: &str,
+        input: &UpdateIssueInput,
+    ) -> TrackerResult<IssueDetails> {
+        self.update_issue(issue_key, input)
+    }
+
+    async fn delete_issue(&self, _issue_key: &str) -> TrackerResult<()> {
+        Err(
+            "Folder mode does not support deleting issues. Remove the markdown files directly."
+                .to_string(),
+        )
+    }
+
+    async fn add_comment(&self, issue_key: &str, body: &str) -> TrackerResult<()> {
+        self.add_comment(issue_key, body)
+    }
+
+    async fn attach_file(
+        &self,
+        _issue_key: &str,
+        _file_path: &str,
+        _file_name: Option<&str>,
+    ) -> TrackerResult<()> {
+        Err("Folder mode does not support attachments.".to_string())
+    }
+
+    async fn download_attachment(
+        &self,
+        _issue_key: &str,
+        _attachment: &IssueAttachment,
+        _target_file_path: &str,
+    ) -> TrackerResult<()> {
+        Err("Folder mode does not support attachment downloads.".to_string())
+    }
+
+    async fn get_transitions(&self, issue_key: &str) -> TrackerResult<Vec<WorkflowTransition>> {
+        self.get_transitions(issue_key)
+    }
+
+    async fn transition_issue(&self, issue_key: &str, transition_id: &str) -> TrackerResult<()> {
+        self.transition_issue(issue_key, transition_id)
+    }
+
+    async fn get_browse_url(&self, issue: &IssueSummary) -> TrackerResult<Option<String>> {
+        let guard = self.state.lock().map_err(|e| e.to_string())?;
+        let url = guard
+            .issues
+            .iter()
+            .find(|i| i.summary_model.key == issue.key)
+            .map(|i| i.source_path.clone());
+        Ok(url)
+    }
+
+    async fn get_self_assignee_label(&self) -> TrackerResult<Option<String>> {
+        Ok(None)
+    }
+
+    fn dispose(&self) {
         self.dispose();
     }
 }

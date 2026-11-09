@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 import { chooseOption, chipOptionValues } from './chipSelect';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 
 let app: TestApp;
 
@@ -11,6 +13,16 @@ test.afterEach(async () => {
 test('runs a real PTY and preserves it when the panel is closed', async () => {
   app = await launchTestApp();
   const win = app.window;
+  if (process.env.PRAXIS_EXPECT_RUST_TERMINAL === '1') {
+    const proof = await app.electronApp.evaluate(async ({ app }) => {
+      const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
+      const bridge = require('./rustHostInstance.js').getRustHostBridge();
+      return { channels: bridge.migratedChannels(), status: await bridge.invoke('host:status') };
+    });
+    expect(proof.channels.filter((channel: string) => channel.startsWith('terminal:'))).toHaveLength(9);
+    expect(proof.status.crateVersion).toBeTruthy();
+    console.log('[terminal] Verified all nine Rust terminal controls and ready host.');
+  }
   await win.getByLabel('Toggle panel').click();
   const terminal = win.getByTestId('integrated-terminal');
   await expect(terminal).toBeVisible();
@@ -35,6 +47,11 @@ test('runs a real PTY and preserves it when the panel is closed', async () => {
   await win.getByLabel('Toggle panel').click();
   await expect(win.getByTestId('integrated-terminal')).toBeVisible();
   await expect.poll(currentContext).toContain('TM_PTY_OK');
+  if (process.env.PRAXIS_EXPECT_RUST_TERMINAL === '1') {
+    const folder = path.resolve(__dirname, '../../.praxis/session-artifacts');
+    fs.mkdirSync(folder, { recursive: true });
+    await win.screenshot({ path: path.join(folder, 'rust-terminal.png') });
+  }
 });
 
 test('captures shell-integrated command records and exposes failed-command actions', async () => {

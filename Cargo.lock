@@ -1499,6 +1499,7 @@ name = "praxis-host"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "napi",
  "napi-derive",
  "praxis-ai",

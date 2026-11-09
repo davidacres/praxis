@@ -118,10 +118,12 @@ pub fn prepare_direct_deployment<B: DeploymentRunBackend>(
 
 // ── Approve ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ApproveDirectDeploymentResult {
     pub run: DeploymentRun,
     pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
@@ -198,10 +200,12 @@ pub struct DirectDeploymentOptions {
     pub health_check_port: Option<u16>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RunDirectDeploymentResult {
     pub dispatched: bool,
     pub run: DeploymentRun,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
@@ -475,10 +479,12 @@ pub fn deployment_health_result(run: &DeploymentRun) -> DeploymentHealthResult {
 
 // ── Explicit rollback ────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RollbackDirectDeploymentResult {
     pub rolled_back: bool,
     pub run: DeploymentRun,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 

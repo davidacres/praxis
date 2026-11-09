@@ -64,6 +64,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     let mobile = MobileBridge::new(runtime.handle().clone(), calls.clone());
     register_mobile_channels(&host, &mobile);
+    praxis_host::profile_bridge::register_profile_channels(&host, runtime.handle());
+    praxis_host::deployment_bridge::register_deployment_channels(&host, runtime.handle());
+    praxis_host::ai_bridge::register_ai_channels(&host, runtime.handle());
+    praxis_host::tracker_bridge::register_tracker_channels(&host, runtime.handle());
+    let terminal =
+        praxis_host::terminal_bridge::register_terminal_channels(&host, runtime.handle());
 
     write_frame(
         &stdout,
@@ -102,5 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Stdin closed: fail any outstanding calls so nothing waits on a dead channel.
     calls.close();
     mobile.shutdown();
+    terminal.dispose();
     Ok(())
 }

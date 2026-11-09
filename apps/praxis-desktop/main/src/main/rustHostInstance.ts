@@ -54,6 +54,31 @@ export const DEFAULT_MIGRATED_CHANNELS: readonly string[] = [
   'folder:discoverPlans'
 ];
 
+/** Available for explicit source testing; remote/release evidence remains a separate gate. */
+export const OPT_IN_MIGRATED_CHANNELS: readonly string[] = [
+  'workflows:listPolicies',
+  'projects:getRunProfile', 'projects:saveRunProfile', 'projects:validateRunProfile', 'projects:discoverRunServices',
+  'deployments:listProfiles', 'deployments:getProfile', 'deployments:saveProfile',
+  'deployments:validateProfile', 'deployments:preflightCapabilities',
+  'deployments:prepare', 'deployments:approve', 'deployments:deploy',
+  'deployments:getRun', 'deployments:listRuns', 'deployments:health', 'deployments:rollback',
+  'terminal:listProfiles', 'terminal:list', 'terminal:create', 'terminal:write',
+  'terminal:resize', 'terminal:kill', 'terminal:getBuffer', 'terminal:getContext', 'terminal:listCommands',
+  'ai:detectLocalRuntimes', 'ai:validateCustomProvider', 'ai:customBaseUrlProblem',
+  'ai:reasoningAvailability', 'ai:modelPricing', 'ai:knownContextLength',
+  'ai:providerLimitError', 'ai:preflightProvider',
+  'gadgets:parseChatBlocks', 'gadgets:validate', 'gadgets:repairJson', 'gadgets:redactSecrets',
+  'acp:evaluatePermission', 'acp:isReadOnlyShellCommand', 'acp:resolveSandboxedPath',
+  'teamChat:listPersonas', 'teamChat:verifyTurn',
+  'aiUsage:summarize', 'aiUsage:byModel', 'aiUsage:trend', 'aiUsage:daily',
+  'tracker:checkConnection', 'tracker:getProjects', 'tracker:supportsBoards',
+  'tracker:getBoards', 'tracker:getBoardDetails', 'tracker:getIssues',
+  'tracker:getFilterMetadata', 'tracker:getParentItems', 'tracker:getIssue',
+  'tracker:createIssue', 'tracker:updateIssue', 'tracker:deleteIssue',
+  'tracker:addComment', 'tracker:getTransitions', 'tracker:transitionIssue',
+  'tracker:getSelfAssigneeLabel', 'tracker:getBrowseUrl', 'tracker:reset'
+];
+
 /**
  * Resolves the initial set of migrated channels based on environment settings and binary presence.
  * Set `PRAXIS_RUST_CHANNELS=none` (or `false`, `0`, `off`) to disable delegation.
@@ -73,14 +98,19 @@ export function resolveInitialMigratedChannels(packaged = app?.isPackaged ?? fal
     const requested = envVal.split(',').map(s => s.trim()).filter(Boolean);
     const channels: string[] = [];
     for (const req of requested) {
+      if (req === 'settings:set') continue; // Electron is the sole desktop settings writer.
+      if (req.toLowerCase() === 'default') { channels.push(...DEFAULT_MIGRATED_CHANNELS); continue; }
       if (req.endsWith('*')) {
         const prefix = req.slice(0, -1);
-        channels.push(...DEFAULT_MIGRATED_CHANNELS.filter(c => c.startsWith(prefix)));
+        channels.push(...[...DEFAULT_MIGRATED_CHANNELS, ...OPT_IN_MIGRATED_CHANNELS].filter(c => c.startsWith(prefix)));
       } else {
         channels.push(req);
       }
     }
-    return channels;
+    if (channels.some(channel => channel.startsWith('terminal:'))) {
+      channels.push(...OPT_IN_MIGRATED_CHANNELS.filter(channel => channel.startsWith('terminal:')));
+    }
+    return [...new Set(channels)];
   }
   return [...DEFAULT_MIGRATED_CHANNELS];
 }
@@ -134,6 +164,9 @@ export async function disposeRustHost(): Promise<void> {
   const current = bridgeInstance;
   bridgeInstance = undefined;
   if (current) {
+    if (current.migratedChannels().some(channel => channel.startsWith('terminal:'))) {
+      await current.invoke('terminal:dispose').catch(error => console.warn('[rustHost] Terminal cleanup failed.', error));
+    }
     await current.dispose();
   }
 }

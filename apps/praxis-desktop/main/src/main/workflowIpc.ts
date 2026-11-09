@@ -861,11 +861,11 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     await commitWorkflowBase(projectId, message);
   });
 
-  // Opt-in only until bridge CI and shared-store/cache parity are proven. The Rust handler
-  // reads the durable store; the TypeScript fallback retains the existing in-memory semantics.
+  // Electron owns writes and optimistic visibility. Rust reads the same cache snapshot,
+  // including pending saves; it never races a second disk reader against that cache.
   getRustHostBridge().handleOrFallback('workflows:listPolicies', async (): Promise<WorkflowPolicyProfile[]> => {
     return getWorkflowPolicyStore().list();
-  }, ipcMain);
+  }, ipcMain, () => [getWorkflowBackingStore().snapshot()]);
 
   ipcMain.handle(
     'workflows:savePolicy',

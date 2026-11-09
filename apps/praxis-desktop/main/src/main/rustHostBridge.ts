@@ -47,6 +47,7 @@ export interface RustHostTransport {
   start?(): Promise<void>;
   dispatch(request: RustRpcRequest): Promise<RustRpcResponse>;
   onEvent(listener: (envelope: RustEventEnvelope) => void): () => void;
+  onDisconnect?(listener: (error: Error) => void): () => void;
   registeredChannels?(): readonly string[];
   dispose(): Promise<void> | void;
 }
@@ -108,6 +109,7 @@ export class StdioRustHostTransport implements RustHostTransport {
     { resolve: (res: RustRpcResponse) => void; reject: (err: Error) => void }
   >();
   private readonly eventListeners = new Set<(envelope: RustEventEnvelope) => void>();
+  private readonly disconnectListeners = new Set<(error: Error) => void>();
 
   constructor(options: StdioRustHostOptions) {
     this.options = options;
@@ -164,6 +166,7 @@ export class StdioRustHostTransport implements RustHostTransport {
           if (this.options.restartOnExit === false) this.terminalError = error;
           this.resetExitedTransport();
           this.failPending(error);
+          this.notifyDisconnect(error);
           child.kill();
         }
       });
@@ -229,6 +232,7 @@ export class StdioRustHostTransport implements RustHostTransport {
         if (this.child === child) {
           this.resetExitedTransport();
           this.failPending(err instanceof Error ? err : new Error(String(err)));
+          this.notifyDisconnect(err instanceof Error ? err : new Error(String(err)));
         }
       });
 
@@ -245,6 +249,7 @@ export class StdioRustHostTransport implements RustHostTransport {
         if (this.child === child) {
           this.resetExitedTransport();
           this.failPending(exitError);
+          this.notifyDisconnect(exitError);
         }
       });
     });
@@ -296,6 +301,13 @@ export class StdioRustHostTransport implements RustHostTransport {
     };
   }
 
+  onDisconnect(listener: (error: Error) => void): () => void {
+    this.disconnectListeners.add(listener);
+    return () => {
+      this.disconnectListeners.delete(listener);
+    };
+  }
+
   async dispose(): Promise<void> {
     this.readlineInterface?.close();
     this.readlineInterface = undefined;
@@ -335,6 +347,16 @@ export class StdioRustHostTransport implements RustHostTransport {
       entry.reject(error);
     }
     this.pending.clear();
+  }
+
+  private notifyDisconnect(error: Error): void {
+    for (const listener of this.disconnectListeners) {
+      try {
+        listener(error);
+      } catch (err) {
+        console.warn('[rustHostBridge] Error in disconnect listener:', err);
+      }
+    }
   }
 }
 
@@ -468,6 +490,13 @@ export class RustHostBridge {
     };
   }
 
+  onDisconnect(listener: (error: Error) => void): () => void {
+    if (this.transport.onDisconnect) {
+      return this.transport.onDisconnect(listener);
+    }
+    return () => {};
+  }
+
   /**
    * Seeds `safeStorage`-unlocked secrets from Electron into `crates/praxis-host`'s in-memory
    * `HostSecretStore` so migrated Rust services can use them without calling Electron APIs.
@@ -485,12 +514,13 @@ export class RustHostBridge {
   handleOrFallback<TArgs extends any[] = any[], TResult = any>(
     channel: string,
     fallback: (event: IpcMainInvokeEvent, ...args: TArgs) => Promise<TResult> | TResult,
-    ipcTarget: Pick<IpcMain, 'handle'> = ipcMain
+    ipcTarget: Pick<IpcMain, 'handle'> = ipcMain,
+    prepareRustArgs?: (...args: TArgs) => unknown[]
   ): void {
     ipcTarget.handle(channel, async (event: IpcMainInvokeEvent, ...args: unknown[]) => {
       if (this.migrated.has(channel)) {
         try {
-          return await this.invoke<TResult>(channel, ...args);
+          return await this.invoke<TResult>(channel, ...(prepareRustArgs ? prepareRustArgs(...args as TArgs) : args));
         } catch (error) {
           // Transport failure may follow a completed mutation. Never replay it in TS.
           if (!(error instanceof RustHostRpcError) || error.code !== 'CHANNEL_NOT_REGISTERED') {

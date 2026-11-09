@@ -21,6 +21,9 @@ import {
   findProviderDescriptor,
   getProviderDescriptor,
   providerNeedsApiKey,
+  customBaseUrlProblem,
+  getModelPricing,
+  getKnownContextLength,
   PathSandboxError,
   isLatestEditToPath,
   publishArtifact,
@@ -113,6 +116,7 @@ import { testUserMcpServer, userMcpAcpServers, userMcpToolExtension } from './us
 import { deleteAgentSession } from './deleteAgentSession';
 import { getServiceForConnection } from './serviceRegistry';
 import { isAnalysisConfirmed } from './aiWorkflowIpc';
+import { getRustHostBridge } from './rustHostInstance';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import { getCurrentBranch } from './gitService';
 import { getProjectStore } from './projectStoreInstance';
@@ -660,6 +664,33 @@ export function registerAiIpc(): void {
   }
 
   ipcMain.handle('ai:getStatus', async () => getAiProviderStatus());
+
+  const bridge = getRustHostBridge();
+  bridge.handleOrFallback('ai:validateCustomProvider', (_event, input: any) => {
+    const problems: string[] = [];
+    if (!input?.name?.trim()) problems.push('A name is required.');
+    const urlProb = customBaseUrlProblem(input?.baseUrl ?? '');
+    if (urlProb) problems.push(urlProb);
+    if (!input?.apiKey?.trim() && (!input?.headers || Object.keys(input.headers).length === 0)) {
+      problems.push('An API key or at least one custom header is required.');
+    }
+    if (!input?.model?.trim()) problems.push('A model is required.');
+    return problems;
+  });
+  bridge.handleOrFallback('ai:customBaseUrlProblem', (_event, url: string) => customBaseUrlProblem(url));
+  bridge.handleOrFallback('ai:reasoningAvailability', (_event, provider?: string, model?: string, effort?: any) =>
+    reasoningAvailability(provider as any, model, effort)
+  );
+  bridge.handleOrFallback('ai:modelPricing', (_event, provider?: string, model?: string) =>
+    getModelPricing(provider as any, model)
+  );
+  bridge.handleOrFallback('ai:knownContextLength', (_event, model?: string, provider?: string) =>
+    getKnownContextLength(model, provider as any)
+  );
+  bridge.handleOrFallback('ai:providerLimitError', (_event, error: string) => ({
+    isLimit: isProviderLimitError(error),
+    message: extractProviderLimitMessage(error)
+  }));
 
   ipcMain.handle('ai:testMcpServer', async (_event: Electron.IpcMainInvokeEvent, config: McpServerConfig) =>
     testUserMcpServer(config)

@@ -20,6 +20,7 @@ praxis-mobile.workspace = true
 praxis-trackers.workspace = true
 praxis-workflows.workspace = true
 axum.workspace = true
+chrono.workspace = true
 napi = { workspace = true, optional = true }
 napi-derive = { workspace = true, optional = true }
 serde.workspace = true

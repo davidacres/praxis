@@ -13,6 +13,8 @@ import {
   type RunProfileValidationResult
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
+import { getRustHostBridge } from './rustHostInstance';
+import { decodeRustProfile } from './rustProfileReads';
 
 /**
  * Run profile IPC (FX-BE-054 / TASK-143): read/write `run.praxis.json`
@@ -61,29 +63,33 @@ async function discoverRunServices(rootFolder: string): Promise<Array<ProposedRu
 }
 
 export function registerRunProfileIpc(): void {
+  const bridge = getRustHostBridge();
   ipcMain.handle(
     'projects:getRunProfile',
     async (_event, projectId: string): Promise<{ profile?: RunProfile; issues: RunProfileIssue[] }> => {
       const folder = projectFolder(projectId);
       if (!folder) return { issues: [] };
+      if (bridge.isChannelMigrated('projects:getRunProfile')) {
+        return decodeRustProfile(await bridge.invoke('projects:getRunProfile', folder), 'run');
+      }
       return readRunProfile(folder);
     }
   );
 
-  ipcMain.handle('projects:saveRunProfile', async (_event, projectId: string, profile: RunProfile): Promise<void> => {
+  bridge.handleOrFallback('projects:saveRunProfile', async (_event, projectId: string, profile: RunProfile): Promise<void> => {
     const folder = projectFolder(projectId);
     if (!folder) throw new Error('This project has no working folder to store a run profile in.');
     await writeRunProfile(folder, profile);
-  });
+  }, ipcMain, (projectId, profile) => [projectFolder(projectId) ?? '', profile]);
 
-  ipcMain.handle('projects:validateRunProfile', (_event, profile: RunProfile): RunProfileValidationResult => validateRunProfile(profile));
+  bridge.handleOrFallback('projects:validateRunProfile', (_event, profile: RunProfile): RunProfileValidationResult => validateRunProfile(profile));
 
-  ipcMain.handle(
+  bridge.handleOrFallback(
     'projects:discoverRunServices',
     async (_event, projectId: string): Promise<Array<ProposedRunService & { relativeDir: string }>> => {
       const folder = projectFolder(projectId);
       if (!folder) return [];
       return discoverRunServices(folder);
-    }
+    }, ipcMain, projectId => [projectFolder(projectId) ?? '']
   );
 }

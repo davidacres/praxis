@@ -228,6 +228,184 @@ pub fn validate_run_profile(profile: &RunProfile) -> Vec<RunProfileIssue> {
     errors
 }
 
+/// IPC validation before typed deserialization: report invalid ports and unknown
+/// probe kinds using the same field errors as the desktop rather than serde errors.
+#[must_use]
+pub fn validate_run_profile_value(profile: &Value) -> Vec<RunProfileIssue> {
+    let mut errors = Vec::new();
+    let string = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    let valid_port = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_u64)
+            .is_some_and(|port| port > 0 && port <= 65535)
+    };
+    for field in ["id", "name"] {
+        if string(profile.get(field)).trim().is_empty() {
+            errors.push(issue(field, format!("{field} is required.")));
+        }
+    }
+    let services = profile
+        .get("services")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if services.is_empty() {
+        errors.push(issue(
+            "services",
+            "A run profile needs at least one service.",
+        ));
+    }
+    let mut ids = BTreeSet::new();
+    for (index, service) in services.iter().enumerate() {
+        let at = format!("services[{index}]");
+        let id = string(service.get("id"));
+        if id.trim().is_empty() {
+            errors.push(issue(format!("{at}.id"), "id is required."));
+        } else if !ids.insert(id.clone()) {
+            errors.push(issue(
+                format!("{at}.id"),
+                format!("Duplicate service id \"{id}\"."),
+            ));
+        }
+        if string(service.get("executable")).trim().is_empty() {
+            errors.push(issue(format!("{at}.executable"), "executable is required."));
+        }
+        if let Some(cwd) = service.get("cwd") {
+            let text = string(Some(cwd));
+            if !cwd.is_string() || !is_portable_folder_path(&text) {
+                errors.push(issue(
+                    format!("{at}.cwd"),
+                    format!("cwd must be repo-relative, not absolute: \"{text}\"."),
+                ));
+            }
+        }
+        if service.get("port").is_some() && !valid_port(service.get("port")) {
+            errors.push(issue(
+                format!("{at}.port"),
+                "port must be an integer between 1 and 65535.",
+            ));
+        }
+        if let Some(probe) = service
+            .get("readinessProbe")
+            .filter(|v| !v.is_null() && **v != Value::Bool(false))
+        {
+            let kind = string(probe.get("kind"));
+            match kind.as_str() {
+                "http" if string(probe.get("path")).trim().is_empty() => errors.push(issue(
+                    format!("{at}.readinessProbe.path"),
+                    "An http probe needs a path.",
+                )),
+                "tcp" if !valid_port(probe.get("port")) => errors.push(issue(
+                    format!("{at}.readinessProbe.port"),
+                    "A tcp probe needs a valid port (1-65535).",
+                )),
+                "log-line" if string(probe.get("match")).trim().is_empty() => errors.push(issue(
+                    format!("{at}.readinessProbe.match"),
+                    "A log-line probe needs a non-empty match string.",
+                )),
+                "http" | "tcp" | "log-line" => {}
+                _ => {
+                    let label = probe.get("kind").map_or_else(
+                        || "undefined".into(),
+                        |value| {
+                            value
+                                .as_str()
+                                .map_or_else(|| value.to_string(), str::to_string)
+                        },
+                    );
+                    errors.push(issue(
+                        format!("{at}.readinessProbe.kind"),
+                        format!("Unknown readiness probe kind \"{label}\"."),
+                    ));
+                }
+            }
+        }
+        if let Some(env) = service.get("env").and_then(Value::as_object) {
+            for (key, value) in env {
+                if is_secret_shaped_key(key)
+                    && !value.as_str().is_some_and(is_secret_reference_value)
+                {
+                    errors.push(issue(format!("{at}.env.{key}"), format!("\"{key}\" looks like a secret; use a ${{secret:NAME}} reference, never a literal value.")));
+                }
+            }
+        }
+    }
+    let deps = |service: &Value| {
+        service
+            .get("dependsOn")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    for (index, service) in services.iter().enumerate() {
+        for dep in deps(service) {
+            let text = string(Some(&dep));
+            if !ids.contains(&text) {
+                errors.push(issue(
+                    format!("services[{index}].dependsOn"),
+                    format!("Unknown service id \"{text}\"."),
+                ));
+            }
+        }
+    }
+    let graph: BTreeMap<String, Vec<String>> = services
+        .iter()
+        .map(|s| {
+            (
+                string(s.get("id")),
+                deps(s).iter().map(|v| string(Some(v))).collect(),
+            )
+        })
+        .collect();
+    fn visit(
+        id: &str,
+        graph: &BTreeMap<String, Vec<String>>,
+        done: &mut BTreeSet<String>,
+        path: &mut Vec<String>,
+    ) -> Option<Vec<String>> {
+        if done.contains(id) {
+            return None;
+        }
+        if path.iter().any(|v| v == id) {
+            let mut cycle = path.clone();
+            cycle.push(id.to_string());
+            return Some(cycle);
+        }
+        path.push(id.to_string());
+        for dep in graph.get(id).into_iter().flatten() {
+            if graph.contains_key(dep) {
+                if let Some(cycle) = visit(dep, graph, done, path) {
+                    return Some(cycle);
+                }
+            }
+        }
+        path.pop();
+        done.insert(id.to_string());
+        None
+    }
+    let mut done = BTreeSet::new();
+    for service in &services {
+        if let Some(cycle) = visit(
+            &string(service.get("id")),
+            &graph,
+            &mut done,
+            &mut Vec::new(),
+        ) {
+            errors.push(issue(
+                "services",
+                format!("Service dependencies form a cycle: {}.", cycle.join(" → ")),
+            ));
+            break;
+        }
+    }
+    errors
+}
+
 /// DFS over `depends_on`; returns the cycle (for a clear message) or `None` for a DAG.
 fn find_dependency_cycle(services: &[RunServiceDefinition]) -> Option<Vec<String>> {
     let by_id: BTreeMap<&str, &RunServiceDefinition> =

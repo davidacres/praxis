@@ -7,6 +7,8 @@ import { WorkflowPolicyStore, type WorkflowPolicyProfile } from '@praxis/core';
 import { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
 import { RustHostBridge, StdioRustHostTransport } from './rustHostBridge';
 import { DEFAULT_MIGRATED_CHANNELS } from './rustHostInstance';
+import { withJsonFileWrite } from './adapters/jsonFileWrites';
+import { SharedSettingsBackend } from './adapters/sharedSettingsBackend';
 
 const key = 'praxis.workflowPolicies.v1';
 
@@ -62,4 +64,54 @@ test('opt-in workflow read sees acknowledged TypeScript policy saves and removal
     await store.remove(profile.id);
     assert.deepEqual(await bridge.invoke('workflows:listPolicies'), []);
   } finally { await bridge.dispose(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Rust policy reads use the authoritative optimistic snapshot before save and after rollback', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-policy-cache-'));
+  const file = path.join(dir, 'workflows.json');
+  const backing = new JsonKeyValueStore(file);
+  const store = new WorkflowPolicyStore(backing);
+  const bridge = new RustHostBridge({ transport: new StdioRustHostTransport({ userDataDir: dir, settingsPath: path.join(dir, 'settings.json') }) });
+  let release!: () => void;
+  const held = withJsonFileWrite(file, () => new Promise<void>(resolve => { release = resolve; }));
+  await Promise.resolve();
+  const rename = fs.promises.rename;
+  t.mock.method(fs.promises, 'rename', async (...args: Parameters<typeof rename>) => {
+    if (args[1] === file) throw new Error('injected policy save failure');
+    return rename(...args);
+  });
+  const profile = { schemaVersion: 1, id: 'pending', name: 'Pending', scope: 'global', requiredGates: [],
+    requireHumanApproval: true, allowGateBypass: false, requireTrustedAgents: false, maxAttemptsPerNode: 2,
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' } as WorkflowPolicyProfile;
+  try {
+    const failed = assert.rejects(store.save(profile), /injected policy save failure/);
+    assert.equal(store.list().length, 1);
+    assert.deepEqual(await bridge.invoke('workflows:listPolicies', backing.snapshot()), store.list());
+    assert.equal(fs.existsSync(file), false, 'no durable save has happened');
+    release(); await held; await failed;
+    assert.deepEqual(await bridge.invoke('workflows:listPolicies', backing.snapshot()), []);
+  } finally { release(); await bridge.dispose(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('delegated settings read sees the pending cache snapshot and performs no write', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-settings-cache-'));
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, '{}');
+  const backend = new SharedSettingsBackend(file);
+  const bridge = new RustHostBridge({ transport: new StdioRustHostTransport({ userDataDir: dir, settingsPath: file }), migratedChannels: ['settings:get'] });
+  let get!: () => Promise<unknown>;
+  bridge.handleOrFallback('settings:get', async () => backend.read(), {
+    handle: (_channel, handler) => { get = () => handler({} as never); },
+  }, () => [backend.read()]);
+  let release!: () => void;
+  const held = withJsonFileWrite(file, () => new Promise<void>(resolve => { release = resolve; }));
+  await Promise.resolve();
+  let saving: Promise<unknown> | undefined;
+  try {
+    saving = backend.write({ terminal: { fontSize: 24 } });
+    assert.deepEqual(await get(), JSON.parse(JSON.stringify(backend.read())));
+    assert.equal(fs.readFileSync(file, 'utf8'), '{}');
+    release(); await held; await saving;
+    assert.deepEqual(await get(), JSON.parse(JSON.stringify(backend.read())));
+  } finally { release(); await held; await saving?.catch(() => undefined); backend.dispose(); await bridge.dispose(); fs.rmSync(dir, { recursive: true, force: true }); }
 });

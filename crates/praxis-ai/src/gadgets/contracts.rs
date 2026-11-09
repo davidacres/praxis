@@ -153,7 +153,11 @@ pub struct GadgetEnvelope {
 
 /// Ordered blocks comprising an AI assistant turn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(
+    tag = "type",
+    rename_all = "lowercase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ChatBlock {
     Markdown {
         block_id: String,

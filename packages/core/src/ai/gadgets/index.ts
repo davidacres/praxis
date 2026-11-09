@@ -8,6 +8,7 @@ export * from './scope';
 export * from './actionLedger';
 export * from './gadgetService';
 export * from './blockParser';
+export * from './jsonRepair';
 export * from './fixtures';
 export * from './answerText';
 export * from './imageGadget';

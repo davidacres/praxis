@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { JsonKeyValueStore } from './jsonKeyValueStore';
+import { withJsonFileWrite } from './jsonFileWrites';
 
 function tmpFile(): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-kv-')), 'store.json');
@@ -44,4 +45,25 @@ test('a rejected write rolls its key back and does not wedge the queue', async (
   await store.update('after', 2);
   const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepEqual(onDisk, { ok: 1, after: 2 });
+});
+
+test('an older failed write cannot roll back a newer optimistic edit or poison another key', async () => {
+  const file = tmpFile();
+  const store = new JsonKeyValueStore(file);
+  await store.update('same', 'initial');
+  let release!: () => void;
+  const held = withJsonFileWrite(file, () => new Promise<void>(resolve => { release = resolve; }));
+  await Promise.resolve();
+  const circular: Record<string, unknown> = {};
+  circular.self = circular;
+  const failed = assert.rejects(store.update('same', circular));
+  const newer = store.update('same', 'newer');
+  const other = store.update('other', 2);
+  assert.equal(store.get('same'), 'newer');
+  release();
+  await held;
+  await failed;
+  assert.equal(store.get('same'), 'newer');
+  await Promise.all([newer, other]);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { same: 'newer', other: 2 });
 });
