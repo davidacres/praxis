@@ -20,6 +20,7 @@ pub mod gates;
 pub mod github_actions_api;
 pub mod github_actions_executor;
 pub mod github_actions_observer;
+pub mod github_actions_results;
 pub mod network_probe;
 pub mod orchestrator;
 pub mod preview_verification;
