@@ -46,14 +46,14 @@ use crate::publish_manifest::PublishManifest;
 /// The run store as the orchestrator shares it.
 pub type SharedRunStore<B> = Mutex<DeploymentRunStore<B>>;
 
-fn status_name(status: DeploymentRunStatus) -> String {
+pub(crate) fn status_name(status: DeploymentRunStatus) -> String {
     serde_json::to_value(status)
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
         .unwrap_or_default()
 }
 
-fn require_run<B: DeploymentRunBackend>(
+pub(crate) fn require_run<B: DeploymentRunBackend>(
     store: &SharedRunStore<B>,
     run_id: &str,
 ) -> Result<DeploymentRun, String> {
@@ -64,7 +64,7 @@ fn require_run<B: DeploymentRunBackend>(
         .ok_or_else(|| format!("Deployment run {run_id} was not found."))
 }
 
-fn save<B: DeploymentRunBackend>(
+pub(crate) fn save<B: DeploymentRunBackend>(
     store: &SharedRunStore<B>,
     run: &DeploymentRun,
 ) -> Result<(), String> {
