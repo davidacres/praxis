@@ -43,6 +43,8 @@ For an isolated worktree without npm dependencies, the generator accepts a depen
 
 ## Remaining TASK-520 work
 
+Update: the [2026-11-09 transport checkpoint](rust-mobile-transport.md) completes the library TCP/Noise responder and relay client described in item 1. Desktop adapters, platform interface discovery/composition and the cutover evidence in items 2–3 remain open. The table above records the earlier draft snapshot, not the later transport totals.
+
 1. Port the real TCP/Noise responder and relay client, retaining handshake timeouts, connection limits, pairing, authenticated caller replacement, project authorization, filtered events/replay and policy enforcement for existing peers.
 2. Implement desktop dependency adapters and lifecycle composition for these handlers, including permission ownership, workspace trust, safe file/image access, schedule notifications and runner wake-up.
 3. Prove host integration with the phone protocol and the mobile-access desktop specs against both backend modes, with diagnostics showing which runtime actually served mobile requests. Obtain matching CI evidence under FX-BE-203 before changing delegation.

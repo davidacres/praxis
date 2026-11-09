@@ -35,6 +35,14 @@ pub struct MobileCommandRecord {
 /// The ledger the LAN listener and host services share. Methods take `&self`; an implementation
 /// supplies its own interior locking.
 pub trait MobileCommandLedger: Send + Sync {
+    /// Atomically checks and reserves a command id before its handler can await.
+    /// Rust listener tasks may dispatch on different threads; get/put is not an admission lock.
+    fn admit(
+        &self,
+        command_id: &str,
+        payload_digest: &str,
+        issued_at: &str,
+    ) -> Result<(MobileCommandRecord, bool), MobileProtocolError>;
     fn get(&self, command_id: &str) -> Option<MobileCommandRecord>;
     fn put(&self, record: MobileCommandRecord);
     fn append_event(&self, event: MobileEventEnvelope);
@@ -82,6 +90,34 @@ impl InMemoryMobileCommandLedger {
 }
 
 impl MobileCommandLedger for InMemoryMobileCommandLedger {
+    fn admit(
+        &self,
+        command_id: &str,
+        payload_digest: &str,
+        issued_at: &str,
+    ) -> Result<(MobileCommandRecord, bool), MobileProtocolError> {
+        let mut state = self.lock();
+        if let Some(existing) = state.commands.get(command_id) {
+            if existing.payload_digest != payload_digest {
+                return Err(MobileProtocolError::for_command(
+                    MobileProtocolErrorCode::DuplicateCommand,
+                    "The command ID was already used with a different payload.",
+                    false,
+                    command_id,
+                ));
+            }
+            return Ok((existing.clone(), true));
+        }
+        let record = MobileCommandRecord {
+            command_id: command_id.into(),
+            payload_digest: payload_digest.into(),
+            state: MobileCommandState::Accepted,
+            outcome: None,
+            updated_at: issued_at.into(),
+        };
+        state.commands.insert(command_id.into(), record.clone());
+        Ok((record, false))
+    }
     fn get(&self, command_id: &str) -> Option<MobileCommandRecord> {
         self.lock().commands.get(command_id).cloned()
     }
@@ -130,26 +166,7 @@ pub fn admit_mobile_command(
     payload_digest: &str,
     issued_at: &str,
 ) -> Result<(MobileCommandRecord, bool), MobileProtocolError> {
-    if let Some(existing) = ledger.get(command_id) {
-        if existing.payload_digest != payload_digest {
-            return Err(MobileProtocolError::for_command(
-                MobileProtocolErrorCode::DuplicateCommand,
-                "The command ID was already used with a different payload.",
-                false,
-                command_id,
-            ));
-        }
-        return Ok((existing, true));
-    }
-    let record = MobileCommandRecord {
-        command_id: command_id.to_owned(),
-        payload_digest: payload_digest.to_owned(),
-        state: MobileCommandState::Accepted,
-        outcome: None,
-        updated_at: issued_at.to_owned(),
-    };
-    ledger.put(record.clone());
-    Ok((record, false))
+    ledger.admit(command_id, payload_digest, issued_at)
 }
 
 pub fn mark_mobile_command_unknown(
