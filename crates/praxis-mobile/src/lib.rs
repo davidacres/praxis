@@ -7,6 +7,7 @@
 //! between a phone and a desktop that cannot reach each other directly.
 
 pub mod client;
+pub mod host;
 pub mod noise;
 pub mod relay;
 pub mod secure_channel;

@@ -9,20 +9,31 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+praxis-core.workspace = true
+praxis-workflows.workspace = true
+async-trait.workspace = true
 axum.workspace = true
+base64.workspace = true
 chacha20poly1305.workspace = true
+chrono.workspace = true
 ed25519-dalek.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
+indexmap.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-tungstenite.workspace = true
 url.workspace = true
+uuid.workspace = true
 x25519-dalek.workspace = true
 zeroize.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["net"] }
+
 [dev-dependencies]
-tokio-tungstenite.workspace = true

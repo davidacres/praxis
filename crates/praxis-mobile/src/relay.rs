@@ -134,11 +134,11 @@ pub fn verify_host_signature(public_key_hex: &str, nonce_hex: &str, signature_he
         .is_ok()
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn decode_hex(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_hex(text: &str) -> Option<Vec<u8>> {
     if text.len() % 2 != 0 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
