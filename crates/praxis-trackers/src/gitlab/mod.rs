@@ -2,7 +2,9 @@
 //! connection's config surface, and the board service built on them.
 
 pub mod api_service;
+pub mod board_service;
 pub mod config_store;
 
 pub use api_service::*;
+pub use board_service::*;
 pub use config_store::*;
