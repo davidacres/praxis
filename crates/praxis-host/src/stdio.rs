@@ -20,4 +20,29 @@ pub enum HostWireFrame {
     /// Unsolicited server-pushed event emitted on [`crate::HostEventBus`].
     #[serde(rename_all = "camelCase")]
     Event { envelope: RustEventEnvelope },
+    /// Host-initiated request to Electron (e.g. forwarding a decoded phone request to the
+    /// TypeScript mobile application). Answered by an inbound [`HostInboundReply`].
+    #[serde(rename_all = "camelCase")]
+    Call {
+        id: String,
+        method: String,
+        #[serde(default)]
+        params: serde_json::Value,
+    },
+}
+
+/// Inbound line from Electron answering a [`HostWireFrame::Call`]. Distinguished from a
+/// `RustRpcRequest` by `kind == "callResponse"`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum HostInboundReply {
+    #[serde(rename_all = "camelCase")]
+    CallResponse {
+        id: String,
+        ok: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result: Option<serde_json::Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }

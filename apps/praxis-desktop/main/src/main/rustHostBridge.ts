@@ -23,7 +23,11 @@ const MULTI_ARG_EVENT_CHANNELS = new Set<string>(['runs:statusChanged', 'runs:lo
 type HostWireFrame =
   | { kind: 'ready'; status: RustHostStatus; registeredChannels: string[] }
   | { kind: 'response'; envelope: RustRpcResponse }
-  | { kind: 'event'; envelope: RustEventEnvelope };
+  | { kind: 'event'; envelope: RustEventEnvelope }
+  | { kind: 'call'; id: string; method: string; params?: unknown };
+
+/** Handles a host-initiated request (e.g. a decoded phone request) and returns its result. */
+export type RustHostCallHandler = (method: string, params: unknown) => Promise<unknown>;
 
 /** Error thrown when a Rust host RPC invocation returns `ok: false`. */
 export class RustHostRpcError extends Error {
@@ -63,6 +67,11 @@ export interface StdioRustHostOptions {
   /** Startup handshake timeout in milliseconds (defaults to 10,000ms). */
   startupTimeoutMs?: number;
   onReady?: (status: RustHostStatus) => void;
+  /**
+   * Serves `call` frames the host sends to Electron. Without a handler every call is
+   * answered with an error so the host never waits for its timeout.
+   */
+  onCall?: RustHostCallHandler;
 }
 
 /** Resolves an explicit override or the newest local Cargo binary (release wins ties). */
@@ -181,6 +190,10 @@ export class StdioRustHostTransport implements RustHostTransport {
           for (const listener of this.eventListeners) {
             listener(frame.envelope);
           }
+          return;
+        }
+        if (frame.kind === 'call') {
+          void this.answerCall(child, frame.id, frame.method, frame.params);
         }
       });
 
@@ -213,6 +226,25 @@ export class StdioRustHostTransport implements RustHostTransport {
     });
 
     return this.startPromise;
+  }
+
+  /** Runs the call handler and writes the `callResponse` line; never rejects. */
+  private async answerCall(
+    child: ChildProcessWithoutNullStreams,
+    id: string,
+    method: string,
+    params: unknown
+  ): Promise<void> {
+    let reply: { kind: 'callResponse'; id: string; ok: boolean; result?: unknown; error?: string };
+    try {
+      if (!this.options.onCall) throw new Error(`No handler for host call "${method}".`);
+      const result = await this.options.onCall(method, params);
+      reply = { kind: 'callResponse', id, ok: true, ...(result === undefined ? {} : { result }) };
+    } catch (error) {
+      reply = { kind: 'callResponse', id, ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (this.child !== child || child.exitCode !== null || child.killed || !child.stdin.writable) return;
+    child.stdin.write(`${JSON.stringify(reply)}\n`, () => undefined);
   }
 
   async dispatch(request: RustRpcRequest): Promise<RustRpcResponse> {

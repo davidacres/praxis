@@ -1,6 +1,7 @@
 //! Shell-agnostic service container, RPC dispatcher, and event broadcast bus
 //! backing the Electron main process (via N-API / JSON-RPC) and headless test runs.
 
+pub mod call_client;
 pub mod config;
 pub mod context;
 pub mod events;
@@ -10,13 +11,14 @@ pub mod secrets;
 pub mod stdio;
 mod workflow_reads;
 
+pub use call_client::{HostCallClient, HostCallError};
 pub use config::{HostConfig, HostConfigError};
 pub use context::{HostContext, RpcHandlerFn};
 pub use events::{EventSubscriptionId, HostEventBus};
 use praxis_contracts::RustHostStatus;
 use praxis_core::core_status;
 pub use secrets::HostSecretStore;
-pub use stdio::HostWireFrame;
+pub use stdio::{HostInboundReply, HostWireFrame};
 
 /// Returns the current status of the Praxis Rust host container.
 #[must_use]

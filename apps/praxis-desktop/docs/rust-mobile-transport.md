@@ -46,3 +46,10 @@ Findings that shape the work:
 - A TypeScript adapter exposing the `MobileLanServer`/`MobileRelayClient` surface used by `mobileListenerInstance.ts` and `mobilePairingInstance.ts` lets selection stay a single switch (default TypeScript, opt-in env var, as with `PRAXIS_RUST_CHANNELS`).
 
 Planned slices: (1) reverse-call frames plus tests; (2) host control methods and proxy handlers; (3) TypeScript adapter and opt-in selection; (4) dual-mode desktop tests proving which runtime served and the real-phone interop test through the adapter.
+
+### Slice 1 done: host-to-Electron call channel
+
+- Rust: `HostWireFrame::Call`, inbound `HostInboundReply::CallResponse` and `HostCallClient` (`crates/praxis-host/src/call_client.rs`) give correlated ids, per-call timeouts, late-reply tolerance, failure on a dead write, and `close()` that fails outstanding and future calls. The binary routes `callResponse` stdin lines to the client (all other lines still parse as `RustRpcRequest`, so existing traffic is unchanged) and closes the client at stdin EOF.
+- TypeScript: `StdioRustHostTransport` takes an `onCall` handler; without one, calls are refused immediately rather than timing out; handler errors become `ok:false`.
+- Evidence: 6 new Rust unit tests; 3 new Node tests (`rustHostCalls.test.ts`, added to `test:mobile`) using a stand-in host process; full Rust workspace 980 passed, 0 failed; clippy `-D warnings` clean; existing `rustHostBridge` and `rustChannelParity` Node tests 51/51 against the rebuilt real binary.
+- Not yet proven: the real `praxis-host` binary never issues a call (nothing uses the channel yet), so the Rust-to-Node path is covered by each side's tests against the shared wire shape, not an end-to-end run. Slice 2 supplies the first real caller.

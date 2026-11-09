@@ -6,7 +6,9 @@ use std::io::{self, BufRead, Write};
 use std::sync::{Arc, Mutex};
 
 use praxis_contracts::RustRpcRequest;
-use praxis_host::{HostConfig, HostContext, HostWireFrame, host_status};
+use praxis_host::{
+    HostCallClient, HostConfig, HostContext, HostInboundReply, HostWireFrame, host_status,
+};
 
 fn write_frame(writer: &Arc<Mutex<io::Stdout>>, frame: &HostWireFrame) {
     let Ok(line) = serde_json::to_string(frame) else {
@@ -56,11 +58,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
+    // Host-to-Electron calls share stdout with responses/events; replies arrive on stdin.
+    let call_stdout = Arc::clone(&stdout);
+    let calls = HostCallClient::new(move |frame| {
+        write_frame(&call_stdout, &frame);
+        true
+    });
+
     let stdin = io::stdin();
     for line_result in stdin.lock().lines() {
         let line = line_result?;
         let trimmed = line.trim();
         if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(reply) = serde_json::from_str::<HostInboundReply>(trimmed) {
+            calls.handle_reply(reply);
             continue;
         }
         let response = match serde_json::from_str::<RustRpcRequest>(trimmed) {
@@ -78,5 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         write_frame(&stdout, &HostWireFrame::Response { envelope: response });
     }
 
+    // Stdin closed: fail any outstanding calls so nothing waits on a dead channel.
+    calls.close();
     Ok(())
 }
