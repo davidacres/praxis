@@ -15,14 +15,13 @@ test('AI Usage displays million, billion and trillion token totals with compact 
   fs.writeFileSync(path.join(userDataDir, 'ai-usage-log.json'), JSON.stringify({ 'praxis.aiUsageLog.v1': ledger }));
   const app = await launchTestApp({}, { userDataDir, settingsPath: path.join(userDataDir, 'settings.json') });
   try {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('aiUsage:providerHistory');
+    {
       const totals = [999_999, 1_000_000, 2_500_000, 1_000_000_000, 1_200_000_000, 1_000_000_000_000, 3_200_000_000_000, 999_950_000];
-      ipcMain.handle('aiUsage:providerHistory', (_event, provider) => ({
+      await app.overrideChannel('aiUsage:providerHistory', ([provider]) => ({
         provider, fetchedAt: new Date().toISOString(), source: 'provider-api',
         totalTokens: totals.shift(), note: 'Mocked provider history for formatting verification.'
       }));
-    });
+    }
     const win = app.window;
     await win.keyboard.press('ControlOrMeta+k');
     const palette = win.getByRole('dialog', { name: 'Go to' });

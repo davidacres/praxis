@@ -159,6 +159,26 @@ fn handle(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
             };
             respond(&mut stream, "200 OK", &rpc(shared, channel, args).to_string())
         }
+        // Test-only: dispatch a host channel that is outside the renderer contract
+        // (e.g. `workspaces:writeFile`, which the native shell calls after a file dialog).
+        // This is how a test stands in for that dialog: it answers the shell channel
+        // itself, then performs the step the shell would have taken. Gated by the same
+        // PRAXIS_E2E=1 + token as every other route here.
+        ("POST", "/host") => {
+            let parsed = serde_json::from_slice::<Value>(&request.body).ok().and_then(|v| {
+                Some((v["channel"].as_str()?.to_owned(), v["args"].as_array().cloned().unwrap_or_default()))
+            });
+            let Some((channel, args)) = parsed else {
+                return respond(&mut stream, "400 Bad Request", r#"{"error":"bad json"}"#);
+            };
+            let response = shared.host.dispatch_rpc(RustRpcRequest { id: "e2e-host".into(), channel, args });
+            let body = if response.ok {
+                json!({ "ok": true, "result": response.result.unwrap_or(Value::Null) })
+            } else {
+                json!({ "ok": false, "error": response.error })
+            };
+            respond(&mut stream, "200 OK", &body.to_string())
+        }
         ("GET", "/events") => {
             write!(
                 stream,

@@ -207,9 +207,11 @@ test('Security Review: findings, readable report, and an approved plan created o
 
   // …and saves as Markdown where the person chooses.
   const savedPath = path.join(repo, 'security-report.md');
-  await app!.electronApp.evaluate(({ dialog: electronDialog }, chosen) => {
-    electronDialog.showSaveDialog = async () => ({ canceled: false, filePath: chosen });
-  }, savedPath);
+  await app!.overrideChannel('workflows:saveStageReport', async ([runId, nodeId], backend) => {
+    const text = await backend.call('workflows:stageReport', runId, nodeId);
+    fs.writeFileSync(savedPath, String(text ?? ''));
+    return { saved: true, path: savedPath };
+  });
   await dialog.getByRole('button', { name: 'Save as Markdown…' }).click();
   await expect.poll(() => fs.existsSync(savedPath)).toBe(true);
   expect(fs.readFileSync(savedPath, 'utf8')).toContain('## Findings register');

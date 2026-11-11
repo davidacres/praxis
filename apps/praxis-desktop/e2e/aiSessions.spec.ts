@@ -570,9 +570,7 @@ test('the agent\'s reply uses the pane it has; yours stays a reply beside it', a
     AI_GATEWAY_URL: mock.baseUrl
   });
   const win = app.window;
-  await app.electronApp.evaluate(async ({ BrowserWindow }) => {
-    BrowserWindow.getAllWindows()[0]?.setBounds({ x: 0, y: 0, width: 1920, height: 1080 });
-  });
+  await app.window.setViewportSize({ width: 1920, height: 1080 });
 
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Say something long.' } });

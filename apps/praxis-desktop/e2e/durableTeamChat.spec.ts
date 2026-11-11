@@ -280,17 +280,16 @@ test('keyboard cancellation preserves accepted messages and cancels only the sel
 test('an unconfirmed submission retries its original command after both acknowledgements are lost', async () => {
   mock = await startMockOpenAiCompatibleServer({ reply: 'Accepted exactly once' });
   app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: any[]) => Promise<unknown>> })._invokeHandlers;
     const handler = handlers.get('assistant:submitTurn')!;
     let calls = 0;
-    ipcMain.removeHandler('assistant:submitTurn');
-    ipcMain.handle('assistant:submitTurn', async (event, command) => {
+    await app.overrideChannel('assistant:submitTurn', async ([command]) => {
       const result = await handler(event, command);
       if (++calls <= 2) throw new Error('Lost acceptance acknowledgement');
       return result;
     });
-  });
+  }
   const win = app.window;
   await win.getByTestId('titlebar-assistant').click();
   const input = win.getByTestId('assistant-input');
@@ -483,14 +482,14 @@ test('re-opening a team chat whose first load failed reads its transcript again'
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-dev')).toContainText('Kept on disk');
   // The next transcript read fails once, as a transient IPC or disk fault would.
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: unknown[]) => unknown> })._invokeHandlers;
     const original = handlers.get('assistant:getConversation')!;
     handlers.set('assistant:getConversation', async () => {
       handlers.set('assistant:getConversation', original);
       throw new Error('Transient read failure');
     });
-  });
+  }
   await win.reload();
   await row.click();
   await expect(win.getByRole('alert')).toContainText('Transient read failure');

@@ -16,15 +16,14 @@ test('themed titlebar switches projects and exposes panel controls', async () =>
   const app = await launchTestApp({ appearance: { themeId: 'tm-default-2', themeMode: 'dark' } },
     { userDataDir, settingsPath: path.join(userDataDir, 'settings.json') }, undefined, { openNewSession: false });
   // Deterministic Hybrid status: no real index/model download or service is needed.
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request) => {
+  {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'owner-status') return { data: { running: true, hasIndex: true } };
       if (request.action === 'list') return { data: [{ id: 'visual-index', root: '/test/titlebar', state: 'ready' }] };
       if (request.tool === 'get_index_status') return { data: { models: [{ state: 'active' }] } };
       return { data: {} };
     });
-  });
+  }
   const page = app.window;
   const artifacts = path.resolve(__dirname, '../../.praxis/session-artifacts');
   fs.mkdirSync(artifacts, { recursive: true });

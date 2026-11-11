@@ -274,10 +274,10 @@ test('an image can be dropped or pasted into the assistant composer and is sent 
 test('assistant full tools uses the selected working folder through an agent session', async () => {
   test.setTimeout(60000);
   const win = await launch(0, false, { name: 'read_file', arguments: JSON.stringify({ path: 'features/feature-01-demo/task-01-01-fix-login-bug.md' }) });
-  await app!.electronApp.evaluate(({ ipcMain }, folder) => {
-    ipcMain.removeHandler('dialog:pickFolder');
-    ipcMain.handle('dialog:pickFolder', () => folder);
-  }, plansDir!);
+  {
+    const folder = plansDir!;
+    await app!.overrideChannel('dialog:pickFolder', () => folder);
+  }
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-working-directory').click();
   await expect(win.getByTestId('assistant-working-directory')).toContainText(path.basename(plansDir!));

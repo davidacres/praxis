@@ -33,10 +33,10 @@ async function enterColor(color: string) {
 test('one accent overrides every theme, survives Looks and reload, and restores custom and installed palette defaults', async () => {
   test.setTimeout(60000);
   app = await launchTestApp({ appearance: { customThemes: [custom], installedThemeIds: [custom.id, installed.id] } });
-  await app.electronApp.evaluate(({ ipcMain }, installed) => {
-    ipcMain.removeHandler('marketplace:listActiveAppearance');
-    ipcMain.handle('marketplace:listActiveAppearance', () => ({ themes: [installed], surfacePacks: [] }));
-  }, installed);
+  {
+    const installed = installed;
+    await app.overrideChannel('marketplace:listActiveAppearance', () => ({ themes: [installed], surfacePacks: [] }));
+  }
   await app.window.reload();
   await openThemes();
   const page = app.window;

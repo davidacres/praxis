@@ -14,10 +14,9 @@ test('composer code intelligence control shows in new session, toggles preferenc
   const win = app.window;
 
   // Mock code intelligence IPC so it returns predictable fixture repository data
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     let generation = 1;
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') {
         return { data: [{ id: 'pci:repo:fixture', root: '/test/workspace', state: 'ready', generation }] };
       }
@@ -30,7 +29,7 @@ test('composer code intelligence control shows in new session, toggles preferenc
       }
       return { data: {} };
     });
-  });
+  }
 
   // New Session is the default view
   await win.waitForSelector('[data-testid="new-session-view"]');
@@ -100,9 +99,8 @@ test('existing session follow-up composer shows code intelligence chip and statu
   );
   const win = app.window;
 
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+  {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') {
         return { data: [{ id: 'pci:repo:fixture', root: '/repo/fixture', state: 'ready', generation: 2 }] };
       }
@@ -111,7 +109,7 @@ test('existing session follow-up composer shows code intelligence chip and statu
       }
       return { data: {} };
     });
-  });
+  }
 
   await openFromPalette(win, 'New conversation');
   await win.getByPlaceholder('Ask anything, brainstorm, or get something done…').fill('Test code intel follow-up');
@@ -131,9 +129,8 @@ test('composer code intelligence chip allows searching directly and changing sea
   const win = app.window;
 
   // Mock code intelligence IPC with search_code response
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+  {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') {
         return { data: [{ id: 'pci:repo:fixture', root: '/test/workspace', state: 'ready', generation: 2 }] };
       }
@@ -165,7 +162,7 @@ test('composer code intelligence chip allows searching directly and changing sea
       }
       return { data: {} };
     });
-  });
+  }
 
   await win.waitForSelector('[data-testid="new-session-view"]');
   const chip = win.getByTestId('new-session-code-intel-chip');

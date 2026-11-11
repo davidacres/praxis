@@ -410,7 +410,7 @@ test('review exposes shared runtime controls while preserving its review boundar
   await win.locator(`[data-testid="issue-card"][data-issue-key="${issueKey}"]`).click();
   await win.getByTestId('issue-ai-review-btn').click();
   await expect(composer).toBeVisible();
-  await app!.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1100, 800));
+  await app!.window.setViewportSize({ width: 1100, height: 800 });
   await expect.poll(() => composer.evaluate(node => {
     const bounds = node.getBoundingClientRect();
     return Array.from(node.querySelectorAll<HTMLElement>('button, input[type=range]')).filter(control => {

@@ -13,7 +13,11 @@ import { chromium, type BrowserContext, type Page } from '@playwright/test';
  * attach, so only the webview is substituted; `window.praxis` is the production
  * bridge and every channel is answered by the Rust host.
  */
-const REPO_ROOT = path.resolve(__dirname, '../../..');
+// macOS reports its temp dir through a symlink (/var -> /private/var). The backend
+// canonicalises every path it stores, so specs comparing a path they created under
+// os.tmpdir() with one the app returned need the canonical form from the start.
+try { process.env.TMPDIR = fs.realpathSync(os.tmpdir()); } catch { /* keep the default */ }
+const REPO_ROOT =path.resolve(__dirname, '../../..');
 const BACKEND_BINARY = process.env.PRAXIS_TAURI_BIN
   ?? path.join(REPO_ROOT, 'target', 'debug', process.platform === 'win32' ? 'praxis-desktop.exe' : 'praxis-desktop');
 
@@ -28,12 +32,48 @@ export interface BackendHandle {
   waitForEvent(event: string): Promise<never>;
 }
 
+/** What a channel override can reach besides its own arguments. */
+export interface ChannelContext {
+  /** Calls the real backend (the Rust host), bypassing every override - the "original" handler. */
+  call(channel: string, ...args: unknown[]): Promise<any>;
+  /**
+   * Like `call`, but also reaches host channels outside the renderer contract (what the
+   * native shell itself invokes after a dialog, e.g. `workspaces:writeFile`).
+   */
+  host(channel: string, ...args: unknown[]): Promise<any>;
+}
+
+/**
+ * Answers a renderer IPC call in the test process. Replaces the Electron-era
+ * `ipcMain.removeHandler(ch); ipcMain.handle(ch, ...)` stubs and `dialog.show*Dialog`
+ * mocks. Runs in Node, so it can close over fixtures and record calls in ordinary
+ * variables instead of `globalThis` in the (retired) main process. Throw to reject
+ * the renderer's promise; a thrown `{ code, message }` object is passed through.
+ */
+export type ChannelHandler = (args: any[], context: ChannelContext) => unknown | Promise<unknown>;
+
 export interface TestApp {
   electronApp: BackendHandle;
   window: Page;
   userDataDir: string;
   /** Per-test settings file the app reads/writes instead of the real shared one. */
   settingsPath: string;
+  /**
+   * Make every page's calls to `channel` answer from `handler` instead of the backend.
+   * Survives reloads and applies to every page of the context; a later call replaces
+   * an earlier handler for the same channel.
+   */
+  overrideChannel(channel: string, handler: ChannelHandler): Promise<void>;
+  /** Stop overriding `channel`; calls reach the backend again. */
+  restoreChannel(channel: string): Promise<void>;
+  /** Calls the real backend directly (what the renderer would get with no override). */
+  callBackend(channel: string, ...args: unknown[]): Promise<any>;
+  /**
+   * Delivers a host event to the renderer exactly as the backend's event stream would
+   * (`webContents.send(channel, payload)` in the Electron main process). Goes to every
+   * page of the context unless `page` is given.
+   */
+  emitEvent(channel: string, payload?: unknown, page?: Page): Promise<void>;
 }
 
 /**
@@ -54,15 +94,19 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
     callbacks.set(id, data => { if (once) callbacks.delete(id); callback?.(data); });
     return id;
   };
+  const dispatch = (envelope: unknown) => {
+    for (const id of [...(listeners.get('praxis:event') ?? [])]) {
+      callbacks.get(id)?.({ event: 'praxis:event', id, payload: envelope });
+    }
+  };
+  // Test control: deliver a synthetic host event, as `webContents.send` did.
+  w.__praxisE2eEmit = dispatch;
   let source: EventSource | undefined;
   const ensureEvents = () => {
     if (source) return;
     source = new EventSource(`${base}/events?token=${token}`);
     source.onmessage = message => {
-      const envelope = JSON.parse(message.data);
-      for (const id of [...(listeners.get('praxis:event') ?? [])]) {
-        callbacks.get(id)?.({ event: 'praxis:event', id, payload: envelope });
-      }
+      dispatch(JSON.parse(message.data));
     };
   };
   w.__TAURI_INTERNALS__.transformCallback = register;
@@ -82,6 +126,12 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
     }
     if (command === 'plugin:event|unlisten') return undefined;
     if (command !== 'praxis_rpc') throw { code: 'UNSUPPORTED', message: `No e2e handler for Tauri command ${command}` };
+    // Per-test channel overrides (TestApp.overrideChannel) answer from the test process.
+    if (w.__praxisOverrideNames?.has(args.channel) && w.__praxisE2eOverride) {
+      const answer = await w.__praxisE2eOverride(args.channel, args.args ?? []);
+      if (!answer.ok) throw answer.error;
+      return answer.result;
+    }
     const response = await fetch(`${base}/rpc?token=${token}`, {
       method: 'POST',
       body: JSON.stringify({ channel: args.channel, args: args.args })
@@ -275,6 +325,32 @@ export async function launchTestApp(
   });
   await context.addInitScript(tauriShim, { port, token });
   const electronApp = backendHandle(backend, context);
+  const overrides = new Map<string, ChannelHandler>();
+  const callRoute = (route: 'rpc' | 'host') => async (channel: string, ...args: unknown[]): Promise<any> => {
+    const response = await fetch(`http://127.0.0.1:${port}/${route}?token=${token}`, { method: 'POST', body: JSON.stringify({ channel, args }) });
+    const body = await response.json() as { ok: boolean; result?: unknown; error?: unknown };
+    if (!body.ok) throw body.error ?? new Error(`Backend call ${channel} failed`);
+    return body.result;
+  };
+  const callBackend = callRoute('rpc');
+  const handlerContext: ChannelContext = { call: callBackend, host: callRoute('host') };
+  await context.exposeFunction('__praxisE2eOverride', async (channel: string, args: unknown[]) => {
+    const handler = overrides.get(channel);
+    try {
+      if (!handler) return { ok: true, result: await callBackend(channel, ...args) };
+      return { ok: true, result: (await handler(args, handlerContext)) ?? null };
+    } catch (error) {
+      const known = error as { code?: string; message?: string };
+      return { ok: false, error: known && typeof known === 'object' && known.message !== undefined
+        ? { code: known.code ?? 'DESKTOP_ERROR', message: known.message } : { code: 'DESKTOP_ERROR', message: String(error) } };
+    }
+  });
+  const syncOverrideNames = async () => {
+    const names = [...overrides.keys()];
+    const apply = (list: string[]) => { (window as any).__praxisOverrideNames = new Set(list); };
+    await context.addInitScript(apply, names);
+    await Promise.all(context.pages().map(page => page.evaluate(apply, names).catch(() => undefined)));
+  };
   testAppProcesses.set(electronApp, backend);
   const window = context.pages()[0] ?? await context.newPage();
   const baseUrl = process.env.PRAXIS_E2E_RENDERER_URL ?? `http://localhost:${process.env.PRAXIS_E2E_PORT || 5173}`;
@@ -314,7 +390,16 @@ export async function launchTestApp(
     }
   }
 
-  return { electronApp, window, userDataDir, settingsPath };
+  return {
+    electronApp, window, userDataDir, settingsPath,
+    async overrideChannel(channel, handler) { overrides.set(channel, handler); await syncOverrideNames(); },
+    async restoreChannel(channel) { overrides.delete(channel); await syncOverrideNames(); },
+    callBackend,
+    async emitEvent(channel, payload, page) {
+      const targets = page ? [page] : context.pages();
+      await Promise.all(targets.map(target => target.evaluate(envelope => (window as any).__praxisE2eEmit(envelope), { channel, payload })));
+    }
+  };
 }
 
 /**

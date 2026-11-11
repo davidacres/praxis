@@ -103,7 +103,7 @@ test('an existing session configures its selected provider rather than the app d
   }, mock.baseUrl);
   await openSession(page);
   await expect(page.getByTestId('session-state-badge')).toHaveText('Completed', { timeout: 15000 });
-  await app.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(720, 800));
+  await app.window.setViewportSize({ width: 720, height: 800 });
   const sessionModel = page.getByTestId('session-model');
   await expect(sessionModel).toHaveText('gpt-4o-mini');
   await expect(sessionModel.locator('.composer-chip-meta')).toHaveCount(0);

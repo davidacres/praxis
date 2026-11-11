@@ -240,7 +240,8 @@ test('daily review previews only the five most recently active unfinished projec
       starterTickets: [{ summary: 'Completed kickoff', description: '', issueType: 'Task', status: 'Done' }], defaultAiToolMode: 'read-only'
     }, workspace.id)).id;
   });
-  await app.electronApp.evaluate(({ ipcMain }, projectId) => {
+  {
+    const projectId = projectId;
     const records = Array.from({ length: 9 }, (_, index) => {
       const number = index + 1;
       const at = new Date(Date.now() - (10 - number) * 3_600_000).toISOString();
@@ -251,9 +252,8 @@ test('daily review previews only the five most recently active unfinished projec
         events: number === 2 ? [{ type: 'text', text: 'Recent activity', timestamp: new Date().toISOString() }] : []
       };
     });
-    ipcMain.removeHandler('ai:listSessions');
-    ipcMain.handle('ai:listSessions', () => records);
-  }, projectId);
+    await app.overrideChannel('ai:listSessions', () => records);
+  }
   await page.reload();
   await openProjectHome(page, 'Recent sessions review');
   const review = page.getByTestId('project-review-panel');

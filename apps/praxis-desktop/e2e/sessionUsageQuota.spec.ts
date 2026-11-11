@@ -48,9 +48,9 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
   });
   const page = app.window;
   const resetsAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-  await app.electronApp.evaluate(({ ipcMain }, reset) => {
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', (_event, providers: string[]) => ({ snapshots: providers.map(provider => ({
+  {
+    const reset = resetsAt;
+    await app.overrideChannel('aiUsage:providerSnapshots', ([providers]) => ({ snapshots: providers.map(provider => ({
       provider,
       checkedAt: new Date().toISOString(),
       windows: [
@@ -60,7 +60,7 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
       ],
       credits: { remaining: 0, currency: 'USD' }
     })), checkedAt: new Date().toISOString() }));
-  }, resetsAt);
+  }
   await openDraftComposer(page);
 
   const draft = page.getByTestId('new-session-view');
@@ -124,15 +124,15 @@ for (const { name, windows, reported } of [
       AI_GATEWAY_API_KEY: 'usage-unreported-e2e-key', AI_GATEWAY_URL: mock.baseUrl
     });
     const page = app.window;
-    await app.electronApp.evaluate(({ ipcMain }, windows) => {
-      ipcMain.removeHandler('aiUsage:providerSnapshots');
-      ipcMain.handle('aiUsage:providerSnapshots', (_event, providers: string[]) => ({ snapshots: providers.map(provider => ({
+    {
+      const windows = windows;
+      await app.overrideChannel('aiUsage:providerSnapshots', ([providers]) => ({ snapshots: providers.map(provider => ({
         provider,
         checkedAt: new Date().toISOString(),
         windows,
         ...(windows.length ? {} : { unavailableReason: 'Provider did not return usage.' })
       })), checkedAt: new Date().toISOString() }));
-    }, windows);
+    }
     await openDraftComposer(page);
 
     const summary = page.getByTestId('new-session-view').getByTestId('session-usage-summary');
@@ -259,14 +259,13 @@ test('collapsed usage skips the count-up under reduced motion', async () => {
   });
   const page = app.window;
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers: string[]) => {
+  {
+    await app.overrideChannel('aiUsage:providerSnapshots', async ([providers]) => {
       await new Promise(resolve => setTimeout(resolve, 800));
       return { snapshots: providers.map(provider => ({ provider, checkedAt: new Date().toISOString(),
         windows: [{ period: 'hour', windowDurationMinutes: 300, usedPercent: 27 }, { period: 'week', usedPercent: 54 }] })), checkedAt: new Date().toISOString() };
     });
-  });
+  }
   await openDraftComposer(page);
   const row = page.getByTestId('new-session-view').getByTestId('session-usage-group-vercel-gateway').locator('[data-testid="session-usage-meter-week"][data-reported="true"]');
   await row.waitFor();
@@ -449,10 +448,10 @@ test('session usage follows the active conversation speaker and its runtime toke
     await page.getByTestId('sessions-view').getByTestId('session-chat-thread').click({ position: { x: 10, y: 10 } });
     await expect(summary).not.toHaveAttribute('open', '');
   } finally {
-    await app.electronApp.evaluate(({ ipcMain }, record) => {
-      ipcMain.removeHandler('ai:listSessions');
-      ipcMain.handle('ai:listSessions', () => [record]);
-    }, record);
+    {
+      const record = record;
+      await app.overrideChannel('ai:listSessions', () => [record]);
+    }
   }
 });
 

@@ -86,7 +86,7 @@ test.skip('capture implemented AI provider screens', async () => {
     PRAXIS_LOCAL_RUNTIME_ORIGINS: JSON.stringify({ 'lm-studio': lmStudio.baseUrl })
   });
   const win = app.window;
-  await app.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setContentSize(1440, 900));
+  await app.window.setViewportSize({ width: 1440, height: 900 });
   await win.waitForSelector('[data-testid="new-session-view"]');
   await win.evaluate(async () => { await window.praxis.ai.setProviderApiKey('anthropic', 'e2e-anthropic-key'); });
   await win.reload();
@@ -156,7 +156,7 @@ test('capture implemented first-run wizard', async () => {
   }, undefined, { AI_GATEWAY_API_KEY: undefined, VERCEL_OIDC_TOKEN: undefined, GITHUB_TOKEN: undefined, GH_TOKEN: undefined }, { workspace: false, aiOnboarding: true });
   const win = app.window;
   await win.getByTestId('ai-setup-wizard').waitFor({ timeout: 20000 });
-  await app.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setContentSize(1440, 900));
+  await app.window.setViewportSize({ width: 1440, height: 900 });
   await win.waitForTimeout(1500);
   await win.getByTestId('ai-setup-choice-anthropic').click().catch(() => undefined);
   await shot(win, '12-setup-wizard');

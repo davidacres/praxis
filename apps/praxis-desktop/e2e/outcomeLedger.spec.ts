@@ -35,7 +35,7 @@ test('What Changed ledger keeps home intact and opens recorded evidence', async 
     await page.screenshot({ path: path.join(dir, 'outcome-ledger-dark.png') });
     await page.reload(); await dismissSplash(page);
     await expect(page.getByTestId('project-review-panel')).toHaveClass(/outcome-ledger/);
-    await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1000, 820); });
+    await app.window.setViewportSize({ width: 1000, height: 820 });
     await page.screenshot({ path: path.join(dir, 'outcome-ledger-compact.png') });
     await page.getByRole('button', { name: 'Home', exact: true }).click();
     await expect(page.getByTestId('project-review-panel')).toHaveCount(0);

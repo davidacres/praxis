@@ -120,11 +120,11 @@ test('teardown drains an ACP task even when the session list already reports com
   // Hold a real ACP subprocess open, but expose the terminal snapshot teardown
   // can see while shutdown is still pending. The real abort IPC and native
   // close guard remain in place: skipping this record would hang Electron.close.
-  await app!.electronApp.evaluate(({ ipcMain }, records) => {
-    ipcMain.removeHandler('ai:listSessions');
-    ipcMain.handle('ai:listSessions', () => records.map(record =>
+  {
+    const records = sessions;
+    await app!.overrideChannel('ai:listSessions', () => records.map(record =>
       record.issueKey === 'SESSION-one' ? { ...record, state: 'completed' } : record));
-  }, sessions);
+  }
   const userDataDir = app!.userDataDir;
   await closeTestApp(app!);
   app = undefined;

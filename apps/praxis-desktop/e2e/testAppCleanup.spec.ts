@@ -16,10 +16,9 @@ test('stalled renderer cleanup is bounded and reported after terminating its app
   const app = await launchTestApp();
   const child = app.electronApp.process();
   try {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('projects:list');
-      ipcMain.handle('projects:list', () => new Promise(() => {}));
-    });
+    {
+      await app.overrideChannel('projects:list', () => new Promise(() => {}));
+    }
     await expect(closeTestApp(app, { timeoutMs: 1000 })).rejects.toThrow(/stopping test-owned work/);
     expect(child.signalCode).toBe('SIGKILL');
     expect(fs.existsSync(app.userDataDir)).toBe(false);
