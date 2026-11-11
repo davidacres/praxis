@@ -294,6 +294,89 @@ fn save_custom_provider(host: &HostContext, args: &[Value]) -> Result<Value> {
     Ok(config)
 }
 
+/// The npm package behind a provider's app-managed ACP adapter.
+fn acp_package(provider: &str) -> Option<&'static str> {
+    match provider {
+        "claude-code-cli" => Some("@agentclientprotocol/claude-agent-acp"),
+        "codex-cli" => Some("@agentclientprotocol/codex-acp"),
+        "antigravity-cli" => Some("agy"),
+        _ => None,
+    }
+}
+
+fn managed_package(host: &HostContext, provider: &str) -> Result<(&'static str, String)> {
+    let resolved = find(host, provider)?;
+    match (resolved.descriptor.kind, acp_package(provider)) {
+        (DescriptorKind::CliAgent, Some(package)) => Ok((package, resolved.descriptor.label)),
+        _ => Err(failure(format!("{} does not have an app-managed ACP package.", resolved.descriptor.label))),
+    }
+}
+
+/// Reads package metadata only, for the fixed package assigned to a built-in CLI provider.
+fn latest_cli_version(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let (package, label) = managed_package(host, text(args, 0)?)?;
+    let fetched: std::result::Result<String, String> = block_on(async {
+        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build().map_err(|e| e.to_string())?;
+        let response = client.get(format!("https://registry.npmjs.org/{}", package.replace('/', "%2F"))).header("accept", "application/vnd.npm.install-v1+json").send().await.map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(format!("Package registry returned {}.", response.status().as_u16()));
+        }
+        let metadata: Value = response.json().await.map_err(|e| e.to_string())?;
+        let version = metadata["dist-tags"]["latest"].as_str().unwrap_or_default().to_owned();
+        let valid = version.split(['-', '+']).next().is_some_and(|core| core.split('.').count() == 3 && core.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit())));
+        if valid { Ok(version) } else { Err("The package registry did not return a valid latest version.".into()) }
+    });
+    fetched.map(|version| json!({ "version": version })).map_err(|detail| failure(format!("Could not check the latest {label} ACP version: {detail}")))
+}
+
+/// Installs only the known package for a built-in ACP provider; renderer input never becomes a
+/// shell command.
+fn install_cli_provider(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let (package, label) = managed_package(host, text(args, 0)?)?;
+    let managers: [(&str, Vec<String>); 4] = [
+        ("npm", vec!["install".into(), "--global".into(), format!("{package}@latest")]),
+        ("pnpm", vec!["add".into(), "--global".into(), format!("{package}@latest")]),
+        ("yarn", vec!["global".into(), "add".into(), format!("{package}@latest")]),
+        ("bun", vec!["add".into(), "--global".into(), format!("{package}@latest")]),
+    ];
+    let path = praxis_ai::providers::environment::effective_path();
+    let Some((manager, manager_args)) = managers.iter().find(|(name, _)| praxis_ai::providers::registry::resolve_executable(name, path).is_some()) else {
+        return Err(failure(format!("No supported JavaScript package manager was found. Install Node.js (which includes npm), or install {package} manually and set the ACP executable path below.")));
+    };
+    let output = std::process::Command::new(manager).args(manager_args).env("PATH", path).stdin(std::process::Stdio::null()).output().map_err(|e| failure(format!("Could not install {label} ACP with {manager}: {e}")))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        return Err(failure(format!("Could not install {label} ACP with {manager}: {}", detail.trim())));
+    }
+    let said = String::from_utf8_lossy(if output.stdout.is_empty() { &output.stderr } else { &output.stdout }).trim().to_owned();
+    Ok(json!({ "message": format!("{label} ACP installed with {manager}. {said}").trim().to_owned() }))
+}
+
+/// Preflight for a CLI provider, plus the ACP capabilities when it is ready. `null` for an API
+/// provider (nothing to probe).
+fn probe_provider_capability(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let provider = text(args, 0)?;
+    let resolved = find(host, provider)?;
+    if resolved.descriptor.kind != DescriptorKind::CliAgent {
+        return Ok(Value::Null);
+    }
+    let override_path = host.settings().read().ai.providers.get(provider).and_then(|c| c.cli_path.clone()).map(|p| p.trim().to_owned()).filter(|p| !p.is_empty());
+    let command = override_path.or(resolved.descriptor.default_command.clone()).ok_or_else(|| failure("No command is configured for this provider."))?;
+    let preflight = probe_cli_provider(&command);
+    let mut result = preflight.to_json();
+    if preflight.status != "ready" {
+        return Ok(result);
+    }
+    match block_on(super::ai_models::probe_acp_capabilities(&command, resolved.descriptor.default_args.clone(), &super::ai_models::working_directory_for(host))) {
+        Ok(capabilities) => result["capabilities"] = capabilities,
+        Err(message) => {
+            result["status"] = json!("failed");
+            result["message"] = json!(message);
+        }
+    }
+    Ok(result)
+}
+
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:getStatus" => active_status(host),
@@ -301,6 +384,9 @@ pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Res
         "ai:listProviderPresets" => Ok(json!(provider_presets())),
         "ai:detectLocalRuntimes" => Ok(json!(detect_local_runtimes())),
         "ai:testCustomProvider" => test_custom_provider(host, args),
+        "ai:getLatestCliProviderVersion" => latest_cli_version(host, args),
+        "ai:installCliProvider" => install_cli_provider(host, args),
+        "ai:probeProviderCapability" => probe_provider_capability(host, args),
         "ai:saveCustomProvider" => save_custom_provider(host, args),
         "ai:setApiKey" => {
             let active = host.settings().read().ai.active_provider.clone();

@@ -128,21 +128,7 @@ pub fn dispatch(
     }
     match channel {
         // 1. Provider configuration & statuses
-        "ai:probeProviderCapability" => {
-            let provider = text(args, 0).unwrap_or("google");
-            Ok(json!({
-                "provider": provider,
-                "streaming": true,
-                "toolCalling": true,
-                "vision": true
-            }))
-        }
         "ai:testMcpServer" => Ok(json!({ "ok": true, "tools": [] })),
-        "ai:installCliProvider" => {
-            let provider = text(args, 0).unwrap_or("antigravity");
-            Ok(json!({ "ok": true, "provider": provider, "installed": true }))
-        }
-        "ai:getLatestCliProviderVersion" => Ok(json!({ "version": "1.0.0", "upToDate": true })),
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
 
         // 2. Code intelligence & semantic model

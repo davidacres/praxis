@@ -92,6 +92,55 @@ async fn read_model_selector(command: &str, args: Vec<String>, cwd: &str) -> std
     outcome?
 }
 
+/// Completes ACP `initialize` without creating a session or sending a prompt, and returns the
+/// stable subset of the agent's capabilities. Nothing is granted: requests are refused.
+pub(super) async fn probe_acp_capabilities(command: &str, args: Vec<String>, cwd: &str) -> std::result::Result<Value, String> {
+    let resolved = resolve_executable(command, effective_path()).ok_or_else(|| format!("spawn {command} ENOENT"))?;
+    let (connection, mut incoming) = AcpConnection::spawn(AcpSpawn {
+        command: resolved.to_string_lossy().into_owned(),
+        args,
+        cwd: Some(cwd.to_owned()).filter(|cwd| !cwd.is_empty()),
+        env: vec![("PATH".into(), effective_path().to_owned())],
+    })
+    .await?;
+    let connection = std::sync::Arc::new(connection);
+    let refuser = {
+        let connection = std::sync::Arc::clone(&connection);
+        tokio::spawn(async move {
+            while let Some(message) = incoming.recv().await {
+                match message {
+                    Incoming::Request { id, .. } => {
+                        let _ = connection.respond_error(&id, -32601, "Not available during a capability probe.").await;
+                    }
+                    Incoming::Closed => break,
+                    Incoming::Notification { .. } => {}
+                }
+            }
+        })
+    };
+    let outcome = tokio::time::timeout(HANDSHAKE_TIMEOUT, connection.request("initialize", json!({ "protocolVersion": 1, "clientCapabilities": {} })))
+        .await
+        .map_err(|_| format!("{command} did not answer initialize within {}s.", HANDSHAKE_TIMEOUT.as_secs()))
+        .and_then(|reply| reply.map_err(|error| error.to_string()));
+    connection.shutdown().await;
+    refuser.abort();
+    let capabilities = outcome?["agentCapabilities"].clone();
+    if capabilities.is_null() {
+        return Err("The ACP provider did not advertise capabilities.".into());
+    }
+    Ok(json!({
+        "protocol": "acp",
+        "sessionResume": capabilities["sessionCapabilities"]["resume"].is_object() || capabilities["sessionCapabilities"]["resume"] == true,
+        "sessionLoad": capabilities["loadSession"] == true,
+        "sessionClose": capabilities["sessionCapabilities"]["close"].is_object() || capabilities["sessionCapabilities"]["close"] == true,
+        "mcpHttp": capabilities["mcpCapabilities"]["http"] == true
+    }))
+}
+
+pub(super) fn working_directory_for(host: &HostContext) -> String {
+    working_directory(host)
+}
+
 fn list_cli(host: &HostContext, provider: &str) -> Result<Value> {
     let Some(descriptor) = built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent) else {
         return Ok(Value::Null);
