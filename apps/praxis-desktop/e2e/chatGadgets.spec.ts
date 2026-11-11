@@ -1,0 +1,1087 @@
+import * as fs from 'node:fs';
+import { openFromPalette } from './navigation';
+import { openSession } from './sessionNavigation';
+import * as path from 'node:path';
+import { test, expect, type Locator } from '@playwright/test';
+import {
+  buildExpiredGadgetFixture,
+  buildGadgetFailureFixtures,
+  buildGadgetFenceMessage,
+  buildGadgetFixtures,
+  GADGET_KINDS
+} from '@praxis/core';
+import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+
+/**
+ * Interactive chat gadgets (FX-BF-036), end to end.
+ *
+ * These drive the **real** producer path: the mock gateway returns a message
+ * containing `praxis-gadget` fences, exactly as a provider would, and the app
+ * parses, validates, stamps scope, renders, and records the answer through the
+ * ledger. Nothing here hand-builds an envelope in the renderer, because doing
+ * so would skip the two steps most likely to break — parsing and host-side
+ * validation.
+ */
+
+const NO_GATEWAY_ENV = {
+  AI_GATEWAY_API_KEY: undefined,
+  VERCEL_OIDC_TOKEN: undefined,
+  FROSTY_VERCEL_API_KEY: undefined,
+  AI_GATEWAY_URL: undefined,
+  VERCEL_AI_GATEWAY_URL: undefined,
+  FROSTY_VERCEL_URL: undefined
+} as const;
+
+/** Scope is stripped by `buildGadgetFenceMessage`; these only satisfy the builder. */
+const FIXTURE_OPTIONS = {
+  scope: { hostId: 'fixture-host', sessionId: 'fixture-session' },
+  issuedAt: '2026-09-13T10:00:00.000Z'
+};
+
+let app: TestApp | undefined;
+let mock: MockGatewayServer | undefined;
+
+test.afterEach(async () => {
+  if (app) {
+    await closeTestApp(app);
+    app = undefined;
+  }
+  if (mock) {
+    await mock.close();
+    mock = undefined;
+  }
+});
+
+/** Start a session whose single provider reply is `reply`, and open Sessions. */
+async function sessionWithReply(
+  reply: string,
+  options: {
+    toolCall?: { name: string; arguments: Record<string, unknown> };
+    toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+    imageFile?: { fileName: string; contents: Buffer };
+    htmlFile?: { fileName: string; contents: string };
+  } = {}
+) {
+  const { imageFile, htmlFile, ...mockOptions } = options;
+  mock = await startMockGatewayServer({ mode: 'complete', reply, ...mockOptions });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gadget-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  if (imageFile) fs.writeFileSync(path.join(app.userDataDir, imageFile.fileName), imageFile.contents);
+  if (htmlFile) fs.writeFileSync(path.join(app.userDataDir, htmlFile.fileName), htmlFile.contents);
+  const win = app.window;
+  // No `issueKey`: a free-form session, so nothing is looked up on a board.
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      permissionMode: 'auto',
+      task: { goal: 'Demonstrate interactive chat gadgets.' }
+    });
+  });
+  await openFromPalette(win, 'Conversations');
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  return win;
+}
+
+test('assistant Markdown renders tables and emphasis in the chat bubble', async () => {
+  const win = await sessionWithReply([
+    '| Story | Scope | State |',
+    '|---|---|---|',
+    '| FX-BE-097 | Versioned contracts, validation, fallback | To Do |',
+    '| FX-BE-098 | Renderer registry; table/chart/progress/diff/handoff surfaces | To Do |',
+    '| FX-BE-099 | Command ledger, scope auth, expiry/stale/dedupe | To Do |',
+    '| FX-BE-100 | Workflow gates, provider handoffs, run monitor | To Do |',
+    '| FX-BE-101 | A11y, mobile, fixtures, e2e proof | To Do |',
+    '',
+    'Plan statuses, `PLAN_MAP.md` and the roadmap reflect this honestly: 097/098/099 Done, 100/101 In progress.'
+  ].join('\n'));
+
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  await expect(assistant.locator('[data-testid="session-chat-markdown"] table')).toBeVisible();
+  await expect(assistant.locator('th')).toHaveCount(3);
+  await expect(assistant.locator('tbody tr')).toHaveCount(5);
+  await expect(assistant.locator('td').first()).toHaveText('FX-BE-097');
+  await expect(assistant.locator('td').nth(1)).toContainText('Versioned contracts, validation, fallback');
+  await expect(assistant).not.toContainText('|---|---|');
+
+  // The inspector deliberately does not echo the reply — it is the session's
+  // state, not a second transcript.
+  await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
+});
+
+test('image links and filenames render as clickable chat previews', async () => {
+  // A tiny valid PNG is enough to exercise the real host-side file read and
+  // Chromium image decode without making the fixture repository binary-heavy.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const win = await sessionWithReply(
+    'The screenshot is ready.\n\n[screenshot.png](screenshot.png)\n\nA second copy is below:\n\nscreenshot.png',
+    { imageFile: { fileName: 'screenshot.png', contents: png } }
+  );
+
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  const images = assistant.locator('img.markdown-image-preview');
+  await expect(images).toHaveCount(2);
+  await expect.poll(() => images.first().evaluate(image => ({ src: image.getAttribute('src'), width: image.naturalWidth }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/png;base64,/),
+    width: 1
+  });
+
+  await images.first().click();
+  const lightbox = win.locator('[data-testid="markdown-image-lightbox"]');
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator('[data-testid="markdown-image-lightbox-image"]')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(lightbox).toHaveAttribute('data-zoom', '1');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-zoom-in"]').click();
+  await expect(lightbox).toHaveAttribute('data-zoom', '1.25');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-zoom-reset"]').click();
+  await expect(lightbox).toHaveAttribute('data-zoom', '1');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-zoom-out"]').click();
+  await expect(lightbox).toHaveAttribute('data-zoom', '0.75');
+  await lightbox.locator('[data-testid="markdown-image-lightbox-close"]').click();
+  await expect(lightbox).toHaveCount(0);
+  await images.first().click();
+  await expect(lightbox).toBeVisible();
+  await win.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+});
+
+test('an image gadget shows the picture itself, not an artifact file row', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const image = {
+    type: 'gadget' as const,
+    blockId: 'image-block',
+    gadget: {
+      version: 1,
+      kind: 'image',
+      gadgetId: 'image-preview',
+      payload: {
+        title: 'Visual verification',
+        images: [{
+          name: 'focus-mode-tabs.png',
+          path: 'focus-mode-tabs.png',
+          mediaType: 'image/png',
+          description: 'Focus-mode tabs after implementation'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([image], 'The visual verification screenshot is attached.'),
+    { imageFile: { fileName: 'focus-mode-tabs.png', contents: png } }
+  );
+
+  const gadget = win.locator('[data-testid="gadget-image"]');
+  await expect(gadget).toBeVisible();
+  await expect(gadget).toContainText('Visual verification');
+  await expect(gadget).toContainText('Focus-mode tabs after implementation');
+
+  // The picture is the surface — there is no artifact card, and with it no
+  // "Open in Workspace" or "Save" chrome around it.
+  await expect(gadget.locator('[data-testid="gadget-artifact-card"]')).toHaveCount(0);
+  await expect(gadget.locator('[data-testid="gadget-artifact-open-dock"]')).toHaveCount(0);
+
+  const picture = gadget.locator('[data-testid="gadget-image-preview"] img.markdown-image-preview');
+  await expect(picture).toHaveCount(1);
+  await expect(gadget.locator('li.gadget-image-item')).toHaveCount(1);
+  await expect.poll(() => picture.evaluate(element => ({
+    src: element.getAttribute('src'),
+    width: (element as HTMLImageElement).naturalWidth
+  }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/png;base64,/),
+    width: 1
+  });
+
+  await win.screenshot({ path: 'output/playwright/chat-gadget-image.png', fullPage: true });
+
+  await picture.click();
+  const lightbox = win.locator('[data-testid="markdown-image-lightbox"]');
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator('[data-testid="markdown-image-lightbox-image"]')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await lightbox.locator('[data-testid="markdown-image-lightbox-close"]').click();
+  await expect(lightbox).toHaveCount(0);
+  await picture.click();
+  await expect(lightbox).toBeVisible();
+  await win.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+});
+
+test('an image gadget carries an inline SVG without asking the host for a file', async () => {
+  const image = {
+    type: 'gadget' as const,
+    blockId: 'svg-block',
+    gadget: {
+      version: 1,
+      kind: 'image',
+      gadgetId: 'image-svg',
+      payload: {
+        title: 'Diagram',
+        images: [{
+          name: 'flow.svg',
+          path: 'flow.svg',
+          mediaType: 'image/svg+xml',
+          description: 'A flow diagram',
+          content: '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="red"/></svg>'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([image], 'The diagram is attached.')
+  );
+
+  const gadget = win.locator('[data-testid="gadget-image"]');
+  await expect(gadget).toBeVisible();
+
+  // The SVG travels in the payload, so it is drawn from its own source rather
+  // than resolved against the session's folder.
+  const picture = gadget.locator('[data-testid="gadget-image-preview"] img.markdown-image-preview');
+  await expect(picture).toHaveCount(1);
+  await expect.poll(() => picture.evaluate(element => ({
+    src: element.getAttribute('src'),
+    width: (element as HTMLImageElement).naturalWidth
+  }))).toMatchObject({
+    src: expect.stringMatching(/^data:image\/svg\+xml/),
+    width: 4
+  });
+});
+
+test('an artifact gadget of only images is drawn on the image surface', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  // The shape an agent emits when it publishes a screenshot. It is an artifact
+  // gadget, but it holds nothing but a picture, so it is drawn as one.
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-image-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-image-preview',
+      payload: {
+        title: 'Visual verification',
+        artifacts: [{
+          name: 'focus-mode-tabs.png',
+          path: 'focus-mode-tabs.png',
+          mediaType: 'image/png',
+          description: 'Focus-mode tabs after implementation'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The visual verification artifact is attached.'),
+    { imageFile: { fileName: 'focus-mode-tabs.png', contents: png } }
+  );
+
+  await expect(win.locator('[data-testid="gadget-image"]')).toBeVisible();
+  await expect(win.locator('[data-testid="gadget-artifact"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="gadget-image-preview"] img.markdown-image-preview')).toHaveCount(1);
+});
+
+test('an artifact gadget of mixed files stays on the artifact surface', async () => {
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-mixed-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-mixed',
+      payload: {
+        title: 'Run artifacts',
+        artifacts: [
+          { name: 'focus-mode-tabs.png', path: 'focus-mode-tabs.png', mediaType: 'image/png' },
+          { name: 'report.html', path: 'report.html', mediaType: 'text/html' }
+        ]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The run artifacts are attached.')
+  );
+
+  await expect(win.locator('[data-testid="gadget-artifact"]')).toBeVisible();
+  await expect(win.locator('[data-testid="gadget-image"]')).toHaveCount(0);
+});
+
+test('artifact gadget renders handover metadata and item category badges', async () => {
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-handover-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'handover-delivery',
+      payload: {
+        title: 'Work Handover & Verification',
+        artifacts: [
+          {
+            name: 'fullwidth-chat.png',
+            path: '.praxis/session-artifacts/fullwidth-chat.png',
+            category: 'evidence',
+            verdict: 'passed',
+            description: 'Screenshot of full-width chat'
+          },
+          {
+            name: 'summary-report.json',
+            path: 'output/summary-report.json',
+            category: 'deliverable',
+            description: 'Structured completion output'
+          }
+        ],
+        handover: {
+          verdict: 'passed',
+          testSummary: { total: 17, passed: 17, failed: 0 },
+          gitRef: 'feat/handover',
+          nextSteps: 'Proceed with user sign-off',
+          requiresSignoff: true
+        }
+      },
+      actions: [{ actionId: 'sign-off', label: 'Approve & Close', effect: 'informational' }]
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'Work completed with handover receipt.')
+  );
+
+  const gadget = win.locator('[data-testid="gadget-artifact"]');
+  await expect(gadget).toContainText('Work Handover & Verification');
+
+  const handoverCard = gadget.locator('[data-testid="gadget-artifact-handover"]');
+  await expect(handoverCard).toBeVisible();
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-verdict"]')).toContainText('Verified · Passed');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-tests"]')).toContainText('17/17 tests passed');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-gitref"]')).toContainText('feat/handover');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-signoff"]')).toContainText('Sign-off required');
+  await expect(handoverCard.locator('[data-testid="gadget-artifact-handover-next-steps"]')).toContainText('Proceed with user sign-off');
+
+  await expect(gadget.locator('[data-testid="gadget-artifact-item-category"]').first()).toHaveText('evidence');
+  await expect(gadget.locator('[data-testid="gadget-artifact-item-verdict"]').first()).toHaveText('passed');
+
+  const gadgetBox = await gadget.boundingBox();
+  if (gadgetBox) {
+    await win.screenshot({
+      path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-handover-gadget.png'),
+      clip: {
+        x: Math.max(0, gadgetBox.x - 20),
+        y: Math.max(0, gadgetBox.y - 20),
+        width: gadgetBox.width + 40,
+        height: gadgetBox.height + 40
+      }
+    });
+  }
+});
+
+test('HTML artifacts open in an isolated in-app preview', async () => {
+  const html = fs.readFileSync(path.resolve(__dirname, '../../.praxis/visualizations/session-list-card-mockup.html'), 'utf8');
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-html-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-html-preview',
+      payload: {
+        title: 'Session list card mockup',
+        artifacts: [{ name: 'session-list-card-mockup.html', path: 'session-list-card-mockup.html', mediaType: 'text/html' }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The interactive HTML mockup is attached.'),
+    { htmlFile: { fileName: 'session-list-card-mockup.html', contents: html } }
+  );
+
+  const appInstance = app!;
+  const previewReady = appInstance.electronApp.waitForEvent('window');
+  await win.locator('[data-testid="gadget-artifact-html-preview"]').click();
+  const preview = await previewReady;
+  await expect(preview.locator('[data-variant="Automation-like"] h2')).toHaveText('Sessions');
+  await expect(preview.getByRole('tab', { name: 'Compact rows' })).toHaveAttribute('aria-selected', 'true');
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeHidden();
+  expect(await preview.evaluate(() => ({
+    hasPraxisBridge: 'praxis' in window,
+    hasNodeRequire: 'require' in window
+  }))).toEqual({ hasPraxisBridge: false, hasNodeRequire: false });
+
+  await preview.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-list-cards-in-app-preview.png') });
+  await preview.getByRole('tab', { name: 'Expanded cards' }).click();
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toContainText('Updated 18 min ago');
+  const startingUrl = preview.url();
+  await preview.evaluate(() => {
+    const link = document.createElement('a');
+    link.id = 'external-navigation-probe';
+    link.href = 'https://example.invalid/';
+    link.textContent = 'External navigation probe';
+    document.body.append(link);
+  });
+  await preview.locator('#external-navigation-probe').click();
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
+  await preview.evaluate(() => { void fetch('https://example.invalid/probe').catch(() => {}); });
+  await expect.poll(() => preview.url()).toBe(startingUrl);
+  await expect(preview.locator('[data-variant="Expanded cards"]')).toBeVisible();
+  expect(await preview.evaluate(() => performance.getEntriesByType('resource').map(entry => entry.name)))
+    .not.toContain('https://example.invalid/probe');
+  const sessionId = await win.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.sessionId);
+  const traversalResult = await win.evaluate(async id => {
+    try {
+      await window.praxis.ai.openHtmlArtifactPreview(id!, '../outside.html', 'Outside workspace');
+      return 'unexpectedly opened';
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }, sessionId);
+  expect(traversalResult).toContain('outside the session workspace');
+
+  // Save copies the file into the artifacts folder beside what is already
+  // published there, leaving the existing pages and index untouched.
+  const publishedDir = path.join(appInstance.userDataDir, 'docs', 'published-artifacts');
+  fs.mkdirSync(path.join(publishedDir, 'shots'), { recursive: true });
+  fs.writeFileSync(path.join(publishedDir, 'README.md'), '# Published artifacts');
+  fs.writeFileSync(path.join(publishedDir, 'session-list-card-mockup.html'), '<p>an older page</p>');
+  const save = win.locator('[data-testid="gadget-artifact-save"]');
+  await save.click();
+  await expect(save).toHaveAttribute('aria-label', 'Saved');
+  await expect(save).toHaveAttribute('title', 'Saved to docs/published-artifacts/session-list-card-mockup-2.html');
+  expect(fs.readFileSync(path.join(publishedDir, 'session-list-card-mockup-2.html'), 'utf8')).toBe(html);
+  expect(fs.readFileSync(path.join(publishedDir, 'session-list-card-mockup.html'), 'utf8')).toBe('<p>an older page</p>');
+  expect(fs.readFileSync(path.join(publishedDir, 'README.md'), 'utf8')).toBe('# Published artifacts');
+});
+
+test('artifact workspace dock opens, switches between preview, code, and diff, and supports saving to workspace', async () => {
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-dock-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-dashboard-preview',
+      payload: {
+        title: 'Component Deliverables',
+        artifacts: [{
+          name: 'MetricsCard.tsx',
+          path: 'src/components/MetricsCard.tsx',
+          language: 'tsx',
+          content: 'export function MetricsCard() {\n  return <div className="card">Metrics</div>;\n}',
+          version: 2,
+          category: 'deliverable'
+        }]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'Here is the MetricsCard component.')
+  );
+
+  const gadget = win.locator('[data-testid="gadget-artifact"]');
+  await expect(gadget).toContainText('MetricsCard.tsx');
+  await expect(gadget.locator('[data-testid="gadget-artifact-version"]')).toHaveText('v2');
+
+  // Click Open in Workspace button
+  await gadget.locator('[data-testid="gadget-artifact-open-dock"]').click();
+
+  // The dock opens in the split pane with the live preview tab active by default
+  const dock = win.locator('[data-testid="session-artifact-dock"]');
+  await expect(dock).toBeVisible();
+  await expect(dock.locator('[data-testid="artifact-dock-title"]')).toHaveText('MetricsCard.tsx');
+  await expect(dock.locator('[data-testid="artifact-version-badge"]')).toHaveText('v2');
+
+  // Verify live in-sandbox transpiled component preview
+  const previewIframe = dock.locator('[data-testid="artifact-preview-html"] iframe');
+  await expect(previewIframe).toBeVisible();
+  await expect(previewIframe.contentFrame().locator('.card')).toHaveText('Metrics');
+
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-workspace-dock.png')
+  });
+
+  // Switch to Code tab
+  await dock.locator('[data-testid="artifact-tab-code"]').click();
+  const codeView = dock.locator('[data-testid="artifact-code-view"]');
+  await expect(codeView).toBeVisible();
+  await expect(codeView).toContainText('export function MetricsCard()');
+
+  // Switch to Diff tab
+  await dock.locator('[data-testid="artifact-tab-diff"]').click();
+  const diffView = dock.locator('[data-testid="artifact-diff-view"]');
+  await expect(diffView).toBeVisible();
+  await expect(diffView.locator('.diff-added').first()).toContainText('MetricsCard');
+
+  // Switch back to Preview tab
+  await dock.locator('[data-testid="artifact-tab-preview"]').click();
+  await expect(previewIframe).toBeVisible();
+
+  // Test switching between the 5 prototype layouts
+  const layoutSelector = dock.locator('[data-testid="artifact-layout-selector"]');
+  await expect(layoutSelector).toBeVisible();
+
+  // 1. Switch to Dual-Pane Workbench
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-dual-pane"]').click();
+  const dualPane = dock.locator('[data-testid="artifact-prototype-dual-pane"]');
+  await expect(dualPane).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-dual-pane.png')
+  });
+
+  // 2. Switch to Multi-Tab Studio
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-tabbed-studio"]').click();
+  const tabbedStudio = dock.locator('[data-testid="artifact-prototype-tabbed-studio"]');
+  await expect(tabbedStudio).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-tabbed-studio.png')
+  });
+
+  // 3. Switch to Device Viewport Stage
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-device-canvas"]').click();
+  const deviceStage = dock.locator('[data-testid="artifact-prototype-device-canvas"]');
+  await expect(deviceStage).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-device-canvas.png')
+  });
+
+  // 4. Switch to Iterative Companion
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-iterative-companion"]').click();
+  const companion = dock.locator('[data-testid="artifact-prototype-iterative-companion"]');
+  await expect(companion).toBeVisible();
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-prototype-iterative-companion.png')
+  });
+
+  // Switch back to Classic Split
+  await layoutSelector.click();
+  await dock.locator('[data-testid="artifact-layout-option-classic-split"]').click();
+
+  // Save to workspace
+  // Saving publishes into the project's artifacts folder (default
+  // docs/published-artifacts), never back over the artifact's own path.
+  await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();
+  await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Saved to docs/published-artifacts/MetricsCard.tsx');
+  const published = path.join(app!.userDataDir, 'docs', 'published-artifacts', 'MetricsCard.tsx');
+  expect(fs.readFileSync(published, 'utf8')).toContain('export function MetricsCard()');
+  expect(fs.existsSync(path.join(app!.userDataDir, 'src', 'components', 'MetricsCard.tsx'))).toBe(false);
+  // A second save finds the identical copy instead of writing a duplicate.
+  await dock.locator('[data-testid="artifact-save-workspace-btn"]').click();
+  await expect(dock.locator('[data-testid="artifact-dock-notice"]')).toContainText('Already in docs/published-artifacts/MetricsCard.tsx');
+  expect(fs.readdirSync(path.dirname(published))).toEqual(['MetricsCard.tsx']);
+
+  // Header toggle also works
+  const toggleBtn = win.locator('[data-testid="session-artifact-toggle"]');
+  await expect(toggleBtn).toHaveClass(/active/);
+
+  // Close dock
+  await dock.locator('[data-testid="artifact-close-btn"]').click();
+  await expect(dock).toBeHidden();
+  await expect(toggleBtn).not.toHaveClass(/active/);
+});
+
+// Agents publish artifacts as files in the session folder, not inline text, so
+// the dock has to read them — and say plainly when one is gone.
+test('artifact workspace dock previews a file-backed text artifact and explains a missing one', async () => {
+  const gadget = {
+    type: 'gadget' as const,
+    blockId: 'artifact-file-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-file-evidence',
+      payload: {
+        title: 'Verification evidence',
+        artifacts: [
+          { name: 'change-diff.txt', path: '.praxis/session-artifacts/change-diff.txt', mediaType: 'text/plain' },
+          { name: 'removed-report.log', path: '.praxis/session-artifacts/removed-report.log', mediaType: 'text/plain' }
+        ]
+      },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(buildGadgetFenceMessage([gadget], 'Evidence attached.'));
+  const artifactsDir = path.join(app!.userDataDir, '.praxis', 'session-artifacts');
+  fs.mkdirSync(artifactsDir, { recursive: true });
+  fs.writeFileSync(path.join(artifactsDir, 'change-diff.txt'), 'diff --git a/x b/x\n+the real file body');
+
+  const openButtons = win.locator('[data-testid="gadget-artifact-open-dock"]');
+  await openButtons.nth(0).click();
+  const dock = win.locator('[data-testid="session-artifact-dock"]');
+  // The Preview tab shows the file itself, not a placeholder card.
+  const text = dock.locator('[data-testid="artifact-preview-text"]');
+  await expect(text).toContainText('+the real file body');
+  // The name stays readable in a narrow dock rather than clipped to a sliver.
+  // Its own box can be wide while its row clips it, so measure what shows.
+  // (Proven against the old CSS, where only "(" of the name was visible.)
+  const title = dock.locator('[data-testid="artifact-dock-title"]');
+  await expect(title).toHaveText('change-diff.txt');
+  const visibleTitleWidth = await title.evaluate(el => {
+    const own = el.getBoundingClientRect();
+    const row = el.parentElement!.getBoundingClientRect();
+    return Math.min(own.right, row.right) - own.left;
+  });
+  expect(visibleTitleWidth).toBeGreaterThan(60);
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-dock-text-preview.png')
+  });
+
+  // A file that no longer exists says so, and where it was looked for,
+  // instead of leaving the previous artifact's text under the new name.
+  await openButtons.nth(1).click();
+  await expect(title).toHaveText('removed-report.log');
+  const unavailable = dock.locator('[data-testid="artifact-dock-unavailable"]');
+  await expect(unavailable.locator('span')).toHaveText(/^Artifact file was not found in the session folder \(/);
+  await expect(unavailable).toContainText('.praxis/session-artifacts/removed-report.log');
+  await expect(dock).not.toContainText('the real file body');
+  await win.screenshot({
+    path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-dock-missing-file.png')
+  });
+
+  // Going back to the existing file recovers.
+  await openButtons.nth(0).click();
+  await expect(text).toContainText('+the real file body');
+  await expect(unavailable).toBeHidden();
+});
+
+test('internal memory citations stay persisted but do not render in the transcript', async () => {
+  const rolloutId = '01a099ed-d2b7-7861-a7e0-89eee71e6e27';
+  const reply = [
+    'The visible answer stays in the conversation.',
+    '',
+    '<oai-mem-citation>',
+    '<citation_entries>',
+    'MEMORY.md:146-146|note=[Praxis desktop verification sequence]',
+    '</citation_entries>',
+    '<rollout_ids>',
+    rolloutId,
+    '</rollout_ids>',
+    '</oai-mem-citation>'
+  ].join('\n');
+  const win = await sessionWithReply(reply);
+
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  await expect(assistant).toContainText('The visible answer stays in the conversation.');
+  await expect(assistant).not.toContainText('oai-mem-citation');
+  await expect(assistant).not.toContainText('MEMORY.md');
+  await expect(assistant).not.toContainText(rolloutId);
+
+  // Presentation filtering must not destroy the provider response. The raw
+  // event remains available for audit, diagnostics, and session recovery.
+  // getSession hydrates the transcript; listSessions ships an event-free summary.
+  const storedMessage = await win.evaluate(async () =>
+    (await window.praxis.ai.getSession((await window.praxis.ai.listSessions())[0]!.issueKey))?.events
+      .find(event => event.type === 'message')?.detail
+  );
+  expect(storedMessage).toContain('<oai-mem-citation>');
+  expect(storedMessage).toContain(rolloutId);
+});
+
+test('chat producers receive the choice-gadget policy for genuine decisions', async () => {
+  await sessionWithReply('There is no decision to make in this fixture.');
+
+  const request = JSON.parse(mock!.requests[0]!.body) as {
+    messages: Array<{ role: string; content: string }>;
+  };
+  const systemPrompt = request.messages
+    .filter(message => message.role === 'system')
+    .map(message => message.content)
+    .join('\n');
+  expect(systemPrompt).toContain('## Interactive response surfaces');
+  expect(systemPrompt).toContain('include a single explicit `praxis-gadget` choice block');
+  expect(systemPrompt).toContain('Do not turn every numbered list into controls.');
+  expect(systemPrompt).toContain('"kind":"choice"');
+  expect(systemPrompt).toContain('The host adds scope and issuedAt.');
+  expect(systemPrompt).toContain('publish it as an image gadget');
+  expect(systemPrompt).toContain('Use the `image` kind for screenshots');
+  expect(systemPrompt).toContain('.praxis/session-artifacts/');
+});
+
+test('Settings lists each built-in gadget with its purpose', async () => {
+  app = await launchTestApp(undefined, undefined, NO_GATEWAY_ENV);
+  const win = app.window;
+
+  await win.locator('[data-testid="titlebar-settings"]').click();
+  await expect(win.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+  await win.locator('[data-testid="settings-nav-gadgets"]').click();
+
+  const section = win.locator('[data-testid="settings-gadgets"]');
+  await expect(section.locator('[data-testid^="settings-gadget-"]')).toHaveCount(13);
+  await expect(section.locator('[data-testid="settings-gadget-tool-completion"]')).toContainText('Tool completion');
+  await expect(section.locator('[data-testid="settings-gadget-tool-completion"]')).toContainText('one expandable activity entry');
+  await expect(section.locator('[data-testid="settings-gadget-choice"]')).toContainText('clear decision');
+});
+
+test('a provider message asking for gadgets renders every kind in place', async () => {
+  const message = buildGadgetFenceMessage(buildGadgetFixtures(FIXTURE_OPTIONS), 'Here is the current state of the run.');
+  const win = await sessionWithReply(message);
+
+  // The prose survives; the raw JSON does not leak into the transcript.
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  await expect(assistant).toContainText('Here is the current state of the run.');
+  await expect(assistant).not.toContainText('praxis-gadget');
+  await expect(assistant).not.toContainText('"actions"');
+
+  for (const kind of GADGET_KINDS) {
+    await expect(win.locator(`[data-testid="gadget-${kind}"]`), `${kind} did not render`).toBeVisible();
+  }
+
+  // Gadgets are attributed to Praxis, not to the model that asked for them.
+  await expect(win.locator('.gadget-kicker').first()).toContainText('Praxis');
+
+  // The rail carries the session's state, not a second copy of the reply — so
+  // there is no message block here, and no fence can leak into one.
+  await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-inspector"]')).not.toContainText('praxis-gadget');
+  await win.screenshot({ path: 'output/playwright/chat-gadgets-catalogue.png', fullPage: true });
+
+  // One provider turn — rendering a gadget must never cost a second request.
+  expect(mock!.requests).toHaveLength(1);
+});
+
+test('answering a choice records it through the ledger and leaves it answered', async () => {
+  const [choice] = buildGadgetFixtures(FIXTURE_OPTIONS);
+  const win = await sessionWithReply(buildGadgetFenceMessage([choice], 'Pick a provider to carry on with.'));
+
+  const gadget = win.locator('[data-testid="gadget-choice"]');
+  await expect(gadget).toBeVisible();
+  await expect(gadget).toHaveAttribute('data-gadget-state', 'active');
+
+  // An option the host marked unavailable stays visible with its reason.
+  await expect(gadget).toContainText('no CLI found on this machine');
+  await expect(gadget.getByRole('radio', { name: /Copilot/ })).toBeDisabled();
+
+  // The submit button is inert until a choice has actually been made.
+  const submit = gadget.locator('[data-testid="gadget-action-pick"]');
+  await expect(submit).toBeDisabled();
+
+  await gadget.getByRole('radio', { name: /Claude/ }).check();
+  await expect(submit).toBeEnabled();
+  await win.screenshot({ path: 'output/playwright/chat-gadget-choice-selected.png', fullPage: true });
+  await submit.click();
+
+  await expect(gadget.locator('[data-testid="gadget-result"]')).toContainText('Recorded');
+  // The host settles this action in the same turn, so it goes straight to
+  // `completed` rather than resting in `submitted` — which is only reached when
+  // the host has real work still to do.
+  await expect(gadget).toHaveAttribute('data-gadget-state', 'completed');
+  await expect(gadget.locator('[data-testid="gadget-inert-note"]')).toContainText('This decision has been made');
+  // Answered, the choice collapses to what was picked: no options, no submit.
+  await expect(gadget.getByRole('radio')).toHaveCount(0);
+  await expect(submit).toHaveCount(0);
+  await expect(gadget.locator('[data-testid="gadget-answered"]')).toContainText('Claude');
+  await win.screenshot({ path: 'output/playwright/chat-gadget-choice-answered.png', fullPage: true });
+
+  // Answering a `choice` gadget also reports the answer back to the agent as
+  // a follow-up turn — the same path a typed reply takes — so the model that
+  // asked actually learns what was picked. Wait for that second turn to
+  // settle before asserting on request counts.
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  // Polled: the badge settles as soon as the turn completes, which can be just
+  // before the request lands on the mock.
+  await expect.poll(() => mock!.requests.length, { timeout: 15000 }).toBe(2);
+  const followUp = JSON.parse(mock!.requests[1]!.body) as { messages: Array<{ role: string; content: string }> };
+  expect(followUp.messages.at(-1)).toMatchObject({ role: 'user' });
+  expect(followUp.messages.at(-1)!.content).toContain('Claude');
+  // The collapsed gadget already shows the decision, so the follow-up is not
+  // repeated as a message from the user in the transcript.
+  await expect(win.locator('[data-testid="session-chat-thread"]')).not.toContainText('Gadget response');
+
+  // The gadget is durable, not a transient renderer detail. Reloading the
+  // selected session restores the completed choice without triggering another
+  // provider request.
+  await win.reload();
+  await openFromPalette(win, 'Conversations');
+  await expect(win.locator('[data-testid="gadget-choice"]')).toHaveAttribute('data-gadget-state', 'completed');
+  await expect(win.locator('[data-testid="gadget-choice"]')).toContainText('This decision has been made');
+  // The chosen answer survives the reload, read back from the ledger.
+  await expect(win.locator('[data-testid="gadget-choice"] [data-testid="gadget-answered"]')).toContainText('Claude');
+  expect(mock!.requests).toHaveLength(2);
+
+  // The decision is in the durable ledger, with the evidence of what was asked.
+  const record = await win.evaluate(async () => {
+    const events = await window.praxis.gadgets.replay(0);
+    return events.map(event => ({ status: event.status, gadgetId: event.gadgetId }));
+  });
+  expect(record).toEqual([{ status: 'accepted', gadgetId: 'fx-choice' }, { status: 'completed', gadgetId: 'fx-choice' }]);
+  expect(mock!.requests).toHaveLength(2);
+});
+
+test('a second answer to the same gadget is refused, not applied twice', async () => {
+  const [choice] = buildGadgetFixtures(FIXTURE_OPTIONS);
+  const win = await sessionWithReply(buildGadgetFenceMessage([choice]));
+
+  const gadget = win.locator('[data-testid="gadget-choice"]');
+  await gadget.getByRole('radio', { name: /Claude/ }).check();
+  await gadget.locator('[data-testid="gadget-action-pick"]').click();
+  await expect(gadget).toHaveAttribute('data-gadget-state', 'completed');
+
+  // Re-submitting the identical decision replays the recorded outcome rather
+  // than running it again; a *different* answer is refused as already settled.
+  const [replayed, changed] = await win.evaluate(async () => {
+    const sessionId = (await window.praxis.ai.listSessions())[0].sessionId;
+    const base = { sessionId, gadgetId: 'fx-choice', actionId: 'pick' } as const;
+    return [
+      await window.praxis.gadgets.submit({
+        ...base,
+        value: { kind: 'choice', selected: 'claude' },
+        idempotencyKey: `${sessionId}:fx-choice:pick`
+      }),
+      await window.praxis.gadgets.submit({
+        ...base,
+        value: { kind: 'choice', selected: 'codex' },
+        idempotencyKey: `${sessionId}:fx-choice:pick-2`
+      })
+    ];
+  });
+
+  expect(replayed.replay).toBe(true);
+  expect(replayed.status).toBe('completed');
+  expect(changed.status).toBe('rejected');
+  expect(changed.error?.code).toBe('already-submitted');
+});
+
+test('a malformed, unknown or unsafe gadget degrades to readable text', async () => {
+  const failures = buildGadgetFailureFixtures(FIXTURE_OPTIONS);
+  const win = await sessionWithReply(buildGadgetFenceMessage(failures, 'Some of these are broken on purpose.'));
+
+  const fallbacks = win.locator('[data-testid="gadget-block-fallback"]');
+  await expect(fallbacks).toHaveCount(failures.length);
+
+  // Each one says *why*, and none of them renders an interactive surface.
+  await expect(fallbacks.filter({ hasText: 'not a gadget kind' })).toHaveCount(1);
+  await expect(fallbacks.filter({ hasText: 'contract version' })).toHaveCount(1);
+  await expect(fallbacks.filter({ hasText: 'limit is' })).toHaveCount(1);
+  await expect(fallbacks.filter({ hasText: 'workflow gate' })).toHaveCount(1);
+  await expect(fallbacks.filter({ hasText: 'traverse outside the workspace' })).toHaveCount(1);
+  await expect(win.locator('[data-testid="gadget-choice"]')).toHaveCount(0);
+
+  // When the producer supplied no fallback text of its own, the refusal reason
+  // is the body — it must not also be repeated underneath as a detail line.
+  const versionFailure = fallbacks.filter({ hasText: 'contract version' });
+  await expect(versionFailure.locator('.gadget-fallback-detail')).toHaveCount(0);
+  // The one fixture that *did* supply its own text keeps both: its words, and
+  // the reason its surface could not be drawn.
+  const unknownKind = fallbacks.filter({ hasText: 'a surface this build does not have' });
+  await expect(unknownKind.locator('.gadget-fallback-detail')).toContainText('not a gadget kind');
+
+  await win.screenshot({ path: 'output/playwright/chat-gadgets-fallbacks.png', fullPage: true });
+});
+
+test('an expired gadget says so and refuses an answer', async () => {
+  const win = await sessionWithReply('Deciding.');
+  const expired = buildExpiredGadgetFixture(FIXTURE_OPTIONS);
+
+  const result = await win.evaluate(async fixture => {
+    const sessionId = (await window.praxis.ai.listSessions())[0].sessionId;
+    // Publish through the host so scope is real; the fixture's own expiry has
+    // already passed by the time it is read back.
+    await window.praxis.gadgets.publish(sessionId, [
+      {
+        ...fixture,
+        blockId: 'msg-0-expired',
+        gadget: {
+          ...(fixture.gadget as Record<string, unknown>),
+          scope: { hostId: 'unused', sessionId },
+          issuedAt: new Date(Date.now() - 60_000).toISOString(),
+          expiresAt: new Date(Date.now() - 30_000).toISOString()
+        }
+      }
+    ]);
+    return window.praxis.gadgets.submit({
+      sessionId,
+      gadgetId: 'fx-expired',
+      actionId: 'pick',
+      value: { kind: 'choice', selected: 'a' },
+      idempotencyKey: 'expired-attempt'
+    });
+  }, expired);
+
+  expect(result.status).toBe('rejected');
+  expect(result.error?.code).toBe('gadget-expired');
+
+  const gadget = win.locator('[data-testid="gadget-choice"]');
+  await expect(gadget).toHaveAttribute('data-gadget-state', 'expired');
+  await expect(gadget.locator('[data-testid="gadget-inert-note"]')).toContainText('expired');
+  await expect(gadget.locator('[data-testid="gadget-action-pick"]')).toBeDisabled();
+});
+
+test('an action aimed at another session is refused by scope', async () => {
+  const [choice] = buildGadgetFixtures(FIXTURE_OPTIONS);
+  const win = await sessionWithReply(buildGadgetFenceMessage([choice]));
+
+  const result = await win.evaluate(async () =>
+    window.praxis.gadgets.submit({
+      sessionId: 'a-session-that-does-not-exist',
+      gadgetId: 'fx-choice',
+      actionId: 'pick',
+      value: { kind: 'choice', selected: 'claude' },
+      idempotencyKey: 'wrong-session'
+    })
+  );
+  expect(result.status).toBe('rejected');
+  expect(result.error?.code).toBe('scope-mismatch');
+});
+
+test('gadget surfaces are keyboard reachable and carry their semantics', async () => {
+  const catalogue = buildGadgetFixtures(FIXTURE_OPTIONS);
+  const win = await sessionWithReply(buildGadgetFenceMessage(catalogue));
+
+  // Radio groups are real groups, labelled by the question they belong to.
+  const choice = win.locator('[data-testid="gadget-choice"]');
+  const group = choice.getByRole('radiogroup');
+  await expect(group).toHaveAttribute('aria-labelledby', /fx-choice-title/);
+  await expect(choice.getByRole('radio')).toHaveCount(3);
+
+  // Keyboard: focus the first enabled option and choose it without a pointer.
+  const first = choice.getByRole('radio', { name: /Claude/ });
+  // `:focus-visible` only engages for a real keyboard interaction, so focus is
+  // moved away and back with Tab — the same approach keyboardFocus.spec.ts uses.
+  await first.focus();
+  await win.keyboard.press('Tab');
+  await win.keyboard.press('Shift+Tab');
+  await expect(first).toBeFocused();
+  // The global focus ring must actually paint — a control that shows nothing
+  // when focused is invisible to anyone driving the app from the keyboard.
+  const outline = await first.evaluate(element => {
+    const style = getComputedStyle(element);
+    return { width: style.outlineWidth, style: style.outlineStyle };
+  });
+  expect(outline.style, 'the focused option painted no ring').not.toBe('none');
+  expect(outline.width).not.toBe('0px');
+  await win.keyboard.press('Space');
+  await expect(first).toBeChecked();
+
+  // Progress exposes its value rather than faking one.
+  const progress = win.locator('[data-testid="gadget-progress"]').getByRole('progressbar');
+  await expect(progress).toHaveAttribute('aria-valuenow', '60');
+  await expect(progress).toHaveAttribute('aria-label', 'Delivery run');
+
+  // A table is a real table with scoped headers.
+  const table = win.locator('[data-testid="gadget-table"] table');
+  await expect(table.locator('th[scope="col"]')).toHaveCount(3);
+  await expect(table.locator('tbody tr')).toHaveCount(3);
+
+  // A chart is never only a picture — the numbers are always present too.
+  const chart = win.locator('[data-testid="gadget-chart"]');
+  await expect(chart.getByRole('img')).toHaveAttribute('aria-label', /trending down/);
+  await expect(chart.locator('details summary')).toContainText('Chart data');
+
+  // Form labels are associated with their controls.
+  const form = win.locator('[data-testid="gadget-form"]');
+  await expect(form.getByLabel('Summary')).toBeVisible();
+  await expect(form.getByLabel('Contains breaking changes')).toBeVisible();
+
+  // The approval gadget names the gate it opens rather than hiding it.
+  await expect(win.locator('[data-testid="gadget-approval"]')).toContainText('deployment.staging');
+});
+
+test('a form will not submit until its required fields are filled', async () => {
+  const form = buildGadgetFixtures(FIXTURE_OPTIONS).find(
+    block => block.type === 'gadget' && (block.gadget as { kind: string }).kind === 'form'
+  )!;
+  const win = await sessionWithReply(buildGadgetFenceMessage([form]));
+
+  const gadget: Locator = win.locator('[data-testid="gadget-form"]');
+  const save = gadget.locator('[data-testid="gadget-action-save"]');
+  await expect(save).toBeDisabled();
+  await expect(gadget).toContainText('Still needed: Summary');
+
+  await gadget.getByLabel('Summary').fill('Ship the gadget work');
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(gadget.locator('[data-testid="gadget-result"]')).toContainText('Recorded');
+});
+
+test('a conflict gadget refuses to resolve until every side is chosen', async () => {
+  const conflict = buildGadgetFixtures(FIXTURE_OPTIONS).find(
+    block => block.type === 'gadget' && (block.gadget as { kind: string }).kind === 'conflict'
+  )!;
+  const win = await sessionWithReply(buildGadgetFenceMessage([conflict]));
+
+  const gadget = win.locator('[data-testid="gadget-conflict"]');
+  const resolve = gadget.locator('[data-testid="gadget-action-resolve"]');
+  await expect(resolve).toBeDisabled();
+  await expect(gadget).toContainText('2 conflicts still to resolve');
+
+  // Praxis never preselects a side, so both have to be answered deliberately.
+  await gadget.getByRole('radiogroup').first().getByRole('radio').first().check();
+  await expect(resolve).toBeDisabled();
+  await expect(gadget).toContainText('1 conflict still to resolve');
+
+  await gadget.getByRole('radiogroup').nth(1).getByRole('radio').nth(1).check();
+  await expect(resolve).toBeEnabled();
+  await resolve.click();
+  await expect(gadget.locator('[data-testid="gadget-result"]')).toContainText('Recorded');
+});
+
+test('Open in Workspace opens an HTML artifact from the session page too', async () => {
+  // The session page (AgentDetailsPage) is where a session opened from the
+  // sidebar or palette lands. It once had no artifact dock, so the button
+  // dispatched its event into nothing. The page's script must also run, since
+  // a design mockup draws itself with JavaScript.
+  const html = '<!doctype html><html><head><title>Design</title></head><body><main id="root"></main>' +
+    '<script>document.getElementById("root").innerHTML = "<h1 class=\\"drawn\\">Quiet Gallery</h1>";</script></body></html>';
+  const artifact = {
+    type: 'gadget' as const,
+    blockId: 'artifact-design-block',
+    gadget: {
+      version: 1,
+      kind: 'artifact',
+      gadgetId: 'artifact-design',
+      payload: { title: 'Designs', artifacts: [{ name: 'quiet-gallery.html', path: 'quiet-gallery.html', mediaType: 'text/html' }] },
+      actions: []
+    }
+  };
+  const win = await sessionWithReply(
+    buildGadgetFenceMessage([artifact], 'The design is attached.'),
+    { htmlFile: { fileName: 'quiet-gallery.html', contents: html } }
+  );
+  await openSession(win);
+  const page = win.locator('[data-testid="agent-details-page"]');
+  await expect(page).toBeVisible();
+
+  // The card shows a rendered snapshot of the page, the name without its path,
+  // and icon-only actions whose names are their tooltips.
+  const card = page.locator('[data-testid="gadget-artifact-card"]');
+  await expect(card.locator('[data-testid="gadget-artifact-thumb"] img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/, { timeout: 15000 });
+  await expect(card.locator('.gadget-artifact-path')).toHaveCount(0);
+  await expect(card.locator('[data-testid="gadget-artifact-open-dock"]')).toHaveAttribute('aria-label', 'Open in Artifact Workspace');
+  await expect(card.locator('[data-testid="gadget-artifact-open-dock"]')).toHaveText('');
+  await expect(card.locator('[data-testid="gadget-artifact-html-preview"]')).toHaveAttribute('aria-label', 'Pop out in a separate window');
+  await expect(card.locator('[data-testid="gadget-artifact-save"]')).toHaveText('');
+  const cardBox = await card.boundingBox();
+  if (cardBox) {
+    await win.screenshot({
+      path: path.resolve(__dirname, '../../.praxis/session-artifacts/artifact-gadget-thumbnail-card.png'),
+      clip: { x: cardBox.x - 16, y: cardBox.y - 16, width: cardBox.width + 32, height: cardBox.height + 32 }
+    });
+  }
+
+  await page.locator('[data-testid="gadget-artifact-open-dock"]').click();
+  const dock = page.locator('[data-testid="session-artifact-dock"]');
+  await expect(dock).toBeVisible();
+  await expect(dock.locator('[data-testid="artifact-dock-title"]')).toHaveText('quiet-gallery.html');
+  await expect(dock.locator('[data-testid="artifact-preview-html"] iframe').contentFrame().locator('h1.drawn')).toHaveText('Quiet Gallery');
+
+  // Closing it hands the space back; the header toggle brings the same artifact back.
+  await dock.getByRole('button', { name: 'Close Artifact Workspace' }).click();
+  await expect(dock).toHaveCount(0);
+  await page.locator('[data-testid="agent-details-artifact-toggle"]').click();
+  await expect(page.locator('[data-testid="artifact-dock-title"]')).toHaveText('quiet-gallery.html');
+});
