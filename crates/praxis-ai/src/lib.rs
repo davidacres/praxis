@@ -18,5 +18,6 @@ pub mod acp;
 pub mod gadgets;
 pub mod mcp;
 pub mod providers;
+pub mod session;
 pub mod team_chat;
 pub mod usage_stats;

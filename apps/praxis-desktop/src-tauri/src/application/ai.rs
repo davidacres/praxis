@@ -8,9 +8,6 @@ use uuid::Uuid;
 use super::storage::{parse, read, write_atomic};
 use super::{Result, failure, now, text};
 
-fn sessions_file(user_data_dir: &Path) -> std::path::PathBuf {
-    user_data_dir.join("ai-sessions.json")
-}
 
 fn analysis_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("ai-analysis.json")
@@ -21,40 +18,11 @@ fn feedback_file(user_data_dir: &Path) -> std::path::PathBuf {
 }
 
 fn read_sessions(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
-    let path = sessions_file(user_data_dir);
-    if let Some(content) = read(&path)? {
-        let val = parse(&path, Some(&content))?;
-        let sessions = val
-            .get("praxis.agentSessions")
-            .or_else(|| val.get("praxis.aiSessions.v1"));
-        if let Some(sessions) = sessions {
-            let sessions = sessions
-                .as_object()
-                .ok_or_else(|| failure("Invalid session index: expected a session map."))?;
-            let mut map = BTreeMap::new();
-            for (k, v) in sessions {
-                map.insert(k.clone(), v.clone());
-            }
-            return Ok(map);
-        }
-    }
-    Ok(BTreeMap::new())
+    super::session_store::store(user_data_dir).all()
 }
 
 fn save_sessions(user_data_dir: &Path, sessions: &BTreeMap<String, Value>) -> Result<()> {
-    let path = sessions_file(user_data_dir);
-    let raw = read(&path)?;
-    let mut document = parse(&path, raw.as_deref())?;
-    let key = if document.get("praxis.agentSessions").is_some()
-        || document.get("praxis.aiSessions.v1").is_none()
-    {
-        "praxis.agentSessions"
-    } else {
-        "praxis.aiSessions.v1"
-    };
-    document[key] = json!(sessions);
-    let encoded = super::storage::encoded(&document)?;
-    write_atomic(&path, &encoded, false)
+    super::session_store::store(user_data_dir).replace_all(sessions.clone())
 }
 
 fn read_analysis(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
@@ -369,14 +337,7 @@ pub fn dispatch(
                 Err(failure(format!("Session {issue_key} was not found.")))
             }
         }
-        "ai:delegate" => {
-            let target = text(args, 0).unwrap_or("subagent");
-            Ok(json!({ "delegated": true, "target": target }))
-        }
-        "ai:abort" | "ai:stopConversation" => {
-            let issue_key = text(args, 0).unwrap_or("");
-            Ok(json!({ "aborted": true, "issueKey": issue_key }))
-        }
+        "ai:stopConversation" => Ok(Value::Null),
         "ai:continueSession" => {
             let issue_key = text(args, 0)?;
             let prompt = text(args, 1).unwrap_or("");
@@ -504,16 +465,6 @@ pub fn dispatch(
             let issue_key = text(args, 0)?;
             let mode = text(args, 1).unwrap_or("interactive");
             Ok(json!({ "issueKey": issue_key, "mode": mode }))
-        }
-        "ai:setAcpMode" => {
-            let issue_key = text(args, 0)?;
-            let mode = text(args, 1).unwrap_or("supervisor");
-            Ok(json!({ "issueKey": issue_key, "acpMode": mode }))
-        }
-        "ai:respondToPermission" => {
-            let req_id = text(args, 0).unwrap_or("");
-            let granted = args.get(1).and_then(Value::as_bool).unwrap_or(true);
-            Ok(json!({ "requestId": req_id, "granted": granted }))
         }
         "ai:undoToolFileChange" => Ok(json!({ "undone": true })),
 

@@ -2,7 +2,10 @@
 mod activity;
 mod agent_runtime;
 mod ai;
+mod acp_host;
+mod ai_delegate;
 mod ai_models;
+mod session_store;
 mod ai_providers;
 mod ai_usage;
 mod artifacts;
@@ -430,6 +433,12 @@ impl Application {
         match channel {
             "ai:listSessions" | "ai:getSession" => {
                 return ai::dispatch(host, &host.config().user_data_dir, channel, args);
+            }
+            // Launching only spawns, and an abort can take seconds: neither may hold the profile lock.
+            _ if ai_delegate::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
             }
             "assistant:listChats" | "assistant:getChat" | "assistant:getConversation" => {
                 return assistant::dispatch(host, &host.config().user_data_dir, channel, args);
