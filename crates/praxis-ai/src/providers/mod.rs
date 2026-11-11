@@ -13,6 +13,7 @@ pub mod model_catalog;
 pub mod model_pricing;
 pub mod provider_limit_error;
 pub mod provider_preflight;
+pub mod provider_probe;
 pub mod reasoning_support;
 pub mod registry;
 pub mod wire;

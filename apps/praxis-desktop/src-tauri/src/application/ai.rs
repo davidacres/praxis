@@ -144,11 +144,6 @@ pub fn dispatch(
         }
         "ai:getLatestCliProviderVersion" => Ok(json!({ "version": "1.0.0", "upToDate": true })),
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
-        "ai:testCustomProvider" => Ok(json!({ "ok": true, "models": [] })),
-        "ai:saveCustomProvider" => {
-            let custom = args.first().cloned().unwrap_or_else(|| json!({}));
-            Ok(json!({ "ok": true, "provider": custom }))
-        }
 
         // 2. Code intelligence & semantic model
         "ai:codeIntelligence" => Ok(json!({ "results": [], "totalMatches": 0 })),

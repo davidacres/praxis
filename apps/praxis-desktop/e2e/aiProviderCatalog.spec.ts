@@ -218,7 +218,7 @@ test('a custom endpoint is tested, saved, listed with its capabilities and runs 
   await win.screenshot({ path: path.join(shots, 'ai-provider-custom-form.png') });
 
   // Button clusters never overlap, even with the window narrowed.
-  await app!.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1024, 760));
+  await win.setViewportSize({ width: 1024, height: 760 });
   await expectNoOverlap(form.locator('.custom-endpoint-actions'), form.locator('.custom-endpoint-actions > .btn'));
   await win.screenshot({ path: path.join(shots, 'ai-provider-custom-form-narrow.png') });
 
@@ -330,7 +330,7 @@ test('an endpoint without tool calling is listed as chat only, kept out of sessi
 
 test('the built-in API key row keeps its buttons inside the row without overlapping', async () => {
   const win = await launch();
-  await app!.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1024, 760));
+  await win.setViewportSize({ width: 1024, height: 760 });
   await openAiSettings(win);
   const body = win.getByTestId('ai-provider-body-vercel-gateway');
   await expect(body).toBeVisible();

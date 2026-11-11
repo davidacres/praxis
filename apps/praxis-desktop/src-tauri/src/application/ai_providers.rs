@@ -9,7 +9,9 @@ use praxis_ai::providers::registry::{
     API_KEY_PROVIDERS, DescriptorKind, provider_presets, ProviderDescriptor, built_in_descriptors, gateway_key_from_env, is_custom_provider_id,
     is_executable_available, probe_cli_provider, secret_key_for_provider,
 };
-use praxis_ai::providers::model_catalog::{GatewayOptions, fetch_models};
+use praxis_ai::providers::model_catalog::{GatewayOptions, KeyAuth, fetch_models};
+use praxis_ai::providers::provider_probe::probe_openai_compatible;
+use praxis_core::config::custom_providers::{custom_base_url_problem, custom_header_name_problem, custom_provider_id_for, sanitize_custom_provider};
 use praxis_host::HostContext;
 use super::runtime::{block_on, runtime};
 use serde_json::{Value, json};
@@ -21,6 +23,15 @@ struct Resolved {
     descriptor: ProviderDescriptor,
     /// `Some` for a custom endpoint: its serialized config.
     custom: Option<Value>,
+}
+
+/// Writes a settings patch and tells the renderer, as `settings:set` does. A handler that writes
+/// settings without this leaves open windows showing stale data until they next reload.
+fn write_settings(host: &HostContext, patch: &Value) -> Result<()> {
+    let updated = host.settings().write(patch).map_err(failure)?;
+    host.git_service().set_configured_executable(updated.git.executable_path.clone());
+    host.events().emit("settings:changed", Some(serde_json::to_value(updated).map_err(failure)?));
+    Ok(())
 }
 
 fn custom_configs(host: &HostContext) -> Vec<Value> {
@@ -185,12 +196,112 @@ fn detect_local_runtimes() -> Vec<Value> {
     })
 }
 
+/// Connection options for a (sanitized) custom endpoint config.
+fn custom_options(config: &Value, api_key: Option<String>) -> GatewayOptions {
+    let mut options = GatewayOptions::new(config["baseUrl"].as_str().unwrap_or_default(), api_key);
+    options.api_path = config["apiPath"].as_str().map(str::to_owned);
+    options.exact_path = true;
+    options.auth = match config["auth"]["kind"].as_str() {
+        Some("none") => KeyAuth::None,
+        Some("header") => KeyAuth::Header(config["auth"]["name"].as_str().unwrap_or("Authorization").to_owned()),
+        _ => KeyAuth::Bearer,
+    };
+    options.headers = config["headers"].as_object().map(|map| map.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_owned()))).collect()).unwrap_or_default();
+    options
+}
+
+fn sanitized(draft: &Value) -> Option<Value> {
+    sanitize_custom_provider(draft).and_then(|config| serde_json::to_value(config).ok())
+}
+
+/// Runs the capability probe against a saved endpoint or an unsaved draft. A typed key is used
+/// for this call only and never stored. The result is written back to the saved endpoint only
+/// when the probe targeted exactly what is saved.
+fn test_custom_provider(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let config = sanitized(args.first().unwrap_or(&Value::Null)).ok_or_else(|| failure("Check the endpoint URL and authentication."))?;
+    let options = args.get(1).cloned().unwrap_or(Value::Null);
+    let typed_key = options["apiKey"].as_str().map(str::trim).filter(|key| !key.is_empty()).map(str::to_owned);
+    let id = config["id"].as_str().unwrap_or_default().to_owned();
+    let api_key = typed_key.clone().or_else(|| if config["auth"]["kind"] == "none" { None } else { stored_key(host, &id) });
+    let result = block_on(probe_openai_compatible(&custom_options(&config, api_key), options["model"].as_str()));
+
+    let customs = custom_configs(host);
+    if let Some(saved) = customs.iter().find(|saved| saved["id"] == id)
+        && typed_key.is_none()
+        && saved["baseUrl"] == config["baseUrl"]
+        && saved["apiPath"] == config["apiPath"]
+        && saved["auth"]["kind"] == config["auth"]["kind"]
+    {
+        let capabilities = result["capabilities"].clone();
+        let keep_stream_usage = capabilities["streamUsage"] == true || capabilities["streaming"] != true;
+        let updated: Vec<Value> = customs
+            .iter()
+            .map(|provider| {
+                if provider["id"] != id {
+                    return provider.clone();
+                }
+                let mut next = provider.clone();
+                next["capabilities"] = capabilities.clone();
+                if !keep_stream_usage {
+                    next["streamUsage"] = json!(false);
+                }
+                next
+            })
+            .collect();
+        write_settings(host, &json!({ "ai": { "customProviders": updated } }))?;
+    }
+    Ok(result)
+}
+
+/// Adds or updates a custom endpoint and its key, validating it the way settings load does.
+fn save_custom_provider(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let input = args.first().cloned().unwrap_or(Value::Null);
+    let mut draft = input["config"].clone();
+    let existing = custom_configs(host);
+    let existing_ids: Vec<String> = existing.iter().filter_map(|config| config["id"].as_str().map(str::to_owned)).collect();
+    let requested = draft["id"].as_str().map(str::to_owned);
+    let is_update = requested.as_ref().is_some_and(|id| existing_ids.contains(id));
+    let id = match (&requested, is_update) {
+        (Some(id), true) => id.clone(),
+        _ => custom_provider_id_for(draft["label"].as_str().unwrap_or_default(), &existing_ids),
+    };
+    if let Some(problem) = custom_base_url_problem(draft["baseUrl"].as_str().unwrap_or_default()) {
+        return Err(failure(problem));
+    }
+    for name in draft["headers"].as_object().map(|headers| headers.keys().cloned().collect::<Vec<_>>()).unwrap_or_default() {
+        if let Some(problem) = custom_header_name_problem(&name) {
+            return Err(failure(problem));
+        }
+    }
+    draft["id"] = json!(id);
+    let config = sanitized(&draft).ok_or_else(|| failure("Check the endpoint name, URL and authentication."))?;
+    let customs: Vec<Value> = if is_update {
+        existing.iter().map(|provider| if provider["id"] == id { config.clone() } else { provider.clone() }).collect()
+    } else {
+        existing.iter().cloned().chain(std::iter::once(config.clone())).collect()
+    };
+    let mut ai = json!({ "customProviders": customs });
+    if let Some(model) = input["defaultModel"].as_str() {
+        let trimmed = model.trim();
+        ai["providers"] = json!({ id.clone(): { "defaultModel": if trimmed.is_empty() { Value::Null } else { json!(trimmed) } } });
+    }
+    write_settings(host, &json!({ "ai": ai }))?;
+    if config["auth"]["kind"] == "none" {
+        store_or_clear(host, &id, "")?;
+    } else if let Some(key) = input["apiKey"].as_str() {
+        store_or_clear(host, &id, key)?;
+    }
+    Ok(config)
+}
+
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:getStatus" => active_status(host),
         "ai:listProviderStatuses" => Ok(json!(list_statuses(host))),
         "ai:listProviderPresets" => Ok(json!(provider_presets())),
         "ai:detectLocalRuntimes" => Ok(json!(detect_local_runtimes())),
+        "ai:testCustomProvider" => test_custom_provider(host, args),
+        "ai:saveCustomProvider" => save_custom_provider(host, args),
         "ai:setApiKey" => {
             let active = host.settings().read().ai.active_provider.clone();
             store_or_clear(host, &active, text(args, 0).unwrap_or_default()).and_then(|()| active_status(host))
@@ -211,7 +322,7 @@ pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Res
                 return Err(failure(format!("“{id}” is a built-in provider and can't be removed.")));
             }
             let remaining: Vec<Value> = custom_configs(host).into_iter().filter(|config| config["id"] != id).collect();
-            host.settings().write(&json!({ "ai": { "customProviders": remaining } })).map_err(failure)?;
+            write_settings(host, &json!({ "ai": { "customProviders": remaining } }))?;
             store_or_clear(host, id, "")?;
             Ok(Value::Null)
         })(),
