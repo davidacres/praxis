@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use chrono::{SecondsFormat, Utc};
 use praxis_host::HostContext;
+use praxis_workflows::validation::validate_workflow;
 use praxis_workflows::gates::{GateBypassInput, approve_stage, bypass_gate};
 use praxis_workflows::run::{
     CreateWorkflowRunInput, DeclaredArtifact, LoopDecisionKind, ReworkOptions, WorkflowRun,
@@ -509,6 +510,22 @@ pub fn promote_pack(host: &HostContext, args: &[Value]) -> Result<Value> {
 pub fn save(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
     let val = args.get(1).ok_or_else(|| failure("definition required"))?;
+    if val.get("scope").and_then(Value::as_str) != Some("project")
+        || val.get("projectId").and_then(Value::as_str) != Some(project_id)
+    {
+        return Err(failure(
+            "The designer can only save a project-scoped workflow for its own project.",
+        ));
+    }
+    let result = validate_workflow(val, None);
+    if !result.valid() {
+        let detail: Vec<String> = result
+            .errors
+            .iter()
+            .map(|issue| format!("{}: {}", issue.path, issue.message))
+            .collect();
+        return Err(failure(format!("Workflow is invalid: {}", detail.join("; "))));
+    }
     let mut def: WorkflowDefinition = serde_json::from_value(val.clone()).map_err(failure)?;
     def.project_id = Some(project_id.to_string());
     def.updated_at = now();
@@ -523,11 +540,23 @@ pub fn remove(host: &HostContext, args: &[Value]) -> Result<Value> {
     Ok(Value::Null)
 }
 
-pub fn validate(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({
-        "valid": true,
-        "errors": []
-    }))
+fn policy_value_for(host: &HostContext, project_id: &str) -> Option<Value> {
+    effective_policy(host, &[json!(project_id)])
+        .ok()
+        .filter(|v| !v.is_null())
+}
+
+pub fn validate(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let definition = args
+        .get(1)
+        .or_else(|| args.first())
+        .ok_or_else(|| failure("definition required"))?;
+    let project_id = args
+        .first()
+        .and_then(Value::as_str)
+        .or_else(|| definition.get("projectId").and_then(Value::as_str));
+    let policy = project_id.and_then(|id| policy_value_for(host, id));
+    Ok(validate_workflow(definition, policy.as_ref()).to_json())
 }
 
 pub fn assistant(_host: &HostContext, args: &[Value]) -> Result<Value> {
