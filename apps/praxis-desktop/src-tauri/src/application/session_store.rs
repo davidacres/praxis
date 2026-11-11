@@ -20,7 +20,13 @@ const TRANSCRIPT_FIELDS: [&str; 5] = ["events", "planText", "reasoningText", "re
 pub struct SessionStore {
     dir: PathBuf,
     state: Mutex<State>,
+    /// A background write is already queued; further changes ride along with it.
+    flush_queued: std::sync::atomic::AtomicBool,
 }
+
+/// How long changes are coalesced before they are written. Streaming updates arrive many times a
+/// second; the original persisted asynchronously for the same reason.
+const FLUSH_DELAY: std::time::Duration = std::time::Duration::from_millis(60);
 
 #[derive(Default)]
 struct State {
@@ -34,7 +40,7 @@ struct State {
 pub fn store(user_data_dir: &Path) -> Arc<SessionStore> {
     static STORES: OnceLock<Mutex<HashMap<PathBuf, Arc<SessionStore>>>> = OnceLock::new();
     let mut all = STORES.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    Arc::clone(all.entry(user_data_dir.to_path_buf()).or_insert_with(|| Arc::new(SessionStore { dir: user_data_dir.to_path_buf(), state: Mutex::default() })))
+    Arc::clone(all.entry(user_data_dir.to_path_buf()).or_insert_with(|| Arc::new(SessionStore { dir: user_data_dir.to_path_buf(), state: Mutex::default(), flush_queued: std::sync::atomic::AtomicBool::new(false) })))
 }
 
 fn transcript_path(dir: &Path, session_id: &str) -> PathBuf {
@@ -121,17 +127,33 @@ impl SessionStore {
 
     /// Applies `change` to a record and returns the result. `persist` writes it through to disk;
     /// streaming updates pass `false` and are written when the turn settles.
-    pub fn mutate(&self, issue_key: &str, persist: bool, change: impl FnOnce(&mut Value)) -> Result<Option<Value>> {
+    pub fn mutate(self: &Arc<Self>, issue_key: &str, persist: bool, change: impl FnOnce(&mut Value)) -> Result<Option<Value>> {
         let mut state = self.lock()?;
         let Some(mut record) = state.records.get(issue_key).cloned() else { return Ok(None) };
         self.hydrate(&mut record);
         change(&mut record);
         state.records.insert(issue_key.to_owned(), record.clone());
         state.dirty.insert(issue_key.to_owned());
+        drop(state);
         if persist {
-            self.persist_locked(&mut state, Some(issue_key))?;
+            self.queue_flush();
         }
         Ok(Some(record))
+    }
+
+    /// Writes pending changes shortly, off the caller's thread, once for any burst of updates.
+    fn queue_flush(self: &Arc<Self>) {
+        if self.flush_queued.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        let store = Arc::clone(self);
+        std::thread::spawn(move || {
+            std::thread::sleep(FLUSH_DELAY);
+            store.flush_queued.store(false, std::sync::atomic::Ordering::SeqCst);
+            if let Err(error) = store.flush() {
+                eprintln!("[sessions] could not save: {}", error.message);
+            }
+        });
     }
 
     /// Writes the index, and the transcript of `only` (or every dirty one).
@@ -209,6 +231,7 @@ mod tests {
             record["state"] = json!("completed");
         })
         .expect("mutate");
+        s.flush().expect("flush");
 
         let index: Value = serde_json::from_str(&std::fs::read_to_string(dir.join(INDEX_FILE)).expect("index")).expect("json");
         let slim = &index["praxis.agentSessions"]["SESSION-1"];
@@ -218,7 +241,7 @@ mod tests {
         assert_eq!((transcript["events"].as_array().map(Vec::len), transcript["responseText"].as_str()), (Some(2), Some("hello")));
 
         // A fresh store (a restart) rebuilds the record, hydrating events on demand.
-        let reopened = SessionStore { dir: dir.clone(), state: Mutex::default() };
+        let reopened = Arc::new(SessionStore { dir: dir.clone(), state: Mutex::default(), flush_queued: std::sync::atomic::AtomicBool::new(false) });
         let record = reopened.get("SESSION-1").expect("get").expect("record");
         assert_eq!((record["events"].as_array().map(Vec::len), record["responseText"].as_str(), record["state"].as_str()), (Some(2), Some("hello"), Some("completed")));
         let _ = std::fs::remove_dir_all(dir);

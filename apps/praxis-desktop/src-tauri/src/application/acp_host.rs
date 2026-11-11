@@ -122,6 +122,12 @@ pub fn active_keys(dir: &Path) -> Vec<String> {
     tasks().lock().map(|all| all.keys().filter(|(d, _)| d == dir).map(|(_, key)| key.clone()).collect()).unwrap_or_default()
 }
 
+/// Whether a turn is genuinely in flight. A turn that has reached a terminal state is only
+/// closing its connection, which must not make "wait for the turn to finish" checks fail.
+pub fn is_running(dir: &Path, key: &str) -> bool {
+    find_task(dir, key).is_some_and(|task| task.state().is_none_or(|state| !is_terminal(&state)))
+}
+
 pub fn has_active_task(dir: &Path, key: &str) -> bool {
     find_task(dir, key).is_some()
 }

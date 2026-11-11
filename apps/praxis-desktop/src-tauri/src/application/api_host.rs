@@ -14,6 +14,7 @@ use praxis_ai::providers::model_pricing::{estimate_turn_cost, get_known_context_
 use praxis_ai::providers::provider_limit_error::{extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error};
 use praxis_ai::providers::anthropic_wire::{AnthropicRequestOptions, anthropic_request_body, anthropic_stream_event};
 use praxis_ai::providers::gemini_wire::{GeminiRequestOptions, gemini_request_body, gemini_stream_event};
+use praxis_ai::providers::reasoning_support::{ReasoningEffort, ReasoningFamily, anthropic_thinking_config, detect_reasoning_family, gemini_thinking_budget};
 use praxis_ai::providers::wire::{
     ChatCompletionResult, ChatCompletionToolCall, ChatRequestOptions, ChatStreamEvent, EventStream, GatewayToolDefinition, OpenAiToolCall, SseEvent, TokenUsage, ToolResult, WireMessage,
     WireRole, assistant_message_with_tool_calls, build_chat_request, consume_chat_stream, parse_tool_arguments, tool_result_messages, trim_tool_output_to_budget,
@@ -193,7 +194,12 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
     while let Some(event) = sse.next_event().await {
         let event = event?;
         let parsed = match connection.wire {
-            Wire::Anthropic => anthropic_stream_event(event.event.as_deref().unwrap_or_default(), &event.data),
+            Wire::Anthropic => {
+                // Anthropic names each event twice (an `event:` line and the payload's `type`); some
+                // proxies and test servers send only the payload.
+                let named = event.event.clone().or_else(|| serde_json::from_str::<Value>(&event.data).ok().and_then(|p| p["type"].as_str().map(str::to_owned)));
+                anthropic_stream_event(named.as_deref().unwrap_or_default(), &event.data)
+            }
             _ => gemini_stream_event(&event.data),
         };
         match parsed {
@@ -257,6 +263,48 @@ fn tool_definitions(tool_mode: &str) -> Vec<GatewayToolDefinition> {
             all.push(tool("run_shell", "Run a shell command in the working directory and return stdout/stderr.", json!({ "type": "object", "properties": { "command": { "type": "string", "description": "Shell command to execute" } }, "required": ["command"] })));
             all
         }
+    }
+}
+
+fn parse_effort(effort: Option<&str>) -> Option<ReasoningEffort> {
+    match effort? {
+        "low" => Some(ReasoningEffort::Low),
+        "medium" => Some(ReasoningEffort::Medium),
+        "high" => Some(ReasoningEffort::High),
+        _ => None, // `off` and anything unknown request no reasoning
+    }
+}
+
+/// The reasoning request for the shared OpenAI-compatible wire. A model id routed through it can
+/// still be a Claude or Gemini model underneath (e.g. the gateway's `anthropic/claude-…`), which
+/// needs that provider's own shape through the `providerOptions` passthrough; everything else uses
+/// the standard `reasoning_effort` field. Nothing is sent unless a non-`off` level is selected.
+fn apply_openai_reasoning(body: &mut Value, model: &str, effort: Option<&str>) {
+    let Some(level) = parse_effort(effort) else { return };
+    match detect_reasoning_family(Some(model)) {
+        Some(ReasoningFamily::Anthropic) => {
+            if let Some(config) = anthropic_thinking_config(Some(model), Some(level))
+                && let Some(thinking) = config.thinking
+            {
+                let mut options = json!({ "thinking": thinking });
+                if let Some(output) = config.output_config {
+                    options["output_config"] = output;
+                }
+                if let Some(budget) = options["thinking"]["budget_tokens"].as_u64() {
+                    let current = body["max_tokens"].as_u64().unwrap_or(0);
+                    body["max_tokens"] = json!(current.max(budget + 1024));
+                }
+                // Anthropic rejects a custom temperature alongside thinking.
+                body.as_object_mut().map(|o| o.remove("temperature"));
+                body["providerOptions"]["anthropic"] = options;
+            }
+        }
+        Some(ReasoningFamily::Gemini) => {
+            if let Some(budget) = gemini_thinking_budget(Some(level)) {
+                body["providerOptions"]["google"] = json!({ "thinkingConfig": { "thinkingBudget": budget, "includeThoughts": true } });
+            }
+        }
+        _ => body["reasoning_effort"] = json!(level.as_str()),
     }
 }
 
@@ -439,7 +487,6 @@ enum Outcome {
 }
 
 async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, system: String, mut history: Vec<WireMessage>, tool_mode: &str, max_steps: u64, reasoning: Option<&str>) -> (Outcome, Vec<WireMessage>) {
-    let _ = reasoning;
     let tools = tool_definitions(tool_mode);
     // The gateway's internal model ids carry a `Vercel/` prefix that is not part of the wire id.
     let wire_model = model.strip_prefix("Vercel/").unwrap_or(model).to_owned();
@@ -464,10 +511,11 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 if !connection.stream_usage {
                     request.as_object_mut().map(|o| o.remove("stream_options"));
                 }
+                apply_openai_reasoning(&mut request, &wire_model, reasoning);
                 request
             }
             Wire::Anthropic => {
-                let mut request = anthropic_request_body(&messages, &wire_model, &AnthropicRequestOptions { tools: active_tools, ..AnthropicRequestOptions::default() });
+                let mut request = anthropic_request_body(&messages, &wire_model, &AnthropicRequestOptions { tools: active_tools, reasoning_effort: parse_effort(reasoning), ..AnthropicRequestOptions::default() });
                 request["stream"] = json!(true);
                 request
             }

@@ -388,19 +388,41 @@ pub fn dispatch(
         }
         "ai:updateSessionToolAccess" => {
             let issue_key = text(args, 0)?;
-            let access = args.get(1).cloned().unwrap_or_else(|| json!({}));
-            let mut sessions = read_sessions(user_data_dir)?;
-            let updated = if let Some(s) = sessions.get_mut(issue_key) {
-                s["toolAccess"] = access;
-                Some(s.clone())
-            } else {
-                None
-            };
-            if let Some(s) = updated {
-                save_sessions(user_data_dir, &sessions)?;
-                host.events().emit("ai:sessionChanged", Some(s));
+            if super::acp_host::is_running(user_data_dir, issue_key) {
+                return Err(failure("Wait for the current session turn to finish before changing tool access."));
             }
-            Ok(Value::Null)
+            let options = args.get(1).cloned().unwrap_or(Value::Null);
+            let sessions = super::session_store::store(user_data_dir);
+            let record = sessions.get(issue_key)?.ok_or_else(|| failure(format!("No agent session found for {issue_key}.")))?;
+            // A folder may be set or cleared; clearing it with no tool mode falls back to project-only.
+            let mut working = record["workingDirectory"].as_str().map(str::to_owned);
+            let mut tool_mode = record["toolMode"].as_str().map(str::to_owned);
+            if let Some(folder) = options.get("workingDirectory") {
+                working = folder.as_str().map(str::trim).filter(|f| !f.is_empty()).map(str::to_owned);
+                if working.is_none() && options["toolMode"].is_null() {
+                    tool_mode = Some("project-only".into());
+                }
+            }
+            if let Some(mode) = options["toolMode"].as_str() {
+                if matches!(mode, "full" | "read-only") && working.is_none() {
+                    return Err(failure("A working folder is required for file tools."));
+                }
+                tool_mode = Some(mode.to_owned());
+            }
+            let updated = sessions.mutate(issue_key, true, |r| {
+                match &working {
+                    Some(folder) => r["workingDirectory"] = json!(folder),
+                    None => {
+                        r.as_object_mut().map(|o| o.remove("workingDirectory"));
+                    }
+                }
+                if let Some(mode) = &tool_mode {
+                    r["toolMode"] = json!(mode);
+                }
+            })?;
+            let updated = updated.ok_or_else(|| failure(format!("No agent session found for {issue_key}.")))?;
+            host.events().emit("ai:sessionChanged", Some(updated.clone()));
+            Ok(updated)
         }
         "ai:handoverSession" => {
             let issue_key = text(args, 0)?;
