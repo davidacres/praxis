@@ -14,6 +14,7 @@ mod artifacts;
 mod assistant;
 mod board_prefs;
 mod boards;
+mod builtin_mcp;
 mod connections;
 mod deployments;
 mod gadgets;

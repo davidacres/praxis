@@ -197,7 +197,15 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     let key = settings_key;
     let command = prepared.plan.command.clone().ok_or_else(|| failure("No command is configured for this provider."))?;
     let args = prepared.plan.args.clone();
-    let mcp_servers = super::user_mcp::acp_servers(host, &tool_mode, &provider);
+    // Praxis's own tracker and coordination tools come first, then the servers the user added.
+    let mut mcp_servers: Vec<Value> = Vec::new();
+    if prepared.plan.state == "acp" {
+        if let Some(issue_key) = non_empty(&input, "issueKey") {
+            mcp_servers.extend(super::builtin_mcp::tracker_server(host, dir, &key, non_empty(&input, "connectionId"), &tool_mode).filter(|_| !issue_key.is_empty()));
+        }
+        mcp_servers.extend(super::builtin_mcp::coordination_server(dir, &key, working_directory.as_deref(), &tool_mode));
+    }
+    mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
 
     acp_host::start_task(host, dir, StartTask {
         issue, task, provider, model: non_empty(&input, "model").map(str::to_owned), reasoning_effort: Some(reasoning),
