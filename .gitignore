@@ -102,3 +102,4 @@ __pycache__/
 /gitleaks.sarif
 /osv.sarif
 /osv-report.sarif
+.agent-bin/

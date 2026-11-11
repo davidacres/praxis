@@ -277,7 +277,7 @@ export async function launchTestApp(
   const electronApp = backendHandle(backend, context);
   testAppProcesses.set(electronApp, backend);
   const window = context.pages()[0] ?? await context.newPage();
-  const baseUrl = process.env.PRAXIS_E2E_RENDERER_URL ?? 'http://localhost:5173';
+  const baseUrl = process.env.PRAXIS_E2E_RENDERER_URL ?? `http://localhost:${process.env.PRAXIS_E2E_PORT || 5173}`;
   window.on('console', message => {
     if (message.type() === 'error') console.log(`PAGE LOG [error]: ${message.text()}`);
   });

@@ -24,6 +24,9 @@ const SMOKE_SPECS = [
   'codeIntelligence', 'codeSearchDialog', 'gitGraph', 'gitOnboarding', 'quickCapture', 'whatChanged', 'mobileAccess'
 ].map(name => `${name}.spec.ts`);
 
+/** Each parallel checkout (agent worktree) serves its own renderer on its own port. */
+const rendererPort = Number.parseInt(process.env.PRAXIS_E2E_PORT ?? '', 10) || 5173;
+
 function configuredWorkers(): number {
   const explicit = Number.parseInt(process.env.PRAXIS_E2E_WORKERS ?? '', 10);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
@@ -37,13 +40,13 @@ export default defineConfig({
   workers: configuredWorkers(),
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${rendererPort}`,
     trace: 'retain-on-failure'
   },
   webServer: {
-    command: 'npx vite preview --port 5173 --outDir dist',
+    command: `npx vite preview --port ${rendererPort} --strictPort --outDir dist`,
     cwd: path.resolve(__dirname, 'renderer'),
-    port: 5173,
+    port: rendererPort,
     reuseExistingServer: !process.env.CI,
     timeout: 30000
   },
