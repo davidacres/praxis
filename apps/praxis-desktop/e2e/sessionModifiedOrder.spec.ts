@@ -28,9 +28,10 @@ test('session shelf follows latest activity despite an earlier completion', asyn
     const rows = page.getByTestId('session-shelf-spine');
     await expect(rows.first()).toHaveAttribute('data-session-key', 'SESSION-order-recent');
     const updated = { ...records[0], events: [{ timestamp: new Date(Date.now() + 1000).toISOString(), type: 'message', summary: 'Updated again' }] };
-    await app.electronApp.evaluate(({ BrowserWindow }, record) => {
-      BrowserWindow.getAllWindows()[0].webContents.send('ai:sessionChanged', record);
-    }, updated);
+    {
+      const record = updated;
+      await app.emitEvent('ai:sessionChanged', record);
+    }
     await expect(rows.first()).toHaveAttribute('data-session-key', 'SESSION-order-older');
     fs.mkdirSync(path.resolve(__dirname, '../../.praxis/session-artifacts'), { recursive: true });
     await page.screenshot({ path: path.resolve(__dirname, '../../.praxis/session-artifacts/session-modified-order.png') });

@@ -74,6 +74,14 @@ export interface TestApp {
    * page of the context unless `page` is given.
    */
   emitEvent(channel: string, payload?: unknown, page?: Page): Promise<void>;
+  /**
+   * Opens another window onto the same backend: a new page of the same browser context
+   * (so it shares storage, the channel overrides and the event stream, like a second
+   * `BrowserWindow` on the Electron main process). Defaults to the main window's URL.
+   */
+  openWindow(url?: string): Promise<Page>;
+  /** Every open window (page), main window first. */
+  windows(): Page[];
 }
 
 /**
@@ -390,8 +398,27 @@ export async function launchTestApp(
     }
   }
 
-  return {
+  const openWindow = async (url?: string): Promise<Page> => {
+    const page = await context.newPage();
+    page.on('console', message => {
+      if (message.type() === 'error') console.log(`PAGE LOG [error]: ${message.text()}`);
+    });
+    await page.goto(url ?? window.url());
+    await page.waitForLoadState('domcontentloaded');
+    return page;
+  };
+  // The native shell opens a real window for a detached chat; here that is another page.
+  // The channels still run on the backend, which owns the detached-chat state and its events.
+  const detached = new Map<string, Page>();
+  const detachedUrl = (key: string) => {
+    const url = new URL(window.url());
+    url.search = `?detachedSession=${encodeURIComponent(key)}`;
+    return url.toString();
+  };
+  const testApp: TestApp = {
     electronApp, window, userDataDir, settingsPath,
+    openWindow,
+    windows: () => context.pages(),
     async overrideChannel(channel, handler) { overrides.set(channel, handler); await syncOverrideNames(); },
     async restoreChannel(channel) { overrides.delete(channel); await syncOverrideNames(); },
     callBackend,
@@ -400,6 +427,23 @@ export async function launchTestApp(
       await Promise.all(targets.map(target => target.evaluate(envelope => (window as any).__praxisE2eEmit(envelope), { channel, payload })));
     }
   };
+  await testApp.overrideChannel('detachedChat:open', async ([key], backend) => {
+    const result = await backend.call('detachedChat:open', key);
+    if (!detached.get(key) || detached.get(key)!.isClosed()) {
+      const page = await openWindow(detachedUrl(key));
+      detached.set(key, page);
+      page.once('close', () => { detached.delete(key); });
+    }
+    return result;
+  });
+  await testApp.overrideChannel('detachedChat:close', async ([key], backend) => {
+    const result = await backend.call('detachedChat:close', key);
+    const page = detached.get(key);
+    detached.delete(key);
+    if (page && !page.isClosed()) await page.close();
+    return result;
+  });
+  return testApp;
 }
 
 /**

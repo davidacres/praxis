@@ -17,15 +17,17 @@ test.afterEach(async () => {
   folder = undefined;
 });
 
+/** The stand-in service's state, in the test process (it lived on globalThis of the Electron main process). */
+// eslint-disable-next-line prefer-const
+let ciStub: any;
 type Stub = { running: boolean; hasIndex?: boolean; repoState: string; model?: { state: string; current: number }; calls: string[] };
 
 test('the title bar chip shows indexing, semantic build progress and the search type', async ({}, testInfo) => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     const stub: Stub = { running: true, repoState: 'pending', calls: [] };
-    (globalThis as Record<string, unknown>).ciStub = stub;
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    ciStub = stub;
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       stub.calls.push(String(request.tool ?? request.action));
       if (request.action === 'owner-status') return { data: { running: stub.running, hasIndex: stub.hasIndex ?? true } };
       if (request.action === 'list') return { data: [{ id: 'pci:repo:chip', root: '/test/chip', state: stub.repoState, generation: 1 }] };
@@ -34,8 +36,8 @@ test('the title bar chip shows indexing, semantic build progress and the search 
       if (request.action === 'query') return { data: { matches: [], fragments: [], items: [] }, evidence: [] };
       return { data: {} };
     });
-  });
-  const setStub = (patch: Partial<Stub>) => app!.electronApp.evaluate((_electron, value) => Object.assign((globalThis as Record<string, unknown>).ciStub as object, value), patch);
+  }
+  const setStub = (patch: Partial<Stub>) => Promise.resolve(Object.assign(ciStub, patch));
   const win = app.window;
   // The chip loaded once before the stub; reload so it reads the stub from the start.
   await win.reload();
@@ -60,9 +62,9 @@ test('the title bar chip shows indexing, semantic build progress and the search 
   await expect(chip).toHaveText('Hybrid');
   await expect(chip.locator('.titlebar-code-intel-icon')).toHaveClass(/is-sparkles/);
   await win.locator('.titlebar').screenshot({ path: testInfo.outputPath('titlebar-hybrid.png') });
-  const settled = await app.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as Stub).calls.length);
+  const settled = await Promise.resolve(ciStub.calls.length);
   await win.waitForTimeout(4000);
-  expect(await app.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as Stub).calls.length)).toBe(settled);
+  expect(await Promise.resolve(ciStub.calls.length)).toBe(settled);
 
   // Clicking opens code search on that repository.
   await chip.click();
@@ -71,18 +73,17 @@ test('the title bar chip shows indexing, semantic build progress and the search 
 
 test('the chip shows keyword search without a model and never wakes an idle service', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     const stub: Stub = { running: true, repoState: 'ready', calls: [] };
-    (globalThis as Record<string, unknown>).ciStub = stub;
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    ciStub = stub;
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       stub.calls.push(String(request.tool ?? request.action));
       if (request.action === 'owner-status') return { data: { running: stub.running, hasIndex: stub.hasIndex ?? true } };
       if (request.action === 'list') return { data: [{ id: 'pci:repo:chip', root: '/test/chip', state: stub.repoState, generation: 1 }] };
       if (request.tool === 'get_index_status') return { data: { models: [] } };
       return { data: {} };
     });
-  });
+  }
   const win = app.window;
   await win.reload();
   const chip = win.getByTestId('titlebar-code-intel');
@@ -90,9 +91,9 @@ test('the chip shows keyword search without a model and never wakes an idle serv
   await expect(chip.locator('.titlebar-code-intel-icon')).toHaveClass(/is-search/);
 
   // The service idles out; a focus refresh only asks whether it is running.
-  await app.electronApp.evaluate(() => { const stub = (globalThis as Record<string, unknown>).ciStub as Stub; stub.running = false; stub.calls.length = 0; });
+  ciStub.running = false; ciStub.calls.length = 0;
   await win.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect.poll(() => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as Stub).calls)).toEqual(['owner-status']);
+  await expect.poll(() => Promise.resolve(ciStub.calls)).toEqual(['owner-status']);
   await expect(chip).toHaveText('Keyword');
 });
 
@@ -116,11 +117,10 @@ async function openProjectFolder(win: Page): Promise<string> {
 
 /** A service that has never indexed anything and is not running, until a folder is registered. */
 async function stubUnindexedService() {
-  await app!.electronApp.evaluate(({ ipcMain }) => {
+  {
     const stub = { running: false, hasIndex: false, registered: '' as string, repoState: 'pending', calls: [] as string[] };
-    (globalThis as Record<string, unknown>).ciStub = stub;
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    ciStub = stub;
+    await app!.overrideChannel('ai:codeIntelligence', ([request]) => {
       stub.calls.push(String(request.tool ?? request.action));
       if (request.action === 'owner-status') return { data: { running: stub.running, hasIndex: stub.hasIndex } };
       if (request.action === 'register') { stub.registered = String(request.root); stub.running = true; stub.hasIndex = true; return { data: { repositoryId: 'pci:repo:new' } }; }
@@ -128,10 +128,10 @@ async function stubUnindexedService() {
       if (request.tool === 'get_index_status') return { data: { models: stub.repoState === 'ready' ? [{ fingerprint: 'sha256:m', state: 'building', coverage: { eligible: 100, current: 25 } }] : [] } };
       return { data: {} };
     });
-  });
+  }
 }
-const stubCalls = () => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as { calls: string[] }).calls);
-const registeredRoot = () => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).ciStub as { registered: string }).registered);
+const stubCalls = () => Promise.resolve(ciStub.calls);
+const registeredRoot = () => Promise.resolve(ciStub.registered);
 
 test('an unindexed folder shows Build index without starting the service, and clicking it builds', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
@@ -152,7 +152,7 @@ test('an unindexed folder shows Build index without starting the service, and cl
   await chip.click();
   await expect.poll(registeredRoot).toBe(root);
   await expect(chip).toHaveText('Indexing…');
-  await app.electronApp.evaluate(() => { ((globalThis as Record<string, unknown>).ciStub as { repoState: string }).repoState = 'ready'; });
+  await (() => { ciStub.repoState = 'ready'; })();
   await expect(chip).toHaveText('Semantic 25%', { timeout: 10_000 });
 });
 

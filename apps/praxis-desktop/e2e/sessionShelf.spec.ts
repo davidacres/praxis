@@ -312,9 +312,10 @@ test('shelf books follow spines, retain drafts, delay hover and distinguish sele
   const shelf = page.getByTestId('session-shelf');
   const spines = shelf.getByTestId('session-shelf-spine');
   const card = page.getByTestId('session-shelf-card');
-  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, state: 'awaiting_input' });
-  }, data['praxis.agentSessions']['SESSION-earlier0']);
+  {
+    const record = data['praxis.agentSessions']['SESSION-earlier0'];
+    await app.emitEvent('ai:sessionChanged', { ...record, state: 'awaiting_input' });
+  }
   await expect(shelf.getByTestId('session-shelf-attention')).toHaveCount(1);
   await expect(spines.nth(2)).toHaveAttribute('aria-description', 'Awaiting input');
   // A short pass over a spine must not open a preview later.

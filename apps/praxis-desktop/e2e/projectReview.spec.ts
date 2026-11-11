@@ -241,7 +241,6 @@ test('daily review previews only the five most recently active unfinished projec
     }, workspace.id)).id;
   });
   {
-    const projectId = projectId;
     const records = Array.from({ length: 9 }, (_, index) => {
       const number = index + 1;
       const at = new Date(Date.now() - (10 - number) * 3_600_000).toISOString();

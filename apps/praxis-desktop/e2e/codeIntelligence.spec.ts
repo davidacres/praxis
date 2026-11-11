@@ -11,13 +11,12 @@ test.afterEach(async () => {
 
 async function openPanel({ updateAvailable = false, cleanupError = false }: { updateAvailable?: boolean; cleanupError?: boolean } = {}) {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }, { updateAvailable, cleanupError }) => {
-    let root = '/fixture/original';
+  {
+        let root = '/fixture/original';
     let generation = 1;
     let modelInstalled = false;
 
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') {
         if (generation === 0) return { data: [] };
         return { data: [{ id: 'pci:repo:fixture', root, state: 'ready', generation }] };
@@ -40,8 +39,7 @@ async function openPanel({ updateAvailable = false, cleanupError = false }: { up
       return { error: { code: 'FIXTURE_UNEXPECTED_REQUEST', message: JSON.stringify(request) } };
     });
 
-    ipcMain.removeHandler('ai:getSemanticModelStatus');
-    ipcMain.handle('ai:getSemanticModelStatus', () => ({
+    await app.overrideChannel('ai:getSemanticModelStatus', () => ({
       installed: modelInstalled,
       active: modelInstalled,
       fingerprint: modelInstalled ? 'sha256:fixture-fingerprint' : undefined,
@@ -53,8 +51,7 @@ async function openPanel({ updateAvailable = false, cleanupError = false }: { up
       progressPercent: modelInstalled ? 100 : 0
     }));
 
-    ipcMain.removeHandler('ai:downloadSemanticModel');
-    ipcMain.handle('ai:downloadSemanticModel', () => {
+    await app.overrideChannel('ai:downloadSemanticModel', () => {
       modelInstalled = true;
       return {
         installed: true,
@@ -68,18 +65,16 @@ async function openPanel({ updateAvailable = false, cleanupError = false }: { up
       };
     });
 
-    ipcMain.removeHandler('ai:deleteSemanticModel');
-    ipcMain.handle('ai:deleteSemanticModel', () => {
+    await app.overrideChannel('ai:deleteSemanticModel', () => {
       modelInstalled = false;
     });
 
-    ipcMain.removeHandler('ai:resetCodeIntelligence');
-    ipcMain.handle('ai:resetCodeIntelligence', () => {
+    await app.overrideChannel('ai:resetCodeIntelligence', () => {
       modelInstalled = false;
       generation = 0;
       root = '';
     });
-  }, { updateAvailable, cleanupError });
+  }
 
   const win = app.window;
   await win.getByTestId('titlebar-settings').click();
