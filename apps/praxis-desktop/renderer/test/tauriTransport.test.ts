@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createPraxisBridge } from '../src/host/praxisBridge.generated.ts';
-import { createTauriTransport, DesktopInvocationError } from '../src/host/tauriTransport';
+import { createTauriTransport, DesktopInvocationError, nullUndefined } from '../src/host/tauriTransport';
 import type { HostEvent, TauriInvoke } from '../src/host/tauriTransport';
 
 test('bridge preserves method channels, argument order, optional positions and host errors', async () => {
@@ -68,4 +68,22 @@ test('subscription precedes requests, preserves event shapes, isolates listeners
   assert.equal(settings.length, 3);
   assert.equal(unlistened, 1);
   await assert.rejects(bridge.settings.get(), { code: 'DESKTOP_CLOSED' });
+});
+
+test('undefined survives the JSON transport as null at any depth, so a clear is not lost', async () => {
+  // This is the exact patch the prompt-analysis provider control sends to clear both settings.
+  const patch = { ai: { promptAnalysisProvider: undefined, promptAnalysisModel: undefined, keep: 'x' } };
+  assert.equal(JSON.stringify(patch), '{"ai":{"keep":"x"}}', 'plain JSON drops the clear');
+  const sent = nullUndefined(patch);
+  assert.equal(JSON.stringify(sent), '{"ai":{"promptAnalysisProvider":null,"promptAnalysisModel":null,"keep":"x"}}');
+  assert.deepEqual(nullUndefined([1, undefined, { a: [undefined] }]), [1, null, { a: [null] }]);
+  assert.equal(nullUndefined(undefined), null);
+  const when = new Date(0);
+  assert.equal(nullUndefined(when), when, 'non-plain objects are left alone');
+
+  const seen: unknown[] = [];
+  const transport = await createTauriTransport(async (_command, args) => { seen.push(args.args); return null as never; }, async () => () => {});
+  await createPraxisBridge(transport).settings.set(patch as never);
+  assert.deepEqual(seen, [[{ ai: { promptAnalysisProvider: null, promptAnalysisModel: null, keep: 'x' } }]]);
+  transport.dispose();
 });

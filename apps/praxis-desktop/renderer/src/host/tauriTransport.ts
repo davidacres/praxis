@@ -16,6 +16,21 @@ export class DesktopInvocationError extends Error {
   }
 }
 
+/**
+ * `undefined` becomes `null` at every depth. The Electron bridge cloned arguments structurally,
+ * so `{ ai: { promptAnalysisModel: undefined } }` reached the backend as "clear this key". JSON
+ * drops an undefined property outright, which silently turned every such clear into a no-op.
+ * The backend reads an explicit `null` as the same instruction.
+ */
+export function nullUndefined(value: unknown): unknown {
+  if (value === undefined) return null;
+  if (Array.isArray(value)) return value.map(nullUndefined);
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, nullUndefined(entry)]));
+  }
+  return value;
+}
+
 /** One listener per webview, registered before any initial snapshot request. */
 export async function createTauriTransport(
   invoke: TauriInvoke,
@@ -44,7 +59,7 @@ export async function createTauriTransport(
     async invoke(channel, ...args) {
       if (disposed) throw new DesktopInvocationError(channel, 'DESKTOP_CLOSED', 'Desktop bridge is closed.');
       try {
-        return await invoke('praxis_rpc', { channel, args: args.map(arg => arg === undefined ? null : arg) });
+        return await invoke('praxis_rpc', { channel, args: args.map(nullUndefined) });
       } catch (failure) {
         const error = failure as { code?: unknown; message?: unknown } | null;
         throw new DesktopInvocationError(channel,
