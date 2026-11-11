@@ -157,6 +157,9 @@ impl Task {
     }
 
     pub(super) fn set_state(&self, state: &str, reason: Option<&str>) {
+        if state == "failed" {
+            eprintln!("[session] {} failed: {}", self.key, reason.unwrap_or("no reason given"));
+        }
         let reason = reason.map(str::to_owned);
         let state = state.to_owned();
         self.mutate(true, move |record| {
