@@ -3,6 +3,7 @@ mod activity;
 mod agent_runtime;
 mod ai;
 mod acp_host;
+mod api_host;
 mod ai_delegate;
 mod ai_models;
 mod session_store;

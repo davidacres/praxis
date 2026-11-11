@@ -377,6 +377,44 @@ fn probe_provider_capability(host: &HostContext, args: &[Value]) -> Result<Value
     Ok(result)
 }
 
+/// The connection a session on an API provider uses, and the model it runs unless told otherwise.
+/// Ports `resolveConnectionOptions` + `gatewayOptionsFor`.
+pub(super) fn api_connection(host: &HostContext, provider: &str) -> Result<(super::api_host::ApiConnection, String)> {
+    use super::api_host::{ApiConnection, Wire};
+    let resolved = find(host, provider)?;
+    if resolved.descriptor.kind != DescriptorKind::Api {
+        return Err(failure(format!("{} is CLI-hosted and has no HTTP endpoint.", resolved.descriptor.label)));
+    }
+    let settings = host.settings().read();
+    let ai = &settings.ai;
+    let config = ai.providers.get(provider);
+    let api_key = stored_key(host, provider).or_else(|| (provider == "vercel-gateway").then(praxis_ai::providers::registry::gateway_key_from_env).flatten());
+    let url = if provider == "vercel-gateway" {
+        Some(ai.gateway_url.trim().to_owned()).filter(|u| !u.is_empty()).or_else(|| ["AI_GATEWAY_URL", "VERCEL_AI_GATEWAY_URL", "FROSTY_VERCEL_URL"].iter().find_map(|n| std::env::var(n).ok().map(|v| v.trim().to_owned()).filter(|v| !v.is_empty()))).unwrap_or_else(|| praxis_ai::providers::registry::DEFAULT_VERCEL_URL.to_owned())
+    } else if let Some(custom) = &resolved.custom {
+        custom["baseUrl"].as_str().unwrap_or_default().to_owned()
+    } else {
+        config.and_then(|c| c.base_url.as_deref()).map(str::trim).filter(|u| !u.is_empty()).map(str::to_owned).or_else(|| resolved.descriptor.default_base_url.clone()).unwrap_or_default()
+    };
+    let mut options = GatewayOptions::new(url, api_key);
+    let mut stream_usage = true;
+    if let Some(custom) = &resolved.custom {
+        let rebuilt = custom_options(custom, options.api_key.clone());
+        options = rebuilt;
+        stream_usage = custom["streamUsage"] != false;
+    } else {
+        options.api_path = resolved.descriptor.api_path.clone();
+    }
+    let model = if provider == "vercel-gateway" { Some(ai.default_model.trim().to_owned()).filter(|m| !m.is_empty()) } else { config.and_then(|c| c.default_model.clone()).map(|m| m.trim().to_owned()).filter(|m| !m.is_empty()) }
+        .unwrap_or_else(|| resolved.descriptor.default_model.clone());
+    let wire = match provider {
+        "anthropic" => Wire::Anthropic,
+        "gemini" => Wire::Gemini,
+        _ => Wire::OpenAi,
+    };
+    Ok((ApiConnection { wire, options, stream_usage, provider: provider.to_owned(), label: resolved.descriptor.label }, model))
+}
+
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:getStatus" => active_status(host),

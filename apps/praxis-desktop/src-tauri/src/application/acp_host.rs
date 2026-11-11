@@ -71,31 +71,33 @@ struct Pending {
 
 /// Everything about a running turn that the update/permission handlers share.
 pub struct Task {
-    key: String,
-    dir: PathBuf,
-    host: HostContext,
-    store: Arc<SessionStore>,
+    pub(super) key: String,
+    pub(super) dir: PathBuf,
+    pub(super) host: HostContext,
+    pub(super) store: Arc<SessionStore>,
     connection: Mutex<Option<Arc<AcpConnection>>>,
     agent_session_id: Mutex<Option<String>>,
-    ending: AtomicBool,
+    pub(super) ending: AtomicBool,
     prompt_in_flight: AtomicBool,
-    allow_all: AtomicBool,
-    auto_allow_safe: bool,
+    pub(super) allow_all: AtomicBool,
+    pub(super) auto_allow_safe: bool,
     pending: Mutex<VecDeque<Pending>>,
-    message: Mutex<String>,
-    reasoning: Mutex<String>,
-    steps: AtomicU32,
-    started: Instant,
-    cost_before: Option<Value>,
+    pub(super) message: Mutex<String>,
+    pub(super) reasoning: Mutex<String>,
+    pub(super) steps: AtomicU32,
+    pub(super) started: Instant,
+    pub(super) cost_before: Option<Value>,
     active_tool: Mutex<Option<(String, String)>>,
     tool_inputs: Mutex<HashMap<String, Value>>,
-    done: tokio::sync::Notify,
-    finished: AtomicBool,
-    tool_mode: String,
-    working_directory: PathBuf,
-    owner_session_id: String,
+    pub(super) done: tokio::sync::Notify,
+    pub(super) finished: AtomicBool,
+    pub(super) tool_mode: String,
+    pub(super) working_directory: PathBuf,
+    pub(super) owner_session_id: String,
     /// Milliseconds since `started` of the last update ignored while replaying a resumed session.
     last_replay_ms: std::sync::atomic::AtomicU64,
+    /// Wakes an API-provider turn that is waiting on the network when the session is stopped.
+    pub(super) cancel: tokio::sync::Notify,
 }
 
 /// What a turn starts from: a new session, or a follow-up that tries to resume the agent's own.
@@ -139,22 +141,22 @@ pub fn evt(kind: &str, summary: impl Into<String>, detail: Option<String>, data:
 }
 
 impl Task {
-    fn changed(&self, record: Option<Value>) {
+    pub(super) fn changed(&self, record: Option<Value>) {
         if let Some(record) = record {
             self.host.events().emit("ai:sessionChanged", Some(record));
         }
     }
 
-    fn mutate(&self, persist: bool, change: impl FnOnce(&mut Value)) {
+    pub(super) fn mutate(&self, persist: bool, change: impl FnOnce(&mut Value)) {
         let record = self.store.mutate(&self.key, persist, change).ok().flatten();
         self.changed(record);
     }
 
-    fn state(&self) -> Option<String> {
+    pub(super) fn state(&self) -> Option<String> {
         self.store.get(&self.key).ok().flatten().and_then(|record| record["state"].as_str().map(str::to_owned))
     }
 
-    fn set_state(&self, state: &str, reason: Option<&str>) {
+    pub(super) fn set_state(&self, state: &str, reason: Option<&str>) {
         let reason = reason.map(str::to_owned);
         let state = state.to_owned();
         self.mutate(true, move |record| {
@@ -193,7 +195,7 @@ impl Task {
         });
     }
 
-    fn append(&self, event: Value, steps: u64) {
+    pub(super) fn append(&self, event: Value, steps: u64) {
         self.mutate(true, move |record| {
             if event["type"] == "error"
                 && let Some(text) = event["summary"].as_str().or_else(|| event["detail"].as_str()).filter(|t| is_provider_limit_error(t))
@@ -215,7 +217,7 @@ impl Task {
         });
     }
 
-    fn progress(&self) {
+    pub(super) fn progress(&self) {
         let active = self.active_tool.lock().ok().and_then(|tool| tool.clone());
         let steps = self.steps.load(Ordering::SeqCst);
         let started = chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now() - self.started.elapsed()).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -384,7 +386,7 @@ impl Task {
 
     // ── permissions ──────────────────────────────────────────────────────
 
-    async fn request_permission(&self, request: Value) -> Decision {
+    pub(super) async fn request_permission(&self, request: Value) -> Decision {
         if self.ending.load(Ordering::SeqCst) {
             return Decision::Deny;
         }
@@ -678,7 +680,7 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
         ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(request.auto_approve),
         auto_allow_safe: request.permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
         steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(), tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(),
-        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(), last_replay_ms: std::sync::atomic::AtomicU64::new(0),
+        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.clone()), Arc::clone(&task));
@@ -996,6 +998,7 @@ async fn stop(task: &Arc<Task>, terminal: &str, event: Value) {
     for waiting in task.pending.lock().map(|mut p| p.drain(..).collect::<Vec<_>>()).unwrap_or_default() {
         let _ = waiting.reply.send(Decision::Deny);
     }
+    task.cancel.notify_waiters();
     // Ask politely, then stop waiting: cleanup kills the child regardless.
     let connection = task.connection.lock().ok().and_then(|c| c.clone());
     let session = task.agent_session_id.lock().ok().and_then(|s| s.clone());
@@ -1131,7 +1134,7 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
         auto_allow_safe: permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
         steps: AtomicU32::new(0), started: Instant::now(), cost_before: Some(record["cost"].clone()).filter(|c| !c.is_null()), active_tool: Mutex::default(), tool_inputs: Mutex::default(),
         done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.clone(), working_directory, owner_session_id: session_id,
-        last_replay_ms: std::sync::atomic::AtomicU64::new(0),
+        last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));
@@ -1160,4 +1163,37 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
         finish(&runner).await;
     });
     Ok(())
+}
+
+// ── shared with the API-provider host ───────────────────────────────────
+
+/// Builds and registers the shared task state for a turn with no ACP connection.
+pub(super) fn register_api_task(host: &HostContext, dir: &Path, key: &str, session_id: &str, tool_mode: &str, working_directory: PathBuf, allow_all: bool, auto_allow_safe: bool, cost_before: Option<Value>) -> Arc<Task> {
+    let task = Arc::new(Task {
+        key: key.to_owned(), dir: dir.to_path_buf(), host: host.clone(), store: store(dir), connection: Mutex::new(None), agent_session_id: Mutex::new(None),
+        ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(allow_all), auto_allow_safe, pending: Mutex::default(),
+        message: Mutex::default(), reasoning: Mutex::default(), steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(),
+        tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.to_owned(), working_directory,
+        owner_session_id: session_id.to_owned(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(),
+    });
+    if let Ok(mut all) = tasks().lock() {
+        all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));
+    }
+    task
+}
+
+pub(super) async fn finish_task(task: &Arc<Task>) {
+    finish(task).await;
+}
+
+pub(super) async fn stop_task(task: &Arc<Task>, terminal: &str, event: Value) {
+    stop(task, terminal, event).await;
+}
+
+pub(super) fn fail(task: &Task, message: String) {
+    fail_turn(task, message);
+}
+
+pub(super) fn find_active(dir: &Path, key: &str) -> Option<Arc<Task>> {
+    find_task(dir, key)
 }

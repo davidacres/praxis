@@ -113,9 +113,6 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     if has_binding {
         return Err(failure("Sessions bound to an agent profile or launch binding are not implemented yet."));
     }
-    if kind != DescriptorKind::CliAgent {
-        return Err(failure(format!("{label} sessions run through the API-provider loop, which is not implemented in the Rust backend yet.")));
-    }
     if input["runInWorktree"] == true {
         return Err(failure("Running a session in a dedicated worktree is not implemented yet."));
     }
@@ -167,6 +164,20 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         .unwrap_or_else(|| "medium".into());
     let permission_mode = non_empty(&input, "permissionMode").unwrap_or("manual").to_owned();
 
+    if kind == DescriptorKind::Api {
+        let key = issue["key"].as_str().unwrap_or_default().to_owned();
+        let selected_model = non_empty(&input, "model").map(str::to_owned);
+        let default_model_hint = model_default.clone();
+        drop(settings);
+        let (connection, default_model) = super::ai_providers::api_connection(host, &provider)?;
+        let model = selected_model.or(default_model_hint).unwrap_or(default_model);
+        let images = sanitize_images(input.get("images").unwrap_or(&Value::Null));
+        super::api_host::start_api_task(host, dir, super::api_host::ApiStart {
+            issue, task, model, reasoning_effort: Some(reasoning), working_directory, tool_mode, auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"),
+            permission_mode: Some(permission_mode), images, connection,
+        })?;
+        return finish_launch(dir, &key, &input);
+    }
     let override_path = ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
     let command = override_path.or(default_command).ok_or_else(|| failure("No command is configured for this provider."))?;
     let key = issue["key"].as_str().unwrap_or_default().to_owned();
@@ -178,16 +189,20 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         command, args: default_args, mcp_servers: Vec::new(),
     })?;
 
+    finish_launch(dir, &key, &input)
+}
+
+fn finish_launch(dir: &std::path::Path, key: &str, input: &Value) -> Result<Value> {
     let sessions = store(dir);
     for (field, name) in [("connectionId", "connectionId"), ("projectId", "projectId")] {
         if let Some(value) = non_empty(&input, field).map(str::to_owned) {
-            let _ = sessions.mutate(&key, true, |record| record[name] = json!(value));
+            let _ = sessions.mutate(key, true, |record| record[name] = json!(value));
         }
     }
     if let Some(parent) = non_empty(&input, "parentSessionKey").map(str::to_owned) {
-        let _ = sessions.mutate(&key, true, |record| record["parentSessionKey"] = json!(parent));
+        let _ = sessions.mutate(key, true, |record| record["parentSessionKey"] = json!(parent));
     }
-    sessions.get(&key)?.ok_or_else(|| failure(format!("Session for {key} did not start.")))
+    sessions.get(key)?.ok_or_else(|| failure(format!("Session for {key} did not start.")))
 }
 
 /// Normalises untrusted pasted images: base64 on a known image type, capped in count and size.
@@ -222,7 +237,14 @@ fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -
         return Err(failure("Stop the multi-AI conversation before sending a single-agent follow-up."));
     }
     let provider = record["provider"].as_str().map(str::to_owned).unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
-    let descriptor = built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent).ok_or_else(|| failure(format!("{provider} sessions run through the API-provider loop, which is not implemented in the Rust backend yet.")))?;
+    let descriptor = match built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent) {
+        Some(descriptor) => descriptor,
+        None => {
+            let (connection, _) = super::ai_providers::api_connection(host, &provider)?;
+            super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection)?;
+            return Ok(Value::Null);
+        }
+    };
     let override_path = host.settings().read().ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
     let command = override_path.or(descriptor.default_command.clone()).ok_or_else(|| failure("No command is configured for this provider."))?;
     acp_host::continue_task(host, dir, key, Continue {
