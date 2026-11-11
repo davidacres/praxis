@@ -3490,6 +3490,7 @@ dependencies = [
  "praxis-contracts",
  "praxis-core",
  "praxis-host",
+ "praxis-trackers",
  "praxis-workflows",
  "regex",
  "serde",

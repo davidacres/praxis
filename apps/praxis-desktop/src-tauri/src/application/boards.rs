@@ -2,12 +2,58 @@ use praxis_contracts::BackendMode;
 use praxis_core::issues::{
     build_parent_validation_message, get_parent_rule, is_allowed_parent_type,
 };
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
+
 use praxis_host::HostContext;
+use praxis_trackers::DemoService;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::storage::{Catalog, PROJECTS};
 use super::{Result, connections, failure, now, projects, text};
+
+/// The in-memory demo tracker, available only when the app was started with `--demo`. One per
+/// profile, so its edits live as long as the process like the TypeScript service's did.
+fn demo(host: &HostContext) -> Option<Arc<DemoService>> {
+    if !host.config().demo_mode {
+        return None;
+    }
+    static DEMOS: OnceLock<Mutex<HashMap<PathBuf, Arc<DemoService>>>> = OnceLock::new();
+    let mut all = DEMOS.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    Some(Arc::clone(all.entry(host.config().user_data_dir.clone()).or_insert_with(|| Arc::new(DemoService::default()))))
+}
+
+fn with_connection(mut board: Value, id: &str) -> Value {
+    board["connectionId"] = json!(id);
+    board
+}
+
+/// Runs one `issue:*` operation against the demo tracker. `args` excludes the connection id.
+fn demo_issue(demo: &DemoService, channel: &str, args: &[Value]) -> Result<Value> {
+    let arg = |index: usize| args.get(index).cloned().unwrap_or(Value::Null);
+    let key = || text(args, 0);
+    let page = |index: usize, default: usize| args.get(index).and_then(Value::as_u64).map_or(default, |n| n as usize);
+    match channel {
+        "issue:list" => demo.get_issues(&arg(0), page(1, 0), page(2, demo.default_page_size())),
+        "issue:getFilterMetadata" => demo.get_filter_metadata(&arg(0)),
+        "issue:get" => demo.get_issue(key()?),
+        "issue:create" => demo.create_issue(&arg(0)),
+        "issue:update" => demo.update_issue(key()?, &arg(1)),
+        "issue:delete" => demo.delete_issue(key()?).map(|()| Value::Null),
+        "issue:transition" => demo.transition_issue(key()?, text(args, 1)?).map(|()| Value::Null),
+        "issue:addComment" => demo.add_comment(key()?, text(args, 1)?).map(|()| Value::Null),
+        "issue:getSelfAssigneeLabel" => Ok(json!(DemoService::self_assignee_label())),
+        "issue:getProjects" => Ok(json!(DemoService::projects())),
+        "issue:getParentItems" => {
+            let child = args.get(2).and_then(|options| options["childIssueType"].as_str());
+            demo.get_parent_items(&arg(0), args.get(1).and_then(Value::as_str), child).map(Value::from)
+        }
+        _ => Err("Unknown issue operation.".to_owned()),
+    }
+    .map_err(failure)
+}
 
 fn app_project(catalog: &Catalog, connection: &Value) -> Result<Value> {
     projects::require(
@@ -108,6 +154,12 @@ fn boards_for(
     connection: &Value,
     filters: &Value,
 ) -> Result<Vec<Value>> {
+    if connection["mode"] == "demo"
+        && let Some(demo) = demo(host)
+    {
+        let id = connection["id"].as_str().unwrap_or("");
+        return Ok(demo.get_boards(filters).map_err(failure)?.into_iter().map(|board| with_connection(board, id)).collect());
+    }
     if connection["mode"] == "app" {
         let project = app_project(catalog, connection)?;
         let board = board(&project);
@@ -400,8 +452,16 @@ pub fn dispatch(
         } else {
             connections::list(catalog)
         };
-        let mut boards = Vec::new();
+        // Built-in demo boards come first and are not tied to any connection; demo-mode
+        // connections are skipped below so the same boards are not listed once per connection.
+        let mut boards = match (id, demo(host)) {
+            (None, Some(demo)) => demo.get_boards(&filters).map_err(failure)?,
+            _ => Vec::new(),
+        };
         for connection in candidates {
+            if id.is_none() && connection["mode"] == "demo" && host.config().demo_mode {
+                continue;
+            }
             match boards_for(host, catalog, &connection, &filters) {
                 Ok(values) => boards.extend(values),
                 Err(error) if id.is_none() => eprintln!(
@@ -415,10 +475,20 @@ pub fn dispatch(
     }
     if channel == "board:get" {
         let input = args.first().ok_or_else(|| failure("Board is required."))?;
-        let id = input["connectionId"]
-            .as_str()
-            .ok_or_else(|| failure("Board connection id is required."))?;
+        let Some(id) = input["connectionId"].as_str().filter(|id| !id.is_empty()) else {
+            return match demo(host) {
+                Some(demo) => demo.get_board_details(input).map_err(failure),
+                None => Err(failure("Board connection id is required.")),
+            };
+        };
         let connection = connections::require(catalog, id)?;
+        if connection["mode"] == "demo"
+            && let Some(demo) = demo(host)
+        {
+            let mut details = demo.get_board_details(input).map_err(failure)?;
+            details["board"] = with_connection(details["board"].clone(), id);
+            return Ok(details);
+        }
         if connection["mode"] != "app" {
             return connections::tracker(
                 host,
@@ -458,22 +528,33 @@ pub fn dispatch(
         "issue:getParentItems" => ("tracker:getParentItems", 3),
         _ => return Err(failure("Unknown issue operation.")),
     };
-    let id = args
-        .get(index)
-        .and_then(Value::as_str)
-        .ok_or_else(|| failure("Choose a connection before working with issues."))?;
-    let connection = connections::require(catalog, id)?;
+    let id = args.get(index).and_then(Value::as_str).filter(|id| !id.trim().is_empty());
+    let connection = id.map(|id| connections::require(catalog, id)).transpose()?;
+    // No connection (or a demo-mode one) means the built-in demo tracker, but only under `--demo`.
+    let demo_target = demo(host).filter(|_| connection.as_ref().is_none_or(|connection| connection["mode"] == "demo"));
+    if connection.is_none() && demo_target.is_none() {
+        return Err(failure("Choose a connection before working with issues."));
+    }
     if channel == "issue:transition" {
         let transition_id = text(args, 1)?;
-        let target = if connection["mode"] == "app" {
-            let project = app_project(catalog, &connection)?;
+        let target = if let Some(demo) = &demo_target {
+            demo.get_transitions(text(args, 0)?)
+                .map_err(failure)?
+                .into_iter()
+                .find(|transition| transition["id"] == transition_id)
+                .map(|transition| transition["toStatus"].clone())
+        } else if let (Some(id), Some(connection)) = (id, &connection)
+            && connection["mode"] == "app"
+        {
+            let _ = id;
+            let project = app_project(catalog, connection)?;
             project["workflowStages"]
                 .as_array()
                 .into_iter()
                 .flatten()
                 .find(|stage| stage["id"] == transition_id)
                 .map(|stage| stage["name"].clone())
-        } else {
+        } else if let Some(id) = id {
             connections::tracker(
                 host,
                 catalog,
@@ -486,6 +567,8 @@ pub fn dispatch(
             .flatten()
             .find(|transition| transition["id"] == transition_id)
             .map(|transition| transition["toStatus"].clone())
+        } else {
+            None
         };
         if target.as_ref().and_then(Value::as_str).is_some_and(|name| {
             ["done", "closed", "resolved", "complete", "completed"]
@@ -513,6 +596,12 @@ pub fn dispatch(
             }
         }
     }
+    if let Some(demo) = demo_target {
+        return demo_issue(&demo, channel, &args[..index.min(args.len())]);
+    }
+    let (Some(id), Some(connection)) = (id, connection) else {
+        return Err(failure("Choose a connection before working with issues."));
+    };
     if connection["mode"] == "app" {
         app_issue(catalog, &connection, channel, &args[..index])
     } else {

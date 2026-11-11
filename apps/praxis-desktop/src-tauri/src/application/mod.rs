@@ -32,6 +32,9 @@ use serde_json::{Value, json};
 
 use storage::Catalog;
 
+/// How long a call waits for the profile lock before reporting the profile busy.
+const LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 type Result<T> = std::result::Result<T, RustRpcError>;
 
 fn failure(message: impl ToString) -> RustRpcError {
@@ -445,11 +448,24 @@ impl Application {
                     .join("desktop-state.praxis.lock"),
             )
             .map_err(failure)?;
-        profile_lock.try_lock().map_err(|error| {
-            failure(format!(
-                "Desktop profile is busy; retry after the other writer finishes: {error}"
-            ))
-        })?;
+        // Wait briefly for the lock rather than failing on first contact. Another writer is
+        // normally done in milliseconds, and spawning a host process elsewhere in this process
+        // forks a copy of every open descriptor (including this lock's) until its `exec`, which
+        // can keep a just-released lock held for an instant. A genuinely stuck writer still fails.
+        let deadline = std::time::Instant::now() + LOCK_WAIT;
+        loop {
+            match profile_lock.try_lock() {
+                Ok(()) => break,
+                Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => {
+                    return Err(failure(format!(
+                        "Desktop profile is busy; retry after the other writer finishes: {error}"
+                    )));
+                }
+            }
+        }
         storage::recover(&host.config().user_data_dir)?;
         if channel == "settings:set" {
             if let Some(raw) = storage::read(&host.config().settings_path)? {
@@ -611,8 +627,11 @@ impl Application {
             state.active_workspace = None;
         }
         state.initialized = !matches!(channel, "workspaces:openFile" | "workspaces:openFolder");
-        drop(state);
+        // Release the file lock before the in-process mutex. A caller waiting on the mutex
+        // proceeds straight to `try_lock`; if the mutex went first it would find the file lock
+        // still held and fail with "profile is busy" against our own previous call.
         drop(profile_lock);
+        drop(state);
         if mutation || persisted {
             let mut changed = std::collections::BTreeSet::new();
             for connection in before.iter().chain(after.iter()) {

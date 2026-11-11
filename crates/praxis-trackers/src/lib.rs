@@ -2,6 +2,7 @@
 //! `GitLabBoardService`, `DemoService`, `StubService`) and CI evidence providers.
 
 pub mod ci;
+pub mod demo_service;
 pub mod folder_service;
 pub mod github;
 pub mod gitlab;
@@ -12,6 +13,7 @@ pub mod stub_backend_service;
 #[cfg(test)]
 mod test_support;
 
+pub use demo_service::{DEMO_BOARD_STATUS_ORDER, DEMO_CURRENT_USER, DemoService};
 pub use folder_service::*;
 pub use github::{GitHubBoardService, StaticGitHubConfig};
 pub use gitlab::{GitLabBoardService, StaticGitLabConfig};
