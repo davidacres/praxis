@@ -7,6 +7,7 @@ mod api_host;
 mod ai_delegate;
 mod ai_models;
 mod session_store;
+mod user_mcp;
 mod ai_providers;
 mod ai_usage;
 mod artifacts;

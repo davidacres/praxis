@@ -110,9 +110,6 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     if !has_binding && let Some(c) = &custom && !c["capabilities"].is_null() && c["capabilities"]["tools"] != true {
         return Err(failure(format!("{label} didn't pass tool calling, which agent sessions need. Run its connection test in Settings → AI Provider after changing the model or server.")));
     }
-    if has_binding {
-        return Err(failure("Sessions bound to an agent profile or launch binding are not implemented yet."));
-    }
     if input["runInWorktree"] == true {
         return Err(failure("Running a session in a dedicated worktree is not implemented yet."));
     }
@@ -164,36 +161,241 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         .unwrap_or_else(|| "medium".into());
     let permission_mode = non_empty(&input, "permissionMode").unwrap_or("manual").to_owned();
 
-    if kind == DescriptorKind::Api {
-        let key = issue["key"].as_str().unwrap_or_default().to_owned();
+    let override_path = ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
+    let provider_command = override_path.clone().or(default_command.clone());
+    let skill_names: Vec<String> = input["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect();
+    let (profile_id, host_id) = (non_empty(&input, "profileId").or_else(|| non_empty(&input, "agentId")).map(str::to_owned), non_empty(&input, "hostId").or_else(|| non_empty(&input, "agentId")).map(str::to_owned));
+    let cli_providers = cli_commands(ai);
+    drop(settings);
+    let prepared = prepare_launch(host, dir, profile_id.as_deref(), host_id.as_deref(), &provider, kind, provider_command.as_deref(), &default_args, &skill_names)?;
+    let mut task = task;
+    if let Some(binding) = &prepared.binding {
+        let goal = task["goal"].as_str().unwrap_or_default().to_owned();
+        task["goal"] = json!(format!("{goal}\n\n{}", binding.context));
+    }
+    let is_autonomous = tool_mode == "full" && (matches!(permission_mode.as_str(), "bypass" | "autopilot") || task["kind"] == "implementation");
+    apply_session_context(host, &mut task, &effective_runtime(&provider, kind, &prepared.plan, &cli_providers), working_directory.as_deref(), is_autonomous);
+    let settings_key = issue["key"].as_str().unwrap_or_default().to_owned();
+
+    if prepared.plan.state == "gateway" {
+        let key = settings_key;
         let selected_model = non_empty(&input, "model").map(str::to_owned);
         let default_model_hint = model_default.clone();
-        drop(settings);
         let (connection, default_model) = super::ai_providers::api_connection(host, &provider)?;
+        let needs_key = custom.as_ref().is_none_or(|c| c["auth"]["kind"] != "none");
+        if prepared.binding.is_some() && connection.options.api_key.as_deref().is_none_or(str::is_empty) && needs_key {
+            return Err(failure(format!("No {label} API key configured for this session.")));
+        }
         let model = selected_model.or(default_model_hint).unwrap_or(default_model);
         let images = sanitize_images(input.get("images").unwrap_or(&Value::Null));
         super::api_host::start_api_task(host, dir, super::api_host::ApiStart {
             issue, task, model, reasoning_effort: Some(reasoning), working_directory, tool_mode, auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"),
             permission_mode: Some(permission_mode), images, connection,
         })?;
-        return finish_launch(dir, &key, &input);
+        return finish_launch(dir, &key, &input, &prepared, &skill_names);
     }
-    let override_path = ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
-    let command = override_path.or(default_command).ok_or_else(|| failure("No command is configured for this provider."))?;
-    let key = issue["key"].as_str().unwrap_or_default().to_owned();
-    drop(settings);
+    let key = settings_key;
+    let command = prepared.plan.command.clone().ok_or_else(|| failure("No command is configured for this provider."))?;
+    let args = prepared.plan.args.clone();
+    let mcp_servers = super::user_mcp::acp_servers(host, &tool_mode, &provider);
 
     acp_host::start_task(host, dir, StartTask {
         issue, task, provider, model: non_empty(&input, "model").map(str::to_owned), reasoning_effort: Some(reasoning),
         working_directory, tool_mode, auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"), permission_mode: Some(permission_mode),
-        command, args: default_args, mcp_servers: Vec::new(),
+        command, args, mcp_servers,
     })?;
 
-    finish_launch(dir, &key, &input)
+    finish_launch(dir, &key, &input, &prepared, &skill_names)
 }
 
-fn finish_launch(dir: &std::path::Path, key: &str, input: &Value) -> Result<Value> {
+/// The adapter a session runs on, chosen before launch (`AgentHostLaunchPlan`).
+pub(super) struct Plan {
+    /// `acp` or `gateway`.
+    pub state: &'static str,
+    pub host_id: Option<String>,
+    pub command: Option<String>,
+    pub args: Vec<String>,
+}
+
+pub(super) struct Prepared {
+    pub plan: Plan,
+    pub binding: Option<super::agent_runtime::Binding>,
+}
+
+fn is_bundled_host(host_id: &str) -> bool {
+    host_id.starts_with("praxis-") || host_id == "csharp-dotnet-code-reviewer"
+}
+
+/// A manifest `entry` as a command: bare executable names stay, files relative to the host's own
+/// folder are resolved against it (never the app cwd).
+fn entry_command(entry: &Value, root_path: &str) -> Result<(String, Vec<String>)> {
+    let raw = entry.as_str().or_else(|| entry["command"].as_str()).map(str::trim).filter(|c| !c.is_empty()).ok_or_else(|| failure("The selected agent host does not declare an executable entry point."))?;
+    let root = std::path::Path::new(root_path);
+    let path_like = std::path::Path::new(raw).is_absolute() || raw.contains('/') || raw.contains('\\') || raw.ends_with(".js");
+    let command = if path_like { praxis_core::agent_runtime::resolve_against(root, raw) } else { raw.to_owned() };
+    let args = entry["args"].as_array().into_iter().flatten().filter_map(Value::as_str).map(|arg| {
+        let path_like = std::path::Path::new(arg).is_absolute() || arg.starts_with("./") || arg.starts_with(".\\") || arg.ends_with(".js");
+        if path_like && !std::path::Path::new(arg).is_absolute() { praxis_core::agent_runtime::resolve_against(root, arg) } else { arg.to_owned() }
+    }).collect();
+    Ok((command, args))
+}
+
+fn is_scaffold_host(root_path: &str) -> bool {
+    std::fs::read_to_string(std::path::Path::new(root_path).join("index.js")).is_ok_and(|entry| entry.contains("SCAFFOLD") && entry.contains("scaffold not implemented"))
+}
+
+/// Compiles a discovered manifest into an explicit, supported session adapter.
+fn compile_host_launch(definition: &Value, kind: DescriptorKind, provider_label: &str, provider_command: Option<&str>, provider_args: &[String]) -> Result<Plan> {
+    let manifest = &definition["manifest"];
+    let id = manifest["id"].as_str().unwrap_or_default().to_owned();
+    // Built-in agents, agents found in other AI tools' folders and copies of them
+    // (`entry: "session"`) all run on the session's own runtime.
+    if is_bundled_host(&id) || definition["followsSessionRuntime"] == true || manifest["entry"] == "session" {
+        if kind == DescriptorKind::Api {
+            return Ok(Plan { state: "gateway", host_id: Some(id), command: None, args: Vec::new() });
+        }
+        let command = provider_command.ok_or_else(|| failure("No command is configured for this provider."))?.to_owned();
+        return Ok(Plan { state: "acp", host_id: Some(id), command: Some(command), args: provider_args.to_vec() });
+    }
+    match manifest["type"].as_str().unwrap_or_default() {
+        "acp" => {
+            let root = definition["rootPath"].as_str().unwrap_or_default();
+            if is_scaffold_host(root) {
+                return Err(failure(format!("Agent host \"{id}\" is a scaffold and has no working protocol adapter.")));
+            }
+            let (command, args) = entry_command(&manifest["entry"], root)?;
+            Ok(Plan { state: "acp", host_id: Some(id), command: Some(command), args })
+        }
+        // A gateway manifest opts into the provider-backed transport and must name an API provider.
+        "gateway" => {
+            if kind != DescriptorKind::Api {
+                return Err(failure(format!("Gateway host \"{id}\" requires an API provider; \"{provider_label}\" is CLI-hosted.")));
+            }
+            Ok(Plan { state: "gateway", host_id: Some(id), command: None, args: Vec::new() })
+        }
+        other => Err(failure(format!("Agent host \"{id}\" declares unsupported transport \"{other}\"."))),
+    }
+}
+
+/// Resolves and validates one Agent Hub binding immediately before launch.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn prepare_launch(
+    host: &HostContext,
+    dir: &std::path::Path,
+    profile_id: Option<&str>,
+    host_id: Option<&str>,
+    provider: &str,
+    kind: DescriptorKind,
+    provider_command: Option<&str>,
+    provider_args: &[String],
+    skill_names: &[String],
+) -> Result<Prepared> {
+    if profile_id.is_some() != host_id.is_some() {
+        return Err(failure("A session binding requires both an agent profile and runtime host."));
+    }
+    let (Some(profile_id), Some(host_id)) = (profile_id, host_id) else {
+        let plan = if kind == DescriptorKind::CliAgent {
+            let command = provider_command.ok_or_else(|| failure("No command is configured for this provider."))?.to_owned();
+            Plan { state: "acp", host_id: None, command: Some(command), args: provider_args.to_vec() }
+        } else {
+            Plan { state: "gateway", host_id: None, command: None, args: Vec::new() }
+        };
+        return Ok(Prepared { plan, binding: None });
+    };
+    let binding = super::agent_runtime::create_binding(host, dir, profile_id, host_id, provider, skill_names)?;
+    let label = built_in_descriptors().into_iter().find(|d| d.id == provider).map_or_else(|| provider.to_owned(), |d| d.label);
+    let plan = compile_host_launch(&binding.host, kind, &label, provider_command, provider_args)?;
+    Ok(Prepared { plan, binding: Some(binding) })
+}
+
+/// The `[provider id -> configured command]` of every CLI runtime.
+fn cli_commands(ai: &praxis_core::config::app_settings::AiSettings) -> Vec<(String, String)> {
+    built_in_descriptors()
+        .into_iter()
+        .filter(|d| d.kind == DescriptorKind::CliAgent)
+        .filter_map(|d| {
+            let configured = ai.providers.get(&d.id).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
+            configured.or(d.default_command.clone()).map(|command| (d.id, command))
+        })
+        .collect()
+}
+
+/// Which runtime really runs a launch: an API provider reads no tool files; a built-in CLI runtime
+/// reads its own; a custom ACP binding reads none of the files Praxis knows about (`custom`).
+fn effective_runtime(provider: &str, kind: DescriptorKind, plan: &Plan, clis: &[(String, String)]) -> String {
+    if plan.state != "acp" {
+        return provider.to_owned();
+    }
+    let configured = clis.iter().find(|(id, _)| id == provider).map(|(_, command)| command.as_str());
+    if kind == DescriptorKind::CliAgent && plan.command.as_deref().is_none_or(|command| Some(command) == configured) {
+        return provider.to_owned();
+    }
+    let base = |command: &str| std::path::Path::new(command).file_name().map(|n| n.to_string_lossy().into_owned());
+    // A custom ACP binding that launches one of the known runtimes reads what it reads.
+    plan.command.as_deref().and_then(base).and_then(|launched| clis.iter().find(|(_, command)| base(command).as_deref() == Some(launched.as_str())).map(|(id, _)| id.clone())).unwrap_or_else(|| "custom".to_owned())
+}
+
+/// The working style every session carries, whichever AI runs it (Settings > Agent Runtime).
+fn session_working_style(host: &HostContext, autonomous: bool) -> Option<String> {
+    let style = host.settings().read().ai.working_style.clone();
+    if !style.enabled {
+        return None;
+    }
+    let raw = if style.text.trim().is_empty() { praxis_core::config::app_settings::DEFAULT_WORKING_STYLE.to_owned() } else { style.text.trim().to_owned() };
+    if !autonomous {
+        return Some(raw);
+    }
+    let undo = regex::Regex::new(r"- Before anything that is hard to undo[^\n]*\n?").expect("static pattern");
+    let plan = regex::Regex::new(r"- Before a multi-step change, state a short plan[^\n]*\n?").expect("static pattern");
+    let raw = undo.replace_all(&raw, "- You have full autonomous execution authority in this isolated worktree. Proceed directly with all necessary edits, test executions, and commits without pausing to request approval.\n");
+    let raw = plan.replace_all(&raw, "- Proceed directly to implement all planned changes, run verification tests, and commit cleanly to git.\n");
+    Some(raw.trim().to_owned())
+}
+
+/// The project instructions (minus what the runtime reads itself) and working style a session carries.
+fn apply_session_context(host: &HostContext, task: &mut Value, runtime: &str, working_directory: Option<&str>, autonomous: bool) {
+    if let Some(instructions) = super::agent_runtime::session_instructions(host, runtime, working_directory) {
+        task["projectInstructions"] = json!(instructions);
+    }
+    if let Some(style) = session_working_style(host, autonomous) {
+        task["workingStyle"] = json!(style);
+    }
+}
+
+/// Records which adapter ran the session (`AgentRuntimeLaunch`).
+fn runtime_launch(prepared: &Prepared) -> Value {
+    let transport = prepared.plan.state;
+    let adapter = if prepared.binding.is_some() { transport.to_owned() } else { format!("legacy-{transport}") };
+    let mut launch = json!({ "adapter": adapter, "transport": transport });
+    if let Some(host_id) = &prepared.plan.host_id {
+        launch["hostId"] = json!(host_id);
+    }
+    if let Some(command) = &prepared.plan.command {
+        launch["command"] = json!(command);
+    }
+    launch
+}
+
+fn finish_launch(dir: &std::path::Path, key: &str, input: &Value, prepared: &Prepared, skill_names: &[String]) -> Result<Value> {
     let sessions = store(dir);
+    let launch = runtime_launch(prepared);
+    let _ = sessions.mutate(key, true, |record| record["runtimeLaunch"] = launch);
+    if let (Some(binding), Some(host_id)) = (&prepared.binding, prepared.plan.host_id.as_deref()) {
+        let profile_id = non_empty(input, "profileId").or_else(|| non_empty(input, "agentId")).unwrap_or_default().to_owned();
+        let (host_id, activations) = (host_id.to_owned(), binding.skill_activations.clone());
+        let skills = skill_names.to_vec();
+        let _ = sessions.mutate(key, true, |record| {
+            record["agentId"] = json!(host_id);
+            record["profileId"] = json!(profile_id);
+            record["hostId"] = json!(host_id);
+            if !skills.is_empty() {
+                record["activeSkills"] = json!(skills);
+            }
+            if !activations.is_empty() {
+                record["skillActivations"] = json!(activations);
+            }
+        });
+    }
     for (field, name) in [("connectionId", "connectionId"), ("projectId", "projectId")] {
         if let Some(value) = non_empty(&input, field).map(str::to_owned) {
             let _ = sessions.mutate(key, true, |record| record[name] = json!(value));

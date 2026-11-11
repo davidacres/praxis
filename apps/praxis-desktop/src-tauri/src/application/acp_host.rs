@@ -208,6 +208,10 @@ impl Task {
                     record["lastError"] = json!(extract_provider_limit_message(text).unwrap_or_else(|| text.to_owned()));
                 }
             }
+            let signals = praxis_ai::session::skill_usage::detect_skill_uses(std::slice::from_ref(&event));
+            if let Some(uses) = praxis_ai::session::skill_usage::merge_detected_skill_uses(Some(&record["detectedSkills"]), &signals).filter(|_| !signals.is_empty()) {
+                record["detectedSkills"] = json!(uses);
+            }
             if let Some(events) = record["events"].as_array_mut() {
                 events.push(event);
                 let count = events.len();

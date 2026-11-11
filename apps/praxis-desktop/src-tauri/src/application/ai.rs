@@ -210,6 +210,18 @@ pub fn dispatch(
                         .and_then(Value::as_array)
                         .map_or(0, Vec::len)
                 );
+                // Sessions recorded before skill detection existed are scanned when first opened,
+                // and the result is saved with the session.
+                if session["detectedSkills"].is_null() {
+                    let events = session["events"].as_array().cloned().unwrap_or_default();
+                    let signals = praxis_ai::session::skill_usage::detect_skill_uses(&events);
+                    if let Some(uses) = praxis_ai::session::skill_usage::merge_detected_skill_uses(None, &signals) {
+                        session["detectedSkills"] = json!(uses);
+                        let key = session["issueKey"].as_str().unwrap_or(issue_key).to_owned();
+                        let saved = session["detectedSkills"].clone();
+                        let _ = super::session_store::store(user_data_dir).mutate(&key, true, |record| record["detectedSkills"] = saved);
+                    }
+                }
                 if let Some(record) = session.as_object_mut() {
                     // Provider conversation history is private execution state.
                     record.remove("conversationHistory");

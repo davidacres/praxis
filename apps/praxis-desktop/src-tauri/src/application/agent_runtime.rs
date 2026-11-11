@@ -470,6 +470,89 @@ fn import_item(host: &HostContext, user_data_dir: &Path, args: &[Value]) -> Resu
     Ok(refresh(host, user_data_dir))
 }
 
+// ── bindings: an agent profile on a runtime host ─────────────────────────
+
+/// A validated profile + host (+ skills) ready to launch (`AgentRuntimeManager.createBinding`).
+pub(super) struct Binding {
+    /// The discovered host definition (`manifest`, `rootPath`, `followsSessionRuntime`, ...).
+    pub host: Value,
+    /// `buildProfileContext`: the profile's instructions and the skills that carry theirs.
+    pub context: String,
+    /// `{ skillId, mode, version? }` per requested skill.
+    pub skill_activations: Vec<Value>,
+}
+
+fn skill_read_natively(skill: &Value, provider: &str) -> bool {
+    skill["source"]["readBy"].as_array().is_some_and(|read_by| read_by.iter().any(|runtime| runtime == provider))
+}
+
+/// Resolves and validates one binding immediately before launch: the host must be discovered,
+/// trusted and error-free; the profile valid and trusted; every skill discovered and valid.
+pub(super) fn create_binding(
+    host: &HostContext,
+    user_data_dir: &Path,
+    profile_id: &str,
+    host_id: &str,
+    provider: &str,
+    skill_names: &[String],
+) -> Result<Binding> {
+    let snapshot = list(host, user_data_dir);
+    let definition = snapshot["runtimeHosts"]
+        .as_array()
+        .and_then(|hosts| hosts.iter().find(|candidate| candidate["manifest"]["id"] == host_id))
+        .cloned()
+        .ok_or_else(|| failure(format!("Runtime host \"{host_id}\" was not discovered.")))?;
+    if definition["trusted"] != true {
+        return Err(failure(format!("Runtime host \"{host_id}\" is not trusted.")));
+    }
+    if let Some(errors) = definition["errors"].as_array().filter(|errors| !errors.is_empty()) {
+        let listed: Vec<String> = errors.iter().map(|error| format!("{}: {}", error["path"].as_str().unwrap_or_default(), error["message"].as_str().unwrap_or_default())).collect();
+        return Err(failure(format!("Runtime host \"{host_id}\" has manifest errors: {}", listed.join("; "))));
+    }
+    let profile = snapshot["profiles"]
+        .as_array()
+        .and_then(|profiles| profiles.iter().find(|candidate| candidate["profile"]["id"] == profile_id))
+        .cloned()
+        .ok_or_else(|| failure(format!("Agent profile {profile_id} was not discovered.")))?;
+    if let Some(error) = profile["error"].as_str() {
+        return Err(failure(format!("Agent profile {profile_id} is invalid: {error}")));
+    }
+    if profile["trusted"] != true {
+        return Err(failure(format!("Agent profile {profile_id} is not trusted.")));
+    }
+
+    let mut sections = vec![
+        format!("## Praxis agent profile: {}", profile["profile"]["name"].as_str().unwrap_or_default()),
+        profile["profile"]["instructions"].as_str().unwrap_or_default().to_owned(),
+    ];
+    let mut skill_activations = Vec::new();
+    for name in skill_names {
+        let skill = snapshot["skills"]
+            .as_array()
+            .and_then(|skills| skills.iter().find(|candidate| candidate["metadata"]["name"] == name.as_str()))
+            .ok_or_else(|| failure(format!("Skill {name} was not discovered.")))?;
+        if let Some(error) = skill["error"].as_str() {
+            return Err(failure(format!("Skill {name} is invalid: {error}")));
+        }
+        let instructions = fs::read_to_string(skill["instructionsPath"].as_str().unwrap_or_default()).map_err(|error| failure(error.to_string()))?;
+        // A skill from a tool's own folder is loaded by that tool's runtime itself, and a host
+        // can confirm native activation; adding the instructions again would double them.
+        let confirmed = with_state(user_data_dir, |state| state.skill_modes.get(host_id).and_then(|modes| modes.get(name)).cloned());
+        let mode = if skill_read_natively(skill, provider) { "native".to_owned() } else { confirmed.unwrap_or_else(|| "context".to_owned()) };
+        if mode != "native" {
+            sections.push(format!("## Praxis skill: {name} ({mode})"));
+            sections.push(instructions);
+        }
+        let mut activation = json!({ "skillId": name, "mode": mode });
+        if let Some(version) = skill["metadata"]["version"].as_str().filter(|v| !v.is_empty()) {
+            activation["version"] = json!(version);
+        }
+        skill_activations.push(activation);
+    }
+    let context = sections.into_iter().filter(|section| !section.is_empty()).collect::<Vec<_>>().join("\n\n");
+    Ok(Binding { host: definition, context, skill_activations })
+}
+
 /// Paths discovery found: the only ones the renderer may ask to reveal.
 fn discovered_paths(snapshot: &Value) -> Vec<String> {
     let strings = |value: &Value| value.as_str().map(str::to_owned);
