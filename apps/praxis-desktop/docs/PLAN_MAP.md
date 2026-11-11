@@ -685,3 +685,6 @@ Delivered pipeline and extension guidance: [interactive chat gadgets](interactiv
 | [FX-BE-192](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-192/story.md) | Story | Verify notes journeys and unchanged shelf geometry | To Do | FX-BE-191 |
 | [TASK-502](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-192/tasks/task-502.md) | Task | Add persistence and end-to-end regression coverage | To Do | TASK-501 |
 | [TASK-503](plans/features/fx-bf-113-shelf-and-sidebar-notes/stories/fx-be-192/tasks/task-503.md) | Task | Run full UI validation and preserve visual evidence | To Do | TASK-502 |
+| FX-BF-114 | Feature | [Rust backend and desktop migration](plans/features/fx-bf-114-rust-and-tauri-migration/feature.md) | In Progress | None |
+| FX-BE-199 | Story | [Tauri shell and webview cutover](plans/features/fx-bf-114-rust-and-tauri-migration/stories/fx-be-199-tauri-v2-shell-webviews-and-cutover/story.md) | In Progress | FX-BE-196, FX-BE-197, FX-BE-198 |
+| TASK-527 | Task | [Tauri shell, guarded browser and packaging](plans/features/fx-bf-114-rust-and-tauri-migration/stories/fx-be-199-tauri-v2-shell-webviews-and-cutover/tasks/task-527-implement-tauri-shell-child-webviews-and-packaging.md) | In Progress | FX-BE-196, FX-BE-197, FX-BE-198 |

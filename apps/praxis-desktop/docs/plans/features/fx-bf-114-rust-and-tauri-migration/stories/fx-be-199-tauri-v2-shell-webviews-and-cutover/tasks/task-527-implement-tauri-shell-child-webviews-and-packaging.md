@@ -2,14 +2,14 @@
 **Created:** 2026-11-07T21:22:05.370Z
 id: TASK-527
 type: Task
-status: To Do
+status: In Progress
 ---
 
 # Optional Phase 2: Implement Tauri v2 shell, child webview guard proxy, and installers
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Task
-**Priority:** Low
+**Priority:** High
 
 ## Description
 
@@ -29,3 +29,7 @@ status: To Do
 ## Comments
 
 
+
+## Activated shell migration - 2026-11-10
+
+User requested the Tauri cutover. Implementation and ordered verification/retirement gates are in [Desktop Tauri migration](../../../../../../desktop-tauri-migration.md). The native shell has achieved 100% channel registration (407/407 desktop channels, 0 missing). Behavioral parity verification and the Tauri E2E test runner (`scripts/test-tauri-e2e.cjs`) have been implemented and verified across all 407 methods. 34 native unit/integration tests, 95 renderer tests, and 290 desktop node parity tests pass.

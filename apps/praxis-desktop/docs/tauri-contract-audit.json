@@ -1,0 +1,2486 @@
+{
+  "shell": "tauri",
+  "transport": "in-process",
+  "methodCount": 407,
+  "registeredCount": 407,
+  "missingCount": 0,
+  "verifiedCount": 0,
+  "methods": [
+    {
+      "method": "app.getVersion",
+      "channel": "app:getVersion",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "app.update.getStatus",
+      "channel": "update:getStatus",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "app.update.check",
+      "channel": "update:check",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "app.update.download",
+      "channel": "update:download",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "app.update.installNow",
+      "channel": "update:installNow",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "board.list",
+      "channel": "board:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "board.get",
+      "channel": "board:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.list",
+      "channel": "issue:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.getFilterMetadata",
+      "channel": "issue:getFilterMetadata",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.get",
+      "channel": "issue:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.create",
+      "channel": "issue:create",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.update",
+      "channel": "issue:update",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.delete",
+      "channel": "issue:delete",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.transition",
+      "channel": "issue:transition",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.addComment",
+      "channel": "issue:addComment",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.getSelfAssigneeLabel",
+      "channel": "issue:getSelfAssigneeLabel",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.getProjects",
+      "channel": "issue:getProjects",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "issue.getParentItems",
+      "channel": "issue:getParentItems",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.list",
+      "channel": "connection:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.add",
+      "channel": "connection:add",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.update",
+      "channel": "connection:update",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.remove",
+      "channel": "connection:remove",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.generateId",
+      "channel": "connection:generateId",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.check",
+      "channel": "connection:check",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.getTrackedBoards",
+      "channel": "connection:getTrackedBoards",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.addTrackedBoards",
+      "channel": "connection:addTrackedBoards",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.removeTrackedBoard",
+      "channel": "connection:removeTrackedBoard",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.updateTrackedBoard",
+      "channel": "connection:updateTrackedBoard",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.setSecret",
+      "channel": "connection:setSecret",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "connection.hasSecret",
+      "channel": "connection:hasSecret",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "folder.discoverPlans",
+      "channel": "folder:discoverPlans",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.setNotificationView",
+      "channel": "window:setNotificationView",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.reload",
+      "channel": "window:reload",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.minimize",
+      "channel": "window:minimize",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.toggleMaximize",
+      "channel": "window:toggleMaximize",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.close",
+      "channel": "window:close",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.confirmClose",
+      "channel": "window:confirmClose",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.cancelClose",
+      "channel": "window:cancelClose",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.isMaximized",
+      "channel": "window:isMaximized",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.supportsVibrancy",
+      "channel": "window:supportsVibrancy",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.setSurfaceVibrancy",
+      "channel": "window:setSurfaceVibrancy",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.getZoomFactor",
+      "channel": "window:getZoomFactor",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "window.setZoomFactor",
+      "channel": "window:setZoomFactor",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "detachedChat.open",
+      "channel": "detachedChat:open",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "detachedChat.close",
+      "channel": "detachedChat:close",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "detachedChat.list",
+      "channel": "detachedChat:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.get",
+      "channel": "settings:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.set",
+      "channel": "settings:set",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.getMobileHostInfo",
+      "channel": "settings:getMobileHostInfo",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.publishMobileAppearance",
+      "channel": "settings:publishMobileAppearance",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.createMobilePairingInvitation",
+      "channel": "settings:createMobilePairingInvitation",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.confirmMobilePairing",
+      "channel": "settings:confirmMobilePairing",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.denyMobilePairing",
+      "channel": "settings:denyMobilePairing",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.revokeMobilePairedDevice",
+      "channel": "settings:revokeMobilePairedDevice",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.rotateMobileHostKey",
+      "channel": "settings:rotateMobileHostKey",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.clearSessionData",
+      "channel": "settings:clearSessionData",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "settings.clearProjectWorkspaceBoardData",
+      "channel": "settings:clearProjectWorkspaceBoardData",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "log.getRecent",
+      "channel": "log:getRecent",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "dialog.pickFolder",
+      "channel": "dialog:pickFolder",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "shell.openExternal",
+      "channel": "shell:openExternal",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.attach",
+      "channel": "browser:attach",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.setBounds",
+      "channel": "browser:setBounds",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.setVisible",
+      "channel": "browser:setVisible",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.navigate",
+      "channel": "browser:navigate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.back",
+      "channel": "browser:back",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.forward",
+      "channel": "browser:forward",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.reload",
+      "channel": "browser:reload",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "browser.getState",
+      "channel": "browser:getState",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "boardPrefs.get",
+      "channel": "boardPrefs:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "boardPrefs.set",
+      "channel": "boardPrefs:set",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getStatus",
+      "channel": "ai:getStatus",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setApiKey",
+      "channel": "ai:setApiKey",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listProviderStatuses",
+      "channel": "ai:listProviderStatuses",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.probeProviderCapability",
+      "channel": "ai:probeProviderCapability",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.testMcpServer",
+      "channel": "ai:testMcpServer",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.codeIntelligence",
+      "channel": "ai:codeIntelligence",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getSemanticModelStatus",
+      "channel": "ai:getSemanticModelStatus",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.downloadSemanticModel",
+      "channel": "ai:downloadSemanticModel",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.deleteSemanticModel",
+      "channel": "ai:deleteSemanticModel",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.resetCodeIntelligence",
+      "channel": "ai:resetCodeIntelligence",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.installCliProvider",
+      "channel": "ai:installCliProvider",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getLatestCliProviderVersion",
+      "channel": "ai:getLatestCliProviderVersion",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listCliModelOptions",
+      "channel": "ai:listCliModelOptions",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listApiModelOptions",
+      "channel": "ai:listApiModelOptions",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setProviderApiKey",
+      "channel": "ai:setProviderApiKey",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.testProviderApiKey",
+      "channel": "ai:testProviderApiKey",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.resetProviderApiKeys",
+      "channel": "ai:resetProviderApiKeys",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listProviderPresets",
+      "channel": "ai:listProviderPresets",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.detectLocalRuntimes",
+      "channel": "ai:detectLocalRuntimes",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.testCustomProvider",
+      "channel": "ai:testCustomProvider",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.saveCustomProvider",
+      "channel": "ai:saveCustomProvider",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.removeCustomProvider",
+      "channel": "ai:removeCustomProvider",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listSessions",
+      "channel": "ai:listSessions",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getSession",
+      "channel": "ai:getSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listInterruptedSessions",
+      "channel": "ai:listInterruptedSessions",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.resumeInterruptedSession",
+      "channel": "ai:resumeInterruptedSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.dismissInterruptedSessions",
+      "channel": "ai:dismissInterruptedSessions",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.loadImagePreview",
+      "channel": "ai:loadImagePreview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.openHtmlArtifactPreview",
+      "channel": "ai:openHtmlArtifactPreview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.artifactPageThumbnail",
+      "channel": "ai:artifactPageThumbnail",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.readArtifactText",
+      "channel": "ai:readArtifactText",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.saveArtifactToWorkspace",
+      "channel": "ai:saveArtifactToWorkspace",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.renameSession",
+      "channel": "ai:renameSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.assignSessionToProject",
+      "channel": "ai:assignSessionToProject",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.deleteSession",
+      "channel": "ai:deleteSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.archiveSession",
+      "channel": "ai:archiveSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.delegate",
+      "channel": "ai:delegate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.abort",
+      "channel": "ai:abort",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.continueSession",
+      "channel": "ai:continueSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.updateSessionModel",
+      "channel": "ai:updateSessionModel",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.updateSessionReasoningEffort",
+      "channel": "ai:updateSessionReasoningEffort",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.updateSessionPermissionMode",
+      "channel": "ai:updateSessionPermissionMode",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.updateSessionToolAccess",
+      "channel": "ai:updateSessionToolAccess",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.handoverSession",
+      "channel": "ai:handoverSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.startConversation",
+      "channel": "ai:startConversation",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.sendConversationMessage",
+      "channel": "ai:sendConversationMessage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.stopConversation",
+      "channel": "ai:stopConversation",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setConversationToolOwner",
+      "channel": "ai:setConversationToolOwner",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.editHandoverBrief",
+      "channel": "ai:editHandoverBrief",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.removeWorktree",
+      "channel": "ai:removeWorktree",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setWorktree",
+      "channel": "ai:setWorktree",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.switchSessionMode",
+      "channel": "ai:switchSessionMode",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setAcpMode",
+      "channel": "ai:setAcpMode",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.respondToPermission",
+      "channel": "ai:respondToPermission",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.undoToolFileChange",
+      "channel": "ai:undoToolFileChange",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listWorkflowPacks",
+      "channel": "ai:listWorkflowPacks",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getWorkflowAssignment",
+      "channel": "ai:getWorkflowAssignment",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setWorkflowAssignment",
+      "channel": "ai:setWorkflowAssignment",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.startTicketReview",
+      "channel": "ai:startTicketReview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getTicketReview",
+      "channel": "ai:getTicketReview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.localPeerReview",
+      "channel": "ai:localPeerReview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.localPeerReviewFollowUp",
+      "channel": "ai:localPeerReviewFollowUp",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getAnalysis",
+      "channel": "ai:getAnalysis",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.submitAnalysis",
+      "channel": "ai:submitAnalysis",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.cancelAnalysis",
+      "channel": "ai:cancelAnalysis",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.setAnalysisConfirmed",
+      "channel": "ai:setAnalysisConfirmed",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.clearAnalysis",
+      "channel": "ai:clearAnalysis",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.startDelivery",
+      "channel": "ai:startDelivery",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.decomposeFeature",
+      "channel": "ai:decomposeFeature",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.startSubTaskDelivery",
+      "channel": "ai:startSubTaskDelivery",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.listMergeRequests",
+      "channel": "ai:listMergeRequests",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.createMergeRequest",
+      "channel": "ai:createMergeRequest",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.checkMergeRequestFeedback",
+      "channel": "ai:checkMergeRequestFeedback",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.evaluatePrompt",
+      "channel": "ai:evaluatePrompt",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getFindingFeedback",
+      "channel": "ai:getFindingFeedback",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.reviewFinding",
+      "channel": "ai:reviewFinding",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.evaluateSession",
+      "channel": "ai:evaluateSession",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.getSessionFeedback",
+      "channel": "ai:getSessionFeedback",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.submitSessionFeedback",
+      "channel": "ai:submitSessionFeedback",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "ai.rewritePromptFromFeedback",
+      "channel": "ai:rewritePromptFromFeedback",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.series",
+      "channel": "aiUsage:series",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.compareLatestPeriod",
+      "channel": "aiUsage:compareLatestPeriod",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.dashboardSummary",
+      "channel": "aiUsage:dashboardSummary",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.listEvents",
+      "channel": "aiUsage:listEvents",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.providerSnapshot",
+      "channel": "aiUsage:providerSnapshot",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.providerHistory",
+      "channel": "aiUsage:providerHistory",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.providerSnapshots",
+      "channel": "aiUsage:providerSnapshots",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.setProviderUsageKey",
+      "channel": "aiUsage:setProviderUsageKey",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.alibabaConsoleStatus",
+      "channel": "aiUsage:alibabaConsoleStatus",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.alibabaConsoleSignIn",
+      "channel": "aiUsage:alibabaConsoleSignIn",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "aiUsage.alibabaConsoleSignOut",
+      "channel": "aiUsage:alibabaConsoleSignOut",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "coordination.state",
+      "channel": "coordination:state",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "coordination.recover",
+      "channel": "coordination:recover",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "coordination.stopService",
+      "channel": "coordination:stopService",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "taskDesigner.getState",
+      "channel": "taskDesigner:getState",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "taskDesigner.setState",
+      "channel": "taskDesigner:setState",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "taskDesigner.resolveIssue",
+      "channel": "taskDesigner:resolveIssue",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "taskDesigner.recommendFlow",
+      "channel": "taskDesigner:recommendFlow",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "taskDesigner.recommendBoardFlow",
+      "channel": "taskDesigner:recommendBoardFlow",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "taskDesigner.generateMasterPlan",
+      "channel": "taskDesigner:generateMasterPlan",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "activity.list",
+      "channel": "activity:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.sessionTurn",
+      "channel": "assistant:sessionTurn",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.control",
+      "channel": "assistant:control",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.cancelTurn",
+      "channel": "assistant:cancelTurn",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.retryParticipant",
+      "channel": "assistant:retryParticipant",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.resolveAttempt",
+      "channel": "assistant:resolveAttempt",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.stageAttachments",
+      "channel": "assistant:stageAttachments",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.turn",
+      "channel": "assistant:turn",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.teamReview",
+      "channel": "assistant:teamReview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.listChats",
+      "channel": "assistant:listChats",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.getChat",
+      "channel": "assistant:getChat",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.createChat",
+      "channel": "assistant:createChat",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.saveChat",
+      "channel": "assistant:saveChat",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.renameChat",
+      "channel": "assistant:renameChat",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.archiveChat",
+      "channel": "assistant:archiveChat",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.deleteChat",
+      "channel": "assistant:deleteChat",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.submitTurn",
+      "channel": "assistant:submitTurn",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "assistant.getConversation",
+      "channel": "assistant:getConversation",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.projectTrust",
+      "channel": "workflows:projectTrust",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.approveProjectTrust",
+      "channel": "workflows:approveProjectTrust",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.listTemplates",
+      "channel": "workflows:listTemplates",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.getRecommendedTemplate",
+      "channel": "workflows:getRecommendedTemplate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.recommendTemplate",
+      "channel": "workflows:recommendTemplate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.recommendModelTiers",
+      "channel": "workflows:recommendModelTiers",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.templateReadiness",
+      "channel": "workflows:templateReadiness",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.catalog",
+      "channel": "workflows:catalog",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.get",
+      "channel": "workflows:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.instantiate",
+      "channel": "workflows:instantiate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.promotePack",
+      "channel": "workflows:promotePack",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.save",
+      "channel": "workflows:save",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.remove",
+      "channel": "workflows:remove",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.validate",
+      "channel": "workflows:validate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.assistant",
+      "channel": "workflows:assistant",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.effectivePolicy",
+      "channel": "workflows:effectivePolicy",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.listPolicies",
+      "channel": "workflows:listPolicies",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.savePolicy",
+      "channel": "workflows:savePolicy",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.removePolicy",
+      "channel": "workflows:removePolicy",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.startRun",
+      "channel": "workflows:startRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.prepareRun",
+      "channel": "workflows:prepareRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.checkRunBase",
+      "channel": "workflows:checkRunBase",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.commitRunBase",
+      "channel": "workflows:commitRunBase",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.selectControllerRun",
+      "channel": "workflows:selectControllerRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.removeControllerRun",
+      "channel": "workflows:removeControllerRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.listRuns",
+      "channel": "workflows:listRuns",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.getRun",
+      "channel": "workflows:getRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.renameRun",
+      "channel": "workflows:renameRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.advanceStage",
+      "channel": "workflows:advanceStage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.approveRun",
+      "channel": "workflows:approveRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.bypassGate",
+      "channel": "workflows:bypassGate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.skipApproval",
+      "channel": "workflows:skipApproval",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.decideLoop",
+      "channel": "workflows:decideLoop",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.stageReport",
+      "channel": "workflows:stageReport",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.saveStageReport",
+      "channel": "workflows:saveStageReport",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.retryStage",
+      "channel": "workflows:retryStage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.switchStageProvider",
+      "channel": "workflows:switchStageProvider",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.stopForProviderLimit",
+      "channel": "workflows:stopForProviderLimit",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.reworkStage",
+      "channel": "workflows:reworkStage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.resolveMergeWithAi",
+      "channel": "workflows:resolveMergeWithAi",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.cancelRun",
+      "channel": "workflows:cancelRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.inspectRunWork",
+      "channel": "workflows:inspectRunWork",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.deleteRun",
+      "channel": "workflows:deleteRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.archiveRun",
+      "channel": "workflows:archiveRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.getEvidence",
+      "channel": "workflows:getEvidence",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.startDiagnosis",
+      "channel": "workflows:startDiagnosis",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.getRecommendation",
+      "channel": "workflows:getRecommendation",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.clearRecommendation",
+      "channel": "workflows:clearRecommendation",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workflows.recommendAgent",
+      "channel": "workflows:recommendAgent",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.list",
+      "channel": "projects:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.get",
+      "channel": "projects:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.create",
+      "channel": "projects:create",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.useExisting",
+      "channel": "projects:useExisting",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.remove",
+      "channel": "projects:remove",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.update",
+      "channel": "projects:update",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.inspectFolder",
+      "channel": "projects:inspectFolder",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.attachFolder",
+      "channel": "projects:attachFolder",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.linkBoard",
+      "channel": "projects:linkBoard",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.unlinkBoard",
+      "channel": "projects:unlinkBoard",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.listDocuments",
+      "channel": "projects:listDocuments",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.readDocument",
+      "channel": "projects:readDocument",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.discoverImports",
+      "channel": "projects:discoverImports",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.validateImports",
+      "channel": "projects:validateImports",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.createFromImports",
+      "channel": "projects:createFromImports",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.getRunProfile",
+      "channel": "projects:getRunProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.saveRunProfile",
+      "channel": "projects:saveRunProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.discoverRunServices",
+      "channel": "projects:discoverRunServices",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "projects.validateRunProfile",
+      "channel": "projects:validateRunProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.list",
+      "channel": "workspaces:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.get",
+      "channel": "workspaces:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.create",
+      "channel": "workspaces:create",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.setActive",
+      "channel": "workspaces:setActive",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.update",
+      "channel": "workspaces:update",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.remove",
+      "channel": "workspaces:remove",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.saveToFile",
+      "channel": "workspaces:saveToFile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.openFromFile",
+      "channel": "workspaces:openFromFile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "workspaces.openFolder",
+      "channel": "workspaces:openFolder",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.listProfiles",
+      "channel": "terminal:listProfiles",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.list",
+      "channel": "terminal:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.create",
+      "channel": "terminal:create",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.write",
+      "channel": "terminal:write",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.resize",
+      "channel": "terminal:resize",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.kill",
+      "channel": "terminal:kill",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.getBuffer",
+      "channel": "terminal:getBuffer",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.getContext",
+      "channel": "terminal:getContext",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "terminal.listCommands",
+      "channel": "terminal:listCommands",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.list",
+      "channel": "agentRuntime:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.refresh",
+      "channel": "agentRuntime:refresh",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.start",
+      "channel": "agentRuntime:start",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.stop",
+      "channel": "agentRuntime:stop",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.restart",
+      "channel": "agentRuntime:restart",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.roots",
+      "channel": "agentRuntime:roots",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.activateSkill",
+      "channel": "agentRuntime:activateSkill",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.createAgent",
+      "channel": "agentRuntime:createAgent",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.createProfile",
+      "channel": "agentRuntime:createProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.createSkill",
+      "channel": "agentRuntime:createSkill",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.previewImport",
+      "channel": "agentRuntime:previewImport",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.importItem",
+      "channel": "agentRuntime:importItem",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.approveNativeProject",
+      "channel": "agentRuntime:approveNativeProject",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.revealNative",
+      "channel": "agentRuntime:revealNative",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "agentRuntime.copyNative",
+      "channel": "agentRuntime:copyNative",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.getBlocks",
+      "channel": "gadgets:getBlocks",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.publish",
+      "channel": "gadgets:publish",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.publishFromText",
+      "channel": "gadgets:publishFromText",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.submit",
+      "channel": "gadgets:submit",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.replay",
+      "channel": "gadgets:replay",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.revoke",
+      "channel": "gadgets:revoke",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "gadgets.clear",
+      "channel": "gadgets:clear",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.getStatus",
+      "channel": "marketplace:getStatus",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.configure",
+      "channel": "marketplace:configure",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.setToken",
+      "channel": "marketplace:setToken",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.listCatalog",
+      "channel": "marketplace:listCatalog",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.listInstalled",
+      "channel": "marketplace:listInstalled",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.listActiveAppearance",
+      "channel": "marketplace:listActiveAppearance",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.install",
+      "channel": "marketplace:install",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.update",
+      "channel": "marketplace:update",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.remove",
+      "channel": "marketplace:remove",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.checkForUpdates",
+      "channel": "marketplace:checkForUpdates",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "marketplace.setTrust",
+      "channel": "marketplace:setTrust",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.preflight",
+      "channel": "git:preflight",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.initialize",
+      "channel": "git:initialize",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.clone",
+      "channel": "git:clone",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.open",
+      "channel": "git:open",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.refresh",
+      "channel": "git:refresh",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.status",
+      "channel": "git:status",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getCommit",
+      "channel": "git:getCommit",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getDiff",
+      "channel": "git:getDiff",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getComparison",
+      "channel": "git:getComparison",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.applyHunk",
+      "channel": "git:applyHunk",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.stage",
+      "channel": "git:stage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.unstage",
+      "channel": "git:unstage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.discard",
+      "channel": "git:discard",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.commit",
+      "channel": "git:commit",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.createBranch",
+      "channel": "git:createBranch",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.checkout",
+      "channel": "git:checkout",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.deleteBranch",
+      "channel": "git:deleteBranch",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.renameBranch",
+      "channel": "git:renameBranch",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.merge",
+      "channel": "git:merge",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.rebase",
+      "channel": "git:rebase",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getConflict",
+      "channel": "git:getConflict",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.resolveConflict",
+      "channel": "git:resolveConflict",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.abortConflict",
+      "channel": "git:abortConflict",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getFileContent",
+      "channel": "git:getFileContent",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getFileHistory",
+      "channel": "git:getFileHistory",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.getBlame",
+      "channel": "git:getBlame",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.cherryPick",
+      "channel": "git:cherryPick",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.revert",
+      "channel": "git:revert",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.stash",
+      "channel": "git:stash",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.popStash",
+      "channel": "git:popStash",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.pull",
+      "channel": "git:pull",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.fetch",
+      "channel": "git:fetch",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "git.push",
+      "channel": "git:push",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.start",
+      "channel": "runs:start",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.stop",
+      "channel": "runs:stop",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.stopService",
+      "channel": "runs:stopService",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.startService",
+      "channel": "runs:startService",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.restartService",
+      "channel": "runs:restartService",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.status",
+      "channel": "runs:status",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.reconcile",
+      "channel": "runs:reconcile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.previewUrl",
+      "channel": "runs:previewUrl",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.runVerification",
+      "channel": "runs:runVerification",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "runs.diagnoseVerificationFailure",
+      "channel": "runs:diagnoseVerificationFailure",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "preview.attach",
+      "channel": "preview:attach",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "preview.setBounds",
+      "channel": "preview:setBounds",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "preview.setVisible",
+      "channel": "preview:setVisible",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "preview.open",
+      "channel": "preview:open",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "preview.captureDiagnostics",
+      "channel": "preview:captureDiagnostics",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.listProfiles",
+      "channel": "deployments:listProfiles",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.getProfile",
+      "channel": "deployments:getProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.saveProfile",
+      "channel": "deployments:saveProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.validateProfile",
+      "channel": "deployments:validateProfile",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.preflightCapabilities",
+      "channel": "deployments:preflightCapabilities",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.evaluateCredentials",
+      "channel": "deployments:evaluateCredentials",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.publishArtifact",
+      "channel": "deployments:publishArtifact",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.listArtifacts",
+      "channel": "deployments:listArtifacts",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.listAllArtifacts",
+      "channel": "deployments:listAllArtifacts",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.getArtifact",
+      "channel": "deployments:getArtifact",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.prepare",
+      "channel": "deployments:prepare",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.approve",
+      "channel": "deployments:approve",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.deploy",
+      "channel": "deployments:deploy",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.getRun",
+      "channel": "deployments:getRun",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.listRuns",
+      "channel": "deployments:listRuns",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.health",
+      "channel": "deployments:health",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "deployments.rollback",
+      "channel": "deployments:rollback",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.list",
+      "channel": "scheduledRuns:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.get",
+      "channel": "scheduledRuns:get",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.save",
+      "channel": "scheduledRuns:save",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.preview",
+      "channel": "scheduledRuns:preview",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.remove",
+      "channel": "scheduledRuns:remove",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.rename",
+      "channel": "scheduledRuns:rename",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.archive",
+      "channel": "scheduledRuns:archive",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.workflowChoices",
+      "channel": "scheduledRuns:workflowChoices",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.pause",
+      "channel": "scheduledRuns:pause",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.startNow",
+      "channel": "scheduledRuns:startNow",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.resume",
+      "channel": "scheduledRuns:resume",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.cancel",
+      "channel": "scheduledRuns:cancel",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.skipEntry",
+      "channel": "scheduledRuns:skipEntry",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.retryEntry",
+      "channel": "scheduledRuns:retryEntry",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.approveGate",
+      "channel": "scheduledRuns:approveGate",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.setArmed",
+      "channel": "scheduledRuns:setArmed",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "scheduledRuns.resolveMissed",
+      "channel": "scheduledRuns:resolveMissed",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.list",
+      "channel": "notes:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.createNote",
+      "channel": "notes:createNote",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.updateNote",
+      "channel": "notes:updateNote",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.deleteNote",
+      "channel": "notes:deleteNote",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.createGroup",
+      "channel": "notes:createGroup",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.updateGroup",
+      "channel": "notes:updateGroup",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.deleteGroup",
+      "channel": "notes:deleteGroup",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.replaceMemberships",
+      "channel": "notes:replaceMemberships",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "notes.prepareSnapshot",
+      "channel": "notes:prepareSnapshot",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.list",
+      "channel": "artifacts:list",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.readText",
+      "channel": "artifacts:readText",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.loadImage",
+      "channel": "artifacts:loadImage",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.pageThumbnail",
+      "channel": "artifacts:pageThumbnail",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.createGroup",
+      "channel": "artifacts:createGroup",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.updateGroup",
+      "channel": "artifacts:updateGroup",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.deleteGroup",
+      "channel": "artifacts:deleteGroup",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.delete",
+      "channel": "artifacts:delete",
+      "registered": true,
+      "parityVerified": false
+    },
+    {
+      "method": "artifacts.reveal",
+      "channel": "artifacts:reveal",
+      "registered": true,
+      "parityVerified": false
+    }
+  ],
+  "eventChannels": [
+    "ai:analysisChanged",
+    "ai:semanticModelProgress",
+    "ai:sessionChanged",
+    "ai:sessionDeleted",
+    "artifacts:changed",
+    "assistant:chatsChanged",
+    "assistant:conversationUpdate",
+    "board:changed",
+    "browser:didNavigate",
+    "coordination:changed",
+    "detachedChat:changed",
+    "gadgets:changed",
+    "log:appended",
+    "marketplace:changed",
+    "mobile:pairingChanged",
+    "notes:changed",
+    "runs:log",
+    "runs:statusChanged",
+    "scheduledRuns:changed",
+    "settings:changed",
+    "terminal:command",
+    "terminal:contextAvailability",
+    "terminal:exit",
+    "terminal:output",
+    "update:status",
+    "window:closeRequested",
+    "window:maximizeChanged",
+    "window:notificationOpen",
+    "window:zoomChanged",
+    "workflows:runChanged"
+  ],
+  "mobileExecution": "in-process: paired devices and appearance handled natively",
+  "parityVerified": false
+}

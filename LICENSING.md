@@ -75,23 +75,23 @@ npm lockfile, NuGet cache and pub cache, so restore all three first.
 
 <!-- licensing:generated:begin — run `npm run licenses`; do not edit by hand -->
 
-Totals: 145 npm, 12 NuGet, 79 pub. By licence: MIT 137 · BSD-3-Clause 71 · ISC 10 · Apache-2.0 8 · BlueOak-1.0.0 5 · BSD-2-Clause 3 · PSF-2.0 1 · Python-2.0 1.
+Totals: 125 npm, 12 NuGet, 79 pub. By licence: MIT 124 · BSD-3-Clause 71 · Apache-2.0 8 · ISC 7 · BSD-2-Clause 3 · Apache-2.0 OR MIT 1 · PSF-2.0 1 · Python-2.0 1.
 
 **Needs review:** nothing — every shipped package is on the permissive list.
 
-### Desktop app — npm packages in the installer
+### Desktop app — npm packages in the distribution
 
-Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile protocol/relay packages, plus everything bundled into the renderer.
+Production dependencies of `@praxis/core` and the mobile protocol/relay packages, plus everything bundled into the renderer.
 
 | Package | Version | Licence |
 | --- | --- | --- |
 | `@agentclientprotocol/sdk` | 1.4.0 | Apache-2.0 |
 | `@hono/node-server` | 2.1.1 | MIT |
-| `@isaacs/fs-minipass` | 4.0.1 | ISC |
 | `@modelcontextprotocol/sdk` | 1.32.1 | MIT |
 | `@noble/ciphers` | 1.3.0 | MIT |
 | `@noble/curves` | 1.9.7 | MIT |
 | `@noble/hashes` | 1.8.0 | MIT |
+| `@tauri-apps/api` | 2.12.4 | Apache-2.0 OR MIT |
 | `@xterm/addon-fit` | 0.11.0 | MIT |
 | `@xterm/addon-webgl` | 0.19.0 | MIT |
 | `@xterm/xterm` | 6.0.0 | MIT |
@@ -102,12 +102,10 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `argparse` | 3.0.3 | PSF-2.0 |
 | `body-parser` | 2.4.0 | MIT |
 | `buffer-crc32` | 1.0.0 | MIT |
-| `builder-util-runtime` | 9.7.0 | MIT |
 | `bytes` | 3.1.2 | MIT |
 | `call-bind-apply-helpers` | 1.0.2 | MIT |
 | `call-bound` | 1.0.4 | MIT |
 | `chokidar` | 4.0.3 | MIT |
-| `chownr` | 3.0.0 | BlueOak-1.0.0 |
 | `content-disposition` | 1.1.0 | MIT |
 | `content-type` | 1.0.5 | MIT |
 | `content-type` | 2.1.0 | MIT |
@@ -119,7 +117,6 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `depd` | 2.0.0 | MIT |
 | `dunder-proto` | 1.0.1 | MIT |
 | `ee-first` | 1.1.1 | MIT |
-| `electron-updater` | 6.8.9 | MIT |
 | `encodeurl` | 2.0.0 | MIT |
 | `entities` | 4.5.0 | BSD-2-Clause |
 | `entities` | 8.1.0 | BSD-2-Clause |
@@ -137,12 +134,10 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `finalhandler` | 2.1.1 | MIT |
 | `forwarded` | 0.2.0 | MIT |
 | `fresh` | 2.0.0 | MIT |
-| `fs-extra` | 10.1.0 | MIT |
 | `function-bind` | 1.1.2 | MIT |
 | `get-intrinsic` | 1.3.0 | MIT |
 | `get-proto` | 1.0.1 | MIT |
 | `gopd` | 1.2.0 | MIT |
-| `graceful-fs` | 4.2.11 | ISC |
 | `has-symbols` | 1.1.0 | MIT |
 | `hasown` | 2.0.4 | MIT |
 | `hono` | 4.13.13 | MIT |
@@ -159,12 +154,8 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `json-schema-traverse` | 1.0.0 | MIT |
 | `json-schema-typed` | 8.0.2 | BSD-2-Clause |
 | `jsonc-parser` | 3.3.1 | MIT |
-| `jsonfile` | 6.2.1 | MIT |
-| `lazy-val` | 1.0.5 | MIT |
 | `linkify-it` | 5.0.2 | MIT |
 | `linkify-it` | 6.1.0 | MIT |
-| `lodash.escaperegexp` | 4.1.2 | MIT |
-| `lodash.isequal` | 4.5.0 | MIT |
 | `loose-envify` | 1.4.0 | MIT |
 | `markdown-it` | 14.3.3 | MIT |
 | `markdown-it` | 15.0.3 | MIT |
@@ -174,12 +165,8 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `merge-descriptors` | 2.0.0 | MIT |
 | `mime-db` | 1.54.0 | MIT |
 | `mime-types` | 3.0.2 | MIT |
-| `minipass` | 7.1.3 | BlueOak-1.0.0 |
-| `minizlib` | 3.1.0 | MIT |
 | `ms` | 2.1.3 | MIT |
 | `negotiator` | 1.1.0 | MIT |
-| `node-addon-api` | 7.1.1 | MIT |
-| `node-pty` | 1.1.0 | MIT |
 | `object-assign` | 4.1.1 | MIT |
 | `object-inspect` | 1.13.4 | MIT |
 | `on-finished` | 2.4.1 | MIT |
@@ -199,9 +186,7 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `require-from-string` | 2.0.2 | MIT |
 | `router` | 2.2.0 | MIT |
 | `safer-buffer` | 2.1.2 | MIT |
-| `sax` | 1.6.1 | BlueOak-1.0.0 |
 | `scheduler` | 0.23.2 | MIT |
-| `semver` | 7.7.4 | ISC |
 | `send` | 1.2.1 | MIT |
 | `serve-static` | 2.2.1 | MIT |
 | `setprototypeof` | 1.2.0 | ISC |
@@ -212,19 +197,15 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 | `side-channel-map` | 1.0.1 | MIT |
 | `side-channel-weakmap` | 1.0.2 | MIT |
 | `statuses` | 2.0.2 | MIT |
-| `tar` | 7.5.22 | BlueOak-1.0.0 |
-| `tiny-typed-emitter` | 2.1.0 | MIT |
 | `toidentifier` | 1.0.1 | MIT |
 | `type-is` | 2.1.0 | MIT |
 | `uc.micro` | 2.1.0 | MIT |
 | `uc.micro` | 3.0.0 | MIT |
-| `universalify` | 2.0.1 | MIT |
 | `unpipe` | 1.0.0 | MIT |
 | `vary` | 1.1.2 | MIT |
 | `which` | 2.0.2 | ISC |
 | `wrappy` | 1.0.2 | ISC |
 | `ws` | 8.22.0 | MIT |
-| `yallist` | 5.0.0 | BlueOak-1.0.0 |
 | `yazl` | 3.3.1 | MIT |
 | `zod` | 4.6.7 | MIT |
 | `zod-to-json-schema` | 3.25.2 | ISC |
@@ -233,7 +214,6 @@ Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile
 
 | Package | Version | Licence | Why it ships |
 | --- | --- | --- | --- |
-| `electron` | 43.8.3 | MIT | Electron runtime (bundles Chromium and Node.js; their notices ship in LICENSES.chromium.html) |
 | `typescript` | 7.0.2 | Apache-2.0 | copied into the code-intelligence package for the TypeScript sidecar |
 
 ### Code intelligence service — NuGet packages

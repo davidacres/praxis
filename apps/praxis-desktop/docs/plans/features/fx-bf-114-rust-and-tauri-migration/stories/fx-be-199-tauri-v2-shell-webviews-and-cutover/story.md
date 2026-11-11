@@ -2,14 +2,14 @@
 **Created:** 2026-11-07T21:22:03.920Z
 id: FX-BE-199
 type: Story
-status: To Do
+status: In Progress
 ---
 
 # Optional Phase 2: Tauri v2 Shell and Multi-Webview Proxy Cutover
 
-**Status:** To Do
+**Status:** In Progress
 **Type:** Story
-**Priority:** Low
+**Priority:** High
 
 ## Description
 
@@ -39,3 +39,9 @@ status: To Do
 ## Comments
 
 
+
+## Activated shell migration - 2026-11-10
+
+User requested the Tauri cutover. Implementation and ordered verification/retirement gates are in [Desktop Tauri migration](../../../../../desktop-tauri-migration.md). The new shell is a preview; this item remains In Progress until application contracts, child webview isolation and packaged release gates pass.
+
+Issue mirror: [FX-BE-199](../../../../../issues/features/fx-bf-114-rust-and-tauri-migration/stories/fx-be-199-tauri-v2-shell-webviews-and-cutover/issue.md).

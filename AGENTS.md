@@ -7,14 +7,13 @@ file (`CLAUDE.md` imports it); area notes live next to the code, indexed below.
 
 A monorepo: the **Praxis** desktop app over a shared core.
 
-| Workspace | npm name | What it is |
+| Workspace | npm / cargo name | What it is |
 | --- | --- | --- |
 | `packages/core` | `@praxis/core` | Shared types, settings, Git parsing, folder/plans parsing, AI/MCP plumbing. CommonJS. |
 | `apps/praxis-desktop/renderer` | `@praxis/desktop-renderer` | The desktop renderer — React + Vite. Ordinary DOM. |
-| `apps/praxis-desktop/main` | `@praxis/desktop-main` | Electron main + preload + the Playwright e2e suite. Hosts the renderer build. |
+| `apps/praxis-desktop/src-tauri` | `praxis-desktop` (Rust) | Native Tauri desktop application host. Integrates all backend services in-process. |
 
-Core is consumed only by the Electron app (`main` directly, `renderer` for
-types). It targets Node/Electron — no host-abstraction ports.
+The desktop shell is a native Tauri application (`praxis-desktop`) running in-process Rust services. The Electron main process has been fully superseded and retired.
 
 ## Shared logic belongs in core
 
