@@ -27,6 +27,9 @@ impl Profile {
     fn rpc(&self, channel: &str, args: Vec<Value>) -> Value {
         invoke(&self.host, channel, args).expect("RPC")
     }
+    fn try_rpc(&self, channel: &str, args: Vec<Value>) -> Result<Value> {
+        invoke(&self.host, channel, args)
+    }
 }
 impl Drop for Profile {
     fn drop(&mut self) {
@@ -1534,21 +1537,46 @@ fn agent_runtime_roots_and_authoring() {
     assert!(items["hosts"].is_object());
     assert!(items["capabilities"].is_object());
 
-    // 3. Create custom agent
-    let new_agent = json!({
-        "id": "code-debugger",
-        "name": "Code Debugger",
-        "description": "Specialized debugging agent"
-    });
-    let created = profile.rpc("agentRuntime:createAgent", vec![new_agent]);
-    assert_eq!(created["id"], "code-debugger");
+    // The roots Settings renders carry both scopes for every catalog.
+    for catalog in ["agents", "runtimeHosts", "profiles", "skills"] {
+        assert!(roots[catalog]["global"].as_str().is_some(), "{catalog}.global");
+        assert!(roots[catalog]["project"].as_str().is_some(), "{catalog}.project");
+    }
 
-    // 4. Start / Stop runtime
-    let started = profile.rpc("agentRuntime:start", vec![json!("code-debugger")]);
-    assert_eq!(started["active"], true);
+    // Built-ins are mirrored and listed on first use.
+    assert!(items["profiles"].as_array().expect("profiles").iter().any(|p| p["profile"]["id"] == "praxis-scheduler"));
+    assert!(items["skills"].as_array().expect("skills").iter().any(|s| s["metadata"]["name"] == "praxis-scheduled-runs"));
 
-    let stopped = profile.rpc("agentRuntime:stop", vec![json!("code-debugger")]);
-    assert_eq!(stopped["active"], false);
+    // 3. Create a launch binding: returns the refreshed snapshot and writes a real manifest.
+    let created = profile.rpc(
+        "agentRuntime:createAgent",
+        vec![json!({
+            "scope": "global", "id": "code-debugger", "name": "Code Debugger", "transport": "acp",
+            "command": "sleep", "args": ["30"], "scaffold": false
+        })],
+    );
+    let host = created["runtimeHosts"].as_array().expect("hosts").iter().find(|h| h["manifest"]["id"] == "code-debugger").expect("listed");
+    assert_eq!(host["trusted"], true);
+    assert!(profile.root.join("agents/code-debugger/agent.json").exists());
+
+    // A duplicate or invalid request is refused and writes nothing.
+    assert!(profile.try_rpc("agentRuntime:createAgent", vec![json!({"scope":"global","id":"code-debugger","name":"X","transport":"acp","command":"sleep"})]).is_err());
+    assert!(profile.try_rpc("agentRuntime:createAgent", vec![json!({"scope":"global","id":"Bad Id","name":"X","transport":"acp","command":"sleep"})]).is_err());
+
+    // 4. Start and stop a real host process.
+    #[cfg(unix)]
+    {
+        let started = profile.rpc("agentRuntime:start", vec![json!("code-debugger")]);
+        assert_eq!(started["hosts"]["code-debugger"]["state"], "running");
+        assert!(started["hosts"]["code-debugger"]["pid"].as_u64().is_some());
+        assert!(started["capabilities"]["code-debugger"].is_object());
+        let stopped = profile.rpc("agentRuntime:stop", vec![json!("code-debugger")]);
+        assert!(stopped["hosts"]["code-debugger"].is_null());
+    }
+
+    // Starting something undiscovered fails with the TypeScript wording.
+    let missing = profile.try_rpc("agentRuntime:start", vec![json!("nope")]).expect_err("undiscovered");
+    assert!(missing.message.contains("Runtime host nope was not discovered."));
 }
 
 #[test]

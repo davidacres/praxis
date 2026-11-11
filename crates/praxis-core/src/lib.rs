@@ -2,6 +2,7 @@
 //! settings sanitization, workspaces, project workflows, folder markdown plans,
 //! git CLI parsing/worktrees, path sandboxing, unified diffs, and marketplace archives.
 
+pub mod agent_runtime;
 pub mod config;
 pub mod folder;
 pub mod git;
