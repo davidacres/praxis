@@ -238,15 +238,10 @@ test('solid cells scatter through a super-tile rather than repeating in step', a
   // not land in the same spot in every tile.
   await openSurface();
   // Hold persistence long enough to edit the next dial before its echo arrives.
-  await app.electronApp.evaluate((_electron, modulePath) => {
-    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
-    const backend = require(modulePath).getSettingsBackend();
-    const write = backend.write.bind(backend);
-    backend.write = async (patch: unknown) => {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      return write(patch);
-    };
-  }, require.resolve('../out/main/settingsBackendInstance'));
+  await app.overrideChannel('settings:set', async (args, backend) => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    return backend.call('settings:set', ...args);
+  });
   await chooseOption(window.locator('[data-testid="motif-placement"]'), 'tile');
   const width = async () => Number((await window.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-size').trim()))

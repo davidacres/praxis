@@ -177,15 +177,12 @@ test('collapsed usage animates both bars while account limits load', async () =>
     AI_GATEWAY_API_KEY: 'usage-loading-e2e-key', AI_GATEWAY_URL: mock.baseUrl
   });
   const page = app.window;
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    const held = globalThis as unknown as { releaseUsage?: () => void };
-    const released = new Promise<void>(resolve => { held.releaseUsage = resolve; });
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers: string[]) => {
-      await released;
-      return { snapshots: providers.map(provider => ({ provider, checkedAt: new Date().toISOString(),
-        windows: [{ period: 'hour', windowDurationMinutes: 300, usedPercent: 27 }, { period: 'week', usedPercent: 54 }] })), checkedAt: new Date().toISOString() };
-    });
+  let releaseUsage!: () => void;
+  const released = new Promise<void>(resolve => { releaseUsage = resolve; });
+  await app.overrideChannel('aiUsage:providerSnapshots', async ([providers]) => {
+    await released;
+    return { snapshots: providers.map((provider: string) => ({ provider, checkedAt: new Date().toISOString(),
+      windows: [{ period: 'hour', windowDurationMinutes: 300, usedPercent: 27 }, { period: 'week', usedPercent: 54 }] })), checkedAt: new Date().toISOString() };
   });
   await openDraftComposer(page);
 
@@ -230,7 +227,7 @@ test('collapsed usage animates both bars while account limits load', async () =>
     };
     requestAnimationFrame(tick);
   }));
-  await app.electronApp.evaluate(() => (globalThis as unknown as { releaseUsage: () => void }).releaseUsage());
+  releaseUsage();
   const samples = await sampling;
   expect(samples.length).toBeGreaterThan(5);
   expect(samples[0][0]).toBeLessThan(10);

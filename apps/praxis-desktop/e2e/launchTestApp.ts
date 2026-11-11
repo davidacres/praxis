@@ -82,6 +82,15 @@ export interface TestApp {
   openWindow(url?: string): Promise<Page>;
   /** Every open window (page), main window first. */
   windows(): Page[];
+  /** Calls a host channel outside the renderer contract (what the native shell itself invokes). */
+  callHost(channel: string, ...args: unknown[]): Promise<any>;
+  /**
+   * What the shell does when the user closes or quits: asks the renderer to confirm
+   * (`window:closeRequested`, with the running-session count and the next armed schedule,
+   * exactly as the Electron main process derived them). Resolves with a promise that settles
+   * when the renderer confirms (`window:confirmClose`) - the point at which the app would exit.
+   */
+  requestClose(): Promise<Promise<void>>;
 }
 
 /**
@@ -419,6 +428,22 @@ export async function launchTestApp(
     electronApp, window, userDataDir, settingsPath,
     openWindow,
     windows: () => context.pages(),
+    callHost: callRoute('host'),
+    async requestClose() {
+      let confirm!: () => void;
+      const confirmed = new Promise<void>(resolve => { confirm = resolve; });
+      await testApp.overrideChannel('window:confirmClose', () => { confirm(); });
+      const sessions = (await callBackend('ai:listSessions')) as Array<{ state?: string }>;
+      const runningSessionCount = sessions.filter(session => ['planning', 'executing', 'awaiting_approval', 'awaiting_input'].includes(session.state ?? '')).length;
+      const views = (await callBackend('scheduledRuns:list')) as Array<{ run: { name: string; scheduledStartAt: string; timezone: string; status: string; archived?: boolean } }>;
+      const next = views.map(view => view.run).filter(run => !run.archived && run.status === 'scheduled')
+        .sort((left, right) => Date.parse(left.scheduledStartAt) - Date.parse(right.scheduledStartAt))[0];
+      await testApp.emitEvent('window:closeRequested', {
+        runningSessionCount,
+        ...(next ? { nextSchedule: { name: next.name, scheduledStartAt: next.scheduledStartAt, timezone: next.timezone } } : {})
+      });
+      return confirmed;
+    },
     async overrideChannel(channel, handler) { overrides.set(channel, handler); await syncOverrideNames(); },
     async restoreChannel(channel) { overrides.delete(channel); await syncOverrideNames(); },
     callBackend,
@@ -646,4 +671,13 @@ export async function showProjectBoard(scope: Pick<Page, 'getByTestId'> | { getB
   const toggle = scope.getByTestId('project-boards-toggle').first();
   await toggle.waitFor({ state: 'visible' });
   if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
+}
+
+/**
+ * For a step that drove a native Electron feature (main-process fault injection, native
+ * window flags, OS notifications) the Chromium + Rust harness cannot reproduce. Fails the
+ * test with the reason rather than faking the behaviour.
+ */
+export function notReproducible(reason: string): never {
+  throw new Error(`Not reproducible in the Tauri e2e harness: ${reason}`);
 }

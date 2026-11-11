@@ -206,11 +206,7 @@ test('Given six providers, When recovery appears in wide and narrow panes, Then 
   await win.keyboard.press('Escape');
   await win.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
   await win.getByRole('button', { name: 'Toggle secondary sidebar', exact: true }).click();
-  await app!.electronApp.evaluate(({ BrowserWindow }) => {
-    const window = BrowserWindow.getAllWindows()[0];
-    window.setMinimumSize(480, 600);
-    window.setSize(540, 820);
-  });
+  await app!.window.setViewportSize({ width: 540, height: 820 });
   await expect.poll(() => recovery.evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(540);
   await expect.poll(() => recovery.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   await win.getByTestId('session-limit-actions').click();
@@ -266,7 +262,7 @@ test('Given slow model discovery for one provider, When changing provider again,
   await chooseOption(win.getByTestId('session-limit-provider'), 'gemini');
   await expect(win.getByTestId('session-limit-model')).toHaveAttribute('data-value', 'mock/gemini');
   // Wait for the earlier IPC response to settle, then check it did not replace Gemini.
-  await app!.electronApp.evaluate(async () => { await new Promise(resolve => setTimeout(resolve, 1400)); });
+  await new Promise(resolve => setTimeout(resolve, 1400));
   await expect(win.getByTestId('session-limit-model')).toHaveAttribute('data-value', 'mock/gemini');
 });
 

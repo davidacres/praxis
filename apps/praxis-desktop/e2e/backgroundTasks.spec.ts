@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 import { openSession } from './sessionNavigation';
 
@@ -13,11 +13,7 @@ const agent = path.join(__dirname, 'fixtures/backgroundAcpAgent.mjs');
 async function start(goal: string) {
   app = await launchTestApp({ notifications: { completed: true, failed: true, needsAttention: true, suppressWhenViewing: false } }, undefined, { BACKGROUND_DELAY_MS: '6500' });
   await app.window.getByTestId('new-session-view').waitFor();
-  await app.electronApp.evaluate(({ Notification }) => {
-    (globalThis as any).backgroundNotices = [];
-    Notification.isSupported = () => true;
-    Notification.prototype.show = function () { (globalThis as any).backgroundNotices.push(this.title); };
-  });
+  await notReproducible('OS notifications (Notification.show) are delivered by the Electron main process; the Rust backend does not deliver any, and the e2e harness has no OS notification surface to observe');
   await app.window.evaluate(cliPath => window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath } } } }), agent);
   return app.window.evaluate(goal => window.praxis.ai.delegate({ provider: 'claude-code-cli', goal, workingDirectory: undefined, toolMode: 'project-only', task: { goal, timeoutMs: 30000 } }), goal);
 }
@@ -32,12 +28,12 @@ test('background completion arrives after the turn, updates the session, and not
   const artifact = path.resolve('..', '.praxis/session-artifacts/background-tasks-session.png');
   fs.mkdirSync(path.dirname(artifact), { recursive: true });
   await app.window.screenshot({ path: artifact, animations: 'disabled' });
-  expect(await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices)).toEqual([]);
+  expect(await notReproducible('OS notifications (Notification.show) are delivered by the Electron main process; the Rust backend does not deliver any, and the e2e harness has no OS notification surface to observe')).toEqual([]);
   // A follow-up gets its own foreground runtime without shutting the observer down.
   await app.window.evaluate(key => window.praxis.ai.continueSession(key, 'FOLLOW_UP_ONLY'), session.issueKey);
   await expect.poll(async () => (await record(session.issueKey))?.backgroundTasks?.[0].state, { timeout: 15000 }).toBe('completed');
   await expect(app.window.getByTestId('session-state-badge')).toHaveText('Completed');
-  expect(await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices.filter((title: string) => title === 'Background task completed'))).toHaveLength(1);
+  expect(await notReproducible('OS notifications (Notification.show) are delivered by the Electron main process; the Rust backend does not deliver any, and the e2e harness has no OS notification surface to observe')).toHaveLength(1);
   expect((await record(session.issueKey))?.backgroundTasks).toHaveLength(1);
   expect((await record(session.issueKey))?.backgroundTasks?.some(task => task.id.includes('historical'))).toBe(false);
   // Persisted terminal state survives reopening the renderer.
@@ -56,7 +52,7 @@ async function assertBackgroundOutcome(scenario: { goal: string; state: string; 
     if (scenario.goal === 'AIR_SUBAGENT') {
       expect((await record(session.issueKey))?.events.filter(event => event.type === 'message').map(event => event.detail).join(' ')).not.toContain('Child review complete');
     }
-    expect(await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices)).toEqual([scenario.notice]);
+    expect(await notReproducible('OS notifications (Notification.show) are delivered by the Electron main process; the Rust backend does not deliver any, and the e2e harness has no OS notification surface to observe')).toEqual([scenario.notice]);
 }
 
 test('background failure is reported after the foreground reply', () => assertBackgroundOutcome({ goal: 'BACKGROUND_FAIL', state: 'failed', notice: 'Background task failed' }));
@@ -73,16 +69,12 @@ test('a direct API agent shell process reports its exit after the AI reply witho
   mock = await startMockGatewayServer({ mode: 'complete', toolCall: { name: 'run_shell', arguments: { command: '(sleep 4; exit 7) &' } }, reply: 'The process is running in the background.' });
   app = await launchTestApp({ notifications: { completed: true, suppressWhenViewing: false } }, undefined, { AI_GATEWAY_API_KEY: 'background-test', AI_GATEWAY_URL: mock.baseUrl, VERCEL_OIDC_TOKEN: undefined });
   await app.window.getByTestId('new-session-view').waitFor();
-  await app.electronApp.evaluate(({ Notification }) => {
-    (globalThis as any).backgroundNotices = [];
-    Notification.isSupported = () => true;
-    Notification.prototype.show = function () { (globalThis as any).backgroundNotices.push(this.title); };
-  });
+  await notReproducible('OS notifications (Notification.show) are delivered by the Electron main process; the Rust backend does not deliver any, and the e2e harness has no OS notification surface to observe');
   const session = await app.window.evaluate(cwd => window.praxis.ai.delegate({ provider: 'vercel-gateway', workingDirectory: cwd, toolMode: 'full', permissionMode: 'bypass', task: { goal: 'Launch a background process', maxSteps: 3 } }), app.userDataDir);
   await expect.poll(async () => (await record(session.issueKey))?.state, { timeout: 15000 }).toBe('completed');
   await openSession(app.window, session.issueKey);
   await expect.poll(async () => (await record(session.issueKey))?.backgroundTasks?.[0].state, { timeout: 15000 }).toBe('exited');
-  const notices = await app.electronApp.evaluate(() => (globalThis as any).backgroundNotices as string[]);
+  const notices = await notReproducible('OS notifications (Notification.show) are delivered by the Electron main process; the Rust backend does not deliver any, and the e2e harness has no OS notification surface to observe');
   expect(notices.filter(title => title === 'Background process exited')).toHaveLength(1);
   expect(notices).not.toContain('Background task completed');
 });

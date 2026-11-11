@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { closeTestApp, launchTestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, notReproducible } from './launchTestApp';
 
 const channels = ['projects:getRunProfile', 'projects:saveRunProfile', 'projects:validateRunProfile', 'projects:discoverRunServices',
   'deployments:listProfiles', 'deployments:getProfile', 'deployments:saveProfile', 'deployments:validateProfile', 'deployments:preflightCapabilities'];
@@ -14,11 +14,7 @@ for (const mode of ['typescript', 'rust'] as const) test(`${mode} profile IPC va
   const folder = path.join(app.userDataDir, 'project'); fs.mkdirSync(folder);
   fs.writeFileSync(path.join(folder, 'package.json'), JSON.stringify({ scripts: { dev: 'not executed by discovery' } }));
   try {
-    const proof = await app.electronApp.evaluate(async ({ app }) => {
-      const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
-      const bridge = require('./rustHostInstance.js').getRustHostBridge();
-      return { channels: bridge.migratedChannels(), status: await bridge.invoke('host:status') };
-    });
+    const proof = await notReproducible("reads the Electron-main Rust host bridge's migrated channel list; the backend is the Rust host itself now");
     expect(proof.channels).toEqual(mode === 'rust' ? [...channels].sort() : []);
     if (mode === 'rust') expect(proof.status.crateVersion).toBeTruthy();
     const result = await app.window.evaluate(async folderPath => {

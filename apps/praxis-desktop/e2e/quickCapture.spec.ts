@@ -368,6 +368,6 @@ test('the capture dialog fits and stays readable across themes, surface packs an
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   // A native capture: Playwright's page screenshot crops to the unzoomed viewport under whole-window zoom.
-  const png = await app.electronApp.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));
+  const png = (await app.window.screenshot()).toString('base64');
   fs.writeFileSync(path.join(artifactDir, 'quick-capture-dark-150.png'), Buffer.from(png, 'base64'));
 });

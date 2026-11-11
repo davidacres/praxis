@@ -82,8 +82,7 @@ const beltOrder = (page: Page) => page.getByTestId('schedule-belt-card').evaluat
  * `electronApp.close()`), so answer the warning the way a user would.
  */
 async function quitWithArmedSchedule(): Promise<void> {
-  const closed = app!.electronApp.waitForEvent('close');
-  void app!.electronApp.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined);
+  const closed = await app!.requestClose();
   await app!.window.getByRole('button', { name: 'Quit anyway' }).click();
   await closed;
 }
@@ -910,8 +909,7 @@ test('quitting with a schedule pending asks first, and offers to minimise instea
   const { page, projectId } = await launch();
   await scheduleSoon(page, projectId, 'Pending', 1, 3600);
   // Closing a window quits only on Windows/Linux; on macOS the quit itself is what stops a schedule.
-  if (process.platform === 'darwin') void app!.electronApp.evaluate(({ app: electronApp }) => electronApp.quit());
-  else void app!.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close());
+  await app!.requestClose();
   await expect(page.getByText('A scheduled run is waiting')).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole('dialog')).toContainText('Pending');
   await expect(page.getByRole('button', { name: 'Quit anyway' })).toBeVisible();
@@ -1101,25 +1099,20 @@ test('an older schedule refresh cannot overwrite a newer failure status', async 
   const { page, projectId } = await launch();
   await scheduleSoon(page, projectId, 'Refresh ordering', 1, 120);
   const views = await page.evaluate(() => window.praxis.scheduledRuns.list());
-  await app!.electronApp.evaluate(({ ipcMain }, views) => {
-    let calls = 0;
-    const state = globalThis as typeof globalThis & { releaseScheduleRefresh?: () => void };
-    ipcMain.removeHandler('scheduledRuns:list');
-    ipcMain.handle('scheduledRuns:list', async () => {
-      const first = ++calls === 1;
-      if (first) await new Promise<void>(resolve => { state.releaseScheduleRefresh = resolve; });
-      return views.map(view => ({ ...view, run: { ...view.run, status: first ? 'running' : 'paused' } }));
-    });
-  }, views);
-  const changed = () => app!.electronApp.evaluate(({ BrowserWindow }) => {
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('scheduledRuns:changed');
+  let calls = 0;
+  let releaseScheduleRefresh: (() => void) | undefined;
+  await app!.overrideChannel('scheduledRuns:list', async () => {
+    const first = ++calls === 1;
+    if (first) await new Promise<void>(resolve => { releaseScheduleRefresh = resolve; });
+    return views.map(view => ({ ...view, run: { ...view.run, status: first ? 'running' : 'paused' } }));
   });
+  const changed = () => app!.emitEvent('scheduledRuns:changed');
   await changed();
-  await expect.poll(() => app!.electronApp.evaluate(() => !!(globalThis as typeof globalThis & { releaseScheduleRefresh?: () => void }).releaseScheduleRefresh)).toBe(true);
+  await expect.poll(() => !!releaseScheduleRefresh).toBe(true);
   await changed();
   const card = page.getByTestId('schedule-card').filter({ hasText: 'Refresh ordering' });
   await expect(card.getByTestId('schedule-status')).toHaveText('Paused');
-  await app!.electronApp.evaluate(() => (globalThis as typeof globalThis & { releaseScheduleRefresh?: () => void }).releaseScheduleRefresh!());
+  releaseScheduleRefresh!();
   // Wait for the old promise, its load handler, and React's paint to finish.
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await expect(card.getByTestId('schedule-status')).toHaveText('Paused');

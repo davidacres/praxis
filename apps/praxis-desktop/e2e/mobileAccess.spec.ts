@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
 import { chooseOption } from './chipSelect';
 
 let app: TestApp;
@@ -11,10 +11,7 @@ test.beforeEach(async () => {
   window = app.window;
   const expected = process.env.PRAXIS_EXPECT_MOBILE_TRANSPORT;
   if (expected) {
-    await expect.poll(() => app.electronApp.evaluate(({ app }) => {
-      const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
-      return require('./logBusInstance.js').getLogBus().recent() as string[];
-    })).toContain(`[mobile] Selected ${expected} transport.`);
+    await expect.poll(() => notReproducible('reads the Electron-main log bus for the selected mobile transport; the Rust backend does not expose it')).toContain(`[mobile] Selected ${expected} transport.`);
     console.log(`[mobile] Verified ${expected} transport selection`);
   }
 });

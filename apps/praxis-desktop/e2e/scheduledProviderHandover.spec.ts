@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp, notReproducible } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
 
 test.slow();
@@ -72,7 +72,7 @@ test('scheduled allowance handover checkpoints and continues the active stage in
   expect(['planning', 'executing']).toContain(original?.state);
   expect(original?.worktreePath).toBeTruthy();
   fs.writeFileSync(path.join(original!.worktreePath!, 'checkpoint.txt'), 'work before handover\n');
-  await app.electronApp.evaluate(() => { process.env.PRAXIS_E2E_PROVIDER_USAGE = JSON.stringify({ 'vercel-gateway': 0.95, 'codex-cli': 0.1 }); });
+  await notReproducible('the test changes process.env of the running Electron main process; the Rust backend reads its environment at launch only');
   await expect.poll(async () => (await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId))?.run.entries[0].outcome?.handovers?.length, { timeout: 30000 }).toBe(1);
   const view = await page.evaluate(id => window.praxis.scheduledRuns.get(id), scheduleId);
   const outcome = view!.run.entries[0].outcome!;

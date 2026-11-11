@@ -134,14 +134,10 @@ test('a finished download that the service then refuses is reported, never shown
   // Proven against the old progress listener, which declared success at 100% downloaded:
   // the success line and the error rendered together.
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
-  await app.electronApp.evaluate(({ ipcMain, BrowserWindow }) => {
-    ipcMain.removeHandler('ai:downloadSemanticModel');
-    ipcMain.handle('ai:downloadSemanticModel', async () => {
-      for (const window of BrowserWindow.getAllWindows())
-        window.webContents.send('ai:semanticModelProgress', { bytesDownloaded: 133324998, totalBytes: 133324998, percent: 100 });
-      await new Promise(resolve => setTimeout(resolve, 300));
-      throw new Error('The local code intelligence service did not install the model: fixture refusal');
-    });
+  await app.overrideChannel('ai:downloadSemanticModel', async () => {
+    await app!.emitEvent('ai:semanticModelProgress', { bytesDownloaded: 133324998, totalBytes: 133324998, percent: 100 });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    throw new Error('The local code intelligence service did not install the model: fixture refusal');
   });
 
   const notification = app.window.getByTestId('semantic-search-notification');
