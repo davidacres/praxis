@@ -301,11 +301,11 @@ impl Task {
             "tool_call_update" => self.tool_update(update),
             "available_commands_update" => {
                 let commands: Vec<Value> = update["availableCommands"].as_array().into_iter().flatten().map(|c| json!({ "name": c["name"], "description": c["description"], "inputHint": c["input"]["hint"] })).collect();
-                self.mutate(true, move |record| record["availableCommands"] = json!(commands));
+                self.mutate(true, move |record| record["acpAvailableCommands"] = json!(commands));
             }
             "current_mode_update" => {
                 let mode = update["currentModeId"].clone();
-                self.mutate(true, move |record| record["acpCurrentMode"] = mode);
+                self.mutate(true, move |record| record["acpCurrentModeId"] = mode);
             }
             _ => {}
         }
@@ -828,7 +828,7 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
         let current = modes.get("currentModeId").cloned().unwrap_or(Value::Null);
         let available: Vec<Value> = modes.get("availableModes").and_then(Value::as_array).into_iter().flatten().map(|m| json!({ "id": m["id"], "name": m["name"], "description": m["description"] })).collect();
         task.mutate(true, move |record| {
-            record["acpCurrentMode"] = current;
+            record["acpCurrentModeId"] = current;
             record["acpAvailableModes"] = json!(available);
         });
     }
@@ -1041,7 +1041,7 @@ pub fn set_acp_mode(dir: &Path, key: &str, mode_id: &str) -> Result<()> {
     let mode = mode_id.to_owned();
     super::runtime::block_on(async move { connection.request("session/set_mode", json!({ "sessionId": session, "modeId": mode })).await }).map_err(|e| failure(e.to_string()))?;
     let mode = mode_id.to_owned();
-    task.mutate(true, move |record| record["acpCurrentMode"] = json!(mode));
+    task.mutate(true, move |record| record["acpCurrentModeId"] = json!(mode));
     Ok(())
 }
 
