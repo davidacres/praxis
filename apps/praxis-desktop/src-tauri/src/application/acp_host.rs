@@ -94,6 +94,14 @@ pub struct Task {
     tool_mode: String,
     working_directory: PathBuf,
     owner_session_id: String,
+    /// Milliseconds since `started` of the last update ignored while replaying a resumed session.
+    last_replay_ms: std::sync::atomic::AtomicU64,
+}
+
+/// What a turn starts from: a new session, or a follow-up that tries to resume the agent's own.
+pub enum Launch {
+    Fresh { prompt: String },
+    FollowUp { prompt: String, resumed_prompt: String, resume_id: Option<String>, images: Vec<Value> },
 }
 
 type Tasks = Mutex<HashMap<(PathBuf, String), Arc<Task>>>;
@@ -566,6 +574,7 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
                 // A resumed session replays history; only the live prompt's updates count.
                 let current = task.agent_session_id.lock().ok().and_then(|id| id.clone());
                 if current.as_deref().is_some_and(|id| params["sessionId"] != id) || !task.prompt_in_flight.load(Ordering::SeqCst) || task.ending.load(Ordering::SeqCst) {
+                    task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
                     continue;
                 }
                 task.handle_update(&params["update"]);
@@ -669,7 +678,7 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
         ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(request.auto_approve),
         auto_allow_safe: request.permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
         steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(), tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(),
-        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(),
+        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(), last_replay_ms: std::sync::atomic::AtomicU64::new(0),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.clone()), Arc::clone(&task));
@@ -688,8 +697,9 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
         request.permission_mode.as_deref() == Some("autopilot"),
     );
     let runner = Arc::clone(&task);
+    let launch = Launch::Fresh { prompt: prompt_text };
     runtime().spawn(async move {
-        let outcome = tokio::time::timeout(timeout, run_turn(Arc::clone(&runner), request, prompt_text)).await;
+        let outcome = tokio::time::timeout(timeout, run_turn(Arc::clone(&runner), request, launch)).await;
         if outcome.is_err() {
             stop(&runner, "failed", evt("error", format!("Task stopped after timing out at {}s.", timeout.as_secs()), None, None)).await;
         }
@@ -727,14 +737,14 @@ fn fail_turn(task: &Task, message: String) {
     task.append(evt("error", shown, None, None), 0);
 }
 
-async fn run_turn(task: Arc<Task>, request: StartTask, prompt_text: String) {
-    match drive(&task, &request, prompt_text).await {
+async fn run_turn(task: Arc<Task>, request: StartTask, launch: Launch) {
+    match drive(&task, &request, launch).await {
         Ok(()) => {}
         Err(message) => fail_turn(&task, message),
     }
 }
 
-async fn drive(task: &Arc<Task>, request: &StartTask, prompt_text: String) -> std::result::Result<(), String> {
+async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::result::Result<(), String> {
     let resolved = resolve_executable(&request.command, effective_path()).ok_or_else(|| format!("Failed to start '{}': spawn {} ENOENT", request.command, request.command))?;
     let (connection, incoming) = AcpConnection::spawn(AcpSpawn {
         command: resolved.to_string_lossy().into_owned(),
@@ -772,16 +782,44 @@ async fn drive(task: &Arc<Task>, request: &StartTask, prompt_text: String) -> st
         return Ok(());
     }
 
-    let session = connection.request("session/new", json!({ "cwd": task.working_directory, "mcpServers": servers })).await.map_err(|e| with_stderr(&e.to_string()))?;
-    let agent_session = session["sessionId"].as_str().ok_or("The agent did not return a session id.")?.to_owned();
-    if let Ok(mut slot) = task.agent_session_id.lock() {
-        *slot = Some(agent_session.clone());
+    // A follow-up first tries the agent's own session (`session/load` takes MCP servers, `session/resume`
+    // does not); if that is unavailable or fails, a new session is started with a reconstructed prompt.
+    let mut resumed = false;
+    let mut options: Vec<Value> = Vec::new();
+    let mut session = Value::Null;
+    let mut agent_session = String::new();
+    if let Launch::FollowUp { resume_id: Some(resume_id), .. } = &launch {
+        let can_resume = capabilities["sessionCapabilities"]["resume"].is_object() || capabilities["sessionCapabilities"]["resume"] == true;
+        let can_load = capabilities["loadSession"] == true;
+        let cwd = task.working_directory.to_string_lossy().into_owned();
+        let attempt = if can_load && (!servers.is_empty() || !can_resume) {
+            Some(connection.request("session/load", json!({ "sessionId": resume_id, "cwd": cwd, "mcpServers": servers, "additionalDirectories": [] })).await)
+        } else if can_resume {
+            Some(connection.request("session/resume", json!({ "sessionId": resume_id, "cwd": cwd, "additionalDirectories": [] })).await)
+        } else {
+            None
+        };
+        if let Some(Ok(response)) = attempt {
+            resumed = true;
+            agent_session = resume_id.clone();
+            options = response["configOptions"].as_array().cloned().unwrap_or_default();
+            if let Ok(mut slot) = task.agent_session_id.lock() {
+                *slot = Some(agent_session.clone());
+            }
+        }
+    }
+    if !resumed {
+        session = connection.request("session/new", json!({ "cwd": task.working_directory, "mcpServers": servers })).await.map_err(|e| with_stderr(&e.to_string()))?;
+        agent_session = session["sessionId"].as_str().ok_or("The agent did not return a session id.")?.to_owned();
+        options = session["configOptions"].as_array().cloned().unwrap_or_default();
+        if let Ok(mut slot) = task.agent_session_id.lock() {
+            *slot = Some(agent_session.clone());
+        }
     }
     {
         let id = agent_session.clone();
         task.mutate(true, move |record| record["runtimeSessionId"] = json!(id));
     }
-    let options = session["configOptions"].as_array().cloned().unwrap_or_default();
     if let Some(model) = request.model.as_deref().filter(|m| !m.is_empty()) {
         // Not every agent exposes a model option; the prompt still runs.
         let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": "model", "value": model })).await;
@@ -799,13 +837,33 @@ async fn drive(task: &Arc<Task>, request: &StartTask, prompt_text: String) -> st
         return Ok(());
     }
 
+    let (text, images, follow_up) = match launch {
+        Launch::Fresh { prompt } => (prompt, Vec::new(), false),
+        Launch::FollowUp { prompt, resumed_prompt, images, .. } => (if resumed { resumed_prompt } else { prompt }, images, true),
+    };
+    if text.chars().count() > 1_000_000 {
+        return Err(format!("ACP prompt is too large ({} characters; maximum 1000000). Shorten the message or attached context before retrying.", text.chars().count()));
+    }
+    if resumed {
+        // Replay notifications from the resume arrive before the prompt gate opens; let them drain.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+        while Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            if task.started.elapsed().as_millis() as u64 - task.last_replay_ms.load(Ordering::SeqCst) >= 50 {
+                break;
+            }
+        }
+    }
+    let mut blocks = vec![json!({ "type": "text", "text": text })];
+    blocks.extend(images.iter().map(|image| json!({ "type": "image", "data": image["dataBase64"], "mimeType": image["mimeType"] })));
     task.prompt_in_flight.store(true, Ordering::SeqCst);
-    let reply = connection.request("session/prompt", json!({ "sessionId": agent_session, "prompt": [{ "type": "text", "text": prompt_text }] })).await;
+    let reply = connection.request("session/prompt", json!({ "sessionId": agent_session, "prompt": blocks })).await;
     // The reply can overtake the last streamed chunks by a hair; let them land before the gate closes.
     tokio::time::sleep(Duration::from_millis(30)).await;
     task.prompt_in_flight.store(false, Ordering::SeqCst);
     let response = reply.map_err(|e| with_stderr(&e.to_string()))?;
-    settle(task, &response, request.model.as_deref().or(agent_model.as_deref()));
+    settle(task, &response, request.model.as_deref().or(agent_model.as_deref()), follow_up);
     Ok(())
 }
 
@@ -826,7 +884,7 @@ fn mcp_for_session(server: &Value, http_supported: bool) -> Option<Value> {
 }
 
 /// Records the finished turn: the reply, telemetry, and the terminal state.
-fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>) {
+fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, follow_up: bool) {
     if task.ending.load(Ordering::SeqCst) {
         return;
     }
@@ -875,7 +933,7 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>) {
     match stop.as_str() {
         "end_turn" | "max_turn_requests" => {
             task.set_state("completed", None);
-            task.append(evt("task_complete", "Agent completed the task", None, None), 0);
+            task.append(evt("task_complete", if follow_up { "Agent completed the follow-up" } else { "Agent completed the task" }, None, None), 0);
         }
         // abort already set the terminal state.
         "cancelled" => {}
@@ -984,5 +1042,122 @@ pub fn set_acp_mode(dir: &Path, key: &str, mode_id: &str) -> Result<()> {
     super::runtime::block_on(async move { connection.request("session/set_mode", json!({ "sessionId": session, "modeId": mode })).await }).map_err(|e| failure(e.to_string()))?;
     let mode = mode_id.to_owned();
     task.mutate(true, move |record| record["acpCurrentMode"] = json!(mode));
+    Ok(())
+}
+
+// ── follow-up turns ──────────────────────────────────────────────────────
+
+/// What a follow-up needs beyond the session record.
+pub struct Continue {
+    pub message: String,
+    pub images: Vec<Value>,
+    pub provider: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub mcp_servers: Vec<Value>,
+    pub gadget_answer: bool,
+}
+
+/// `Previous conversation:` plus the recent assistant/user text, for a session that cannot be resumed.
+fn conversation_transcript(events: &[Value]) -> Option<String> {
+    let turns: Vec<String> = events
+        .iter()
+        .filter_map(|event| {
+            let detail = event["detail"].as_str().map(str::trim).filter(|d| !d.is_empty())?;
+            match event["type"].as_str()? {
+                "message" => Some(format!("Assistant:\n{detail}")),
+                "user_input_completed" => Some(format!("User:\n{detail}")),
+                _ => None,
+            }
+        })
+        .collect();
+    if turns.is_empty() {
+        return None;
+    }
+    let transcript = turns.join("\n\n");
+    let budget = 128_000;
+    let count = transcript.chars().count();
+    Some(format!(
+        "Previous conversation:\n\n{}",
+        if count > budget { format!("[Earlier conversation omitted to fit the prompt; the following is the most recent text.]\n{}", transcript.chars().skip(count - budget).collect::<String>()) } else { transcript }
+    ))
+}
+
+/// Sends a follow-up on an existing session: resumes the agent's own session when it can, else
+/// replays a bounded transcript.
+pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continue) -> Result<()> {
+    // Completion is published before the subprocess closes; give the old turn a moment to finish
+    // closing instead of refusing an otherwise completed conversation.
+    if let Some(old) = find_task(dir, key) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while find_task(dir, key).is_some() && old.state().as_deref() == Some("completed") && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+    if has_active_task(dir, key) {
+        return Err(failure(format!("The agent is still working on {key}.")));
+    }
+    let sessions = store(dir);
+    let record = sessions.get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
+    let follow_up = request.message.trim().to_owned();
+    if follow_up.is_empty() {
+        return Err(failure("Enter a follow-up message."));
+    }
+    let tool_mode = record["toolMode"].as_str().unwrap_or("full").to_owned();
+    let working = record["workingDirectory"].as_str().map(str::trim).filter(|w| !w.is_empty()).map(str::to_owned);
+    let issue = json!({ "key": key, "summary": record["taskDefinition"]["goal"], "issueType": "Task", "status": "In progress", "description": record["taskDefinition"]["scope"] });
+    let mut system = format!("{}\n\nTool mode: {}", praxis_ai::session::prompt::build_system_prompt(&record["taskDefinition"], &issue), praxis_ai::session::prompt::tool_mode_prompt(&tool_mode));
+    if request.mcp_servers.iter().any(|s| s["name"] == "praxis-browser") {
+        system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("BROWSER_TOOLS_PROMPT")));
+    }
+    if request.mcp_servers.iter().any(|s| s["name"] == praxis_ai::session::prompt::code_intelligence_server_name()) {
+        system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("CODE_INTELLIGENCE_PROMPT")));
+    }
+    if record["permissionMode"] == "autopilot" {
+        system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")));
+    }
+    let current_turn = format!("User follow-up:\n{follow_up}");
+    let resumed_prompt = [system.clone(), current_turn.clone()].join("\n\n");
+    let events = record["events"].as_array().cloned().unwrap_or_default();
+    let prompt = [Some(system), conversation_transcript(&events), Some(current_turn)].into_iter().flatten().collect::<Vec<_>>().join("\n\n");
+
+    let session_id = record["sessionId"].as_str().unwrap_or_default().to_owned();
+    let permission_mode = record["permissionMode"].as_str().map(str::to_owned);
+    let working_directory = working.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+    let model = record["model"].as_str().map(str::to_owned);
+    let task = Arc::new(Task {
+        key: key.to_owned(), dir: dir.to_path_buf(), host: host.clone(), store: Arc::clone(&sessions), connection: Mutex::new(None), agent_session_id: Mutex::new(None),
+        ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(record["autoApprovePermissions"] == true),
+        auto_allow_safe: permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
+        steps: AtomicU32::new(0), started: Instant::now(), cost_before: Some(record["cost"].clone()).filter(|c| !c.is_null()), active_tool: Mutex::default(), tool_inputs: Mutex::default(),
+        done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.clone(), working_directory, owner_session_id: session_id,
+        last_replay_ms: std::sync::atomic::AtomicU64::new(0),
+    });
+    if let Ok(mut all) = tasks().lock() {
+        all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));
+    }
+    // The previous turn recorded its own reply when it ended; clear the live buffer so the old answer
+    // cannot briefly render after the new user message.
+    task.mutate(true, |record| record["responseText"] = json!(""));
+    let mut event = evt("user_input_completed", "You", Some(follow_up), None);
+    if !request.images.is_empty() {
+        event["attachments"] = json!(request.images);
+    }
+    if request.gadget_answer {
+        event["gadgetAnswer"] = json!(true);
+    }
+    task.append(event, 0);
+    task.set_state("executing", None);
+
+    let start = StartTask {
+        issue, task: record["taskDefinition"].clone(), provider: request.provider, model, reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned),
+        working_directory: working, tool_mode, permission_mode, auto_approve: record["autoApprovePermissions"] == true, command: request.command, args: request.args, mcp_servers: request.mcp_servers,
+    };
+    let launch = Launch::FollowUp { prompt, resumed_prompt, resume_id: record["runtimeSessionId"].as_str().map(str::to_owned), images: request.images };
+    let runner = Arc::clone(&task);
+    runtime().spawn(async move {
+        run_turn(Arc::clone(&runner), start, launch).await;
+        finish(&runner).await;
+    });
     Ok(())
 }

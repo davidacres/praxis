@@ -338,11 +338,6 @@ pub fn dispatch(
             }
         }
         "ai:stopConversation" => Ok(Value::Null),
-        "ai:continueSession" => {
-            let issue_key = text(args, 0)?;
-            let prompt = text(args, 1).unwrap_or("");
-            Ok(json!({ "continued": true, "issueKey": issue_key, "prompt": prompt }))
-        }
         "ai:updateSessionModel" => {
             let issue_key = text(args, 0)?;
             let model = text(args, 1)?;

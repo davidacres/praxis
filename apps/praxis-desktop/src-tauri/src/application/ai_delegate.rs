@@ -10,11 +10,11 @@ use praxis_host::HostContext;
 use praxis_contracts::RustRpcRequest;
 use serde_json::{Value, json};
 
-use super::acp_host::{self, Decision, StartTask};
+use super::acp_host::{self, Continue, Decision, StartTask};
 use super::session_store::store;
 use super::{Result, failure, text};
 
-pub const CHANNELS: [&str; 4] = ["ai:delegate", "ai:abort", "ai:respondToPermission", "ai:setAcpMode"];
+pub const CHANNELS: [&str; 5] = ["ai:delegate", "ai:abort", "ai:respondToPermission", "ai:setAcpMode", "ai:continueSession"];
 
 fn default_task(issue: &Value, overrides: &Value) -> Value {
     let summary = issue["summary"].as_str().unwrap_or_default();
@@ -190,9 +190,54 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     sessions.get(&key)?.ok_or_else(|| failure(format!("Session for {key} did not start.")))
 }
 
+/// Normalises untrusted pasted images: base64 on a known image type, capped in count and size.
+fn sanitize_images(images: &Value) -> Vec<Value> {
+    const MAX_IMAGES: usize = 4;
+    const MAX_BYTES: usize = 12 * 1024 * 1024;
+    let mut out = Vec::new();
+    let mut total = 0usize;
+    for raw in images.as_array().into_iter().flatten() {
+        if out.len() >= MAX_IMAGES {
+            break;
+        }
+        let mime = raw["mimeType"].as_str().map(str::to_lowercase).unwrap_or_default();
+        let data: String = raw["dataBase64"].as_str().map(|d| d.split_once(',').filter(|(head, _)| head.starts_with("data:")).map_or(d, |(_, rest)| rest)).unwrap_or_default().split_whitespace().collect();
+        if !["image/png", "image/jpeg", "image/webp", "image/gif"].contains(&mime.as_str()) || data.is_empty() || data.len() % 4 != 0 {
+            continue;
+        }
+        total += data.len() * 3 / 4;
+        if total > MAX_BYTES {
+            break;
+        }
+        out.push(json!({ "mimeType": mime, "dataBase64": data }));
+    }
+    out
+}
+
+/// `ai:continueSession(issueKey, message, images?, options?)`.
+fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
+    let key = text(args, 0)?;
+    let record = store(dir).get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
+    if record["conversation"]["state"] == "running" {
+        return Err(failure("Stop the multi-AI conversation before sending a single-agent follow-up."));
+    }
+    let provider = record["provider"].as_str().map(str::to_owned).unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
+    let descriptor = built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent).ok_or_else(|| failure(format!("{provider} sessions run through the API-provider loop, which is not implemented in the Rust backend yet.")))?;
+    let override_path = host.settings().read().ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
+    let command = override_path.or(descriptor.default_command.clone()).ok_or_else(|| failure("No command is configured for this provider."))?;
+    acp_host::continue_task(host, dir, key, Continue {
+        message: text(args, 1)?.to_owned(),
+        images: sanitize_images(args.get(2).unwrap_or(&Value::Null)),
+        provider, command, args: descriptor.default_args, mcp_servers: Vec::new(),
+        gadget_answer: args.get(3).is_some_and(|o| o["gadgetAnswer"] == true),
+    })?;
+    Ok(Value::Null)
+}
+
 pub fn dispatch(host: &HostContext, dir: &std::path::Path, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:delegate" => delegate(host, dir, args),
+        "ai:continueSession" => continue_session(host, dir, args),
         "ai:abort" => (|| {
             let key = text(args, 0)?;
             acp_host::abort_task(host, dir, key);
