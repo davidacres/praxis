@@ -352,7 +352,7 @@ pub fn approve_project_trust(host: &HostContext, args: &[Value]) -> Result<Value
 
 pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
-    let embedded = embedded_templates();
+    let embedded = templates_with_addons(host);
     let mut list = Vec::new();
     if let Some(built_ins) = embedded.get("builtIn").and_then(Value::as_array) {
         for t in built_ins {
@@ -361,6 +361,10 @@ pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
                 "source": "built-in"
             }));
         }
+    }
+    // Installed workflow-template add-ons (and the bundled marketplace set) are their own tier.
+    for t in embedded.get("marketplace").and_then(Value::as_array).into_iter().flatten() {
+        list.push(json!({ "definition": t, "source": "marketplace" }));
     }
     for def in get_project_definitions(host, project_id) {
         list.push(json!({
