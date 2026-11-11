@@ -251,7 +251,12 @@ export async function launchTestApp(
     ...(options?.demoMode === false ? [] : ['--demo'])
   ], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   let backendStderr = '';
-  backend.stderr.on('data', chunk => { backendStderr += String(chunk); });
+  backend.stderr.on('data', chunk => {
+    backendStderr += String(chunk);
+    // Debugging aid: PRAXIS_E2E_BACKEND_LOG=<file> keeps the backend's stderr (with
+    // PRAXIS_E2E_LOG_RPC=1 that is one line per RPC call).
+    if (process.env.PRAXIS_E2E_BACKEND_LOG) fs.appendFileSync(process.env.PRAXIS_E2E_BACKEND_LOG, String(chunk));
+  });
   const port = await new Promise<number>((resolve, reject) => {
     let buffered = '';
     const timer = setTimeout(() => reject(new Error(`Backend did not report a port in 20s. stderr:\n${backendStderr}`)), 20000);

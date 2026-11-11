@@ -6,10 +6,12 @@
 //! are found. The key value itself never crosses IPC: only where it came from does.
 
 use praxis_ai::providers::registry::{
-    API_KEY_PROVIDERS, DescriptorKind, ProviderDescriptor, built_in_descriptors, gateway_key_from_env, is_custom_provider_id,
+    API_KEY_PROVIDERS, DescriptorKind, provider_presets, ProviderDescriptor, built_in_descriptors, gateway_key_from_env, is_custom_provider_id,
     is_executable_available, probe_cli_provider, secret_key_for_provider,
 };
+use praxis_ai::providers::model_catalog::{GatewayOptions, fetch_models};
 use praxis_host::HostContext;
+use super::runtime::{block_on, runtime};
 use serde_json::{Value, json};
 
 use super::{Result, failure, text};
@@ -154,10 +156,41 @@ fn store_or_clear(host: &HostContext, provider: &str, value: &str) -> Result<()>
     if done { Ok(()) } else { Err(failure("The key could not be saved to the secure store.")) }
 }
 
+/// Which local OpenAI-compatible runtimes answer right now. Probes each `local` preset's
+/// `/models` on loopback with a short timeout, side by side; nothing listening costs one refused
+/// connection. `PRAXIS_LOCAL_RUNTIME_ORIGINS` (JSON: preset id → origin) points a preset at a
+/// mock for tests.
+fn detect_local_runtimes() -> Vec<Value> {
+    let origins: serde_json::Map<String, Value> = std::env::var("PRAXIS_LOCAL_RUNTIME_ORIGINS").ok().and_then(|raw| serde_json::from_str(&raw).ok()).unwrap_or_default();
+    let probes = provider_presets().into_iter().filter(|preset| preset["group"] == "local").map(|preset| {
+        let base = origins.get(preset["id"].as_str().unwrap_or_default()).and_then(Value::as_str).or(preset["baseUrl"].as_str()).unwrap_or_default().trim_end_matches('/').to_owned();
+        async move {
+            let mut options = GatewayOptions::new(base.clone(), None);
+            options.api_path = preset["apiPath"].as_str().map(str::to_owned);
+            options.exact_path = true;
+            // The listing client has a 10s ceiling; a local runtime that does not answer in 700ms is not there.
+            let models = tokio::time::timeout(std::time::Duration::from_millis(700), fetch_models(&options)).await.ok()?.ok()?;
+            Some(json!({ "presetId": preset["id"], "label": preset["label"], "baseUrl": base, "modelCount": models.len() }))
+        }
+    });
+    let handles: Vec<_> = probes.map(|probe| runtime().spawn(probe)).collect();
+    block_on(async {
+        let mut found = Vec::new();
+        for handle in handles {
+            if let Ok(Some(runtime)) = handle.await {
+                found.push(runtime);
+            }
+        }
+        found
+    })
+}
+
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
         "ai:getStatus" => active_status(host),
         "ai:listProviderStatuses" => Ok(json!(list_statuses(host))),
+        "ai:listProviderPresets" => Ok(json!(provider_presets())),
+        "ai:detectLocalRuntimes" => Ok(json!(detect_local_runtimes())),
         "ai:setApiKey" => {
             let active = host.settings().read().ai.active_provider.clone();
             store_or_clear(host, &active, text(args, 0).unwrap_or_default()).and_then(|()| active_status(host))

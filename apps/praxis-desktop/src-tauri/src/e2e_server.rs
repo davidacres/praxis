@@ -180,6 +180,11 @@ fn handle(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
 /// Mirrors `praxis_rpc` in `main.rs`: same allow-list, then the host. Channels
 /// that need a native window or dialog have no webview here and answer inertly.
 fn rpc(shared: &Shared, channel: String, args: Vec<Value>) -> Value {
+    // Diagnostic: `PRAXIS_E2E_LOG_RPC=1` prints one line per call, so a render loop that hammers
+    // a channel is visible without guessing.
+    if std::env::var_os("PRAXIS_E2E_LOG_RPC").is_some() {
+        eprintln!("[rpc] {channel}");
+    }
     let fail = |code: &str, message: String| json!({ "ok": false, "error": { "code": code, "message": message } });
     if channel == "desktop:capabilities" {
         return json!({ "ok": true, "result": contract_audit(&shared.host) });

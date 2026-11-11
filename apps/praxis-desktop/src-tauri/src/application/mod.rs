@@ -254,6 +254,7 @@ const CHANNELS: &[&str] = &[
     "browser:forward",
     "browser:reload",
     "browser:getState",
+    "ai:detectLocalRuntimes",
     "ai:getStatus",
     "ai:setApiKey",
     "ai:listProviderStatuses",

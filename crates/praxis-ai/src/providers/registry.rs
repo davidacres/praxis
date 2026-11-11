@@ -85,6 +85,13 @@ pub fn secret_key_for_provider(provider: &str) -> String {
     format!("praxis.{provider}ApiKey")
 }
 
+/// The catalog behind Settings → AI Provider → Add provider, generated from the TypeScript
+/// `PROVIDER_PRESETS` by `scripts/generate-provider-presets.mjs`.
+#[must_use]
+pub fn provider_presets() -> Vec<Value> {
+    serde_json::from_str(include_str!("provider_presets.json")).unwrap_or_default()
+}
+
 /// Providers whose keys live in the AI provider secrets namespace.
 pub const API_KEY_PROVIDERS: [&str; 5] = ["vercel-gateway", "openai", "anthropic", "gemini", "z-ai"];
 
@@ -249,6 +256,16 @@ mod tests {
         assert_eq!(ids, ["vercel-gateway", "openai", "anthropic", "gemini", "z-ai", "claude-code-cli", "codex-cli", "copilot-cli", "antigravity-cli", "cursor-cli"]);
         let copilot = built_in_descriptors().into_iter().find(|d| d.id == "copilot-cli").expect("copilot");
         assert_eq!((copilot.default_command.as_deref(), copilot.default_args.as_slice()), (Some("copilot"), ["--acp".to_string()].as_slice()));
+    }
+
+    #[test]
+    fn presets_are_the_documented_catalog() {
+        let presets = provider_presets();
+        assert_eq!(presets.len(), 18);
+        let ollama = presets.iter().find(|p| p["id"] == "ollama").expect("ollama");
+        assert_eq!((ollama["group"].as_str(), ollama["keyRequired"].as_bool(), ollama["auth"]["kind"].as_str()), (Some("local"), Some(false), Some("none")));
+        let bifrost = presets.iter().find(|p| p["id"] == "bifrost").expect("bifrost");
+        assert_eq!(bifrost["auth"]["name"], "x-bf-vk");
     }
 
     #[test]

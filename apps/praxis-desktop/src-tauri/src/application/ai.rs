@@ -144,11 +144,6 @@ pub fn dispatch(
         }
         "ai:getLatestCliProviderVersion" => Ok(json!({ "version": "1.0.0", "upToDate": true })),
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
-        "ai:listProviderPresets" => Ok(json!([
-            { "id": "google", "name": "Google Deepmind / Gemini", "category": "cloud" },
-            { "id": "anthropic", "name": "Anthropic Claude", "category": "cloud" },
-            { "id": "openai", "name": "OpenAI", "category": "cloud" }
-        ])),
         "ai:testCustomProvider" => Ok(json!({ "ok": true, "models": [] })),
         "ai:saveCustomProvider" => {
             let custom = args.first().cloned().unwrap_or_else(|| json!({}));

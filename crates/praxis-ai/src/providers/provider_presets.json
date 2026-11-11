@@ -1,0 +1,231 @@
+[
+  {
+    "id": "bifrost",
+    "label": "Bifrost AI Gateway",
+    "group": "gateway",
+    "note": "Local or remote gateway · virtual keys, budgets and routing",
+    "baseUrl": "http://localhost:8080",
+    "apiPath": "/openai",
+    "auth": {
+      "kind": "header",
+      "name": "x-bf-vk"
+    },
+    "keyRequired": true
+  },
+  {
+    "id": "openrouter",
+    "label": "OpenRouter",
+    "group": "gateway",
+    "note": "Hundreds of models behind one key",
+    "baseUrl": "https://openrouter.ai",
+    "apiPath": "/api/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://openrouter.ai/settings/keys"
+  },
+  {
+    "id": "minimax",
+    "label": "MiniMax",
+    "group": "cloud",
+    "note": "MiniMax models · token-based pricing",
+    "baseUrl": "https://api.minimax.io",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://platform.minimax.io/console/access"
+  },
+  {
+    "id": "alibaba-coding-plan",
+    "label": "Alibaba Model Studio Coding Plan",
+    "group": "cloud",
+    "note": "Coding Plan key (sk-sp-…) · 5-hour, weekly and monthly quota",
+    "baseUrl": "https://coding-intl.dashscope.aliyuncs.com",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=coding-plan#/efm/coding_plan"
+  },
+  {
+    "id": "alibaba-model-studio",
+    "label": "Alibaba Model Studio",
+    "group": "cloud",
+    "note": "Qwen models · pay-as-you-go key (sk-…)",
+    "baseUrl": "https://dashscope-intl.aliyuncs.com",
+    "apiPath": "/compatible-mode/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://modelstudio.console.alibabacloud.com/ap-southeast-1/settings/api-key"
+  },
+  {
+    "id": "alibaba-token-plan",
+    "label": "Alibaba Model Studio Token Plan",
+    "group": "cloud",
+    "note": "Subscription plan key (sk-sp-…)",
+    "baseUrl": "https://token-plan.ap-southeast-1.maas.aliyuncs.com",
+    "apiPath": "/compatible-mode/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://modelstudio.console.alibabacloud.com/subscription/overview"
+  },
+  {
+    "id": "groq",
+    "label": "Groq",
+    "group": "cloud",
+    "note": "Fast open-weight models",
+    "baseUrl": "https://api.groq.com",
+    "apiPath": "/openai/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://console.groq.com/keys"
+  },
+  {
+    "id": "mistral",
+    "label": "Mistral",
+    "group": "cloud",
+    "note": "Mistral and Codestral models",
+    "baseUrl": "https://api.mistral.ai",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://console.mistral.ai/api-keys"
+  },
+  {
+    "id": "deepseek",
+    "label": "DeepSeek",
+    "group": "cloud",
+    "note": "DeepSeek chat and reasoning models",
+    "baseUrl": "https://api.deepseek.com",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://platform.deepseek.com/api_keys"
+  },
+  {
+    "id": "xai",
+    "label": "xAI",
+    "group": "cloud",
+    "note": "Grok models",
+    "baseUrl": "https://api.x.ai",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://console.x.ai"
+  },
+  {
+    "id": "together",
+    "label": "Together AI",
+    "group": "cloud",
+    "note": "Hosted open-weight models",
+    "baseUrl": "https://api.together.xyz",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://api.together.ai/settings/api-keys"
+  },
+  {
+    "id": "fireworks",
+    "label": "Fireworks",
+    "group": "cloud",
+    "note": "Hosted open-weight models",
+    "baseUrl": "https://api.fireworks.ai",
+    "apiPath": "/inference/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://fireworks.ai/account/api-keys"
+  },
+  {
+    "id": "cerebras",
+    "label": "Cerebras",
+    "group": "cloud",
+    "note": "Fast inference on Cerebras hardware",
+    "baseUrl": "https://api.cerebras.ai",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true,
+    "keyUrl": "https://cloud.cerebras.ai"
+  },
+  {
+    "id": "ollama",
+    "label": "Ollama",
+    "group": "local",
+    "note": "No key · localhost:11434",
+    "baseUrl": "http://localhost:11434",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "none"
+    },
+    "keyRequired": false
+  },
+  {
+    "id": "lm-studio",
+    "label": "LM Studio",
+    "group": "local",
+    "note": "No key · localhost:1234",
+    "baseUrl": "http://localhost:1234",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "none"
+    },
+    "keyRequired": false
+  },
+  {
+    "id": "vllm",
+    "label": "vLLM",
+    "group": "local",
+    "note": "Optional key · localhost:8000",
+    "baseUrl": "http://localhost:8000",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "none"
+    },
+    "keyRequired": false
+  },
+  {
+    "id": "llama-cpp",
+    "label": "llama.cpp server",
+    "group": "local",
+    "note": "No key · localhost:8080",
+    "baseUrl": "http://localhost:8080",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "none"
+    },
+    "keyRequired": false
+  },
+  {
+    "id": "custom",
+    "label": "Custom OpenAI-compatible endpoint",
+    "group": "custom",
+    "note": "Any server that speaks /chat/completions — you supply the URL, auth and models.",
+    "baseUrl": "",
+    "apiPath": "/v1",
+    "auth": {
+      "kind": "bearer"
+    },
+    "keyRequired": true
+  }
+]
