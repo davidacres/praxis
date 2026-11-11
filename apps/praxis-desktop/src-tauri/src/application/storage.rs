@@ -126,29 +126,6 @@ pub(super) fn write_atomic(path: &Path, value: &str, create_new: bool) -> Result
     result
 }
 
-pub(super) fn save_secret_to_disk(user_data_dir: &Path, key: &str, value: &str) {
-    let path = user_data_dir.join("secrets.json");
-    let mut entries: BTreeMap<String, Value> = fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
-
-    if value.is_empty() {
-        entries.remove(key);
-    } else {
-        entries.insert(key.to_string(), json!(value));
-    }
-
-    if let Ok(serialized) = serde_json::to_string_pretty(&entries) {
-        let _ = write_atomic(&path, &format!("{serialized}\n"), false);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
-        }
-    }
-}
-
 /// An interrupted write rolls forward only while every target still contains
 /// its expected old/new bytes. An external edit stops recovery, rather than
 /// silently overwriting a person's newer data.

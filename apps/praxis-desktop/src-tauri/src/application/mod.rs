@@ -2,6 +2,8 @@
 mod activity;
 mod agent_runtime;
 mod ai;
+mod ai_models;
+mod ai_providers;
 mod ai_usage;
 mod artifacts;
 mod assistant;
@@ -14,6 +16,7 @@ mod log_bus;
 mod marketplace;
 mod notes;
 mod projects;
+pub(crate) mod runtime;
 mod runs;
 mod scheduled_runs;
 pub(crate) mod storage;

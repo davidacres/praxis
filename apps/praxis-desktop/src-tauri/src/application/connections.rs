@@ -378,7 +378,6 @@ pub fn dispatch(
             } else {
                 host.secrets().set(&key, value);
             }
-            super::storage::save_secret_to_disk(&host.config().user_data_dir, &key, value);
             Ok(Value::Null)
         }
         "connection:hasSecret" => {

@@ -187,7 +187,6 @@ pub fn dispatch(
             } else {
                 host.secrets().set(&key, val);
             }
-            super::storage::save_secret_to_disk(&host.config().user_data_dir, &key, val);
             Ok(Value::Null)
         }
         "aiUsage:alibabaConsoleStatus" => Ok(json!({ "signedIn": false })),

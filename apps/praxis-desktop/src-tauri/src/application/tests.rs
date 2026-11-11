@@ -1584,8 +1584,11 @@ fn ai_sessions_and_analysis_lifecycle() {
     let profile = Profile::new();
 
     // 1. Provider status
+    // The active provider is unconfigured until it has a key; it is never reported ready for free.
     let status = profile.rpc("ai:getStatus", vec![]);
-    assert_eq!(status["configured"], true);
+    assert_eq!((status["provider"].as_str(), status["configured"].as_bool()), (Some("vercel-gateway"), Some(false)));
+    profile.rpc("ai:setApiKey", vec![json!("gateway-key")]);
+    assert_eq!(profile.rpc("ai:getStatus", vec![])["configured"], true);
 
     let providers = profile.rpc("ai:listProviderStatuses", vec![]);
     assert!(providers.as_array().expect("providers").len() >= 3);
@@ -1936,4 +1939,47 @@ fn existing_profile_read_compatibility() {
             .len(),
         theme_id
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn provider_statuses_are_real_and_keys_use_the_migrated_secret_names() {
+    use std::os::unix::fs::PermissionsExt;
+    let profile = Profile::new();
+
+    // A CLI provider is "configured" only when its command resolves to an executable.
+    let tool = profile.root.join("fake-agent");
+    fs::write(&tool, "#!/bin/sh\necho 'fake-agent 4.5.6'\n").expect("script");
+    fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).expect("chmod");
+    profile.rpc("settings:set", vec![json!({"ai": {"providers": {"claude-code-cli": {"cliPath": tool}, "codex-cli": {"cliPath": profile.root.join("absent")}}}})]);
+    let statuses = profile.rpc("ai:listProviderStatuses", vec![]);
+    let by_id = |id: &str| statuses.as_array().expect("list").iter().find(|s| s["provider"] == id).cloned().expect("provider listed");
+    let claude = by_id("claude-code-cli");
+    assert_eq!((claude["kind"].as_str(), claude["configured"].as_bool()), (Some("cli-agent"), Some(true)));
+    assert_eq!((claude["preflight"]["status"].as_str(), claude["preflight"]["providerVersion"].as_str()), (Some("ready"), Some("4.5.6")));
+    assert_eq!(by_id("codex-cli")["configured"], false, "a missing CLI is not configured");
+    assert_eq!(by_id("codex-cli")["preflight"]["status"], "unavailable");
+    assert_eq!(statuses.as_array().expect("list").len(), 10, "every built-in provider is listed");
+
+    // API keys: stored under the Electron-era name, trimmed, never echoed, cleared by an empty value.
+    assert_eq!(by_id("gemini")["configured"], false);
+    let set = profile.rpc("ai:setProviderApiKey", vec![json!("gemini"), json!("  sk-secret  ")]);
+    assert_eq!((set["configured"].as_bool(), set["keySource"].as_str()), (Some(true), Some("secret")));
+    assert!(!set.to_string().contains("sk-secret"), "the key value never crosses IPC");
+    assert_eq!(profile.host.secrets().get("praxis.geminiApiKey").as_deref(), Some("sk-secret"));
+    let cleared = profile.rpc("ai:setProviderApiKey", vec![json!("gemini"), json!("")]);
+    assert_eq!(cleared["configured"], false);
+    assert!(!profile.host.secrets().has("praxis.geminiApiKey"));
+
+    // Keys must never be written in the clear next to the profile's legacy secrets file.
+    profile.rpc("ai:setProviderApiKey", vec![json!("openai"), json!("sk-also-secret")]);
+    assert!(!profile.root.join("secrets.json").exists(), "no plaintext side file");
+
+    // Unknown providers and built-ins that cannot be removed are refused with a reason.
+    assert!(profile.try_rpc("ai:setProviderApiKey", vec![json!("nope"), json!("x")]).expect_err("unknown").message.contains("Unknown AI provider"));
+    assert!(profile.try_rpc("ai:removeCustomProvider", vec![json!("openai")]).expect_err("built-in").message.contains("built-in provider"));
+
+    // Reset clears every API provider's key.
+    profile.rpc("ai:resetProviderApiKeys", vec![]);
+    assert!(!profile.host.secrets().has("praxis.openaiApiKey"));
 }

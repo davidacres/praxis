@@ -120,57 +120,14 @@ pub fn dispatch(
     channel: &str,
     args: &[Value],
 ) -> Result<Value> {
+    if let Some(result) = super::ai_providers::dispatch(host, channel, args) {
+        return result;
+    }
+    if let Some(result) = super::ai_models::dispatch(host, channel, args) {
+        return result;
+    }
     match channel {
         // 1. Provider configuration & statuses
-        "ai:getStatus" => {
-            let settings = host.settings().read();
-            let provider = settings.ai.active_provider.clone();
-            let model = settings.ai.default_model.clone();
-            Ok(json!({
-                "activeProvider": provider,
-                "defaultModel": model,
-                "configured": true,
-                "ready": true
-            }))
-        }
-        "ai:setApiKey" => {
-            let key = text(args, 0).unwrap_or_default();
-            if key.is_empty() {
-                host.secrets().delete("ai:apiKey");
-            } else {
-                host.secrets().set("ai:apiKey", key);
-            }
-            super::storage::save_secret_to_disk(&host.config().user_data_dir, "ai:apiKey", key);
-            Ok(Value::Null)
-        }
-        "ai:listProviderStatuses" => {
-            let settings = host.settings().read();
-            let active = settings.ai.active_provider.clone();
-            let providers = vec![
-                json!({
-                    "provider": "google",
-                    "configured": host.secrets().has("ai:provider:google"),
-                    "enabled": active == "google",
-                    "defaultModel": "gemini-1.5-pro",
-                    "models": ["gemini-1.5-pro", "gemini-1.5-flash"]
-                }),
-                json!({
-                    "provider": "anthropic",
-                    "configured": host.secrets().has("ai:provider:anthropic"),
-                    "enabled": active == "anthropic",
-                    "defaultModel": "claude-3-5-sonnet-20241022",
-                    "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
-                }),
-                json!({
-                    "provider": "openai",
-                    "configured": host.secrets().has("ai:provider:openai"),
-                    "enabled": active == "openai",
-                    "defaultModel": "gpt-4o",
-                    "models": ["gpt-4o", "gpt-4o-mini"]
-                }),
-            ];
-            Ok(json!(providers))
-        }
         "ai:probeProviderCapability" => {
             let provider = text(args, 0).unwrap_or("google");
             Ok(json!({
@@ -186,36 +143,7 @@ pub fn dispatch(
             Ok(json!({ "ok": true, "provider": provider, "installed": true }))
         }
         "ai:getLatestCliProviderVersion" => Ok(json!({ "version": "1.0.0", "upToDate": true })),
-        "ai:listCliModelOptions" | "ai:listApiModelOptions" => {
-            let provider = text(args, 0).unwrap_or("google");
-            let models = match provider {
-                "google" => vec!["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash-exp"],
-                "anthropic" => vec!["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-                _ => vec!["gpt-4o", "gpt-4o-mini", "o1-preview"],
-            };
-            Ok(json!(models))
-        }
-        "ai:setProviderApiKey" => {
-            let provider = text(args, 0)?;
-            let key = text(args, 1).unwrap_or_default();
-            let secret_key = format!("ai:provider:{provider}");
-            if key.is_empty() {
-                host.secrets().delete(&secret_key);
-            } else {
-                host.secrets().set(&secret_key, key);
-            }
-            super::storage::save_secret_to_disk(&host.config().user_data_dir, &secret_key, key);
-            Ok(Value::Null)
-        }
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
-        "ai:resetProviderApiKeys" => {
-            for provider in ["google", "anthropic", "openai"] {
-                let secret_key = format!("ai:provider:{provider}");
-                host.secrets().delete(&secret_key);
-                super::storage::save_secret_to_disk(&host.config().user_data_dir, &secret_key, "");
-            }
-            Ok(Value::Null)
-        }
         "ai:listProviderPresets" => Ok(json!([
             { "id": "google", "name": "Google Deepmind / Gemini", "category": "cloud" },
             { "id": "anthropic", "name": "Anthropic Claude", "category": "cloud" },
@@ -225,10 +153,6 @@ pub fn dispatch(
         "ai:saveCustomProvider" => {
             let custom = args.first().cloned().unwrap_or_else(|| json!({}));
             Ok(json!({ "ok": true, "provider": custom }))
-        }
-        "ai:removeCustomProvider" => {
-            let provider_id = text(args, 0)?;
-            Ok(json!({ "ok": true, "providerId": provider_id }))
         }
 
         // 2. Code intelligence & semantic model
