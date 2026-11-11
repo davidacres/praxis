@@ -46,6 +46,12 @@ try {
     await runCargo(['build', '-p', 'praxis-host', '--bin', 'praxis-host']);
   } else if (mode === 'build') {
     await runCargo(['build', '--workspace']);
+  } else if (mode === 'build-desktop') {
+    await runCargo(['build', '-p', 'praxis-desktop']);
+  } else if (mode === 'test-workflows') {
+    await runCargo(['test', '-p', 'praxis-desktop', '--', 'workflows']);
+  } else if (mode === 'test-git') {
+    await runCargo(['test', '-p', 'praxis-desktop', '--', 'git']);
   } else {
     throw new Error(`Unsupported cargo-workspace mode: ${mode}`);
   }

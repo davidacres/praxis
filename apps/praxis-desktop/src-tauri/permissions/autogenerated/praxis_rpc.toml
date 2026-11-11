@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-praxis-rpc"
+description = "Enables the praxis_rpc command without any pre-configured scope."
+commands.allow = ["praxis_rpc"]
+
+[[permission]]
+identifier = "deny-praxis-rpc"
+description = "Denies the praxis_rpc command without any pre-configured scope."
+commands.deny = ["praxis_rpc"]

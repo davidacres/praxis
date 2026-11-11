@@ -65,7 +65,7 @@ impl GitService {
         }
     }
 
-    fn git_executable(&self) -> String {
+    pub fn git_executable(&self) -> String {
         if let Ok(env_path) = std::env::var("PRAXIS_GIT_PATH") {
             let trimmed = env_path.trim();
             if !trimmed.is_empty() {

@@ -1,0 +1,3448 @@
+{
+  "methods": [
+    {
+      "method": "app.getVersion",
+      "channel": "app:getVersion",
+      "arguments": [],
+      "preloadLine": 67
+    },
+    {
+      "method": "app.update.getStatus",
+      "channel": "update:getStatus",
+      "arguments": [],
+      "preloadLine": 71
+    },
+    {
+      "method": "app.update.check",
+      "channel": "update:check",
+      "arguments": [],
+      "preloadLine": 72
+    },
+    {
+      "method": "app.update.download",
+      "channel": "update:download",
+      "arguments": [],
+      "preloadLine": 73
+    },
+    {
+      "method": "app.update.installNow",
+      "channel": "update:installNow",
+      "arguments": [],
+      "preloadLine": 74
+    },
+    {
+      "method": "board.list",
+      "channel": "board:list",
+      "arguments": [
+        "filters",
+        "connectionId"
+      ],
+      "preloadLine": 86
+    },
+    {
+      "method": "board.get",
+      "channel": "board:get",
+      "arguments": [
+        "board"
+      ],
+      "preloadLine": 87
+    },
+    {
+      "method": "issue.list",
+      "channel": "issue:list",
+      "arguments": [
+        "filters",
+        "startAt",
+        "pageSize",
+        "connectionId"
+      ],
+      "preloadLine": 96
+    },
+    {
+      "method": "issue.getFilterMetadata",
+      "channel": "issue:getFilterMetadata",
+      "arguments": [
+        "filters",
+        "connectionId"
+      ],
+      "preloadLine": 98
+    },
+    {
+      "method": "issue.get",
+      "channel": "issue:get",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 100
+    },
+    {
+      "method": "issue.create",
+      "channel": "issue:create",
+      "arguments": [
+        "input",
+        "connectionId"
+      ],
+      "preloadLine": 102
+    },
+    {
+      "method": "issue.update",
+      "channel": "issue:update",
+      "arguments": [
+        "issueKey",
+        "input",
+        "connectionId"
+      ],
+      "preloadLine": 104
+    },
+    {
+      "method": "issue.delete",
+      "channel": "issue:delete",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 106
+    },
+    {
+      "method": "issue.transition",
+      "channel": "issue:transition",
+      "arguments": [
+        "issueKey",
+        "transitionId",
+        "connectionId"
+      ],
+      "preloadLine": 108
+    },
+    {
+      "method": "issue.addComment",
+      "channel": "issue:addComment",
+      "arguments": [
+        "issueKey",
+        "body",
+        "connectionId"
+      ],
+      "preloadLine": 110
+    },
+    {
+      "method": "issue.getSelfAssigneeLabel",
+      "channel": "issue:getSelfAssigneeLabel",
+      "arguments": [
+        "connectionId"
+      ],
+      "preloadLine": 112
+    },
+    {
+      "method": "issue.getProjects",
+      "channel": "issue:getProjects",
+      "arguments": [
+        "connectionId"
+      ],
+      "preloadLine": 113
+    },
+    {
+      "method": "issue.getParentItems",
+      "channel": "issue:getParentItems",
+      "arguments": [
+        "filters",
+        "searchText",
+        "options",
+        "connectionId"
+      ],
+      "preloadLine": 119
+    },
+    {
+      "method": "connection.list",
+      "channel": "connection:list",
+      "arguments": [],
+      "preloadLine": 122
+    },
+    {
+      "method": "connection.add",
+      "channel": "connection:add",
+      "arguments": [
+        "connection"
+      ],
+      "preloadLine": 123
+    },
+    {
+      "method": "connection.update",
+      "channel": "connection:update",
+      "arguments": [
+        "connection"
+      ],
+      "preloadLine": 124
+    },
+    {
+      "method": "connection.remove",
+      "channel": "connection:remove",
+      "arguments": [
+        "connectionId"
+      ],
+      "preloadLine": 125
+    },
+    {
+      "method": "connection.generateId",
+      "channel": "connection:generateId",
+      "arguments": [
+        "name"
+      ],
+      "preloadLine": 126
+    },
+    {
+      "method": "connection.check",
+      "channel": "connection:check",
+      "arguments": [
+        "connectionId"
+      ],
+      "preloadLine": 127
+    },
+    {
+      "method": "connection.getTrackedBoards",
+      "channel": "connection:getTrackedBoards",
+      "arguments": [
+        "connectionId"
+      ],
+      "preloadLine": 129
+    },
+    {
+      "method": "connection.addTrackedBoards",
+      "channel": "connection:addTrackedBoards",
+      "arguments": [
+        "boards"
+      ],
+      "preloadLine": 131
+    },
+    {
+      "method": "connection.removeTrackedBoard",
+      "channel": "connection:removeTrackedBoard",
+      "arguments": [
+        "connectionId",
+        "boardId"
+      ],
+      "preloadLine": 133
+    },
+    {
+      "method": "connection.updateTrackedBoard",
+      "channel": "connection:updateTrackedBoard",
+      "arguments": [
+        "board"
+      ],
+      "preloadLine": 135
+    },
+    {
+      "method": "connection.setSecret",
+      "channel": "connection:setSecret",
+      "arguments": [
+        "connectionId",
+        "name",
+        "value"
+      ],
+      "preloadLine": 137
+    },
+    {
+      "method": "connection.hasSecret",
+      "channel": "connection:hasSecret",
+      "arguments": [
+        "connectionId",
+        "name"
+      ],
+      "preloadLine": 139
+    },
+    {
+      "method": "folder.discoverPlans",
+      "channel": "folder:discoverPlans",
+      "arguments": [
+        "connectionId"
+      ],
+      "preloadLine": 143
+    },
+    {
+      "method": "window.setNotificationView",
+      "channel": "window:setNotificationView",
+      "arguments": [
+        "target"
+      ],
+      "preloadLine": 146
+    },
+    {
+      "method": "window.reload",
+      "channel": "window:reload",
+      "arguments": [],
+      "preloadLine": 152
+    },
+    {
+      "method": "window.minimize",
+      "channel": "window:minimize",
+      "arguments": [],
+      "preloadLine": 153
+    },
+    {
+      "method": "window.toggleMaximize",
+      "channel": "window:toggleMaximize",
+      "arguments": [],
+      "preloadLine": 154
+    },
+    {
+      "method": "window.close",
+      "channel": "window:close",
+      "arguments": [],
+      "preloadLine": 155
+    },
+    {
+      "method": "window.confirmClose",
+      "channel": "window:confirmClose",
+      "arguments": [],
+      "preloadLine": 156
+    },
+    {
+      "method": "window.cancelClose",
+      "channel": "window:cancelClose",
+      "arguments": [],
+      "preloadLine": 157
+    },
+    {
+      "method": "window.isMaximized",
+      "channel": "window:isMaximized",
+      "arguments": [],
+      "preloadLine": 158
+    },
+    {
+      "method": "window.supportsVibrancy",
+      "channel": "window:supportsVibrancy",
+      "arguments": [],
+      "preloadLine": 159
+    },
+    {
+      "method": "window.setSurfaceVibrancy",
+      "channel": "window:setSurfaceVibrancy",
+      "arguments": [
+        "mode"
+      ],
+      "preloadLine": 160
+    },
+    {
+      "method": "window.getZoomFactor",
+      "channel": "window:getZoomFactor",
+      "arguments": [],
+      "preloadLine": 174
+    },
+    {
+      "method": "window.setZoomFactor",
+      "channel": "window:setZoomFactor",
+      "arguments": [
+        "factor"
+      ],
+      "preloadLine": 175
+    },
+    {
+      "method": "detachedChat.open",
+      "channel": "detachedChat:open",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 183
+    },
+    {
+      "method": "detachedChat.close",
+      "channel": "detachedChat:close",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 184
+    },
+    {
+      "method": "detachedChat.list",
+      "channel": "detachedChat:list",
+      "arguments": [],
+      "preloadLine": 185
+    },
+    {
+      "method": "settings.get",
+      "channel": "settings:get",
+      "arguments": [],
+      "preloadLine": 193
+    },
+    {
+      "method": "settings.set",
+      "channel": "settings:set",
+      "arguments": [
+        "patch"
+      ],
+      "preloadLine": 194
+    },
+    {
+      "method": "settings.getMobileHostInfo",
+      "channel": "settings:getMobileHostInfo",
+      "arguments": [],
+      "preloadLine": 195
+    },
+    {
+      "method": "settings.publishMobileAppearance",
+      "channel": "settings:publishMobileAppearance",
+      "arguments": [
+        "appearance"
+      ],
+      "preloadLine": 196
+    },
+    {
+      "method": "settings.createMobilePairingInvitation",
+      "channel": "settings:createMobilePairingInvitation",
+      "arguments": [],
+      "preloadLine": 197
+    },
+    {
+      "method": "settings.confirmMobilePairing",
+      "channel": "settings:confirmMobilePairing",
+      "arguments": [
+        "requestId",
+        "grant"
+      ],
+      "preloadLine": 198
+    },
+    {
+      "method": "settings.denyMobilePairing",
+      "channel": "settings:denyMobilePairing",
+      "arguments": [
+        "requestId"
+      ],
+      "preloadLine": 199
+    },
+    {
+      "method": "settings.revokeMobilePairedDevice",
+      "channel": "settings:revokeMobilePairedDevice",
+      "arguments": [
+        "deviceId"
+      ],
+      "preloadLine": 200
+    },
+    {
+      "method": "settings.rotateMobileHostKey",
+      "channel": "settings:rotateMobileHostKey",
+      "arguments": [],
+      "preloadLine": 201
+    },
+    {
+      "method": "settings.clearSessionData",
+      "channel": "settings:clearSessionData",
+      "arguments": [],
+      "preloadLine": 207
+    },
+    {
+      "method": "settings.clearProjectWorkspaceBoardData",
+      "channel": "settings:clearProjectWorkspaceBoardData",
+      "arguments": [],
+      "preloadLine": 208
+    },
+    {
+      "method": "log.getRecent",
+      "channel": "log:getRecent",
+      "arguments": [],
+      "preloadLine": 217
+    },
+    {
+      "method": "dialog.pickFolder",
+      "channel": "dialog:pickFolder",
+      "arguments": [
+        "title"
+      ],
+      "preloadLine": 226
+    },
+    {
+      "method": "shell.openExternal",
+      "channel": "shell:openExternal",
+      "arguments": [
+        "url"
+      ],
+      "preloadLine": 229
+    },
+    {
+      "method": "browser.attach",
+      "channel": "browser:attach",
+      "arguments": [],
+      "preloadLine": 232
+    },
+    {
+      "method": "browser.setBounds",
+      "channel": "browser:setBounds",
+      "arguments": [
+        "bounds"
+      ],
+      "preloadLine": 234
+    },
+    {
+      "method": "browser.setVisible",
+      "channel": "browser:setVisible",
+      "arguments": [
+        "visible"
+      ],
+      "preloadLine": 235
+    },
+    {
+      "method": "browser.navigate",
+      "channel": "browser:navigate",
+      "arguments": [
+        "url"
+      ],
+      "preloadLine": 236
+    },
+    {
+      "method": "browser.back",
+      "channel": "browser:back",
+      "arguments": [],
+      "preloadLine": 237
+    },
+    {
+      "method": "browser.forward",
+      "channel": "browser:forward",
+      "arguments": [],
+      "preloadLine": 238
+    },
+    {
+      "method": "browser.reload",
+      "channel": "browser:reload",
+      "arguments": [],
+      "preloadLine": 239
+    },
+    {
+      "method": "browser.getState",
+      "channel": "browser:getState",
+      "arguments": [],
+      "preloadLine": 240
+    },
+    {
+      "method": "boardPrefs.get",
+      "channel": "boardPrefs:get",
+      "arguments": [
+        "boardId"
+      ],
+      "preloadLine": 248
+    },
+    {
+      "method": "boardPrefs.set",
+      "channel": "boardPrefs:set",
+      "arguments": [
+        "boardId",
+        "prefs"
+      ],
+      "preloadLine": 250
+    },
+    {
+      "method": "ai.getStatus",
+      "channel": "ai:getStatus",
+      "arguments": [],
+      "preloadLine": 253
+    },
+    {
+      "method": "ai.setApiKey",
+      "channel": "ai:setApiKey",
+      "arguments": [
+        "value"
+      ],
+      "preloadLine": 254
+    },
+    {
+      "method": "ai.listProviderStatuses",
+      "channel": "ai:listProviderStatuses",
+      "arguments": [],
+      "preloadLine": 255
+    },
+    {
+      "method": "ai.probeProviderCapability",
+      "channel": "ai:probeProviderCapability",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 256
+    },
+    {
+      "method": "ai.testMcpServer",
+      "channel": "ai:testMcpServer",
+      "arguments": [
+        "config"
+      ],
+      "preloadLine": 257
+    },
+    {
+      "method": "ai.codeIntelligence",
+      "channel": "ai:codeIntelligence",
+      "arguments": [
+        "request"
+      ],
+      "preloadLine": 258
+    },
+    {
+      "method": "ai.getSemanticModelStatus",
+      "channel": "ai:getSemanticModelStatus",
+      "arguments": [],
+      "preloadLine": 259
+    },
+    {
+      "method": "ai.downloadSemanticModel",
+      "channel": "ai:downloadSemanticModel",
+      "arguments": [],
+      "preloadLine": 260
+    },
+    {
+      "method": "ai.deleteSemanticModel",
+      "channel": "ai:deleteSemanticModel",
+      "arguments": [],
+      "preloadLine": 261
+    },
+    {
+      "method": "ai.resetCodeIntelligence",
+      "channel": "ai:resetCodeIntelligence",
+      "arguments": [],
+      "preloadLine": 262
+    },
+    {
+      "method": "ai.installCliProvider",
+      "channel": "ai:installCliProvider",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 268
+    },
+    {
+      "method": "ai.getLatestCliProviderVersion",
+      "channel": "ai:getLatestCliProviderVersion",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 269
+    },
+    {
+      "method": "ai.listCliModelOptions",
+      "channel": "ai:listCliModelOptions",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 270
+    },
+    {
+      "method": "ai.listApiModelOptions",
+      "channel": "ai:listApiModelOptions",
+      "arguments": [
+        "provider",
+        "forceRefresh"
+      ],
+      "preloadLine": 272
+    },
+    {
+      "method": "ai.setProviderApiKey",
+      "channel": "ai:setProviderApiKey",
+      "arguments": [
+        "provider",
+        "value"
+      ],
+      "preloadLine": 274
+    },
+    {
+      "method": "ai.testProviderApiKey",
+      "channel": "ai:testProviderApiKey",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 276
+    },
+    {
+      "method": "ai.resetProviderApiKeys",
+      "channel": "ai:resetProviderApiKeys",
+      "arguments": [],
+      "preloadLine": 277
+    },
+    {
+      "method": "ai.listProviderPresets",
+      "channel": "ai:listProviderPresets",
+      "arguments": [],
+      "preloadLine": 278
+    },
+    {
+      "method": "ai.detectLocalRuntimes",
+      "channel": "ai:detectLocalRuntimes",
+      "arguments": [],
+      "preloadLine": 279
+    },
+    {
+      "method": "ai.testCustomProvider",
+      "channel": "ai:testCustomProvider",
+      "arguments": [
+        "draft",
+        "options"
+      ],
+      "preloadLine": 281
+    },
+    {
+      "method": "ai.saveCustomProvider",
+      "channel": "ai:saveCustomProvider",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 282
+    },
+    {
+      "method": "ai.removeCustomProvider",
+      "channel": "ai:removeCustomProvider",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 283
+    },
+    {
+      "method": "ai.listSessions",
+      "channel": "ai:listSessions",
+      "arguments": [],
+      "preloadLine": 284
+    },
+    {
+      "method": "ai.getSession",
+      "channel": "ai:getSession",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 285
+    },
+    {
+      "method": "ai.listInterruptedSessions",
+      "channel": "ai:listInterruptedSessions",
+      "arguments": [],
+      "preloadLine": 286
+    },
+    {
+      "method": "ai.resumeInterruptedSession",
+      "channel": "ai:resumeInterruptedSession",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 287
+    },
+    {
+      "method": "ai.dismissInterruptedSessions",
+      "channel": "ai:dismissInterruptedSessions",
+      "arguments": [
+        "issueKeys"
+      ],
+      "preloadLine": 288
+    },
+    {
+      "method": "ai.loadImagePreview",
+      "channel": "ai:loadImagePreview",
+      "arguments": [
+        "issueKey",
+        "filePath"
+      ],
+      "preloadLine": 290
+    },
+    {
+      "method": "ai.openHtmlArtifactPreview",
+      "channel": "ai:openHtmlArtifactPreview",
+      "arguments": [
+        "issueKey",
+        "filePath",
+        "title"
+      ],
+      "preloadLine": 292
+    },
+    {
+      "method": "ai.artifactPageThumbnail",
+      "channel": "ai:artifactPageThumbnail",
+      "arguments": [
+        "issueKey",
+        "filePath"
+      ],
+      "preloadLine": 294
+    },
+    {
+      "method": "ai.readArtifactText",
+      "channel": "ai:readArtifactText",
+      "arguments": [
+        "issueKey",
+        "filePath"
+      ],
+      "preloadLine": 296
+    },
+    {
+      "method": "ai.saveArtifactToWorkspace",
+      "channel": "ai:saveArtifactToWorkspace",
+      "arguments": [
+        "issueKey",
+        "filePath",
+        "content",
+        "details"
+      ],
+      "preloadLine": 298
+    },
+    {
+      "method": "ai.renameSession",
+      "channel": "ai:renameSession",
+      "arguments": [
+        "issueKey",
+        "title"
+      ],
+      "preloadLine": 300
+    },
+    {
+      "method": "ai.assignSessionToProject",
+      "channel": "ai:assignSessionToProject",
+      "arguments": [
+        "issueKey",
+        "projectId",
+        "ticketKey",
+        "workingDirectory"
+      ],
+      "preloadLine": 302
+    },
+    {
+      "method": "ai.deleteSession",
+      "channel": "ai:deleteSession",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 303
+    },
+    {
+      "method": "ai.archiveSession",
+      "channel": "ai:archiveSession",
+      "arguments": [
+        "issueKey",
+        "archived"
+      ],
+      "preloadLine": 305
+    },
+    {
+      "method": "ai.delegate",
+      "channel": "ai:delegate",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 306
+    },
+    {
+      "method": "ai.abort",
+      "channel": "ai:abort",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 307
+    },
+    {
+      "method": "ai.continueSession",
+      "channel": "ai:continueSession",
+      "arguments": [
+        "issueKey",
+        "message",
+        "images",
+        "options"
+      ],
+      "preloadLine": 309
+    },
+    {
+      "method": "ai.updateSessionModel",
+      "channel": "ai:updateSessionModel",
+      "arguments": [
+        "issueKey",
+        "model"
+      ],
+      "preloadLine": 311
+    },
+    {
+      "method": "ai.updateSessionReasoningEffort",
+      "channel": "ai:updateSessionReasoningEffort",
+      "arguments": [
+        "issueKey",
+        "reasoningEffort"
+      ],
+      "preloadLine": 313
+    },
+    {
+      "method": "ai.updateSessionPermissionMode",
+      "channel": "ai:updateSessionPermissionMode",
+      "arguments": [
+        "issueKey",
+        "permissionMode"
+      ],
+      "preloadLine": 315
+    },
+    {
+      "method": "ai.updateSessionToolAccess",
+      "channel": "ai:updateSessionToolAccess",
+      "arguments": [
+        "issueKey",
+        "options"
+      ],
+      "preloadLine": 319
+    },
+    {
+      "method": "ai.handoverSession",
+      "channel": "ai:handoverSession",
+      "arguments": [
+        "issueKey",
+        "input"
+      ],
+      "preloadLine": 321
+    },
+    {
+      "method": "ai.startConversation",
+      "channel": "ai:startConversation",
+      "arguments": [
+        "issueKey",
+        "input"
+      ],
+      "preloadLine": 323
+    },
+    {
+      "method": "ai.sendConversationMessage",
+      "channel": "ai:sendConversationMessage",
+      "arguments": [
+        "issueKey",
+        "input"
+      ],
+      "preloadLine": 325
+    },
+    {
+      "method": "ai.stopConversation",
+      "channel": "ai:stopConversation",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 326
+    },
+    {
+      "method": "ai.setConversationToolOwner",
+      "channel": "ai:setConversationToolOwner",
+      "arguments": [
+        "issueKey",
+        "participantId"
+      ],
+      "preloadLine": 328
+    },
+    {
+      "method": "ai.editHandoverBrief",
+      "channel": "ai:editHandoverBrief",
+      "arguments": [
+        "issueKey",
+        "expectedRevision",
+        "edits"
+      ],
+      "preloadLine": 330
+    },
+    {
+      "method": "ai.removeWorktree",
+      "channel": "ai:removeWorktree",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 331
+    },
+    {
+      "method": "ai.setWorktree",
+      "channel": "ai:setWorktree",
+      "arguments": [
+        "issueKey",
+        "options"
+      ],
+      "preloadLine": 333
+    },
+    {
+      "method": "ai.switchSessionMode",
+      "channel": "ai:switchSessionMode",
+      "arguments": [
+        "issueKey",
+        "mode"
+      ],
+      "preloadLine": 335
+    },
+    {
+      "method": "ai.setAcpMode",
+      "channel": "ai:setAcpMode",
+      "arguments": [
+        "issueKey",
+        "modeId"
+      ],
+      "preloadLine": 336
+    },
+    {
+      "method": "ai.respondToPermission",
+      "channel": "ai:respondToPermission",
+      "arguments": [
+        "issueKey",
+        "decision"
+      ],
+      "preloadLine": 338
+    },
+    {
+      "method": "ai.undoToolFileChange",
+      "channel": "ai:undoToolFileChange",
+      "arguments": [
+        "issueKey",
+        "eventTimestamp",
+        "path"
+      ],
+      "preloadLine": 340
+    },
+    {
+      "method": "ai.listWorkflowPacks",
+      "channel": "ai:listWorkflowPacks",
+      "arguments": [],
+      "preloadLine": 353
+    },
+    {
+      "method": "ai.getWorkflowAssignment",
+      "channel": "ai:getWorkflowAssignment",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 355
+    },
+    {
+      "method": "ai.setWorkflowAssignment",
+      "channel": "ai:setWorkflowAssignment",
+      "arguments": [
+        "issueKey",
+        "workflow"
+      ],
+      "preloadLine": 357
+    },
+    {
+      "method": "ai.startTicketReview",
+      "channel": "ai:startTicketReview",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 358
+    },
+    {
+      "method": "ai.getTicketReview",
+      "channel": "ai:getTicketReview",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 359
+    },
+    {
+      "method": "ai.localPeerReview",
+      "channel": "ai:localPeerReview",
+      "arguments": [
+        "issueKey",
+        "connectionId",
+        "provider",
+        "model"
+      ],
+      "preloadLine": 361
+    },
+    {
+      "method": "ai.localPeerReviewFollowUp",
+      "channel": "ai:localPeerReviewFollowUp",
+      "arguments": [
+        "issueKey",
+        "message",
+        "connectionId",
+        "provider",
+        "model"
+      ],
+      "preloadLine": 363
+    },
+    {
+      "method": "ai.getAnalysis",
+      "channel": "ai:getAnalysis",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 364
+    },
+    {
+      "method": "ai.submitAnalysis",
+      "channel": "ai:submitAnalysis",
+      "arguments": [
+        "issueKey",
+        "question",
+        "connectionId",
+        "provider",
+        "model"
+      ],
+      "preloadLine": 371
+    },
+    {
+      "method": "ai.cancelAnalysis",
+      "channel": "ai:cancelAnalysis",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 372
+    },
+    {
+      "method": "ai.setAnalysisConfirmed",
+      "channel": "ai:setAnalysisConfirmed",
+      "arguments": [
+        "issueKey",
+        "confirmed"
+      ],
+      "preloadLine": 374
+    },
+    {
+      "method": "ai.clearAnalysis",
+      "channel": "ai:clearAnalysis",
+      "arguments": [
+        "issueKey"
+      ],
+      "preloadLine": 375
+    },
+    {
+      "method": "ai.startDelivery",
+      "channel": "ai:startDelivery",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 383
+    },
+    {
+      "method": "ai.decomposeFeature",
+      "channel": "ai:decomposeFeature",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 385
+    },
+    {
+      "method": "ai.startSubTaskDelivery",
+      "channel": "ai:startSubTaskDelivery",
+      "arguments": [
+        "parentIssueKey",
+        "subTaskKey",
+        "connectionId"
+      ],
+      "preloadLine": 387
+    },
+    {
+      "method": "ai.listMergeRequests",
+      "channel": "ai:listMergeRequests",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 389
+    },
+    {
+      "method": "ai.createMergeRequest",
+      "channel": "ai:createMergeRequest",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 391
+    },
+    {
+      "method": "ai.checkMergeRequestFeedback",
+      "channel": "ai:checkMergeRequestFeedback",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 393
+    },
+    {
+      "method": "ai.evaluatePrompt",
+      "channel": "ai:evaluatePrompt",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 394
+    },
+    {
+      "method": "ai.getFindingFeedback",
+      "channel": "ai:getFindingFeedback",
+      "arguments": [
+        "digest"
+      ],
+      "preloadLine": 395
+    },
+    {
+      "method": "ai.reviewFinding",
+      "channel": "ai:reviewFinding",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 396
+    },
+    {
+      "method": "ai.evaluateSession",
+      "channel": "ai:evaluateSession",
+      "arguments": [
+        "input",
+        "turnIndex"
+      ],
+      "preloadLine": 397
+    },
+    {
+      "method": "ai.getSessionFeedback",
+      "channel": "ai:getSessionFeedback",
+      "arguments": [
+        "issueKey",
+        "turnIndex"
+      ],
+      "preloadLine": 399
+    },
+    {
+      "method": "ai.submitSessionFeedback",
+      "channel": "ai:submitSessionFeedback",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 400
+    },
+    {
+      "method": "ai.rewritePromptFromFeedback",
+      "channel": "ai:rewritePromptFromFeedback",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 401
+    },
+    {
+      "method": "aiUsage.series",
+      "channel": "aiUsage:series",
+      "arguments": [
+        "granularity",
+        "periodsBack",
+        "provider",
+        "model"
+      ],
+      "preloadLine": 405
+    },
+    {
+      "method": "aiUsage.compareLatestPeriod",
+      "channel": "aiUsage:compareLatestPeriod",
+      "arguments": [
+        "granularity"
+      ],
+      "preloadLine": 407
+    },
+    {
+      "method": "aiUsage.dashboardSummary",
+      "channel": "aiUsage:dashboardSummary",
+      "arguments": [],
+      "preloadLine": 408
+    },
+    {
+      "method": "aiUsage.listEvents",
+      "channel": "aiUsage:listEvents",
+      "arguments": [],
+      "preloadLine": 409
+    },
+    {
+      "method": "aiUsage.providerSnapshot",
+      "channel": "aiUsage:providerSnapshot",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 410
+    },
+    {
+      "method": "aiUsage.providerHistory",
+      "channel": "aiUsage:providerHistory",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 411
+    },
+    {
+      "method": "aiUsage.providerSnapshots",
+      "channel": "aiUsage:providerSnapshots",
+      "arguments": [
+        "providers"
+      ],
+      "preloadLine": 412
+    },
+    {
+      "method": "aiUsage.setProviderUsageKey",
+      "channel": "aiUsage:setProviderUsageKey",
+      "arguments": [
+        "provider",
+        "value"
+      ],
+      "preloadLine": 413
+    },
+    {
+      "method": "aiUsage.alibabaConsoleStatus",
+      "channel": "aiUsage:alibabaConsoleStatus",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 414
+    },
+    {
+      "method": "aiUsage.alibabaConsoleSignIn",
+      "channel": "aiUsage:alibabaConsoleSignIn",
+      "arguments": [
+        "provider"
+      ],
+      "preloadLine": 415
+    },
+    {
+      "method": "aiUsage.alibabaConsoleSignOut",
+      "channel": "aiUsage:alibabaConsoleSignOut",
+      "arguments": [],
+      "preloadLine": 416
+    },
+    {
+      "method": "coordination.state",
+      "channel": "coordination:state",
+      "arguments": [],
+      "preloadLine": 419
+    },
+    {
+      "method": "coordination.recover",
+      "channel": "coordination:recover",
+      "arguments": [
+        "claimId",
+        "note"
+      ],
+      "preloadLine": 420
+    },
+    {
+      "method": "coordination.stopService",
+      "channel": "coordination:stopService",
+      "arguments": [
+        "pgid"
+      ],
+      "preloadLine": 421
+    },
+    {
+      "method": "taskDesigner.getState",
+      "channel": "taskDesigner:getState",
+      "arguments": [
+        "boardId",
+        "connectionId"
+      ],
+      "preloadLine": 430
+    },
+    {
+      "method": "taskDesigner.setState",
+      "channel": "taskDesigner:setState",
+      "arguments": [
+        "boardId",
+        "connectionId",
+        "state"
+      ],
+      "preloadLine": 432
+    },
+    {
+      "method": "taskDesigner.resolveIssue",
+      "channel": "taskDesigner:resolveIssue",
+      "arguments": [
+        "issueKey",
+        "connectionId"
+      ],
+      "preloadLine": 434
+    },
+    {
+      "method": "taskDesigner.recommendFlow",
+      "channel": "taskDesigner:recommendFlow",
+      "arguments": [
+        "nodes",
+        "connectors"
+      ],
+      "preloadLine": 438
+    },
+    {
+      "method": "taskDesigner.recommendBoardFlow",
+      "channel": "taskDesigner:recommendBoardFlow",
+      "arguments": [
+        "board"
+      ],
+      "preloadLine": 440
+    },
+    {
+      "method": "taskDesigner.generateMasterPlan",
+      "channel": "taskDesigner:generateMasterPlan",
+      "arguments": [
+        "boardId",
+        "connectionId",
+        "state"
+      ],
+      "preloadLine": 445
+    },
+    {
+      "method": "activity.list",
+      "channel": "activity:list",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 447
+    },
+    {
+      "method": "assistant.sessionTurn",
+      "channel": "assistant:sessionTurn",
+      "arguments": [
+        "request"
+      ],
+      "preloadLine": 449
+    },
+    {
+      "method": "assistant.control",
+      "channel": "assistant:control",
+      "arguments": [
+        "command"
+      ],
+      "preloadLine": 450
+    },
+    {
+      "method": "assistant.cancelTurn",
+      "channel": "assistant:cancelTurn",
+      "arguments": [
+        "command"
+      ],
+      "preloadLine": 451
+    },
+    {
+      "method": "assistant.retryParticipant",
+      "channel": "assistant:retryParticipant",
+      "arguments": [
+        "command"
+      ],
+      "preloadLine": 452
+    },
+    {
+      "method": "assistant.resolveAttempt",
+      "channel": "assistant:resolveAttempt",
+      "arguments": [
+        "command"
+      ],
+      "preloadLine": 453
+    },
+    {
+      "method": "assistant.stageAttachments",
+      "channel": "assistant:stageAttachments",
+      "arguments": [
+        "id",
+        "images"
+      ],
+      "preloadLine": 454
+    },
+    {
+      "method": "assistant.turn",
+      "channel": "assistant:turn",
+      "arguments": [
+        "request"
+      ],
+      "preloadLine": 455
+    },
+    {
+      "method": "assistant.teamReview",
+      "channel": "assistant:teamReview",
+      "arguments": [
+        "request"
+      ],
+      "preloadLine": 456
+    },
+    {
+      "method": "assistant.listChats",
+      "channel": "assistant:listChats",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 457
+    },
+    {
+      "method": "assistant.getChat",
+      "channel": "assistant:getChat",
+      "arguments": [
+        "chatId"
+      ],
+      "preloadLine": 458
+    },
+    {
+      "method": "assistant.createChat",
+      "channel": "assistant:createChat",
+      "arguments": [
+        "projectId",
+        "issueKey"
+      ],
+      "preloadLine": 459
+    },
+    {
+      "method": "assistant.saveChat",
+      "channel": "assistant:saveChat",
+      "arguments": [
+        "chatId",
+        "messages"
+      ],
+      "preloadLine": 460
+    },
+    {
+      "method": "assistant.renameChat",
+      "channel": "assistant:renameChat",
+      "arguments": [
+        "chatId",
+        "title"
+      ],
+      "preloadLine": 461
+    },
+    {
+      "method": "assistant.archiveChat",
+      "channel": "assistant:archiveChat",
+      "arguments": [
+        "chatId",
+        "archived"
+      ],
+      "preloadLine": 462
+    },
+    {
+      "method": "assistant.deleteChat",
+      "channel": "assistant:deleteChat",
+      "arguments": [
+        "chatId"
+      ],
+      "preloadLine": 463
+    },
+    {
+      "method": "assistant.submitTurn",
+      "channel": "assistant:submitTurn",
+      "arguments": [
+        "command"
+      ],
+      "preloadLine": 464
+    },
+    {
+      "method": "assistant.getConversation",
+      "channel": "assistant:getConversation",
+      "arguments": [
+        "conversationId"
+      ],
+      "preloadLine": 465
+    },
+    {
+      "method": "workflows.projectTrust",
+      "channel": "workflows:projectTrust",
+      "arguments": [
+        "projectId",
+        "workflowId"
+      ],
+      "preloadLine": 482
+    },
+    {
+      "method": "workflows.approveProjectTrust",
+      "channel": "workflows:approveProjectTrust",
+      "arguments": [
+        "projectId",
+        "workflowId",
+        "fingerprint"
+      ],
+      "preloadLine": 483
+    },
+    {
+      "method": "workflows.listTemplates",
+      "channel": "workflows:listTemplates",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 484
+    },
+    {
+      "method": "workflows.getRecommendedTemplate",
+      "channel": "workflows:getRecommendedTemplate",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 485
+    },
+    {
+      "method": "workflows.recommendTemplate",
+      "channel": "workflows:recommendTemplate",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 486
+    },
+    {
+      "method": "workflows.recommendModelTiers",
+      "channel": "workflows:recommendModelTiers",
+      "arguments": [
+        "projectId",
+        "definition"
+      ],
+      "preloadLine": 488
+    },
+    {
+      "method": "workflows.templateReadiness",
+      "channel": "workflows:templateReadiness",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 489
+    },
+    {
+      "method": "workflows.catalog",
+      "channel": "workflows:catalog",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 490
+    },
+    {
+      "method": "workflows.get",
+      "channel": "workflows:get",
+      "arguments": [
+        "projectId",
+        "workflowId"
+      ],
+      "preloadLine": 491
+    },
+    {
+      "method": "workflows.instantiate",
+      "channel": "workflows:instantiate",
+      "arguments": [
+        "projectId",
+        "templateId",
+        "name"
+      ],
+      "preloadLine": 493
+    },
+    {
+      "method": "workflows.promotePack",
+      "channel": "workflows:promotePack",
+      "arguments": [
+        "projectId",
+        "packId",
+        "binding"
+      ],
+      "preloadLine": 495
+    },
+    {
+      "method": "workflows.save",
+      "channel": "workflows:save",
+      "arguments": [
+        "projectId",
+        "definition"
+      ],
+      "preloadLine": 497
+    },
+    {
+      "method": "workflows.remove",
+      "channel": "workflows:remove",
+      "arguments": [
+        "projectId",
+        "workflowId"
+      ],
+      "preloadLine": 498
+    },
+    {
+      "method": "workflows.validate",
+      "channel": "workflows:validate",
+      "arguments": [
+        "projectId",
+        "definition"
+      ],
+      "preloadLine": 500
+    },
+    {
+      "method": "workflows.assistant",
+      "channel": "workflows:assistant",
+      "arguments": [
+        "projectId",
+        "definition",
+        "message",
+        "history"
+      ],
+      "preloadLine": 502
+    },
+    {
+      "method": "workflows.effectivePolicy",
+      "channel": "workflows:effectivePolicy",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 503
+    },
+    {
+      "method": "workflows.listPolicies",
+      "channel": "workflows:listPolicies",
+      "arguments": [],
+      "preloadLine": 504
+    },
+    {
+      "method": "workflows.savePolicy",
+      "channel": "workflows:savePolicy",
+      "arguments": [
+        "profile"
+      ],
+      "preloadLine": 505
+    },
+    {
+      "method": "workflows.removePolicy",
+      "channel": "workflows:removePolicy",
+      "arguments": [
+        "profileId"
+      ],
+      "preloadLine": 506
+    },
+    {
+      "method": "workflows.startRun",
+      "channel": "workflows:startRun",
+      "arguments": [
+        "projectId",
+        "workflowId",
+        "taskTitle",
+        "issue",
+        "controller",
+        "planInput",
+        "options"
+      ],
+      "preloadLine": 508
+    },
+    {
+      "method": "workflows.prepareRun",
+      "channel": "workflows:prepareRun",
+      "arguments": [
+        "projectId",
+        "workflowId",
+        "parameters"
+      ],
+      "preloadLine": 510
+    },
+    {
+      "method": "workflows.checkRunBase",
+      "channel": "workflows:checkRunBase",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 511
+    },
+    {
+      "method": "workflows.commitRunBase",
+      "channel": "workflows:commitRunBase",
+      "arguments": [
+        "projectId",
+        "message"
+      ],
+      "preloadLine": 512
+    },
+    {
+      "method": "workflows.selectControllerRun",
+      "channel": "workflows:selectControllerRun",
+      "arguments": [
+        "sessionKey",
+        "runId"
+      ],
+      "preloadLine": 514
+    },
+    {
+      "method": "workflows.removeControllerRun",
+      "channel": "workflows:removeControllerRun",
+      "arguments": [
+        "sessionKey",
+        "runId",
+        "reason"
+      ],
+      "preloadLine": 516
+    },
+    {
+      "method": "workflows.listRuns",
+      "channel": "workflows:listRuns",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 517
+    },
+    {
+      "method": "workflows.getRun",
+      "channel": "workflows:getRun",
+      "arguments": [
+        "runId"
+      ],
+      "preloadLine": 518
+    },
+    {
+      "method": "workflows.renameRun",
+      "channel": "workflows:renameRun",
+      "arguments": [
+        "runId",
+        "name"
+      ],
+      "preloadLine": 519
+    },
+    {
+      "method": "workflows.advanceStage",
+      "channel": "workflows:advanceStage",
+      "arguments": [
+        "runId",
+        "nodeId",
+        "outcome",
+        "detail"
+      ],
+      "preloadLine": 525
+    },
+    {
+      "method": "workflows.approveRun",
+      "channel": "workflows:approveRun",
+      "arguments": [
+        "runId",
+        "actor",
+        "note",
+        "nodeId"
+      ],
+      "preloadLine": 527
+    },
+    {
+      "method": "workflows.bypassGate",
+      "channel": "workflows:bypassGate",
+      "arguments": [
+        "runId",
+        "gate",
+        "actor",
+        "reason",
+        "nodeId"
+      ],
+      "preloadLine": 529
+    },
+    {
+      "method": "workflows.skipApproval",
+      "channel": "workflows:skipApproval",
+      "arguments": [
+        "runId",
+        "nodeId",
+        "actor"
+      ],
+      "preloadLine": 531
+    },
+    {
+      "method": "workflows.decideLoop",
+      "channel": "workflows:decideLoop",
+      "arguments": [
+        "runId",
+        "edgeId",
+        "actor",
+        "decision",
+        "reason",
+        "extraIterations"
+      ],
+      "preloadLine": 534
+    },
+    {
+      "method": "workflows.stageReport",
+      "channel": "workflows:stageReport",
+      "arguments": [
+        "runId",
+        "nodeId"
+      ],
+      "preloadLine": 535
+    },
+    {
+      "method": "workflows.saveStageReport",
+      "channel": "workflows:saveStageReport",
+      "arguments": [
+        "runId",
+        "nodeId"
+      ],
+      "preloadLine": 536
+    },
+    {
+      "method": "workflows.retryStage",
+      "channel": "workflows:retryStage",
+      "arguments": [
+        "runId",
+        "nodeId"
+      ],
+      "preloadLine": 537
+    },
+    {
+      "method": "workflows.switchStageProvider",
+      "channel": "workflows:switchStageProvider",
+      "arguments": [
+        "runId",
+        "nodeId",
+        "provider",
+        "model"
+      ],
+      "preloadLine": 539
+    },
+    {
+      "method": "workflows.stopForProviderLimit",
+      "channel": "workflows:stopForProviderLimit",
+      "arguments": [
+        "runId",
+        "nodeId"
+      ],
+      "preloadLine": 540
+    },
+    {
+      "method": "workflows.reworkStage",
+      "channel": "workflows:reworkStage",
+      "arguments": [
+        "runId",
+        "nodeId"
+      ],
+      "preloadLine": 541
+    },
+    {
+      "method": "workflows.resolveMergeWithAi",
+      "channel": "workflows:resolveMergeWithAi",
+      "arguments": [
+        "runId",
+        "nodeId"
+      ],
+      "preloadLine": 542
+    },
+    {
+      "method": "workflows.cancelRun",
+      "channel": "workflows:cancelRun",
+      "arguments": [
+        "runId",
+        "reason"
+      ],
+      "preloadLine": 543
+    },
+    {
+      "method": "workflows.inspectRunWork",
+      "channel": "workflows:inspectRunWork",
+      "arguments": [
+        "runId"
+      ],
+      "preloadLine": 544
+    },
+    {
+      "method": "workflows.deleteRun",
+      "channel": "workflows:deleteRun",
+      "arguments": [
+        "runId",
+        "options"
+      ],
+      "preloadLine": 545
+    },
+    {
+      "method": "workflows.archiveRun",
+      "channel": "workflows:archiveRun",
+      "arguments": [
+        "runId",
+        "archived"
+      ],
+      "preloadLine": 546
+    },
+    {
+      "method": "workflows.getEvidence",
+      "channel": "workflows:getEvidence",
+      "arguments": [
+        "runId",
+        "nodeId",
+        "attempt"
+      ],
+      "preloadLine": 553
+    },
+    {
+      "method": "workflows.startDiagnosis",
+      "channel": "workflows:startDiagnosis",
+      "arguments": [
+        "runId",
+        "nodeId",
+        "attempt"
+      ],
+      "preloadLine": 555
+    },
+    {
+      "method": "workflows.getRecommendation",
+      "channel": "workflows:getRecommendation",
+      "arguments": [
+        "workflowId",
+        "nodeId",
+        "input"
+      ],
+      "preloadLine": 560
+    },
+    {
+      "method": "workflows.clearRecommendation",
+      "channel": "workflows:clearRecommendation",
+      "arguments": [
+        "workflowId",
+        "nodeId"
+      ],
+      "preloadLine": 562
+    },
+    {
+      "method": "workflows.recommendAgent",
+      "channel": "workflows:recommendAgent",
+      "arguments": [
+        "workflowId",
+        "nodeId",
+        "input"
+      ],
+      "preloadLine": 567
+    },
+    {
+      "method": "projects.list",
+      "channel": "projects:list",
+      "arguments": [],
+      "preloadLine": 570
+    },
+    {
+      "method": "projects.get",
+      "channel": "projects:get",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 571
+    },
+    {
+      "method": "projects.create",
+      "channel": "projects:create",
+      "arguments": [
+        "input",
+        "workspaceId"
+      ],
+      "preloadLine": 572
+    },
+    {
+      "method": "projects.useExisting",
+      "channel": "projects:useExisting",
+      "arguments": [
+        "projectId",
+        "workspaceId"
+      ],
+      "preloadLine": 573
+    },
+    {
+      "method": "projects.remove",
+      "channel": "projects:remove",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 574
+    },
+    {
+      "method": "projects.update",
+      "channel": "projects:update",
+      "arguments": [
+        "projectId",
+        "patch"
+      ],
+      "preloadLine": 575
+    },
+    {
+      "method": "projects.inspectFolder",
+      "channel": "projects:inspectFolder",
+      "arguments": [
+        "folderPath"
+      ],
+      "preloadLine": 576
+    },
+    {
+      "method": "projects.attachFolder",
+      "channel": "projects:attachFolder",
+      "arguments": [
+        "projectId",
+        "input"
+      ],
+      "preloadLine": 577
+    },
+    {
+      "method": "projects.linkBoard",
+      "channel": "projects:linkBoard",
+      "arguments": [
+        "projectId",
+        "board"
+      ],
+      "preloadLine": 578
+    },
+    {
+      "method": "projects.unlinkBoard",
+      "channel": "projects:unlinkBoard",
+      "arguments": [
+        "projectId",
+        "connectionId",
+        "boardId"
+      ],
+      "preloadLine": 579
+    },
+    {
+      "method": "projects.listDocuments",
+      "channel": "projects:listDocuments",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 580
+    },
+    {
+      "method": "projects.readDocument",
+      "channel": "projects:readDocument",
+      "arguments": [
+        "projectId",
+        "relativePath"
+      ],
+      "preloadLine": 581
+    },
+    {
+      "method": "projects.discoverImports",
+      "channel": "projects:discoverImports",
+      "arguments": [
+        "folderPath"
+      ],
+      "preloadLine": 582
+    },
+    {
+      "method": "projects.validateImports",
+      "channel": "projects:validateImports",
+      "arguments": [
+        "rows"
+      ],
+      "preloadLine": 583
+    },
+    {
+      "method": "projects.createFromImports",
+      "channel": "projects:createFromImports",
+      "arguments": [
+        "rows",
+        "workspaceId"
+      ],
+      "preloadLine": 584
+    },
+    {
+      "method": "projects.getRunProfile",
+      "channel": "projects:getRunProfile",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 586
+    },
+    {
+      "method": "projects.saveRunProfile",
+      "channel": "projects:saveRunProfile",
+      "arguments": [
+        "projectId",
+        "profile"
+      ],
+      "preloadLine": 587
+    },
+    {
+      "method": "projects.discoverRunServices",
+      "channel": "projects:discoverRunServices",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 589
+    },
+    {
+      "method": "projects.validateRunProfile",
+      "channel": "projects:validateRunProfile",
+      "arguments": [
+        "profile"
+      ],
+      "preloadLine": 591
+    },
+    {
+      "method": "workspaces.list",
+      "channel": "workspaces:list",
+      "arguments": [],
+      "preloadLine": 594
+    },
+    {
+      "method": "workspaces.get",
+      "channel": "workspaces:get",
+      "arguments": [
+        "workspaceId"
+      ],
+      "preloadLine": 595
+    },
+    {
+      "method": "workspaces.create",
+      "channel": "workspaces:create",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 596
+    },
+    {
+      "method": "workspaces.setActive",
+      "channel": "workspaces:setActive",
+      "arguments": [
+        "workspaceId"
+      ],
+      "preloadLine": 597
+    },
+    {
+      "method": "workspaces.update",
+      "channel": "workspaces:update",
+      "arguments": [
+        "workspaceId",
+        "patch"
+      ],
+      "preloadLine": 598
+    },
+    {
+      "method": "workspaces.remove",
+      "channel": "workspaces:remove",
+      "arguments": [
+        "workspaceId"
+      ],
+      "preloadLine": 599
+    },
+    {
+      "method": "workspaces.saveToFile",
+      "channel": "workspaces:saveToFile",
+      "arguments": [
+        "workspaceId"
+      ],
+      "preloadLine": 600
+    },
+    {
+      "method": "workspaces.openFromFile",
+      "channel": "workspaces:openFromFile",
+      "arguments": [],
+      "preloadLine": 601
+    },
+    {
+      "method": "workspaces.openFolder",
+      "channel": "workspaces:openFolder",
+      "arguments": [
+        "folderPath"
+      ],
+      "preloadLine": 602
+    },
+    {
+      "method": "terminal.listProfiles",
+      "channel": "terminal:listProfiles",
+      "arguments": [],
+      "preloadLine": 605
+    },
+    {
+      "method": "terminal.list",
+      "channel": "terminal:list",
+      "arguments": [],
+      "preloadLine": 606
+    },
+    {
+      "method": "terminal.create",
+      "channel": "terminal:create",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 607
+    },
+    {
+      "method": "terminal.write",
+      "channel": "terminal:write",
+      "arguments": [
+        "sessionId",
+        "data"
+      ],
+      "preloadLine": 608
+    },
+    {
+      "method": "terminal.resize",
+      "channel": "terminal:resize",
+      "arguments": [
+        "sessionId",
+        "cols",
+        "rows"
+      ],
+      "preloadLine": 609
+    },
+    {
+      "method": "terminal.kill",
+      "channel": "terminal:kill",
+      "arguments": [
+        "sessionId"
+      ],
+      "preloadLine": 610
+    },
+    {
+      "method": "terminal.getBuffer",
+      "channel": "terminal:getBuffer",
+      "arguments": [
+        "sessionId"
+      ],
+      "preloadLine": 611
+    },
+    {
+      "method": "terminal.getContext",
+      "channel": "terminal:getContext",
+      "arguments": [
+        "sessionId"
+      ],
+      "preloadLine": 612
+    },
+    {
+      "method": "terminal.listCommands",
+      "channel": "terminal:listCommands",
+      "arguments": [
+        "sessionId"
+      ],
+      "preloadLine": 613
+    },
+    {
+      "method": "agentRuntime.list",
+      "channel": "agentRuntime:list",
+      "arguments": [],
+      "preloadLine": 636
+    },
+    {
+      "method": "agentRuntime.refresh",
+      "channel": "agentRuntime:refresh",
+      "arguments": [],
+      "preloadLine": 637
+    },
+    {
+      "method": "agentRuntime.start",
+      "channel": "agentRuntime:start",
+      "arguments": [
+        "agentId"
+      ],
+      "preloadLine": 638
+    },
+    {
+      "method": "agentRuntime.stop",
+      "channel": "agentRuntime:stop",
+      "arguments": [
+        "agentId"
+      ],
+      "preloadLine": 639
+    },
+    {
+      "method": "agentRuntime.restart",
+      "channel": "agentRuntime:restart",
+      "arguments": [
+        "agentId"
+      ],
+      "preloadLine": 640
+    },
+    {
+      "method": "agentRuntime.roots",
+      "channel": "agentRuntime:roots",
+      "arguments": [],
+      "preloadLine": 641
+    },
+    {
+      "method": "agentRuntime.activateSkill",
+      "channel": "agentRuntime:activateSkill",
+      "arguments": [
+        "agentId",
+        "skillName"
+      ],
+      "preloadLine": 642
+    },
+    {
+      "method": "agentRuntime.createAgent",
+      "channel": "agentRuntime:createAgent",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 643
+    },
+    {
+      "method": "agentRuntime.createProfile",
+      "channel": "agentRuntime:createProfile",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 644
+    },
+    {
+      "method": "agentRuntime.createSkill",
+      "channel": "agentRuntime:createSkill",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 645
+    },
+    {
+      "method": "agentRuntime.previewImport",
+      "channel": "agentRuntime:previewImport",
+      "arguments": [
+        "kind",
+        "sourceDir",
+        "scope"
+      ],
+      "preloadLine": 647
+    },
+    {
+      "method": "agentRuntime.importItem",
+      "channel": "agentRuntime:importItem",
+      "arguments": [
+        "kind",
+        "sourceDir",
+        "scope",
+        "onDuplicate"
+      ],
+      "preloadLine": 649
+    },
+    {
+      "method": "agentRuntime.approveNativeProject",
+      "channel": "agentRuntime:approveNativeProject",
+      "arguments": [
+        "projectRoot",
+        "approved"
+      ],
+      "preloadLine": 651
+    },
+    {
+      "method": "agentRuntime.revealNative",
+      "channel": "agentRuntime:revealNative",
+      "arguments": [
+        "itemPath"
+      ],
+      "preloadLine": 652
+    },
+    {
+      "method": "agentRuntime.copyNative",
+      "channel": "agentRuntime:copyNative",
+      "arguments": [
+        "kind",
+        "id"
+      ],
+      "preloadLine": 653
+    },
+    {
+      "method": "gadgets.getBlocks",
+      "channel": "gadgets:getBlocks",
+      "arguments": [
+        "sessionId"
+      ],
+      "preloadLine": 656
+    },
+    {
+      "method": "gadgets.publish",
+      "channel": "gadgets:publish",
+      "arguments": [
+        "sessionId",
+        "blocks"
+      ],
+      "preloadLine": 657
+    },
+    {
+      "method": "gadgets.publishFromText",
+      "channel": "gadgets:publishFromText",
+      "arguments": [
+        "sessionId",
+        "idPrefix",
+        "text"
+      ],
+      "preloadLine": 659
+    },
+    {
+      "method": "gadgets.submit",
+      "channel": "gadgets:submit",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 660
+    },
+    {
+      "method": "gadgets.replay",
+      "channel": "gadgets:replay",
+      "arguments": [
+        "afterSequence"
+      ],
+      "preloadLine": 661
+    },
+    {
+      "method": "gadgets.revoke",
+      "channel": "gadgets:revoke",
+      "arguments": [
+        "sessionId",
+        "gadgetId"
+      ],
+      "preloadLine": 662
+    },
+    {
+      "method": "gadgets.clear",
+      "channel": "gadgets:clear",
+      "arguments": [
+        "sessionId"
+      ],
+      "preloadLine": 663
+    },
+    {
+      "method": "marketplace.getStatus",
+      "channel": "marketplace:getStatus",
+      "arguments": [],
+      "preloadLine": 671
+    },
+    {
+      "method": "marketplace.configure",
+      "channel": "marketplace:configure",
+      "arguments": [
+        "patch"
+      ],
+      "preloadLine": 672
+    },
+    {
+      "method": "marketplace.setToken",
+      "channel": "marketplace:setToken",
+      "arguments": [
+        "token"
+      ],
+      "preloadLine": 673
+    },
+    {
+      "method": "marketplace.listCatalog",
+      "channel": "marketplace:listCatalog",
+      "arguments": [],
+      "preloadLine": 674
+    },
+    {
+      "method": "marketplace.listInstalled",
+      "channel": "marketplace:listInstalled",
+      "arguments": [],
+      "preloadLine": 675
+    },
+    {
+      "method": "marketplace.listActiveAppearance",
+      "channel": "marketplace:listActiveAppearance",
+      "arguments": [],
+      "preloadLine": 676
+    },
+    {
+      "method": "marketplace.install",
+      "channel": "marketplace:install",
+      "arguments": [
+        "packageName",
+        "options"
+      ],
+      "preloadLine": 678
+    },
+    {
+      "method": "marketplace.update",
+      "channel": "marketplace:update",
+      "arguments": [
+        "kind",
+        "id"
+      ],
+      "preloadLine": 679
+    },
+    {
+      "method": "marketplace.remove",
+      "channel": "marketplace:remove",
+      "arguments": [
+        "kind",
+        "id"
+      ],
+      "preloadLine": 680
+    },
+    {
+      "method": "marketplace.checkForUpdates",
+      "channel": "marketplace:checkForUpdates",
+      "arguments": [],
+      "preloadLine": 681
+    },
+    {
+      "method": "marketplace.setTrust",
+      "channel": "marketplace:setTrust",
+      "arguments": [
+        "kind",
+        "id",
+        "enabled"
+      ],
+      "preloadLine": 683
+    },
+    {
+      "method": "git.preflight",
+      "channel": "git:preflight",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 693
+    },
+    {
+      "method": "git.initialize",
+      "channel": "git:initialize",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 694
+    },
+    {
+      "method": "git.clone",
+      "channel": "git:clone",
+      "arguments": [
+        "repositoryUrl",
+        "targetParent",
+        "targetName"
+      ],
+      "preloadLine": 695
+    },
+    {
+      "method": "git.open",
+      "channel": "git:open",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 696
+    },
+    {
+      "method": "git.refresh",
+      "channel": "git:refresh",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 697
+    },
+    {
+      "method": "git.status",
+      "channel": "git:status",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 698
+    },
+    {
+      "method": "git.getCommit",
+      "channel": "git:getCommit",
+      "arguments": [
+        "repositoryPath",
+        "hash"
+      ],
+      "preloadLine": 699
+    },
+    {
+      "method": "git.getDiff",
+      "channel": "git:getDiff",
+      "arguments": [
+        "repositoryPath",
+        "hash",
+        "filePath"
+      ],
+      "preloadLine": 700
+    },
+    {
+      "method": "git.getComparison",
+      "channel": "git:getComparison",
+      "arguments": [
+        "repositoryPath",
+        "request"
+      ],
+      "preloadLine": 701
+    },
+    {
+      "method": "git.applyHunk",
+      "channel": "git:applyHunk",
+      "arguments": [
+        "repositoryPath",
+        "request"
+      ],
+      "preloadLine": 702
+    },
+    {
+      "method": "git.stage",
+      "channel": "git:stage",
+      "arguments": [
+        "repositoryPath",
+        "paths"
+      ],
+      "preloadLine": 703
+    },
+    {
+      "method": "git.unstage",
+      "channel": "git:unstage",
+      "arguments": [
+        "repositoryPath",
+        "paths"
+      ],
+      "preloadLine": 704
+    },
+    {
+      "method": "git.discard",
+      "channel": "git:discard",
+      "arguments": [
+        "repositoryPath",
+        "paths"
+      ],
+      "preloadLine": 705
+    },
+    {
+      "method": "git.commit",
+      "channel": "git:commit",
+      "arguments": [
+        "repositoryPath",
+        "message"
+      ],
+      "preloadLine": 706
+    },
+    {
+      "method": "git.createBranch",
+      "channel": "git:createBranch",
+      "arguments": [
+        "repositoryPath",
+        "name",
+        "startPoint"
+      ],
+      "preloadLine": 707
+    },
+    {
+      "method": "git.checkout",
+      "channel": "git:checkout",
+      "arguments": [
+        "repositoryPath",
+        "name"
+      ],
+      "preloadLine": 708
+    },
+    {
+      "method": "git.deleteBranch",
+      "channel": "git:deleteBranch",
+      "arguments": [
+        "repositoryPath",
+        "name"
+      ],
+      "preloadLine": 709
+    },
+    {
+      "method": "git.renameBranch",
+      "channel": "git:renameBranch",
+      "arguments": [
+        "repositoryPath",
+        "oldName",
+        "newName"
+      ],
+      "preloadLine": 710
+    },
+    {
+      "method": "git.merge",
+      "channel": "git:merge",
+      "arguments": [
+        "repositoryPath",
+        "source"
+      ],
+      "preloadLine": 711
+    },
+    {
+      "method": "git.rebase",
+      "channel": "git:rebase",
+      "arguments": [
+        "repositoryPath",
+        "target"
+      ],
+      "preloadLine": 712
+    },
+    {
+      "method": "git.getConflict",
+      "channel": "git:getConflict",
+      "arguments": [
+        "repositoryPath",
+        "path"
+      ],
+      "preloadLine": 713
+    },
+    {
+      "method": "git.resolveConflict",
+      "channel": "git:resolveConflict",
+      "arguments": [
+        "repositoryPath",
+        "path",
+        "resolution"
+      ],
+      "preloadLine": 714
+    },
+    {
+      "method": "git.abortConflict",
+      "channel": "git:abortConflict",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 715
+    },
+    {
+      "method": "git.getFileContent",
+      "channel": "git:getFileContent",
+      "arguments": [
+        "repositoryPath",
+        "path"
+      ],
+      "preloadLine": 716
+    },
+    {
+      "method": "git.getFileHistory",
+      "channel": "git:getFileHistory",
+      "arguments": [
+        "repositoryPath",
+        "path",
+        "ref"
+      ],
+      "preloadLine": 717
+    },
+    {
+      "method": "git.getBlame",
+      "channel": "git:getBlame",
+      "arguments": [
+        "repositoryPath",
+        "path",
+        "ref"
+      ],
+      "preloadLine": 718
+    },
+    {
+      "method": "git.cherryPick",
+      "channel": "git:cherryPick",
+      "arguments": [
+        "repositoryPath",
+        "commit"
+      ],
+      "preloadLine": 719
+    },
+    {
+      "method": "git.revert",
+      "channel": "git:revert",
+      "arguments": [
+        "repositoryPath",
+        "commit"
+      ],
+      "preloadLine": 720
+    },
+    {
+      "method": "git.stash",
+      "channel": "git:stash",
+      "arguments": [
+        "repositoryPath",
+        "message"
+      ],
+      "preloadLine": 721
+    },
+    {
+      "method": "git.popStash",
+      "channel": "git:popStash",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 722
+    },
+    {
+      "method": "git.pull",
+      "channel": "git:pull",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 723
+    },
+    {
+      "method": "git.fetch",
+      "channel": "git:fetch",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 724
+    },
+    {
+      "method": "git.push",
+      "channel": "git:push",
+      "arguments": [
+        "repositoryPath"
+      ],
+      "preloadLine": 725
+    },
+    {
+      "method": "runs.start",
+      "channel": "runs:start",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 728
+    },
+    {
+      "method": "runs.stop",
+      "channel": "runs:stop",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 729
+    },
+    {
+      "method": "runs.stopService",
+      "channel": "runs:stopService",
+      "arguments": [
+        "projectId",
+        "serviceId"
+      ],
+      "preloadLine": 730
+    },
+    {
+      "method": "runs.startService",
+      "channel": "runs:startService",
+      "arguments": [
+        "projectId",
+        "serviceId"
+      ],
+      "preloadLine": 731
+    },
+    {
+      "method": "runs.restartService",
+      "channel": "runs:restartService",
+      "arguments": [
+        "projectId",
+        "serviceId"
+      ],
+      "preloadLine": 732
+    },
+    {
+      "method": "runs.status",
+      "channel": "runs:status",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 733
+    },
+    {
+      "method": "runs.reconcile",
+      "channel": "runs:reconcile",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 734
+    },
+    {
+      "method": "runs.previewUrl",
+      "channel": "runs:previewUrl",
+      "arguments": [
+        "projectId",
+        "serviceId"
+      ],
+      "preloadLine": 735
+    },
+    {
+      "method": "runs.runVerification",
+      "channel": "runs:runVerification",
+      "arguments": [
+        "projectId",
+        "check"
+      ],
+      "preloadLine": 747
+    },
+    {
+      "method": "runs.diagnoseVerificationFailure",
+      "channel": "runs:diagnoseVerificationFailure",
+      "arguments": [
+        "projectId",
+        "check",
+        "outcome"
+      ],
+      "preloadLine": 749
+    },
+    {
+      "method": "preview.attach",
+      "channel": "preview:attach",
+      "arguments": [],
+      "preloadLine": 752
+    },
+    {
+      "method": "preview.setBounds",
+      "channel": "preview:setBounds",
+      "arguments": [
+        "bounds"
+      ],
+      "preloadLine": 753
+    },
+    {
+      "method": "preview.setVisible",
+      "channel": "preview:setVisible",
+      "arguments": [
+        "visible"
+      ],
+      "preloadLine": 754
+    },
+    {
+      "method": "preview.open",
+      "channel": "preview:open",
+      "arguments": [
+        "url"
+      ],
+      "preloadLine": 755
+    },
+    {
+      "method": "preview.captureDiagnostics",
+      "channel": "preview:captureDiagnostics",
+      "arguments": [],
+      "preloadLine": 756
+    },
+    {
+      "method": "deployments.listProfiles",
+      "channel": "deployments:listProfiles",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 759
+    },
+    {
+      "method": "deployments.getProfile",
+      "channel": "deployments:getProfile",
+      "arguments": [
+        "projectId",
+        "profileId"
+      ],
+      "preloadLine": 761
+    },
+    {
+      "method": "deployments.saveProfile",
+      "channel": "deployments:saveProfile",
+      "arguments": [
+        "projectId",
+        "profile"
+      ],
+      "preloadLine": 766
+    },
+    {
+      "method": "deployments.validateProfile",
+      "channel": "deployments:validateProfile",
+      "arguments": [
+        "profile"
+      ],
+      "preloadLine": 768
+    },
+    {
+      "method": "deployments.preflightCapabilities",
+      "channel": "deployments:preflightCapabilities",
+      "arguments": [
+        "profile"
+      ],
+      "preloadLine": 770
+    },
+    {
+      "method": "deployments.evaluateCredentials",
+      "channel": "deployments:evaluateCredentials",
+      "arguments": [
+        "profile"
+      ],
+      "preloadLine": 772
+    },
+    {
+      "method": "deployments.publishArtifact",
+      "channel": "deployments:publishArtifact",
+      "arguments": [
+        "artifactId",
+        "deploymentProfileId",
+        "rootDir",
+        "sourceCommit"
+      ],
+      "preloadLine": 777
+    },
+    {
+      "method": "deployments.listArtifacts",
+      "channel": "deployments:listArtifacts",
+      "arguments": [
+        "deploymentProfileId"
+      ],
+      "preloadLine": 782
+    },
+    {
+      "method": "deployments.listAllArtifacts",
+      "channel": "deployments:listAllArtifacts",
+      "arguments": [],
+      "preloadLine": 786
+    },
+    {
+      "method": "deployments.getArtifact",
+      "channel": "deployments:getArtifact",
+      "arguments": [
+        "artifactId"
+      ],
+      "preloadLine": 788
+    },
+    {
+      "method": "deployments.prepare",
+      "channel": "deployments:prepare",
+      "arguments": [
+        "projectId",
+        "runId",
+        "profile",
+        "artifact",
+        "context"
+      ],
+      "preloadLine": 797
+    },
+    {
+      "method": "deployments.approve",
+      "channel": "deployments:approve",
+      "arguments": [
+        "projectId",
+        "runId",
+        "profile",
+        "artifact",
+        "actor"
+      ],
+      "preloadLine": 799
+    },
+    {
+      "method": "deployments.deploy",
+      "channel": "deployments:deploy",
+      "arguments": [
+        "projectId",
+        "runId",
+        "profile",
+        "artifact",
+        "manifest",
+        "options"
+      ],
+      "preloadLine": 820
+    },
+    {
+      "method": "deployments.getRun",
+      "channel": "deployments:getRun",
+      "arguments": [
+        "runId"
+      ],
+      "preloadLine": 825
+    },
+    {
+      "method": "deployments.listRuns",
+      "channel": "deployments:listRuns",
+      "arguments": [
+        "deploymentProfileId"
+      ],
+      "preloadLine": 826
+    },
+    {
+      "method": "deployments.health",
+      "channel": "deployments:health",
+      "arguments": [
+        "runId"
+      ],
+      "preloadLine": 827
+    },
+    {
+      "method": "deployments.rollback",
+      "channel": "deployments:rollback",
+      "arguments": [
+        "projectId",
+        "runId",
+        "profile",
+        "options"
+      ],
+      "preloadLine": 834
+    },
+    {
+      "method": "scheduledRuns.list",
+      "channel": "scheduledRuns:list",
+      "arguments": [],
+      "preloadLine": 841
+    },
+    {
+      "method": "scheduledRuns.get",
+      "channel": "scheduledRuns:get",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 842
+    },
+    {
+      "method": "scheduledRuns.save",
+      "channel": "scheduledRuns:save",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 843
+    },
+    {
+      "method": "scheduledRuns.preview",
+      "channel": "scheduledRuns:preview",
+      "arguments": [
+        "input"
+      ],
+      "preloadLine": 845
+    },
+    {
+      "method": "scheduledRuns.remove",
+      "channel": "scheduledRuns:remove",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 846
+    },
+    {
+      "method": "scheduledRuns.rename",
+      "channel": "scheduledRuns:rename",
+      "arguments": [
+        "id",
+        "name"
+      ],
+      "preloadLine": 847
+    },
+    {
+      "method": "scheduledRuns.archive",
+      "channel": "scheduledRuns:archive",
+      "arguments": [
+        "id",
+        "archived"
+      ],
+      "preloadLine": 848
+    },
+    {
+      "method": "scheduledRuns.workflowChoices",
+      "channel": "scheduledRuns:workflowChoices",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 850
+    },
+    {
+      "method": "scheduledRuns.pause",
+      "channel": "scheduledRuns:pause",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 851
+    },
+    {
+      "method": "scheduledRuns.startNow",
+      "channel": "scheduledRuns:startNow",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 852
+    },
+    {
+      "method": "scheduledRuns.resume",
+      "channel": "scheduledRuns:resume",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 853
+    },
+    {
+      "method": "scheduledRuns.cancel",
+      "channel": "scheduledRuns:cancel",
+      "arguments": [
+        "id"
+      ],
+      "preloadLine": 854
+    },
+    {
+      "method": "scheduledRuns.skipEntry",
+      "channel": "scheduledRuns:skipEntry",
+      "arguments": [
+        "id",
+        "entryId"
+      ],
+      "preloadLine": 855
+    },
+    {
+      "method": "scheduledRuns.retryEntry",
+      "channel": "scheduledRuns:retryEntry",
+      "arguments": [
+        "id",
+        "entryId"
+      ],
+      "preloadLine": 856
+    },
+    {
+      "method": "scheduledRuns.approveGate",
+      "channel": "scheduledRuns:approveGate",
+      "arguments": [
+        "id",
+        "entryId"
+      ],
+      "preloadLine": 857
+    },
+    {
+      "method": "scheduledRuns.setArmed",
+      "channel": "scheduledRuns:setArmed",
+      "arguments": [
+        "id",
+        "armed"
+      ],
+      "preloadLine": 858
+    },
+    {
+      "method": "scheduledRuns.resolveMissed",
+      "channel": "scheduledRuns:resolveMissed",
+      "arguments": [
+        "id",
+        "resolution"
+      ],
+      "preloadLine": 860
+    },
+    {
+      "method": "notes.list",
+      "channel": "notes:list",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 869
+    },
+    {
+      "method": "notes.createNote",
+      "channel": "notes:createNote",
+      "arguments": [
+        "projectId",
+        "input"
+      ],
+      "preloadLine": 871
+    },
+    {
+      "method": "notes.updateNote",
+      "channel": "notes:updateNote",
+      "arguments": [
+        "projectId",
+        "noteId",
+        "input"
+      ],
+      "preloadLine": 873
+    },
+    {
+      "method": "notes.deleteNote",
+      "channel": "notes:deleteNote",
+      "arguments": [
+        "projectId",
+        "noteId"
+      ],
+      "preloadLine": 875
+    },
+    {
+      "method": "notes.createGroup",
+      "channel": "notes:createGroup",
+      "arguments": [
+        "projectId",
+        "input"
+      ],
+      "preloadLine": 877
+    },
+    {
+      "method": "notes.updateGroup",
+      "channel": "notes:updateGroup",
+      "arguments": [
+        "projectId",
+        "groupId",
+        "input"
+      ],
+      "preloadLine": 879
+    },
+    {
+      "method": "notes.deleteGroup",
+      "channel": "notes:deleteGroup",
+      "arguments": [
+        "projectId",
+        "groupId"
+      ],
+      "preloadLine": 881
+    },
+    {
+      "method": "notes.replaceMemberships",
+      "channel": "notes:replaceMemberships",
+      "arguments": [
+        "projectId",
+        "groupId",
+        "noteIds"
+      ],
+      "preloadLine": 883
+    },
+    {
+      "method": "notes.prepareSnapshot",
+      "channel": "notes:prepareSnapshot",
+      "arguments": [
+        "projectId",
+        "source"
+      ],
+      "preloadLine": 885
+    },
+    {
+      "method": "artifacts.list",
+      "channel": "artifacts:list",
+      "arguments": [
+        "projectId"
+      ],
+      "preloadLine": 893
+    },
+    {
+      "method": "artifacts.readText",
+      "channel": "artifacts:readText",
+      "arguments": [
+        "projectId",
+        "path"
+      ],
+      "preloadLine": 894
+    },
+    {
+      "method": "artifacts.loadImage",
+      "channel": "artifacts:loadImage",
+      "arguments": [
+        "projectId",
+        "path"
+      ],
+      "preloadLine": 896
+    },
+    {
+      "method": "artifacts.pageThumbnail",
+      "channel": "artifacts:pageThumbnail",
+      "arguments": [
+        "projectId",
+        "path"
+      ],
+      "preloadLine": 898
+    },
+    {
+      "method": "artifacts.createGroup",
+      "channel": "artifacts:createGroup",
+      "arguments": [
+        "projectId",
+        "name",
+        "paths"
+      ],
+      "preloadLine": 900
+    },
+    {
+      "method": "artifacts.updateGroup",
+      "channel": "artifacts:updateGroup",
+      "arguments": [
+        "projectId",
+        "groupId",
+        "change"
+      ],
+      "preloadLine": 902
+    },
+    {
+      "method": "artifacts.deleteGroup",
+      "channel": "artifacts:deleteGroup",
+      "arguments": [
+        "projectId",
+        "groupId"
+      ],
+      "preloadLine": 904
+    },
+    {
+      "method": "artifacts.delete",
+      "channel": "artifacts:delete",
+      "arguments": [
+        "projectId",
+        "path"
+      ],
+      "preloadLine": 905
+    },
+    {
+      "method": "artifacts.reveal",
+      "channel": "artifacts:reveal",
+      "arguments": [
+        "projectId",
+        "path"
+      ],
+      "preloadLine": 906
+    }
+  ],
+  "events": [
+    "ai:analysisChanged",
+    "ai:semanticModelProgress",
+    "ai:sessionChanged",
+    "ai:sessionDeleted",
+    "artifacts:changed",
+    "assistant:chatsChanged",
+    "assistant:conversationUpdate",
+    "board:changed",
+    "browser:didNavigate",
+    "coordination:changed",
+    "detachedChat:changed",
+    "gadgets:changed",
+    "log:appended",
+    "marketplace:changed",
+    "mobile:pairingChanged",
+    "notes:changed",
+    "runs:log",
+    "runs:statusChanged",
+    "scheduledRuns:changed",
+    "settings:changed",
+    "terminal:command",
+    "terminal:contextAvailability",
+    "terminal:exit",
+    "terminal:output",
+    "update:status",
+    "window:closeRequested",
+    "window:maximizeChanged",
+    "window:notificationOpen",
+    "window:zoomChanged",
+    "workflows:runChanged"
+  ]
+}

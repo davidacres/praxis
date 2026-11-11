@@ -11,7 +11,10 @@ pub mod mobile_bridge;
 #[cfg(feature = "napi-addon")]
 pub mod napi_bridge;
 pub mod profile_bridge;
+pub mod electron_secrets;
+pub mod secret_backends;
 pub mod secrets;
+pub mod services;
 pub mod stdio;
 pub mod terminal_bridge;
 pub mod tracker_bridge;
@@ -25,6 +28,7 @@ pub use events::{EventSubscriptionId, HostEventBus};
 use praxis_contracts::RustHostStatus;
 use praxis_core::core_status;
 pub use secrets::HostSecretStore;
+pub use services::HostServices;
 pub use stdio::{HostInboundReply, HostWireFrame};
 pub use workflow_bridge::{
     GateActionResultDto, GateEvaluationResult, StageApproval, WorkflowPolicy,

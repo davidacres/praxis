@@ -1,24 +1,17 @@
 #!/usr/bin/env bash
 #
-# Build and launch the Praxis desktop (Electron) app.
+# Build and launch the Praxis desktop (Tauri) app.
 #
-# Compiles the three workspaces in dependency order and starts Electron:
+# Compiles the workspaces in dependency order and starts the native Tauri shell:
 #
-#   0. npm install            -> only when package-lock.json is newer than the last
-#                                 install (node_modules/.package-lock.json), so a pulled
-#                                 dependency is never missing at launch
-#   1. packages/core, packages/mobile-protocol, packages/mobile-relay
-#                             -> tsc, produces out/ that the main process imports
-#   2. apps/praxis-desktop/renderer      -> vite build, produces dist/ that the window loads
-#   3. apps/praxis-desktop/main  -> tsc, produces out/main + out/preload
-#   4. copy-renderer          -> apps/praxis-desktop/renderer/dist -> apps/praxis-desktop/main/renderer
-#                                 (win.loadFile('../../renderer/index.html') reads from here,
-#                                 not from frontend/dist directly — skip this and the window
-#                                 opens blank)
-#   5. electron .             -> opens the frameless window
+#   0. npm install            -> only when package-lock.json is newer than the last install
+#   1. packages/core, packages/mobile-protocol, packages/mobile-relay -> tsc
+#   2. apps/praxis-desktop/renderer -> vite build (or dev server in --dev mode)
+#   3. target/debug/praxis-desktop -> cargo build -p praxis-desktop
+#   4. praxis-desktop -> opens the native window
 #
-# In --dev mode step 2/4 are replaced by the Vite dev server: the script starts it,
-# waits for the port to answer, and points the main process at it through
+# In --dev mode the renderer build is replaced by the Vite dev server: the script starts it,
+# waits for the port to answer, and points the desktop shell at it through
 # PRAXIS_DEV_SERVER_URL so the renderer hot-reloads on save. The server
 # is shut down again when the app window closes.
 #
@@ -55,16 +48,32 @@ CORE="$REPO_ROOT/packages/core"
 MOBILE_PROTOCOL="$REPO_ROOT/packages/mobile-protocol"
 MOBILE_RELAY="$REPO_ROOT/packages/mobile-relay"
 FRONTEND="$REPO_ROOT/apps/praxis-desktop/renderer"
-ELECTRON_APP="$REPO_ROOT/apps/praxis-desktop/main"
-NODE_PTY_BINARY="$REPO_ROOT/node_modules/node-pty/build/Release/pty.node"
+DESKTOP_BIN="$REPO_ROOT/target/debug/praxis-desktop"
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
 ok()   { printf '\033[32m  + %s\033[0m\n' "$1"; }
 
-# Electron exits 9 on flags it does not accept from NODE_OPTIONS (--use-system-ca
-# is the usual culprit in this org's shells), so every child runs without it.
-export NODE_OPTIONS=
-unset ELECTRON_RUN_AS_NODE
+# Ensure cargo / rustup is available on PATH if installed in standard locations
+if ! command -v cargo >/dev/null 2>&1; then
+  if [[ -f "$HOME/.cargo/env" ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/.cargo/env"
+  elif [[ -d "$HOME/.cargo/bin" ]]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
+  fi
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "Error: 'cargo' was not found on PATH." >&2
+  echo "Please ensure the Rust toolchain is installed (e.g. via rustup: https://rustup.rs) and ~/.cargo/bin is in your PATH." >&2
+  exit 1
+fi
+
+if [[ -z "${PRAXIS_USER_DATA_DIR:-}" ]]; then
+  if [[ "$(uname -s)" == "Darwin" && -d "$HOME/Library/Application Support/Praxis" ]]; then
+    export PRAXIS_USER_DATA_DIR="$HOME/Library/Application Support/Praxis"
+  fi
+fi
 
 assert_built() {
   local path="$1" hint="$2"
@@ -90,25 +99,14 @@ if [[ "$SKIP_BUILD" -eq 0 && ( ! -f "$INSTALLED_LOCK" || "$REPO_ROOT/package-loc
   ok 'node_modules up to date'
 fi
 
-# node-pty's generic macOS prebuild can fail to spawn on newer macOS releases.
-# A local source build uses the current SDK and remains N-API compatible with
-# both Node and Electron. Only pay the rebuild cost when the artifact is absent.
-if [[ "$(uname -s)" == "Darwin" && ! -f "$NODE_PTY_BINARY" ]]; then
-  step 'Building the native terminal integration'
-  invoke_npm "$ELECTRON_APP" rebuild-terminal
-  ok 'node-pty native module ready'
-fi
-
 if [[ "$SKIP_BUILD" -eq 1 ]]; then
   step 'Skipping build; checking existing output'
   assert_built "$CORE/out/index.js" 'core is not compiled'
   assert_built "$MOBILE_PROTOCOL/out/index.js" 'mobile-protocol is not compiled'
   assert_built "$MOBILE_RELAY/out/index.js" 'mobile-relay is not compiled'
-  assert_built "$ELECTRON_APP/out/main/index.js" 'electron-app is not compiled'
+  assert_built "$DESKTOP_BIN" 'desktop-app is not compiled'
   if [[ "$DEV" -eq 0 ]]; then
     assert_built "$FRONTEND/dist/index.html" 'frontend is not built'
-    step 'Refreshing renderer/ from frontend/dist'
-    invoke_npm "$ELECTRON_APP" copy-renderer
   fi
   ok 'Existing build output looks complete'
 else
@@ -127,15 +125,9 @@ else
     ok 'frontend -> dist/'
   fi
 
-  step 'Compiling apps/praxis-desktop/main'
-  invoke_npm "$ELECTRON_APP" compile
-  ok 'electron-app -> out/'
-
-  if [[ "$DEV" -eq 0 ]]; then
-    step 'Copying frontend/dist into electron-app/renderer'
-    invoke_npm "$ELECTRON_APP" copy-renderer
-    ok 'renderer ready'
-  fi
+  step 'Compiling native Tauri desktop shell'
+  (cd "$REPO_ROOT" && cargo build -p praxis-desktop)
+  ok 'desktop -> target/debug/praxis-desktop'
 fi
 
 VITE_PID=""
@@ -182,15 +174,22 @@ else
   unset PRAXIS_DEV_SERVER_URL || true
 fi
 
-step 'Launching Electron'
+# macOS resolves application identity and the Dock icon from the enclosing bundle.
+# Keep the executable in-process so exit handling and Vite cleanup still work.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  step 'Preparing native macOS app bundle'
+  DESKTOP_BIN="$(node "$REPO_ROOT/apps/praxis-desktop/scripts/prepare-macos-dev-bundle.cjs" "$DESKTOP_BIN")"
+fi
+
+step 'Launching Praxis Desktop (Tauri)'
 if [[ "$DEMO" -eq 1 ]]; then
-  (cd "$ELECTRON_APP" && npx electron . --demo) || EXIT_CODE=$?
+  "$DESKTOP_BIN" --demo || EXIT_CODE=$?
 else
-  (cd "$ELECTRON_APP" && npx electron .) || EXIT_CODE=$?
+  "$DESKTOP_BIN" || EXIT_CODE=$?
 fi
 
 if [[ "$EXIT_CODE" -ne 0 ]]; then
-  printf '\033[33mElectron exited with code %s\033[0m\n' "$EXIT_CODE"
+  printf '\033[33mPraxis Desktop exited with code %s\033[0m\n' "$EXIT_CODE"
   exit "$EXIT_CODE"
 fi
 

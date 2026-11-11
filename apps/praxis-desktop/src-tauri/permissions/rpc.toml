@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-desktop-contract"
+description = "Call the allowlisted desktop contract from the trusted local UI."
+commands.allow = ["praxis_rpc"]

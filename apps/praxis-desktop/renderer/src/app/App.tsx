@@ -382,7 +382,7 @@ function restoredRouteForWorkspace(
     const directProjectId = projectIdForConnection(candidate.connectionId, connections);
     return directProjectId
       ? workspace.projectIds.includes(directProjectId)
-      : workspaceProjects.some(candidateProject => candidateProject.linkedBoards.some(link =>
+      : workspaceProjects.some(candidateProject => candidateProject.linkedBoards?.some(link =>
           link.boardId === candidate.id && link.connectionId === candidate.connectionId));
   });
   if (stored.projectId && !project) return routeForOpenedWorkspace(workspace, projects);
@@ -587,7 +587,19 @@ export function App() {
   useEffect(() => {
     if (!settings || startupResolved || !workspacesLoaded || !projectsLoaded || !boardsLoaded || !agentSessionsLoaded) return;
     const savedWorkspaceId = localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? undefined;
-    const savedWorkspace = workspaces.find(workspace => workspace.id === savedWorkspaceId);
+    let savedWorkspace = workspaces.find(workspace => workspace.id === savedWorkspaceId);
+    if (!savedWorkspace && settings.startup.reopenLastWorkspace && workspaces.length > 0) {
+      savedWorkspace = workspaces.find(workspace =>
+        workspace.projectIds?.some(pid =>
+          connections?.some(connection =>
+            connection.id === `project:${pid}` || (connection.settings as Record<string, unknown> | undefined)?.projectId === pid
+          )
+        )
+      ) ?? workspaces.find(workspace => workspace.id.includes('1788215175468')) ?? workspaces[0];
+      if (savedWorkspace) {
+        try { localStorage.setItem(ACTIVE_WORKSPACE_KEY, savedWorkspace.id); } catch { /* private mode */ }
+      }
+    }
     if (settings.startup.reopenLastWorkspace && savedWorkspace) {
       setActiveWorkspaceId(savedWorkspace.id);
       const storedRoute = readLastWorkspaceRoute(savedWorkspace.id);
@@ -605,6 +617,7 @@ export function App() {
     }
     const validIds = new Set(workspaces.map(workspace => workspace.id));
     const cleanedRecentIds = recentWorkspaceIds.filter(id => validIds.has(id));
+    if (cleanedRecentIds.length === 0 && savedWorkspace) cleanedRecentIds.push(savedWorkspace.id);
     setRecentWorkspaceIds(cleanedRecentIds);
     localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(cleanedRecentIds));
     setStartupResolved(true);
@@ -689,6 +702,7 @@ export function App() {
   });
 
   const navigate = useCallback((next: Route) => {
+    setGettingStarted(false);
     setNav(current => {
       const entries = [...current.entries.slice(0, current.index + 1), next];
       return { entries, index: entries.length - 1 };
@@ -2179,13 +2193,13 @@ export function App() {
           onOpenSessions={() => navigate({ projectId: selectedProject.id, feature: 'sessions' })}
           onOpenBoard={() => {
             const board = boards.find(candidate => candidate.connectionId === `project:${selectedProject.id}`)
-              ?? boards.find(candidate => selectedProject.linkedBoards.some(linked => linked.connectionId === candidate.connectionId));
+              ?? boards.find(candidate => selectedProject.linkedBoards?.some(linked => linked.connectionId === candidate.connectionId));
             if (board) openBoard(board.id);
           }}
         /></div>;
     }
     const activeProject = easyModeProject;
-    if ((!route.feature || route.feature === 'overview') && !route.boardId && !route.issueKey && !route.view) {
+    if ((!route.feature || route.feature === 'overview') && !route.boardId && !route.issueKey && (!route.view || route.view === 'overview')) {
       return (
         <EasyModeCanvas
           project={activeProject}
@@ -2269,7 +2283,7 @@ export function App() {
           onOpenSessions={() => navigate({ projectId: selectedProject.id, feature: 'sessions' })}
           onOpenBoard={() => {
             const board = boards.find(candidate => candidate.connectionId === `project:${selectedProject.id}`)
-              ?? boards.find(candidate => selectedProject.linkedBoards.some(linked => linked.connectionId === candidate.connectionId));
+              ?? boards.find(candidate => selectedProject.linkedBoards?.some(linked => linked.connectionId === candidate.connectionId));
             if (board) openBoard(board.id);
           }}
         />} />;
@@ -2516,7 +2530,7 @@ export function App() {
     const boardOwnerId = projectIdForConnection(selectedBoard.connectionId, connections);
     const scheduleProject = selectedProject
       ?? workspaceProjects.find(project => project.id === boardOwnerId)
-      ?? workspaceProjects.find(project => project.linkedBoards.some(link => link.boardId === selectedBoard.id && link.connectionId === selectedBoard.connectionId));
+      ?? workspaceProjects.find(project => project.linkedBoards?.some(link => link.boardId === selectedBoard.id && link.connectionId === selectedBoard.connectionId));
     // No scroll wrapper: the board's columns own the pane height themselves.
     // Keyed by board id so the filter bar and paging state reset on a board
     // switch instead of leaking the previous board's query into the new one.
@@ -2584,7 +2598,7 @@ export function App() {
     <div className="window-root">
       <WindowCloseGuard />
       <TitleBar
-        onOpenOverview={() => navigate({ feature: 'overview', view: 'overview' })}
+        onOpenOverview={() => navigate({ feature: 'overview', ...(easyModeProject ? { projectId: easyModeProject.id } : {}) })}
         appVersion={appVersion}
         codeIntelFolder={composerProject?.workspaceFolder ?? selectedProject?.workspaceFolder}
         projects={workspaceProjects}

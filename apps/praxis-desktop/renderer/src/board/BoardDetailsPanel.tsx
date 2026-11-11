@@ -27,7 +27,7 @@ function isInProgress(issue: IssueSummary): boolean {
 function countBy(values: string[]): Array<{ label: string; count: number }> {
   const counts = new Map<string, number>();
   for (const value of values) {
-    const label = value.trim() || 'Other';
+    const label = (typeof value === 'string' ? value.trim() : '') || 'Other';
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   return [...counts.entries()]

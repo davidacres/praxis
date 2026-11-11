@@ -49,6 +49,9 @@ export function AiUsageDashboardPanel({ onOpenDetails, onNewConversation }: AiUs
 
   useEffect(() => {
     let cancelled = false;
+    if (!window.praxis?.aiUsage?.dashboardSummary) {
+      return () => { cancelled = true; };
+    }
     window.praxis.aiUsage.dashboardSummary()
       .then(result => { if (!cancelled) setSummary(result); })
       .catch((err: unknown) => { if (!cancelled) setError(err instanceof Error ? err.message : String(err)); });

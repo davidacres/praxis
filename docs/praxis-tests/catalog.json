@@ -3,7 +3,7 @@
   "generatedBy": "apps/praxis-desktop/main/scripts/praxis-test-catalog.cjs",
   "runner": "playwright",
   "scope": "apps/praxis-desktop/main/e2e",
-  "testCount": 806,
+  "testCount": 821,
   "tests": [
     {
       "id": "PT-DD79DC7C96",
@@ -2918,6 +2918,38 @@
       }
     },
     {
+      "id": "PT-4CC8A963D4",
+      "title": "saved artifacts land in the main checkout and are listed, previewed and deleted on the Artifacts page",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/artifactsPage.spec.ts",
+        "line": 54,
+        "project": "functional"
+      },
+      "area": "artifacts Page",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "saved artifacts land in the main checkout and are listed, previewed and deleted on the Artifacts page",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-64E4A04E01",
+      "title": "pages are named by their title, cards drag into groups, and a group can be added to a chat",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/artifactsPage.spec.ts",
+        "line": 220,
+        "project": "functional"
+      },
+      "area": "artifacts Page",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "pages are named by their title, cards drag into groups, and a group can be added to a chat",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-396814BC61",
       "title": "⌘J summons the floating assistant; pin docks it, keeping the conversation",
       "source": {
@@ -3222,12 +3254,28 @@
       }
     },
     {
+      "id": "PT-32157CA5DC",
+      "title": "a team chat row offers rename, archive and delete, and an archived chat restores from the Sessions browser",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
+        "line": 737,
+        "project": "functional"
+      },
+      "area": "assistant",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a team chat row offers rename, archive and delete, and an archived chat restores from the Sessions browser",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-1B219DB70F",
       "title": "durable activation rejects stale legacy turns and transcript writers",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 737,
+        "line": 779,
         "project": "functional"
       },
       "area": "assistant",
@@ -3243,7 +3291,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 747,
+        "line": 789,
         "project": "functional"
       },
       "area": "assistant",
@@ -3259,7 +3307,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 764,
+        "line": 806,
         "project": "functional"
       },
       "area": "assistant",
@@ -3275,7 +3323,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 828,
+        "line": 870,
         "project": "functional"
       },
       "area": "assistant",
@@ -3291,7 +3339,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 919,
+        "line": 961,
         "project": "functional"
       },
       "area": "assistant",
@@ -3307,7 +3355,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 940,
+        "line": 982,
         "project": "functional"
       },
       "area": "assistant",
@@ -3323,7 +3371,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/assistant.spec.ts",
-        "line": 975,
+        "line": 1017,
         "project": "functional"
       },
       "area": "assistant",
@@ -3963,7 +4011,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 88,
+        "line": 89,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -3979,7 +4027,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 114,
+        "line": 115,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -3990,18 +4038,66 @@
       }
     },
     {
-      "id": "PT-4611F1236E",
-      "title": "image artifacts render as clickable chat previews",
+      "id": "PT-CE3AF4AEA9",
+      "title": "an image gadget shows the picture itself, not an artifact file row",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 153,
+        "line": 154,
         "project": "functional"
       },
       "area": "chat Gadgets",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
-        "when": "image artifacts render as clickable chat previews",
+        "when": "an image gadget shows the picture itself, not an artifact file row",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-956D89B384",
+      "title": "an image gadget carries an inline SVG without asking the host for a file",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
+        "line": 218,
+        "project": "functional"
+      },
+      "area": "chat Gadgets",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an image gadget carries an inline SVG without asking the host for a file",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-D622ABC57B",
+      "title": "an artifact gadget of only images is drawn on the image surface",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
+        "line": 259,
+        "project": "functional"
+      },
+      "area": "chat Gadgets",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an artifact gadget of only images is drawn on the image surface",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-262C4A6E1D",
+      "title": "an artifact gadget of mixed files stays on the artifact surface",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
+        "line": 295,
+        "project": "functional"
+      },
+      "area": "chat Gadgets",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "an artifact gadget of mixed files stays on the artifact surface",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -4011,7 +4107,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 209,
+        "line": 321,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4027,7 +4123,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 277,
+        "line": 389,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4038,12 +4134,44 @@
       }
     },
     {
+      "id": "PT-941048C95D",
+      "title": "artifact workspace dock opens, switches between preview, code, and diff, and supports saving to workspace",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
+        "line": 467,
+        "project": "functional"
+      },
+      "area": "chat Gadgets",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "artifact workspace dock opens, switches between preview, code, and diff, and supports saving to workspace",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-79E80C5B9C",
+      "title": "artifact workspace dock previews a file-backed text artifact and explains a missing one",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
+        "line": 600,
+        "project": "functional"
+      },
+      "area": "chat Gadgets",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "artifact workspace dock previews a file-backed text artifact and explains a missing one",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-879C206255",
       "title": "internal memory citations stay persisted but do not render in the transcript",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 341,
+        "line": 662,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4059,7 +4187,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 374,
+        "line": 695,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4075,7 +4203,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 393,
+        "line": 715,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4091,7 +4219,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 408,
+        "line": 730,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4107,7 +4235,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 435,
+        "line": 757,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4123,7 +4251,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 503,
+        "line": 825,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4139,7 +4267,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 537,
+        "line": 859,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4155,7 +4283,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 564,
+        "line": 886,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4171,7 +4299,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 602,
+        "line": 924,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4187,7 +4315,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 619,
+        "line": 941,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4203,7 +4331,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 672,
+        "line": 994,
         "project": "functional"
       },
       "area": "chat Gadgets",
@@ -4219,13 +4347,29 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
-        "line": 689,
+        "line": 1011,
         "project": "functional"
       },
       "area": "chat Gadgets",
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a conflict gadget refuses to resolve until every side is chosen",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-38A64A957C",
+      "title": "Open in Workspace opens an HTML artifact from the session page too",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/chatGadgets.spec.ts",
+        "line": 1033,
+        "project": "functional"
+      },
+      "area": "chat Gadgets",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "Open in Workspace opens an HTML artifact from the session page too",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -6731,7 +6875,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/mobileAccess.spec.ts",
-        "line": 24,
+        "line": 32,
         "project": "functional"
       },
       "area": "mobile Access",
@@ -6747,7 +6891,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/mobileAccess.spec.ts",
-        "line": 33,
+        "line": 41,
         "project": "functional"
       },
       "area": "mobile Access",
@@ -6763,7 +6907,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/mobileAccess.spec.ts",
-        "line": 48,
+        "line": 57,
         "project": "functional"
       },
       "area": "mobile Access",
@@ -6774,12 +6918,28 @@
       }
     },
     {
+      "id": "PT-66B8FFBD93",
+      "title": "resetting an enabled host changes its fingerprint and rebinds the listener",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/mobileAccess.spec.ts",
+        "line": 66,
+        "project": "functional"
+      },
+      "area": "mobile Access",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "resetting an enabled host changes its fingerprint and rebinds the listener",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-112E148947",
       "title": "an allowed-subnet entry the policy cannot match is rejected inline, and a legacy prefix migrates",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/mobileAccess.spec.ts",
-        "line": 57,
+        "line": 78,
         "project": "functional"
       },
       "area": "mobile Access",
@@ -7686,12 +7846,28 @@
       }
     },
     {
+      "id": "PT-6AC16DF105",
+      "title": "a project's artifacts folder defaults to docs/published-artifacts and is editable",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
+        "line": 236,
+        "project": "functional"
+      },
+      "area": "projects",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "a project's artifacts folder defaults to docs/published-artifacts and is editable",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-E8FB985783",
       "title": "uses a folder connection for an existing-folder project with plans",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 236,
+        "line": 285,
         "project": "functional"
       },
       "area": "projects",
@@ -7707,7 +7883,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 270,
+        "line": 319,
         "project": "functional"
       },
       "area": "projects",
@@ -7723,7 +7899,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 290,
+        "line": 339,
         "project": "functional"
       },
       "area": "projects",
@@ -7739,7 +7915,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 320,
+        "line": 369,
         "project": "functional"
       },
       "area": "projects",
@@ -7755,7 +7931,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 335,
+        "line": 384,
         "project": "functional"
       },
       "area": "projects",
@@ -7771,7 +7947,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 367,
+        "line": 416,
         "project": "functional"
       },
       "area": "projects",
@@ -7787,7 +7963,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 379,
+        "line": 428,
         "project": "functional"
       },
       "area": "projects",
@@ -7803,7 +7979,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 408,
+        "line": 457,
         "project": "functional"
       },
       "area": "projects",
@@ -7819,7 +7995,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 459,
+        "line": 508,
         "project": "functional"
       },
       "area": "projects",
@@ -7835,7 +8011,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 523,
+        "line": 572,
         "project": "functional"
       },
       "area": "projects",
@@ -7851,7 +8027,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 560,
+        "line": 609,
         "project": "functional"
       },
       "area": "projects",
@@ -7867,7 +8043,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 596,
+        "line": 645,
         "project": "functional"
       },
       "area": "projects",
@@ -7883,7 +8059,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/projects.spec.ts",
-        "line": 620,
+        "line": 669,
         "project": "functional"
       },
       "area": "projects",
@@ -8114,6 +8290,22 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "draft and existing sessions share the composer frame and input layout",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-7E1EE4F050",
+      "title": "10,000 Rust events reach real main and secondary renderers in order, with clean restart/unsubscribe",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/rustEventStream.spec.ts",
+        "line": 25,
+        "project": "functional"
+      },
+      "area": "rust Event Stream",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "10,000 Rust events reach real main and secondary renderers in order, with clean restart/unsubscribe",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -8786,6 +8978,38 @@
       "flow": {
         "given": "the Praxis desktop test fixture is prepared in an isolated application context",
         "when": "a schedule paused on an untrusted workflow offers to review and trust it, then carries on",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-BBA0B4FEB0",
+      "title": "archives and restores a scheduled run from the lineup card and the report, and deletes from the report",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 1575,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "archives and restores a scheduled run from the lineup card and the report, and deletes from the report",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
+      "id": "PT-5C9313572E",
+      "title": "sidebar list and card list show edit, archive, and delete matching the session list",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/scheduledRuns.spec.ts",
+        "line": 1652,
+        "project": "functional"
+      },
+      "area": "scheduled Runs",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "sidebar list and card list show edit, archive, and delete matching the session list",
         "then": "the automated assertions for this test pass and record the described user-visible result"
       }
     },
@@ -10907,7 +11131,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/terminal.spec.ts",
-        "line": 11,
+        "line": 13,
         "project": "functional"
       },
       "area": "terminal",
@@ -10923,7 +11147,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/terminal.spec.ts",
-        "line": 40,
+        "line": 57,
         "project": "functional"
       },
       "area": "terminal",
@@ -10939,7 +11163,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/terminal.spec.ts",
-        "line": 59,
+        "line": 76,
         "project": "functional"
       },
       "area": "terminal",
@@ -10955,7 +11179,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/terminal.spec.ts",
-        "line": 71,
+        "line": 88,
         "project": "functional"
       },
       "area": "terminal",
@@ -10971,7 +11195,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/terminal.spec.ts",
-        "line": 87,
+        "line": 104,
         "project": "functional"
       },
       "area": "terminal",
@@ -11419,7 +11643,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowAgentStage.spec.ts",
-        "line": 68,
+        "line": 71,
         "project": "functional"
       },
       "area": "workflow Agent Stage",
@@ -11435,7 +11659,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowAgentStage.spec.ts",
-        "line": 201,
+        "line": 204,
         "project": "functional"
       },
       "area": "workflow Agent Stage",
@@ -11446,12 +11670,28 @@
       }
     },
     {
+      "id": "PT-B31D6E1AE5",
+      "title": "the plan is available in the right sidebar during an implement stage and opens in the main middle pane",
+      "source": {
+        "runner": "playwright",
+        "file": "apps/praxis-desktop/main/e2e/workflowAgentStage.spec.ts",
+        "line": 266,
+        "project": "functional"
+      },
+      "area": "workflow Agent Stage",
+      "flow": {
+        "given": "the Praxis desktop test fixture is prepared in an isolated application context",
+        "when": "the plan is available in the right sidebar during an implement stage and opens in the main middle pane",
+        "then": "the automated assertions for this test pass and record the described user-visible result"
+      }
+    },
+    {
       "id": "PT-095333D691",
       "title": "without a build stage the built product is missing in a fresh worktree, so what needs it fails",
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts",
-        "line": 102,
+        "line": 103,
         "project": "functional"
       },
       "area": "workflow Build Stage",
@@ -11467,7 +11707,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts",
-        "line": 110,
+        "line": 111,
         "project": "functional"
       },
       "area": "workflow Build Stage",
@@ -11483,7 +11723,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts",
-        "line": 131,
+        "line": 132,
         "project": "functional"
       },
       "area": "workflow Build Stage",
@@ -11499,7 +11739,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowBuildStage.spec.ts",
-        "line": 143,
+        "line": 144,
         "project": "functional"
       },
       "area": "workflow Build Stage",
@@ -11947,7 +12187,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts",
-        "line": 118,
+        "line": 119,
         "project": "functional"
       },
       "area": "workflow Install Deps",
@@ -11963,7 +12203,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts",
-        "line": 131,
+        "line": 132,
         "project": "functional"
       },
       "area": "workflow Install Deps",
@@ -11979,7 +12219,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowInstallDeps.spec.ts",
-        "line": 150,
+        "line": 151,
         "project": "functional"
       },
       "area": "workflow Install Deps",
@@ -12219,7 +12459,7 @@
       "source": {
         "runner": "playwright",
         "file": "apps/praxis-desktop/main/e2e/workflowRetryFailed.spec.ts",
-        "line": 97,
+        "line": 98,
         "project": "functional"
       },
       "area": "workflow Retry Failed",

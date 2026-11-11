@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { DetachedChatWindow } from './ai/DetachedChatWindow';
@@ -99,30 +99,38 @@ async function applyMarketplaceAppearance(): Promise<void> {
   }
 }
 
-void window.praxis.settings.get().then(async settings => {
+async function applySavedAppearance(settings: AppSettings): Promise<void> {
   setCustomProviderCatalog(settings.ai.customProviders);
   applyDisplayMode(settings.appearance.displayMode);
   registerCustomThemes(settings.appearance.customThemes);
   registerCustomSurfacePacks(settings.appearance.customSurfacePacks);
   await applyMarketplaceAppearance();
   applyAccentColor(settings.appearance.accentColor);
-  applyThemePreference(settings.appearance.themeId, settings.appearance.themeMode);
-  applySurfacePack(settings.appearance.surfacePackId, {
-    intensity: settings.appearance.surface.intensity,
-    texture: settings.appearance.surface.texture,
-    translucency: settings.appearance.surface.translucency,
-    windowVibrancy: settings.appearance.surface.windowVibrancy,
-    animateMotifs: settings.appearance.surface.animateMotifs,
-    motif: settings.appearance.surface.motif
+  const activeLook = settings.appearance.looks?.find(look => look.id === settings.appearance.activeLookId);
+  const themeId = activeLook?.themeId ?? settings.appearance.themeId;
+  const themeMode = activeLook?.themeMode ?? settings.appearance.themeMode;
+  const surfacePackId = activeLook?.surfacePackId ?? settings.appearance.surfacePackId;
+  const surface = activeLook?.surface ?? settings.appearance.surface;
+  applyThemePreference(themeId, themeMode);
+  applySurfacePack(surfacePackId, {
+    intensity: surface.intensity,
+    texture: surface.texture,
+    translucency: surface.translucency,
+    windowVibrancy: surface.windowVibrancy,
+    animateMotifs: surface.animateMotifs,
+    motif: surface.motif
   });
-}).catch(() => {
+}
+
+void window.praxis.settings.get().then(applySavedAppearance).catch(error => {
+  console.error('Could not apply saved Praxis appearance:', error);
   // Local storage remains a usable first-launch fallback when settings are unavailable.
 });
 
 window.praxis.settings.onChanged(settings => {
-  applyAccentColor(settings.appearance.accentColor);
-  setCustomProviderCatalog(settings.ai.customProviders);
-  applyDisplayMode(settings.appearance.displayMode);
+  void applySavedAppearance(settings).catch(error => {
+    console.error('Could not apply updated Praxis appearance:', error);
+  });
 });
 
 window.praxis.marketplace.onChanged(() => {
@@ -138,10 +146,58 @@ window.praxis.marketplace.onChanged(() => {
 // a single-conversation view instead of the full shell.
 const detachedSessionKey = new URLSearchParams(window.location.search).get('detachedSession');
 
+class RootErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
+  override state: { error?: Error } = {};
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[Praxis root error boundary]', error, info);
+  }
+
+  override render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          background: 'var(--bg, #18191c)',
+          color: 'var(--text, #e3e5e8)',
+          fontFamily: 'system-ui, -apple-system, sans-serif'
+        }}>
+          <h2 style={{ margin: '0 0 12px 0', fontSize: '18px' }}>Something went wrong</h2>
+          <p style={{ margin: '0 0 20px 0', color: 'var(--text-tertiary, #959ba4)', fontSize: '14px', maxWidth: '480px', textAlign: 'center' }}>
+            {this.state.error.message || 'An unexpected error occurred in the desktop renderer.'}
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              this.setState({ error: undefined });
+              window.location.reload();
+            }}
+          >
+            Reload application
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <DialogHost>
-      {detachedSessionKey ? <DetachedChatWindow issueKey={detachedSessionKey} /> : <AssistantProvider><App /></AssistantProvider>}
-    </DialogHost>
+    <RootErrorBoundary>
+      <DialogHost>
+        {detachedSessionKey ? <DetachedChatWindow issueKey={detachedSessionKey} /> : <AssistantProvider><App /></AssistantProvider>}
+      </DialogHost>
+    </RootErrorBoundary>
   </StrictMode>
 );

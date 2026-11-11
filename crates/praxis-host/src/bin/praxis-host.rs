@@ -6,9 +6,9 @@ use std::io::{self, BufRead, Write};
 use std::sync::{Arc, Mutex};
 
 use praxis_contracts::RustRpcRequest;
-use praxis_host::mobile_bridge::{MobileBridge, register_mobile_channels};
 use praxis_host::{
-    HostCallClient, HostConfig, HostContext, HostInboundReply, HostWireFrame, host_status,
+    HostCallClient, HostConfig, HostContext, HostInboundReply, HostServices, HostWireFrame,
+    host_status,
 };
 
 fn write_frame(writer: &Arc<Mutex<io::Stdout>>, frame: &HostWireFrame) {
@@ -62,15 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
-    let mobile = MobileBridge::new(runtime.handle().clone(), calls.clone());
-    register_mobile_channels(&host, &mobile);
-    praxis_host::profile_bridge::register_profile_channels(&host, runtime.handle());
-    praxis_host::deployment_bridge::register_deployment_channels(&host, runtime.handle());
-    praxis_host::ai_bridge::register_ai_channels(&host, runtime.handle());
-    praxis_host::tracker_bridge::register_tracker_channels(&host, runtime.handle());
-    praxis_host::workflow_bridge::register_workflow_channels(&host);
-    let terminal =
-        praxis_host::terminal_bridge::register_terminal_channels(&host, runtime.handle());
+    let services = HostServices::register(&host, runtime.handle(), calls.clone());
 
     write_frame(
         &stdout,
@@ -107,8 +99,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Stdin closed: fail any outstanding calls so nothing waits on a dead channel.
-    calls.close();
-    mobile.shutdown();
-    terminal.dispose();
+    services.shutdown();
     Ok(())
 }

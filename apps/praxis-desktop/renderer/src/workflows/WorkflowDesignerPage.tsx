@@ -1081,7 +1081,7 @@ function AgentStageFields({
   const selectedProfileId = node.agent.profileId || node.agent.agentId;
   const chosen = agents.find(candidate => candidate.manifest.id === selectedHostId);
   const chosenProfile = profiles.find(candidate => candidate.profile.id === selectedProfileId);
-  const caps = catalog?.capabilities[selectedHostId];
+  const caps = catalog?.capabilities?.[selectedHostId];
   const unusable =
     selectedHostId && chosen
       ? chosen.errors.length > 0 || (requireTrust && !chosen.trusted)

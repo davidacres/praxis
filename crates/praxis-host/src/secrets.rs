@@ -6,12 +6,25 @@
 //! on Electron's C++ keychain APIs.
 
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
+
+/// Durable storage behind a [`HostSecretStore`]. The store keeps the unlocked map in memory;
+/// a backend makes writes survive a restart. Implementations must never log values.
+pub trait SecretBackend: Debug + Send + Sync {
+    /// Reads every persisted secret. Entries that cannot be read are skipped, never fatal.
+    fn load(&self) -> BTreeMap<String, String>;
+    /// Persists one secret.
+    fn store(&self, key: &str, value: &str) -> Result<(), String>;
+    /// Removes one secret. Removing an absent key is not an error.
+    fn remove(&self, key: &str) -> Result<(), String>;
+}
 
 /// Thread-safe credential store shared across services inside [`crate::HostContext`].
 #[derive(Debug, Clone, Default)]
 pub struct HostSecretStore {
     inner: Arc<RwLock<BTreeMap<String, String>>>,
+    backend: Arc<RwLock<Option<Arc<dyn SecretBackend>>>>,
 }
 
 impl HostSecretStore {
@@ -45,10 +58,42 @@ impl HostSecretStore {
             .is_some_and(|guard| guard.get(key).is_some_and(|v| !v.is_empty()))
     }
 
+    /// Attaches durable storage and loads what it already holds into memory. Values already
+    /// in memory (for example seeded by a test) win over persisted ones.
+    pub fn attach_backend(&self, backend: Arc<dyn SecretBackend>) {
+        let persisted = backend.load();
+        if let Ok(mut guard) = self.inner.write() {
+            for (key, value) in persisted {
+                guard.entry(key).or_insert(value);
+            }
+        }
+        if let Ok(mut slot) = self.backend.write() {
+            *slot = Some(backend);
+        }
+    }
+
+    fn backend(&self) -> Option<Arc<dyn SecretBackend>> {
+        self.backend.read().ok().and_then(|slot| slot.clone())
+    }
+
     /// Stores or updates a secret value. Passing an empty string removes the key.
+    ///
+    /// With a backend attached the value is persisted first; if that fails nothing changes and
+    /// `false` is returned, so a secret is never reported stored that would vanish on restart.
     pub fn set(&self, key: impl Into<String>, value: impl Into<String>) -> bool {
         let key = key.into();
         let value = value.into();
+        if let Some(backend) = self.backend() {
+            let persisted = if value.is_empty() {
+                backend.remove(&key)
+            } else {
+                backend.store(&key, &value)
+            };
+            if let Err(error) = persisted {
+                eprintln!("[secrets] could not persist '{key}': {error}");
+                return false;
+            }
+        }
         let Ok(mut guard) = self.inner.write() else {
             return false;
         };
@@ -62,6 +107,12 @@ impl HostSecretStore {
 
     /// Deletes a secret by key, returning `true` if it was present.
     pub fn delete(&self, key: &str) -> bool {
+        if let Some(backend) = self.backend()
+            && let Err(error) = backend.remove(key)
+        {
+            eprintln!("[secrets] could not remove '{key}': {error}");
+            return false;
+        }
         self.inner
             .write()
             .ok()

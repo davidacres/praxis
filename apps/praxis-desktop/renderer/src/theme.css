@@ -2784,6 +2784,7 @@ textarea {
      reference, where "What's the goal?" measures 119px wide. */
   font-size: 16px;
   resize: none;
+  overflow-x: hidden;
 }
 
 /* Not a bare outline reset: .composer:focus-within paints the same ring
@@ -11682,6 +11683,7 @@ button.session-telemetry-chip.is-code-intel:hover {
   min-height: 0;
   max-height: 200px;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-top: calc(var(--space-1) + 3px);
   font-size: var(--text-sm);
   line-height: 1.3;
@@ -22244,6 +22246,7 @@ button.session-chat-attachment {
   outline: none;
   font-family: inherit;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .easymode-composer-textarea::placeholder {

@@ -5,6 +5,9 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   build: {
+    rolldownOptions: {
+      input: ['index.html', 'tauri.html']
+    },
     outDir: 'dist'
   }
 });

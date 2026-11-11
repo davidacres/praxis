@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "child-browsers",
+  "description": "Child browser webviews (ai-browser, preview-browser) receive zero desktop RPC permissions.",
+  "local": false,
+  "windows": ["browser", "preview"],
+  "permissions": []
+}

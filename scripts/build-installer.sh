@@ -41,29 +41,17 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ELECTRON_APP="$REPO_ROOT/apps/praxis-desktop/main"
+DESKTOP_BIN="$REPO_ROOT/target/debug/praxis-desktop"
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
   "$SCRIPT_DIR/build-app.sh"
 else
-  for required in "$REPO_ROOT/packages/core/out/index.js" "$REPO_ROOT/apps/praxis-desktop/renderer/dist/index.html" "$ELECTRON_APP/out/main/index.js" "$ELECTRON_APP/renderer/index.html"; do
+  for required in "$REPO_ROOT/packages/core/out/index.js" "$REPO_ROOT/apps/praxis-desktop/renderer/dist/index.html" "$DESKTOP_BIN"; do
     [[ -f "$required" ]] || { echo "Missing build input: $required" >&2; exit 1; }
   done
 fi
 
-case "$TARGET" in
-  native) builder_args=() ;;
-  mac|dmg) builder_args=(--mac dmg zip) ;;
-  win|windows|nsis) builder_args=(--win nsis --x64) ;;
-  linux) builder_args=(--linux AppImage deb) ;;
-  appimage) builder_args=(--linux AppImage) ;;
-  deb) builder_args=(--linux deb) ;;
-  dir) builder_args=(--dir) ;;
-  *) echo "Unsupported target: $TARGET (use native, mac, win, linux, appimage, deb, or dir)" >&2; exit 1 ;;
-esac
+printf '\033[36m==> Packaging Praxis (%s) via Tauri\033[0m\n' "$TARGET"
+(cd "$REPO_ROOT/apps/praxis-desktop/renderer" && npm run tauri:build)
 
-printf '\033[36m==> Packaging Praxis (%s)\033[0m\n' "$TARGET"
-(cd "$ELECTRON_APP" && npx electron-builder ${builder_args[@]+"${builder_args[@]}"} --publish never)
-
-printf '\033[32m  + Installer artifacts are ready:\033[0m\n'
-find "$ELECTRON_APP/dist" -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' \) -print
+printf '\033[32m  + Distribution artifacts are ready in target/debug\033[0m\n'

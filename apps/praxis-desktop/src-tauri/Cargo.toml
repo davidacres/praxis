@@ -1,0 +1,39 @@
+[package]
+name = "praxis-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.90"
+description = "Praxis in-process Tauri desktop shell"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+praxis-contracts.workspace = true
+praxis-core.workspace = true
+praxis-ai.workspace = true
+praxis-workflows.workspace = true
+praxis-host = { path = "../../../crates/praxis-host" }
+base64.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+indexmap.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+url.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-window-state = "2"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

@@ -30,7 +30,13 @@ const stateLabel: Record<AgentSessionRecord['state'], string> = {
 export function OverviewPage({ projects, connections, sessions, connectionChecks, onNewProject, onNewSession, onNewConversation, onOpenProjects, onOpenSessions, onOpenConnections, onOpenAiUsage, onOpenBoard }: OverviewPageProps) {
   const recentSessions = sessions.filter(session => !isConversationSession(session)).slice(0, 4);
   const [runtime, setRuntime] = useState<{ profiles: number; hosts: number; skills: number }>();
-  useEffect(() => { void window.praxis.agentRuntime.list().then(snapshot => setRuntime({ profiles: snapshot.profiles?.length ?? 0, hosts: (snapshot.runtimeHosts ?? snapshot.agents).length, skills: snapshot.skills.length })).catch(() => setRuntime({ profiles: 0, hosts: 0, skills: 0 })); }, []);
+  useEffect(() => {
+    if (!window.praxis?.agentRuntime?.list) {
+      setRuntime({ profiles: 0, hosts: 0, skills: 0 });
+      return;
+    }
+    void window.praxis.agentRuntime.list().then(snapshot => setRuntime({ profiles: snapshot.profiles?.length ?? 0, hosts: (snapshot.runtimeHosts ?? snapshot.agents).length, skills: snapshot.skills.length })).catch(() => setRuntime({ profiles: 0, hosts: 0, skills: 0 }));
+  }, []);
 
   return (
     <div className="overview-page" data-testid="overview-page">

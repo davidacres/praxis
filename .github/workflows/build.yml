@@ -83,9 +83,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: |
-          npm ci
-          node node_modules/electron/install.js
+        run: npm ci
 
       - name: Build core
         run: npm run build:core
@@ -96,14 +94,16 @@ jobs:
       - name: Build mobile relay declarations
         run: npm run build:mobile-relay
 
+      # praxis-desktop is a Cargo workspace member; GTK/WebKit are needed even
+      # when this job only checks the native shell and does not launch a webview.
+      - name: Install Tauri Linux build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev libayatana-appindicator3-dev
+
       - name: Typecheck
         run: npm run check-types
 
       - name: Build renderer
         run: npm run build:renderer
-
-      - name: Copy renderer into the Electron host
-        run: npm run desktop:copy-renderer
 
       - name: Compile desktop
         run: npm run build:desktop
@@ -123,11 +123,8 @@ jobs:
       - name: Antigravity auto-approval stays behind explicit consent
         run: npm run test:antigravity-consent
 
-      - name: Desktop Git and persistence tests
-        run: npm run test:desktop:git
-
-      - name: Workflow process and write-back tests
-        run: npm run test:desktop:workflows
+      - name: Desktop Tauri E2E and parity tests
+        run: npm run test:desktop:tauri
 
   desktop:
     name: Desktop (${{ matrix.suite }})
@@ -164,35 +161,10 @@ jobs:
           dotnet-version: '10.0.402'
       - name: Install dependencies
         run: npm ci
-      - name: Install and repair Electron bundle
-        run: |
-          electron_app="node_modules/electron/dist/Electron.app"
-          node node_modules/electron/install.js
-          npm rebuild node-pty --build-from-source --runtime=electron --target=43.8.3 --dist-url=https://electronjs.org/headers
-          xattr -cr "$electron_app"
-          codesign --force --deep --sign - "$electron_app"
-          codesign --verify --deep --strict --verbose=2 "$electron_app"
-      - name: Build desktop and copy the current renderer
+      - name: Build desktop
         run: npm run build
-      # Each shard has its own machine and Electron bundle. Keep launches
-      # serial within a runner to retain the macOS signature stability fix.
-      - name: Install Playwright Chromium
-        working-directory: apps/praxis-desktop/main
-        run: npx playwright install chromium
-
-      - name: Desktop tests
-        working-directory: apps/praxis-desktop/main
-        run: npx playwright test ${{ matrix.args }} --workers=1 --reporter=list,html
-      - name: Upload desktop test diagnostics
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: desktop-test-results-${{ matrix.suite }}
-          path: |
-            apps/praxis-desktop/main/test-results/
-            apps/praxis-desktop/main/playwright-report/
-            apps/praxis-desktop/main/output/playwright/
-          if-no-files-found: ignore
+      - name: Desktop Tauri E2E tests
+        run: npm run test:desktop:tauri
 
   rust-parity:
     name: Rust Parity (${{ matrix.name }})

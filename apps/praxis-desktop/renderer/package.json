@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run check-core-imports && tsc --noEmit -p . && vite build",
-    "check-types": "npm run check-core-imports && tsc --noEmit -p .",
-    "test": "node --import ./test/register.mjs --test test/notesSession.test.ts test/notesTree.test.ts test/noteSendReference.test.ts test/noteSendStore.test.ts test/scheduleSpotlight.test.ts test/reportModel.test.ts test/scheduleFlow.test.ts test/conversationSubscription.test.ts test/turnControlModel.test.ts test/assistantErrorState.test.ts test/assistantPendingSubmissions.test.ts test/assistantOwnership.test.ts test/assistantPageContextCompatibility.test.ts test/assistantShellMode.test.ts test/assistantSubmitCommand.test.ts",
+    "build": "npm run check-tauri-bridge && npm run check-core-imports && tsc --noEmit -p . && vite build",
+    "check-types": "npm run check-tauri-bridge && npm run check-core-imports && tsc --noEmit -p .",
+    "test": "node --import ./test/register.mjs --test test/notesSession.test.ts test/notesTree.test.ts test/noteSendReference.test.ts test/noteSendStore.test.ts test/scheduleSpotlight.test.ts test/reportModel.test.ts test/scheduleFlow.test.ts test/conversationSubscription.test.ts test/turnControlModel.test.ts test/assistantErrorState.test.ts test/assistantPendingSubmissions.test.ts test/assistantOwnership.test.ts test/assistantPageContextCompatibility.test.ts test/assistantShellMode.test.ts test/assistantSubmitCommand.test.ts test/tauriTransport.test.ts",
     "check-core-imports": "node scripts/checkCoreImports.cjs",
-    "textures": "electron scripts/generate-surface-textures.cjs"
+    "check-tauri-bridge": "node ../scripts/generate-tauri-bridge.cjs --check",
+    "tauri:dev": "node ../scripts/run-tauri.cjs dev",
+    "tauri:build": "node ../scripts/run-tauri.cjs build --debug --no-bundle",
+    "tauri:audit": "node ../scripts/audit-tauri-contract.cjs",
+    "tauri:test": "node ../scripts/test-tauri-e2e.cjs"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
@@ -22,6 +27,7 @@
   "devDependencies": {
     "@babel/parser": "^7.25.0",
     "@praxis/core": "*",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/markdown-it": "^14.2.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

@@ -263,9 +263,9 @@ export function TitleBar({
   };
 
   return (
-    <header ref={headerRef} className={`titlebar${isMac ? ' titlebar-mac' : ''}${locked ? ' titlebar-locked' : ''}`} data-locked={locked || undefined}>
-      <div className="titlebar-group titlebar-left">
-      <div className="titlebar-group titlebar-header-group" role="group" aria-label="Navigation">
+    <header data-tauri-drag-region ref={headerRef} className={`titlebar${isMac ? ' titlebar-mac' : ''}${locked ? ' titlebar-locked' : ''}`} data-locked={locked || undefined}>
+      <div data-tauri-drag-region className="titlebar-group titlebar-left">
+      <div data-tauri-drag-region className="titlebar-group titlebar-header-group" role="group" aria-label="Navigation">
                 <button type="button" className="icon-btn" aria-label="Back" disabled={!canGoBack} onClick={onBack}>
                   <Icon name="arrow-left" />
                 </button>
@@ -358,11 +358,11 @@ export function TitleBar({
       </div>
 
       </div>
-      <div className="titlebar-spacer" />
+      <div className="titlebar-spacer" data-tauri-drag-region />
 
       <UpdateIndicator settingsOpen={settingsOpen} onOpenAiSettings={onOpenAiSettings} />
 
-      <div className="titlebar-group titlebar-right">
+      <div data-tauri-drag-region className="titlebar-group titlebar-right">
             {boardFilter && (
             <div className="titlebar-context-wrap" ref={filterRef}>
               <button
@@ -411,7 +411,7 @@ export function TitleBar({
             </div>
             )}
 
-        <div className="titlebar-group titlebar-center" role="group" aria-label="Session actions">
+        <div data-tauri-drag-region className="titlebar-group titlebar-center" role="group" aria-label="Session actions">
         {onNewSession && (
           <button
             type="button"
@@ -427,7 +427,7 @@ export function TitleBar({
           </button>
         )}
 
-        <div className="titlebar-group titlebar-actions" role="group" aria-label="Create and activity">
+        <div data-tauri-drag-region className="titlebar-group titlebar-actions" role="group" aria-label="Create and activity">
                 <div className="new-menu-anchor" ref={newMenuRef}>
                   <button
                     type="button"
@@ -490,7 +490,7 @@ export function TitleBar({
                   </button>
                 )}
         </div>
-        <div className="titlebar-group titlebar-activity" role="group" aria-label="Activity">
+        <div data-tauri-drag-region className="titlebar-group titlebar-activity" role="group" aria-label="Activity">
                 {onOpenScheduledRuns && (
                   <button
                     type="button"
@@ -529,7 +529,7 @@ export function TitleBar({
 
         </div>
         </div>
-        <div className="titlebar-group titlebar-utilities" role="group" aria-label="Utilities">
+        <div data-tauri-drag-region className="titlebar-group titlebar-utilities" role="group" aria-label="Utilities">
                 <CodeIntelTitlebarChip folder={codeIntelFolder} />
 
                 <button
@@ -546,7 +546,7 @@ export function TitleBar({
         </div>
 
 
-              <div className="titlebar-group titlebar-layout-toggles" role="group" aria-label="Panels">
+              <div data-tauri-drag-region className="titlebar-group titlebar-layout-toggles" role="group" aria-label="Panels">
                 <button
                   type="button"
                   className={`icon-btn${sidebarVisible ? ' active' : ''}`}
@@ -605,7 +605,7 @@ export function TitleBar({
 
               </div>
 
-        <div className="titlebar-group titlebar-preferences" role="group" aria-label="Zoom and settings">
+        <div data-tauri-drag-region className="titlebar-group titlebar-preferences" role="group" aria-label="Zoom and settings">
 
                 <div className="titlebar-zoom-controls" data-testid="titlebar-zoom-controls" aria-label="Application zoom">
                   <button
@@ -694,7 +694,7 @@ export function TitleBar({
 function UpdateIndicator({ settingsOpen, onOpenAiSettings }: { settingsOpen: boolean; onOpenAiSettings: () => void }) {
   const status = useUpdateStatus();
   const appUpdateIndicator = status?.state === 'ready' ? (
-    <div className="titlebar-group titlebar-update">
+    <div data-tauri-drag-region className="titlebar-group titlebar-update">
       <button
         className="titlebar-update-btn"
         data-testid="titlebar-update"
@@ -706,7 +706,7 @@ function UpdateIndicator({ settingsOpen, onOpenAiSettings }: { settingsOpen: boo
       </button>
     </div>
   ) : status?.state === 'available' && !status.canInstall && status.releaseUrl ? (
-    <div className="titlebar-group titlebar-update">
+    <div data-tauri-drag-region className="titlebar-group titlebar-update">
       <button
         className="titlebar-update-btn"
         data-testid="titlebar-update"

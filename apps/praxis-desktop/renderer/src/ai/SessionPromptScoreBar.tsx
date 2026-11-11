@@ -177,10 +177,10 @@ export function SessionPromptScoreBar({
 
   const findingKey = trimmedPrompt;
   const isSnoozed = Boolean(report && snoozedKey !== undefined && findingKey === snoozedKey);
-  const hasBlocker = Boolean(report?.findings.some(isHardBlocker));
+  const hasBlocker = Boolean(report?.findings?.some(isHardBlocker));
   const clarityWaiting = Boolean(report?.clarity && report.clarity.status !== 'checked');
   const wantsCoach = Boolean(
-    trimmedPrompt && !disabled && report && (report.findings.length > 0 || clarityWaiting || manualReview) && !isSnoozed &&
+    trimmedPrompt && !disabled && report && ((report.findings?.length ?? 0) > 0 || clarityWaiting || manualReview) && !isSnoozed &&
     (typingSettled || hasBlocker || mounted || manualReview)
   );
 

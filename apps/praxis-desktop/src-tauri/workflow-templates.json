@@ -1,0 +1,5374 @@
+{
+  "builtIn": [
+    {
+      "schemaVersion": 1,
+      "id": "governed-delivery",
+      "name": "Governed delivery",
+      "description": "Plan, implement, then converge review, QA, and security before a human approves.",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "plan",
+      "builtIn": true,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 160,
+          "y": 40,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Produce an implementation plan for the assigned task.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true,
+              "description": "The implementation plan."
+            }
+          ],
+          "mutatesWorktree": false
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 160,
+          "y": 200,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement the plan. Run automated tests to verify your changes, fix any broken or outdated tests, commit the clean change, and report the ref. On a later iteration, fix the findings you are handed before anything else, and say how each was addressed.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true,
+              "description": "The implemented change."
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Review",
+          "x": 160,
+          "y": 360,
+          "inputs": [
+            "plan-doc",
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "profileId": "praxis-reviewer",
+            "hostId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the implementation snapshot for correctness, quality and security using the change-diff input artifact and read-only file access. Judge it against the plan: report anything the plan asked for that the change does not do as a finding. Rate severity by impact, not by who introduced it or whether the plan mentioned it: a security or correctness problem in code this change touches is high or critical even when it predates the change — the code ships either way. High and critical findings send the change back to be fixed; a finding you are unsure of is medium at most. Read only: shell commands that change files or run builds and tests are refused.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true,
+              "description": "Structured review findings."
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "independentOf": "implement"
+        },
+        {
+          "type": "agent-task",
+          "id": "test-contracts",
+          "name": "Praxis Test contracts",
+          "x": 160,
+          "y": 520,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-test-author",
+            "profileId": "praxis-test-author",
+            "hostId": "praxis-test-author",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Inventory the automated QA tests, author or update the structured English Praxis Test catalog, and run its deterministic validator. Ensure automated tests pass and report the exact test count, coverage links, and any stale or ambiguous contracts.",
+          "outputs": [
+            {
+              "id": "test-contracts",
+              "kind": "report",
+              "required": true,
+              "description": "The validated Praxis Test catalog and coverage report."
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "install",
+          "name": "Install dependencies",
+          "x": 40,
+          "y": 680,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "ci",
+            "--registry=https://registry.npmjs.org/"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "timeoutMs": 600000,
+          "maxAttempts": 2,
+          "outputs": [
+            {
+              "id": "install-log",
+              "kind": "log",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "build",
+          "name": "Build",
+          "x": 40,
+          "y": 840,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "run",
+            "build",
+            "--if-present"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "timeoutMs": 900000,
+          "outputs": [
+            {
+              "id": "build-log",
+              "kind": "log",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": "agent-task",
+          "id": "qa-repair-agent",
+          "name": "Repair QA failures",
+          "x": 280,
+          "y": 1000,
+          "inputs": [
+            "change-diff",
+            "qa-results"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report"
+            ]
+          },
+          "instructions": "Inspect the failed QA evidence, diagnose the smallest safe fix, implement it in the worktree, and commit the repair. Do not weaken, remove, or bypass tests.",
+          "outputs": [
+            {
+              "id": "qa-repair-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 1
+        },
+        {
+          "type": "check",
+          "id": "qa",
+          "name": "QA",
+          "x": 40,
+          "y": 1000,
+          "inputs": [
+            "change-diff",
+            "test-contracts",
+            "install-log"
+          ],
+          "command": "node",
+          "args": [
+            "-e",
+            "process.stdout.write(\"QA test selection is managed by Praxis.\")"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "qa-results",
+              "kind": "test-results",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "affectedTests": true,
+          "maxAttempts": 2,
+          "failureRecovery": {
+            "repairNodeId": "qa-repair-agent",
+            "maxAttempts": 2
+          }
+        },
+        {
+          "type": "check",
+          "id": "security",
+          "name": "Security scan",
+          "x": 280,
+          "y": 680,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "audit",
+            "--audit-level=high",
+            "--json",
+            "--registry=https://registry.npmjs.org/"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "adapter": "npm-audit",
+          "outputs": [
+            {
+              "id": "security-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "Gates",
+          "x": 160,
+          "y": 1160,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 160,
+          "y": 1320,
+          "inputs": [
+            "review-findings",
+            "test-contracts",
+            "qa-results",
+            "security-findings"
+          ],
+          "prompt": "Review, QA, and security have passed. Approve this change for delivery?",
+          "requiredGates": [
+            "review",
+            "qa",
+            "security"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-impl",
+          "from": "plan",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-review",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-tests",
+          "from": "review",
+          "to": "test-contracts",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-tests-install",
+          "from": "test-contracts",
+          "to": "install",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-install-build",
+          "from": "install",
+          "to": "build",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-build-qa",
+          "from": "build",
+          "to": "qa",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-qa-repair",
+          "from": "qa",
+          "to": "qa-repair-agent",
+          "on": "failure",
+          "required": false
+        },
+        {
+          "id": "e-tests-sec",
+          "from": "test-contracts",
+          "to": "security",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-qa-gates",
+          "from": "qa",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sec-gates",
+          "from": "security",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-fix",
+          "from": "review",
+          "to": "implement",
+          "on": "findings",
+          "required": true,
+          "when": {
+            "severity": "high"
+          },
+          "loop": {
+            "maxIterations": 2
+          }
+        },
+        {
+          "id": "e-security-fix",
+          "from": "security",
+          "to": "implement",
+          "on": "findings",
+          "required": true,
+          "when": {
+            "severity": "high"
+          },
+          "loop": {
+            "maxIterations": 1
+          }
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "quick-change",
+      "name": "Quick change",
+      "description": "One implementation stage and a human sign-off. No automated gates.",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "implement",
+      "builtIn": true,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 0,
+          "y": 0,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement the assigned change.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 240,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "prompt": "Approve this change?",
+          "requiredGates": [],
+          "allowBypass": false
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-impl-approve",
+          "from": "implement",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "improve-until-target",
+      "name": "Improve until target",
+      "description": "Iterate on a solution toward a stated goal, keeping the best version, until it reaches a target score or stops improving.",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "baseline",
+      "builtIn": true,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "requiresMeasurableGoal": true,
+      "parameters": [
+        {
+          "id": "goal",
+          "label": "Goal",
+          "kind": "text",
+          "required": true,
+          "description": "What \"better\" means for this code, in a sentence or two."
+        },
+        {
+          "id": "target",
+          "label": "Target score (0–100)",
+          "kind": "number",
+          "min": 1,
+          "max": 100,
+          "description": "Stop when the evaluator scores the code at or above this."
+        },
+        {
+          "id": "rubric",
+          "label": "Rubric",
+          "kind": "text",
+          "description": "How the evaluator should score, when the goal is not a number."
+        },
+        {
+          "id": "iterations",
+          "label": "Iterations",
+          "kind": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "bindsLoopEdge": "e-improve-again",
+          "description": "The most passes to make after the first."
+        }
+      ],
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "baseline",
+          "name": "Baseline",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "profileId": "praxis-reviewer",
+            "hostId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Measure the code as it is now, before any change. Score how well the code meets the goal you are given, from 0 (not at all) to 100 (fully), against the rubric when one is given. Be consistent: the same code must get the same score, so state the evidence behind it. Report the score as metrics.score in your findings block, and list what stands between this code and a full score as findings, most important first, each with a concrete suggestion. Do not change any code.",
+          "outputs": [
+            {
+              "id": "baseline-findings",
+              "kind": "findings",
+              "required": true,
+              "description": "The starting score and what holds it back."
+            }
+          ],
+          "mutatesWorktree": false,
+          "modelTier": "standard"
+        },
+        {
+          "type": "agent-task",
+          "id": "improve",
+          "name": "Improve",
+          "x": 240,
+          "y": 160,
+          "inputs": [
+            "baseline-findings"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report"
+            ]
+          },
+          "instructions": "Make one focused improvement toward the goal: address the top three findings you are given and nothing else. Keep the change small enough to review. Run the tests, then commit. Add new tests where the goal needs them, but do not change, skip or delete existing tests or lower any threshold — the change is checked for that and an attempt that does it is undone.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2,
+          "guardTests": {}
+        },
+        {
+          "type": "check",
+          "id": "install",
+          "name": "Install dependencies",
+          "x": 480,
+          "y": 60,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "ci",
+            "--registry=https://registry.npmjs.org/"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "timeoutMs": 600000,
+          "maxAttempts": 2,
+          "outputs": [
+            {
+              "id": "install-log",
+              "kind": "log",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "test",
+          "name": "Tests",
+          "x": 720,
+          "y": 60,
+          "inputs": [
+            "change-diff",
+            "install-log"
+          ],
+          "command": "npm",
+          "args": [
+            "test"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-results",
+              "kind": "test-results",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "agent-task",
+          "id": "evaluate",
+          "name": "Evaluate",
+          "x": 960,
+          "y": 160,
+          "inputs": [
+            "change-diff",
+            "test-results"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "profileId": "praxis-reviewer",
+            "hostId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Measure the improved code. Score how well the code meets the goal you are given, from 0 (not at all) to 100 (fully), against the rubric when one is given. Be consistent: the same code must get the same score, so state the evidence behind it. Report the score as metrics.score in your findings block, and list what stands between this code and a full score as findings, most important first, each with a concrete suggestion. Do not change any code.",
+          "outputs": [
+            {
+              "id": "evaluation",
+              "kind": "findings",
+              "required": true,
+              "description": "This pass's score and what still holds it back."
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "independentOf": "improve",
+          "modelTier": "standard"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 1200,
+          "y": 160,
+          "inputs": [
+            "evaluation",
+            "test-results"
+          ],
+          "prompt": "The loop has stopped on its best version. Review the score history and the change, then approve it.",
+          "requiredGates": [
+            "qa",
+            "review"
+          ],
+          "allowBypass": false
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-baseline-improve",
+          "from": "baseline",
+          "to": "improve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-improve-install",
+          "from": "improve",
+          "to": "install",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-install-test",
+          "from": "install",
+          "to": "test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-test-evaluate",
+          "from": "test",
+          "to": "evaluate",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-evaluate-approve",
+          "from": "evaluate",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-improve-again",
+          "from": "evaluate",
+          "to": "improve",
+          "on": "findings",
+          "required": true,
+          "when": {
+            "metric": {
+              "metric": "score",
+              "operator": "<",
+              "value": 90,
+              "valueFromParameter": "target"
+            }
+          },
+          "loop": {
+            "maxIterations": 3,
+            "keepBest": {
+              "metric": "score",
+              "higherIsBetter": true,
+              "patience": 2
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "marketplace": [
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc",
+      "name": "Full SDLC",
+      "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+      "trigger": "ticket",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze requirements, verify existing architecture, and produce structured plan.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 200,
+          "y": 160,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement changes matching plan specifications, verify changes by running automated tests and fixing any broken or outdated tests, and commit clean changes to the branch.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "install",
+          "name": "Install dependencies",
+          "x": 320,
+          "y": 60,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "ci",
+            "--registry=https://registry.npmjs.org/"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "timeoutMs": 600000,
+          "maxAttempts": 2,
+          "outputs": [
+            {
+              "id": "install-log",
+              "kind": "log",
+              "required": true
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "build",
+          "name": "Build",
+          "x": 440,
+          "y": 130,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "run",
+            "build",
+            "--if-present"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "timeoutMs": 900000,
+          "outputs": [
+            {
+              "id": "build-log",
+              "kind": "log",
+              "required": false
+            }
+          ]
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 440,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "run",
+            "lint"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 440,
+          "y": 60,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npx",
+          "args": [
+            "tsc",
+            "--noEmit"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "test",
+          "name": "Unit tests & coverage",
+          "x": 560,
+          "y": 120,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "test"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 440,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 440,
+          "y": 260,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 440,
+          "y": 320,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "osv-scanner",
+          "args": [
+            "scan",
+            "source",
+            "--no-ignore",
+            "--format",
+            "sarif",
+            "--output-file",
+            "osv.sarif",
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "osv.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Structured code review",
+          "x": 440,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review changes against quality and security criteria and return structured findings.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC Gates",
+          "x": 680,
+          "y": 160,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 900,
+          "y": 160,
+          "inputs": [
+            "change-diff",
+            "review-findings"
+          ],
+          "prompt": "All QA, Security, and Code Review quality gates have passed. Sign off on changes?",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1100,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "run",
+            "deploy"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-impl",
+          "from": "plan",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-install",
+          "from": "implement",
+          "to": "install",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "install",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "install",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-install-build",
+          "from": "install",
+          "to": "build",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-test",
+          "from": "build",
+          "to": "test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sec",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-rev",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sec-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-rev-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-dotnet",
+      "name": "Full SDLC (.NET)",
+      "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+      "trigger": "ticket",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze requirements, verify existing architecture, and produce structured plan.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 200,
+          "y": 160,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement changes matching plan specifications, verify changes by running automated tests and fixing any broken or outdated tests, and commit clean changes to the branch.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 440,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "format",
+            "--verify-no-changes"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 440,
+          "y": 60,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "build"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "test",
+          "name": "Unit tests & coverage",
+          "x": 440,
+          "y": 120,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "test",
+            "/p:CollectCoverage=true",
+            "/p:CoverletOutputFormat=cobertura"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 440,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 440,
+          "y": 260,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 440,
+          "y": 320,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "list",
+            "package",
+            "--vulnerable"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Structured code review",
+          "x": 440,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "csharp-dotnet-code-reviewer",
+            "scope": "global",
+            "skillNames": [
+              "dotnet-solid-dry"
+            ],
+            "toolMode": "read-only"
+          },
+          "instructions": "Review changes against quality and security criteria and return structured findings.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC Gates",
+          "x": 680,
+          "y": 160,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 900,
+          "y": 160,
+          "inputs": [
+            "change-diff",
+            "review-findings"
+          ],
+          "prompt": "All QA, Security, and Code Review quality gates have passed. Sign off on changes?",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1100,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "publish"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-impl",
+          "from": "plan",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sec",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-rev",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sec-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-rev-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-python",
+      "name": "Full SDLC (Python)",
+      "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+      "trigger": "ticket",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze requirements, verify existing architecture, and produce structured plan.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 200,
+          "y": 160,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement changes matching plan specifications, verify changes by running automated tests and fixing any broken or outdated tests, and commit clean changes to the branch.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 440,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "ruff",
+          "args": [
+            "check",
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 440,
+          "y": 60,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "mypy",
+          "args": [
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "test",
+          "name": "Unit tests & coverage",
+          "x": 440,
+          "y": 120,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "pytest",
+          "args": [
+            "--cov=."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 440,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 440,
+          "y": 260,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 440,
+          "y": 320,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "osv-scanner",
+          "args": [
+            "scan",
+            "source",
+            "--no-ignore",
+            "--format",
+            "sarif",
+            "--output-file",
+            "osv.sarif",
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "osv.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Structured code review",
+          "x": 440,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review changes against quality and security criteria and return structured findings.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC Gates",
+          "x": 680,
+          "y": 160,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 900,
+          "y": 160,
+          "inputs": [
+            "change-diff",
+            "review-findings"
+          ],
+          "prompt": "All QA, Security, and Code Review quality gates have passed. Sign off on changes?",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1100,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "python",
+          "args": [
+            "-m",
+            "deploy"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-impl",
+          "from": "plan",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sec",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-rev",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sec-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-rev-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-generic",
+      "name": "Full SDLC (generic)",
+      "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+      "trigger": "ticket",
+      "scope": "global",
+      "version": 1,
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-02T00:00:00.000Z",
+      "updatedAt": "2026-09-02T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze requirements, verify existing architecture, and produce structured plan.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 200,
+          "y": 160,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement changes matching plan specifications, verify changes by running automated tests and fixing any broken or outdated tests, and commit clean changes to the branch.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 440,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure lint command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 440,
+          "y": 60,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure typecheck command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "test",
+          "name": "Unit tests & coverage",
+          "x": 440,
+          "y": 120,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure test command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "qa"
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 440,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 440,
+          "y": 260,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 440,
+          "y": 320,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure SCA scan"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": false
+            }
+          ],
+          "satisfiesGate": "security"
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Structured code review",
+          "x": 440,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review changes against quality and security criteria and return structured findings.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC Gates",
+          "x": 680,
+          "y": 160,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 900,
+          "y": 160,
+          "inputs": [
+            "change-diff",
+            "review-findings"
+          ],
+          "prompt": "All QA, Security, and Code Review quality gates have passed. Sign off on changes?",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1100,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure deployment command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-impl",
+          "from": "plan",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sec",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-rev",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sec-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-rev-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-loop",
+      "name": "Full SDLC Loop",
+      "description": "Iterative SDLC: BDD scenarios authored before code, parallel QA/security/review verification with structured findings, and bounded retry plus gate-held approval so every failed stage loops until clean.",
+      "scope": "global",
+      "version": 1,
+      "trigger": "ticket",
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze the task, verify the existing architecture, and produce a structured implementation plan covering behaviour, risk, and the acceptance scenarios the BDD stage should encode.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "bdd-author",
+          "name": "Author BDD scenarios",
+          "x": 180,
+          "y": 40,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-test-author",
+            "profileId": "praxis-test-author",
+            "hostId": "praxis-test-author",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Turn the plan into executable acceptance coverage: write the project's BDD scenarios where that convention exists and author/update the structured English Praxis Test catalog with one contract per acceptance rule. Do not implement step definitions or product code.",
+          "outputs": [
+            {
+              "id": "bdd-scenarios",
+              "kind": "report",
+              "required": true,
+              "description": "The authored .feature scenarios."
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 380,
+          "y": 160,
+          "inputs": [
+            "plan-doc",
+            "bdd-scenarios"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Run automated tests to verify your changes and fix any broken or outdated tests before committing clean changes and reporting the ref.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 600,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "run",
+            "lint"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 600,
+          "y": 40,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npx",
+          "args": [
+            "tsc",
+            "--noEmit"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "unit-test",
+          "name": "Unit tests & coverage",
+          "x": 600,
+          "y": 80,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "test"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "cobertura"
+            }
+          ],
+          "reportPath": "coverage/cobertura-coverage.xml",
+          "adapter": "cobertura",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "bdd-run",
+          "name": "BDD scenarios run",
+          "x": 600,
+          "y": 120,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "command": "npx",
+          "args": [
+            "cucumber-js",
+            "--format",
+            "junit:reports/bdd-junit.xml"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "bdd-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "junit"
+            }
+          ],
+          "reportPath": "reports/bdd-junit.xml",
+          "adapter": "junit",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 600,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 600,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 600,
+          "y": 240,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "osv-scanner",
+          "args": [
+            "scan",
+            "source",
+            "--no-ignore",
+            "--format",
+            "sarif",
+            "--output-file",
+            "osv.sarif",
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "osv.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Code review",
+          "x": 600,
+          "y": 280,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "test-review",
+          "name": "Automated test review",
+          "x": 600,
+          "y": 320,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the automated tests and the authored BDD scenarios against the implementation: do the scenarios match the plan, do the step definitions test real behaviour, and are the unit tests meaningful rather than tautological? Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "test-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "security-review",
+          "name": "Security review",
+          "x": 600,
+          "y": 360,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-security-analyst",
+            "profileId": "praxis-security-analyst",
+            "hostId": "praxis-security-analyst",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "electron-hardening",
+              "ci-workflow-hardening"
+            ]
+          },
+          "instructions": "Review the change for security issues the scanners cannot see: authorization gaps, injection via new inputs, unsafe deserialization, and business-logic abuse. Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "security-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "security",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "ux-review",
+          "name": "UI/UX review (advisory)",
+          "x": 600,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the change for UI/UX impact from the diff alone: copy quality, interaction states (loading, empty, error), accessibility (labels, focus, contrast risks), and consistency with existing patterns. Advisory: your findings are reported but cannot block delivery.",
+          "outputs": [
+            {
+              "id": "ux-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC gates",
+          "x": 860,
+          "y": 200,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 1080,
+          "y": 200,
+          "inputs": [
+            "review-findings",
+            "test-review-findings",
+            "security-review-findings"
+          ],
+          "prompt": "QA (lint, types, unit tests, BDD scenarios), security (SAST, secrets, SCA, analyst review), and code review have converged. Any high-or-worse review or security finding, or coverage below 80%, is still holding the run — resolve and rework before approving.",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "qa": [
+              {
+                "type": "metric",
+                "metric": "lineCoveragePct",
+                "operator": ">=",
+                "value": 80
+              }
+            ],
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1300,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "npm",
+          "args": [
+            "run",
+            "deploy"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-bdd",
+          "from": "plan",
+          "to": "bdd-author",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-impl",
+          "from": "bdd-author",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "unit-test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-bdd",
+          "from": "implement",
+          "to": "bdd-run",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secrets",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-review",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-testreview",
+          "from": "implement",
+          "to": "test-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secreview",
+          "from": "implement",
+          "to": "security-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-ux",
+          "from": "implement",
+          "to": "ux-review",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "unit-test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-gates",
+          "from": "bdd-run",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secrets-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-testreview-gates",
+          "from": "test-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secreview-gates",
+          "from": "security-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-ux-gates",
+          "from": "ux-review",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-loop-dotnet",
+      "name": "Full SDLC Loop (.NET)",
+      "description": "Iterative SDLC: BDD scenarios authored before code, parallel QA/security/review verification with structured findings, and bounded retry plus gate-held approval so every failed stage loops until clean.",
+      "scope": "global",
+      "version": 1,
+      "trigger": "ticket",
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze the task, verify the existing architecture, and produce a structured implementation plan covering behaviour, risk, and the acceptance scenarios the BDD stage should encode.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "bdd-author",
+          "name": "Author BDD scenarios",
+          "x": 180,
+          "y": 40,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-test-author",
+            "profileId": "praxis-test-author",
+            "hostId": "praxis-test-author",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Turn the plan into executable acceptance coverage: write the project's BDD scenarios where that convention exists and author/update the structured English Praxis Test catalog with one contract per acceptance rule. Do not implement step definitions or product code.",
+          "outputs": [
+            {
+              "id": "bdd-scenarios",
+              "kind": "report",
+              "required": true,
+              "description": "The authored .feature scenarios."
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 380,
+          "y": 160,
+          "inputs": [
+            "plan-doc",
+            "bdd-scenarios"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Run automated tests to verify your changes and fix any broken or outdated tests before committing clean changes and reporting the ref.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 600,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "format",
+            "--verify-no-changes"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 600,
+          "y": 40,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "build"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "unit-test",
+          "name": "Unit tests & coverage",
+          "x": 600,
+          "y": 80,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "test",
+            "/p:CollectCoverage=true",
+            "/p:CoverletOutputFormat=cobertura"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "cobertura"
+            }
+          ],
+          "reportPath": "coverage.cobertura.xml",
+          "adapter": "cobertura",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "bdd-run",
+          "name": "BDD scenarios run",
+          "x": 600,
+          "y": 120,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure BDD test command (Reqnroll/SpecFlow)"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "bdd-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "junit"
+            }
+          ],
+          "reportPath": "reports/bdd-junit.xml",
+          "adapter": "junit",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 600,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 600,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 600,
+          "y": 240,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "list",
+            "package",
+            "--vulnerable"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "osv.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Code review",
+          "x": 600,
+          "y": 280,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "csharp-dotnet-code-reviewer",
+            "scope": "global",
+            "skillNames": [
+              "dotnet-solid-dry",
+              "praxis-test-contracts"
+            ],
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "test-review",
+          "name": "Automated test review",
+          "x": 600,
+          "y": 320,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "csharp-dotnet-code-reviewer",
+            "scope": "global",
+            "skillNames": [
+              "dotnet-solid-dry"
+            ],
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the automated tests and the authored BDD scenarios against the implementation: do the scenarios match the plan, do the step definitions test real behaviour, and are the unit tests meaningful rather than tautological? Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "test-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "security-review",
+          "name": "Security review",
+          "x": 600,
+          "y": 360,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-security-analyst",
+            "profileId": "praxis-security-analyst",
+            "hostId": "praxis-security-analyst",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "electron-hardening",
+              "ci-workflow-hardening"
+            ]
+          },
+          "instructions": "Review the change for security issues the scanners cannot see: authorization gaps, injection via new inputs, unsafe deserialization, and business-logic abuse. Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "security-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "security",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "ux-review",
+          "name": "UI/UX review (advisory)",
+          "x": 600,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "csharp-dotnet-code-reviewer",
+            "scope": "global",
+            "skillNames": [
+              "dotnet-solid-dry"
+            ],
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the change for UI/UX impact from the diff alone: copy quality, interaction states (loading, empty, error), accessibility (labels, focus, contrast risks), and consistency with existing patterns. Advisory: your findings are reported but cannot block delivery.",
+          "outputs": [
+            {
+              "id": "ux-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC gates",
+          "x": 860,
+          "y": 200,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 1080,
+          "y": 200,
+          "inputs": [
+            "review-findings",
+            "test-review-findings",
+            "security-review-findings"
+          ],
+          "prompt": "QA (lint, types, unit tests, BDD scenarios), security (SAST, secrets, SCA, analyst review), and code review have converged. Any high-or-worse review or security finding, or coverage below 80%, is still holding the run — resolve and rework before approving.",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "qa": [
+              {
+                "type": "metric",
+                "metric": "lineCoveragePct",
+                "operator": ">=",
+                "value": 80
+              }
+            ],
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1300,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "dotnet",
+          "args": [
+            "publish"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-bdd",
+          "from": "plan",
+          "to": "bdd-author",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-impl",
+          "from": "bdd-author",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "unit-test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-bdd",
+          "from": "implement",
+          "to": "bdd-run",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secrets",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-review",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-testreview",
+          "from": "implement",
+          "to": "test-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secreview",
+          "from": "implement",
+          "to": "security-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-ux",
+          "from": "implement",
+          "to": "ux-review",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "unit-test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-gates",
+          "from": "bdd-run",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secrets-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-testreview-gates",
+          "from": "test-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secreview-gates",
+          "from": "security-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-ux-gates",
+          "from": "ux-review",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-loop-python",
+      "name": "Full SDLC Loop (Python)",
+      "description": "Iterative SDLC: BDD scenarios authored before code, parallel QA/security/review verification with structured findings, and bounded retry plus gate-held approval so every failed stage loops until clean.",
+      "scope": "global",
+      "version": 1,
+      "trigger": "ticket",
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze the task, verify the existing architecture, and produce a structured implementation plan covering behaviour, risk, and the acceptance scenarios the BDD stage should encode.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "bdd-author",
+          "name": "Author BDD scenarios",
+          "x": 180,
+          "y": 40,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-test-author",
+            "profileId": "praxis-test-author",
+            "hostId": "praxis-test-author",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Turn the plan into executable acceptance coverage: write the project's BDD scenarios where that convention exists and author/update the structured English Praxis Test catalog with one contract per acceptance rule. Do not implement step definitions or product code.",
+          "outputs": [
+            {
+              "id": "bdd-scenarios",
+              "kind": "report",
+              "required": true,
+              "description": "The authored .feature scenarios."
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 380,
+          "y": 160,
+          "inputs": [
+            "plan-doc",
+            "bdd-scenarios"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Run automated tests to verify your changes and fix any broken or outdated tests before committing clean changes and reporting the ref.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 600,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "ruff",
+          "args": [
+            "check",
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 600,
+          "y": 40,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "mypy",
+          "args": [
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "unit-test",
+          "name": "Unit tests & coverage",
+          "x": 600,
+          "y": 80,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "pytest",
+          "args": [
+            "--cov=.",
+            "--cov-report=xml:coverage.xml"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "cobertura"
+            }
+          ],
+          "reportPath": "coverage.xml",
+          "adapter": "cobertura",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "bdd-run",
+          "name": "BDD scenarios run",
+          "x": 600,
+          "y": 120,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "command": "behave",
+          "args": [
+            "--junit",
+            "--junit-directory",
+            "reports"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "bdd-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "junit"
+            }
+          ],
+          "reportPath": "reports",
+          "adapter": "junit",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 600,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 600,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 600,
+          "y": 240,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "osv-scanner",
+          "args": [
+            "scan",
+            "source",
+            "--no-ignore",
+            "--format",
+            "sarif",
+            "--output-file",
+            "osv.sarif",
+            "."
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "osv.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Code review",
+          "x": 600,
+          "y": 280,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "test-review",
+          "name": "Automated test review",
+          "x": 600,
+          "y": 320,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the automated tests and the authored BDD scenarios against the implementation: do the scenarios match the plan, do the step definitions test real behaviour, and are the unit tests meaningful rather than tautological? Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "test-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "security-review",
+          "name": "Security review",
+          "x": 600,
+          "y": 360,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-security-analyst",
+            "profileId": "praxis-security-analyst",
+            "hostId": "praxis-security-analyst",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "electron-hardening",
+              "ci-workflow-hardening"
+            ]
+          },
+          "instructions": "Review the change for security issues the scanners cannot see: authorization gaps, injection via new inputs, unsafe deserialization, and business-logic abuse. Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "security-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "security",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "ux-review",
+          "name": "UI/UX review (advisory)",
+          "x": 600,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the change for UI/UX impact from the diff alone: copy quality, interaction states (loading, empty, error), accessibility (labels, focus, contrast risks), and consistency with existing patterns. Advisory: your findings are reported but cannot block delivery.",
+          "outputs": [
+            {
+              "id": "ux-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC gates",
+          "x": 860,
+          "y": 200,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 1080,
+          "y": 200,
+          "inputs": [
+            "review-findings",
+            "test-review-findings",
+            "security-review-findings"
+          ],
+          "prompt": "QA (lint, types, unit tests, BDD scenarios), security (SAST, secrets, SCA, analyst review), and code review have converged. Any high-or-worse review or security finding, or coverage below 80%, is still holding the run — resolve and rework before approving.",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "qa": [
+              {
+                "type": "metric",
+                "metric": "lineCoveragePct",
+                "operator": ">=",
+                "value": 80
+              }
+            ],
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1300,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "python",
+          "args": [
+            "-m",
+            "deploy"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-bdd",
+          "from": "plan",
+          "to": "bdd-author",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-impl",
+          "from": "bdd-author",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "unit-test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-bdd",
+          "from": "implement",
+          "to": "bdd-run",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secrets",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-review",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-testreview",
+          "from": "implement",
+          "to": "test-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secreview",
+          "from": "implement",
+          "to": "security-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-ux",
+          "from": "implement",
+          "to": "ux-review",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "unit-test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-gates",
+          "from": "bdd-run",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secrets-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-testreview-gates",
+          "from": "test-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secreview-gates",
+          "from": "security-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-ux-gates",
+          "from": "ux-review",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "full-sdlc-loop-generic",
+      "name": "Full SDLC Loop (generic)",
+      "description": "Iterative SDLC: BDD scenarios authored before code, parallel QA/security/review verification with structured findings, and bounded retry plus gate-held approval so every failed stage loops until clean.",
+      "scope": "global",
+      "version": 1,
+      "trigger": "ticket",
+      "entryNodeId": "plan",
+      "builtIn": false,
+      "createdAt": "2026-09-10T00:00:00.000Z",
+      "updatedAt": "2026-09-10T00:00:00.000Z",
+      "nodes": [
+        {
+          "type": "agent-task",
+          "id": "plan",
+          "name": "Plan",
+          "x": 0,
+          "y": 160,
+          "inputs": [],
+          "agent": {
+            "agentId": "praxis-planner",
+            "profileId": "praxis-planner",
+            "hostId": "praxis-planner",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Analyze the task, verify the existing architecture, and produce a structured implementation plan covering behaviour, risk, and the acceptance scenarios the BDD stage should encode.",
+          "outputs": [
+            {
+              "id": "plan-doc",
+              "kind": "plan",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "bdd-author",
+          "name": "Author BDD scenarios",
+          "x": 180,
+          "y": 40,
+          "inputs": [
+            "plan-doc"
+          ],
+          "agent": {
+            "agentId": "praxis-test-author",
+            "profileId": "praxis-test-author",
+            "hostId": "praxis-test-author",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Turn the plan into executable acceptance coverage: write the project's BDD scenarios where that convention exists and author/update the structured English Praxis Test catalog with one contract per acceptance rule. Do not implement step definitions or product code.",
+          "outputs": [
+            {
+              "id": "bdd-scenarios",
+              "kind": "report",
+              "required": true,
+              "description": "The authored .feature scenarios."
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "implement",
+          "name": "Implement",
+          "x": 380,
+          "y": 160,
+          "inputs": [
+            "plan-doc",
+            "bdd-scenarios"
+          ],
+          "agent": {
+            "agentId": "praxis-implementer",
+            "profileId": "praxis-implementer",
+            "hostId": "praxis-implementer",
+            "scope": "global",
+            "toolMode": "full",
+            "skillNames": [
+              "verification-report",
+              "visual-verification"
+            ]
+          },
+          "instructions": "Implement the plan, wiring the BDD scenarios to real behaviour and making them pass. Run automated tests to verify your changes and fix any broken or outdated tests before committing clean changes and reporting the ref.",
+          "outputs": [
+            {
+              "id": "change-diff",
+              "kind": "diff",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": true,
+          "maxAttempts": 3
+        },
+        {
+          "type": "check",
+          "id": "lint",
+          "name": "Lint",
+          "x": 600,
+          "y": 0,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure lint command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "lint-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "typecheck",
+          "name": "Type check",
+          "x": 600,
+          "y": 40,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure typecheck command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "typecheck-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "unit-test",
+          "name": "Unit tests & coverage",
+          "x": 600,
+          "y": 80,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure unit test command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "test-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "cobertura"
+            }
+          ],
+          "reportPath": "coverage/cobertura-coverage.xml",
+          "adapter": "cobertura",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "bdd-run",
+          "name": "BDD scenarios run",
+          "x": 600,
+          "y": 120,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure BDD test command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "bdd-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "junit"
+            }
+          ],
+          "reportPath": "reports/bdd-junit.xml",
+          "adapter": "junit",
+          "satisfiesGate": "qa",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sast",
+          "name": "SAST scan",
+          "x": 600,
+          "y": 160,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "semgrep",
+          "args": [
+            "scan",
+            "--config=auto",
+            "--baseline-commit={baseCommit}",
+            "--sarif",
+            "--output=semgrep.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sast-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "semgrep.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "secrets",
+          "name": "Secret scan",
+          "x": 600,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "gitleaks",
+          "args": [
+            "detect",
+            "--no-git",
+            "--report-format=sarif",
+            "--report-path=gitleaks.sarif"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "secret-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "gitleaks.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "check",
+          "id": "sca",
+          "name": "SCA scan",
+          "x": 600,
+          "y": 240,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure SCA scan"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": [
+            {
+              "id": "sca-findings",
+              "kind": "findings",
+              "required": true,
+              "adapter": "sarif"
+            }
+          ],
+          "reportPath": "osv.sarif",
+          "adapter": "sarif",
+          "satisfiesGate": "security",
+          "maxAttempts": 2
+        },
+        {
+          "type": "agent-task",
+          "id": "review",
+          "name": "Code review",
+          "x": 600,
+          "y": 280,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "praxis-test-contracts"
+            ]
+          },
+          "instructions": "Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "test-review",
+          "name": "Automated test review",
+          "x": 600,
+          "y": 320,
+          "inputs": [
+            "bdd-scenarios",
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the automated tests and the authored BDD scenarios against the implementation: do the scenarios match the plan, do the step definitions test real behaviour, and are the unit tests meaningful rather than tautological? Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "test-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "review",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "security-review",
+          "name": "Security review",
+          "x": 600,
+          "y": 360,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-security-analyst",
+            "profileId": "praxis-security-analyst",
+            "hostId": "praxis-security-analyst",
+            "scope": "global",
+            "toolMode": "read-only",
+            "skillNames": [
+              "electron-hardening",
+              "ci-workflow-hardening"
+            ]
+          },
+          "instructions": "Review the change for security issues the scanners cannot see: authorization gaps, injection via new inputs, unsafe deserialization, and business-logic abuse. Review the implementation snapshot and return structured findings with file, line, severity, and a concrete suggestion for every finding. Prose alone fails this stage: the findings artifact is required.",
+          "outputs": [
+            {
+              "id": "security-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "satisfiesGate": "security",
+          "maxAttempts": 3
+        },
+        {
+          "type": "agent-task",
+          "id": "ux-review",
+          "name": "UI/UX review (advisory)",
+          "x": 600,
+          "y": 400,
+          "inputs": [
+            "change-diff"
+          ],
+          "agent": {
+            "agentId": "praxis-reviewer",
+            "scope": "global",
+            "toolMode": "read-only"
+          },
+          "instructions": "Review the change for UI/UX impact from the diff alone: copy quality, interaction states (loading, empty, error), accessibility (labels, focus, contrast risks), and consistency with existing patterns. Advisory: your findings are reported but cannot block delivery.",
+          "outputs": [
+            {
+              "id": "ux-review-findings",
+              "kind": "findings",
+              "required": true
+            }
+          ],
+          "mutatesWorktree": false,
+          "maxAttempts": 2
+        },
+        {
+          "type": "join",
+          "id": "gates",
+          "name": "SDLC gates",
+          "x": 860,
+          "y": 200,
+          "inputs": [],
+          "mode": "all"
+        },
+        {
+          "type": "approval",
+          "id": "approve",
+          "name": "Approve",
+          "x": 1080,
+          "y": 200,
+          "inputs": [
+            "review-findings",
+            "test-review-findings",
+            "security-review-findings"
+          ],
+          "prompt": "QA (lint, types, unit tests, BDD scenarios), security (SAST, secrets, SCA, analyst review), and code review have converged. Any high-or-worse review or security finding, or coverage below 80%, is still holding the run — resolve and rework before approving.",
+          "requiredGates": [
+            "qa",
+            "security",
+            "review"
+          ],
+          "allowBypass": false,
+          "gateThresholds": {
+            "qa": [
+              {
+                "type": "metric",
+                "metric": "lineCoveragePct",
+                "operator": ">=",
+                "value": 80
+              }
+            ],
+            "security": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ],
+            "review": [
+              {
+                "type": "severity",
+                "severityLevel": "high",
+                "maxCount": 0
+              }
+            ]
+          }
+        },
+        {
+          "type": "check",
+          "id": "deploy",
+          "name": "Deploy",
+          "x": 1300,
+          "y": 200,
+          "inputs": [
+            "change-diff"
+          ],
+          "command": "echo",
+          "args": [
+            "Configure deployment command"
+          ],
+          "successExitCodes": [
+            0
+          ],
+          "outputs": []
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-plan-bdd",
+          "from": "plan",
+          "to": "bdd-author",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-impl",
+          "from": "bdd-author",
+          "to": "implement",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-lint",
+          "from": "implement",
+          "to": "lint",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-typecheck",
+          "from": "implement",
+          "to": "typecheck",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-impl-test",
+          "from": "implement",
+          "to": "unit-test",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-bdd",
+          "from": "implement",
+          "to": "bdd-run",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sast",
+          "from": "implement",
+          "to": "sast",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secrets",
+          "from": "implement",
+          "to": "secrets",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-sca",
+          "from": "implement",
+          "to": "sca",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-review",
+          "from": "implement",
+          "to": "review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-testreview",
+          "from": "implement",
+          "to": "test-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-secreview",
+          "from": "implement",
+          "to": "security-review",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-impl-ux",
+          "from": "implement",
+          "to": "ux-review",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-lint-gates",
+          "from": "lint",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-typecheck-gates",
+          "from": "typecheck",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-test-gates",
+          "from": "unit-test",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-bdd-gates",
+          "from": "bdd-run",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sast-gates",
+          "from": "sast",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secrets-gates",
+          "from": "secrets",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-sca-gates",
+          "from": "sca",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-review-gates",
+          "from": "review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-testreview-gates",
+          "from": "test-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-secreview-gates",
+          "from": "security-review",
+          "to": "gates",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-ux-gates",
+          "from": "ux-review",
+          "to": "gates",
+          "on": "success",
+          "required": false
+        },
+        {
+          "id": "e-gates-approve",
+          "from": "gates",
+          "to": "approve",
+          "on": "success",
+          "required": true
+        },
+        {
+          "id": "e-approve-deploy",
+          "from": "approve",
+          "to": "deploy",
+          "on": "success",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ members = [
   "crates/praxis-ai",
   "crates/praxis-mobile",
   "crates/praxis-host",
+  "apps/praxis-desktop/src-tauri",
 ]
 
 [workspace.package]
@@ -64,6 +65,9 @@ flate2 = "1.1"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 sha1 = "0.10"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 base64 = "0.22"
 libc = "0.2"
 nix = { version = "0.28", default-features = false, features = ["signal"] }

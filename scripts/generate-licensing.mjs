@@ -24,7 +24,7 @@ const END = '<!-- licensing:generated:end -->';
 
 /** Licences that need no review for an MIT app: permissive, notice-only. */
 const PERMISSIVE = new Set(['MIT', 'MIT-0', 'ISC', '0BSD', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0',
-  'BlueOak-1.0.0', 'Python-2.0', 'PSF-2.0', 'Unicode-3.0', 'Unicode-DFS-2016', 'CC0-1.0', 'Zlib', 'BSL-1.0']);
+  'Apache-2.0 OR MIT', 'BlueOak-1.0.0', 'Python-2.0', 'PSF-2.0', 'Unicode-3.0', 'Unicode-DFS-2016', 'CC0-1.0', 'Zlib', 'BSL-1.0']);
 
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
 const byName = (a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version);
@@ -43,9 +43,9 @@ function detectLicenceText(text) {
 // ── npm ─────────────────────────────────────────────────────────────────────
 function npmClosure() {
   const lock = readJson(path.join(root, 'package-lock.json')).packages;
-  // Everything electron-builder packs (main + core + mobile packages) and
+  // Everything packaged into the desktop distribution and
   // everything Vite bundles into the renderer.
-  const workspaces = ['apps/praxis-desktop/main', 'apps/praxis-desktop/renderer', 'packages/core',
+  const workspaces = ['apps/praxis-desktop/renderer', 'packages/core',
     'packages/mobile-protocol', 'packages/mobile-relay'];
   const found = new Map();
   // Node's lookup: the nearest node_modules walking up from the requiring package.
@@ -75,10 +75,10 @@ function npmClosure() {
   return [...found.values()].sort(byName);
 }
 
-/** Shipped although declared as devDependencies: the runtime itself and the service's TypeScript sidecar. */
+/** Shipped although declared as devDependencies: the service's TypeScript sidecar. */
 function npmShippedTools() {
   const lock = readJson(path.join(root, 'package-lock.json')).packages;
-  return [['electron', 'Electron runtime (bundles Chromium and Node.js; their notices ship in LICENSES.chromium.html)'],
+  return [
     ['typescript', 'copied into the code-intelligence package for the TypeScript sidecar']]
     .map(([name, note]) => ({ name, version: lock['node_modules/' + name]?.version ?? 'unknown', licence: lock['node_modules/' + name]?.license ?? 'unknown', note }));
 }
@@ -167,8 +167,8 @@ const generated = [BEGIN, '',
   review.length
     ? '**Needs review** (not on the permissive list in `scripts/generate-licensing.mjs`):\n\n' + table(review)
     : '**Needs review:** nothing — every shipped package is on the permissive list.', '',
-  '### Desktop app — npm packages in the installer', '',
-  'Production dependencies of `@praxis/desktop-main`, `@praxis/core` and the mobile protocol/relay packages, plus everything bundled into the renderer.', '',
+  '### Desktop app — npm packages in the distribution', '',
+  'Production dependencies of `@praxis/core` and the mobile protocol/relay packages, plus everything bundled into the renderer.', '',
   table(npm), '',
   '### Desktop app — shipped tools', '',
   table(tools, true), '',

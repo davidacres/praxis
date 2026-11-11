@@ -49,6 +49,7 @@ export function ProviderBudgets({ testIdPrefix = 'overview-budgets' }: ProviderB
 
   const load = useCallback(async () => {
     try {
+      if (!window.praxis?.aiUsage?.providerSnapshots) return;
       const next = await window.praxis.aiUsage.providerSnapshots();
       if (mounted.current) {
         setResult(next);

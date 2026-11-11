@@ -90,6 +90,11 @@ export function WorkspaceActivityHeatmap({
   // Load 375 days of usage series from usage ledger
   useEffect(() => {
     let cancelled = false;
+    if (!window.praxis?.aiUsage?.series) {
+      return () => {
+        cancelled = true;
+      };
+    }
     window.praxis.aiUsage.series('day', 375)
       .then(buckets => {
         if (!cancelled) setLedgerBuckets(buckets);
