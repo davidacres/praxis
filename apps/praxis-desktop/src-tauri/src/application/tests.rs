@@ -1118,58 +1118,121 @@ fn system_mobile_pairing_and_clear_data() {
     assert_eq!(clear_result, Value::Null);
 }
 
+/// A one-thread HTTP server standing in for GitHub Packages: REST listing, packument, tarball.
+fn mock_registry(addons: Vec<(&'static str, Value, Vec<(&'static str, String)>)>) -> String {
+    use base64::Engine as _;
+    use sha2::{Digest, Sha512};
+    use std::io::{Read, Write};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let base = format!("http://{}", listener.local_addr().expect("addr"));
+    let built: Vec<(&'static str, Value, Vec<u8>)> = addons
+        .into_iter()
+        .map(|(name, manifest, files)| {
+            let mut builder = tar::Builder::new(Vec::new());
+            let package = json!({ "name": name, "version": "1.0.0", "praxis": manifest }).to_string();
+            let mut all = vec![("package/package.json".to_string(), package)];
+            all.extend(files.into_iter().map(|(file, body)| (format!("package/addon/{file}"), body)));
+            for (path, body) in all {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(body.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder.append_data(&mut header, path, body.as_bytes()).expect("tar entry");
+            }
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            gz.write_all(&builder.into_inner().expect("tar")).expect("gz");
+            (name, manifest, gz.finish().expect("gz"))
+        })
+        .collect();
+    let served = base.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let mut stream = stream;
+            let mut buffer = [0u8; 4096];
+            let read = stream.read(&mut buffer).unwrap_or(0);
+            let request = String::from_utf8_lossy(&buffer[..read]).to_string();
+            let path = request.split_whitespace().nth(1).unwrap_or("/").split('?').next().unwrap_or("/").to_string();
+            let found = built.iter().find(|(name, _, _)| path == format!("/{name}") || path == format!("/{name}/-/{name}-1.0.0.tgz"));
+            let (status, content_type, body): (u16, &str, Vec<u8>) = if path == "/users/acme/packages" {
+                let list: Vec<Value> = built.iter().map(|(name, _, _)| json!({ "name": name, "updated_at": "2026-01-01T00:00:00Z" })).collect();
+                (200, "application/json", json!(list).to_string().into_bytes())
+            } else if let Some((name, manifest, tarball)) = found {
+                if path.ends_with(".tgz") {
+                    (200, "application/octet-stream", tarball.clone())
+                } else {
+                    let integrity = format!("sha512-{}", base64::engine::general_purpose::STANDARD.encode(Sha512::digest(tarball)));
+                    let packument = json!({
+                        "dist-tags": { "latest": "1.0.0" },
+                        "versions": { "1.0.0": { "praxis": manifest, "dist": { "tarball": format!("{served}/{name}/-/{name}-1.0.0.tgz"), "integrity": integrity } } }
+                    });
+                    (200, "application/json", packument.to_string().into_bytes())
+                }
+            } else {
+                (404, "application/json", b"{\"message\":\"no such package\"}".to_vec())
+            };
+            let head = format!("HTTP/1.1 {status} X\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len());
+            let _ = stream.write_all(head.as_bytes());
+            let _ = stream.write_all(&body);
+        }
+    });
+    base
+}
+
 #[test]
 fn marketplace_catalog_install_and_trust() {
     let profile = Profile::new();
+    let theme = json!({ "schemaVersion": 1, "kind": "theme", "id": "nord", "name": "Nord" });
+    let agent = json!({ "schemaVersion": 1, "kind": "agent", "id": "tidy-bot", "name": "Tidy Bot" });
+    let registry = mock_registry(vec![
+        ("praxis-addon-nord", theme, vec![("theme.json", json!({ "name": "Nord", "mode": "dark", "preview": { "canvas": "#2e3440" } }).to_string())]),
+        ("praxis-addon-tidy", agent, vec![("agent.json", json!({ "id": "tidy-bot", "name": "Tidy Bot", "type": "acp" }).to_string())]),
+        ("unrelated-package", json!({}), vec![]),
+    ]);
 
-    // 1. Initial status
     let status = profile.rpc("marketplace:getStatus", vec![]);
-    assert_eq!(status["packageNamePrefix"], "@praxis-addon/");
+    assert_eq!(status["packageNamePrefix"], "praxis-addon-");
+    assert_eq!(status["ready"], false);
+    // Without a configured marketplace the catalogue explains why instead of inventing entries.
+    assert!(profile.try_rpc("marketplace:listCatalog", vec![]).is_err());
 
-    // 2. Configure
     let configured = profile.rpc(
         "marketplace:configure",
-        vec![json!({ "enabled": true, "owner": "test-owner" })],
+        vec![json!({ "enabled": true, "owner": "acme", "apiBaseUrl": registry, "registryBaseUrl": registry })],
     );
-    assert_eq!(configured["enabled"], true);
-    assert_eq!(configured["owner"], "test-owner");
-
-    // 3. Set token
+    assert_eq!(configured["owner"], "acme");
     profile.rpc("marketplace:setToken", vec![json!("ghp_test_token")]);
-    let status_with_token = profile.rpc("marketplace:getStatus", vec![]);
-    assert_eq!(status_with_token["hasToken"], true);
-    assert_eq!(status_with_token["ready"], true);
+    let ready = profile.rpc("marketplace:getStatus", vec![]);
+    assert_eq!((ready["hasToken"].clone(), ready["ready"].clone()), (json!(true), json!(true)));
 
-    // 4. List catalog
     let catalog = profile.rpc("marketplace:listCatalog", vec![]);
-    assert!(!catalog.as_array().expect("catalog").is_empty());
+    let names: Vec<&str> = catalog.as_array().expect("catalog").iter().map(|e| e["packageName"].as_str().unwrap_or_default()).collect();
+    assert_eq!(names, ["praxis-addon-tidy", "praxis-addon-nord"]); // sorted by kind: agent < theme
 
-    // 5. Install addon
-    let installed_addon = profile.rpc(
-        "marketplace:install",
-        vec![
-            json!("@praxis-addon/theme-solarized"),
-            json!({ "kind": "theme" }),
-        ],
-    );
-    assert_eq!(installed_addon["manifest"]["id"], "solarized");
+    // A declarative add-on is active the moment it installs.
+    let nord = profile.rpc("marketplace:install", vec![json!("praxis-addon-nord")]);
+    assert_eq!((nord["manifest"]["id"].clone(), nord["enabled"].clone()), (json!("nord"), json!(true)));
+    let appearance = profile.rpc("marketplace:listActiveAppearance", vec![]);
+    assert_eq!(appearance["themes"][0]["preview"]["canvas"], "#2e3440");
 
-    let installed_list = profile.rpc("marketplace:listInstalled", vec![]);
-    assert_eq!(installed_list.as_array().expect("installed").len(), 1);
+    // An agent installs disabled, and only reaches the discovery root once trusted.
+    let tidy = profile.rpc("marketplace:install", vec![json!("praxis-addon-tidy")]);
+    assert_eq!(tidy["enabled"], false);
+    let mirrored = profile.root.join("agents/tidy-bot/agent.json");
+    assert!(!mirrored.exists());
+    profile.rpc("marketplace:setTrust", vec![json!("agent"), json!("tidy-bot"), json!(true)]);
+    assert!(mirrored.is_file());
+    assert!(!profile.root.join("agents/tidy-bot/.praxis-addon.json").exists());
+    profile.rpc("marketplace:setTrust", vec![json!("agent"), json!("tidy-bot"), json!(false)]);
+    assert!(!mirrored.exists());
 
-    // 6. Set trust
-    profile.rpc(
-        "marketplace:setTrust",
-        vec![json!("theme"), json!("solarized"), json!(false)],
-    );
+    assert_eq!(profile.rpc("marketplace:listInstalled", vec![]).as_array().expect("installed").len(), 2);
+    assert_eq!(profile.rpc("marketplace:checkForUpdates", vec![]), json!([]));
+    assert!(profile.try_rpc("marketplace:install", vec![json!("praxis-addon-missing")]).is_err());
 
-    // 7. Remove addon
-    profile.rpc(
-        "marketplace:remove",
-        vec![json!("theme"), json!("solarized")],
-    );
-    let after_remove = profile.rpc("marketplace:listInstalled", vec![]);
-    assert_eq!(after_remove.as_array().expect("installed").len(), 0);
+    profile.rpc("marketplace:remove", vec![json!("theme"), json!("nord")]);
+    assert_eq!(profile.rpc("marketplace:listInstalled", vec![]).as_array().expect("installed").len(), 1);
+    assert_eq!(profile.rpc("marketplace:listActiveAppearance", vec![])["themes"], json!([]));
 }
 
 #[test]
@@ -1782,7 +1845,7 @@ fn electron_installed_theme_is_loaded_with_saved_look_without_network() {
     fs::create_dir_all(&dir).expect("valid compatibility fixture");
     fs::write(
         dir.join(".praxis-addon.json"),
-        json!({"manifest": {"kind": "theme", "id": "github-dark"}, "enabled": true}).to_string(),
+        json!({"manifest": {"schemaVersion": 1, "kind": "theme", "id": "github-dark", "name": "GitHub Dark"}, "enabled": true}).to_string(),
     )
     .expect("valid compatibility fixture");
     fs::write(dir.join("theme.json"), json!({"name": "GitHub Dark", "mode": "dark", "preview": {"canvas": "#0d1117", "accent": "#2f81f7"}}).to_string()).expect("valid compatibility fixture");

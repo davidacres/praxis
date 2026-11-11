@@ -3418,7 +3418,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-ai"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3445,7 +3445,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-contracts"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3455,7 +3455,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-core"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3480,12 +3480,13 @@ dependencies = [
 
 [[package]]
 name = "praxis-desktop"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chrono",
  "chrono-tz",
+ "flate2",
  "indexmap 2.14.2",
  "praxis-ai",
  "praxis-contracts",
@@ -3498,6 +3499,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tar",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -3510,7 +3512,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-host"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "aes",
  "axum",
@@ -3537,7 +3539,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-mobile"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3567,7 +3569,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-trackers"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "axum",
@@ -3585,7 +3587,7 @@ dependencies = [
 
 [[package]]
 name = "praxis-workflows"
-version = "0.1.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "axum",

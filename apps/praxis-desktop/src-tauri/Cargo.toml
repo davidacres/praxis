@@ -40,3 +40,7 @@ tauri-plugin-window-state = "2"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+tar.workspace = true
+flate2.workspace = true

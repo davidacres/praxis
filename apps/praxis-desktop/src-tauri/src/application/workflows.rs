@@ -242,6 +242,30 @@ fn embedded_templates() -> Value {
         .unwrap_or_else(|_| json!({ "builtIn": [], "marketplace": [] }))
 }
 
+/// Embedded templates with the marketplace tier completed: installed `workflow-template`
+/// add-ons come first (global scope) and supersede an embedded template with the same id.
+fn templates_with_addons(host: &HostContext) -> Value {
+    let mut embedded = embedded_templates();
+    let from_addons: Vec<Value> = super::marketplace::workflow_templates(&host.config().user_data_dir)
+        .into_iter()
+        .filter(|raw| raw.get("id").and_then(Value::as_str).is_some() && raw.get("nodes").is_some_and(Value::is_array))
+        .map(|mut raw| {
+            raw["scope"] = json!("global");
+            raw
+        })
+        .collect();
+    let addon_ids: Vec<String> = from_addons.iter().filter_map(|t| t["id"].as_str().map(str::to_string)).collect();
+    let bundled = embedded
+        .get("marketplace")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|t| t["id"].as_str().is_none_or(|id| !addon_ids.iter().any(|a| a == id)));
+    embedded["marketplace"] = Value::Array(from_addons.into_iter().chain(bundled).collect());
+    embedded
+}
+
 // ── Project & Template definitions ──────────────────────────────────────
 
 fn project_workflows_key(project_id: &str) -> String {
@@ -328,7 +352,7 @@ pub fn approve_project_trust(host: &HostContext, args: &[Value]) -> Result<Value
 
 pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
-    let embedded = embedded_templates();
+    let embedded = templates_with_addons(host);
     let mut list = Vec::new();
     if let Some(built_ins) = embedded.get("builtIn").and_then(Value::as_array) {
         for t in built_ins {
@@ -337,6 +361,10 @@ pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
                 "source": "built-in"
             }));
         }
+    }
+    // Installed workflow-template add-ons (and the bundled marketplace set) are their own tier.
+    for t in embedded.get("marketplace").and_then(Value::as_array).into_iter().flatten() {
+        list.push(json!({ "definition": t, "source": "marketplace" }));
     }
     for def in get_project_definitions(host, project_id) {
         list.push(json!({
@@ -405,7 +433,7 @@ pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn catalog(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
-    let embedded = embedded_templates();
+    let embedded = templates_with_addons(host);
     let built_in = embedded
         .get("builtIn")
         .cloned()
@@ -451,7 +479,7 @@ pub fn instantiate(host: &HostContext, args: &[Value]) -> Result<Value> {
     let template_id = text(args, 1)?;
     let name_override = args.get(2).and_then(Value::as_str);
 
-    let embedded = embedded_templates();
+    let embedded = templates_with_addons(host);
     let built_ins = embedded.get("builtIn").and_then(Value::as_array);
     let marketplace = embedded.get("marketplace").and_then(Value::as_array);
 
