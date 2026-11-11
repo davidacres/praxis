@@ -444,7 +444,9 @@ impl Application {
             "assistant:listChats" | "assistant:getChat" | "assistant:getConversation" => {
                 return assistant::dispatch(host, &host.config().user_data_dir, channel, args);
             }
-            "marketplace:listActiveAppearance" => {
+            // Marketplace work is network- and disk-bound and never touches the project catalog,
+            // so it must not hold the profile lock while a registry answers.
+            _ if channel.starts_with("marketplace:") => {
                 return marketplace::dispatch(host, &host.config().user_data_dir, channel, args);
             }
             _ => {}
