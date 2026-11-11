@@ -11,6 +11,7 @@ pub mod authoring;
 pub mod bundled;
 pub mod catalog;
 pub mod manifest;
+pub mod native_sources;
 
 pub use catalog::{CatalogOptions, CatalogSnapshot, refresh_catalog};
 

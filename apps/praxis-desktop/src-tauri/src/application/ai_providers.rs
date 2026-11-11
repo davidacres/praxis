@@ -27,7 +27,7 @@ struct Resolved {
 
 /// Writes a settings patch and tells the renderer, as `settings:set` does. A handler that writes
 /// settings without this leaves open windows showing stale data until they next reload.
-fn write_settings(host: &HostContext, patch: &Value) -> Result<()> {
+pub(super) fn write_settings(host: &HostContext, patch: &Value) -> Result<()> {
     let updated = host.settings().write(patch).map_err(failure)?;
     host.git_service().set_configured_executable(updated.git.executable_path.clone());
     host.events().emit("settings:changed", Some(serde_json::to_value(updated).map_err(failure)?));
