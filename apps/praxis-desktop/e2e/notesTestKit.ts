@@ -13,7 +13,7 @@ export async function createProject(page: Page, name: string, key: string): Prom
     return (await window.praxis.projects.create({
       name, key, type: 'product', purpose: '', brief: {}, startingPoint: 'app-storage',
       workflowStages: [{ id: 'todo', name: 'To do', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }],
-      starterTickets: [{ summary: 'Seed', description: '', issueType: 'Task', status: 'To do' }]
+      starterTickets: [{ summary: 'Seed', description: '', issueType: 'Task', status: 'To do' }], defaultAiToolMode: 'read-only'
     } as never, workspace.id)).id as string;
   }, { name, key });
 }
@@ -53,16 +53,12 @@ const PROVIDER_CHANNELS = [
 ];
 
 export async function spyProviderCalls(app: TestApp): Promise<{ count: () => Promise<number>; sessions: () => Promise<number> }> {
-  await app.electronApp.evaluate(({ ipcMain }, channels) => {
-    const calls: string[] = [];
-    (globalThis as { __providerSpy?: string[] }).__providerSpy = calls;
-    for (const channel of channels) {
-      ipcMain.removeHandler(channel);
-      ipcMain.handle(channel, () => { calls.push(channel); throw new Error(`unexpected provider call: ${channel}`); });
-    }
-  }, PROVIDER_CHANNELS);
+  const calls: string[] = [];
+  for (const channel of PROVIDER_CHANNELS) {
+    await app.overrideChannel(channel, () => { calls.push(channel); throw new Error(`unexpected provider call: ${channel}`); });
+  }
   return {
-    count: () => app.electronApp.evaluate(() => (globalThis as { __providerSpy?: string[] }).__providerSpy!.length),
+    count: async () => calls.length,
     sessions: () => app.window.evaluate(async () => (await window.praxis.ai.listSessions()).length)
   };
 }

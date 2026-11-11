@@ -29,7 +29,9 @@ test('10,000 Rust events reach real main and secondary renderers in order, with 
   const emit = (sequence: number) => app.callHost('host:emitEvent', 'runs:log', ['rust-stream-parity', {
     serviceId: 'stream-proof', stream: 'stdout', text: String(sequence), at: '2026-01-01T00:00:00Z'
   }]);
-  const replies = (await Promise.all(Array.from({ length: count }, (_, sequence) => emit(sequence)))).length;
+  let replies = 0;
+  // Sequential, so arrival order is the emission order the assertions below check.
+  for (let sequence = 0; sequence < count; sequence++) { await emit(sequence); replies++; }
   expect(replies).toBe(count);
   await expect.poll(async () => (await sequences(app.window)).length, { timeout: 30_000 }).toBe(count);
   await expect.poll(async () => (await sequences(secondary)).length, { timeout: 30_000 }).toBe(count);

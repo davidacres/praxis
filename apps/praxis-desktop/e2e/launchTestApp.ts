@@ -161,7 +161,7 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
 
 function backendHandle(backend: ChildProcess, context: BrowserContext): BackendHandle {
   const unsupported = (what: string) => async (): Promise<never> => {
-    throw new Error(`${what} drove the retired Electron main process and has no equivalent: the backend is a separate Rust process. Rewrite this step against window.praxis, the filesystem, or a backend control channel.`);
+    throw new Error(`${what} drove the retired Electron main process and has no equivalent: the backend is a separate Rust process. Use TestApp.overrideChannel (stub/record a channel or dialog), emitEvent (push a host event), openWindow, callBackend/callHost, page.setViewportSize, the filesystem, or notReproducible() for a native-only step.`);
   };
   return {
     process: () => backend,
@@ -457,7 +457,10 @@ export async function launchTestApp(
     if (!detached.get(key) || detached.get(key)!.isClosed()) {
       const page = await openWindow(detachedUrl(key));
       detached.set(key, page);
-      page.once('close', () => { detached.delete(key); });
+      page.once('close', () => {
+        // A window closed by the user (or the test) tells the backend, as the shell does.
+        if (detached.get(key) === page) { detached.delete(key); void callBackend('detachedChat:close', key).catch(() => undefined); }
+      });
     }
     return result;
   });
