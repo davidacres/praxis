@@ -71,7 +71,8 @@ child webviews with the loopback guard proxy.
 | User workspace | ✓ | Persisted project/connection set, versioned `.workspace.praxis.json` files |
 | GitLab boards | ✓ | REST API integration via core `GitLabService` |
 | Jira via custom MCP server (stdio/HTTP) | ✓ | "Advanced" connection mode; see `packages/core/src/mcp/` |
-| Jira Cloud OAuth sign-in (browser) | ✓ | `praxis://` scheme + loopback fallback for app-initiated OAuth |
+| Jira Cloud OAuth sign-in (browser) | ✓ | `praxis://` scheme + loopback fallback for app-initiated OAuth. Tauri host: loopback callback; tokens, the registered client and discovered endpoints persist in the OS keychain secret store (file fallback only when the keychain is off) and are refreshed with the refresh token before expiry or on a 401 |
+| Jira issue writes (create / edit / delete / comment) | ✓ | Rust `jira_service.rs`, community and official Atlassian tool sets, parent-hierarchy validation as in TS. Delete is community-only (the official server exposes no delete tool). Attach / download files and board create / delete refuse with the TS wording; epic / workspace-JQL board rename writes through a `JiraBoardSettings` sink that no IPC channel wires yet |
 | Jira Cloud API-token sign-in (guided) | ✓ | Guided form in Connections UI; stores encrypted PAT |
 | GitHub boards | ✓ | REST API client (`GitHubBoardService`); one board per repository, columns synthesized from "status: …" labels already on the repo (FX-BE-035) |
 | Connections manager UI | ✓ | Sidebar + detail pane; add/remove/test connections |

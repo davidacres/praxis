@@ -32,7 +32,7 @@ const MOCK_MCP_PATH = path.resolve(__dirname, 'mockJiraMcpServer.mjs');
  * bundled Node is on disk next to the Electron binary, so the spawn does not
  * rely on the system `node` being installed.
  */
-function seededSettings(): Record<string, unknown> {
+function seededSettings(mockPath = MOCK_MCP_PATH): Record<string, unknown> {
   return {
     connections: [
       {
@@ -41,7 +41,7 @@ function seededSettings(): Record<string, unknown> {
         mode: 'jiracloud',
         settings: {
           stdioCommand: process.execPath,
-          stdioArgs: [MOCK_MCP_PATH],
+          stdioArgs: [mockPath],
           stdioCwd: process.cwd()
         }
       }
@@ -105,4 +105,96 @@ test('board picker lists the boards the mock MCP server reports', async () => {
   await expect(
     window.locator('[data-testid="board-picker-row"]', { hasText: 'Demo Board' })
   ).toBeVisible();
+});
+
+// ── write operations, over both tool sets ───────────────────────────────────
+
+const ATLASSIAN_MOCK_PATH = path.resolve(__dirname, 'mockAtlassianMcpServer.mjs');
+
+async function relaunch(mockPath: string): Promise<void> {
+  if (app) await closeTestApp(app);
+  app = await launchTestApp(seededSettings(mockPath));
+  window = app.window;
+}
+
+/** create, edit, comment and (where the surface has it) delete through the issue IPC. */
+async function writeRoundTrip(canDelete: boolean): Promise<void> {
+  const id = 'mock-jira-mcp';
+  const created = await window.evaluate(
+    async connectionId =>
+      window.praxis.issue.create(
+        { projectKey: 'DEMO', issueType: 'Task', summary: ' Written by e2e ', description: 'First body' },
+        connectionId
+      ),
+    id
+  );
+  expect(created.summary).toBe('Written by e2e');
+  expect(created.description).toBe('First body');
+
+  const edited = await window.evaluate(
+    async ([connectionId, key]) =>
+      window.praxis.issue.update(
+        key,
+        { summary: 'Edited by e2e', description: 'Second body', priority: 'High', assignee: 'Sam' },
+        connectionId
+      ),
+    [id, created.key]
+  );
+  expect(edited.summary).toBe('Edited by e2e');
+  expect(edited.priority).toBe('High');
+  expect(edited.assignee).toBe('Sam');
+
+  await window.evaluate(
+    async ([connectionId, key]) => window.praxis.issue.addComment(key, '  a comment ', connectionId),
+    [id, created.key]
+  );
+  const reread = await window.evaluate(
+    async ([connectionId, key]) => window.praxis.issue.get(key, connectionId),
+    [id, created.key]
+  );
+  expect(reread.comments?.map(comment => comment.body)).toEqual(['a comment']);
+
+  const deletion = window.evaluate(
+    async ([connectionId, key]) =>
+      window.praxis.issue.delete(key, connectionId).then(
+        () => 'deleted',
+        (error: Error) => String(error.message)
+      ),
+    [id, created.key]
+  );
+  if (canDelete) {
+    expect(await deletion).toBe('deleted');
+    const gone = await window.evaluate(
+      async ([connectionId, key]) =>
+        window.praxis.issue.get(key, connectionId).then(
+          () => 'found',
+          () => 'missing'
+        ),
+      [id, created.key]
+    );
+    expect(gone).toBe('missing');
+  } else {
+    expect(await deletion).toContain('does not expose a tool for deleteIssue');
+  }
+}
+
+test('create, edit, comment and delete issues over the community tool set', async () => {
+  await writeRoundTrip(true);
+});
+
+test('create, edit and comment on issues over the official Atlassian tool set', async () => {
+  await relaunch(ATLASSIAN_MOCK_PATH);
+  await writeRoundTrip(false);
+});
+
+test('a parent that breaks the hierarchy is refused before any write', async () => {
+  const message = await window.evaluate(async () =>
+    window.praxis.issue
+      .create({ projectKey: 'DEMO', issueType: 'Subtask', summary: 'Orphan' }, 'mock-jira-mcp')
+      .then(
+        () => 'created',
+        (error: Error) => String(error.message)
+      )
+  );
+  expect(message).toContain('is required');
 });
