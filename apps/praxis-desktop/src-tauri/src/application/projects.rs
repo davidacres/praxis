@@ -20,6 +20,7 @@ use uuid::Uuid;
 use super::storage::{Catalog, PROJECTS, WORKSPACES, read};
 use super::{Result, failure, now, text};
 
+/// `path.resolve`: absolute and lexically normalised, symlinks left as spelled.
 pub fn absolute(path: &Path) -> Result<PathBuf> {
     let path = std::path::absolute(path).map_err(failure)?;
     let mut result = PathBuf::new();
@@ -32,40 +33,7 @@ pub fn absolute(path: &Path) -> Result<PathBuf> {
             _ => result.push(component.as_os_str()),
         }
     }
-    // Resolve existing ancestors too: on macOS /var and /private/var are the
-    // same tree, and mixing their spellings must not break portable paths.
-    let mut ancestor = result;
-    let mut missing = Vec::new();
-    loop {
-        match fs::canonicalize(&ancestor) {
-            Ok(mut resolved) => {
-                for component in missing.into_iter().rev() {
-                    resolved.push(component);
-                }
-                return Ok(resolved);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                if fs::symlink_metadata(&ancestor)
-                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
-                {
-                    return Err(failure(
-                        "The selected path contains an unresolved symbolic link.",
-                    ));
-                }
-                missing.push(
-                    ancestor
-                        .file_name()
-                        .ok_or_else(|| failure("Cannot resolve the selected path."))?
-                        .to_owned(),
-                );
-                ancestor = ancestor
-                    .parent()
-                    .ok_or_else(|| failure("Cannot resolve the selected path."))?
-                    .to_owned();
-            }
-            Err(error) => return Err(failure(error)),
-        }
-    }
+    Ok(result)
 }
 
 fn walk(root: &Path, depth: usize, max_depth: usize, limit: usize, files: &mut Vec<PathBuf>) {
@@ -239,7 +207,8 @@ struct CreateInput {
     folder_name: Option<String>,
     workflow_stages: Vec<ProjectWorkflowStage>,
     starter_tickets: Vec<Starter>,
-    default_ai_tool_mode: String,
+    #[serde(default)]
+    default_ai_tool_mode: Option<String>,
 }
 
 pub fn list(catalog: &Catalog) -> Result<Vec<Value>> {
@@ -339,13 +308,13 @@ fn folder(start: &str, path: Option<&str>, name: Option<&str>) -> Result<Option<
         )));
     }
     match start {
-        "existing-folder" => Ok(Some(fs::canonicalize(path).map_err(failure)?)),
+        "existing-folder" => Ok(Some(path)),
         "new-folder" => {
             let name = name.unwrap_or("").trim();
             if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
                 return Err(failure("A valid project folder name is required."));
             }
-            let target = fs::canonicalize(path).map_err(failure)?.join(name);
+            let target = path.join(name);
             if fs::symlink_metadata(&target).is_ok() {
                 return Err(failure(format!(
                     "The folder {} already exists. Choose Existing Folder instead.",
@@ -499,7 +468,7 @@ fn create(catalog: &mut Catalog, args: &[Value], version: &str) -> Result<Value>
         default_board_id: format!("{id}-board"),
         linked_boards: Vec::new(),
         default_ai_tool_mode: if folder.is_some() {
-            input.default_ai_tool_mode
+            input.default_ai_tool_mode.unwrap_or_else(|| "project-only".into())
         } else {
             "project-only".into()
         },

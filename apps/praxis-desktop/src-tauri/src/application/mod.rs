@@ -412,9 +412,13 @@ struct ApplicationState {
 
 impl Application {
     pub fn register(host: &HostContext, version: &str) {
+        // The Output tab backfills from this bus; the launch line proves the
+        // ring buffer and `log:getRecent` end to end.
+        let bus = log_bus::LogBus::new(&host.config().user_data_dir);
+        bus.append(host, &format!("[app] Praxis {version} started"));
         let application = Arc::new(Self {
             state: Mutex::new(ApplicationState::default()),
-            log_bus: Mutex::new(None),
+            log_bus: Mutex::new(Some(bus)),
             webviews: webviews::WebviewManager::new(),
             version: version.into(),
         });

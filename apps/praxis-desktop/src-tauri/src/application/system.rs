@@ -164,7 +164,7 @@ pub fn dispatch(
         "update:getStatus" | "update:check" | "update:download" | "update:installNow" => {
             Ok(json!({
                 "state": "unsupported",
-                "reason": "Automatic updates are disabled in development/preview builds."
+                "reason": "Updates are only checked in a packaged build."
             }))
         }
         "coordination:state" => Ok(json!({
