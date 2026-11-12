@@ -9,7 +9,8 @@
 //! `mobile:internal:read` / `mobile:internal:command`; [`register`] answers them.
 
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::mpsc::{Receiver, channel};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use async_trait::async_trait;
 use praxis_contracts::{RustRpcError, RustRpcRequest};
@@ -21,7 +22,10 @@ use praxis_mobile::host::application::{
 use praxis_mobile::host::ledger::InMemoryMobileCommandLedger;
 use praxis_mobile::host::permissions::{MobilePermissionAnswer, respond_to_mobile_permission};
 use praxis_mobile::host::protocol::{MobileCommand, MobileReadRequest};
-use praxis_mobile::host::run_projection::{MobileRunSummaryInput, mobile_run_snapshot};
+use praxis_mobile::host::run_projection::{
+    MobileRunChange, MobileRunSummaryInput, append_mobile_run_event, append_mobile_schedules_event,
+    mobile_run_snapshot,
+};
 use praxis_mobile::host::scheduled_runs::{
     MobileScheduleDeps, MobileScheduleStore, MobileSchedules, create_mobile_schedules,
 };
@@ -37,7 +41,8 @@ use praxis_mobile::host::session_changes::{
     read_mobile_session_file_diff,
 };
 use praxis_mobile::host::session_projection::{
-    MobileSessionSnapshot, MobileSessionSummary, mobile_session_snapshot, mobile_session_summary,
+    MobileSessionSnapshot, MobileSessionSummary, append_mobile_session_event,
+    mobile_session_snapshot, mobile_session_summary,
 };
 use praxis_mobile::host::session_record::MobileSessionRecord;
 use praxis_workflows::scheduled_run::{ScheduledRun, ScheduledTicketRef};
@@ -145,7 +150,10 @@ impl DesktopMobileDeps {
     }
 
     fn snapshot(&self, record: &MobileSessionRecord) -> MobileSessionSnapshot {
-        mobile_session_snapshot(record, self.latest_sequence(), None)
+        let host = self.host.clone();
+        let resolve =
+            move |session: &str, key: &str, text: &str| resolve_gadgets(&host, session, key, text);
+        mobile_session_snapshot(record, self.latest_sequence(), Some(&resolve))
     }
 
     async fn project(&self, project_id: &str) -> Fallible<Option<Value>> {
@@ -198,6 +206,57 @@ impl DesktopMobileDeps {
             Ok(run)
         }
     }
+}
+
+/// The gadgets one assistant message asked for, as the desktop has them. A message the desktop
+/// has not published yet is published here under the same key, so both surfaces share one
+/// gadget and one answer.
+fn resolve_gadgets(
+    host: &HostContext,
+    session_id: &str,
+    message_key: &str,
+    text: &str,
+) -> (Vec<Value>, usize) {
+    let prefix = format!("{message_key}-");
+    let of_message = |blocks: Value| -> Vec<Value> {
+        blocks
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|block| {
+                block["type"] != "markdown"
+                    && block["blockId"]
+                        .as_str()
+                        .is_some_and(|id| id.starts_with(&prefix))
+            })
+            .cloned()
+            .collect()
+    };
+    let mut blocks = of_message(
+        call_sync(host, "gadgets:getBlocks", vec![json!(session_id)]).unwrap_or(Value::Null),
+    );
+    if blocks.is_empty() {
+        blocks = of_message(
+            call_sync(
+                host,
+                "gadgets:publishFromText",
+                vec![json!(session_id), json!(message_key), json!(text)],
+            )
+            .unwrap_or(Value::Null),
+        );
+    }
+    let mut views = Vec::new();
+    let mut unrendered = 0;
+    for block in blocks {
+        if block["type"] != "gadget" {
+            unrendered += 1;
+            continue;
+        }
+        let gadget = block["gadget"].clone();
+        let state = gadget["state"].as_str().unwrap_or("active").to_owned();
+        views.push(json!({ "gadget": gadget, "state": state }));
+    }
+    (views, unrendered)
 }
 
 fn call_sync(host: &HostContext, channel: &str, args: Vec<Value>) -> Fallible<Value> {
@@ -323,6 +382,9 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
     }
     fn latest_sequence(&self) -> u64 {
         self.mobile.latest_sequence()
+    }
+    fn appearance(&self) -> Option<Value> {
+        self.mobile.appearance()
     }
     fn schedules(&self) -> Option<Arc<dyn MobileSchedules>> {
         Some(create_mobile_schedules(ScheduleDeps {
@@ -859,8 +921,15 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
         self.require_run(run_id).await
     }
 
-    async fn reject_run(&self, _run_id: &str, _actor: &str, _reason: &str) -> Fallible<Value> {
-        Err("Rejecting a workflow gate from the phone is not available in this build. Reject it on the desktop.".into())
+    async fn reject_run(&self, run_id: &str, actor: &str, reason: &str) -> Fallible<Value> {
+        let host = self.host.clone();
+        let (run_id, actor, reason) = (run_id.to_owned(), actor.to_owned(), reason.to_owned());
+        tokio::task::spawn_blocking(move || {
+            super::workflows::reject_run(&host, &run_id, &actor, &reason)
+                .map_err(|error| error.message)
+        })
+        .await
+        .map_err(|error| error.to_string())?
     }
 
     async fn continue_session(
@@ -974,6 +1043,153 @@ impl DesktopMobileDeps {
     }
 }
 
+/// Channels whose events become phone events.
+const WATCHED: [&str; 5] = [
+    "ai:sessionChanged",
+    "gadgets:changed",
+    "workflows:runChanged",
+    "scheduledRuns:changed",
+    "mobile:appearanceChanged",
+];
+
+/// What changed since the pump last looked, deduplicated: a streaming session fires far faster
+/// than a phone needs snapshots.
+#[derive(Default)]
+struct Changes {
+    sessions: Vec<String>,
+    runs: Vec<String>,
+    schedules: bool,
+    appearance: Option<Value>,
+}
+
+impl Changes {
+    fn note(&mut self, channel: &str, payload: Option<Value>) {
+        let id = |payload: &Option<Value>, field: &str| {
+            payload.as_ref().and_then(|value| {
+                value
+                    .as_str()
+                    .or_else(|| value[field].as_str())
+                    .filter(|id| !id.is_empty())
+                    .map(str::to_owned)
+            })
+        };
+        match channel {
+            "ai:sessionChanged" => {
+                let key = id(&payload, "issueKey").or_else(|| id(&payload, "sessionId"));
+                if let Some(key) = key.filter(|key| !self.sessions.contains(key)) {
+                    self.sessions.push(key);
+                }
+            }
+            "gadgets:changed" => {
+                if let Some(session) =
+                    id(&payload, "sessionId").filter(|s| !self.sessions.contains(s))
+                {
+                    self.sessions.push(session);
+                }
+            }
+            "workflows:runChanged" => {
+                if let Some(run) = id(&payload, "runId").filter(|r| !self.runs.contains(r)) {
+                    self.runs.push(run);
+                }
+            }
+            "scheduledRuns:changed" => self.schedules = true,
+            "mobile:appearanceChanged" => self.appearance = payload,
+            _ => {}
+        }
+    }
+}
+
+/// Feeds the phone event log from the desktop's own change events. Events are handled on one
+/// worker thread, never on the emitter: a run change is emitted while the run store is locked,
+/// and reading it back from there would deadlock.
+fn start_event_pump(deps: &Arc<DesktopMobileDeps>) {
+    let (sender, receiver) = channel::<(String, Option<Value>)>();
+    let sender = Mutex::new(sender);
+    deps.host.events().on_event(move |event| {
+        if WATCHED.contains(&event.channel.as_str())
+            && let Ok(sender) = sender.lock()
+        {
+            let _ = sender.send((event.channel.clone(), event.payload.clone()));
+        }
+    });
+    let deps = Arc::clone(deps);
+    std::thread::spawn(move || pump(&deps, &receiver));
+}
+
+fn pump(deps: &Arc<DesktopMobileDeps>, receiver: &Receiver<(String, Option<Value>)>) {
+    let mut run_projects: HashMap<String, String> = HashMap::new();
+    while let Ok(first) = receiver.recv() {
+        let mut changes = Changes::default();
+        changes.note(&first.0, first.1);
+        for (channel, payload) in receiver.try_iter() {
+            changes.note(&channel, payload);
+        }
+        if let Some(appearance) = &changes.appearance {
+            deps.mobile.set_appearance(appearance);
+        }
+        for key in &changes.sessions {
+            let Ok(Some(record)) = runtime::block_on(deps.full_record(key)) else {
+                continue;
+            };
+            let host = deps.host.clone();
+            let resolve = move |session: &str, message: &str, text: &str| {
+                resolve_gadgets(&host, session, message, text)
+            };
+            deps.mobile.publish(|ledger, host_id| {
+                append_mobile_session_event(ledger, host_id, &record, Some(&resolve))
+            });
+        }
+        for run_id in &changes.runs {
+            publish_run_change(deps, &mut run_projects, run_id);
+        }
+        if changes.schedules
+            && let Ok(projects) = call_sync(&deps.host, "projects:list", vec![])
+        {
+            for project in projects.as_array().into_iter().flatten() {
+                if let Some(id) = project["id"].as_str() {
+                    deps.mobile.publish(|ledger, host_id| {
+                        append_mobile_schedules_event(ledger, host_id, id)
+                    });
+                }
+            }
+        }
+    }
+}
+
+/// A run that is gone or archived is announced as removed, scoped to the project it had.
+fn publish_run_change(
+    deps: &Arc<DesktopMobileDeps>,
+    run_projects: &mut HashMap<String, String>,
+    run_id: &str,
+) {
+    let run = call_sync(&deps.host, "workflows:getRun", vec![json!(run_id)]).unwrap_or(Value::Null);
+    let summary = (!run.is_null() && run["archived"] != true)
+        .then(|| serde_json::from_value::<MobileRunSummaryInput>(run).ok())
+        .flatten();
+    match summary {
+        Some(summary) => {
+            run_projects.insert(run_id.to_owned(), summary.project_id.clone());
+            deps.mobile.publish(|ledger, host_id| {
+                append_mobile_run_event(ledger, host_id, MobileRunChange::Summary(&summary))
+            });
+        }
+        None => {
+            if let Some(project_id) = run_projects.remove(run_id) {
+                deps.mobile.publish(|ledger, host_id| {
+                    append_mobile_run_event(
+                        ledger,
+                        host_id,
+                        MobileRunChange::Removed {
+                            run_id,
+                            project_id: &project_id,
+                        },
+                    )
+                });
+            }
+        }
+    }
+}
+
 /// Answers the listener's `mobile:internal:read` / `mobile:internal:command`.
 pub fn register(host: &HostContext, mobile: &Arc<MobileHost>) {
     let deps = DesktopMobileDeps::new(host, mobile);
@@ -995,6 +1211,7 @@ pub fn register(host: &HostContext, mobile: &Arc<MobileHost>) {
         }
     };
 
+    start_event_pump(&deps);
     let (read_deps, command_deps) = (Arc::clone(&deps), Arc::clone(&deps));
     let read_tables = Arc::clone(&tables);
     let read_build = build.clone();

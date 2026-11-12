@@ -6,6 +6,7 @@
 //! workflow runs, git), a narrow trait stands in for them — the host implements it later.
 
 pub mod access;
+pub mod appearance;
 pub mod application;
 pub mod gadget_text;
 pub mod identity;
