@@ -491,36 +491,40 @@ pub fn recommend_model_tiers(_host: &HostContext, _args: &[Value]) -> Result<Val
 
 pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
-    let embedded = embedded_templates();
-    let mut list = Vec::new();
-    if let Some(built_ins) = embedded.get("builtIn").and_then(Value::as_array) {
-        for t in built_ins {
-            list.push(json!({
-                "templateId": t.get("id"),
-                "ready": false,
-                "structureOk": false,
-                "agentsOk": false,
+    let catalog = agent_catalog(host);
+    let mut templates = all_template_values(host, project_id);
+    templates.dedup_by(|a, b| a["id"] == b["id"]);
+    let list: Vec<Value> = templates
+        .iter()
+        .map(|template| {
+            let structure = validate_workflow(template, None);
+            let mut blocking = serde_json::Map::new();
+            for node in template["nodes"].as_array().into_iter().flatten() {
+                let blockers = preflight_blockers(&catalog, std::slice::from_ref(node), None);
+                if let Some(first) = blockers.first() {
+                    // The message alone, without its remediation sentence.
+                    let message = first.split(". ").next().unwrap_or(first);
+                    blocking.insert(
+                        node["id"].as_str().unwrap_or("").to_string(),
+                        json!(if message.ends_with('.') { message.to_string() } else { format!("{message}.") }),
+                    );
+                }
+            }
+            let installable = template["nodes"].as_array().into_iter().flatten().any(|node| {
+                let agent = node["agent"]["agentId"].as_str().unwrap_or("");
+                praxis_core::agent_runtime::bundled::is_bundled_agent(agent)
+                    || node["agent"]["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str).any(|n| praxis_core::agent_runtime::bundled::bundled_skill(n).is_some())
+            });
+            json!({
+                "templateId": template["id"],
+                "structureOk": structure.valid(),
+                "agentsOk": blocking.is_empty(),
+                "blockingByNode": blocking,
                 "dependencies": [],
-                "autoInstallable": false,
-                "blockingByNode": {"runtime": "Live workflow readiness has not been verified in this Tauri build."},
-                "missingTools": [],
-                "missingAgents": []
-            }));
-        }
-    }
-    for def in get_project_definitions(host, project_id) {
-        list.push(json!({
-            "templateId": def.id,
-            "ready": false,
-            "structureOk": false,
-            "agentsOk": false,
-            "dependencies": [],
-            "autoInstallable": false,
-            "blockingByNode": {"runtime": "Live workflow readiness has not been verified in this Tauri build."},
-            "missingTools": [],
-            "missingAgents": []
-        }));
-    }
+                "autoInstallable": installable && !blocking.is_empty(),
+            })
+        })
+        .collect();
     Ok(json!(list))
 }
 
