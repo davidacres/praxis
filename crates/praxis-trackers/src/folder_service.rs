@@ -330,6 +330,74 @@ struct FolderServiceState {
     loaded: bool,
     watchers: Vec<FolderWatcher>,
     comment_count_snapshot: HashMap<String, usize>,
+    /// What the plan files looked like when the in-memory model was last made current.
+    fingerprint: u64,
+}
+
+/// A cheap identity for the plan files under `roots` (path, size, modified time). A service kept
+/// across calls compares it to notice edits made outside it, so a long-lived board never serves
+/// stale cards, while its own writes (recorded by [`WriteSettle`]) keep the in-memory model.
+fn tree_fingerprint(roots: &[String]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    fn walk(dir: &Path, depth: usize, hasher: &mut std::collections::hash_map::DefaultHasher) {
+        if depth > 8 {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let mut entries: Vec<_> = entries.flatten().collect();
+        entries.sort_by_key(std::fs::DirEntry::path);
+        for entry in entries {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                if !name.starts_with('.') && name != "node_modules" && name != "target" {
+                    walk(&path, depth + 1, hasher);
+                }
+            } else {
+                path.hash(hasher);
+                meta.len().hash(hasher);
+                meta.modified().ok().and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).hash(hasher);
+            }
+        }
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for root in roots {
+        root.hash(&mut hasher);
+        walk(Path::new(root), 0, &mut hasher);
+    }
+    hasher.finish()
+}
+
+fn watched_roots(state: &FolderServiceState) -> Vec<String> {
+    if state.board_roots.is_empty() {
+        state.configured_roots.clone()
+    } else {
+        state.board_roots.iter().map(|r| r.root_path.clone()).collect()
+    }
+}
+
+/// Declared first in a method that writes plan files: when the method ends the files on disk are
+/// recorded as the state the in-memory model already reflects, so the write is not mistaken for an
+/// outside edit (which would reload and re-parse what the model holds more faithfully).
+struct WriteSettle<'a>(&'a FolderService);
+
+impl WriteSettle<'_> {
+    /// Records the files as they are now. Called before the method reads its result back through a
+    /// public getter, which would otherwise see its own write as an outside edit.
+    fn settle(&self) {
+        if let Ok(mut guard) = self.0.state.lock()
+            && guard.loaded
+        {
+            guard.fingerprint = tree_fingerprint(&watched_roots(&guard));
+        }
+    }
+}
+
+impl Drop for WriteSettle<'_> {
+    fn drop(&mut self) {
+        self.settle();
+    }
 }
 
 /// Folder-backed [`IssueTrackerService`](crate::IssueTrackerService) implementation.
@@ -407,6 +475,7 @@ impl FolderService {
         &self,
         options: Option<&SyncBoardConfigOptions>,
     ) -> Result<(), String> {
+        let settle = WriteSettle(self);
         self.ensure_loaded()?;
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let Some(ref plans_root_str) = guard.plans_root_path else {
@@ -784,6 +853,7 @@ impl FolderService {
 
     /// Creates a new markdown issue in the primary plans root.
     pub fn create_issue(&self, input: &CreateIssueInput) -> Result<IssueDetails, String> {
+        let settle = WriteSettle(self);
         self.ensure_loaded()?;
         {
             let mut guard = self.state.lock().map_err(|e| e.to_string())?;
@@ -869,6 +939,7 @@ impl FolderService {
                 self.load_from_disk_locked(&mut guard, None)?;
                 let created_key = stable_feature_key(&guard.project_key, feature_id);
                 drop(guard);
+                settle.settle();
                 return self.get_issue(&created_key);
             }
 
@@ -971,6 +1042,7 @@ impl FolderService {
                 child_seq,
             );
             drop(guard);
+            settle.settle();
             self.get_issue(&created_key)
         }
     }
@@ -981,6 +1053,7 @@ impl FolderService {
         issue_key: &str,
         input: &UpdateIssueInput,
     ) -> Result<IssueDetails, String> {
+        let settle = WriteSettle(self);
         self.ensure_loaded()?;
         let target_key = {
             let mut guard = self.state.lock().map_err(|e| e.to_string())?;
@@ -1235,6 +1308,7 @@ impl FolderService {
             guard.issues[issue_idx].summary_model.key.clone()
         };
 
+        settle.settle();
         self.get_issue(&target_key)
     }
 
@@ -1244,6 +1318,7 @@ impl FolderService {
         if comment_body.is_empty() {
             return Err("Comment cannot be empty.".to_string());
         }
+        let settle = WriteSettle(self);
         self.ensure_loaded()?;
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue = guard
@@ -1288,6 +1363,7 @@ impl FolderService {
 
     /// Moves `issue_key` along `transition_id` and updates parent feature rollup tables.
     pub fn transition_issue(&self, issue_key: &str, transition_id: &str) -> Result<(), String> {
+        let settle = WriteSettle(self);
         self.ensure_loaded()?;
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         let issue_idx = guard
@@ -1390,6 +1466,14 @@ impl FolderService {
     fn ensure_loaded(&self) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
         if guard.loaded {
+            // Edits made outside this service (an editor, git, another Praxis surface) reload the
+            // board; an unreadable folder keeps the model it has, as the watcher-driven reload does.
+            if tree_fingerprint(&watched_roots(&guard)) != guard.fingerprint {
+                if self.load_from_disk_locked(&mut guard, None).is_ok() {
+                    Self::snapshot_comment_counts(&mut guard);
+                }
+                guard.fingerprint = tree_fingerprint(&watched_roots(&guard));
+            }
             return Ok(());
         }
         let roots: Vec<String> = self
@@ -1424,6 +1508,7 @@ impl FolderService {
         Self::snapshot_comment_counts(&mut guard);
         Self::setup_watchers(&mut guard);
         guard.loaded = true;
+        guard.fingerprint = tree_fingerprint(&watched_roots(&guard));
         Ok(())
     }
 
@@ -2111,6 +2196,35 @@ mod tests {
             .expect("update issue");
         assert_eq!(edited.summary.summary, "Implement Rust parser");
         assert_eq!(edited.comments.as_ref().map(Vec::len), Some(1));
+
+        service.dispose();
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_kept_service_holds_its_own_writes_and_reloads_outside_edits() {
+        let root = temp_dir("praxis-folder-kept");
+        let feature_dir = root.join("features").join("feature-01-design");
+        std::fs::create_dir_all(&feature_dir).expect("mkdir feature");
+        let feature_file = feature_dir.join("feature.md");
+        std::fs::write(&feature_file, "# Core Design\n\n**Status:** Proposed\n**Type:** Feature\n\n## Description\n\nOriginal.\n").expect("write feature.md");
+        let service = FolderService::from_static(StaticFolderConfig {
+            folder_roots: vec![root.to_string_lossy().to_string()],
+            project_key: "KEPT".to_string(),
+            ..StaticFolderConfig::default()
+        });
+        let key = service.get_issues(&IssueFilters::default(), 0, 10).expect("list").issues[0].key.clone();
+
+        // A description with its own heading is stored whole; re-reading the file would split it there.
+        let described = "Users cannot log in.\n\n## Acceptance criteria\n- Login works";
+        service.update_issue(&key, &UpdateIssueInput { description: Some(described.to_string()), ..UpdateIssueInput::default() }).expect("update description");
+        assert_eq!(service.get_issue(&key).expect("get").summary.description.as_deref(), Some(described));
+
+        // Something other than the service edits the file: the next call sees it.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let edited = std::fs::read_to_string(&feature_file).expect("read").replace("# Core Design", "# Renamed Outside");
+        std::fs::write(&feature_file, edited).expect("edit outside");
+        assert_eq!(service.get_issue(&key).expect("get after outside edit").summary.summary, "Renamed Outside");
 
         service.dispose();
         let _ = std::fs::remove_dir_all(&root);

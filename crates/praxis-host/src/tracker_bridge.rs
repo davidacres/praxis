@@ -47,13 +47,35 @@ fn parse_conn(args: &[Value]) -> Result<TrackerConnectionInput, RustRpcError> {
         .map_err(|e| failure(format!("Invalid connection configuration: {e}")))
 }
 
+/// The folder service for a connection's configuration, kept across calls.
+///
+/// A folder board's in-memory model is authoritative for what the service itself wrote: a
+/// description holding a `## Acceptance criteria` heading is stored whole, but reading the file
+/// back splits it at that heading. A service rebuilt for every call would always re-read, so the
+/// connection keeps one (the Electron host cached one per connection id). Edits made outside it
+/// are noticed and reloaded by the service itself.
+fn folder_service(config: StaticFolderConfig) -> Arc<dyn IssueTrackerService> {
+    const MAX_KEPT: usize = 32;
+    type Kept = Vec<(String, Arc<FolderService>)>;
+    static SERVICES: std::sync::Mutex<Kept> = std::sync::Mutex::new(Vec::new());
+    let key = serde_json::to_string(&config).unwrap_or_default();
+    let mut services = SERVICES.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((_, service)) = services.iter().find(|(k, _)| *k == key) {
+        return service.clone();
+    }
+    let service = Arc::new(FolderService::from_static(config));
+    if services.len() >= MAX_KEPT {
+        let (_, evicted) = services.remove(0);
+        evicted.dispose();
+    }
+    services.push((key, service.clone()));
+    service
+}
+
 #[must_use]
 pub fn resolve_tracker_service(input: &TrackerConnectionInput) -> Arc<dyn IssueTrackerService> {
     match input.mode {
-        BackendMode::Folder => {
-            let cfg = input.folder_config.clone().unwrap_or_default();
-            Arc::new(FolderService::from_static(cfg))
-        }
+        BackendMode::Folder => folder_service(input.folder_config.clone().unwrap_or_default()),
         BackendMode::Github => {
             let cfg = input.github_config.clone().unwrap_or_default();
             Arc::new(GitHubBoardService::new(
