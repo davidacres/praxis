@@ -131,26 +131,68 @@ pub async fn changed_paths(folder: &Path) -> Result<Vec<String>, String> {
         &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
     )
     .await?;
-    Ok(status
-        .split('\0')
-        .filter(|e| e.len() > 3)
-        .map(|e| e[3..].to_string())
-        .collect())
+    Ok(parse_changed_paths(&status))
 }
 
-/// Commits what a Praxis write (a ticket move, say) changed since `before`, so the checkout does not
-/// read as dirty and the schedule's next ticket can start (`commitPraxisWrite`).
+/// Paths from `status --porcelain=v1 -z`; a rename or copy carries its source as the next record.
+fn parse_changed_paths(status: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut records = status.split('\0');
+    while let Some(record) = records.next() {
+        if record.len() < 4 {
+            continue;
+        }
+        paths.push(record[3..].to_string());
+        if record.starts_with('R') || record.starts_with('C') {
+            records.next();
+        }
+    }
+    paths
+}
+
+/// Commits exactly the files a Praxis write (a ticket move, say) changed since `before`, so the
+/// checkout does not read as dirty and the schedule's next ticket can start (`commitPraxisWrite`).
+///
+/// A path that was already changed before the write may hold the person's own edits and is never
+/// committed for them. A path is only taken as Praxis's if it now contains `marker` (the text
+/// Praxis wrote), so something else changing a file at the same moment is not swept in. Nothing
+/// is committed while a merge, rebase or cherry-pick is in progress. Returns the committed paths.
 pub async fn commit_praxis_write(
     folder: &Path,
     before: &[String],
+    marker: &str,
     message: &str,
-) -> Result<(), String> {
-    let after = changed_paths(folder).await?;
-    let fresh: Vec<String> = after.into_iter().filter(|p| !before.contains(p)).collect();
-    if fresh.is_empty() {
-        return Ok(());
+) -> Result<Vec<String>, String> {
+    let mut candidates: Vec<String> = changed_paths(folder)
+        .await?
+        .into_iter()
+        .filter(|p| !before.contains(p))
+        .collect();
+    candidates.sort();
+    let written: Vec<String> = candidates
+        .into_iter()
+        .filter(|path| {
+            std::fs::read_to_string(folder.join(path)).is_ok_and(|text| text.contains(marker))
+        })
+        .collect();
+    if written.is_empty() || operation_in_progress(folder).await {
+        return Ok(Vec::new());
     }
-    commit_paths(folder, &fresh, message).await
+    commit_paths(folder, &written, message).await?;
+    Ok(written)
+}
+
+/// A merge, rebase or cherry-pick is underway: committing now would fold into it.
+async fn operation_in_progress(folder: &Path) -> bool {
+    for head in ["MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD"] {
+        if git(folder, &["rev-parse", "-q", "--verify", head])
+            .await
+            .is_ok()
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Commits exactly `paths` (the product files a run would otherwise leave out) on the base checkout.
@@ -1420,5 +1462,110 @@ mod tests {
             install_hint("frobnicate"),
             "install frobnicate and make sure it is on your PATH"
         );
+    }
+
+    fn sh(dir: &Path, args: &[&str]) {
+        let ok = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=T",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        assert!(
+            ok.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&ok.stderr)
+        );
+    }
+
+    struct TempRepo(PathBuf);
+
+    impl TempRepo {
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn repo() -> TempRepo {
+        let root = std::env::temp_dir().join(format!("praxis-writeback-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = TempRepo(root);
+        sh(dir.path(), &["init", "-q", "-b", "main"]);
+        std::fs::write(dir.path().join("keep.md"), "base\n").unwrap();
+        sh(dir.path(), &["add", "."]);
+        sh(dir.path(), &["commit", "-q", "-m", "base"]);
+        dir
+    }
+
+    fn commit_count(dir: &Path) -> usize {
+        let out = std::process::Command::new("git")
+            .args(["rev-list", "--count", "HEAD"])
+            .current_dir(dir)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
+    }
+
+    #[test]
+    fn rename_sources_are_not_reported_as_changed_paths() {
+        let paths = parse_changed_paths("R  new.md\0old.md\0?? x.md\0");
+        assert_eq!(paths, vec!["new.md", "x.md"]);
+    }
+
+    #[tokio::test]
+    async fn write_back_commits_only_files_containing_the_marker() {
+        let dir = repo();
+        let before = changed_paths(dir.path()).await.unwrap();
+        std::fs::write(dir.path().join("ticket.md"), "Run passed\n").unwrap();
+        std::fs::write(dir.path().join("other.md"), "someone else\n").unwrap();
+        let done = commit_praxis_write(dir.path(), &before, "Run passed", "Record")
+            .await
+            .unwrap();
+        assert_eq!(done, vec!["ticket.md"]);
+        assert_eq!(commit_count(dir.path()), 2);
+        assert_eq!(changed_paths(dir.path()).await.unwrap(), vec!["other.md"]);
+    }
+
+    #[tokio::test]
+    async fn write_back_never_commits_files_already_changed_before() {
+        let dir = repo();
+        std::fs::write(dir.path().join("keep.md"), "base\nmy edit Run passed\n").unwrap();
+        let before = changed_paths(dir.path()).await.unwrap();
+        let done = commit_praxis_write(dir.path(), &before, "Run passed", "Record")
+            .await
+            .unwrap();
+        assert!(done.is_empty());
+        assert_eq!(commit_count(dir.path()), 1);
+    }
+
+    #[tokio::test]
+    async fn write_back_waits_while_a_merge_is_in_progress() {
+        let dir = repo();
+        let before = changed_paths(dir.path()).await.unwrap();
+        std::fs::write(dir.path().join("ticket.md"), "Run passed\n").unwrap();
+        let head = git(dir.path(), &["rev-parse", "HEAD"]).await.unwrap();
+        std::fs::write(
+            dir.path().join(".git").join("MERGE_HEAD"),
+            format!("{head}\n"),
+        )
+        .unwrap();
+        let done = commit_praxis_write(dir.path(), &before, "Run passed", "Record")
+            .await
+            .unwrap();
+        assert!(done.is_empty());
+        assert_eq!(commit_count(dir.path()), 1);
     }
 }

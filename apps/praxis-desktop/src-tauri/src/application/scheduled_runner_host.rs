@@ -1257,7 +1257,13 @@ impl ScheduledRunnerPorts for HostPorts {
             .await;
         if let (Ok(_), Some(folder), Some(before)) = (&moved, &folder, &before) {
             let message = format!("Move {} to {status}", ticket.issue_key);
-            if let Err(error) = workflow_engine::commit_praxis_write(folder, before, &message).await
+            if let Err(error) = workflow_engine::commit_praxis_write(
+                folder,
+                before,
+                &praxis_core::folder::markdown_status_writer::plan_status_to_markdown(&status),
+                &message,
+            )
+            .await
             {
                 eprintln!(
                     "Moved {} to {status} but could not commit it: {error}",

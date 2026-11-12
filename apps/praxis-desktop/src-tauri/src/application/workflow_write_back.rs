@@ -149,7 +149,7 @@ async fn send(host: &HostContext, run: &WorkflowRun) -> Result<(), String> {
             .to_string();
         let message = format!("{marker}\n\nRecord run outcome on {key}");
         if let Err(error) =
-            workflow_engine::commit_praxis_write(Path::new(&root), &before, &message).await
+            workflow_engine::commit_praxis_write(Path::new(&root), &before, &marker, &message).await
         {
             log_bus::log(
                 host,
