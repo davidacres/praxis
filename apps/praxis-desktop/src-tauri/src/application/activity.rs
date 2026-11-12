@@ -1,6 +1,7 @@
 //! Project activity store and git commit history aggregation.
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
 
 use chrono::{DateTime, Duration, Utc};
 use praxis_host::HostContext;
@@ -26,60 +27,113 @@ pub fn dispatch(
                 .and_then(Value::as_str)
                 .ok_or_else(|| failure("activity:list requires a projectId argument."))?;
             let project = catalog.require(storage::PROJECTS, project_id)?;
-            let file_path = root.join("project-activity.json");
-            let raw = storage::read(&file_path)?;
-            let mut doc = storage::parse(&file_path, raw.as_deref())?;
-
-            let activity_key = format!("activity:{project_id}");
-            let snapshot = doc.get(&activity_key).cloned().unwrap_or_else(|| {
-                json!({
-                    "startedAt": now(),
-                    "entries": []
-                })
-            });
-
-            let started_at = snapshot["startedAt"]
-                .as_str()
-                .map(ToString::to_string)
-                .unwrap_or_else(now);
-
-            let thirty_days_ago = Utc::now() - Duration::days(30);
-
-            let mut stored_entries = Vec::new();
-            if let Some(entries) = snapshot["entries"].as_array() {
-                for entry in entries {
-                    if let Some(ts_str) = entry["timestamp"].as_str()
-                        && let Ok(ts) = DateTime::parse_from_rfc3339(ts_str)
-                        && ts.with_timezone(&Utc) >= thirty_days_ago
-                    {
-                        stored_entries.push(entry.clone());
-                    }
-                }
-            }
-
-            let commit_entries = read_git_commits(host, &project, project_id);
-
-            let mut merged = stored_entries;
-            merged.extend(commit_entries);
+            let (started_at, stored) = open(root, project_id)?;
+            // Commits are read from the repository on demand, never copied into the store.
+            let mut merged: Vec<Value> = stored.into_iter().rev().collect();
+            merged.extend(read_git_commits(host, &project, project_id));
             merged.sort_by(|a, b| {
                 let ts_a = a["timestamp"].as_str().unwrap_or("");
                 let ts_b = b["timestamp"].as_str().unwrap_or("");
                 ts_b.cmp(ts_a)
             });
-
-            doc[activity_key] = json!({
-                "startedAt": started_at,
-                "entries": merged
-            });
-            let encoded = storage::encoded(&doc)?;
-            storage::write_atomic(&file_path, &encoded, false)?;
-
             Ok(json!({
                 "startedAt": started_at,
                 "entries": merged
             }))
         }
         _ => Err(failure(format!("Unsupported activity channel: {channel}"))),
+    }
+}
+
+const MAX_STORED_ENTRIES: usize = 1000;
+
+/// Observers record from file-watcher threads while `activity:list` reads on the
+/// RPC thread; both rewrite the same file.
+static STORE_LOCK: Mutex<()> = Mutex::new(());
+
+/// The stored observations for one project (oldest first, last 30 days) and
+/// when observation began; persisted so `startedAt` stays fixed.
+fn open(root: &Path, project_id: &str) -> Result<(String, Vec<Value>)> {
+    let _guard = STORE_LOCK.lock().map_err(failure)?;
+    open_locked(root, project_id)
+}
+
+fn open_locked(root: &Path, project_id: &str) -> Result<(String, Vec<Value>)> {
+    let file_path = root.join("project-activity.json");
+    let raw = storage::read(&file_path)?;
+    let mut doc = storage::parse(&file_path, raw.as_deref())?;
+    let key = format!("activity:{project_id}");
+    let snapshot = doc.get(&key).cloned().unwrap_or(Value::Null);
+    let started_at = snapshot["startedAt"]
+        .as_str()
+        .map(ToString::to_string)
+        .unwrap_or_else(now);
+    let cutoff = Utc::now() - Duration::days(30);
+    let mut entries: Vec<Value> = snapshot["entries"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|entry| entry["projectId"] == project_id && entry["kind"] != "commit")
+        .filter(|entry| {
+            entry["timestamp"]
+                .as_str()
+                .and_then(|ts| DateTime::parse_from_rfc3339(ts).ok())
+                .is_some_and(|ts| ts.with_timezone(&Utc) >= cutoff)
+        })
+        .collect();
+    if entries.len() > MAX_STORED_ENTRIES {
+        entries.drain(..entries.len() - MAX_STORED_ENTRIES);
+    }
+    doc[key] = json!({ "startedAt": started_at, "entries": entries });
+    storage::write_atomic(&file_path, &storage::encoded(&doc)?, false)?;
+    Ok((started_at, entries))
+}
+
+/// One observation of a change made through Praxis (or noticed on disk).
+pub struct Observation<'a> {
+    pub project_id: &'a str,
+    pub kind: &'a str,
+    pub target_key: &'a str,
+    pub summary: &'a str,
+    pub action: &'a str,
+    pub connection_id: Option<&'a str>,
+    pub actor: &'a str,
+}
+
+/// Append an observation to the project's activity store. Best effort: the
+/// change being observed has already succeeded and must not fail because of it.
+pub fn record(root: &Path, observation: &Observation<'_>) {
+    let result = (|| -> Result<()> {
+        let _guard = STORE_LOCK.lock().map_err(failure)?;
+        let (started_at, mut entries) = open_locked(root, observation.project_id)?;
+        let timestamp = now();
+        let mut entry = json!({
+            "id": format!("{timestamp}:{}", uuid::Uuid::new_v4().simple()),
+            "projectId": observation.project_id,
+            "kind": observation.kind,
+            "targetKey": observation.target_key,
+            "summary": observation.summary,
+            "action": observation.action,
+            "timestamp": timestamp,
+            "actor": observation.actor
+        });
+        if let Some(connection_id) = observation.connection_id {
+            entry["connectionId"] = json!(connection_id);
+        }
+        entries.push(entry);
+        if entries.len() > MAX_STORED_ENTRIES {
+            entries.drain(..entries.len() - MAX_STORED_ENTRIES);
+        }
+        let file_path = root.join("project-activity.json");
+        let raw = storage::read(&file_path)?;
+        let mut doc = storage::parse(&file_path, raw.as_deref())?;
+        doc[format!("activity:{}", observation.project_id)] =
+            json!({ "startedAt": started_at, "entries": entries });
+        storage::write_atomic(&file_path, &storage::encoded(&doc)?, false)
+    })();
+    if let Err(error) = result {
+        eprintln!("Could not save project activity: {}", error.message);
     }
 }
 
