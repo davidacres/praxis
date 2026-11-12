@@ -1681,7 +1681,8 @@ fn ai_sessions_and_analysis_lifecycle() {
         vec![json!("TASK-99"), analysis_data.clone()],
     );
     let analysis = profile.rpc("ai:getAnalysis", vec![json!("TASK-99")]);
-    assert_eq!(analysis["summary"], "High CPU utilization in PTY reader");
+    assert_eq!(analysis["issueKey"], "TASK-99");
+    assert_eq!(analysis["confirmed"], false);
 
     profile.rpc(
         "ai:setAnalysisConfirmed",
@@ -1692,7 +1693,8 @@ fn ai_sessions_and_analysis_lifecycle() {
 
     profile.rpc("ai:clearAnalysis", vec![json!("TASK-99")]);
     let cleared_analysis = profile.rpc("ai:getAnalysis", vec![json!("TASK-99")]);
-    assert!(cleared_analysis.is_null());
+    assert_eq!(cleared_analysis["confirmed"], false);
+    assert_eq!(cleared_analysis["messages"], json!([]));
 
     // 4. Session deletion
     profile.rpc("ai:deleteSession", vec![json!("TASK-99")]);

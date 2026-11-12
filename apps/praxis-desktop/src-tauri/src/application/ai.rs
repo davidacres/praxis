@@ -13,6 +13,20 @@ fn analysis_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("ai-analysis.json")
 }
 
+/// The `AiAnalysisState` the renderer reads: always present, `confirmed` false until confirmed.
+fn analysis_state(issue_key: &str, stored: Option<&Value>) -> Value {
+    let stored = stored.cloned().unwrap_or(Value::Null);
+    json!({
+        "issueKey": issue_key,
+        "messages": stored.get("messages").cloned().unwrap_or_else(|| json!([])),
+        "confirmed": stored["confirmed"] == true,
+        "confirmedAt": stored.get("confirmedAt").cloned().filter(|v| !v.is_null()),
+        "busy": false,
+        "provider": stored.get("provider").cloned().filter(|v| !v.is_null()),
+        "model": stored.get("model").cloned().filter(|v| !v.is_null()),
+    })
+}
+
 fn feedback_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("session-feedback.json")
 }
@@ -407,7 +421,7 @@ pub fn dispatch(
         "ai:getAnalysis" => {
             let issue_key = text(args, 0)?;
             let analyses = read_analysis(user_data_dir)?;
-            Ok(analyses.get(issue_key).cloned().unwrap_or(Value::Null))
+            Ok(analysis_state(issue_key, analyses.get(issue_key)))
         }
         "ai:submitAnalysis" => {
             let issue_key = text(args, 0)?;
@@ -432,12 +446,31 @@ pub fn dispatch(
             let issue_key = text(args, 0)?;
             let confirmed = args.get(1).and_then(Value::as_bool).unwrap_or(true);
             let mut analyses = read_analysis(user_data_dir)?;
-            if let Some(a) = analyses.get_mut(issue_key) {
-                a["confirmed"] = json!(confirmed);
-                save_analysis(user_data_dir, &analyses)?;
-                host.events()
-                    .emit("ai:analysisChanged", Some(json!(issue_key)));
+            let entry = analyses
+                .entry(issue_key.to_string())
+                .or_insert_with(|| json!({ "messages": [], "confirmed": false }));
+            entry["confirmed"] = json!(confirmed);
+            entry["confirmedAt"] = if confirmed { json!(now()) } else { Value::Null };
+            save_analysis(user_data_dir, &analyses)?;
+            if confirmed {
+                // The analysis session is promoted to implement the confirmed plan with full tools.
+                let store = super::session_store::store(user_data_dir);
+                let promoted = store.mutate(issue_key, true, |record| {
+                    if record["taskDefinition"]["kind"] == "analysis" {
+                        record["taskDefinition"]["definitionOfDone"] = json!("Implement the confirmed plan, run the relevant tests, and report the completed result.");
+                        record["taskDefinition"]["nonGoals"] = Value::Null;
+                        record["taskDefinition"]["completionContract"] = json!("Continue in this conversation until the confirmed implementation is complete and verified.");
+                        record["toolMode"] = json!("full");
+                    }
+                });
+                if let Ok(Some(record)) = promoted {
+                    host.events().emit("ai:sessionChanged", Some(record));
+                }
             }
+            host.events().emit(
+                "ai:analysisChanged",
+                Some(analysis_state(issue_key, analyses.get(issue_key))),
+            );
             Ok(Value::Null)
         }
 
