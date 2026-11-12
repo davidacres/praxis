@@ -340,7 +340,9 @@ export async function launchTestApp(
   });
 
   const context = await chromium.launchPersistentContext(path.join(userDataDir, 'chromium-profile'), {
-    viewport: { width: 1440, height: 900 }
+    viewport: { width: 1440, height: 900 },
+    // The specs were written against a day-first locale ("15 Jan"); Electron took it from the OS.
+    locale: 'en-GB'
   });
   await context.addInitScript(tauriShim, { port, token });
   const electronApp = backendHandle(backend, context);

@@ -131,7 +131,14 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
             praxis_ai::providers::registry::DescriptorKind::CliAgent => {
                 // A CLI agent counts once it has been pointed at (or chosen as the active AI); one that
                 // merely happens to be installed on this machine is not set up for Praxis.
-                config.and_then(|c| c.cli_path.as_deref()).is_some_and(|p| !p.trim().is_empty())
+                config.and_then(|c| c.cli_path.as_deref()).map(str::trim).is_some_and(|p| {
+                    !p.is_empty()
+                        && praxis_workflows::check_process::is_check_command_available(
+                            p,
+                            std::env::var("PATH").ok().as_deref(),
+                            std::env::var("PATHEXT").ok().as_deref(),
+                        )
+                })
                     || (descriptor.id == ai.active_provider
                         && descriptor.default_command.as_deref().is_some_and(|command| {
                             praxis_workflows::check_process::is_check_command_available(
