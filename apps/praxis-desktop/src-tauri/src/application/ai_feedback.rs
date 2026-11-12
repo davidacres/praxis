@@ -308,10 +308,80 @@ fn catalog(host: &HostContext, dir: &Path) -> Catalog {
 
 // ── the model's read of a prompt ─────────────────────────────────────────────────────────────
 
+/// How the prompt check reaches its model: a direct API completion, or a one-shot prompt to a CLI
+/// agent over ACP (a CLI-only setup has no API key to complete against).
+enum Source {
+    Api(ApiConnection),
+    Cli { command: String, args: Vec<String> },
+}
+
 struct Choice {
-    connection: ApiConnection,
+    source: Source,
     provider: String,
+    /// The model sent to the provider; empty for a CLI agent left on its own default.
     model: String,
+}
+
+impl Choice {
+    /// The model as shown and cached: `provider/model`, `cli-default` for an unpinned CLI agent.
+    fn label(&self) -> String {
+        let model = if self.model.is_empty() {
+            "cli-default"
+        } else {
+            &self.model
+        };
+        format!("{}/{model}", self.provider)
+    }
+
+    fn endpoint(&self) -> &str {
+        match &self.source {
+            Source::Api(connection) => Some(connection.options.url.as_str())
+                .filter(|u| !u.is_empty())
+                .unwrap_or("default-endpoint"),
+            Source::Cli { .. } => "default-endpoint",
+        }
+    }
+}
+
+/// The CLI agents that can read a prompt, in the order a CLI-only setup tries them.
+const CLI_CANDIDATES: [&str; 5] = [
+    "claude-code-cli",
+    "codex-cli",
+    "copilot-cli",
+    "antigravity-cli",
+    "cursor-cli",
+];
+
+/// A CLI provider that is switched on and whose executable can be found.
+fn cli_choice(host: &HostContext, provider: &str, model: Option<&str>) -> Option<Choice> {
+    use praxis_ai::providers::environment::effective_path;
+    use praxis_ai::providers::registry::{
+        DescriptorKind, built_in_descriptors, resolve_executable,
+    };
+    let descriptor = built_in_descriptors()
+        .into_iter()
+        .find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent)?;
+    let settings = host.settings().read();
+    let config = settings.ai.providers.get(provider);
+    if config.and_then(|c| c.enabled) == Some(false) {
+        return None;
+    }
+    let command = config
+        .and_then(|c| c.cli_path.as_deref())
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned)
+        .or(descriptor.default_command.clone())?;
+    drop(settings);
+    resolve_executable(&command, effective_path())?;
+    Some(Choice {
+        source: Source::Cli {
+            command,
+            args: descriptor.default_args.clone(),
+        },
+        provider: provider.to_owned(),
+        model: model.unwrap_or_default().to_owned(),
+    })
 }
 
 fn ready(host: &HostContext, provider: &str) -> Option<(ApiConnection, String)> {
@@ -327,7 +397,8 @@ fn ready(host: &HostContext, provider: &str) -> Option<(ApiConnection, String)> 
 }
 
 /// The provider that reads prompts: the prompt-analysis provider, else the recommendation provider,
-/// else the active provider when it has a key, else the first API provider that does.
+/// else the active provider when it has a key, else the first API provider that does, else (a
+/// CLI-only setup) the active or first installed CLI agent.
 fn prompt_check_choice(host: &HostContext) -> Option<Choice> {
     use praxis_ai::providers::registry::{DescriptorKind, built_in_descriptors};
     let (explicit, recommendation, active, model_override, custom) = {
@@ -356,9 +427,13 @@ fn prompt_check_choice(host: &HostContext) -> Option<Choice> {
     };
     let (provider, (connection, default_model)) =
         if let Some(provider) = explicit.or(recommendation) {
+            if let Some(cli) = cli_choice(host, &provider, model_override.as_deref()) {
+                return Some(cli);
+            }
             let pair = ready(host, &provider)?;
             (provider, pair)
         } else {
+            let active_provider = active.clone();
             let mut order = vec![active];
             order.extend(
                 built_in_descriptors()
@@ -368,7 +443,7 @@ fn prompt_check_choice(host: &HostContext) -> Option<Choice> {
             );
             order.extend(custom);
             let mut seen = Vec::new();
-            order
+            let found = order
                 .into_iter()
                 .filter(|p| {
                     !seen.contains(p) && {
@@ -376,10 +451,19 @@ fn prompt_check_choice(host: &HostContext) -> Option<Choice> {
                         true
                     }
                 })
-                .find_map(|p| ready(host, &p).map(|pair| (p, pair)))?
+                .find_map(|p| ready(host, &p).map(|pair| (p, pair)));
+            match found {
+                Some(found) => found,
+                // No API key anywhere: a CLI agent that is installed can still read the prompt.
+                None => {
+                    return std::iter::once(active_provider.as_str())
+                        .chain(CLI_CANDIDATES)
+                        .find_map(|p| cli_choice(host, p, model_override.as_deref()));
+                }
+            }
         };
     Some(Choice {
-        connection,
+        source: Source::Api(connection),
         provider,
         model: model_override.unwrap_or(default_model),
     })
@@ -480,17 +564,8 @@ fn assess_prompt(
             json!({ "reason": "No AI provider is configured to read prompts." }),
         );
     };
-    let model = format!("{}/{}", choice.provider, choice.model);
-    let key = clarity::cache_key(
-        text,
-        prior,
-        &format!(
-            "{model}@{}",
-            Some(choice.connection.options.url.as_str())
-                .filter(|u| !u.is_empty())
-                .unwrap_or("default-endpoint")
-        ),
-    );
+    let model = choice.label();
+    let key = clarity::cache_key(text, prior, &format!("{model}@{}", choice.endpoint()));
     let lookup = || -> Option<Value> {
         let hit = cached_answers(dir)[&key].clone();
         let answers = clarity::parse_answers(&hit["answers"].to_string(), text, prior).ok()?;
@@ -547,24 +622,42 @@ fn assess_prompt(
     );
     let outcome = (|| -> std::result::Result<Answers, (Stage, String)> {
         let user_prompt = clarity::build_prompt(text, prior);
-        let reply = super::runtime::block_on(async {
-            tokio::time::timeout(
-                CALL_TIMEOUT,
-                super::api_host::run_provider_prompt(
-                    &choice.connection,
-                    &choice.model,
-                    clarity::SYSTEM_PROMPT,
-                    &user_prompt,
-                    None,
-                    |_| {},
-                ),
-            )
-            .await
-        });
-        let (reply, _usage) = match reply {
-            Err(_) => return Err((Stage::ProviderRequest, "The request timed out.".into())),
-            Ok(Err(error)) => return Err((Stage::ProviderRequest, error)),
-            Ok(Ok(done)) => done,
+        let reply = match &choice.source {
+            Source::Api(connection) => {
+                let reply = super::runtime::block_on(async {
+                    tokio::time::timeout(
+                        CALL_TIMEOUT,
+                        super::api_host::run_provider_prompt(
+                            connection,
+                            &choice.model,
+                            clarity::SYSTEM_PROMPT,
+                            &user_prompt,
+                            None,
+                            |_| {},
+                        ),
+                    )
+                    .await
+                });
+                match reply {
+                    Err(_) => {
+                        return Err((Stage::ProviderRequest, "The request timed out.".into()));
+                    }
+                    Ok(Err(error)) => return Err((Stage::ProviderRequest, error)),
+                    Ok(Ok((reply, _usage))) => reply,
+                }
+            }
+            Source::Cli { command, args } => {
+                let cwd = super::ai_models::working_directory_for(host);
+                super::runtime::block_on(super::acp_one_shot::prompt_once(
+                    command,
+                    args.clone(),
+                    &cwd,
+                    Some(choice.model.as_str()),
+                    &format!("{}\n\n{user_prompt}", clarity::SYSTEM_PROMPT),
+                    CALL_TIMEOUT,
+                ))
+                .map_err(|error| (Stage::ProviderRequest, error))?
+            }
         };
         reply_chars = reply.chars().count();
         stage = Stage::ResponseValidation;
@@ -596,7 +689,11 @@ fn assess_prompt(
             )
         }
         Err((failed_stage, error)) => {
-            let reason = diagnostics::failure(failed_stage, &error, false);
+            let reason = diagnostics::failure(
+                failed_stage,
+                &error,
+                matches!(choice.source, Source::Cli { .. }),
+            );
             let status = regex::Regex::new(r"\b[45]\d{2}\b")
                 .ok()
                 .and_then(|r| r.find(&error).map(|m| m.as_str().to_owned()));

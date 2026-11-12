@@ -721,3 +721,52 @@ test('authentication recovery is readable inside the analysis notice at a narrow
   fs.mkdirSync(artifacts, { recursive: true });
   await win.screenshot({ path: path.join(artifacts, 'prompt-analysis-authentication-notice.png') });
 });
+
+const NO_API_KEYS = {
+  AI_GATEWAY_API_KEY: undefined, AI_GATEWAY_URL: undefined, VERCEL_OIDC_TOKEN: undefined,
+  OPENAI_API_KEY: undefined, ANTHROPIC_API_KEY: undefined, GEMINI_API_KEY: undefined
+};
+
+test('a CLI-only setup reads prompts through a one-shot prompt to its CLI agent', async () => {
+  // No API key anywhere: the only way to read a prompt is the installed CLI agent over ACP.
+  const log = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-clarity-agent-')), 'prompts.jsonl');
+  app = await launchTestApp(
+    { ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: path.join(__dirname, 'fixtures', 'clarityAcpAgent.mjs') } } } },
+    undefined,
+    { CLARITY_AGENT_LOG: log, ...NO_API_KEYS }
+  );
+  const win = app.window;
+  const evaluate = (promptText: string) => win.evaluate(
+    input => window.praxis.ai.evaluatePrompt(input), { promptText, toolMode: 'full' as const, checkClarity: true }
+  );
+  const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : []);
+
+  const clear = await evaluate('fix the truncated headline in the prompt score bar');
+  expect(clear.clarity?.status, JSON.stringify(clear.clarity)).toBe('checked');
+  expect(clear.clarity?.model).toBe('claude-code-cli/cli-default');
+  expect(calls()).toHaveLength(1);
+  // The one-shot prompt carries the checklist system prompt and the prompt under review.
+  expect(calls()[0]).toContain('fixed checklist');
+  expect(calls()[0]).toContain('truncated headline');
+
+  // A second look at the same prompt is a cache hit: the agent is not asked again.
+  const cached = await evaluate('fix the truncated headline in the prompt score bar');
+  expect(cached.clarity?.cached).toBe(true);
+  expect(calls()).toHaveLength(1);
+
+  // The agent's read drives the score.
+  const vague = await evaluate('VAGUE_TARGET change it');
+  expect(vague.clarity?.status).toBe('checked');
+  expect(vague.overallScore).toBeLessThan(clear.overallScore);
+  expect(calls()).toHaveLength(2);
+  fs.rmSync(path.dirname(log), { recursive: true, force: true });
+});
+
+test('a CLI-only setup with no usable agent still reports the check as unavailable', async () => {
+  app = await launchTestApp({ ai: { activeProvider: 'claude-code-cli' } }, undefined, NO_API_KEYS);
+  const result = await app.window.evaluate(
+    input => window.praxis.ai.evaluatePrompt(input), { promptText: 'fix the headline', toolMode: 'full' as const, checkClarity: true }
+  );
+  expect(result.clarity?.status).toBe('unavailable');
+  expect(result.clarity?.reason).toContain('No AI provider is configured');
+});

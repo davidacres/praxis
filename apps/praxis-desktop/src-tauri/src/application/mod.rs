@@ -22,6 +22,7 @@ mod board_prefs;
 mod boards;
 mod browser_mcp;
 mod builtin_mcp;
+mod acp_one_shot;
 mod cli_usage;
 mod connections;
 mod context_snapshot;
