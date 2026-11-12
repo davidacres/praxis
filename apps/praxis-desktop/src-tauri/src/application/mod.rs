@@ -530,6 +530,11 @@ impl Application {
             | "ai:testProviderApiKey" => {
                 return ai::dispatch(host, &host.config().user_data_dir, channel, args);
             }
+            // One-shot model calls: the reply can take many seconds, and saving the result goes back
+            // through the host (taking the profile lock itself), so they must not hold it.
+            "workflows:recommendTemplate" | "workflows:recommendModelTiers" | "workflows:recommendAgent" => {
+                return workflows::dispatch(host, channel, args);
+            }
             // Launching only spawns, and an abort can take seconds: neither may hold the profile lock.
             _ if ai_delegate::CHANNELS.contains(&channel) => {
                 if let Some(result) = ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args) {
