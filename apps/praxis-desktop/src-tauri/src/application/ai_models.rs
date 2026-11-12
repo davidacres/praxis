@@ -158,14 +158,21 @@ fn list_cli(host: &HostContext, provider: &str) -> Result<Value> {
         .map(|choice| {
             let value = choice["value"].as_str().unwrap_or_default().to_owned();
             let usage = choice["_meta"]["copilotUsage"].as_str().filter(|usage| usage.ends_with('x') && usage[..usage.len() - 1].parse::<f64>().is_ok());
+            let published = published_cli_metadata(provider, &value, choice["name"].as_str().unwrap_or_default());
             let mut option = json!({ "value": value, "name": choice["name"] });
+            if let Some(label) = published["pricingLabel"].as_str() {
+                option["pricingLabel"] = json!(label);
+            }
+            if let Some(label) = published["contextLabel"].as_str() {
+                option["contextLabel"] = json!(label);
+            }
             if let Some(description) = choice["description"].as_str() {
                 option["description"] = json!(description);
             }
             if let Some(usage) = usage {
                 option["pricingLabel"] = json!(format!("{}× premium requests", &usage[..usage.len() - 1]));
             }
-            let length = codex.as_ref().and_then(|lengths| lengths.get(&value).copied()).or_else(|| get_known_context_length(Some(&value), Some(provider)));
+            let length = codex.as_ref().and_then(|lengths| lengths.get(&value).copied()).or_else(|| get_known_context_length(Some(&value), Some(provider))).or_else(|| published["contextLength"].as_u64());
             if let Some(length) = length.filter(|length| *length > 0) {
                 option["contextLength"] = json!(length);
             }
@@ -242,6 +249,105 @@ fn list_api(host: &HostContext, provider: &str, force_refresh: bool) -> Result<V
         // The picker degrades to "no list" rather than showing an error.
         Err(_) => Ok(Value::Null),
     }
+}
+
+/// Canonical model family id, excluding CLI reasoning/speed parameters (`canonicalCliModelId`).
+fn canonical_cli_model_id(value: &str) -> String {
+    use regex::Regex;
+    let lower = value.to_lowercase();
+    let mut id = lower.split('[').next().unwrap_or_default().to_owned();
+    id = Regex::new(r"\s*\([^)]*\)").expect("static").replace_all(&id, "").trim().to_owned();
+    id = Regex::new(r"\s+").expect("static").replace_all(&id, "-").into_owned();
+    // The original strips with a lookahead; repeat until nothing more matches.
+    let suffix = Regex::new(r"-(?:thinking|extra-high|xhigh|high|medium|low|minimal|none|max|fast)(-|$)").expect("static");
+    loop {
+        let next = suffix.replace(&id, "$1").into_owned();
+        if next == id {
+            break;
+        }
+        id = next;
+    }
+    id = Regex::new(r"^(opus|sonnet|haiku|fable)-").expect("static").replace(&id, "claude-$1-").into_owned();
+    id = Regex::new(r"^(claude-(?:opus|sonnet|haiku|fable)-\d+)-(\d+)(-|$)").expect("static").replace(&id, "$1.$2$3").into_owned();
+    id = Regex::new(r"-\d{8}$").expect("static").replace(&id, "").into_owned();
+    id.strip_prefix("glm-5p3").map_or(id.clone(), |rest| format!("glm-5.3{rest}"))
+}
+
+/// Published base token rates, checked 2026-10-11. API references, not charges against a CLI
+/// subscription. Exact ids only; no family guesses.
+fn reference_rates(id: &str) -> Option<(f64, f64)> {
+    Some(match id {
+        "gpt-6.1-sol" | "gpt-6-sol" => (2.0, 10.0), "gpt-6-astra" => (10.0, 50.0), "gpt-6-luna" => (0.1, 0.5),
+        "gpt-5.6-sol" => (4.0, 20.0), "gpt-5.6-terra" => (2.0, 12.0), "gpt-5.6-luna" => (0.2, 1.2),
+        "gpt-5.5" => (5.0, 30.0), "gpt-5.4" => (2.5, 15.0), "gpt-5.4-mini" => (0.75, 4.5), "gpt-5.4-nano" => (0.2, 1.25),
+        "gpt-5.3-codex" | "gpt-5.2" => (1.75, 14.0), "gpt-5.1" => (1.25, 10.0), "gpt-5-mini" => (0.25, 2.0),
+        "claude-opus-5.5" => (4.0, 20.0), "claude-sonnet-5.5" | "claude-sonnet-5" => (2.0, 10.0), "claude-haiku-5.5" => (0.1, 0.5),
+        "claude-fable-5.1" | "claude-fable-5" => (10.0, 50.0), "claude-opus-5" | "claude-opus-4.8" | "claude-opus-4.7" | "claude-opus-4.6" | "claude-opus-4.5" => (5.0, 25.0),
+        "claude-sonnet-4.6" | "claude-sonnet-4.5" | "claude-sonnet-4" => (3.0, 15.0), "claude-haiku-4.5" => (1.0, 5.0),
+        "gemini-3.8-flash" | "gemini-3.7-flash" | "gemini-3.6-flash" => (0.75, 3.75), "gemini-3.1-pro" => (2.0, 12.0), "muse-spark-1.3" => (1.25, 4.25),
+        "kimi-k3" => (3.0, 15.0), "glm-5.2" | "glm-5.3" => (1.4, 4.4), "glm-5.3-flash" => (0.15, 0.5), "kimi-k2.7-code" => (0.95, 4.0),
+        "gemini-3.5-flash" => (1.5, 9.0), "gemini-3-flash" => (0.5, 3.0), "gemini-2.5-flash" => (0.3, 2.5),
+        _ => return None,
+    })
+}
+
+fn rate(value: f64) -> String {
+    if value.fract() == 0.0 { format!("{}", value as i64) } else { format!("{value}") }
+}
+
+/// Context size and price label the vendors publish for a CLI model (`publishedCliModelMetadata`).
+fn published_cli_metadata(provider: &str, value: &str, name: &str) -> Value {
+    use regex::Regex;
+    let id = canonical_cli_model_id(value);
+    let resolved = if reference_rates(&id).is_some() { id.clone() } else { canonical_cli_model_id(name) };
+    let mut metadata = json!({});
+    if let Some((input, output)) = reference_rates(&resolved) {
+        metadata["pricingLabel"] = json!(format!("API base ${} / ${} /1M", rate(input), rate(output)));
+    }
+    if Regex::new(r"^claude-(?:opus|sonnet|haiku|fable)-5(?:\.|$)").expect("static").is_match(&resolved) {
+        metadata["contextLength"] = json!(1_000_000);
+    }
+    let gemini_flash = Regex::new(r"^gemini-3\.[678]-flash$").expect("static");
+    if gemini_flash.is_match(&resolved) {
+        metadata["contextLength"] = json!(1_048_576);
+    }
+    if provider == "cursor-cli" {
+        let cursor_context = match id.as_str() { "grok-4.7" | "grok-4.6" | "grok-4.5" => Some(256_000), "composer-2.5" => Some(200_000), "gemini-3.8-flash" => Some(200_000), "muse-spark-1.3" => Some(300_000), _ => None };
+        match cursor_context {
+            Some(length) => metadata["contextLength"] = json!(length),
+            None => {
+                metadata.as_object_mut().map(|o| o.remove("contextLength"));
+            }
+        }
+        if id.starts_with("grok-4.") || id == "composer-2.5" {
+            let fast = value.contains("fast=true");
+            let long = id == "grok-4.7" && value.contains("context=500k");
+            let (input, output) = if id == "composer-2.5" {
+                if fast { (3.0, 15.0) } else { (0.5, 2.5) }
+            } else {
+                let input = if long && fast { 6.0 } else if long || fast { 4.0 } else { 2.0 };
+                let output = if (long && fast) || (fast && id == "grok-4.5") { 18.0 } else if long || fast { 12.0 } else { 6.0 };
+                (input, output)
+            };
+            metadata["pricingLabel"] = json!(format!("${} / ${} /1M", rate(input), rate(output)));
+        }
+        if id == "gemini-3.8-flash" {
+            metadata["pricingLabel"] = json!("$0.75 / $3.5 /1M");
+        }
+    } else if provider == "antigravity-cli" {
+        if Regex::new(r"^gemini-3\.(?:1-pro|[678]-flash)$").expect("static").is_match(&id) || Regex::new(r"^claude-(?:opus|sonnet)-5\.5$").expect("static").is_match(&id) {
+            metadata["contextLength"] = json!(1_000_000_u64.max(if gemini_flash.is_match(&id) || id == "gemini-3.1-pro" { 1_048_576 } else { 0 }));
+        }
+        if id == "gpt-oss-120b" {
+            metadata["contextLength"] = json!(131_072);
+            metadata["pricingLabel"] = json!("Open weights");
+        }
+    }
+    if id == "auto" || (id == "default" && name.eq_ignore_ascii_case("auto")) {
+        metadata["contextLabel"] = json!("Model dependent");
+        metadata["pricingLabel"] = json!("Routed model rate");
+    }
+    metadata
 }
 
 /// Rejects a model the provider's current catalog does not list. A catalog that cannot be read is

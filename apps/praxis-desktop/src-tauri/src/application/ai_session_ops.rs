@@ -16,7 +16,8 @@ use super::session_handover as handover;
 use super::session_store::{stamp_reasoning, store};
 use super::{Result, failure, now, text};
 
-pub const CHANNELS: [&str; 10] = [
+pub const CHANNELS: [&str; 12] = [
+    "ai:removeWorktree", "ai:setWorktree",
     "ai:updateSessionModel", "ai:updateSessionReasoningEffort", "ai:updateSessionPermissionMode", "ai:handoverSession", "ai:editHandoverBrief",
     "ai:switchSessionMode", "ai:startConversation", "ai:sendConversationMessage", "ai:stopConversation", "ai:setConversationToolOwner",
 ];
@@ -545,8 +546,77 @@ fn set_tool_owner(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Valu
     Ok(updated)
 }
 
+/// Creates (or re-attaches) the dedicated worktree for a session; returns its facts as JSON.
+pub(super) fn prepare_worktree(default_base: &str, issue: &Value, folder: &str, reuse_existing: bool, branch_name: Option<String>) -> Result<Value> {
+    use praxis_core::git::{GitWorktreeManager, PrepareWorktreeOptions, WorktreeIssueInput};
+    let current = std::process::Command::new("git").args(["rev-parse", "--abbrev-ref", "HEAD"]).current_dir(folder).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned()).filter(|b| !b.is_empty() && b != "HEAD");
+    let base = current.or_else(|| Some(default_base.trim().to_owned()).filter(|b| !b.is_empty())).ok_or_else(|| failure("Could not determine a base branch for the worktree (detached HEAD?)."))?;
+    let input = WorktreeIssueInput { key: issue["key"].as_str().unwrap_or_default().to_owned(), summary: issue["summary"].as_str().unwrap_or_default().to_owned(), branch: issue["branch"].as_str().map(str::to_owned) };
+    let options = PrepareWorktreeOptions { force_clean: false, reuse_existing, branch_name, ..PrepareWorktreeOptions::default() };
+    match GitWorktreeManager::silent().prepare_delivery_worktree_sync(&input, &base, Path::new(folder), Some(&options)) {
+        Ok(prepared) => Ok(json!({ "worktreePath": prepared.worktree_path, "branchName": prepared.branch_name, "baseBranch": prepared.base_branch, "worktreeName": prepared.worktree_name })),
+        Err(praxis_core::git::WorktreeError::Conflict { worktree_path, .. }) => Err(failure(format!("A worktree for {} already exists at {worktree_path}. Remove it (or that session) and retry.", input.key))),
+        Err(error) => Err(failure(error)),
+    }
+}
+
+fn set_worktree(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Value> {
+    let key = text(args, 0)?;
+    let options = args.get(1).cloned().unwrap_or(Value::Null);
+    let sessions = store(dir);
+    let record = sessions.get(key)?.ok_or_else(|| no_session(key))?;
+    if acp_host::has_active_task(dir, key) {
+        return Err(failure("Wait for the current session to finish before creating a worktree."));
+    }
+    let folder = record["workingDirectory"].as_str().map(str::trim).filter(|w| !w.is_empty()).ok_or_else(|| failure("A working directory is required to set a worktree."))?.to_owned();
+    let default_base = host.settings().read().delivery.default_base_branch.clone();
+    let base = options["baseBranch"].as_str().map(str::trim).filter(|b| !b.is_empty()).map_or(default_base, str::to_owned);
+    let issue = json!({ "key": key, "summary": record["title"].as_str().unwrap_or(key) });
+    let branch = options["branchName"].as_str().map(str::trim).filter(|b| !b.is_empty()).map(str::to_owned);
+    let prepared = prepare_worktree(&base, &issue, &folder, true, branch)?;
+    let updated = sessions
+        .mutate(key, true, |r| {
+            r["workingDirectory"] = prepared["worktreePath"].clone();
+            r["worktreePath"] = prepared["worktreePath"].clone();
+            r["worktreeBranch"] = prepared["branchName"].clone();
+            r["worktreeBaseBranch"] = prepared["baseBranch"].clone();
+            r["worktreeName"] = prepared["worktreeName"].clone();
+        })?
+        .ok_or_else(|| no_session(key))?;
+    host.events().emit("ai:sessionChanged", Some(updated.clone()));
+    Ok(updated)
+}
+
+fn remove_worktree(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Value> {
+    use praxis_core::git::{GitWorktreeManager, WorktreeTarget};
+    let key = text(args, 0)?;
+    let sessions = store(dir);
+    let record = sessions.get(key)?.ok_or_else(|| no_session(key))?;
+    if acp_host::has_active_task(dir, key) {
+        return Err(failure("Wait for the current session to finish before removing its worktree."));
+    }
+    let path = record["worktreePath"].as_str().map(str::trim).filter(|p| !p.is_empty());
+    let branch = record["worktreeBranch"].as_str().map(str::trim).filter(|p| !p.is_empty());
+    let (Some(path), Some(branch)) = (path, branch) else { return Err(failure(format!("Session {key} has no dedicated worktree."))) };
+    let target = WorktreeTarget { worktree_path: path.to_owned(), branch_name: branch.to_owned() };
+    GitWorktreeManager::silent().remove_delivery_worktree_sync(Path::new(path), &target, None).map_err(|e| failure(format!("Could not remove the session worktree: {e}")))?;
+    // The session ran in the worktree, so point it back at the main checkout.
+    let main_root = Path::new(path).parent().and_then(Path::parent).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    if let Some(updated) = sessions.mutate(key, true, |r| {
+        r["workingDirectory"] = json!(main_root);
+        for field in ["worktreePath", "worktreeBranch", "worktreeBaseBranch", "worktreeName"] {
+            r.as_object_mut().map(|o| o.remove(field));
+        }
+    })? {
+        host.events().emit("ai:sessionChanged", Some(updated));
+    }
+    Ok(Value::Null)
+}
+
 pub fn dispatch(host: &HostContext, dir: &Path, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
+        "ai:removeWorktree" => remove_worktree(host, dir, args),
+        "ai:setWorktree" => set_worktree(host, dir, args),
         "ai:updateSessionModel" => update_model(host, dir, args),
         "ai:updateSessionReasoningEffort" => update_reasoning(host, dir, args),
         "ai:updateSessionPermissionMode" => update_permission_mode(host, dir, args),

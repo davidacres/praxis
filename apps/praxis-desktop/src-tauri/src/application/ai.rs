@@ -376,7 +376,6 @@ pub fn dispatch(
             host.events().emit("ai:sessionChanged", Some(updated.clone()));
             Ok(updated)
         }
-        "ai:removeWorktree" | "ai:setWorktree" => Ok(Value::Null),
         "ai:undoToolFileChange" => Ok(json!({ "undone": true })),
 
         // 4. Artifacts in AI

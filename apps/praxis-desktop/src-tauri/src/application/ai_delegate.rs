@@ -86,7 +86,7 @@ pub(super) fn delegate_channel(host: &HostContext, dir: &std::path::Path, args: 
 }
 
 fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
-    let input = args.first().cloned().unwrap_or(Value::Null);
+    let mut input = args.first().cloned().unwrap_or(Value::Null);
     // A ticket review brings its own issue (keyed by the review session) and task contract.
     let review = input.get("ticketReview").filter(|r| r.is_object()).cloned();
     let settings = host.settings().read();
@@ -120,9 +120,6 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     // An endpoint whose connection test showed no tool calling would fail on its first tool use.
     if !has_binding && let Some(c) = &custom && !c["capabilities"].is_null() && c["capabilities"]["tools"] != true {
         return Err(failure(format!("{label} didn't pass tool calling, which agent sessions need. Run its connection test in Settings → AI Provider after changing the model or server.")));
-    }
-    if input["runInWorktree"] == true {
-        return Err(failure("Running a session in a dedicated worktree is not implemented yet."));
     }
 
     // The issue: a tracker issue, or a synthesized one for a free-form session.
@@ -162,6 +159,15 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         .or(existing_folder)
         .or_else(|| Some(ai.working_directory.trim().to_owned()).filter(|w| !w.is_empty()))
         .or_else(|| std::env::var("PRAXIS_AI_WORKING_DIR").ok().map(|w| w.trim().to_owned()).filter(|w| !w.is_empty()));
+
+    // Optionally run in a dedicated git worktree branched off the folder's current branch.
+    let mut working_directory = working_directory;
+    if input["runInWorktree"] == true {
+        let folder = working_directory.clone().ok_or_else(|| failure("Pick a git repository folder to run this session in a worktree."))?;
+        let prepared = super::ai_session_ops::prepare_worktree(&settings.delivery.default_base_branch, &issue, &folder, false, None)?;
+        working_directory = Some(prepared["worktreePath"].as_str().unwrap_or_default().to_owned());
+        input["__worktree"] = prepared;
+    }
 
     let mut tool_mode = if is_analysis { Some("read-only".to_owned()) } else { non_empty(&input, "toolMode").map(str::to_owned) };
     // With no folder, a session that did not explicitly ask for tools converses with none.
@@ -408,6 +414,16 @@ fn finish_launch(dir: &std::path::Path, key: &str, input: &Value, prepared: &Pre
     let sessions = store(dir);
     let launch = runtime_launch(prepared);
     let _ = sessions.mutate(key, true, |record| record["runtimeLaunch"] = launch);
+    if input["__worktree"].is_object() {
+        let worktree = input["__worktree"].clone();
+        let _ = sessions.mutate(key, true, |record| {
+            record["workingDirectory"] = worktree["worktreePath"].clone();
+            record["worktreePath"] = worktree["worktreePath"].clone();
+            record["worktreeBranch"] = worktree["branchName"].clone();
+            record["worktreeBaseBranch"] = worktree["baseBranch"].clone();
+            record["worktreeName"] = worktree["worktreeName"].clone();
+        });
+    }
     if let (Some(binding), Some(host_id)) = (&prepared.binding, prepared.plan.host_id.as_deref()) {
         let profile_id = non_empty(input, "profileId").or_else(|| non_empty(input, "agentId")).unwrap_or_default().to_owned();
         let (host_id, activations) = (host_id.to_owned(), binding.skill_activations.clone());

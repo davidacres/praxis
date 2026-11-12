@@ -847,6 +847,18 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
         // Not every agent exposes a model option; the prompt still runs.
         let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": "model", "value": model })).await;
     }
+    // The reasoning effort rides the agent's `thought_level` option; agents without one keep their default.
+    if let Some(effort) = request.reasoning_effort.as_deref().filter(|e| !e.is_empty()) {
+        let option = options.iter().find(|o| o["category"] == "thought_level" || o["id"] == "effort").cloned();
+        if let Some(option) = option.filter(|o| o["type"] == "select") {
+            let choices: Vec<Value> = option["options"].as_array().into_iter().flatten().flat_map(|e| if e.get("group").is_some() { e["options"].as_array().cloned().unwrap_or_default() } else { vec![e.clone()] }).collect();
+            let preferred: Vec<&str> = if effort == "off" { vec!["off", "none", "minimal", "default"] } else { vec![effort] };
+            let value = preferred.iter().find_map(|candidate| choices.iter().find(|c| c["value"].as_str().is_some_and(|v| v.eq_ignore_ascii_case(candidate)) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(candidate))).and_then(|c| c["value"].as_str().map(str::to_owned)));
+            if let Some(value) = value {
+                let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": option["id"], "value": value })).await;
+            }
+        }
+    }
     if let Some(modes) = session["modes"].as_object() {
         let current = modes.get("currentModeId").cloned().unwrap_or(Value::Null);
         let available: Vec<Value> = modes.get("availableModes").and_then(Value::as_array).into_iter().flatten().map(|m| json!({ "id": m["id"], "name": m["name"], "description": m["description"] })).collect();
