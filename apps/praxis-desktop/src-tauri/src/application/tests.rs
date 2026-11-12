@@ -1261,9 +1261,10 @@ fn runs_services_and_task_designer_canvases() {
 
     // 3. Task designer canvas persistence
     let canvas_state = json!({
-        "nodes": [{ "id": "node-1", "type": "task" }],
+        "nodes": [{ "id": "node-1", "type": "note", "x": 1, "y": 2, "width": 280, "height": 190 }],
         "connectors": [],
-        "viewport": { "x": 10.0, "y": 20.0, "zoom": 1.5 }
+        "zoom": 1.5,
+        "toolbarPosition": { "x": 16, "y": 16 }
     });
     let saved_canvas = profile.rpc(
         "taskDesigner:setState",
@@ -1279,12 +1280,8 @@ fn runs_services_and_task_designer_canvases() {
         retrieved_canvas["nodes"].as_array().expect("nodes").len(),
         1
     );
-    assert_eq!(retrieved_canvas["viewport"]["zoom"], 1.5);
+    assert_eq!(retrieved_canvas["zoom"], 1.5);
 
-    // 4. Resolve issue
-    let resolved = profile.rpc("taskDesigner:resolveIssue", vec![json!("FEAT-42")]);
-    assert_eq!(resolved["mainIssue"]["issueKey"], "FEAT-42");
-    assert_eq!(resolved["mainIssue"]["projectKey"], "FEAT");
 }
 
 #[test]

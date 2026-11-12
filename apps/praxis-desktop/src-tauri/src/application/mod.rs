@@ -17,6 +17,8 @@ mod connections;
 mod deployments;
 mod gadgets;
 mod log_bus;
+mod task_designer_plan;
+mod task_designer_state;
 mod plan_watch;
 mod marketplace;
 mod notes;
@@ -618,7 +620,7 @@ impl Application {
         } else if channel.starts_with("runs:") {
             runs::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("taskDesigner:") {
-            task_designer::dispatch(&host.config().user_data_dir, channel, args)?
+            task_designer::dispatch(host, &mut catalog, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("browser:")
             || channel.starts_with("preview:")
             || channel.starts_with("detachedChat:")
