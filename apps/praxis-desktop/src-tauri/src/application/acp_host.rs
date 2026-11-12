@@ -439,7 +439,12 @@ impl Task {
         if let Some(name) = permission_tool_name(request["name"].as_str(), request["toolCallId"].as_str().unwrap_or_default()) {
             data = Some(json!({ "toolName": name }));
         }
-        self.append(evt("permission_requested", format!("Approval needed: {action}"), Some(format!("The agent is requesting permission to {action}.")), data), 0);
+        // API-session tools describe their own request (`description` and `detail`).
+        let (summary, detail) = match request["description"].as_str() {
+            Some(description) => (description.to_owned(), request["detail"].as_str().map(str::to_owned)),
+            None => (format!("Approval needed: {action}"), Some(format!("The agent is requesting permission to {action}."))),
+        };
+        self.append(evt("permission_requested", summary, detail, data), 0);
         answer.await.unwrap_or(Decision::Deny)
     }
 

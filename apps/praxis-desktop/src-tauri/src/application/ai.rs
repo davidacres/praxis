@@ -96,7 +96,7 @@ pub fn dispatch(
     }
     match channel {
         // 1. Provider configuration & statuses
-        "ai:testMcpServer" => Ok(json!({ "ok": true, "tools": [] })),
+        "ai:testMcpServer" => Ok(super::user_mcp::test_server(args.first().unwrap_or(&Value::Null))),
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
 
         // 2. Code intelligence & semantic model
@@ -379,10 +379,9 @@ pub fn dispatch(
         "ai:undoToolFileChange" => Ok(json!({ "undone": true })),
 
         // 4. Artifacts in AI
-        "ai:loadImagePreview" | "ai:openHtmlArtifactPreview" | "ai:artifactPageThumbnail" => {
+        "ai:openHtmlArtifactPreview" | "ai:artifactPageThumbnail" => {
             Ok(json!({ "url": Value::Null, "dataUrl": Value::Null }))
         }
-        "ai:readArtifactText" => Ok(json!("")),
         "ai:saveArtifactToWorkspace" => Ok(json!({ "saved": true })),
 
         // 5. Workflow packs & ticket review

@@ -254,6 +254,7 @@ fn tool_definitions(tool_mode: &str, tracker: bool) -> Vec<GatewayToolDefinition
         tool("read_file", "Read a UTF-8 text file relative to the working directory.", json!({ "type": "object", "properties": { "path": path }, "required": ["path"] })),
         tool("list_dir", "List files and directories under a path relative to the working directory.", json!({ "type": "object", "properties": { "path": { "type": "string", "description": "Directory path relative to the working directory (default \".\")" } } })),
     ];
+    let image_tool = tool("read_image", "Read an image file (png, jpg, gif, webp) and return it so it can be viewed. Use this to inspect screenshots or visual output rather than guessing at it.", json!({ "type": "object", "properties": { "path": path }, "required": ["path"] }));
     // The session's own ticket, through the tracker connection it is bound to.
     let tracker_tools: Vec<GatewayToolDefinition> = if tracker && tool_mode != "project-only" {
         praxis_ai::mcp::builtin::list_tracker_tools()
@@ -266,9 +267,10 @@ fn tool_definitions(tool_mode: &str, tracker: bool) -> Vec<GatewayToolDefinition
     };
     match tool_mode {
         "project-only" => Vec::new(),
-        "read-only" => read.into_iter().chain(tracker_tools).collect(),
+        "read-only" => read.into_iter().chain(std::iter::once(image_tool)).chain(tracker_tools).collect(),
         _ => {
             let mut all = read;
+            all.push(image_tool);
             all.extend(tracker_tools);
             all.push(tool("write_file", "Write a UTF-8 text file relative to the working directory (creates parents).", json!({ "type": "object", "properties": { "path": path, "content": { "type": "string", "description": "Full file contents to write" } }, "required": ["path", "content"] })));
             all.push(tool("run_shell", "Run a shell command in the working directory and return stdout/stderr.", json!({ "type": "object", "properties": { "command": { "type": "string", "description": "Shell command to execute" } }, "required": ["command"] })));
@@ -339,6 +341,20 @@ fn failed(content: impl Into<String>) -> ToolOutcome {
     ToolOutcome { ok: false, content: content.into(), data: None }
 }
 
+/// A tool from a server the user added; servers that require approval ask before each call.
+async fn run_mcp_tool(task: &Arc<Task>, tool: &praxis_ai::mcp::tool_bridge::ResolvedMcpTool, server: &praxis_core::config::mcp_servers::McpServerConfig, call: &ChatCompletionToolCall) -> ToolOutcome {
+    if tool.require_approval {
+        let detail = serde_json::to_string_pretty(&call.arguments).unwrap_or_default();
+        let detail = if detail.chars().count() > 1500 { format!("{}…", detail.chars().take(1500).collect::<String>()) } else { detail };
+        let request = json!({ "toolCallId": call.id, "kind": "mcp-tool", "title": format!("Permission requested: {} › {}", server.name, tool.original_tool_name), "description": format!("Permission requested: {} › {}", server.name, tool.original_tool_name), "detail": detail, "name": call.name, "rawInput": call.arguments });
+        if task.request_permission(request).await == super::acp_host::Decision::Deny {
+            return failed(format!("Permission denied for {}.", tool.original_tool_name));
+        }
+    }
+    let (ok, content) = super::user_mcp::call(server, &tool.original_tool_name, &call.arguments).await;
+    ToolOutcome { ok, content, data: None }
+}
+
 /// A tracker tool against the connection the session is bound to; writes ask first.
 async fn run_tracker_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
     let connection_id = task.store.get(&task.key).ok().flatten().and_then(|r| r["connectionId"].as_str().map(str::to_owned));
@@ -382,6 +398,29 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             }
             match resolve_sandboxed_path(root, &path).and_then(|p| std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))) {
                 Ok(content) => ToolOutcome { ok: true, content, data: None },
+                Err(error) => failed(error),
+            }
+        }
+        "read_image" => {
+            let path = text("path");
+            if path.trim().is_empty() {
+                return failed("path is required");
+            }
+            let extension = std::path::Path::new(&path).extension().and_then(|e| e.to_str()).map(str::to_lowercase).unwrap_or_default();
+            let Some(media) = [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("gif", "image/gif"), ("webp", "image/webp")].iter().find(|(e, _)| *e == extension).map(|(_, m)| *m) else {
+                return failed(format!("Not a readable image: {path}. Supported: .png, .jpg, .jpeg, .gif, .webp"));
+            };
+            let request = json!({ "toolCallId": call.id, "title": "Permission requested: read_image", "name": "read_image", "kind": "read", "rawInput": args });
+            if task.request_permission(request).await == super::acp_host::Decision::Deny {
+                return failed("Permission denied for read_image");
+            }
+            match resolve_sandboxed_path(root, &path).and_then(|p| std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))) {
+                Ok(bytes) if bytes.len() > 12 * 1024 * 1024 => failed(format!("{path} is too large to attach.")),
+                Ok(bytes) => {
+                    use base64::Engine;
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                    ToolOutcome { ok: true, content: format!("Image: {path} ({media}, {} bytes).", bytes.len()), data: Some(json!({ "__images": [{ "mimeType": media, "dataBase64": encoded }] })) }
+                }
                 Err(error) => failed(error),
             }
         }
@@ -552,13 +591,18 @@ enum Outcome {
 }
 
 async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, system: String, mut history: Vec<WireMessage>, tool_mode: &str, max_steps: u64, reasoning: Option<&str>) -> (Outcome, Vec<WireMessage>) {
-    let tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"));
+    let mut tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"));
+    let (mcp_servers, mcp_tools) = super::user_mcp::api_tools(&task.host, tool_mode, &connection.provider).await;
+    tools.extend(mcp_tools.iter().map(|t| GatewayToolDefinition { name: t.namespaced_name.clone(), description: t.description.clone(), input_schema: t.input_schema.clone() }));
     // The gateway's internal model ids carry a `Vercel/` prefix that is not part of the wire id.
     let wire_model = model.strip_prefix("Vercel/").unwrap_or(model).to_owned();
     let mut steps = 0u64;
     let mut read_counts: HashMap<String, u32> = HashMap::new();
     let mut duplicate_reads = 0u32;
     let mut nudged = false;
+    // Each model call is billed once, so a turn's tokens are the running sum of its calls.
+    let mut run_usage: Option<TokenUsage> = None;
+    let mut run_estimate: Option<TokenUsage> = None;
     let read_only = tools.iter().all(|t| matches!(t.name.as_str(), "read_file" | "list_dir" | "read_image"));
     let provider_label = connection.label.clone();
     let _ = provider_label;
@@ -587,7 +631,7 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
             Wire::Gemini => gemini_request_body(&messages, &GeminiRequestOptions { tools: active_tools, ..GeminiRequestOptions::default() }),
         };
         let prompt_chars: usize = messages.iter().map(|m| m.content.as_deref().map_or(0, |c| c.chars().count())).sum();
-        let mut turn = Turn { usage: None, estimate: None, tools: Vec::new(), started: Instant::now(), reasoning_emitted: 0, prompt_chars };
+        let mut turn = Turn { usage: run_usage, estimate: run_estimate, tools: Vec::new(), started: Instant::now(), reasoning_emitted: 0, prompt_chars };
         let _ = (&mut turn.estimate, &mut turn.reasoning_emitted, &turn.prompt_chars);
 
         let cancelled = task.cancel.notified();
@@ -629,6 +673,7 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 cached_input_tokens: sum(turn.usage.and_then(|u| u.cached_input_tokens), reported.cached_input_tokens),
             });
             add_usage(task, reported, &connection.provider, model);
+            run_usage = turn.usage;
         }
 
         let text = completion.text.clone();
@@ -642,6 +687,7 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 return (Outcome::Failed(notice), history);
             }
             emit_message(task, &mut turn, &text, &completion, connection, model, &system);
+            run_estimate = turn.estimate;
         }
 
         if completion.tool_calls.is_empty() {
@@ -658,6 +704,7 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
         let wire_calls: Vec<OpenAiToolCall> = completion.tool_calls.iter().map(|c| OpenAiToolCall::function(c.id.clone(), c.name.clone(), c.arguments.to_string())).collect();
         history.push(assistant_message_with_tool_calls(&text, &wire_calls));
         let mut results: Vec<ToolResult> = Vec::new();
+        let mut tool_images: Vec<praxis_ai::providers::wire::WireImageAttachment> = Vec::new();
         for call in &completion.tool_calls {
             if task.ending.load(Ordering::SeqCst) {
                 return (Outcome::Aborted, history);
@@ -696,12 +743,22 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 if task.ending.load(Ordering::SeqCst) {
                     return (Outcome::Aborted, history);
                 }
+                let owner = mcp_tools.iter().find(|t| t.namespaced_name == call.name).and_then(|t| mcp_servers.iter().find(|s| s.id == t.server_id).map(|s| (t.clone(), s.clone())));
                 tokio::select! {
                     () = &mut cancelled => return (Outcome::Aborted, history),
-                    outcome = run_tool(task, call) => outcome,
+                    outcome = async {
+                        match &owner {
+                            Some((tool, server)) => run_mcp_tool(task, tool, server, call).await,
+                            None => run_tool(task, call).await,
+                        }
+                    } => outcome,
                 }
             };
             let mut data = outcome.data.clone().unwrap_or_else(|| json!({}));
+            // An image a tool read cannot ride a text-only tool message; it is re-attached below.
+            if let Some(images) = data.as_object_mut().and_then(|o| o.remove("__images")).and_then(|v| v.as_array().cloned()) {
+                tool_images.extend(images.iter().filter_map(|i| serde_json::from_value::<praxis_ai::providers::wire::WireImageAttachment>(i.clone()).ok()));
+            }
             data["toolName"] = json!(call.name);
             data["ok"] = json!(outcome.ok);
             if data["kind"].is_null() {
@@ -711,6 +768,11 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
             results.push(ToolResult { call_id: Some(call.id.clone()), content: outcome.content });
         }
         history.extend(tool_result_messages(&wire_calls, &results));
+        if !tool_images.is_empty() {
+            let mut shown = WireMessage::text(WireRole::User, "The tool output above included image attachments, shown here:");
+            shown.images = Some(tool_images);
+            history.push(shown);
+        }
         if !nudged && (duplicate_reads >= 2 || (read_only && steps >= 25)) {
             nudged = true;
             history.push(WireMessage::text(WireRole::User, "You have gathered comprehensive context from the codebase. Do not invoke any further tools. Deliver your complete output and final response now."));

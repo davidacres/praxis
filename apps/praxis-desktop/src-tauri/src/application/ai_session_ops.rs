@@ -16,7 +16,8 @@ use super::session_handover as handover;
 use super::session_store::{stamp_reasoning, store};
 use super::{Result, failure, now, text};
 
-pub const CHANNELS: [&str; 12] = [
+pub const CHANNELS: [&str; 14] = [
+    "ai:loadImagePreview", "ai:readArtifactText",
     "ai:removeWorktree", "ai:setWorktree",
     "ai:updateSessionModel", "ai:updateSessionReasoningEffort", "ai:updateSessionPermissionMode", "ai:handoverSession", "ai:editHandoverBrief",
     "ai:switchSessionMode", "ai:startConversation", "ai:sendConversationMessage", "ai:stopConversation", "ai:setConversationToolOwner",
@@ -546,6 +547,57 @@ fn set_tool_owner(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Valu
     Ok(updated)
 }
 
+/// The folder a session works in, found by issue key or session id.
+fn session_folder(dir: &Path, key_or_id: &str) -> Option<String> {
+    let sessions = store(dir);
+    let record = sessions.get(key_or_id).ok().flatten().or_else(|| sessions.all().ok()?.into_values().find(|r| r["sessionId"] == key_or_id))?;
+    ["worktreePath", "workingDirectory"].iter().find_map(|f| record[*f].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_owned))
+}
+
+const MAX_IMAGE_PREVIEW_BYTES: u64 = 12 * 1024 * 1024;
+const MAX_TEXT_ARTIFACT_BYTES: u64 = 2 * 1024 * 1024;
+
+/// A session's image as a data URL, or null when it is not available (a preview is decoration).
+fn load_image_preview(dir: &Path, args: &[Value]) -> Result<Value> {
+    use base64::Engine;
+    let Some(folder) = session_folder(dir, text(args, 0)?) else { return Ok(Value::Null) };
+    let input = args.get(1).and_then(Value::as_str).map(str::trim).unwrap_or_default();
+    if input.is_empty() {
+        return Ok(Value::Null);
+    }
+    let bare = input.split(['?', '#']).next().unwrap_or_default();
+    let extension = Path::new(bare).extension().and_then(|e| e.to_str()).map(str::to_lowercase).unwrap_or_default();
+    let Some(media) = [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("gif", "image/gif"), ("webp", "image/webp"), ("bmp", "image/bmp"), ("avif", "image/avif")].iter().find(|(e, _)| *e == extension).map(|(_, m)| *m) else { return Ok(Value::Null) };
+    let candidate = input.strip_prefix("file://").map_or_else(|| input.to_owned(), str::to_owned);
+    let Ok(absolute) = praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path(Path::new(&folder), &candidate) else { return Ok(Value::Null) };
+    match std::fs::metadata(&absolute) {
+        Ok(meta) if meta.is_file() && meta.len() <= MAX_IMAGE_PREVIEW_BYTES => match std::fs::read(&absolute) {
+            Ok(bytes) => Ok(json!(format!("data:{media};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))),
+            Err(_) => Ok(Value::Null),
+        },
+        _ => Ok(Value::Null),
+    }
+}
+
+/// The text of a file-backed artifact inside the session's folder.
+fn read_artifact_text(dir: &Path, args: &[Value]) -> Result<Value> {
+    let folder = session_folder(dir, text(args, 0)?);
+    let input = args.get(1).and_then(Value::as_str).map(str::trim).unwrap_or_default();
+    let absolute_input = Path::new(input).is_absolute() || input.split_once(':').is_some_and(|(scheme, _)| scheme.len() > 1 && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c)));
+    let Some(folder) = folder.filter(|_| !input.is_empty() && !absolute_input) else { return Err(failure("Artifact is not available in the session workspace.")) };
+    let resolved = praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path(Path::new(&folder), input).map_err(|_| failure("Artifact is outside the session workspace."))?;
+    let (Ok(root), Ok(real)) = (std::fs::canonicalize(&folder), std::fs::canonicalize(&resolved)) else {
+        return Err(failure(format!("Artifact file was not found in the session folder ({folder}).")));
+    };
+    if !real.starts_with(&root) {
+        return Err(failure("Artifact resolves outside the session workspace."));
+    }
+    match std::fs::metadata(&real) {
+        Ok(meta) if meta.is_file() && meta.len() <= MAX_TEXT_ARTIFACT_BYTES => std::fs::read(&real).map(|b| json!(String::from_utf8_lossy(&b))).map_err(|_| failure("Artifact could not be read.")),
+        _ => Err(failure("Artifact must be a text file no larger than 2 MB.")),
+    }
+}
+
 /// Creates (or re-attaches) the dedicated worktree for a session; returns its facts as JSON.
 pub(super) fn prepare_worktree(default_base: &str, issue: &Value, folder: &str, reuse_existing: bool, branch_name: Option<String>) -> Result<Value> {
     use praxis_core::git::{GitWorktreeManager, PrepareWorktreeOptions, WorktreeIssueInput};
@@ -615,6 +667,8 @@ fn remove_worktree(host: &HostContext, dir: &Path, args: &[Value]) -> Result<Val
 
 pub fn dispatch(host: &HostContext, dir: &Path, channel: &str, args: &[Value]) -> Option<Result<Value>> {
     Some(match channel {
+        "ai:loadImagePreview" => load_image_preview(dir, args),
+        "ai:readArtifactText" => read_artifact_text(dir, args),
         "ai:removeWorktree" => remove_worktree(host, dir, args),
         "ai:setWorktree" => set_worktree(host, dir, args),
         "ai:updateSessionModel" => update_model(host, dir, args),
