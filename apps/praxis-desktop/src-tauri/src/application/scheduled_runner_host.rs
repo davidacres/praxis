@@ -314,6 +314,18 @@ fn stage_progress(host: &HostContext, run: &WorkflowRun) -> Value {
     } else {
         None
     };
+    // Held at a stage by its environment (a missing tool, a working copy that could not be set up),
+    // with nothing failed outright: that stage is the one to retry.
+    let blocker = blocker.or_else(|| {
+        (summary["paused"] == json!(true) && summary["pauseReason"] == "environment")
+            .then(|| {
+                stages
+                    .iter()
+                    .find(|s| s["lane"] == "paused" && s["pause"] == "environment")
+                    .cloned()
+            })
+            .flatten()
+    });
     let current = blocker
         .clone()
         .or_else(|| {
