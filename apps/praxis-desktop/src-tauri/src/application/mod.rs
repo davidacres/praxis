@@ -29,11 +29,18 @@ mod notes;
 mod projects;
 pub(crate) mod runtime;
 mod runs;
+mod scheduled_run_requests;
+mod scheduled_runner_host;
 mod scheduled_runs;
 pub(crate) mod storage;
 mod system;
 mod task_designer;
 mod webviews;
+mod workflow_agent_stage;
+mod workflow_engine;
+mod workflow_env_failure;
+mod workflow_estimate;
+mod workflow_summary;
 mod workflows;
 mod workspaces;
 
@@ -483,6 +490,11 @@ impl Application {
             }
             _ if channel.starts_with("assistant:") => {
                 return assistant::dispatch(host, &host.config().user_data_dir, channel, args);
+            }
+            // The runner behind these reads the board and starts workflow runs, which take the profile
+            // lock themselves, so a handler holding it here would wait on its own callers.
+            _ if channel.starts_with("scheduledRuns:") => {
+                return scheduled_runs::dispatch(host, channel, args);
             }
             // Marketplace work is network- and disk-bound and never touches the project catalog,
             // so it must not hold the profile lock while a registry answers.

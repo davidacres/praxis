@@ -166,6 +166,16 @@ impl Catalog {
     }
     pub fn load(root: &Path, settings: &Path) -> Result<Self> {
         recover(root)?;
+        Self::load_documents(root, settings)
+    }
+
+    /// A read for background work that does not hold the profile lock: it must never replay a
+    /// write journal that a handler is in the middle of committing.
+    pub fn load_readonly(root: &Path, settings: &Path) -> Result<Self> {
+        Self::load_documents(root, settings)
+    }
+
+    fn load_documents(root: &Path, settings: &Path) -> Result<Self> {
         let mut documents = Vec::new();
         for path in [
             root.join("workspaces.json"),

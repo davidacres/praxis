@@ -222,7 +222,7 @@ fn running_status(entry: &HostEntry) -> Value {
 
 // ── snapshot ─────────────────────────────────────────────────────────────
 
-fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
+pub(super) fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
     let roots = roots(host, user_data_dir);
     let mut options = catalog_options(&roots);
     options.native_sources = Some(native_source_options(host, None));
@@ -254,7 +254,7 @@ fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
     })
 }
 
-fn list(host: &HostContext, user_data_dir: &Path) -> Value {
+pub(super) fn list(host: &HostContext, user_data_dir: &Path) -> Value {
     match with_state(user_data_dir, |state| state.snapshot.clone()) {
         Some(snapshot) => snapshot,
         None => refresh(host, user_data_dir),
