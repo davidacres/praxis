@@ -130,10 +130,28 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
             }
             praxis_ai::providers::registry::DescriptorKind::CliAgent => {
                 config.and_then(|c| c.cli_path.as_deref()).is_some_and(|p| !p.trim().is_empty())
+                    || descriptor.default_command.as_deref().is_some_and(|command| {
+                        praxis_workflows::check_process::is_check_command_available(
+                            command,
+                            std::env::var("PATH").ok().as_deref(),
+                            std::env::var("PATHEXT").ok().as_deref(),
+                        )
+                    })
             }
         };
-        if set_up || descriptor.id == ai.active_provider {
+        if set_up {
             usable.push(descriptor.id);
+        }
+    }
+    // Endpoints the user added: usable unless switched off, with a key unless they need none.
+    for custom in ai.custom_providers.iter().flatten().filter_map(|c| serde_json::to_value(c).ok()) {
+        let Some(id) = custom["id"].as_str() else { continue };
+        if ai.providers.get(id).and_then(|c| c.enabled) == Some(false) || custom["enabled"] == json!(false) {
+            continue;
+        }
+        let needs_key = custom["auth"]["kind"] != "none";
+        if !needs_key || host.secrets().has(&praxis_ai::providers::registry::secret_key_for_provider(id)) {
+            usable.push(id.to_string());
         }
     }
     usable
@@ -144,6 +162,93 @@ pub fn usage_override() -> Option<std::collections::BTreeMap<String, f64>> {
     std::env::var("PRAXIS_E2E_PROVIDER_USAGE")
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
+}
+
+/// An entry's agent tasks in run order, with state, attempts and time (`scheduledEntryDetail`).
+pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Value {
+    let summary = workflows::summarize(host, run);
+    let rows = summary["stages"].as_array().cloned().unwrap_or_default();
+    let ordered = praxis_workflows::scheduled_run_detail::ordered_workflow_stages(&run.definition, |id| {
+        run.nodes.get(id).is_some_and(|n| !n.attempts.is_empty())
+    });
+    let mut stages = Vec::new();
+    for node in ordered {
+        let id = &node.base().id;
+        let Some(row) = rows.iter().find(|r| r["nodeId"] == json!(id)) else { continue };
+        let total_ms: i64 = run
+            .nodes
+            .get(id)
+            .map(|state| {
+                state
+                    .attempts
+                    .iter()
+                    .filter_map(|a| {
+                        let end = chrono::DateTime::parse_from_rfc3339(a.ended_at.as_deref()?).ok()?;
+                        let start = chrono::DateTime::parse_from_rfc3339(&a.started_at).ok()?;
+                        Some((end - start).num_milliseconds().max(0))
+                    })
+                    .sum()
+            })
+            .unwrap_or(0);
+        let mut stage = serde_json::Map::new();
+        for key in [
+            "nodeId", "name", "type", "lane", "attempts", "attemptsThisRevision", "maxAttempts", "provider",
+            "durationMs", "startedAt", "lastError", "command", "sessionKey",
+        ] {
+            if let Some(value) = row.get(key).filter(|v| !v.is_null()) {
+                stage.insert(key.to_string(), value.clone());
+            }
+        }
+        if total_ms > 0 {
+            stage.insert("totalMs".into(), json!(total_ms));
+        }
+        if let Some(iteration) = row["loopIteration"]["iteration"].as_u64().filter(|i| *i > 1) {
+            stage.insert("loopIteration".into(), json!(iteration));
+        }
+        if row["lane"] == "paused" {
+            if let Some(error) = row["lastError"].as_str() {
+                stage.insert("activity".into(), json!({ "text": error, "source": "pause" }));
+            }
+        }
+        stages.push(Value::Object(stage));
+    }
+    let mut loops = Vec::new();
+    for lp in summary["loops"].as_array().into_iter().flatten() {
+        for pass in lp["history"].as_array().into_iter().flatten() {
+            let findings: Vec<String> = pass["topFindings"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|f| {
+                    let place = f["file"]
+                        .as_str()
+                        .map(|file| match f["line"].as_u64() {
+                            Some(line) => format!(" · {file}:{line}"),
+                            None => format!(" · {file}"),
+                        })
+                        .unwrap_or_default();
+                    format!("{}{place} — {}", f["severity"].as_str().unwrap_or(""), f["message"].as_str().unwrap_or(""))
+                })
+                .collect();
+            loops.push(json!({
+                "fromName": lp["fromName"], "toName": lp["toName"], "iteration": pass["iteration"],
+                "at": pass["at"], "findings": findings,
+            }));
+        }
+    }
+    json!({ "entryId": entry_id, "workflowRunId": run.run_id, "stages": stages, "loops": loops })
+}
+
+/// Details for every started entry of a schedule that is in flight or finished.
+pub fn entry_details(host: &HostContext, run: &ScheduledRun) -> Vec<Value> {
+    run.entries
+        .iter()
+        .filter_map(|entry| {
+            let workflow_run_id = entry.outcome.as_ref()?.workflow_run_id.clone()?;
+            let stored = workflows::stored_run(host, &workflow_run_id)?;
+            Some(entry_detail(host, &entry.id, &stored))
+        })
+        .collect()
 }
 
 /// One record per in-flight entry, with its run's stage progress (`describeLiveEntries`).
@@ -160,6 +265,7 @@ pub fn live_entries(host: &HostContext, run: &ScheduledRun) -> Vec<Value> {
             let mut live = json!({ "entryId": entry.id, "workflowRunId": workflow_run_id });
             match workflows::stored_run(host, &workflow_run_id) {
                 Some(stored) => {
+                    live["stages"] = entry_detail(host, &entry.id, &stored)["stages"].clone();
                     let progress = stage_progress(host, &stored);
                     if let (Some(target), Some(source)) = (live.as_object_mut(), progress.as_object()) {
                         target.extend(source.clone());

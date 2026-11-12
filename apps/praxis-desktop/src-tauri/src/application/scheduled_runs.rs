@@ -212,6 +212,17 @@ fn build_view(host: &HostContext, run: &ScheduledRun, all: &[ScheduledRun]) -> V
         "readiness": readiness,
         "start": { "date": start.date, "time": start.time },
     });
+    let shows_work = in_flight
+        || matches!(
+            run.status,
+            ScheduledRunStatus::Completed | ScheduledRunStatus::Cancelled | ScheduledRunStatus::Failed
+        );
+    if shows_work {
+        let details = scheduled_runner_host::entry_details(host, run);
+        if !details.is_empty() {
+            view["details"] = json!(details);
+        }
+    }
     if in_flight {
         let headroom: Vec<Value> = usable
             .iter()
