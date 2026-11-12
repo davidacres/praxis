@@ -997,7 +997,7 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
 }
 
 /// A follow-up turn on an API session, continuing from the saved conversation history.
-pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, message: &str, images: Vec<Value>, connection: ApiConnection, internal: bool, conversation_context: Option<&str>) -> Result<()> {
+pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, message: &str, images: Vec<Value>, connection: ApiConnection, internal: bool, gadget_answer: bool, conversation_context: Option<&str>) -> Result<()> {
     if super::acp_host::has_active_task(dir, key) {
         return Err(failure(format!("The agent is still working on {key}.")));
     }
@@ -1033,6 +1033,10 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
     let mut event = if internal { evt("conversation_turn", "Conversation turn started", None, None) } else { evt("user_input_completed", "You", Some(follow_up), None) };
     if !images.is_empty() {
         event["attachments"] = json!(images);
+    }
+    if gadget_answer {
+        // The answered gadget already shows the decision, so the transcript does not repeat it.
+        event["gadgetAnswer"] = json!(true);
     }
     task.append(event, 0);
     task.set_state("executing", None);

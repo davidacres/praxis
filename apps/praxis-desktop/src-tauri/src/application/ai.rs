@@ -421,7 +421,6 @@ pub fn dispatch(
         "ai:openHtmlArtifactPreview" | "ai:artifactPageThumbnail" => {
             Ok(json!({ "url": Value::Null, "dataUrl": Value::Null }))
         }
-        "ai:saveArtifactToWorkspace" => Ok(json!({ "saved": true })),
 
         // 5. Workflow packs & ticket review
         "ai:listWorkflowPacks" => Ok(json!([])),
