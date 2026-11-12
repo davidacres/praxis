@@ -25,6 +25,11 @@ fn default_task(issue: &Value, overrides: &Value) -> Value {
         "scope": overrides["scope"].as_str().unwrap_or("This issue and related files"),
         "definitionOfDone": overrides["definitionOfDone"].as_str().unwrap_or("All acceptance criteria met, code compiles, tests pass"),
     });
+    for field in ["kind", "sessionMode"] {
+        if let Some(value) = overrides[field].as_str() {
+            task[field] = json!(value);
+        }
+    }
     for field in ["workflow", "maxSteps", "timeoutMs"] {
         if !overrides[field].is_null() && overrides[field] != json!(0) {
             task[field] = overrides[field].clone();
@@ -125,6 +130,9 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         review["issue"].clone()
     } else if let Some(issue_key) = non_empty(&input, "issueKey") {
         host_call(host, "issue:get", vec![json!(issue_key), input.get("connectionId").cloned().unwrap_or(Value::Null)])?
+    } else if input["issue"].is_object() {
+        // A caller-supplied stand-in (the Virtual Team assistant has no ticket of its own).
+        input["issue"].clone()
     } else {
         let goal = non_empty(&input, "goal").or_else(|| non_empty(&input["task"], "goal")).ok_or_else(|| failure("Delegate needs either an issue key or a goal."))?;
         json!({ "key": format!("SESSION-{}", &uuid::Uuid::new_v4().to_string()[..8]), "summary": goal, "issueType": "Task", "status": "New", "projectKey": "SESSION" })

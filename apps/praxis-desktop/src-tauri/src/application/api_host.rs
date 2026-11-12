@@ -371,12 +371,26 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
     }
     let root = &task.working_directory;
     match call.name.as_str() {
-        "read_file" => match resolve_sandboxed_path(root, &text("path")).and_then(|p| std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))) {
-            Ok(content) => ToolOutcome { ok: true, content, data: None },
-            Err(error) => failed(error),
-        },
+        "read_file" => {
+            let path = text("path");
+            if path.trim().is_empty() {
+                return failed("path is required");
+            }
+            let request = json!({ "toolCallId": call.id, "title": "Permission requested: read_file", "name": "read_file", "kind": "read", "rawInput": args });
+            if task.request_permission(request).await == super::acp_host::Decision::Deny {
+                return failed("Permission denied for read_file");
+            }
+            match resolve_sandboxed_path(root, &path).and_then(|p| std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))) {
+                Ok(content) => ToolOutcome { ok: true, content, data: None },
+                Err(error) => failed(error),
+            }
+        }
         "list_dir" => {
             let requested = Some(text("path")).filter(|p| !p.is_empty()).unwrap_or_else(|| ".".into());
+            let request = json!({ "toolCallId": call.id, "title": "Permission requested: list_dir", "name": "list_dir", "kind": "search", "rawInput": args });
+            if task.request_permission(request).await == super::acp_host::Decision::Deny {
+                return failed("Permission denied for list_dir");
+            }
             match resolve_sandboxed_path(root, &requested).and_then(|p| std::fs::read_dir(&p).map_err(|e| format!("{}: {e}", p.display()))) {
                 Ok(entries) => {
                     let mut names: Vec<String> = entries.flatten().map(|e| format!("{}{}", e.file_name().to_string_lossy(), if e.file_type().is_ok_and(|t| t.is_dir()) { "/" } else { "" })).collect();
@@ -476,7 +490,7 @@ fn sum(a: Option<u64>, b: Option<u64>) -> Option<u64> {
     if a.is_none() && b.is_none() { None } else { Some(a.unwrap_or(0) + b.unwrap_or(0)) }
 }
 
-fn usage_json(usage: &TokenUsage) -> Value {
+pub(super) fn usage_json(usage: &TokenUsage) -> Value {
     let mut value = json!({});
     for (key, field) in [("inputTokens", usage.input_tokens), ("outputTokens", usage.output_tokens), ("totalTokens", usage.total_tokens), ("reasoningTokens", usage.reasoning_tokens), ("cachedInputTokens", usage.cached_input_tokens)] {
         if let Some(n) = field {
@@ -951,4 +965,31 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
 #[allow(dead_code)]
 pub(super) fn report(task: &Task, message: String) {
     fail(task, message);
+}
+
+
+/// One no-tools completion (`runProviderPrompt`): a system prompt and a single user prompt, streamed
+/// and collected. Used by the Virtual Team assistant for text-only turns.
+pub(super) async fn run_provider_prompt(connection: &ApiConnection, model: &str, system: &str, prompt: &str, reasoning: Option<&str>, on_text: impl FnMut(&str)) -> std::result::Result<(String, TokenUsage), String> {
+    let wire_model = model.strip_prefix("Vercel/").unwrap_or(model).to_owned();
+    let messages = vec![WireMessage::text(WireRole::System, system.to_owned()), WireMessage::text(WireRole::User, prompt.to_owned())];
+    let body = match connection.wire {
+        Wire::OpenAi => {
+            let mut request = build_chat_request(&messages, &wire_model, &ChatRequestOptions { tools: Vec::new(), stream: true, ..ChatRequestOptions::default() }).body;
+            if !connection.stream_usage {
+                request.as_object_mut().map(|o| o.remove("stream_options"));
+            }
+            apply_openai_reasoning(&mut request, &wire_model, reasoning);
+            request
+        }
+        Wire::Anthropic => {
+            let mut request = anthropic_request_body(&messages, &wire_model, &AnthropicRequestOptions { tools: Vec::new(), reasoning_effort: parse_effort(reasoning), ..AnthropicRequestOptions::default() });
+            request["stream"] = json!(true);
+            request
+        }
+        Wire::Gemini => gemini_request_body(&messages, &GeminiRequestOptions { tools: Vec::new(), ..GeminiRequestOptions::default() }),
+    };
+    let sse = post_stream(connection, &wire_model, &body).await?;
+    let result = collect(connection, sse, on_text).await?;
+    Ok((result.text, result.usage))
 }

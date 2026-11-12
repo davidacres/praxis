@@ -1576,13 +1576,9 @@ fn assistant_chats_lifecycle() {
     let list = profile.rpc("assistant:listChats", vec![json!("proj-1")]);
     assert_eq!(list.as_array().expect("chats").len(), 1);
 
-    // 3. Save chat messages
-    let messages = json!([
-        { "id": "m-1", "role": "user", "content": "Hello team" },
-        { "id": "m-2", "role": "assistant", "personaId": "lead", "content": "Hello!" }
-    ]);
-    let saved = profile.rpc("assistant:saveChat", vec![json!(chat_id), messages]);
-    assert_eq!(saved["messages"].as_array().expect("msgs").len(), 2);
+    // 3. A durable conversation is written only through the coordinator, never by a whole-transcript save.
+    let refused = profile.try_rpc("assistant:saveChat", vec![json!(chat_id), json!([])]);
+    assert!(refused.is_err());
 
     // 4. Rename and archive
     let renamed = profile.rpc(
@@ -1768,7 +1764,7 @@ fn saved_conversation_reads_are_independent_of_catalog_errors_and_writer_lock() 
     fs::write(profile.root.join("projects.json"), "{broken-catalog")
         .expect("broken catalog fixture");
     fs::write(profile.root.join("ai-sessions.json"), json!({"praxis.agentSessions": {"SESSION-saved": {"issueKey": "SESSION-saved", "sessionId": "runtime-saved", "events": []}}}).to_string()).expect("session index");
-    fs::write(profile.root.join("team-chats.json"), json!({"schemaVersion": 2, "revision": 1, "conversations": [{"id": "saved-chat", "messages": []}], "teamChats": []}).to_string()).expect("chats");
+    fs::write(profile.root.join("team-chats.json"), json!({"schemaVersion": 2, "revision": 1, "activation": {"version": 1, "acceptedNewTurns": false}, "conversations": [durable_fixture("saved-chat", "")], "teamChats": []}).to_string()).expect("chats");
     let lock = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -1807,13 +1803,14 @@ fn saved_conversation_reads_are_independent_of_catalog_errors_and_writer_lock() 
 fn electron_durable_chats_preserve_activation_and_unknown_fields() {
     let profile = Profile::new();
     let file = profile.root.join("team-chats.json");
+    let mut existing = durable_fixture("chat-existing", "project-existing");
+    existing["revision"] = json!(12);
+    existing["commandReceipts"] = json!([]);
+    existing["futureField"] = json!(true);
+    existing["messages"] = json!([{"id": "m1", "role": "user", "text": "Saved question", "createdAt": "2026-11-01T00:00:00Z", "turnId": "legacy:m1", "sequence": 1, "attachments": []}]);
     let doc = json!({"schemaVersion": 2, "revision": 81, "teamChats": [],
         "activation": {"version": 1, "acceptedNewTurns": true}, "futureMetadata": {"keep": 42},
-        "conversations": [{"id": "chat-existing", "projectId": "project-existing", "title": "Existing team chat",
-            "createdAt": "2026-11-01T00:00:00Z", "updatedAt": "2026-11-02T00:00:00Z", "revision": 12,
-            "participants": [], "turns": [], "bindings": [], "summaries": [], "pinnedMessageIds": [],
-            "messages": [{"id": "m1", "role": "user", "text": "Saved question", "createdAt": "2026-11-01T00:00:00Z"}],
-            "commandReceipts": [{"commandId": "keep-this-receipt"}], "futureField": true}]});
+        "conversations": [existing]});
     fs::write(&file, doc.to_string()).expect("valid compatibility fixture");
     let before = fs::read(&file).expect("valid compatibility fixture");
     let list = profile.rpc("assistant:listChats", vec![json!("project-existing")]);
@@ -1823,12 +1820,12 @@ fn electron_durable_chats_preserve_activation_and_unknown_fields() {
         profile.rpc("assistant:listChats", vec![json!("other-project")]),
         json!([])
     );
+    // Listing never rewrites the file.
+    assert_eq!(fs::read(&file).expect("valid compatibility fixture"), before);
+    // Opening a conversation starts a coordinator epoch, which is a committed revision.
     let conversation = profile.rpc("assistant:getConversation", vec![json!("chat-existing")]);
-    assert_eq!(conversation, doc["conversations"][0]);
-    assert_eq!(
-        fs::read(&file).expect("valid compatibility fixture"),
-        before
-    );
+    assert_eq!(conversation["futureField"], true);
+    assert_eq!(conversation["messages"], doc["conversations"][0]["messages"]);
     profile.rpc(
         "assistant:renameChat",
         vec![json!("chat-existing"), json!("New title")],
@@ -1846,7 +1843,14 @@ fn electron_durable_chats_preserve_activation_and_unknown_fields() {
         saved["conversations"][0]["messages"],
         conversation["messages"]
     );
-    assert_eq!(saved["revision"], 82);
+    assert!(saved["revision"].as_i64().unwrap_or(0) > 81);
+    assert_eq!(saved["conversations"][0]["futureField"], true);
+}
+
+fn durable_fixture(id: &str, project: &str) -> Value {
+    json!({"id": id, "schemaVersion": 2, "revision": 0, "coordinatorEpoch": "fixture", "projectId": project, "title": "Existing team chat",
+        "createdAt": "2026-11-01T00:00:00Z", "updatedAt": "2026-11-02T00:00:00Z", "participants": [], "messages": [], "turns": [],
+        "bindings": [], "summaries": [], "pinnedMessageIds": [], "commandReceipts": []})
 }
 
 #[test]

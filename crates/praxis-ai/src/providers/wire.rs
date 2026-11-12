@@ -219,29 +219,6 @@ pub struct ChatRequest {
     pub body: serde_json::Value,
 }
 
-/// One message as OpenAI sends it. A message carrying images gets the multipart `content` array,
-/// the text part first and then one `image_url` data-URL part per attachment; any other message
-/// passes through unchanged.
-fn openai_message(message: &WireMessage) -> serde_json::Value {
-    let mut value = serde_json::to_value(message).unwrap_or(serde_json::Value::Null);
-    let images = message.images.as_deref().unwrap_or_default();
-    if images.is_empty() {
-        return value;
-    }
-    let mut parts: Vec<serde_json::Value> = Vec::new();
-    if let Some(text) = message.content.as_deref().filter(|text| !text.is_empty()) {
-        parts.push(serde_json::json!({ "type": "text", "text": text }));
-    }
-    for image in images {
-        parts.push(serde_json::json!({ "type": "image_url", "image_url": { "url": format!("data:{};base64,{}", image.mime_type, image.data_base64) } }));
-    }
-    if let Some(object) = value.as_object_mut() {
-        object.remove("images");
-        object.insert("content".to_string(), serde_json::Value::Array(parts));
-    }
-    value
-}
-
 /// Builds a chat-completion request.
 ///
 /// The body is the OpenAI-compatible shape every Praxis provider accepts, so
@@ -257,7 +234,10 @@ pub fn build_chat_request(
         "model".to_string(),
         serde_json::Value::String(model.to_string()),
     );
-    body.insert("messages".to_string(), serde_json::Value::Array(messages.iter().map(openai_message).collect()));
+    body.insert(
+        "messages".to_string(),
+        serde_json::Value::Array(messages.iter().map(openai_wire_message).collect()),
+    );
     if let Some(temperature) = options.temperature {
         body.insert("temperature".to_string(), serde_json::json!(temperature));
     }
@@ -305,6 +285,31 @@ pub fn build_chat_request(
         headers: vec![("Content-Type".to_string(), "application/json".to_string())],
         body: serde_json::Value::Object(body),
     }
+}
+
+/// `toOpenAiWireMessage`: a message with no images passes through unchanged; one carrying `images`
+/// gets OpenAI's multipart `content` array, the text part first and then one `image_url` data URL
+/// per attachment.
+fn openai_wire_message(message: &WireMessage) -> serde_json::Value {
+    let mut value = serde_json::to_value(message).unwrap_or(serde_json::Value::Null);
+    let Some(images) = message.images.as_ref().filter(|images| !images.is_empty()) else {
+        return value;
+    };
+    let mut parts = Vec::new();
+    if let Some(text) = message.content.as_deref().filter(|text| !text.is_empty()) {
+        parts.push(serde_json::json!({ "type": "text", "text": text }));
+    }
+    for image in images {
+        parts.push(serde_json::json!({
+            "type": "image_url",
+            "image_url": { "url": format!("data:{};base64,{}", image.mime_type, image.data_base64) }
+        }));
+    }
+    if let Some(object) = value.as_object_mut() {
+        object.remove("images");
+        object.insert("content".to_string(), serde_json::Value::Array(parts));
+    }
+    value
 }
 
 /// An assistant turn that calls tools.
