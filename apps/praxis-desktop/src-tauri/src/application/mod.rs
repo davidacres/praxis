@@ -1,5 +1,6 @@
 //! Rust desktop application adapters: ownership, stores and portable workspaces.
 mod activity;
+mod alibaba_usage;
 mod ai_browser;
 mod browser_mcp;
 mod agent_runtime;
@@ -379,6 +380,9 @@ const CHANNELS: &[&str] = &[
     "aiUsage:alibabaConsoleStatus",
     "aiUsage:alibabaConsoleSignIn",
     "aiUsage:alibabaConsoleSignOut",
+    // Used by the native sign-in window, never added to the renderer allowlist.
+    "aiUsage:alibabaConsoleTarget",
+    "aiUsage:alibabaConsoleStoreSession",
     "assistant:sessionTurn",
     "assistant:control",
     "assistant:cancelTurn",
@@ -531,6 +535,10 @@ impl Application {
         match channel {
             "ai:listSessions" | "ai:getSession" => {
                 return ai::dispatch(host, &host.config().user_data_dir, channel, args);
+            }
+            // A quota read is a network round trip to the vendor's console; it needs no profile data.
+            "aiUsage:providerSnapshot" | "aiUsage:providerSnapshots" => {
+                return ai_usage::dispatch(host, &host.config().user_data_dir, channel, args);
             }
             // These spawn a CLI agent or call a model endpoint and can run for many seconds when the
             // agent is unresponsive. Holding the profile lock for that long freezes every other

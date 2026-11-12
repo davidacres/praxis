@@ -252,6 +252,8 @@ mod tests {
         let child: Value = serde_json::from_str(include_str!("../capabilities/child-browsers.json")).expect("child");
         assert_eq!(child["local"], false);
         assert_eq!(child["permissions"], json!([]), "child browser webviews get no RPC permission");
+        assert!(child["windows"].as_array().expect("windows").iter().any(|w| w == crate::alibaba_window::WINDOW_LABEL), "the console sign-in window is a zero-permission child");
+        assert!(!main["windows"].as_array().expect("windows").iter().any(|w| w == crate::alibaba_window::WINDOW_LABEL));
     }
 
     #[test]

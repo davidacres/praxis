@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod alibaba_window;
 mod application;
 mod e2e_server;
 mod state;
@@ -138,6 +139,13 @@ async fn praxis_rpc(
                 .open_url(url, None::<&str>)
                 .map_err(shell_error)?;
             Ok(Value::Null)
+        }
+        "aiUsage:alibabaConsoleSignIn" => {
+            // The window is the shell's; the backend decides where it goes and keeps what it finds.
+            let provider = args.first().and_then(Value::as_str).ok_or_else(|| error("INVALID_ARGUMENT", "Provider required."))?.to_owned();
+            let target = invoke_host(state.host.clone(), "aiUsage:alibabaConsoleTarget".into(), vec![json!(provider)]).await?;
+            let cookies = alibaba_window::sign_in(window.app_handle(), &target).await?;
+            invoke_host(state.host.clone(), "aiUsage:alibabaConsoleStoreSession".into(), vec![json!(provider), json!(cookies)]).await
         }
         "workspaces:saveToFile" | "workspaces:openFromFile" => {
             let save = channel == "workspaces:saveToFile";
