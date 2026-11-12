@@ -15091,7 +15091,7 @@ button.session-chat-attachment {
 /* ── Project details sidebar (the pane-aux inspector) ─────────────────────
    One narrow column. Sections carry no surface of their own — they inherit
    whatever theme/material the pane behind them paints. */
-.project-home { height: 100%; overflow: auto; padding: 20px; color: var(--text); background: transparent; }
+.project-home { height: 100%; overflow: auto; padding: 20px 20px 72px; /* clear the floating assistant launcher so the last row stays clickable */ color: var(--text); background: transparent; }
 .project-home-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .project-home-icon-badge { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent); }
 .project-home-id { min-width: 0; flex: 1; }
