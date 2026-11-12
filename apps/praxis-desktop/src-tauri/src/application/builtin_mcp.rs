@@ -15,7 +15,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use praxis_ai::mcp::builtin::{
-    COORDINATION_MCP_SERVER_NAME, CoordinationHub, TrackerProvider, execute_coordination_tool, execute_tracker_tool, list_coordination_tools, list_tracker_tools,
+    COORDINATION_MCP_SERVER_NAME, TrackerProvider, execute_coordination_tool_with_hooks, execute_tracker_tool, list_coordination_tools, list_tracker_tools,
 };
 use praxis_ai::mcp::types::McpToolInfo;
 use praxis_host::HostContext;
@@ -30,7 +30,7 @@ const TRACKER_SERVER_NAME: &str = "praxis-tracker";
 #[derive(Clone)]
 enum Kind {
     Tracker { host: HostContext, connection_id: Option<String>, tool_mode: AgentToolMode },
-    Coordination,
+    Coordination { working_directory: std::path::PathBuf },
 }
 
 #[derive(Clone)]
@@ -52,11 +52,6 @@ struct Registry {
 fn registry() -> &'static Mutex<Registry> {
     static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
     REGISTRY.get_or_init(Default::default)
-}
-
-fn hub() -> &'static CoordinationHub {
-    static HUB: OnceLock<CoordinationHub> = OnceLock::new();
-    HUB.get_or_init(CoordinationHub::new)
 }
 
 fn lock() -> std::sync::MutexGuard<'static, Registry> {
@@ -130,7 +125,8 @@ pub(super) fn coordination_server(dir: &Path, issue_key: &str, working_directory
     if std::env::var("PRAXIS_COORDINATION").as_deref() == Ok("off") || tool_mode != "full" || working_directory.is_none_or(|w| w.trim().is_empty()) {
         return None;
     }
-    register(Session { kind: Kind::Coordination, issue_key: issue_key.to_owned(), dir: dir.to_path_buf() }, COORDINATION_MCP_SERVER_NAME).ok()
+    let working_directory = std::path::PathBuf::from(working_directory.unwrap_or_default());
+    register(Session { kind: Kind::Coordination { working_directory }, issue_key: issue_key.to_owned(), dir: dir.to_path_buf() }, COORDINATION_MCP_SERVER_NAME).ok()
 }
 
 // ── tracker backend over the host's own `issue:*` channels ───────────────
@@ -202,10 +198,10 @@ async fn call_tool(session: &Session, name: &str, args: &Value) -> (bool, String
                 Err(message) => (false, message),
             }
         }
-        Kind::Coordination => match execute_coordination_tool(name, args, &session.issue_key, hub()).await {
-            Ok(result) => (result.ok, result.content),
-            Err(message) => (false, message),
-        },
+        Kind::Coordination { working_directory } => {
+            let hooks = super::coordination::SessionHooks::new(&session.issue_key, working_directory);
+            execute_coordination_tool_with_hooks(name, args, &hooks).await
+        }
     }
 }
 
@@ -219,14 +215,14 @@ async fn respond(session: &Session, request: &Value) -> Option<Value> {
     Some(match method {
         "initialize" => {
             let version = request["params"]["protocolVersion"].as_str().unwrap_or("2025-03-26");
-            let name = if matches!(session.kind, Kind::Coordination) { COORDINATION_MCP_SERVER_NAME } else { TRACKER_SERVER_NAME };
+            let name = if matches!(session.kind, Kind::Coordination { .. }) { COORDINATION_MCP_SERVER_NAME } else { TRACKER_SERVER_NAME };
             json!({ "jsonrpc": "2.0", "id": id, "result": { "protocolVersion": version, "capabilities": { "tools": {} }, "serverInfo": { "name": name, "version": "1.0.0" } } })
         }
         "ping" => json!({ "jsonrpc": "2.0", "id": id, "result": {} }),
         "tools/list" => {
             let tools: Vec<Value> = match &session.kind {
                 Kind::Tracker { tool_mode, .. } => list_tracker_tools().iter().filter(|tool| *tool_mode != AgentToolMode::ReadOnly || !is_write_tool(&tool.name)).map(tool_json).collect(),
-                Kind::Coordination => list_coordination_tools().iter().map(tool_json).collect(),
+                Kind::Coordination { .. } => list_coordination_tools().iter().map(tool_json).collect(),
             };
             json!({ "jsonrpc": "2.0", "id": id, "result": { "tools": tools } })
         }

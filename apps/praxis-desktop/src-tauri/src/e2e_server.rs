@@ -75,6 +75,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // The launcher owns our lifetime: exit when stdin closes.
     let mut sink = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut sink);
+    crate::application::dispose();
     services.shutdown();
     runtime.shutdown_background();
     Ok(())

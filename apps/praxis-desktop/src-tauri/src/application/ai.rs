@@ -301,6 +301,8 @@ pub fn dispatch(
             let mut sessions = read_sessions(user_data_dir)?;
             sessions.remove(issue_key);
             save_sessions(user_data_dir, &sessions)?;
+            // The session leaves the broker (an executing claim waits for recovery).
+            super::coordination::end_coordinated_session(issue_key);
             host.events()
                 .emit("ai:sessionDeleted", Some(json!(issue_key)));
             Ok(Value::Null)

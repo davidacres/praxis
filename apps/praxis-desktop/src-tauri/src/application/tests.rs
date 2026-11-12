@@ -1091,8 +1091,9 @@ fn system_mobile_pairing_and_clear_data() {
     assert_eq!(update_status["state"], "unsupported");
 
     let coord_state = profile.rpc("coordination:state", vec![]);
-    assert_eq!(coord_state["role"], "follower");
-    assert!(coord_state["blockedReason"].is_string());
+    // This process joined the broker (a test's own, never the user's) and leads it.
+    assert_eq!(coord_state["role"], "leader");
+    assert!(coord_state["blockedReason"].is_null());
 
     // 6. Clear session data
     let clear_result = profile.rpc("settings:clearSessionData", vec![]);
@@ -1881,7 +1882,8 @@ fn session_support_snapshots_have_renderer_required_fields() {
     for key in ["claims", "waiters", "events"] {
         assert!(coordination["state"][key].is_array());
     }
-    assert!(coordination["blockedReason"].is_string());
+    assert!(coordination["blockedReason"].is_null());
+    assert_eq!(coordination["state"]["schemaVersion"], 1);
     let readiness = profile.rpc(
         "workflows:templateReadiness",
         vec![json!("project-existing")],
