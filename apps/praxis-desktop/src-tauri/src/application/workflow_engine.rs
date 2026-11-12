@@ -436,18 +436,38 @@ fn tail(output: &str) -> String {
     }
 }
 
-fn evidence_dir(host: &HostContext, run: &WorkflowRun, node_id: &str) -> PathBuf {
-    let attempt = run
-        .nodes
-        .get(node_id)
-        .map_or(1, |n| n.attempts.len().max(1));
-    host.config()
-        .user_data_dir
-        .join("workflow-evidence")
-        .join(&run.project_id)
-        .join(&run.run_id)
-        .join(node_id)
-        .join(format!("attempt-{attempt}"))
+async fn head_sha(cwd: &Path) -> Option<String> {
+    let sha = git(cwd, &["rev-parse", "HEAD"]).await.ok()?;
+    (sha.len() >= 7 && sha.chars().all(|c| c.is_ascii_hexdigit())).then_some(sha)
+}
+
+fn evidence_root(host: &HostContext) -> PathBuf {
+    host.config().user_data_dir.join("workflow-evidence")
+}
+
+fn evidence_attempt(run: &WorkflowRun, node_id: &str) -> usize {
+    run.nodes.get(node_id).map_or(1, |n| n.attempts.len().max(1))
+}
+
+/// Retains a node attempt's combined log as an evidence bundle; the stored file when there is one.
+fn retain_evidence(
+    host: &HostContext,
+    run: &WorkflowRun,
+    node_id: &str,
+    source_sha: Option<&str>,
+    captured: &super::workflow_evidence::Captured,
+) -> Result<Option<PathBuf>, String> {
+    super::workflow_evidence::write_log_bundle(
+        &evidence_root(host),
+        &super::workflow_evidence::EvidenceKey {
+            project_id: &run.project_id,
+            run_id: &run.run_id,
+            node_id,
+            attempt: evidence_attempt(run, node_id),
+        },
+        source_sha,
+        captured,
+    )
 }
 
 const PACKAGE_MANAGERS: [&str; 4] = ["npm", "pnpm", "yarn", "bun"];
@@ -553,10 +573,14 @@ impl HostDispatcher {
         };
         let mut log = format!("Initiating merge of branch {source} into {target}...\n");
         let evidence = |log: &str| {
-            let dir = evidence_dir(&self.host, run, &node.base.id);
-            if std::fs::create_dir_all(&dir).is_ok() {
-                let _ = std::fs::write(dir.join("combined.log"), log);
-            }
+            let (content, redacted) = super::workflow_evidence::redact(log);
+            let _ = retain_evidence(
+                &self.host,
+                run,
+                &node.base.id,
+                None,
+                &super::workflow_evidence::Captured { content: Some(content), missing_reason: None, redacted },
+            );
         };
         if git(&root, &["rev-parse", "--verify", &source]).await.is_err() {
             log.push_str(&format!("Source branch {source} was not found in the repository.\n"));
@@ -753,13 +777,30 @@ impl HostDispatcher {
 
         // Whatever the check emitted is evidence, even when it was stopped or timed out.
         let spawn_failed = result.code.is_none() && !result.timed_out && !context.cancel.is_cancelled();
-        let dir = evidence_dir(&self.host, &context.run, &node.base.id);
-        let log_path = dir.join("combined.log");
-        let persisted = !spawn_failed
-            && std::fs::create_dir_all(&dir).is_ok()
-            && std::fs::write(&log_path, &result.output).is_ok();
-        let artifacts: Vec<DeclaredArtifact> = if persisted {
-            node.outputs
+        // Redact before this becomes evidence at all, and before the tail below can land raw in a
+        // run's own error text: a check's output can echo a secret from the environment.
+        let (redacted_output, redacted) = super::workflow_evidence::redact(&result.output);
+        let source_sha = head_sha(&cwd).await;
+        let captured = if spawn_failed {
+            super::workflow_evidence::Captured {
+                content: None,
+                missing_reason: Some(
+                    result.error.clone().unwrap_or_else(|| format!("Could not start {}.", node.command)),
+                ),
+                redacted: false,
+            }
+        } else {
+            super::workflow_evidence::Captured {
+                content: Some(redacted_output.clone()),
+                missing_reason: None,
+                redacted,
+            }
+        };
+        let stored = retain_evidence(&self.host, &context.run, &node.base.id, source_sha.as_deref(), &captured);
+        let log_path = stored.as_ref().ok().cloned().flatten();
+        let artifacts: Vec<DeclaredArtifact> = match &log_path {
+            Some(log_path) => node
+                .outputs
                 .iter()
                 .map(|contract| DeclaredArtifact {
                     contract_id: contract.id.clone(),
@@ -768,9 +809,8 @@ impl HostDispatcher {
                     artifact_id: None,
                     reference: None,
                 })
-                .collect()
-        } else {
-            Vec::new()
+                .collect(),
+            None => Vec::new(),
         };
 
         let mut outcome = StageOutcome::default();
@@ -819,10 +859,10 @@ impl HostDispatcher {
         let code = result
             .code
             .map_or("without a code".to_string(), |c| c.to_string());
-        let body = if result.output.trim().is_empty() {
+        let body = if redacted_output.trim().is_empty() {
             ".".to_string()
         } else {
-            format!(":\n{}", tail(&result.output))
+            format!(":\n{}", tail(&redacted_output))
         };
         // A non-zero exit is usually the check's verdict. When the output shows the tool itself could
         // not do its job it is not: pause the run instead of failing it and spending the attempt.
@@ -830,7 +870,7 @@ impl HostDispatcher {
             command: &node.command,
             args: &args_list,
             exit_code: result.code,
-            output: &result.output,
+            output: &redacted_output,
             spawn_error: "",
         });
         let prefix = env_failure

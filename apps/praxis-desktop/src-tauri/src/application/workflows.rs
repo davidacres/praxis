@@ -2148,8 +2148,23 @@ pub fn archive_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     Ok(summarize(host, &run))
 }
 
-pub fn get_evidence(_host: &HostContext, _args: &[Value]) -> Result<Value> {
-    Ok(json!({ "expired": false }))
+pub fn get_evidence(host: &HostContext, args: &[Value]) -> Result<Value> {
+    let run_id = text(args, 0)?;
+    let node_id = text(args, 1)?;
+    let attempt = args.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
+    let Some(run) = stored_run(host, run_id) else {
+        return Ok(json!({ "expired": false }));
+    };
+    Ok(super::workflow_evidence::read_view(
+        &host.config().user_data_dir.join("workflow-evidence"),
+        &super::workflow_evidence::EvidenceKey {
+            project_id: &run.project_id,
+            run_id,
+            node_id,
+            attempt,
+        },
+        &run.project_id,
+    ))
 }
 
 pub fn start_diagnosis(_host: &HostContext, _args: &[Value]) -> Result<Value> {
