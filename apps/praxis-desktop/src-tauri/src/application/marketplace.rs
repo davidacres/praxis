@@ -562,6 +562,11 @@ pub fn workflow_templates(user_data_dir: &Path) -> Vec<Value> {
     storage(user_data_dir).workflow_templates()
 }
 
+/// True when a retired runtime-pin package is installed and launch must reconcile.
+pub fn has_retired_pins(user_data_dir: &Path) -> bool {
+    storage(user_data_dir).list().iter().any(|a| a.manifest.kind == AddonKind::Agent && is_retired_pin(&a.package_name))
+}
+
 /// Launch-time reconciliation: drop retired pin packages, then re-mirror agents and skills.
 pub fn reconcile_installed_on_launch(host: &HostContext, user_data_dir: &Path) {
     let store = storage(user_data_dir);

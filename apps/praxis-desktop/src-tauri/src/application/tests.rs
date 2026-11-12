@@ -647,7 +647,7 @@ fn log_bus_buffers_recent_lines_and_persists() {
     let reopened = Profile::open(&profile.root);
     let recent = invoke(&reopened, "log:getRecent", vec![]).expect("getRecent");
     let arr = recent.as_array().expect("array");
-    assert_eq!(arr.len(), 4);
+    assert_eq!(arr.len(), 4, "{arr:?}");
     assert_eq!(arr[0], "first log");
     assert_eq!(arr[1], "second log");
     assert_eq!(arr[2], "—— previous session above ——");
@@ -1332,13 +1332,30 @@ fn webviews_navigation_and_detached_chats() {
     let profile = Profile::new();
 
     // 1. Browser navigation and state
-    let nav = profile.rpc("browser:navigate", vec![json!("https://example.com/test")]);
+    let page = {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let url = format!("http://{}/test", listener.local_addr().expect("addr"));
+        std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut request = [0u8; 2048];
+                let _ = stream.read(&mut request);
+                let body = "<!doctype html><title>Test page</title><h1>Hello</h1>";
+                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            }
+        });
+        url
+    };
+    super::ai_browser::ALLOW_PRIVATE_IN_TESTS.store(true, std::sync::atomic::Ordering::SeqCst);
+    let nav = profile.rpc("browser:navigate", vec![json!(page)]);
+    super::ai_browser::ALLOW_PRIVATE_IN_TESTS.store(false, std::sync::atomic::Ordering::SeqCst);
     assert_eq!(nav["ok"], true);
-    assert_eq!(nav["url"], "https://example.com/test");
+    assert_eq!(nav["url"], page.as_str());
+    assert_eq!(nav["title"], "Test page");
 
     let state = profile.rpc("browser:getState", vec![]);
-    assert_eq!(state["url"], "https://example.com/test");
-    assert_eq!(state["isLoading"], false);
+    assert_eq!(state["url"], page.as_str());
+    assert_eq!(state["loading"], false);
 
     // Blocked browser navigation to private/loopback host
     let blocked_browser = invoke(

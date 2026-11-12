@@ -47,7 +47,15 @@ fn browser() -> &'static Mutex<Browser> {
     BROWSER.get_or_init(Default::default)
 }
 
+/// Unit tests point the browser at a local server without touching the process environment.
+#[cfg(test)]
+pub static ALLOW_PRIVATE_IN_TESTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn allow_private_hosts() -> bool {
+    #[cfg(test)]
+    if ALLOW_PRIVATE_IN_TESTS.load(std::sync::atomic::Ordering::SeqCst) {
+        return true;
+    }
     std::env::var("PRAXIS_BROWSER_ALLOW_LOOPBACK").as_deref() == Ok("1")
 }
 

@@ -493,10 +493,12 @@ impl Application {
             }
         });
         // Retired runtime-pin add-ons are uninstalled before anything reads the agent catalog.
-        let reconcile_host = host.clone();
-        std::thread::spawn(move || {
-            marketplace::reconcile_installed_on_launch(&reconcile_host, &reconcile_host.config().user_data_dir);
-        });
+        if marketplace::has_retired_pins(&host.config().user_data_dir) {
+            let reconcile_host = host.clone();
+            std::thread::spawn(move || {
+                marketplace::reconcile_installed_on_launch(&reconcile_host, &reconcile_host.config().user_data_dir);
+            });
+        }
         mobile_host::register_internal_channels(host, &application.mobile);
         application.mobile.init();
         for &channel in CHANNELS.iter().chain(std::iter::once(&"settings:set")) {

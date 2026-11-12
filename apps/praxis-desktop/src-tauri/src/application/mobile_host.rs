@@ -251,7 +251,7 @@ impl MobileHost {
                 if change.drop_connections {
                     self.rpc("mobile:applyPolicy", json!({ "policy": policy, "dropConnections": true }))?;
                 }
-            } else {
+            } else if change.listener.bound || change.drop_connections {
                 self.rpc("mobile:applyPolicy", json!({ "policy": policy, "dropConnections": change.drop_connections }))?;
             }
             Ok(())
