@@ -16,11 +16,25 @@ use state::DesktopState;
 
 /// Raises task notifications with the platform's notification centre.
 ///
-/// The desktop notification plugin reports no click on desktop platforms, so a click cannot be
-/// routed back here; `open` is what a click handler calls once one exists, and is exercised
-/// through the e2e server's recording shell.
+/// A click on a notification (`tap`) is reported by the plugin's `on_action` handler. Each shown
+/// notice is remembered under the id it was shown with, so the click finds its target; the handler
+/// then calls `Center::click`, whose `open` focuses the window and routes to the session. The e2e
+/// server's recording shell exercises the same `open` through its click endpoint.
 struct NativeNoticeShell {
     app: tauri::AppHandle,
+    shown: ShownNotices,
+}
+
+/// Notices shown and not yet clicked, by notification id (bounded: the oldest are forgotten).
+type ShownNotices = std::sync::Arc<
+    std::sync::Mutex<std::collections::BTreeMap<i32, application::task_notifications::Notice>>,
+>;
+
+const SHOWN_NOTICE_LIMIT: usize = 64;
+
+fn next_notice_id() -> i32 {
+    static NEXT: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) & i32::MAX
 }
 
 impl application::task_notifications::NoticeShell for NativeNoticeShell {
@@ -48,6 +62,14 @@ impl application::task_notifications::NoticeShell for NativeNoticeShell {
         if !silent {
             builder = builder.sound("default");
         }
+        let id = next_notice_id();
+        if let Ok(mut shown) = self.shown.lock() {
+            while shown.len() >= SHOWN_NOTICE_LIMIT {
+                shown.pop_first();
+            }
+            shown.insert(id, notice.clone());
+        }
+        builder = builder.id(id);
         if let Err(error) = builder.show() {
             eprintln!("Task notification could not be displayed: {error}");
         }
@@ -419,10 +441,32 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 window.set_zoom(state.host.settings().read().appearance.zoom_factor)?;
             }
-            application::task_notifications::install(
+            let shown = ShownNotices::default();
+            let center = application::task_notifications::install(
                 &state.host,
-                std::sync::Arc::new(NativeNoticeShell { app: app.handle().clone() }),
+                std::sync::Arc::new(NativeNoticeShell {
+                    app: app.handle().clone(),
+                    shown: std::sync::Arc::clone(&shown),
+                }),
             );
+            {
+                use tauri_plugin_notification::NotificationExt;
+                let registered = app.notification().on_action(move |performed| {
+                    if performed.action_id() != "tap" {
+                        return;
+                    }
+                    let notice = performed
+                        .notification()
+                        .map(|n| n.id())
+                        .and_then(|id| shown.lock().ok()?.remove(&id));
+                    if let Some(notice) = notice {
+                        center.click(&notice);
+                    }
+                });
+                if let Err(error) = registered {
+                    eprintln!("Task notification clicks are unavailable: {error}");
+                }
+            }
             app.manage(state);
             app.set_menu(tauri::menu::Menu::default(app.handle())?)?;
             if let Ok(dev_url) = std::env::var("PRAXIS_DEV_SERVER_URL")
