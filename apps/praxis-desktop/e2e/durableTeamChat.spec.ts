@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
 
 let app: TestApp | undefined;
@@ -97,7 +97,7 @@ test('subscription buffers a racing revision and discards responses after select
 test('unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply', async () => {
   mock = await startMockOpenAiCompatibleServer({ reply: 'Recovered answer' });
   app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
-  notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
+  await app!.callHost('assistant:e2eFault', { unknownOnce: true });
   const win = app.window;
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-input').fill('Recover this accepted message');
@@ -385,7 +385,7 @@ test('a storage write failure is shown and the accepted transcript remains', asy
   await expect(win.getByTestId('assistant-message-dev')).toContainText('First durable reply');
   const committed = fs.readFileSync(path.join(app.userDataDir, 'team-chats.json'), 'utf8');
   // Fail every team-chat temp-file write in main, the way a full disk does.
-  notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
+  await app!.callHost('assistant:e2eFault', { failCommits: 'ENOSPC: no space left on device, write' });
   await input.fill('Lost to a full disk');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByRole('alert')).toContainText('ENOSPC');
@@ -397,16 +397,16 @@ test('a storage write failure is shown and the accepted transcript remains', asy
   const artifact = path.resolve(__dirname, '../../../../.praxis/session-artifacts/fx-be-184-storage-failure.png');
   fs.mkdirSync(path.dirname(artifact), { recursive: true });
   await win.screenshot({ path: artifact });
-  notReproducible('restores the main-process fs.promises patch installed earlier');
+  await app!.callHost('assistant:e2eFault', { failCommits: null });
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-user')).toHaveText(['Before the disk filled', 'Lost to a full disk']);
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
   // Post-dispatch commit failure after the renderer has already loaded the attempt_running revision.
-  notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
+  await app!.callHost('assistant:e2eFault', { failCommitsAfterExecute: 'ENOSPC: completion write failed' });
   await input.fill('Halted on completion write');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByRole('alert')).toContainText('ENOSPC: completion write failed Restart Praxis to recover this team chat.');
-  notReproducible('restores the main-process fs.promises patch installed earlier');
+  await app!.callHost('assistant:e2eFault', { reset: true });
   await input.fill('Queued behind halted turn');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' })).toHaveCount(1);
@@ -561,7 +561,7 @@ test('queued page context and staged image reach the provider after navigation a
     const win = app.window;
     const id = await win.evaluate(() => window.praxis.assistant.createChat('').then(chat => chat.id));
     // Hold the first dispatch without using a timing assumption about provider speed.
-    notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
+    await app!.callHost('assistant:e2eFault', { holdDispatch: true });
     const original = await win.evaluate(async ({ id, folder }) => {
       const runtimeOptions = { provider: 'claude-code-cli' as const, toolMode: 'read-only' as const, workingDirectory: folder };
       const submit = async (text: string, attachmentRefs: import('@praxis/core').ConversationAttachment[] = [], context?: import('@praxis/core').SubmitConversationCommand['context']) => {
@@ -579,7 +579,7 @@ test('queued page context and staged image reach the provider after navigation a
     const queued = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
     expect(queued.turns[1].state).toBe('queued');
     await win.reload();
-    notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
+    await app!.callHost('assistant:e2eFault', { holdDispatch: false });
     await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns[1].state, id), { timeout: 20000 }).toBe('completed');
     const conversation = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
     const message = conversation.messages.find(message => message.id === conversation.turns[1].userMessageId)!;

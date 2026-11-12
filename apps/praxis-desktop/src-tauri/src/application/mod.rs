@@ -518,6 +518,13 @@ impl Application {
             });
         }
         mobile_host::register_internal_channels(host, &application.mobile);
+        // The e2e suite's stand-in for patching the adapter and the disk; unreachable in a shipped app.
+        if std::env::var("PRAXIS_E2E").as_deref() == Ok("1") {
+            host.register_handler("assistant:e2eFault", |_, args| {
+                team_chat::faults::control(args.first().unwrap_or(&Value::Null));
+                Ok(Value::Null)
+            });
+        }
         application.mobile.init();
         for &channel in CHANNELS.iter().chain(std::iter::once(&"settings:set")) {
             let application = Arc::clone(&application);

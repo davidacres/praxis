@@ -246,7 +246,7 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     acp_host::start_task(host, dir, StartTask {
         issue, task, provider, model: non_empty(&input, "model").map(str::to_owned), reasoning_effort: Some(reasoning),
         working_directory, tool_mode, auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"), permission_mode: Some(permission_mode),
-        command, args, mcp_servers,
+        command, args, mcp_servers, images: sanitize_images(input.get("images").unwrap_or(&Value::Null)),
     })?;
 
     finish_launch(dir, &key, &input, &prepared, &skill_names)

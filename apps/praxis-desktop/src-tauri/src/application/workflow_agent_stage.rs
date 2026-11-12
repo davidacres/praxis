@@ -776,6 +776,7 @@ fn launch(
                 command,
                 args: descriptor.default_args.clone(),
                 mcp_servers: Vec::new(),
+                images: Vec::new(),
             },
         )
         .map_err(|e| e.message)?;
