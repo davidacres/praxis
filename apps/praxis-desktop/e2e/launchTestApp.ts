@@ -407,11 +407,12 @@ export async function launchTestApp(
     }
   }
 
-  const openWindow = async (url?: string): Promise<Page> => {
+  const openWindow = async (url?: string, beforeNavigate?: (page: Page) => void): Promise<Page> => {
     const page = await context.newPage();
     page.on('console', message => {
       if (message.type() === 'error') console.log(`PAGE LOG [error]: ${message.text()}`);
     });
+    beforeNavigate?.(page);
     await page.goto(url ?? window.url());
     await page.waitForLoadState('domcontentloaded');
     return page;
@@ -455,11 +456,13 @@ export async function launchTestApp(
   await testApp.overrideChannel('detachedChat:open', async ([key], backend) => {
     const result = await backend.call('detachedChat:open', key);
     if (!detached.get(key) || detached.get(key)!.isClosed()) {
-      const page = await openWindow(detachedUrl(key));
-      detached.set(key, page);
-      page.once('close', () => {
-        // A window closed by the user (or the test) tells the backend, as the shell does.
-        if (detached.get(key) === page) { detached.delete(key); void callBackend('detachedChat:close', key).catch(() => undefined); }
+      // Registered before the page navigates: a window closed while it is still loading must
+      // still tell the backend, as the shell does.
+      await openWindow(detachedUrl(key), page => {
+        detached.set(key, page);
+        page.once('close', () => {
+          if (detached.get(key) === page) { detached.delete(key); void callBackend('detachedChat:close', key).catch(() => undefined); }
+        });
       });
     }
     return result;
