@@ -20,6 +20,7 @@ mod assistant;
 mod background_tasks;
 mod board_prefs;
 mod boards;
+pub mod browser_native;
 mod browser_mcp;
 mod builtin_mcp;
 mod connections;
