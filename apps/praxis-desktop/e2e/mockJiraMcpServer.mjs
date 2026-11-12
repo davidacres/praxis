@@ -412,6 +412,14 @@ const toolHandlers = {
     if (!projectKey || !summary || !issueType) {
       return errorResult('project_key, summary and issue_type are required.');
     }
+    let createExtra = {};
+    if (typeof args?.additional_fields === 'string' && args.additional_fields.length > 0) {
+      try {
+        createExtra = JSON.parse(args.additional_fields);
+      } catch {
+        createExtra = {};
+      }
+    }
     const created = {
       id: String(issues.length + 1),
       key: nextIssueKey(projectKey),
@@ -430,6 +438,9 @@ const toolHandlers = {
         comment: { comments: [] }
       }
     };
+    if (typeof createExtra.parent === 'string') {
+      applyParent(created, createExtra.parent);
+    }
     issues.push(created);
     return jsonResult(created);
   },
@@ -455,6 +466,27 @@ const toolHandlers = {
     }
     if (typeof parsedFields.description === 'string') {
       target.fields.description = parsedFields.description;
+    }
+    if (Object.prototype.hasOwnProperty.call(parsedFields, 'assignee')) {
+      const assignee = parsedFields.assignee;
+      target.fields.assignee = assignee?.name ? { displayName: assignee.name } : null;
+    }
+    let extra = {};
+    if (typeof args?.additional_fields === 'string' && args.additional_fields.length > 0) {
+      try {
+        extra = JSON.parse(args.additional_fields);
+      } catch {
+        extra = {};
+      }
+    }
+    if (extra.priority?.name) {
+      target.fields.priority = { name: extra.priority.name };
+    }
+    if (extra.issuetype?.name) {
+      target.fields.issuetype = { name: extra.issuetype.name };
+    }
+    if (Object.prototype.hasOwnProperty.call(extra, 'parent')) {
+      applyParent(target, extra.parent?.key);
     }
 
     target.fields.updated = new Date().toISOString();
@@ -522,6 +554,18 @@ const toolHandlers = {
   }
 };
 
+function applyParent(target, parentKey) {
+  const parent = parentKey ? issues.find(issue => issue.key === parentKey) : undefined;
+  if (parent) {
+    target.fields.parent = {
+      key: parent.key,
+      fields: { summary: parent.fields.summary, issuetype: parent.fields.issuetype }
+    };
+  } else {
+    delete target.fields.parent;
+  }
+}
+
 function statusCategoryFor(statusName) {
   switch (statusName) {
     case 'Done':
@@ -534,6 +578,81 @@ function statusCategoryFor(statusName) {
   }
 }
 
+// ── Official Atlassian surface ──────────────────────────────────────────────
+// `MOCK_JIRA_SURFACE=atlassian` (set by mockAtlassianMcpServer.mjs) swaps the community tool set for
+// the official remote server's: every call carries `cloudId`, issues are addressed by `issueIdOrKey`
+// and the write tools are createJiraIssue / editJiraIssue (no delete, as on the real server).
+
+const CLOUD_ID = 'mock-cloud-id';
+const ATLASSIAN_SURFACE = process.env.MOCK_JIRA_SURFACE === 'atlassian';
+const ATLASSIAN_CALLS = [];
+
+function requireCloud(args) {
+  return args?.cloudId === CLOUD_ID ? undefined : errorResult(`Unknown cloudId ${args?.cloudId}.`);
+}
+
+function atlassianArgs(args) {
+  // Shape the official arguments as the community handlers expect them.
+  return { ...args, issue_key: args?.issueIdOrKey };
+}
+
+const atlassianHandlers = {
+  getAccessibleAtlassianResources: () =>
+    jsonResult([{ id: CLOUD_ID, url: 'https://mock.atlassian.net', name: 'mock' }]),
+  getVisibleJiraProjects: args => requireCloud(args) ?? jsonResult({ values: PROJECTS }),
+  searchJiraIssuesUsingJql: args =>
+    requireCloud(args) ??
+    toolHandlers['atlassian-jira_search']({ jql: args.jql, limit: args.maxResults, start_at: 0 }),
+  getJiraIssue: args => requireCloud(args) ?? toolHandlers['atlassian-jira_get_issue'](atlassianArgs(args)),
+  getTransitionsForJiraIssue: args =>
+    requireCloud(args) ?? toolHandlers['atlassian-jira_get_transitions'](atlassianArgs(args)),
+  addCommentToJiraIssue: args =>
+    requireCloud(args) ??
+    toolHandlers['atlassian-jira_add_comment'](
+      { ...atlassianArgs(args), body: args.commentBody ?? args.body }
+    ),
+  createJiraIssue: args => {
+    const bad = requireCloud(args);
+    if (bad) return bad;
+    ATLASSIAN_CALLS.push({ tool: 'createJiraIssue', args });
+    return toolHandlers['atlassian-jira_create_issue']({
+      project_key: args.projectKey,
+      summary: args.summary,
+      issue_type: args.issueTypeName,
+      description: args.description,
+      additional_fields: args.parent ? JSON.stringify({ parent: args.parent }) : undefined
+    });
+  },
+  editJiraIssue: args => {
+    const bad = requireCloud(args);
+    if (bad) return bad;
+    ATLASSIAN_CALLS.push({ tool: 'editJiraIssue', args });
+    const fields = {};
+    const additional = {};
+    if (typeof args.summary === 'string') fields.summary = args.summary;
+    if (typeof args.description === 'string') fields.description = args.description;
+    if (Object.prototype.hasOwnProperty.call(args, 'assignee')) {
+      fields.assignee = args.assignee ? { name: args.assignee } : null;
+    }
+    if (typeof args.priority === 'string') additional.priority = { name: args.priority };
+    if (typeof args.issueTypeName === 'string') additional.issuetype = { name: args.issueTypeName };
+    if (Object.prototype.hasOwnProperty.call(args, 'parent')) {
+      additional.parent = args.parent ? { key: args.parent } : null;
+    }
+    return toolHandlers['atlassian-jira_update_issue']({
+      issue_key: args.issueIdOrKey,
+      fields: JSON.stringify(fields),
+      additional_fields: JSON.stringify(additional)
+    });
+  }
+};
+
+const ATLASSIAN_DESCRIPTORS = Object.keys(atlassianHandlers).map(name => ({
+  name,
+  description: `Mock official Atlassian tool ${name}.`,
+  inputSchema: { type: 'object', properties: {} }
+}));
+
 // ── Server wiring ────────────────────────────────────────────────────────────
 
 const server = new Server(
@@ -542,14 +661,14 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: TOOL_DESCRIPTORS
+  tools: ATLASSIAN_SURFACE ? ATLASSIAN_DESCRIPTORS : TOOL_DESCRIPTORS
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async request => {
   const name = request?.params?.name;
   const args = request?.params?.arguments ?? {};
 
-  const handler = toolHandlers[name];
+  const handler = ATLASSIAN_SURFACE ? atlassianHandlers[name] : toolHandlers[name];
   if (!handler) {
     return errorResult(`Unknown tool: ${name}`);
   }

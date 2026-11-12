@@ -74,6 +74,27 @@ fn folder_service(config: StaticFolderConfig) -> Arc<dyn IssueTrackerService> {
     service
 }
 
+/// The Jira service for a connection's configuration, kept across calls so one MCP session (and
+/// one stdio server process) serves a connection instead of one per call.
+fn jira_service(config: crate::jira_service::StaticJiraConfig) -> Arc<dyn IssueTrackerService> {
+    const MAX_KEPT: usize = 16;
+    type Kept = Vec<(String, Arc<crate::jira_service::JiraCloudService>)>;
+    static SERVICES: std::sync::Mutex<Kept> = std::sync::Mutex::new(Vec::new());
+    let key = serde_json::to_string(&config).unwrap_or_default();
+    let mut services = SERVICES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((_, service)) = services.iter().find(|(k, _)| *k == key) {
+        return service.clone();
+    }
+    let service = Arc::new(crate::jira_service::JiraCloudService::new(config));
+    if services.len() >= MAX_KEPT {
+        services.remove(0);
+    }
+    services.push((key, service.clone()));
+    service
+}
+
 #[must_use]
 pub fn resolve_tracker_service(input: &TrackerConnectionInput) -> Arc<dyn IssueTrackerService> {
     match input.mode {
@@ -94,7 +115,7 @@ pub fn resolve_tracker_service(input: &TrackerConnectionInput) -> Arc<dyn IssueT
         }
         BackendMode::Jiracloud => match input.jira_config.clone().filter(|cfg| cfg.is_configured())
         {
-            Some(cfg) => Arc::new(crate::jira_service::JiraCloudService::new(cfg)),
+            Some(cfg) => jira_service(cfg),
             None => Arc::new(StubBackendService::new(BackendMode::Jiracloud)),
         },
         other => Arc::new(StubBackendService::new(other)),
@@ -102,6 +123,8 @@ pub fn resolve_tracker_service(input: &TrackerConnectionInput) -> Arc<dyn IssueT
 }
 
 pub fn register_tracker_channels(host: &HostContext, runtime: &Handle) {
+    // MCP OAuth sign-ins persist through the host's secret store (the OS keychain).
+    crate::mcp_oauth_store::TokenVault::global().install_store(host.secrets().clone());
     let rt = runtime.clone();
     host.register_handler("tracker:checkConnection", move |_ctx, args| {
         let conn = parse_conn(args)?;

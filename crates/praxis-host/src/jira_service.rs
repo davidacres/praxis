@@ -4,9 +4,10 @@
 //! (`Authorization: Basic`) or an OAuth 2.1 authorization-code + PKCE loop.
 //!
 //! Scope of this port: connection check, projects, agile boards and their issues, search, issue
-//! details, comments and transitions on both the community and the official Atlassian tool
-//! surfaces. Creating, editing, deleting and attaching refuse with a message naming the gap rather
-//! than guessing at Jira's field payloads.
+//! details, comments, transitions, and creating, editing and deleting issues on both the community
+//! and the official Atlassian tool surfaces. Like the TS service, attaching and downloading files
+//! and creating/removing boards refuse with the TS wording (Jira MCP has no such tools); renaming
+//! a board writes through a [`JiraBoardSettings`] sink.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -21,6 +22,10 @@ use praxis_contracts::{
     IssueDetails, IssueFilters, IssueSummary, PagedIssues, ParentItemQueryOptions, Project,
     UpdateBoardInput, UpdateIssueInput, WorkflowTransition,
 };
+use praxis_core::issues::{
+    build_parent_validation_message, get_parent_rule, is_allowed_parent_type, is_parent_issue_type,
+    normalize_issue_type_label,
+};
 use praxis_trackers::jira::shape::{
     derive_browse_url, extract_array, normalize_comment, normalize_issue, normalize_project,
     normalize_transition,
@@ -31,6 +36,8 @@ use praxis_trackers::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+
+use crate::mcp_oauth_store::{OAuthTokens, StoredClient, StoredEndpoints, TokenVault, now_ms};
 
 const MIN_TIMEOUT_MS: u64 = 5000;
 const DEFAULT_SCOPE: &str = "read:jira-work write:jira-work read:jira-user offline_access";
@@ -81,6 +88,22 @@ pub struct StaticJiraConfig {
     pub timeout_ms: u64,
     #[serde(default)]
     pub default_page_size: usize,
+    /// The linked epic board's key, name override and the workspace JQL board's query and name
+    /// (`getJiraMcpEpicKey`, `getJiraMcpEpicBoardName`, `getJiraMcpBoardJql`, `getJiraMcpBoardName`).
+    #[serde(default)]
+    pub epic_key: String,
+    #[serde(default)]
+    pub epic_board_name: String,
+    #[serde(default)]
+    pub board_jql: String,
+    #[serde(default)]
+    pub board_name: String,
+}
+
+/// Where a renamed epic/JQL board is persisted (the TS `JiraConfigStore` setters).
+pub trait JiraBoardSettings: Send + Sync {
+    /// Stores one board setting: `epicBoardName`, `boardJql` or `boardName`.
+    fn set(&self, key: &str, value: &str) -> Result<(), String>;
 }
 
 impl StaticJiraConfig {
@@ -97,11 +120,6 @@ impl StaticJiraConfig {
 }
 
 // ── transports ───────────────────────────────────────────────────────────
-
-fn token_cache() -> &'static Mutex<BTreeMap<String, String>> {
-    static CACHE: OnceLock<Mutex<BTreeMap<String, String>>> = OnceLock::new();
-    CACHE.get_or_init(Default::default)
-}
 
 /// MCP session ids by connection, so the short-lived per-call services of one connection share
 /// one server-side session (a stateful server refuses a second `initialize`).
@@ -167,6 +185,18 @@ impl HttpSession {
         )
     }
 
+    /// The OAuth credential identity: the server URL, plus the pre-registered client id when one
+    /// is configured, so a BYO-client connection and a dynamically registered one to the same
+    /// server never share tokens (the TS provider's `secretKey`).
+    fn oauth_identity(&self) -> String {
+        let url = self.config.http_url.trim();
+        if self.config.oauth_client_id.is_empty() {
+            url.to_owned()
+        } else {
+            format!("{url}#{}", self.config.oauth_client_id)
+        }
+    }
+
     fn authorization(&self) -> Option<String> {
         match self.config.auth_method.as_str() {
             "api-token" if !self.config.api_token.is_empty() => Some(format!(
@@ -176,10 +206,9 @@ impl HttpSession {
                     self.config.api_email, self.config.api_token
                 ))
             )),
-            "oauth" => token_cache()
-                .lock()
-                .ok()
-                .and_then(|c| c.get(&self.cache_key()).map(|t| format!("Bearer {t}"))),
+            "oauth" => TokenVault::global()
+                .tokens(&self.oauth_identity())
+                .map(|t| format!("Bearer {}", t.access_token)),
             _ => None,
         }
     }
@@ -211,7 +240,21 @@ impl HttpSession {
         let id = self.next_id;
         self.next_id += 1;
         let body = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
+        if self.config.auth_method == "oauth"
+            && TokenVault::global()
+                .tokens(&self.oauth_identity())
+                .is_some_and(|t| t.needs_refresh(now_ms()))
+        {
+            // An access token that is expired or about to be is refreshed before it is used.
+            let _ = self.refresh_tokens().await;
+        }
         let mut response = self.post_raw(&body).await?;
+        if response.status().as_u16() == 401
+            && self.config.auth_method == "oauth"
+            && self.refresh_tokens().await
+        {
+            response = self.post_raw(&body).await?;
+        }
         if response.status().as_u16() == 401 && self.config.auth_method == "oauth" {
             let challenge = response
                 .headers()
@@ -292,6 +335,70 @@ impl HttpSession {
     }
 
     // ── OAuth 2.1: discovery, registration, PKCE authorisation, token grant ──
+
+    /// Exchanges the stored refresh token for a new access token. A refused refresh (the grant
+    /// was revoked or expired) drops the stored tokens so the caller falls through to a full
+    /// sign-in; a transport failure keeps them for the next attempt. Returns whether a usable
+    /// access token is now stored.
+    async fn refresh_tokens(&mut self) -> bool {
+        let identity = self.oauth_identity();
+        let vault = TokenVault::global();
+        let Some(current) = vault.tokens(&identity) else {
+            return false;
+        };
+        let Some(refresh_token) = current.refresh_token.clone() else {
+            return false;
+        };
+        let token_endpoint = if self.config.oauth_token_endpoint.is_empty() {
+            vault.endpoints(&identity).map(|e| e.token_endpoint)
+        } else {
+            Some(self.config.oauth_token_endpoint.clone())
+        };
+        let client_id = if self.config.oauth_client_id.is_empty() {
+            vault.client(&identity).map(|c| c.client_id)
+        } else {
+            Some(self.config.oauth_client_id.clone())
+        };
+        let (Some(token_endpoint), Some(client_id)) = (token_endpoint, client_id) else {
+            return false;
+        };
+        let mut form = vec![
+            ("grant_type", "refresh_token".to_owned()),
+            ("refresh_token", refresh_token.clone()),
+        ];
+        let mut request = self
+            .client
+            .post(&token_endpoint)
+            .timeout(self.config.timeout());
+        if self.config.oauth_client_secret.is_empty() {
+            form.push(("client_id", client_id));
+        } else {
+            request = request.header(
+                "Authorization",
+                format!(
+                    "Basic {}",
+                    base64::engine::general_purpose::STANDARD
+                        .encode(format!("{client_id}:{}", self.config.oauth_client_secret))
+                ),
+            );
+        }
+        let Ok(response) = request.form(&form).send().await else {
+            return false;
+        };
+        let status = response.status();
+        let body: Value = response.json().await.unwrap_or(Value::Null);
+        if status.is_success() {
+            if let Some(next) = OAuthTokens::from_response(&body, Some(&refresh_token), now_ms()) {
+                vault.save_tokens(&identity, &next);
+                return true;
+            }
+            return false;
+        }
+        if status.is_client_error() {
+            vault.clear_tokens(&identity);
+        }
+        false
+    }
 
     async fn get_json(&self, url: &str) -> Result<Value, String> {
         let response = self
@@ -528,6 +635,7 @@ impl HttpSession {
             .client
             .post(&token_endpoint)
             .timeout(self.config.timeout());
+        let stored_client_id = client_id.clone();
         if client_secret.is_empty() {
             form.push(("client_id", client_id));
         } else {
@@ -556,11 +664,28 @@ impl HttpSession {
                     .unwrap_or("token request refused")
             ));
         }
-        let access = token["access_token"]
-            .as_str()
+        let tokens = OAuthTokens::from_response(&token, None, now_ms())
             .ok_or("The token response had no access_token.")?;
-        if let Ok(mut cache) = token_cache().lock() {
-            cache.insert(self.cache_key(), access.to_owned());
+        let identity = self.oauth_identity();
+        let vault = TokenVault::global();
+        vault.save_tokens(&identity, &tokens);
+        // What a later refresh needs after a restart.
+        if self.config.oauth_client_id.is_empty() {
+            vault.save_client(
+                &identity,
+                &StoredClient {
+                    client_id: stored_client_id,
+                },
+            );
+        }
+        if self.config.oauth_token_endpoint.is_empty() {
+            vault.save_endpoints(
+                &identity,
+                &StoredEndpoints {
+                    authorization_endpoint,
+                    token_endpoint,
+                },
+            );
         }
         self.session_id = None;
         Ok(())
@@ -650,6 +775,7 @@ macro_rules! with_conn {
 pub struct JiraCloudService {
     config: StaticJiraConfig,
     state: tokio::sync::Mutex<Option<Connected>>,
+    board_settings: Option<Arc<dyn JiraBoardSettings>>,
 }
 
 impl JiraCloudService {
@@ -658,7 +784,15 @@ impl JiraCloudService {
         Self {
             config,
             state: tokio::sync::Mutex::new(None),
+            board_settings: None,
         }
+    }
+
+    /// Lets board renames persist (without it they report that settings cannot be saved).
+    #[must_use]
+    pub fn with_board_settings(mut self, settings: Arc<dyn JiraBoardSettings>) -> Self {
+        self.board_settings = Some(settings);
+        self
     }
 
     async fn connect(&self) -> Result<Connected, String> {
@@ -1040,6 +1174,194 @@ impl JiraCloudService {
             "{what} is not supported by the Jira desktop backend yet."
         ))
     }
+
+    /// The parent rules of the TS `validateParentSelection`, for the issue about to be written.
+    async fn validate_parent_selection(
+        &self,
+        project_key: &str,
+        issue_type: &str,
+        parent_key: Option<&str>,
+        current_issue_key: Option<&str>,
+    ) -> Result<(), String> {
+        let rule = get_parent_rule(Some(issue_type), BackendMode::Jiracloud);
+        let label = normalize_issue_type_label(Some(issue_type));
+        if !rule.can_have_parent {
+            return match parent_key {
+                Some(_) => Err(format!("{label} items cannot have a parent.")),
+                None => Ok(()),
+            };
+        }
+        let Some(parent_key) = parent_key else {
+            return if rule.requires_parent {
+                Err(format!(
+                    "{} is required for {label} items.",
+                    rule.default_label
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if current_issue_key == Some(parent_key) {
+            return Err("An item cannot be its own parent.".into());
+        }
+        let parent = self.get_issue(parent_key).await?;
+        if parent.summary.project_key != project_key {
+            return Err(format!(
+                "{} {parent_key} must be in the same project.",
+                rule.default_label
+            ));
+        }
+        if !is_allowed_parent_type(
+            Some(&parent.summary.issue_type),
+            Some(issue_type),
+            BackendMode::Jiracloud,
+        ) {
+            return Err(build_parent_validation_message(
+                Some(issue_type),
+                BackendMode::Jiracloud,
+                Some(&parent.summary.issue_type),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn create_issue_raw(
+        &self,
+        project_key: &str,
+        summary: &str,
+        description: Option<&str>,
+        parent_key: Option<&str>,
+        issue_type: &str,
+    ) -> Result<Value, String> {
+        let timeout = self.config.timeout();
+        with_conn!(self, |c| {
+            if c.adapter == Adapter::Atlassian {
+                let mut args = json!({
+                    "cloudId": resolve_cloud_id(c, timeout).await?,
+                    "projectKey": project_key,
+                    "issueTypeName": issue_type,
+                    "summary": summary,
+                });
+                if let Some(description) = description {
+                    args["description"] = json!(description);
+                }
+                if let Some(parent) = parent_key {
+                    args["parent"] = json!(parent);
+                }
+                let tool = require_tool(c, "createIssue")?;
+                return call_json(c, timeout, &tool, args).await;
+            }
+            let mut args = json!({
+                "project_key": project_key,
+                "summary": summary,
+                "issue_type": issue_type,
+            });
+            if let Some(description) = description {
+                args["description"] = json!(description);
+            }
+            if let Some(parent) = parent_key {
+                args["additional_fields"] = json!(json!({ "parent": parent }).to_string());
+            }
+            let tool = require_tool(c, "createIssue")?;
+            call_json(c, timeout, &tool, args).await
+        })
+    }
+
+    /// `updateIssueRaw`: `updates` holds Jira field shapes (`{name}` / `{key}` objects, or null).
+    async fn update_issue_raw(
+        &self,
+        issue_key: &str,
+        updates: serde_json::Map<String, Value>,
+    ) -> Result<(), String> {
+        let timeout = self.config.timeout();
+        let mut updates = updates;
+        with_conn!(self, |c| {
+            if c.adapter == Adapter::Atlassian {
+                let mut args = serde_json::Map::new();
+                args.insert("cloudId".into(), json!(resolve_cloud_id(c, timeout).await?));
+                args.insert("issueIdOrKey".into(), json!(issue_key));
+                if let Some(summary) = updates.remove("summary").filter(Value::is_string) {
+                    args.insert("summary".into(), summary);
+                }
+                if let Some(description) = updates.remove("description").filter(Value::is_string) {
+                    args.insert("description".into(), description);
+                }
+                if let Some(assignee) = updates.remove("assignee") {
+                    if let Some(name) = assignee["name"].as_str() {
+                        args.insert("assignee".into(), json!(name));
+                    } else if assignee.is_null() {
+                        args.insert("assignee".into(), Value::Null);
+                    }
+                }
+                if let Some(parent) = updates.remove("parent") {
+                    args.insert(
+                        "parent".into(),
+                        parent["key"].as_str().map_or(Value::Null, |k| json!(k)),
+                    );
+                }
+                if let Some(priority) = updates.remove("priority") {
+                    if let Some(name) = priority["name"].as_str() {
+                        args.insert("priority".into(), json!(name));
+                    }
+                }
+                if let Some(issuetype) = updates.remove("issuetype") {
+                    if let Some(name) = issuetype["name"].as_str() {
+                        args.insert("issueTypeName".into(), json!(name));
+                    }
+                }
+                if !updates.is_empty() {
+                    args.insert("fields".into(), Value::Object(updates.clone()));
+                }
+                let tool = require_tool(c, "updateIssue")?;
+                call_json(c, timeout, &tool, Value::Object(args)).await?;
+                return Ok(());
+            }
+            let mut fields = serde_json::Map::new();
+            let mut additional = serde_json::Map::new();
+            for (key, value) in updates.clone() {
+                if matches!(key.as_str(), "parent" | "priority" | "issuetype") {
+                    additional.insert(key, value);
+                } else {
+                    fields.insert(key, value);
+                }
+            }
+            let mut args = json!({
+                "issue_key": issue_key,
+                "fields": Value::Object(fields).to_string(),
+            });
+            if !additional.is_empty() {
+                args["additional_fields"] = json!(Value::Object(additional).to_string());
+            }
+            let tool = require_tool(c, "updateIssue")?;
+            call_json(c, timeout, &tool, args).await?;
+            Ok(())
+        })
+    }
+}
+
+/// The community tool for an operation, or the official Atlassian one when that surface is
+/// connected (`requireTool`).
+fn require_tool(connected: &Connected, operation: &str) -> Result<String, String> {
+    let (community, atlassian) = match operation {
+        "createIssue" => ("atlassian-jira_create_issue", "createJiraIssue"),
+        "updateIssue" => ("atlassian-jira_update_issue", "updateJiraIssue"),
+        "deleteIssue" => ("atlassian-jira_delete_issue", "deleteJiraIssue"),
+        other => return Err(format!("Unknown Jira operation {other}.")),
+    };
+    if connected.names.iter().any(|n| n == community) {
+        return Ok(community.to_owned());
+    }
+    if connected.adapter == Adapter::Atlassian {
+        if let Some(exposed) =
+            resolve_tool(&connected.names, &format!("{ATLASSIAN_PREFIX}{atlassian}"))
+        {
+            return Ok(exposed);
+        }
+    }
+    Err(format!(
+        "The connected Jira MCP server does not expose a tool for {operation}. \
+         Reconnect to a server that supports the required Jira tools."
+    ))
 }
 
 #[async_trait]
@@ -1296,16 +1618,58 @@ impl IssueTrackerService for JiraCloudService {
         Err("Creating boards is not supported in Jira MCP mode. Boards are derived from the linked epic or configured JQL query.".into())
     }
 
-    async fn update_board(
-        &self,
-        _board_id: &str,
-        _input: &UpdateBoardInput,
-    ) -> TrackerResult<Board> {
-        self.unsupported("Renaming Jira boards")
+    async fn update_board(&self, board_id: &str, input: &UpdateBoardInput) -> TrackerResult<Board> {
+        let name = input.name.as_deref().map(str::trim).unwrap_or_default();
+        let jql = input.jql.as_deref().map(str::trim);
+        if name.is_empty() {
+            return Err("Board name cannot be empty.".into());
+        }
+        let save = |key: &str, value: &str| -> Result<(), String> {
+            self.board_settings
+                .as_ref()
+                .ok_or_else(|| "Board settings cannot be saved by this host.".to_owned())?
+                .set(key, value)
+        };
+        if let Some(epic_key) = board_id.strip_prefix("epic:") {
+            if jql.is_some_and(|j| !j.is_empty()) {
+                return Err("Epic boards do not support a custom JQL query.".into());
+            }
+            if epic_key.is_empty() {
+                return Err("Invalid Jira MCP board identifier.".into());
+            }
+            let epic = self.get_issue(epic_key).await?;
+            save("epicBoardName", name)?;
+            let epic = epic.summary;
+            return serde_json::from_value(json!({
+                "id": board_id, "name": name, "type": "epic",
+                "projectKey": epic.project_key, "projectName": epic.project_name,
+                "locationName": epic.project_name, "raw": { "epicKey": epic.key },
+            }))
+            .map_err(|e| e.to_string());
+        }
+        if board_id == "jql:workspace" {
+            let board_jql = self.config.board_jql.trim();
+            if board_jql.is_empty() {
+                return Err("Jira MCP board query is not configured.".into());
+            }
+            if let Some(jql) = jql {
+                if jql.is_empty() {
+                    return Err("Board JQL cannot be empty.".into());
+                }
+                save("boardJql", jql)?;
+            }
+            save("boardName", name)?;
+            let effective = jql.filter(|j| !j.is_empty()).unwrap_or(board_jql);
+            return serde_json::from_value(json!({
+                "id": board_id, "name": name, "type": "jql", "raw": { "jql": effective },
+            }))
+            .map_err(|e| e.to_string());
+        }
+        Err("Boards cannot be edited in Jira MCP mode.".into())
     }
 
     async fn delete_board(&self, _board_id: &str) -> TrackerResult<()> {
-        self.unsupported("Removing Jira boards")
+        Err("Boards cannot be deleted in Jira MCP mode.".into())
     }
 
     async fn get_issue(&self, issue_key: &str) -> TrackerResult<IssueDetails> {
@@ -1368,24 +1732,134 @@ impl IssueTrackerService for JiraCloudService {
         })
     }
 
-    async fn create_issue(&self, _input: &CreateIssueInput) -> TrackerResult<IssueDetails> {
-        self.unsupported("Creating Jira issues")
+    async fn create_issue(&self, input: &CreateIssueInput) -> TrackerResult<IssueDetails> {
+        let issue_type = input.issue_type.trim();
+        if issue_type.is_empty() {
+            return Err("Issue type cannot be empty.".into());
+        }
+        let parent_key = input
+            .parent_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty());
+        self.validate_parent_selection(&input.project_key, issue_type, parent_key, None)
+            .await?;
+        let created = self
+            .create_issue_raw(
+                &input.project_key,
+                input.summary.trim(),
+                input.description.as_deref(),
+                parent_key,
+                issue_type,
+            )
+            .await?;
+        let created_key = created["key"]
+            .as_str()
+            .map(str::trim)
+            .filter(|k| !k.is_empty())
+            .ok_or("Jira MCP server did not return the created issue key.")?;
+        self.get_issue(created_key).await
     }
 
     async fn update_issue(
         &self,
-        _issue_key: &str,
-        _input: &UpdateIssueInput,
+        issue_key: &str,
+        input: &UpdateIssueInput,
     ) -> TrackerResult<IssueDetails> {
-        self.unsupported("Editing Jira issues")
+        let current = self.get_issue(issue_key).await?;
+        let has_parent_patch = input.parent_key.is_some();
+        let next_issue_type = input
+            .issue_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map_or_else(|| current.summary.issue_type.clone(), str::to_owned);
+        let next_parent_key = if has_parent_patch {
+            input
+                .parent_key
+                .clone()
+                .flatten()
+                .map(|p| p.trim().to_owned())
+                .filter(|p| !p.is_empty())
+        } else {
+            current.summary.parent_key.clone()
+        };
+        self.validate_parent_selection(
+            &current.summary.project_key,
+            &next_issue_type,
+            next_parent_key.as_deref(),
+            Some(issue_key),
+        )
+        .await?;
+
+        let mut updates = serde_json::Map::new();
+        if let Some(summary) = &input.summary {
+            let summary = summary.trim();
+            if summary.is_empty() {
+                return Err("Summary cannot be empty.".into());
+            }
+            updates.insert("summary".into(), json!(summary));
+        }
+        if let Some(description) = &input.description {
+            updates.insert("description".into(), json!(description));
+        }
+        if let Some(priority) = input
+            .priority
+            .as_deref()
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+        {
+            updates.insert("priority".into(), json!({ "name": priority }));
+        }
+        if let Some(issue_type) = input
+            .issue_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
+            updates.insert("issuetype".into(), json!({ "name": issue_type }));
+        }
+        if let Some(assignee) = &input.assignee {
+            let assignee = assignee.as_deref().map(str::trim).filter(|a| !a.is_empty());
+            updates.insert(
+                "assignee".into(),
+                assignee.map_or(Value::Null, |name| json!({ "name": name })),
+            );
+        }
+        if has_parent_patch {
+            let parent = if is_parent_issue_type(Some(&next_issue_type)) {
+                Value::Null
+            } else {
+                next_parent_key
+                    .as_deref()
+                    .map_or(Value::Null, |key| json!({ "key": key }))
+            };
+            updates.insert("parent".into(), parent);
+        }
+        self.update_issue_raw(issue_key, updates).await?;
+        self.get_issue(issue_key).await
     }
 
-    async fn delete_issue(&self, _issue_key: &str) -> TrackerResult<()> {
-        self.unsupported("Deleting Jira issues")
+    async fn delete_issue(&self, issue_key: &str) -> TrackerResult<()> {
+        let timeout = self.config.timeout();
+        with_conn!(self, |c| {
+            let args = if c.adapter == Adapter::Atlassian {
+                json!({ "cloudId": resolve_cloud_id(c, timeout).await?, "issueIdOrKey": issue_key })
+            } else {
+                json!({ "issue_key": issue_key })
+            };
+            let tool = require_tool(c, "deleteIssue")?;
+            call_json(c, timeout, &tool, args).await?;
+            Ok(())
+        })
     }
 
     async fn add_comment(&self, issue_key: &str, body: &str) -> TrackerResult<()> {
         let timeout = self.config.timeout();
+        let body = body.trim();
+        if body.is_empty() {
+            return Err("Comment cannot be empty.".into());
+        }
         with_conn!(self, |c| {
             if c.adapter == Adapter::Atlassian {
                 let tool = resolve_tool(
@@ -1406,7 +1880,7 @@ impl IssueTrackerService for JiraCloudService {
                     c,
                     timeout,
                     "atlassian-jira_add_comment",
-                    json!({ "issue_key": issue_key, "comment": body }),
+                    json!({ "issue_key": issue_key, "body": body }),
                 )
                 .await?;
             }
@@ -1420,7 +1894,8 @@ impl IssueTrackerService for JiraCloudService {
         _file_path: &str,
         _file_name: Option<&str>,
     ) -> TrackerResult<()> {
-        self.unsupported("Attaching files to Jira issues")
+        // The TS service refuses too: neither Jira MCP tool set uploads files.
+        Err("Attaching files is not supported over Jira MCP. Use a comment with the file contents or attach via the web UI.".into())
     }
 
     async fn download_attachment(
@@ -1429,7 +1904,7 @@ impl IssueTrackerService for JiraCloudService {
         _attachment: &IssueAttachment,
         _target_file_path: &str,
     ) -> TrackerResult<()> {
-        self.unsupported("Downloading Jira attachments")
+        Err("Downloading attachments is not supported over Jira MCP. Use the web UI to download attachments.".into())
     }
 
     async fn get_transitions(&self, issue_key: &str) -> TrackerResult<Vec<WorkflowTransition>> {
@@ -1507,6 +1982,7 @@ pub fn unconfigured() -> Arc<dyn IssueTrackerService> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -1590,5 +2066,370 @@ mod tests {
             .await
             .expect("issue");
         assert!(issue.transitions.is_some());
+    }
+
+    fn config_for(script_name: &str) -> Option<StaticJiraConfig> {
+        let mut config = mock_config()?;
+        let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/praxis-desktop/e2e")
+            .join(script_name);
+        config.stdio_args = vec![script.to_string_lossy().into_owned()];
+        Some(config)
+    }
+
+    fn create_input(parent: Option<&str>, issue_type: &str) -> CreateIssueInput {
+        CreateIssueInput {
+            project_key: "DEMO".into(),
+            issue_type: issue_type.into(),
+            summary: "  Brand new  ".into(),
+            description: Some("Body".into()),
+            parent_key: parent.map(str::to_owned),
+            ..CreateIssueInput::default()
+        }
+    }
+
+    /// The write operations behave the same on both tool sets, so one body runs against each.
+    async fn exercise_writes(service: &JiraCloudService, can_delete: bool) {
+        // create: parent validation first, then the tool call, then a re-read.
+        assert_eq!(
+            service
+                .create_issue(&create_input(None, " "))
+                .await
+                .unwrap_err(),
+            "Issue type cannot be empty."
+        );
+        let err = service
+            .create_issue(&create_input(Some("DEMO-2"), "Task"))
+            .await
+            .unwrap_err();
+        assert!(err.contains("Epic"), "{err}");
+        let created = service
+            .create_issue(&create_input(None, "Task"))
+            .await
+            .expect("create");
+        assert_eq!(created.summary.summary, "Brand new");
+        assert_eq!(created.summary.issue_type, "Task");
+        assert_eq!(created.summary.description.as_deref(), Some("Body"));
+        let key = created.summary.key.clone();
+
+        // edit: summary, description, priority, assignee, issue type.
+        let edited = service
+            .update_issue(
+                &key,
+                &UpdateIssueInput {
+                    summary: Some(" Renamed ".into()),
+                    description: Some("New body".into()),
+                    priority: Some("High".into()),
+                    assignee: Some(Some("Sam".into())),
+                    issue_type: Some("Story".into()),
+                    ..UpdateIssueInput::default()
+                },
+            )
+            .await
+            .expect("update");
+        assert_eq!(edited.summary.summary, "Renamed");
+        assert_eq!(edited.summary.description.as_deref(), Some("New body"));
+        assert_eq!(edited.summary.priority.as_deref(), Some("High"));
+        assert_eq!(edited.summary.assignee.as_deref(), Some("Sam"));
+        assert_eq!(edited.summary.issue_type, "Story");
+        // An explicit null clears the assignee.
+        let cleared = service
+            .update_issue(
+                &key,
+                &UpdateIssueInput {
+                    assignee: Some(None),
+                    ..UpdateIssueInput::default()
+                },
+            )
+            .await
+            .expect("clear assignee");
+        assert!(cleared.summary.assignee.is_none());
+        assert_eq!(
+            service
+                .update_issue(
+                    &key,
+                    &UpdateIssueInput {
+                        summary: Some("  ".into()),
+                        ..UpdateIssueInput::default()
+                    }
+                )
+                .await
+                .unwrap_err(),
+            "Summary cannot be empty."
+        );
+
+        // comments: trimmed, and an empty one is refused before any call.
+        service
+            .add_comment(&key, "  hello  ")
+            .await
+            .expect("comment");
+        let with_comment = service.get_issue(&key).await.expect("get");
+        assert_eq!(with_comment.comments.unwrap()[0].body, "hello");
+        assert_eq!(
+            service.add_comment(&key, "   ").await.unwrap_err(),
+            "Comment cannot be empty."
+        );
+
+        // delete
+        if can_delete {
+            service.delete_issue(&key).await.expect("delete");
+            assert!(service.get_issue(&key).await.is_err());
+        } else {
+            let err = service.delete_issue(&key).await.unwrap_err();
+            assert!(
+                err.contains("does not expose a tool for deleteIssue"),
+                "{err}"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn writes_issues_over_the_community_tool_set() {
+        let Some(config) = config_for("mockJiraMcpServer.mjs") else {
+            return;
+        };
+        let service = JiraCloudService::new(config);
+        exercise_writes(&service, true).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn writes_issues_over_the_official_atlassian_tool_set() {
+        let Some(config) = config_for("mockAtlassianMcpServer.mjs") else {
+            return;
+        };
+        let service = JiraCloudService::new(config);
+        exercise_writes(&service, false).await;
+        // The surface really was the official one.
+        assert!(
+            service
+                .state
+                .lock()
+                .await
+                .as_ref()
+                .is_some_and(|c| c.adapter == Adapter::Atlassian)
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn subtasks_need_a_parent_in_the_same_project() {
+        let Some(config) = config_for("mockJiraMcpServer.mjs") else {
+            return;
+        };
+        let service = JiraCloudService::new(config);
+        let err = service
+            .create_issue(&create_input(None, "Subtask"))
+            .await
+            .unwrap_err();
+        assert!(err.contains("is required"), "{err}");
+        let err = service
+            .update_issue(
+                "DEMO-1",
+                &UpdateIssueInput {
+                    parent_key: Some(Some("DEMO-1".into())),
+                    issue_type: Some("Subtask".into()),
+                    ..UpdateIssueInput::default()
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err, "An item cannot be its own parent.");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn attachments_and_board_removal_refuse_like_the_ts_service() {
+        let service = JiraCloudService::new(StaticJiraConfig::default());
+        assert!(
+            service
+                .attach_file("DEMO-1", "/tmp/x", None)
+                .await
+                .unwrap_err()
+                .starts_with("Attaching files is not supported over Jira MCP.")
+        );
+        assert_eq!(
+            service.delete_board("42").await.unwrap_err(),
+            "Boards cannot be deleted in Jira MCP mode."
+        );
+        assert_eq!(
+            service
+                .update_board(
+                    "42",
+                    &UpdateBoardInput {
+                        name: Some("x".into()),
+                        jql: None
+                    }
+                )
+                .await
+                .unwrap_err(),
+            "Boards cannot be edited in Jira MCP mode."
+        );
+        assert_eq!(
+            service
+                .update_board(
+                    "42",
+                    &UpdateBoardInput {
+                        name: Some(" ".into()),
+                        jql: None
+                    }
+                )
+                .await
+                .unwrap_err(),
+            "Board name cannot be empty."
+        );
+    }
+
+    #[derive(Default)]
+    struct Recorded(Mutex<Vec<(String, String)>>);
+    impl JiraBoardSettings for Recorded {
+        fn set(&self, key: &str, value: &str) -> Result<(), String> {
+            self.0.lock().unwrap().push((key.into(), value.into()));
+            Ok(())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn renames_the_workspace_jql_board_through_the_settings_sink() {
+        let sink = Arc::new(Recorded::default());
+        let config = StaticJiraConfig {
+            board_jql: "project = DEMO".into(),
+            ..StaticJiraConfig::default()
+        };
+        let service = JiraCloudService::new(config).with_board_settings(sink.clone());
+        let board = service
+            .update_board(
+                "jql:workspace",
+                &UpdateBoardInput {
+                    name: Some(" Mine ".into()),
+                    jql: Some("project = OTHER".into()),
+                },
+            )
+            .await
+            .expect("rename");
+        assert_eq!(board.name, "Mine");
+        assert_eq!(board.board_type, "jql");
+        assert_eq!(
+            *sink.0.lock().unwrap(),
+            vec![
+                ("boardJql".to_owned(), "project = OTHER".to_owned()),
+                ("boardName".to_owned(), "Mine".to_owned())
+            ]
+        );
+        let err = service
+            .update_board(
+                "epic:DEMO-1",
+                &UpdateBoardInput {
+                    name: Some("E".into()),
+                    jql: Some("x".into()),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err, "Epic boards do not support a custom JQL query.");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn renames_an_epic_board_after_reading_the_epic() {
+        let Some(config) = config_for("mockJiraMcpServer.mjs") else {
+            return;
+        };
+        let sink = Arc::new(Recorded::default());
+        let service = JiraCloudService::new(config).with_board_settings(sink.clone());
+        let board = service
+            .update_board(
+                "epic:DEMO-1",
+                &UpdateBoardInput {
+                    name: Some("Epic view".into()),
+                    jql: None,
+                },
+            )
+            .await
+            .expect("rename");
+        assert_eq!(board.board_type, "epic");
+        assert_eq!(board.project_key.as_deref(), Some("DEMO"));
+        assert_eq!(
+            *sink.0.lock().unwrap(),
+            vec![("epicBoardName".to_owned(), "Epic view".to_owned())]
+        );
+    }
+
+    /// An expired access token is refreshed with the stored refresh token, the rotated pair is
+    /// stored, and the request goes out with the new bearer.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn refreshes_an_expired_oauth_token_before_calling_the_server() {
+        use axum::{Router, extract::State, http::HeaderMap, routing::post};
+        #[derive(Clone, Default)]
+        struct Seen(Arc<Mutex<Vec<String>>>);
+        async fn mcp(
+            State(seen): State<Seen>,
+            headers: HeaderMap,
+            body: String,
+        ) -> axum::response::Response {
+            use axum::response::IntoResponse;
+            let auth = headers
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_owned();
+            seen.0.lock().unwrap().push(auth.clone());
+            if auth != "Bearer fresh-access" {
+                return axum::http::StatusCode::UNAUTHORIZED.into_response();
+            }
+            let request: Value = serde_json::from_str(&body).unwrap_or_default();
+            let result = match request["method"].as_str() {
+                Some("tools/list") => json!({ "tools": [{ "name": "atlassian-jira_search" }] }),
+                _ => json!({}),
+            };
+            axum::Json(json!({ "jsonrpc": "2.0", "id": request["id"], "result": result }))
+                .into_response()
+        }
+        async fn token(body: String) -> axum::response::Response {
+            use axum::response::IntoResponse;
+            assert!(body.contains("grant_type=refresh_token"), "{body}");
+            assert!(body.contains("refresh_token=old-refresh"), "{body}");
+            axum::Json(json!({ "access_token": "fresh-access", "refresh_token": "new-refresh", "expires_in": 3600 }))
+                .into_response()
+        }
+        let seen = Seen::default();
+        let app = Router::new()
+            .route("/mcp", post(mcp))
+            .route("/token", post(token))
+            .with_state(seen.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await });
+
+        let config = StaticJiraConfig {
+            http_url: format!("http://127.0.0.1:{port}/mcp"),
+            auth_method: "oauth".into(),
+            oauth_client_id: "client-1".into(),
+            oauth_token_endpoint: format!("http://127.0.0.1:{port}/token"),
+            timeout_ms: 10_000,
+            ..StaticJiraConfig::default()
+        };
+        let mut session = HttpSession::new(config);
+        let identity = session.oauth_identity();
+        TokenVault::global().save_tokens(
+            &identity,
+            &OAuthTokens {
+                access_token: "stale-access".into(),
+                refresh_token: Some("old-refresh".into()),
+                token_type: "Bearer".into(),
+                scope: None,
+                expires_at_ms: Some(1),
+            },
+        );
+        let listed = session
+            .request("tools/list", json!({}))
+            .await
+            .expect("listed");
+        assert_eq!(listed["tools"][0]["name"], "atlassian-jira_search");
+        // The stale token was never sent; the refreshed one was.
+        assert_eq!(
+            *seen.0.lock().unwrap(),
+            vec!["Bearer fresh-access".to_owned()]
+        );
+        let stored = TokenVault::global().tokens(&identity).unwrap();
+        assert_eq!(stored.access_token, "fresh-access");
+        assert_eq!(stored.refresh_token.as_deref(), Some("new-refresh"));
+        TokenVault::global().clear_all(&identity);
     }
 }
