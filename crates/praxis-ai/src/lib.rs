@@ -15,6 +15,7 @@ pub enum WireProtocolFamily {
 }
 
 pub mod acp;
+pub mod feedback;
 pub mod gadgets;
 pub mod mcp;
 pub mod providers;

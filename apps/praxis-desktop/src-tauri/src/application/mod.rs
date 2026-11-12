@@ -527,6 +527,12 @@ impl Application {
                     return result;
                 }
             }
+            // Prompt checks wait on a model, so scoring must not hold the profile lock either.
+            _ if ai_feedback::CHANNELS.contains(&channel) => {
+                if let Some(result) = ai_feedback::dispatch(host, &host.config().user_data_dir, channel, args) {
+                    return result;
+                }
+            }
             // Ticket reviews launch an agent and gadget answers call back into the tracker, so
             // neither may hold the profile lock.
             _ if ai_review::CHANNELS.contains(&channel) => {
