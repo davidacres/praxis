@@ -496,6 +496,12 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
             host, dir, &key, &tool_mode,
         ));
     }
+    mcp_servers.extend(super::code_intelligence::session_server(
+        host,
+        dir,
+        working_directory.as_deref(),
+        &provider,
+    ));
     mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
 
     acp_host::start_task(
@@ -1093,6 +1099,12 @@ pub(super) fn continue_with(
     ));
     mcp_servers.extend(super::browser_mcp::server_for_session(
         host, dir, key, &tool_mode,
+    ));
+    mcp_servers.extend(super::code_intelligence::session_server(
+        host,
+        dir,
+        record["workingDirectory"].as_str(),
+        &provider,
     ));
     mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
     acp_host::continue_task(

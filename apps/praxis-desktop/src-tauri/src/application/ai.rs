@@ -124,11 +124,21 @@ pub fn dispatch(
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
 
         // 2. Code intelligence & semantic model
-        "ai:codeIntelligence" => Ok(json!({ "results": [], "totalMatches": 0 })),
-        "ai:getSemanticModelStatus" => Ok(super::semantic_model::status(user_data_dir)),
-        "ai:downloadSemanticModel" => super::semantic_model::download(host, user_data_dir),
+        "ai:codeIntelligence" => Ok(super::code_intelligence::handle(host, user_data_dir, args)),
+        "ai:getSemanticModelStatus" => Ok(super::code_intelligence::semantic_status(
+            host,
+            user_data_dir,
+        )),
+        "ai:downloadSemanticModel" => {
+            super::semantic_model::download(host, user_data_dir)?;
+            super::code_intelligence::install_downloaded_model(host, user_data_dir)?;
+            Ok(super::semantic_model::status(user_data_dir))
+        }
         "ai:deleteSemanticModel" => Ok(super::semantic_model::delete(user_data_dir)),
-        "ai:resetCodeIntelligence" => Ok(Value::Null),
+        "ai:resetCodeIntelligence" => {
+            super::code_intelligence::reset(host, user_data_dir);
+            Ok(Value::Null)
+        }
 
         // 3. Sessions & conversations
         "ai:listSessions" => {

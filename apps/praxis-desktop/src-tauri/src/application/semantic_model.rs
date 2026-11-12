@@ -87,6 +87,20 @@ fn is_installed(dir: &Path) -> bool {
     installed["modelId"] == MODEL_ID && installed["revision"] == MODEL_REVISION
 }
 
+pub fn cached_fingerprint() -> Option<String> {
+    FINGERPRINT.lock().ok().and_then(|f| f.clone())
+}
+
+pub fn set_cached_fingerprint(fingerprint: &str) {
+    if let Ok(mut f) = FINGERPRINT.lock() {
+        *f = Some(fingerprint.to_owned());
+    }
+}
+
+pub fn is_model_installed(user_data_dir: &Path) -> bool {
+    is_installed(&model_directory(user_data_dir))
+}
+
 pub fn status(user_data_dir: &Path) -> Value {
     let dir = model_directory(user_data_dir);
     let installed = is_installed(&dir);

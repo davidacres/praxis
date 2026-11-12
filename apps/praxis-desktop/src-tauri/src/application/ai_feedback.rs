@@ -233,8 +233,25 @@ fn gather_hints(folder: &str) -> Option<WorkspaceHints> {
     })
 }
 
-/// Raw workspace facts for a folder, cached briefly because the composer asks on every typing pause.
-fn workspace_hints(folder: Option<&str>, _prompt: &str) -> Option<WorkspaceHints> {
+/// Raw workspace facts for a folder, cached briefly because the composer asks on every typing pause,
+/// plus exact-name lookups in the folder's code index for identifiers the prompt names (skipped
+/// silently when the index is off or absent).
+fn workspace_hints(
+    host: &HostContext,
+    folder: Option<&str>,
+    prompt: &str,
+) -> Option<WorkspaceHints> {
+    let mut hints = folder_hints(folder)?;
+    let names = praxis_ai::feedback::grounding::extract_prompt_identifiers(prompt);
+    if let Some(symbols) = super::code_intelligence::lookup_indexed_symbols(host, folder, &names)
+        && !symbols.is_empty()
+    {
+        hints.symbols = symbols;
+    }
+    Some(hints)
+}
+
+fn folder_hints(folder: Option<&str>) -> Option<WorkspaceHints> {
     #[allow(clippy::type_complexity)]
     static CACHE: OnceLock<Mutex<HashMap<String, (Instant, Option<WorkspaceHints>)>>> =
         OnceLock::new();
@@ -252,19 +269,9 @@ fn workspace_hints(folder: Option<&str>, _prompt: &str) -> Option<WorkspaceHints
     hints
 }
 
-/// Whether the folder's code intelligence is switched on (project override, else the global flag).
+/// Whether the folder's code intelligence is on (settings rule) and the service is installed.
 fn code_intelligence_enabled(host: &HostContext, folder: Option<&str>) -> bool {
-    let settings = host.settings().read();
-    let Some(config) = settings.ai.code_intelligence.as_ref() else {
-        return true;
-    };
-    let overridden = folder.and_then(|f| {
-        config
-            .project_overrides
-            .as_ref()
-            .and_then(|o| o.get(f).or_else(|| o.get(f.trim_end_matches('/'))))
-    });
-    overridden.copied().unwrap_or(config.enabled)
+    super::code_intelligence::is_enabled_for(host, folder)
 }
 
 // ── catalog ──────────────────────────────────────────────────────────────────────────────────
@@ -641,7 +648,7 @@ fn evaluate_prompt(host: &HostContext, dir: &Path, request: &Value) -> Result<Va
     let prompt = request["promptText"].as_str().unwrap_or_default();
     let working_directory = request["workingDirectory"].as_str();
     let catalog = catalog(host, dir);
-    let hints = workspace_hints(working_directory, prompt);
+    let hints = workspace_hints(host, working_directory, prompt);
     let clarity = assess_prompt(
         host,
         dir,
@@ -718,7 +725,7 @@ fn run_session_evaluation(
         .filter(|p| !p.is_empty())
         .or_else(|| record["workingDirectory"].as_str());
     let catalog = catalog(host, dir);
-    let hints = workspace_hints(folder, &goal_prompt);
+    let hints = workspace_hints(host, folder, &goal_prompt);
     let clarity = assess_prompt(host, dir, &goal_prompt, prior.as_ref(), true);
     let used_code_intelligence = events.iter().any(|e| {
         regex::Regex::new(r"(?i)code[_-]?intelligence|find_symbol|search_code")
