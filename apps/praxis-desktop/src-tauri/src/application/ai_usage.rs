@@ -4,13 +4,13 @@ use praxis_host::HostContext;
 use serde_json::{Value, json};
 
 use super::ai_usage_stats as stats;
+use super::cli_usage as cli;
 use super::{Result, failure, now, text};
 
 const USAGE_SECRET_PREFIX: &str = "ai-usage:";
 
 /// Mirrors the Electron `providerSnapshot` fallthrough: a provider with no account-usage adapter
-/// reports `not-supported` with this reason. The CLI quota adapters (Codex, Claude Code) are not
-/// ported, so they land here too, honestly, rather than inventing windows.
+/// reports `not-supported` with this reason.
 fn default_provider_snapshot(host: &HostContext, provider: &str) -> Value {
     if provider == "openai" {
         let has_key = std::env::var("OPENAI_ADMIN_KEY").is_ok_and(|v| !v.is_empty())
@@ -59,13 +59,51 @@ fn enabled_usage_providers(host: &HostContext) -> Vec<String> {
     out
 }
 
-/// One provider's account usage: a saved Alibaba Coding Plan endpoint reads its quota through the
-/// console session; every other provider has no usage connection in this build.
-fn snapshot_for(host: &HostContext, provider: &str) -> Value {
-    match super::alibaba_usage::endpoint_base_url(host, provider) {
-        Some(base_url) => super::alibaba_usage::usage_snapshot(host, provider, &base_url),
-        None => default_provider_snapshot(host, provider),
+/// One provider's account usage: the Codex and Claude Code CLIs report their plan windows, a saved
+/// Alibaba Coding Plan endpoint reads its quota through the console session; every other provider
+/// has no usage connection in this build.
+fn snapshot_for(host: &HostContext, user_data_dir: &Path, provider: &str) -> Value {
+    match provider {
+        cli::CODEX => cli::codex_snapshot(),
+        cli::CLAUDE => {
+            let records = super::session_store::store(user_data_dir)
+                .all()
+                .map(|all| all.into_values().collect::<Vec<_>>())
+                .unwrap_or_default();
+            cli::claude_snapshot(&cli::native_home(), &cli::claude_limit_errors(records))
+        }
+        _ => match super::alibaba_usage::endpoint_base_url(host, provider) {
+            Some(base_url) => super::alibaba_usage::usage_snapshot(host, provider, &base_url),
+            None => default_provider_snapshot(host, provider),
+        },
     }
+}
+
+/// Cumulative tokens for the two CLIs, labelled with how far to trust them.
+fn cli_history(provider: &str) -> Option<Value> {
+    let (source, note, tokens) = match provider {
+        cli::CLAUDE => (
+            "local-cli",
+            "Local Claude Code statistics on this device only; input and output tokens, excluding cache tokens. Not complete account history.",
+            cli::claude_local_tokens(&cli::native_home()),
+        ),
+        cli::CODEX => (
+            "provider-summary",
+            "CLI-reported cumulative summary. The CLI does not establish the date range or coverage across devices.",
+            cli::codex_lifetime_tokens(),
+        ),
+        _ => return None,
+    };
+    let mut history =
+        json!({ "provider": provider, "fetchedAt": now(), "source": source, "note": note });
+    match tokens {
+        Some(total) => history["totalTokens"] = json!(total),
+        None => {
+            history["unavailableReason"] =
+                json!("No cumulative token summary is available from this CLI.");
+        }
+    }
+    Some(history)
 }
 
 fn console_status(host: &HostContext, provider: &str) -> Value {
@@ -125,10 +163,13 @@ pub fn dispatch(
         }
         "aiUsage:providerSnapshot" => {
             let provider = text(args, 0)?;
-            Ok(snapshot_for(host, provider))
+            Ok(snapshot_for(host, user_data_dir, provider))
         }
         "aiUsage:providerHistory" => {
             let provider = text(args, 0)?;
+            if let Some(history) = cli_history(provider) {
+                return Ok(history);
+            }
             Ok(json!({
                 "provider": provider,
                 "fetchedAt": now(),
@@ -144,7 +185,24 @@ pub fn dispatch(
             } else {
                 enabled_usage_providers(host)
             };
-            let snapshots: Vec<Value> = providers.iter().map(|p| snapshot_for(host, p)).collect();
+            // Each CLI read spawns a process with its own timeout; read them side by side.
+            let snapshots: Vec<Value> = std::thread::scope(|scope| {
+                let reads: Vec<_> = providers
+                    .iter()
+                    .map(|p| scope.spawn(|| snapshot_for(host, user_data_dir, p)))
+                    .collect();
+                reads
+                    .into_iter()
+                    .zip(&providers)
+                    .map(|(read, p)| {
+                        read.join().unwrap_or_else(|_| {
+                            json!({ "provider": p, "fetchedAt": now(), "windows": [],
+                                "unavailableReason": "The usage read failed unexpectedly.",
+                                "unavailableReasonCode": "fetch-failed" })
+                        })
+                    })
+                    .collect()
+            });
             Ok(json!({"snapshots": snapshots, "checkedAt": now()}))
         }
         "aiUsage:setProviderUsageKey" => {
