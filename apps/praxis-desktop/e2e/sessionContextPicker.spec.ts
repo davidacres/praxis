@@ -28,10 +28,11 @@ test('composer plus adds real folder, session and ticket context to a follow-up'
         starterTickets: [{ summary: 'Recovery acceptance criteria', description: 'Unique ticket evidence: recover interrupted sessions without replaying completed actions.', issueType: 'Task', status: 'Todo' }],
         workflowStages: [{ id: 'todo', name: 'Todo', category: 'todo' }, { id: 'done', name: 'Done', category: 'done' }], defaultAiToolMode: 'read-only' }, workspace.id);
     });
-    await app.electronApp.evaluate(({ ipcMain }, paths) => {
+    {
+      const paths = [folder, otherFolder, folder];
       let call = 0;
-      ipcMain.removeHandler('dialog:pickFolder'); ipcMain.handle('dialog:pickFolder', () => paths[Math.min(call++, paths.length - 1)]);
-    }, [folder, otherFolder, folder]);
+      await app.overrideChannel('dialog:pickFolder', () => paths[Math.min(call++, paths.length - 1)]);
+    }
     await page.reload(); await dismissSplash(page);
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Go to' });

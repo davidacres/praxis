@@ -8,15 +8,13 @@ test('provider history stays separate, handles keys, coverage, zero and unavaila
   test.slow();
   const app = await launchTestApp({ ai: { providers: { openai: { added: true }, anthropic: { added: true } } } });
   try {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('aiUsage:providerHistory');
-      ipcMain.removeHandler('aiUsage:setProviderUsageKey');
+    {
       const keys: Record<string, string> = {};
-      ipcMain.handle('aiUsage:setProviderUsageKey', (_event, provider, key) => {
+      await app.overrideChannel('aiUsage:setProviderUsageKey', ([provider, key]) => {
         if (key === 'reject-key') throw new Error('Test keychain rejected save');
         keys[provider] = key;
       });
-      ipcMain.handle('aiUsage:providerHistory', (_event, provider) => ({
+      await app.overrideChannel('aiUsage:providerHistory', ([provider]) => ({
         provider, fetchedAt: '2026-10-13T12:00:00Z', source: provider === 'claude-code-cli' ? 'local-cli' : 'provider-api',
         totalTokens: provider === 'anthropic' ? 0 : 123456,
         requestedFrom: provider === 'openai' ? '2020-01-01T00:00:00Z' : undefined,
@@ -25,7 +23,7 @@ test('provider history stays separate, handles keys, coverage, zero and unavaila
         note: provider === 'claude-code-cli' ? 'Local statistics on this device only.' : 'Provider retention can limit coverage.',
         unavailableReason: provider === 'codex-cli' ? 'No cumulative token summary is available from this CLI.' : (provider === 'openai' || provider === 'anthropic') && !keys[provider] ? 'Add an organization Admin API key.' : undefined
       }));
-    });
+    }
     const win = app.window;
     await win.keyboard.press('ControlOrMeta+k');
     const palette = win.getByRole('dialog', { name: 'Go to' });

@@ -61,9 +61,10 @@ async function launchWithStates(): Promise<{ page: Page; records: Record<string,
   const stored = Object.fromEntries(records.map(record => [record.issueKey, { ...record, state: record.state === 'failed' ? 'failed' : 'completed', completedAt: record.startedAt }]));
   fs.writeFileSync(path.join(userDataDir, 'ai-sessions.json'), JSON.stringify({ 'praxis.agentSessions': stored }));
   app = await launchTestApp(undefined, { userDataDir, settingsPath: path.join(userDataDir, 'settings.json') }, undefined, { openNewSession: false });
-  await app.electronApp.evaluate(({ BrowserWindow }, live) => {
-    for (const record of live) for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', record);
-  }, records);
+  {
+    const live = records;
+    for (const record of live) await app.emitEvent('ai:sessionChanged', record);
+  }
   const page = app.window;
   await page.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
   await page.keyboard.press('Escape');
@@ -71,16 +72,14 @@ async function launchWithStates(): Promise<{ page: Page; records: Record<string,
   return { page, records };
 }
 
-/** Replaces a main-process handler with one that records its arguments. */
+/** Replaces a backend channel with a stand-in that records its arguments. */
+const recordedCalls = new Map<string, unknown[][]>();
 async function recordIpc(channel: string): Promise<void> {
-  await app!.electronApp.evaluate(({ ipcMain }, name) => {
-    const calls: unknown[][] = [];
-    (globalThis as Record<string, unknown>)[`__calls:${name}`] = calls;
-    ipcMain.removeHandler(name);
-    ipcMain.handle(name, (_event, ...args) => { calls.push(args); });
-  }, channel);
+  const calls: unknown[][] = [];
+  recordedCalls.set(channel, calls);
+  await app!.overrideChannel(channel, args => { calls.push(args); });
 }
-const ipcCalls = (channel: string) => app!.electronApp.evaluate((_electron, name) => (globalThis as Record<string, unknown>)[`__calls:${name}`] as unknown[][], channel);
+const ipcCalls = async (channel: string) => recordedCalls.get(channel) as unknown[][];
 
 test('each spine draws its session\'s state, with a cap only where you are needed', async () => {
   test.slow();

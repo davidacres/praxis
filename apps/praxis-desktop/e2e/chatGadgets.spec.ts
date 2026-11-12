@@ -408,7 +408,7 @@ test('HTML artifacts open in an isolated in-app preview', async () => {
   );
 
   const appInstance = app!;
-  const previewReady = appInstance.electronApp.waitForEvent('window');
+  const previewReady = appInstance.window.context().waitForEvent('page');
   await win.locator('[data-testid="gadget-artifact-html-preview"]').click();
   const preview = await previewReady;
   await expect(preview.locator('[data-variant="Automation-like"] h2')).toHaveText('Sessions');

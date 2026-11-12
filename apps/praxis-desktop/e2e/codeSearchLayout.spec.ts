@@ -17,11 +17,26 @@ const symbol = (id: string, qualifiedName: string, signature: string, kind: stri
 
 async function openWithStub(): Promise<Page> {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }, fixtures) => {
+  {
+    const fixtures = {
+    matches: [
+      { symbol: symbol('pci:sym:a', 'App.A', 'class A', 'type', ['pci:ev:a']), reasons: ['lexical', 'exact'] },
+      { symbol: symbol('pci:sym:long', 'App.Billing.Invoices.Calculation.InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding', 'public decimal InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding.CalculateGrandTotalIncludingAllApplicableRegionalTaxes(Invoice invoice, Region region, RoundingMode rounding)', 'method', ['pci:ev:long']), reasons: ['lexical', 'vector'] },
+      { symbol: symbol('pci:sym:noloc', 'App.Generated.Unlocated', 'void Unlocated()', 'method'), reasons: ['vector'] },
+      { symbol: symbol('pci:sym:ext', 'System.String.Concat', 'string string.Concat(string, string)', 'method', [], true), reasons: ['lexical'] },
+      { symbol: symbol('pci:sym:short', 'App.Run', '', 'function', ['pci:ev:short']), reasons: ['vector'] },
+      { symbol: symbol('pci:sym:top', 'main/src/main/semanticModelDownload.ts [synthetic top-level entry]', '[synthetic top-level entry]', 'method', ['pci:ev:top']), reasons: ['vector'] }
+    ],
+    evidence: [
+      { id: 'pci:ev:a', path: 'src/A.cs', range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } } },
+      { id: 'pci:ev:long', path: 'src/Billing/Invoices/Calculation/InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding.cs', range: { start: { line: 120, character: 4 }, end: { line: 180, character: 5 } } },
+      { id: 'pci:ev:top', path: 'main/src/main/semanticModelDownload.ts', range: { start: { line: 0, character: 0 }, end: { line: 40, character: 0 } } },
+      { id: 'pci:ev:short', path: 'Run.ts', range: { start: { line: 9, character: 0 }, end: { line: 9, character: 20 } } }
+    ]
+  };
     const searches: Array<{ mode: string; query: string }> = [];
-    (globalThis as Record<string, unknown>).codeSearchRequests = searches;
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    codeSearchRequests = searches;
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') return { data: [{ id: 'pci:repo:layout', root: '/test/layout', state: 'ready', generation: 1 }] };
       if (request.action === 'query' && request.tool === 'search_code') {
         const args = request.arguments as { mode: string; query: string };
@@ -41,29 +56,19 @@ async function openWithStub(): Promise<Page> {
       if (request.action === 'query') return { data: { fragments: [], items: [] }, evidence: [] };
       return { data: {} };
     });
-  }, {
-    matches: [
-      { symbol: symbol('pci:sym:a', 'App.A', 'class A', 'type', ['pci:ev:a']), reasons: ['lexical', 'exact'] },
-      { symbol: symbol('pci:sym:long', 'App.Billing.Invoices.Calculation.InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding', 'public decimal InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding.CalculateGrandTotalIncludingAllApplicableRegionalTaxes(Invoice invoice, Region region, RoundingMode rounding)', 'method', ['pci:ev:long']), reasons: ['lexical', 'vector'] },
-      { symbol: symbol('pci:sym:noloc', 'App.Generated.Unlocated', 'void Unlocated()', 'method'), reasons: ['vector'] },
-      { symbol: symbol('pci:sym:ext', 'System.String.Concat', 'string string.Concat(string, string)', 'method', [], true), reasons: ['lexical'] },
-      { symbol: symbol('pci:sym:short', 'App.Run', '', 'function', ['pci:ev:short']), reasons: ['vector'] },
-      { symbol: symbol('pci:sym:top', 'main/src/main/semanticModelDownload.ts [synthetic top-level entry]', '[synthetic top-level entry]', 'method', ['pci:ev:top']), reasons: ['vector'] }
-    ],
-    evidence: [
-      { id: 'pci:ev:a', path: 'src/A.cs', range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } } },
-      { id: 'pci:ev:long', path: 'src/Billing/Invoices/Calculation/InvoiceTotalsCalculatorWithRegionalTaxRulesAndRounding.cs', range: { start: { line: 120, character: 4 }, end: { line: 180, character: 5 } } },
-      { id: 'pci:ev:top', path: 'main/src/main/semanticModelDownload.ts', range: { start: { line: 0, character: 0 }, end: { line: 40, character: 0 } } },
-      { id: 'pci:ev:short', path: 'Run.ts', range: { start: { line: 9, character: 0 }, end: { line: 9, character: 20 } } }
-    ]
-  });
+  }
   const win = app.window;
   await win.keyboard.press('ControlOrMeta+Shift+F');
   await expect(win.getByTestId('code-search-dialog')).toBeVisible();
   return win;
 }
 
-const searchCount = (win: Page) => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).codeSearchRequests as unknown[]).length);
+/** Stand-in service state, kept in the test process (it was on globalThis of the Electron main process). */
+let codeSearchRequests: Array<{ mode: string; query: string }>;
+let modelState: { model: string; current: number; searches: string[] };
+let searchPages: Array<Record<string, unknown>>;
+
+const searchCount = (win: Page) => Promise.resolve(codeSearchRequests.length);
 
 test('every result row is the full list width and the same height', async ({}, testInfo) => {
   const win = await openWithStub();
@@ -109,7 +114,7 @@ test('changing the mode searches again and the dialog reports fallback and cover
 
   await chooseOption(dialog.getByRole('button', { name: 'Search mode' }), 'vector');
   await expect.poll(() => searchCount(win)).toBe(before + 1);
-  const last = await app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).codeSearchRequests as Array<{ mode: string }>).at(-1));
+  const last = await Promise.resolve(codeSearchRequests.at(-1));
   expect(last?.mode).toBe('vector');
   await expect(dialog.getByTestId('code-search-item-pci:sym:a')).toContainText('Semantic');
   await expect(dialog.getByTestId('code-search-notice')).toContainText('3 of 12');
@@ -125,11 +130,10 @@ test('changing the mode searches again and the dialog reports fallback and cover
 // Hybrid comes back by itself when it finishes.
 test('while the semantic index builds only keyword search is offered, and hybrid returns when it is ready', async ({}, testInfo) => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     const state = { model: 'building', current: 4000, searches: [] as string[] };
-    (globalThis as Record<string, unknown>).modelState = state;
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    modelState = state;
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') return { data: [{ id: 'pci:repo:build', root: '/test/build', state: 'ready', generation: 1 }] };
       if (request.action !== 'query') return { data: {} };
       if (request.tool === 'get_index_status')
@@ -141,12 +145,12 @@ test('while the semantic index builds only keyword search is offered, and hybrid
       if (state.model !== 'active' && mode === 'vector') return { error: { code: 'MODEL_UNAVAILABLE', message: 'Install and activate a local embedding model before vector search.' } };
       return { data: { matches: [match], eligibleSymbolCount: 20865, vectorCoveredSymbolCount: state.model === 'active' ? 20865 : 0 }, evidence: [], warnings: [] };
     });
-  });
+  }
   const win = app.window;
   await win.keyboard.press('ControlOrMeta+Shift+F');
   const dialog = win.getByTestId('code-search-dialog');
   const modeChip = dialog.getByRole('button', { name: 'Search mode' }).and(win.locator('button.chip-select'));
-  const searches = () => app!.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).modelState as { searches: string[] }).searches);
+  const searches = () => Promise.resolve(modelState.searches);
 
   // Keyword is chosen, and the dialog says why.
   await expect(modeChip).toHaveAttribute('data-value', 'lexical');
@@ -172,11 +176,11 @@ test('while the semantic index builds only keyword search is offered, and hybrid
   expect(await searches()).toEqual(['lexical']);
 
   // Progress moves on while the dialog is open.
-  await app.electronApp.evaluate(() => { ((globalThis as Record<string, unknown>).modelState as { current: number }).current = 12000; });
+  await Promise.resolve().then(() => { modelState.current = 12000; });
   await expect(status).toContainText('57% (12,000 of 20,865 symbols)', { timeout: 10_000 });
 
   // The build finishes: Hybrid is chosen again and the question is asked again in it.
-  await app.electronApp.evaluate(() => { ((globalThis as Record<string, unknown>).modelState as { model: string }).model = 'active'; });
+  await Promise.resolve().then(() => { modelState.model = 'active'; });
   await expect(modeChip).toHaveAttribute('data-value', 'hybrid', { timeout: 10_000 });
   await expect(dialog.getByTestId('code-search-item-pci:sym:tok')).toContainText('Keyword · Semantic');
   await expect(status).toHaveCount(0);
@@ -188,12 +192,11 @@ test('while the semantic index builds only keyword search is offered, and hybrid
 // "continue with nextCursor" note.
 test('a page trimmed to the response budget offers Show more instead of a cursor note', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     const pages: Array<Record<string, unknown>> = [];
-    (globalThis as Record<string, unknown>).searchPages = pages;
+    searchPages = pages;
     const match = (n: number) => ({ symbol: { symbolId: `pci:sym:${n}`, qualifiedName: `App.Symbol${n}`, signature: `void Symbol${n}()`, kind: 'method', declarations: [] }, reasons: ['lexical'] });
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') return { data: [{ id: 'pci:repo:big', root: '/test/big', state: 'ready', generation: 1 }] };
       if (request.tool === 'get_index_status') return { data: { models: [{ fingerprint: 'sha256:m', state: 'active', coverage: { eligible: 5, current: 5 } }] } };
       if (request.action !== 'query' || request.tool !== 'search_code') return { data: { fragments: [], items: [] }, evidence: [] };
@@ -204,7 +207,7 @@ test('a page trimmed to the response budget offers Show more instead of a cursor
           warnings: [{ code: 'RESPONSE_TRUNCATED', message: 'Page reduced to fit the response budget; continue with nextCursor.' }] };
       return { data: { matches: [3, 4, 5].map(match) }, evidence: [], nextCursor: null, warnings: [] };
     });
-  });
+  }
   const win = app.window;
   await win.keyboard.press('ControlOrMeta+Shift+F');
   const dialog = win.getByTestId('code-search-dialog');
@@ -224,7 +227,7 @@ test('a page trimmed to the response budget offers Show more instead of a cursor
   await expect(dialog.getByTestId('code-search-more-btn')).toHaveCount(0);
   await expect(dialog.getByTestId('code-search-item-pci:sym:1')).toHaveClass(/\bactive\b/);
   // The cursor is only valid with the first page's arguments, so they are sent unchanged.
-  const pages = await app.electronApp.evaluate(() => (globalThis as Record<string, unknown>).searchPages as Array<Record<string, unknown>>);
+  const pages = await Promise.resolve(searchPages);
   expect(pages).toHaveLength(2);
   const { cursor, ...rest } = pages[1];
   expect(cursor).toBe('page-2');

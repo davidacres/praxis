@@ -48,9 +48,9 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
   });
   const page = app.window;
   const resetsAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
-  await app.electronApp.evaluate(({ ipcMain }, reset) => {
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', (_event, providers: string[]) => ({ snapshots: providers.map(provider => ({
+  {
+    const reset = resetsAt;
+    await app.overrideChannel('aiUsage:providerSnapshots', ([providers]) => ({ snapshots: providers.map(provider => ({
       provider,
       checkedAt: new Date().toISOString(),
       windows: [
@@ -60,7 +60,7 @@ test('composer usage panel draws provider quota windows as bars with a collapsed
       ],
       credits: { remaining: 0, currency: 'USD' }
     })), checkedAt: new Date().toISOString() }));
-  }, resetsAt);
+  }
   await openDraftComposer(page);
 
   const draft = page.getByTestId('new-session-view');
@@ -124,15 +124,14 @@ for (const { name, windows, reported } of [
       AI_GATEWAY_API_KEY: 'usage-unreported-e2e-key', AI_GATEWAY_URL: mock.baseUrl
     });
     const page = app.window;
-    await app.electronApp.evaluate(({ ipcMain }, windows) => {
-      ipcMain.removeHandler('aiUsage:providerSnapshots');
-      ipcMain.handle('aiUsage:providerSnapshots', (_event, providers: string[]) => ({ snapshots: providers.map(provider => ({
+    {
+      await app.overrideChannel('aiUsage:providerSnapshots', ([providers]) => ({ snapshots: providers.map(provider => ({
         provider,
         checkedAt: new Date().toISOString(),
         windows,
         ...(windows.length ? {} : { unavailableReason: 'Provider did not return usage.' })
       })), checkedAt: new Date().toISOString() }));
-    }, windows);
+    }
     await openDraftComposer(page);
 
     const summary = page.getByTestId('new-session-view').getByTestId('session-usage-summary');
@@ -178,15 +177,12 @@ test('collapsed usage animates both bars while account limits load', async () =>
     AI_GATEWAY_API_KEY: 'usage-loading-e2e-key', AI_GATEWAY_URL: mock.baseUrl
   });
   const page = app.window;
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    const held = globalThis as unknown as { releaseUsage?: () => void };
-    const released = new Promise<void>(resolve => { held.releaseUsage = resolve; });
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers: string[]) => {
-      await released;
-      return { snapshots: providers.map(provider => ({ provider, checkedAt: new Date().toISOString(),
-        windows: [{ period: 'hour', windowDurationMinutes: 300, usedPercent: 27 }, { period: 'week', usedPercent: 54 }] })), checkedAt: new Date().toISOString() };
-    });
+  let releaseUsage!: () => void;
+  const released = new Promise<void>(resolve => { releaseUsage = resolve; });
+  await app.overrideChannel('aiUsage:providerSnapshots', async ([providers]) => {
+    await released;
+    return { snapshots: providers.map((provider: string) => ({ provider, checkedAt: new Date().toISOString(),
+      windows: [{ period: 'hour', windowDurationMinutes: 300, usedPercent: 27 }, { period: 'week', usedPercent: 54 }] })), checkedAt: new Date().toISOString() };
   });
   await openDraftComposer(page);
 
@@ -231,7 +227,7 @@ test('collapsed usage animates both bars while account limits load', async () =>
     };
     requestAnimationFrame(tick);
   }));
-  await app.electronApp.evaluate(() => (globalThis as unknown as { releaseUsage: () => void }).releaseUsage());
+  releaseUsage();
   const samples = await sampling;
   expect(samples.length).toBeGreaterThan(5);
   expect(samples[0][0]).toBeLessThan(10);
@@ -259,14 +255,13 @@ test('collapsed usage skips the count-up under reduced motion', async () => {
   });
   const page = app.window;
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers: string[]) => {
+  {
+    await app.overrideChannel('aiUsage:providerSnapshots', async ([providers]) => {
       await new Promise(resolve => setTimeout(resolve, 800));
       return { snapshots: providers.map(provider => ({ provider, checkedAt: new Date().toISOString(),
         windows: [{ period: 'hour', windowDurationMinutes: 300, usedPercent: 27 }, { period: 'week', usedPercent: 54 }] })), checkedAt: new Date().toISOString() };
     });
-  });
+  }
   await openDraftComposer(page);
   const row = page.getByTestId('new-session-view').getByTestId('session-usage-group-vercel-gateway').locator('[data-testid="session-usage-meter-week"][data-reported="true"]');
   await row.waitFor();
@@ -284,12 +279,12 @@ test('a session that ran without token reports shows a dash, never Not reported'
   await page.getByTestId('new-session-submit').click();
   await expect.poll(() => page.evaluate(async () => (await window.praxis.ai.listSessions())[0]?.state)).toBe('completed');
   const record = await page.evaluate(async () => (await window.praxis.ai.listSessions())[0]);
-  await app.electronApp.evaluate(({ BrowserWindow, ipcMain }, record) => {
+  {
     const updated = { ...record, tokenUsage: undefined, runtimeEpochs: [{ id: 'run', provider: 'claude-code-cli', model: record.model, startedAt: new Date().toISOString(), reason: 'started' }] };
-    ipcMain.removeHandler('ai:listSessions'); ipcMain.handle('ai:listSessions', () => [updated]);
-    ipcMain.removeHandler('ai:getSession'); ipcMain.handle('ai:getSession', () => updated);
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', updated);
-  }, record);
+await app.overrideChannel('ai:listSessions', () => [updated]);
+await app.overrideChannel('ai:getSession', () => updated);
+    await app.emitEvent('ai:sessionChanged', updated);
+  }
   const tokens = page.getByTestId('sessions-view').getByTestId('session-usage-tokens-claude-code-cli');
   await expect(tokens).toHaveText('–');
   await expect(tokens).toHaveAttribute('title', /Token count not available from this provider/);
@@ -346,8 +341,8 @@ test('session usage follows the active conversation speaker and its runtime toke
   const record = await page.evaluate(async () => (await window.praxis.ai.listSessions())[0]);
   try {
     const publish = async (speakerId: string) => {
-      await app!.electronApp.evaluate(({ BrowserWindow, ipcMain }, { record, speakerId }) => {
-        const startedAt = new Date().toISOString();
+      {
+                const startedAt = new Date().toISOString();
         const updated = {
           ...record, provider: 'claude-code-cli', model: 'host-model', tokenUsage: { totalTokens: 399 }, cost: { amount: 4, currency: 'USD' },
           runtimeEpochs: [
@@ -362,26 +357,22 @@ test('session usage follows the active conversation speaker and its runtime toke
               { id: 'guest', provider: 'codex-cli', model: 'guest-model', role: 'guest', displayLabel: 'Guest' }
             ] }
         };
-        ipcMain.removeHandler('ai:listSessions');
-        ipcMain.handle('ai:listSessions', () => [updated]);
-        ipcMain.removeHandler('ai:getSession');
-        ipcMain.handle('ai:getSession', () => updated);
-        ipcMain.removeHandler('aiUsage:providerSnapshots');
-        ipcMain.handle('aiUsage:providerSnapshots', async (_event, providers: string[]) => {
+        await app!.overrideChannel('ai:listSessions', () => [updated]);
+        await app!.overrideChannel('ai:getSession', () => updated);
+        await app!.overrideChannel('aiUsage:providerSnapshots', async ([providers]) => {
           await new Promise(resolve => setTimeout(resolve, 500));
           return { snapshots: providers.map(provider => ({ provider, fetchedAt: new Date().toISOString(), windows: [
             { period: 'hour', windowDurationMinutes: 300, usedPercent: provider === 'codex-cli' ? 18 : 32, resetsAt: new Date(Date.now() + 7200000).toISOString() },
             { period: 'week', usedPercent: provider === 'codex-cli' ? 44 : 61, resetsAt: new Date(Date.now() + 172800000).toISOString() }
           ] })), checkedAt: new Date().toISOString() };
         });
-        ipcMain.removeHandler('aiUsage:listEvents');
-        ipcMain.handle('aiUsage:listEvents', () => [
+        await app!.overrideChannel('aiUsage:listEvents', () => [
           { sessionId: record.sessionId, provider: 'claude-code-cli', model: 'host-model', cost: { amount: 1.5, currency: 'USD' } },
           { sessionId: record.sessionId, provider: 'claude-code-cli', model: 'earlier-model', cost: { amount: 0.5, currency: 'USD' } },
           { sessionId: record.sessionId, provider: 'codex-cli', model: 'guest-model', cost: { amount: 2, currency: 'USD' } }
         ]);
-        for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', updated);
-      }, { record, speakerId });
+        await app!.emitEvent('ai:sessionChanged', updated);
+      }
     };
     const summary = page.getByTestId('sessions-view').getByTestId('session-usage-summary');
     await publish('guest');
@@ -449,10 +440,9 @@ test('session usage follows the active conversation speaker and its runtime toke
     await page.getByTestId('sessions-view').getByTestId('session-chat-thread').click({ position: { x: 10, y: 10 } });
     await expect(summary).not.toHaveAttribute('open', '');
   } finally {
-    await app.electronApp.evaluate(({ ipcMain }, record) => {
-      ipcMain.removeHandler('ai:listSessions');
-      ipcMain.handle('ai:listSessions', () => [record]);
-    }, record);
+    {
+      await app.overrideChannel('ai:listSessions', () => [record]);
+    }
   }
 });
 

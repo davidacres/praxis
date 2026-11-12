@@ -356,9 +356,10 @@ test('review exposes shared runtime controls while preserving its review boundar
   await expect(liveComposer.getByTestId('session-composer-activity-timer')).toBeVisible();
   await expect(win.getByTestId('session-activity-status')).toHaveCount(0);
   const activeReview = await win.evaluate(async () => (await window.praxis.ai.listSessions()).find(session => session.issueKey.startsWith('review~'))!);
-  await app!.electronApp.evaluate(({ BrowserWindow }, record) => {
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, reasoningText: 'Checking the acceptance criteria' });
-  }, activeReview);
+  {
+    const record = activeReview;
+    await app!.emitEvent('ai:sessionChanged', { ...record, reasoningText: 'Checking the acceptance criteria' });
+  }
   await expect(win.getByTestId('review-thought-markdown')).toBeVisible();
   await expect(win.getByTestId('review-thought-markdown')).toContainText('Checking the acceptance criteria');
 
@@ -410,7 +411,7 @@ test('review exposes shared runtime controls while preserving its review boundar
   await win.locator(`[data-testid="issue-card"][data-issue-key="${issueKey}"]`).click();
   await win.getByTestId('issue-ai-review-btn').click();
   await expect(composer).toBeVisible();
-  await app!.electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.setSize(1100, 800));
+  await app!.window.setViewportSize({ width: 1100, height: 800 });
   await expect.poll(() => composer.evaluate(node => {
     const bounds = node.getBoundingClientRect();
     return Array.from(node.querySelectorAll<HTMLElement>('button, input[type=range]')).filter(control => {

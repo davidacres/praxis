@@ -193,10 +193,9 @@ test('Given a recovery menu, When it is dismissed or Stop is selected, Then sele
 
 test('Given six providers, When recovery appears in wide and narrow panes, Then only two chips and a split action remain inline', async () => {
   const { win } = await givenLimitedProvider(QUOTA_ERROR, false, async app => {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('ai:listProviderStatuses');
-      ipcMain.handle('ai:listProviderStatuses', () => ['vercel-gateway', 'openai', 'anthropic', 'gemini', 'z-ai', 'codex-cli'].map(provider => ({ provider, configured: true, enabled: true, capabilities: { tools: true } })));
-    });
+    {
+      await app.overrideChannel('ai:listProviderStatuses', () => ['vercel-gateway', 'openai', 'anthropic', 'gemini', 'z-ai', 'codex-cli'].map(provider => ({ provider, configured: true, enabled: true, capabilities: { tools: true } })));
+    }
   });
   const recovery = win.getByTestId('session-limit-switch');
   await expect(recovery.locator('.chip-select')).toHaveCount(2);
@@ -207,11 +206,7 @@ test('Given six providers, When recovery appears in wide and narrow panes, Then 
   await win.keyboard.press('Escape');
   await win.getByRole('button', { name: 'Toggle sidebar', exact: true }).click();
   await win.getByRole('button', { name: 'Toggle secondary sidebar', exact: true }).click();
-  await app!.electronApp.evaluate(({ BrowserWindow }) => {
-    const window = BrowserWindow.getAllWindows()[0];
-    window.setMinimumSize(480, 600);
-    window.setSize(540, 820);
-  });
+  await app!.window.setViewportSize({ width: 540, height: 820 });
   await expect.poll(() => recovery.evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(540);
   await expect.poll(() => recovery.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
   await win.getByTestId('session-limit-actions').click();
@@ -236,13 +231,12 @@ test('Given a configured default absent from the catalog, When choosing its prov
 
 test('Given failing model discovery, When reloading models, Then Switch stays blocked until a valid model is loaded', async () => {
   const { win, replacement } = await givenLimitedProvider(QUOTA_ERROR, false, async app => {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('ai:listApiModelOptions');
-      ipcMain.handle('ai:listApiModelOptions', (_event, provider, refresh) => {
+    {
+      await app.overrideChannel('ai:listApiModelOptions', ([provider, refresh]) => {
         if (provider === 'openai' && !refresh) throw new Error('Mock catalog unavailable');
         return { currentValue: 'mock/model', options: [{ value: 'mock/model', name: 'mock/model' }] };
       });
-    });
+    }
   });
   await expect(win.getByTestId('session-limit-switch')).toContainText('Mock catalog unavailable');
   await expect(win.getByTestId('session-limit-switch-go')).toBeDisabled();
@@ -254,15 +248,13 @@ test('Given failing model discovery, When reloading models, Then Switch stays bl
 
 test('Given slow model discovery for one provider, When changing provider again, Then the late catalog cannot overwrite the new selection', async () => {
   const { win } = await givenLimitedProvider(QUOTA_ERROR, false, async app => {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('ai:listProviderStatuses');
-      ipcMain.handle('ai:listProviderStatuses', () => ['openai', 'anthropic', 'gemini'].map(provider => ({ provider, configured: true, enabled: true })));
-      ipcMain.removeHandler('ai:listApiModelOptions');
-      ipcMain.handle('ai:listApiModelOptions', async (_event, provider) => {
+    {
+      await app.overrideChannel('ai:listProviderStatuses', () => ['openai', 'anthropic', 'gemini'].map(provider => ({ provider, configured: true, enabled: true })));
+      await app.overrideChannel('ai:listApiModelOptions', async ([provider]) => {
         if (provider === 'anthropic') await new Promise(resolve => setTimeout(resolve, 1200));
         return { currentValue: `mock/${provider}`, options: [{ value: `mock/${provider}`, name: `mock/${provider}` }] };
       });
-    });
+    }
   });
   await expect(win.getByTestId('session-limit-switch-go')).toBeEnabled();
   await chooseOption(win.getByTestId('session-limit-provider'), 'anthropic');
@@ -270,18 +262,16 @@ test('Given slow model discovery for one provider, When changing provider again,
   await chooseOption(win.getByTestId('session-limit-provider'), 'gemini');
   await expect(win.getByTestId('session-limit-model')).toHaveAttribute('data-value', 'mock/gemini');
   // Wait for the earlier IPC response to settle, then check it did not replace Gemini.
-  await app!.electronApp.evaluate(async () => { await new Promise(resolve => setTimeout(resolve, 1400)); });
+  await new Promise(resolve => setTimeout(resolve, 1400));
   await expect(win.getByTestId('session-limit-model')).toHaveAttribute('data-value', 'mock/gemini');
 });
 
 test('Given a runtime without a model catalog, When it is selected, Then provider-default fallback is explicit', async () => {
   const { win } = await givenLimitedProvider(QUOTA_ERROR, false, async app => {
-    await app.electronApp.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('ai:listProviderStatuses');
-      ipcMain.handle('ai:listProviderStatuses', () => [{ provider: 'codex-cli', configured: true, enabled: true }]);
-      ipcMain.removeHandler('ai:listCliModelOptions');
-      ipcMain.handle('ai:listCliModelOptions', () => undefined);
-    });
+    {
+      await app.overrideChannel('ai:listProviderStatuses', () => [{ provider: 'codex-cli', configured: true, enabled: true }]);
+      await app.overrideChannel('ai:listCliModelOptions', () => undefined);
+    }
   });
   await expect(win.getByTestId('session-limit-model')).toContainText('Provider default — model not exposed');
   await expect(win.getByTestId('session-limit-switch-go')).toBeEnabled();

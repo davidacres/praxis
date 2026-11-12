@@ -13,7 +13,11 @@ import { chromium, type BrowserContext, type Page } from '@playwright/test';
  * attach, so only the webview is substituted; `window.praxis` is the production
  * bridge and every channel is answered by the Rust host.
  */
-const REPO_ROOT = path.resolve(__dirname, '../../..');
+// macOS reports its temp dir through a symlink (/var -> /private/var). The backend
+// canonicalises every path it stores, so specs comparing a path they created under
+// os.tmpdir() with one the app returned need the canonical form from the start.
+try { process.env.TMPDIR = fs.realpathSync(os.tmpdir()); } catch { /* keep the default */ }
+const REPO_ROOT =path.resolve(__dirname, '../../..');
 const BACKEND_BINARY = process.env.PRAXIS_TAURI_BIN
   ?? path.join(REPO_ROOT, 'target', 'debug', process.platform === 'win32' ? 'praxis-desktop.exe' : 'praxis-desktop');
 
@@ -28,12 +32,65 @@ export interface BackendHandle {
   waitForEvent(event: string): Promise<never>;
 }
 
+/** What a channel override can reach besides its own arguments. */
+export interface ChannelContext {
+  /** Calls the real backend (the Rust host), bypassing every override - the "original" handler. */
+  call(channel: string, ...args: unknown[]): Promise<any>;
+  /**
+   * Like `call`, but also reaches host channels outside the renderer contract (what the
+   * native shell itself invokes after a dialog, e.g. `workspaces:writeFile`).
+   */
+  host(channel: string, ...args: unknown[]): Promise<any>;
+}
+
+/**
+ * Answers a renderer IPC call in the test process. Replaces the Electron-era
+ * `ipcMain.removeHandler(ch); ipcMain.handle(ch, ...)` stubs and `dialog.show*Dialog`
+ * mocks. Runs in Node, so it can close over fixtures and record calls in ordinary
+ * variables instead of `globalThis` in the (retired) main process. Throw to reject
+ * the renderer's promise; a thrown `{ code, message }` object is passed through.
+ */
+export type ChannelHandler = (args: any[], context: ChannelContext) => unknown | Promise<unknown>;
+
 export interface TestApp {
   electronApp: BackendHandle;
   window: Page;
   userDataDir: string;
   /** Per-test settings file the app reads/writes instead of the real shared one. */
   settingsPath: string;
+  /**
+   * Make every page's calls to `channel` answer from `handler` instead of the backend.
+   * Survives reloads and applies to every page of the context; a later call replaces
+   * an earlier handler for the same channel.
+   */
+  overrideChannel(channel: string, handler: ChannelHandler): Promise<void>;
+  /** Stop overriding `channel`; calls reach the backend again. */
+  restoreChannel(channel: string): Promise<void>;
+  /** Calls the real backend directly (what the renderer would get with no override). */
+  callBackend(channel: string, ...args: unknown[]): Promise<any>;
+  /**
+   * Delivers a host event to the renderer exactly as the backend's event stream would
+   * (`webContents.send(channel, payload)` in the Electron main process). Goes to every
+   * page of the context unless `page` is given.
+   */
+  emitEvent(channel: string, payload?: unknown, page?: Page): Promise<void>;
+  /**
+   * Opens another window onto the same backend: a new page of the same browser context
+   * (so it shares storage, the channel overrides and the event stream, like a second
+   * `BrowserWindow` on the Electron main process). Defaults to the main window's URL.
+   */
+  openWindow(url?: string): Promise<Page>;
+  /** Every open window (page), main window first. */
+  windows(): Page[];
+  /** Calls a host channel outside the renderer contract (what the native shell itself invokes). */
+  callHost(channel: string, ...args: unknown[]): Promise<any>;
+  /**
+   * What the shell does when the user closes or quits: asks the renderer to confirm
+   * (`window:closeRequested`, with the running-session count and the next armed schedule,
+   * exactly as the Electron main process derived them). Resolves with a promise that settles
+   * when the renderer confirms (`window:confirmClose`) - the point at which the app would exit.
+   */
+  requestClose(): Promise<Promise<void>>;
 }
 
 /**
@@ -54,15 +111,19 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
     callbacks.set(id, data => { if (once) callbacks.delete(id); callback?.(data); });
     return id;
   };
+  const dispatch = (envelope: unknown) => {
+    for (const id of [...(listeners.get('praxis:event') ?? [])]) {
+      callbacks.get(id)?.({ event: 'praxis:event', id, payload: envelope });
+    }
+  };
+  // Test control: deliver a synthetic host event, as `webContents.send` did.
+  w.__praxisE2eEmit = dispatch;
   let source: EventSource | undefined;
   const ensureEvents = () => {
     if (source) return;
     source = new EventSource(`${base}/events?token=${token}`);
     source.onmessage = message => {
-      const envelope = JSON.parse(message.data);
-      for (const id of [...(listeners.get('praxis:event') ?? [])]) {
-        callbacks.get(id)?.({ event: 'praxis:event', id, payload: envelope });
-      }
+      dispatch(JSON.parse(message.data));
     };
   };
   w.__TAURI_INTERNALS__.transformCallback = register;
@@ -82,6 +143,12 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
     }
     if (command === 'plugin:event|unlisten') return undefined;
     if (command !== 'praxis_rpc') throw { code: 'UNSUPPORTED', message: `No e2e handler for Tauri command ${command}` };
+    // Per-test channel overrides (TestApp.overrideChannel) answer from the test process.
+    if (w.__praxisOverrideNames?.has(args.channel) && w.__praxisE2eOverride) {
+      const answer = await w.__praxisE2eOverride(args.channel, args.args ?? []);
+      if (!answer.ok) throw answer.error;
+      return answer.result;
+    }
     const response = await fetch(`${base}/rpc?token=${token}`, {
       method: 'POST',
       body: JSON.stringify({ channel: args.channel, args: args.args })
@@ -94,7 +161,7 @@ function tauriShim({ port, token }: { port: number; token: string }): void {
 
 function backendHandle(backend: ChildProcess, context: BrowserContext): BackendHandle {
   const unsupported = (what: string) => async (): Promise<never> => {
-    throw new Error(`${what} drove the retired Electron main process and has no equivalent: the backend is a separate Rust process. Rewrite this step against window.praxis, the filesystem, or a backend control channel.`);
+    throw new Error(`${what} drove the retired Electron main process and has no equivalent: the backend is a separate Rust process. Use TestApp.overrideChannel (stub/record a channel or dialog), emitEvent (push a host event), openWindow, callBackend/callHost, page.setViewportSize, the filesystem, or notReproducible() for a native-only step.`);
   };
   return {
     process: () => backend,
@@ -275,6 +342,32 @@ export async function launchTestApp(
   });
   await context.addInitScript(tauriShim, { port, token });
   const electronApp = backendHandle(backend, context);
+  const overrides = new Map<string, ChannelHandler>();
+  const callRoute = (route: 'rpc' | 'host') => async (channel: string, ...args: unknown[]): Promise<any> => {
+    const response = await fetch(`http://127.0.0.1:${port}/${route}?token=${token}`, { method: 'POST', body: JSON.stringify({ channel, args }) });
+    const body = await response.json() as { ok: boolean; result?: unknown; error?: unknown };
+    if (!body.ok) throw body.error ?? new Error(`Backend call ${channel} failed`);
+    return body.result;
+  };
+  const callBackend = callRoute('rpc');
+  const handlerContext: ChannelContext = { call: callBackend, host: callRoute('host') };
+  await context.exposeFunction('__praxisE2eOverride', async (channel: string, args: unknown[]) => {
+    const handler = overrides.get(channel);
+    try {
+      if (!handler) return { ok: true, result: await callBackend(channel, ...args) };
+      return { ok: true, result: (await handler(args, handlerContext)) ?? null };
+    } catch (error) {
+      const known = error as { code?: string; message?: string };
+      return { ok: false, error: known && typeof known === 'object' && known.message !== undefined
+        ? { code: known.code ?? 'DESKTOP_ERROR', message: known.message } : { code: 'DESKTOP_ERROR', message: String(error) } };
+    }
+  });
+  const syncOverrideNames = async () => {
+    const names = [...overrides.keys()];
+    const apply = (list: string[]) => { (window as any).__praxisOverrideNames = new Set(list); };
+    await context.addInitScript(apply, names);
+    await Promise.all(context.pages().map(page => page.evaluate(apply, names).catch(() => undefined)));
+  };
   testAppProcesses.set(electronApp, backend);
   const window = context.pages()[0] ?? await context.newPage();
   const baseUrl = process.env.PRAXIS_E2E_RENDERER_URL ?? `http://localhost:${process.env.PRAXIS_E2E_PORT || 5173}`;
@@ -314,7 +407,71 @@ export async function launchTestApp(
     }
   }
 
-  return { electronApp, window, userDataDir, settingsPath };
+  const openWindow = async (url?: string): Promise<Page> => {
+    const page = await context.newPage();
+    page.on('console', message => {
+      if (message.type() === 'error') console.log(`PAGE LOG [error]: ${message.text()}`);
+    });
+    await page.goto(url ?? window.url());
+    await page.waitForLoadState('domcontentloaded');
+    return page;
+  };
+  // The native shell opens a real window for a detached chat; here that is another page.
+  // The channels still run on the backend, which owns the detached-chat state and its events.
+  const detached = new Map<string, Page>();
+  const detachedUrl = (key: string) => {
+    const url = new URL(window.url());
+    url.search = `?detachedSession=${encodeURIComponent(key)}`;
+    return url.toString();
+  };
+  const testApp: TestApp = {
+    electronApp, window, userDataDir, settingsPath,
+    openWindow,
+    windows: () => context.pages(),
+    callHost: callRoute('host'),
+    async requestClose() {
+      let confirm!: () => void;
+      const confirmed = new Promise<void>(resolve => { confirm = resolve; });
+      await testApp.overrideChannel('window:confirmClose', () => { confirm(); });
+      const sessions = (await callBackend('ai:listSessions')) as Array<{ state?: string }>;
+      const runningSessionCount = sessions.filter(session => ['planning', 'executing', 'awaiting_approval', 'awaiting_input'].includes(session.state ?? '')).length;
+      const views = (await callBackend('scheduledRuns:list')) as Array<{ run: { name: string; scheduledStartAt: string; timezone: string; status: string; archived?: boolean } }>;
+      const next = views.map(view => view.run).filter(run => !run.archived && run.status === 'scheduled')
+        .sort((left, right) => Date.parse(left.scheduledStartAt) - Date.parse(right.scheduledStartAt))[0];
+      await testApp.emitEvent('window:closeRequested', {
+        runningSessionCount,
+        ...(next ? { nextSchedule: { name: next.name, scheduledStartAt: next.scheduledStartAt, timezone: next.timezone } } : {})
+      });
+      return confirmed;
+    },
+    async overrideChannel(channel, handler) { overrides.set(channel, handler); await syncOverrideNames(); },
+    async restoreChannel(channel) { overrides.delete(channel); await syncOverrideNames(); },
+    callBackend,
+    async emitEvent(channel, payload, page) {
+      const targets = page ? [page] : context.pages();
+      await Promise.all(targets.map(target => target.evaluate(envelope => (window as any).__praxisE2eEmit(envelope), { channel, payload })));
+    }
+  };
+  await testApp.overrideChannel('detachedChat:open', async ([key], backend) => {
+    const result = await backend.call('detachedChat:open', key);
+    if (!detached.get(key) || detached.get(key)!.isClosed()) {
+      const page = await openWindow(detachedUrl(key));
+      detached.set(key, page);
+      page.once('close', () => {
+        // A window closed by the user (or the test) tells the backend, as the shell does.
+        if (detached.get(key) === page) { detached.delete(key); void callBackend('detachedChat:close', key).catch(() => undefined); }
+      });
+    }
+    return result;
+  });
+  await testApp.overrideChannel('detachedChat:close', async ([key], backend) => {
+    const result = await backend.call('detachedChat:close', key);
+    const page = detached.get(key);
+    detached.delete(key);
+    if (page && !page.isClosed()) await page.close();
+    return result;
+  });
+  return testApp;
 }
 
 /**
@@ -517,4 +674,13 @@ export async function showProjectBoard(scope: Pick<Page, 'getByTestId'> | { getB
   const toggle = scope.getByTestId('project-boards-toggle').first();
   await toggle.waitFor({ state: 'visible' });
   if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
+}
+
+/**
+ * For a step that drove a native Electron feature (main-process fault injection, native
+ * window flags, OS notifications) the Chromium + Rust harness cannot reproduce. Fails the
+ * test with the reason rather than faking the behaviour.
+ */
+export function notReproducible(reason: string): never {
+  throw new Error(`Not reproducible in the Tauri e2e harness: ${reason}`);
 }

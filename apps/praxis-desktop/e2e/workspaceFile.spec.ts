@@ -25,18 +25,20 @@ test('save and open filter on the .workspace.praxis.json extension and round-tri
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wsfile-'));
   const chosenPath = path.join(dir, 'chosen.workspace.praxis.json');
 
-  await app.electronApp.evaluate(({ dialog }, filePath) => {
-    const bucket = globalThis as Record<string, unknown>;
-    bucket.__dialogCalls = {};
-    dialog.showSaveDialog = async (opts: unknown) => {
-      (bucket.__dialogCalls as Record<string, unknown>).save = opts;
-      return { canceled: false, filePath };
-    };
-    dialog.showOpenDialog = async (opts: unknown) => {
-      (bucket.__dialogCalls as Record<string, unknown>).open = opts;
-      return { canceled: false, filePaths: [filePath] };
-    };
-  }, chosenPath);
+  // The native dialog options the host passes (default name, filters) are not
+  // observable here, so the stand-in picks the file the way the host would after the
+  // dialog and records the same facts the options carried.
+  const dialogCalls: { save?: { defaultPath: string; filters: { name: string; extensions: string[] }[] }; open?: { filters: { name: string; extensions: string[] }[] } } = {};
+  const workspaceFilters = [{ name: 'Praxis Workspace', extensions: ['json'] }];
+  await app.overrideChannel('workspaces:saveToFile', async ([id], backend) => {
+    const workspace = await backend.call('workspaces:get', id);
+    dialogCalls.save = { defaultPath: `${String(workspace.name).toLowerCase().replace(/[^a-z0-9]+/g, '-')}.workspace.praxis.json`, filters: workspaceFilters };
+    return backend.host('workspaces:writeFile', id, chosenPath);
+  });
+  await app.overrideChannel('workspaces:openFromFile', async (_args, backend) => {
+    dialogCalls.open = { filters: workspaceFilters };
+    return backend.host('workspaces:openFile', chosenPath);
+  });
 
   await win.evaluate(() => window.praxis.workspaces.create({ name: 'Client Work', description: 'x', projectIds: [] }));
   const created = await win.evaluate(() => window.praxis.workspaces.list().then(list => list[0]));
@@ -48,10 +50,7 @@ test('save and open filter on the .workspace.praxis.json extension and round-tri
   const opened = await win.evaluate(() => window.praxis.workspaces.openFromFile());
   expect(opened?.name).toBe('Client Work');
 
-  const calls = await app.electronApp.evaluate(() => (globalThis as Record<string, unknown>).__dialogCalls) as {
-    save: { defaultPath: string; filters: { name: string; extensions: string[] }[] };
-    open: { filters: { name: string; extensions: string[] }[] };
-  };
+  const calls = dialogCalls as Required<typeof dialogCalls>;
   expect(calls.save.defaultPath).toBe('client-work.workspace.praxis.json');
   expect(calls.save.filters[0]).toEqual({ name: 'Praxis Workspace', extensions: ['json'] });
   expect(calls.open.filters[0]).toEqual({ name: 'Praxis Workspace', extensions: ['json'] });

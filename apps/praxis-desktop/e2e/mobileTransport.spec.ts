@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { MobileSecureClient, generateKeyPair } from '@praxis/mobile-protocol';
 import type { MobileCommand, MobileReadRequest } from '@praxis/core';
-import { launchTestApp, closeTestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, notReproducible } from './launchTestApp';
 import { chooseOption } from './chipSelect';
 import { selectRustHostBinary } from './rustHostSelection';
 
@@ -35,10 +35,7 @@ for (const mode of modes) {
       await win.getByTestId('titlebar-settings').click(); await win.getByTestId('settings-nav-mobile').click();
       await chooseOption(win.getByTestId('mobile-access-mode'), 'local-only');
       await expect(win.getByTestId('mobile-listener-status')).toContainText('Listening');
-      const diagnostic = await app.electronApp.evaluate(({ app }) => {
-        const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
-        return require('./mobileListenerInstance.js').mobileTransportDiagnostics();
-      });
+      const diagnostic = await notReproducible('reads the Electron-main mobile listener diagnostics (mobileListenerInstance); the Rust backend does not expose them');
       expect(diagnostic.mode).toBe(mode);
       if (mode === 'rust') { childPids.push(diagnostic.pid); expect(diagnostic.ready).toBe(true); expect(diagnostic.crateVersion).toBeTruthy(); expect(diagnostic.pid).toBeGreaterThan(0); }
       console.log(`[mobile-dual-mode] ${JSON.stringify(diagnostic)}`);
@@ -96,10 +93,7 @@ for (const mode of modes) {
         return records.find(record => record.sessionId === session.sessionId)?.state;
       }, { timeout: 15000 }).toBe('completed');
       if (mode === 'rust') {
-        const served = await app.electronApp.evaluate(({ app }) => {
-          const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
-          return require('./mobileListenerInstance.js').mobileTransportDiagnostics();
-        });
+        const served = await notReproducible('reads the Electron-main mobile listener diagnostics (mobileListenerInstance); the Rust backend does not expose them');
         expect(served.pid).toBe(diagnostic.pid);
         expect(served.readCalls).toBeGreaterThan(0);
         expect(served.commandCalls).toBeGreaterThanOrEqual(4);
@@ -116,10 +110,7 @@ for (const mode of modes) {
       const rotated = await win.evaluate(() => window.praxis.settings.getMobileHostInfo());
       expect(rotated.publicKeyHex).not.toBe(previousKey); expect(rotated.listener.connectionCount).toBe(0);
       if (mode === 'rust') {
-        const next = await app.electronApp.evaluate(({ app }) => {
-          const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
-          return require('./mobileListenerInstance.js').mobileTransportDiagnostics();
-        });
+        const next = await notReproducible('reads the Electron-main mobile listener diagnostics (mobileListenerInstance); the Rust backend does not expose them');
         expect(next.ready).toBe(true); expect(next.pid).not.toBe(diagnostic.pid); childPids.push(next.pid);
       }
       await chooseOption(win.getByTestId('mobile-access-mode'), 'off');

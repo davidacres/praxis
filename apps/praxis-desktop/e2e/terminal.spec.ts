@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp, notReproducible } from './launchTestApp';
 import { chooseOption, chipOptionValues } from './chipSelect';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
@@ -14,11 +14,7 @@ test('runs a real PTY and preserves it when the panel is closed', async () => {
   app = await launchTestApp();
   const win = app.window;
   if (process.env.PRAXIS_EXPECT_RUST_TERMINAL === '1') {
-    const proof = await app.electronApp.evaluate(async ({ app }) => {
-      const require = process.getBuiltinModule('module')!.createRequire(app.getAppPath() + '/out/main/index.js');
-      const bridge = require('./rustHostInstance.js').getRustHostBridge();
-      return { channels: bridge.migratedChannels(), status: await bridge.invoke('host:status') };
-    });
+    const proof = await notReproducible("reads the Electron-main Rust host bridge's migrated channel list; the backend is the Rust host itself now");
     expect(proof.channels.filter((channel: string) => channel.startsWith('terminal:'))).toHaveLength(9);
     expect(proof.status.crateVersion).toBeTruthy();
     console.log('[terminal] Verified all nine Rust terminal controls and ready host.');

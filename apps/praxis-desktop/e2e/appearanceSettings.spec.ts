@@ -208,20 +208,10 @@ test('installs a marketplace theme and makes it available on reload', async () =
     }, undefined, { PRAXIS_MARKETPLACE_TOKEN: 'e2e-token' });
     window = app.window;
     // Hold installation open so visibility alone cannot masquerade as readiness.
-    await app.electronApp.evaluate((_electron, modulePath) => {
-      const require = process.getBuiltinModule('module')!.createRequire(modulePath);
-      const marketplace = require(modulePath);
-      const build = marketplace.buildMarketplaceService;
-      marketplace.buildMarketplaceService = async () => {
-        const service = await build();
-        const install = service.install.bind(service);
-        service.install = async (...args: unknown[]) => {
-          await new Promise(resolve => setTimeout(resolve, 600));
-          return install(...args);
-        };
-        return service;
-      };
-    }, require.resolve('../out/main/marketplaceInstance'));
+    await app.overrideChannel('marketplace:install', async (args, backend) => {
+      await new Promise(resolve => setTimeout(resolve, 600));
+      return backend.call('marketplace:install', ...args);
+    });
 
     await window.locator('[data-testid="titlebar-settings"]').click();
     await window.locator('[data-testid="settings-nav-appearance-themes"]').click();

@@ -342,37 +342,8 @@ test('ACP resume replay does not duplicate the previous answer into a follow-up'
   await expect.poll(async () => (await readSession(win, 'APP-212'))?.state, { timeout: 15000 }).toBe('completed');
 
   await openSession(win, 'APP-212');
-  // Keep launch-phase evidence for the CI-only stall without changing its timing or assertions.
-  await app.electronApp.evaluate((_electron, modulePaths) => {
-    const require = process.getBuiltinModule('module')!.createRequire(modulePaths.log);
-    const log = require(modulePaths.log).getLogBus();
-    const observe = (target: Record<string, any>, name: string) => {
-      const original = target[name].bind(target);
-      target[name] = async (...args: unknown[]) => {
-        const started = Date.now();
-        log.appendLine(`[e2e:ACP follow-up] ${name} started`);
-        try {
-          return await original(...args);
-        } finally {
-          log.appendLine(`[e2e:ACP follow-up] ${name} finished after ${Date.now() - started}ms`);
-        }
-      };
-    };
-    observe(require(modulePaths.launch), 'preparePersistedAgentLaunch');
-    observe(require(modulePaths.instructions), 'sessionInstructionsFor');
-    observe(require(modulePaths.browser), 'browserMcpServerForSession');
-    observe(require(modulePaths.tracker), 'trackerMcpServerForSession');
-    const host = require(modulePaths.host).getAcpAgentHost();
-    observe(host, 'continueTask');
-    observe(host, 'cleanupTask');
-  }, {
-    log: require.resolve('../out/main/logBusInstance'),
-    launch: require.resolve('../out/main/agentSessionLauncher'),
-    instructions: require.resolve('../out/main/nativeSourcesInstance'),
-    browser: require.resolve('../out/main/browserMcp'),
-    tracker: require.resolve('../out/main/trackerMcp'),
-    host: require.resolve('../out/main/aiInstance')
-  });
+  // (The Electron build logged launch-phase timings here for a CI-only stall by wrapping main-process
+  // functions; the Rust backend has no such hooks, and the step never affected the assertions.)
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
   const input = win.locator('[data-testid="session-follow-up-input"]');
   await expect(input).toBeEnabled({ timeout: 15000 });

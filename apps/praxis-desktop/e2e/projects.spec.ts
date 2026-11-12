@@ -613,9 +613,7 @@ test('an existing folder is three steps too, and confirms the detected identity'
     const page = app.window;
     // The picker has to be stubbed in the main process: `window.praxis` is a
     // contextBridge object, so assigning over it from the page is a no-op.
-    await app.electronApp.evaluate(({ dialog }, chosen) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
-    }, folder);
+    await app.overrideChannel('dialog:pickFolder', () => folder);
 
     await page.getByTestId('new-menu').click();
     await page.getByTestId('new-project').click();
@@ -647,9 +645,7 @@ test('ticking advanced setup adds brief and tool access in existing-folder mode'
   fs.writeFileSync(path.join(folder, 'README.md'), '# Deep Setup\n');
   try {
     const page = app.window;
-    await app.electronApp.evaluate(({ dialog }, chosen) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
-    }, folder);
+    await app.overrideChannel('dialog:pickFolder', () => folder);
     await page.getByTestId('new-menu').click();
     await page.getByTestId('new-project').click();
     await page.getByTestId('add-project-open-folder').click();

@@ -14,9 +14,10 @@ test.afterEach(async () => {
 
 /** The e2e app is unpackaged, so the real updater never runs; drive the renderer with the pushes it would send. */
 async function pushStatus(status: UpdateStatus): Promise<void> {
-  await app.electronApp.evaluate(({ BrowserWindow }, next) => {
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('update:status', next);
-  }, status);
+  {
+    const next = status;
+    await app.emitEvent('update:status', next);
+  }
 }
 
 test('an unpackaged build reports that updates are unsupported and offers no check', async () => {

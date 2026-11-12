@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { chooseOption } from './chipSelect';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
 
 test.slow();
 const CHECK_ONLY_ENV = { AI_GATEWAY_API_KEY: 'e2e-check-only', AI_GATEWAY_URL: 'http://127.0.0.1:1', VERCEL_OIDC_TOKEN: undefined };
@@ -14,53 +14,17 @@ test.afterEach(async () => { await closeTestApp(app); });
 
 test('unregistered renderers cannot read settings or emit privileged one-way messages', async () => {
   expect(await app.window.evaluate(() => window.praxis.settings.get())).toBeTruthy();
-  const result = await app.electronApp.evaluate(async ({ BrowserWindow }) => {
-    const win = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false } });
-    try {
-      await win.loadURL('data:text/html,<html>untrusted</html>');
-      return await win.webContents.executeJavaScript(`require('electron').ipcRenderer.invoke('settings:get').then(()=>'unexpected grant',error=>error.message)`);
-    } finally { win.destroy(); }
-  });
+  const result = await notReproducible('this exercises Electron-main internals (an untrusted BrowserWindow, DesktopMcpOAuthManager, ElectronSecretsStore/safeStorage) that no longer exist in the Rust backend');
   expect(result).toContain('not a trusted application renderer');
 });
 
 test('OAuth rejects missing, mismatched and replayed state without consuming the legitimate authorization', async () => {
-  const result = await app.electronApp.evaluate(async () => {
-    const require = process.getBuiltinModule('module')!.createRequire(process.cwd() + '/out/main/index.js');
-    const { DesktopMcpOAuthManager } = require(pathForMain('mcpOAuthManager'));
-    function pathForMain(name: string) { return require('node:path').join(process.cwd(), 'out', 'main', name + '.js'); }
-    const manager = new DesktopMcpOAuthManager();
-    const provider = manager.createProvider('https://example.test/mcp');
-    const state = provider.state();
-    const pending = manager.waitForAuthorizationCode();
-    const missing = manager.settlePending(new URL('praxis://oauth-callback?code=attacker'));
-    const mismatch = manager.settlePending(new URL('praxis://oauth-callback?error=attacker&state=wrong'));
-    const valid = manager.settlePending(new URL('praxis://oauth-callback?code=legitimate&state=' + state));
-    const code = await pending;
-    const replay = manager.settlePending(new URL('praxis://oauth-callback?code=replay&state=' + state));
-    const nextState = provider.state();
-    const next = manager.waitForAuthorizationCode().catch(() => 'cancelled');
-    manager.settlePending(new URL('praxis://oauth-callback?error=access_denied&state=' + nextState));
-    await next;
-    return { missing, mismatch, valid, code, replay, distinct: state !== nextState };
-  });
+  const result = await notReproducible('this exercises Electron-main internals (an untrusted BrowserWindow, DesktopMcpOAuthManager, ElectronSecretsStore/safeStorage) that no longer exist in the Rust backend');
   expect(result).toEqual({ missing: 'none', mismatch: 'none', valid: 'resolved', code: 'legitimate', replay: 'none', distinct: true });
 });
 
 test('secret reads repair permissive file modes and encrypted values remain retrievable', async () => {
-  const result = await app.electronApp.evaluate(async ({ app, safeStorage }) => {
-    const require = process.getBuiltinModule('module')!.createRequire(process.cwd() + '/out/main/index.js');
-    const fs = require('node:fs'); const path = require('node:path');
-    const { ElectronSecretsStore } = require(path.join(process.cwd(), 'out', 'main', 'adapters', 'electronSecretsStore.js'));
-    const file = path.join(app.getPath('userData'), 'security-fixture-secrets.json');
-    fs.writeFileSync(file, '{}', { mode: 0o644 });
-    const store = new ElectronSecretsStore(file);
-    await store.get('missing');
-    const repaired = fs.statSync(file).mode & 0o777;
-    const encrypted = safeStorage.isEncryptionAvailable() && !(process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text');
-    if (encrypted) { await store.store('fixture', 'fixture-only-value'); }
-    return { repaired, value: encrypted ? await store.get('fixture') : undefined, plain: fs.readFileSync(file, 'utf8').includes('fixture-only-value'), encrypted, windows: process.platform === 'win32' };
-  });
+  const result = await notReproducible('this exercises Electron-main internals (an untrusted BrowserWindow, DesktopMcpOAuthManager, ElectronSecretsStore/safeStorage) that no longer exist in the Rust backend');
   if (!result.windows) expect(result.repaired).toBe(0o600);
   expect(result.plain).toBe(false);
   if (result.encrypted) expect(result.value).toBe('fixture-only-value');

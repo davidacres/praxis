@@ -8,9 +8,8 @@ test.afterEach(async () => {
 });
 
 async function setupMockCodeIntelligence(app: TestApp) {
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+  {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') {
         return {
           data: [{ id: 'pci:repo:fixture', root: '/test/workspace', state: 'ready', generation: 2 }]
@@ -127,7 +126,7 @@ async function setupMockCodeIntelligence(app: TestApp) {
       }
       return { data: {} };
     });
-  });
+  }
 }
 
 test('opens code search from command palette, searches symbols, and displays source and usages', async () => {

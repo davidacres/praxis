@@ -16,11 +16,10 @@ test.afterEach(async () => {
 
 test('shows semantic search recommendation notification on startup if model not installed', async ({}, testInfo) => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     let modelInstalled = false;
 
-    ipcMain.removeHandler('ai:getSemanticModelStatus');
-    ipcMain.handle('ai:getSemanticModelStatus', () => ({
+    await app.overrideChannel('ai:getSemanticModelStatus', () => ({
       installed: modelInstalled,
       active: modelInstalled,
       fingerprint: undefined,
@@ -29,8 +28,7 @@ test('shows semantic search recommendation notification on startup if model not 
       progressPercent: 0
     }));
 
-    ipcMain.removeHandler('ai:downloadSemanticModel');
-    ipcMain.handle('ai:downloadSemanticModel', () => {
+    await app.overrideChannel('ai:downloadSemanticModel', () => {
       modelInstalled = true;
       return {
         installed: true,
@@ -41,7 +39,7 @@ test('shows semantic search recommendation notification on startup if model not 
         progressPercent: 100
       };
     });
-  });
+  }
 
   const win = app.window;
   const notification = win.getByTestId('semantic-search-notification');
@@ -62,11 +60,10 @@ test('shows semantic search recommendation notification on startup if model not 
 
 test('enables semantic search from startup notification and shows success feedback', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
-  await app.electronApp.evaluate(({ ipcMain }) => {
+  {
     let modelInstalled = false;
 
-    ipcMain.removeHandler('ai:getSemanticModelStatus');
-    ipcMain.handle('ai:getSemanticModelStatus', () => ({
+    await app.overrideChannel('ai:getSemanticModelStatus', () => ({
       installed: modelInstalled,
       active: modelInstalled,
       fingerprint: undefined,
@@ -75,8 +72,7 @@ test('enables semantic search from startup notification and shows success feedba
       progressPercent: 0
     }));
 
-    ipcMain.removeHandler('ai:downloadSemanticModel');
-    ipcMain.handle('ai:downloadSemanticModel', () => {
+    await app.overrideChannel('ai:downloadSemanticModel', () => {
       modelInstalled = true;
       return {
         installed: true,
@@ -87,7 +83,7 @@ test('enables semantic search from startup notification and shows success feedba
         progressPercent: 100
       };
     });
-  });
+  }
 
   const win = app.window;
   const notification = win.getByTestId('semantic-search-notification');
@@ -104,9 +100,8 @@ test('enables semantic search from startup notification and shows success feedba
 
 test('configure button in notification opens Code Intelligence settings page', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('ai:getSemanticModelStatus');
-    ipcMain.handle('ai:getSemanticModelStatus', () => ({
+  {
+    await app.overrideChannel('ai:getSemanticModelStatus', () => ({
       installed: false,
       active: false,
       fingerprint: undefined,
@@ -115,12 +110,11 @@ test('configure button in notification opens Code Intelligence settings page', a
       progressPercent: 0
     }));
 
-    ipcMain.removeHandler('ai:codeIntelligence');
-    ipcMain.handle('ai:codeIntelligence', (_event, request: Record<string, unknown>) => {
+    await app.overrideChannel('ai:codeIntelligence', ([request]) => {
       if (request.action === 'list') return { data: [] };
       return { data: {} };
     });
-  });
+  }
 
   const win = app.window;
   const notification = win.getByTestId('semantic-search-notification');
@@ -140,14 +134,10 @@ test('a finished download that the service then refuses is reported, never shown
   // Proven against the old progress listener, which declared success at 100% downloaded:
   // the success line and the error rendered together.
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
-  await app.electronApp.evaluate(({ ipcMain, BrowserWindow }) => {
-    ipcMain.removeHandler('ai:downloadSemanticModel');
-    ipcMain.handle('ai:downloadSemanticModel', async () => {
-      for (const window of BrowserWindow.getAllWindows())
-        window.webContents.send('ai:semanticModelProgress', { bytesDownloaded: 133324998, totalBytes: 133324998, percent: 100 });
-      await new Promise(resolve => setTimeout(resolve, 300));
-      throw new Error('The local code intelligence service did not install the model: fixture refusal');
-    });
+  await app.overrideChannel('ai:downloadSemanticModel', async () => {
+    await app!.emitEvent('ai:semanticModelProgress', { bytesDownloaded: 133324998, totalBytes: 133324998, percent: 100 });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    throw new Error('The local code intelligence service did not install the model: fixture refusal');
   });
 
   const notification = app.window.getByTestId('semantic-search-notification');
@@ -161,9 +151,8 @@ test('a finished download that the service then refuses is reported, never shown
 
 test('offers an update instead of enable when an earlier model is installed', async () => {
   app = await launchTestApp(undefined, undefined, { AI_GATEWAY_API_KEY: 'gateway-fixture-key', ...noInheritedModel }, { semanticSearchPrompt: true });
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('ai:getSemanticModelStatus');
-    ipcMain.handle('ai:getSemanticModelStatus', () => ({
+  {
+    await app.overrideChannel('ai:getSemanticModelStatus', () => ({
       installed: false,
       active: false,
       updateAvailable: true,
@@ -171,7 +160,7 @@ test('offers an update instead of enable when an earlier model is installed', as
       downloading: false,
       progressPercent: 0
     }));
-  });
+  }
 
   // The notification reads status once on mount, before this mock existed; remount it.
   const win = app.window;

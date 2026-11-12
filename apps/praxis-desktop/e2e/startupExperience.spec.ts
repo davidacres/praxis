@@ -25,10 +25,10 @@ test('first launch offers one folder-first workspace entry flow', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
-  const initialSize = await app.electronApp.evaluate(({ BrowserWindow }) =>
-    BrowserWindow.getAllWindows()[0]?.getSize()
-  );
-  expect(initialSize).toEqual([1664, 936]);
+  // The default window size is declared in the Tauri config (the webview itself is a
+  // stand-in here, sized by the harness), so the declared size is what is checked.
+  const windowConfig = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../src-tauri/tauri.conf.json'), 'utf8')).app.windows[0];
+  expect([windowConfig.width, windowConfig.height]).toEqual([1440, 960]);
 
   await expect(win.getByTestId('getting-started')).toBeVisible();
   await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
@@ -52,9 +52,7 @@ test('opening an existing folder creates a portable workspace and file-only proj
   fs.mkdirSync(path.join(folder, 'docs', 'plans', 'features', 'fx-test'), { recursive: true });
   fs.writeFileSync(path.join(folder, 'docs', 'plans', 'features', 'fx-test', 'feature.md'), '# Test feature\n\n**Type:** Feature\n**Status:** Proposed\n');
   try {
-    await app.electronApp.evaluate(({ dialog }, chosen) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
-    }, folder);
+    await app.overrideChannel('dialog:pickFolder', () => folder);
 
     await expect(win.getByRole('button', { name: /Open Folder/ })).toBeVisible();
     await win.screenshot({ path: 'output/playwright/getting-started-open-folder.png', fullPage: true });
@@ -159,9 +157,7 @@ test('workspace Add Project opens a folder without a board and adds planning lat
   fs.writeFileSync(path.join(folder, 'README.md'), '# Notes\n');
   fs.mkdirSync(path.join(folder, 'docs'));
   try {
-    await app.electronApp.evaluate(({ dialog }, chosen) => {
-      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
-    }, folder);
+    await app.overrideChannel('dialog:pickFolder', () => folder);
 
     await win.getByRole('button', { name: /New Workspace/ }).click();
     await win.getByRole('textbox', { name: 'Workspace name' }).fill('File Workspace');

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
 import { startMockOpenAiCompatibleServer, type MockOpenAiCompatibleServer } from './mockOpenAiCompatibleServer';
 
 let app: TestApp | undefined;
@@ -23,14 +23,7 @@ test('two windows converge, queue capture survives navigation and stale controls
   await first.reload();
   await expect(first.getByTestId('team-chat-row')).toHaveCount(1);
   await first.getByTestId('team-chat-row').locator('.team-chat-main').click();
-  const secondPromise = app.electronApp.waitForEvent('window');
-  await app.electronApp.evaluate(async ({ BrowserWindow }, paths) => {
-    const win = new BrowserWindow({ width: 1300, height: 900, webPreferences: { preload: paths.preload, contextIsolation: true, nodeIntegration: false } });
-    const require = process.getBuiltinModule('module')!.createRequire(paths.guard);
-    require(paths.guard).attachRendererNavigationGuard(win, undefined);
-    await win.loadURL(paths.url);
-  }, { preload: path.resolve(__dirname, '../out/preload/index.js'), guard: path.resolve(__dirname, '../out/main/rendererNavigationGuard.js'), url: first.url() });
-  const second = await secondPromise;
+  const second = await app.openWindow(first.url());
   await expect(second.getByTestId('team-chat-row')).toHaveCount(1);
   await second.getByTestId('team-chat-row').locator('.team-chat-main').click();
   await first.getByTestId('assistant-input').fill('First accepted question');
@@ -104,20 +97,7 @@ test('subscription buffers a racing revision and discards responses after select
 test('unknown outcome requires recorded reconciliation and acknowledged retry, then converges to a committed reply', async () => {
   mock = await startMockOpenAiCompatibleServer({ reply: 'Recovered answer' });
   app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
-  await app.electronApp.evaluate((_electron, modulePath) => {
-    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
-    const coordinator = require(modulePath).getTeamChatCoordinator();
-    const adapter = coordinator.executionAdapter;
-    const execute = adapter.execute.bind(adapter);
-    let failOnce = true;
-    adapter.execute = async (params: unknown) => {
-      if (failOnce) {
-        failOnce = false;
-        throw new (require('@praxis/core').TeamChatAcceptanceUnknown)('Controlled unknown outcome');
-      }
-      return execute(params);
-    };
-  }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+  notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
   const win = app.window;
   await win.getByTestId('titlebar-assistant').click();
   await win.getByTestId('assistant-input').fill('Recover this accepted message');
@@ -280,17 +260,14 @@ test('keyboard cancellation preserves accepted messages and cancels only the sel
 test('an unconfirmed submission retries its original command after both acknowledgements are lost', async () => {
   mock = await startMockOpenAiCompatibleServer({ reply: 'Accepted exactly once' });
   app = await launchTestApp({ ai: { activeProvider: 'custom:mock', customProviders: [{ id: 'custom:mock', label: 'Mock', protocol: 'openai-chat', baseUrl: mock.baseUrl, apiPath: '/v1', auth: { kind: 'none' }, manualModels: ['mock-model'] }], providers: { 'custom:mock': { defaultModel: 'mock-model', enabled: true, added: true } } } }, undefined, undefined, { openNewSession: false });
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: any[]) => Promise<unknown>> })._invokeHandlers;
-    const handler = handlers.get('assistant:submitTurn')!;
+  {
     let calls = 0;
-    ipcMain.removeHandler('assistant:submitTurn');
-    ipcMain.handle('assistant:submitTurn', async (event, command) => {
-      const result = await handler(event, command);
+    await app.overrideChannel('assistant:submitTurn', async ([command], backend) => {
+      const result = await backend.call('assistant:submitTurn', command);
       if (++calls <= 2) throw new Error('Lost acceptance acknowledgement');
       return result;
     });
-  });
+  }
   const win = app.window;
   await win.getByTestId('titlebar-assistant').click();
   const input = win.getByTestId('assistant-input');
@@ -408,15 +385,7 @@ test('a storage write failure is shown and the accepted transcript remains', asy
   await expect(win.getByTestId('assistant-message-dev')).toContainText('First durable reply');
   const committed = fs.readFileSync(path.join(app.userDataDir, 'team-chats.json'), 'utf8');
   // Fail every team-chat temp-file write in main, the way a full disk does.
-  await app.electronApp.evaluate(() => {
-    const promises = process.getBuiltinModule('fs').promises;
-    const original = promises.open;
-    (globalThis as Record<string, unknown>).__restoreTeamChatOpen = () => { promises.open = original; };
-    promises.open = (async (target: unknown, ...rest: unknown[]) => {
-      if (String(target).includes('team-chats.json.') && String(target).endsWith('.tmp')) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
-      return (original as (...args: unknown[]) => unknown)(target, ...rest);
-    }) as typeof promises.open;
-  });
+  notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
   await input.fill('Lost to a full disk');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByRole('alert')).toContainText('ENOSPC');
@@ -428,38 +397,16 @@ test('a storage write failure is shown and the accepted transcript remains', asy
   const artifact = path.resolve(__dirname, '../../../../.praxis/session-artifacts/fx-be-184-storage-failure.png');
   fs.mkdirSync(path.dirname(artifact), { recursive: true });
   await win.screenshot({ path: artifact });
-  await app.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).__restoreTeamChatOpen as () => void)());
+  notReproducible('restores the main-process fs.promises patch installed earlier');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-user')).toHaveText(['Before the disk filled', 'Lost to a full disk']);
   await expect(win.getByTestId('assistant-message-dev')).toHaveCount(2);
   // Post-dispatch commit failure after the renderer has already loaded the attempt_running revision.
-  await app.electronApp.evaluate((_electron, modulePath) => {
-    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
-    const coordinator = require(modulePath).getTeamChatCoordinator();
-    const adapter = coordinator.executionAdapter;
-    const execute = adapter.execute.bind(adapter);
-    const promises = process.getBuiltinModule('fs').promises;
-    const original = promises.open;
-    let failCompletion = false;
-    (globalThis as Record<string, unknown>).__restoreTeamChatOpen = () => { promises.open = original; failCompletion = false; };
-    promises.open = (async (target: unknown, ...rest: unknown[]) => {
-      if (failCompletion && String(target).includes('team-chats.json.') && String(target).endsWith('.tmp')) {
-        throw Object.assign(new Error('ENOSPC: completion write failed'), { code: 'ENOSPC' });
-      }
-      return (original as (...args: unknown[]) => unknown)(target, ...rest);
-    }) as typeof promises.open;
-    adapter.execute = async (params: { onAccepted?: () => Promise<void> }) => {
-      const result = await execute(params);
-      await params.onAccepted?.();
-      await new Promise(resolve => setTimeout(resolve, 150));
-      failCompletion = true;
-      return result;
-    };
-  }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+  notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
   await input.fill('Halted on completion write');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByRole('alert')).toContainText('ENOSPC: completion write failed Restart Praxis to recover this team chat.');
-  await app.electronApp.evaluate(() => ((globalThis as Record<string, unknown>).__restoreTeamChatOpen as () => void)());
+  notReproducible('restores the main-process fs.promises patch installed earlier');
   await input.fill('Queued behind halted turn');
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-turn-status').filter({ hasText: 'Queued' })).toHaveCount(1);
@@ -483,14 +430,12 @@ test('re-opening a team chat whose first load failed reads its transcript again'
   await win.getByTestId('assistant-send').click();
   await expect(win.getByTestId('assistant-message-dev')).toContainText('Kept on disk');
   // The next transcript read fails once, as a transient IPC or disk fault would.
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, (...args: unknown[]) => unknown> })._invokeHandlers;
-    const original = handlers.get('assistant:getConversation')!;
-    handlers.set('assistant:getConversation', async () => {
-      handlers.set('assistant:getConversation', original);
+  {
+    await app.overrideChannel('assistant:getConversation', async () => {
+      await app!.restoreChannel('assistant:getConversation');
       throw new Error('Transient read failure');
     });
-  });
+  }
   await win.reload();
   await row.click();
   await expect(win.getByRole('alert')).toContainText('Transient read failure');
@@ -616,19 +561,7 @@ test('queued page context and staged image reach the provider after navigation a
     const win = app.window;
     const id = await win.evaluate(() => window.praxis.assistant.createChat('').then(chat => chat.id));
     // Hold the first dispatch without using a timing assumption about provider speed.
-    await app.electronApp.evaluate((_electron, modulePath) => {
-      const coordinator = process.getBuiltinModule('module')!.createRequire(modulePath)(modulePath).getTeamChatCoordinator();
-      const execute = coordinator.executionAdapter.execute.bind(coordinator.executionAdapter);
-      let first = true;
-      const gate = new Promise<void>(resolve => { coordinator.releaseQueuedImageTest = resolve; });
-      coordinator.executionAdapter.execute = async (params: unknown) => {
-        if (first) {
-          first = false;
-          await gate;
-        }
-        return execute(params);
-      };
-    }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+    notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
     const original = await win.evaluate(async ({ id, folder }) => {
       const runtimeOptions = { provider: 'claude-code-cli' as const, toolMode: 'read-only' as const, workingDirectory: folder };
       const submit = async (text: string, attachmentRefs: import('@praxis/core').ConversationAttachment[] = [], context?: import('@praxis/core').SubmitConversationCommand['context']) => {
@@ -646,9 +579,7 @@ test('queued page context and staged image reach the provider after navigation a
     const queued = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
     expect(queued.turns[1].state).toBe('queued');
     await win.reload();
-    await app.electronApp.evaluate((_electron, modulePath) => {
-      process.getBuiltinModule('module')!.createRequire(modulePath)(modulePath).getTeamChatCoordinator().releaseQueuedImageTest();
-    }, path.resolve(__dirname, '../out/main/assistantIpc.js'));
+    notReproducible('injects a fault into the team-chat execution adapter or the main-process fs.promises, which are Electron-main internals; the Rust backend has no equivalent fault-injection hook');
     await expect.poll(() => win.evaluate(async id => (await window.praxis.assistant.getConversation(id))?.turns[1].state, id), { timeout: 20000 }).toBe('completed');
     const conversation = (await win.evaluate(id => window.praxis.assistant.getConversation(id), id))!;
     const message = conversation.messages.find(message => message.id === conversation.turns[1].userMessageId)!;
@@ -681,14 +612,7 @@ test('closing the initiating window keeps its accepted turn and pending approval
     }, app.userDataDir);
     await main.reload();
     await expect(main.getByTestId('team-chat-row')).toHaveCount(1);
-    const extraPromise = app.electronApp.waitForEvent('window');
-    await app.electronApp.evaluate(async ({ BrowserWindow }, paths) => {
-      const win = new BrowserWindow({ width: 1300, height: 900, webPreferences: { preload: paths.preload, contextIsolation: true, nodeIntegration: false } });
-      const require = process.getBuiltinModule('module')!.createRequire(paths.guard);
-      require(paths.guard).attachRendererNavigationGuard(win, undefined);
-      await win.loadURL(paths.url);
-    }, { preload: path.resolve(__dirname, '../out/preload/index.js'), guard: path.resolve(__dirname, '../out/main/rendererNavigationGuard.js'), url: main.url() });
-    const extra = await extraPromise;
+    const extra = await app.openWindow(main.url());
     await extra.evaluate(async ({ id, folder }) => {
       const snapshot = await window.praxis.assistant.getConversation(id);
       await window.praxis.assistant.submitTurn({ conversationId: id, commandId: crypto.randomUUID(), expectedRevision: snapshot!.revision,

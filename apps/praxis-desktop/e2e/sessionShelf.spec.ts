@@ -312,9 +312,10 @@ test('shelf books follow spines, retain drafts, delay hover and distinguish sele
   const shelf = page.getByTestId('session-shelf');
   const spines = shelf.getByTestId('session-shelf-spine');
   const card = page.getByTestId('session-shelf-card');
-  await app.electronApp.evaluate(({ BrowserWindow }, record) => {
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send('ai:sessionChanged', { ...record, state: 'awaiting_input' });
-  }, data['praxis.agentSessions']['SESSION-earlier0']);
+  {
+    const record = data['praxis.agentSessions']['SESSION-earlier0'];
+    await app.emitEvent('ai:sessionChanged', { ...record, state: 'awaiting_input' });
+  }
   await expect(shelf.getByTestId('session-shelf-attention')).toHaveCount(1);
   await expect(spines.nth(2)).toHaveAttribute('aria-description', 'Awaiting input');
   // A short pass over a spine must not open a preview later.
@@ -364,7 +365,7 @@ test('shelf books follow spines, retain drafts, delay hover and distinguish sele
   await page.keyboard.press('Escape'); await expect(card).toBeHidden();
   await page.mouse.move(600, 180);
   await spines.nth(4).hover(); await expect(input).toHaveValue('Keep my draft for this session');
-  await app.electronApp.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1100, 480); });
+  await app.window.setViewportSize({ width: 1100, height: 480 });
   await expect.poll(async () => {
     const bounds = (await card.boundingBox())!;
     return bounds.y >= 40 && bounds.y + bounds.height <= 480;

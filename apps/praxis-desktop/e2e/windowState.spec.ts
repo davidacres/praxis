@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
+import { closeTestApp, launchTestApp, type TestApp, notReproducible } from './launchTestApp';
 
 test('window state remembers previous position, width, and height across restarts', async () => {
   let app: TestApp = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
@@ -8,10 +8,7 @@ test('window state remembers previous position, width, and height across restart
     const targetBounds = { x: 120, y: 140, width: 1024, height: 768 };
 
     // Set custom bounds on the main BrowserWindow
-    await app.electronApp.evaluate(async ({ BrowserWindow }, bounds) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      win.setBounds(bounds);
-    }, targetBounds);
+    await notReproducible('native window bounds (BrowserWindow.setBounds/getBounds) and their persistence belong to the Tauri shell; the Chromium page stands in for the window');
 
     // Wait for the debounced save or trigger close
     await app.electronApp.close();
@@ -25,10 +22,7 @@ test('window state remembers previous position, width, and height across restart
     );
 
     // Read restored bounds
-    const restoredBounds = await app.electronApp.evaluate(async ({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      return win.getBounds();
-    });
+    const restoredBounds = await notReproducible('native window bounds (BrowserWindow.setBounds/getBounds) and their persistence belong to the Tauri shell; the Chromium page stands in for the window');
 
     expect(restoredBounds.x).toBe(targetBounds.x);
     expect(restoredBounds.y).toBe(targetBounds.y);

@@ -200,15 +200,10 @@ test('each turn records its reply once, and follow-ups carry the earlier answer'
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('Ready for review');
 
   // Model the asynchronous launch preparation between send and executing.
-  await app.electronApp.evaluate((_electron, modulePath) => {
-    const require = process.getBuiltinModule('module')!.createRequire(modulePath);
-    const host = require(modulePath).getAcpAgentHost();
-    const continueTask = host.continueTask.bind(host);
-    host.continueTask = async (...args: unknown[]) => {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      return continueTask(...args);
-    };
-  }, require.resolve('../out/main/aiInstance'));
+  await app.overrideChannel('ai:continueSession', async (args, backend) => {
+    await new Promise(resolve => setTimeout(resolve, 400));
+    return backend.call('ai:continueSession', ...args);
+  });
 
   // Two follow-ups: each adds exactly one reply. The retroactive flush this
   // replaced re-appended the previous answer, so the second follow-up used to

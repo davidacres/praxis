@@ -12,9 +12,8 @@ test('AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functi
   app = await launchTestApp();
   const win = app.window;
   // Account limits must not depend on a signed-in Codex installation on the runner.
-  await app.electronApp.evaluate(({ ipcMain }) => {
-    ipcMain.removeHandler('aiUsage:providerSnapshots');
-    ipcMain.handle('aiUsage:providerSnapshots', () => ({
+  {
+    await app.overrideChannel('aiUsage:providerSnapshots', () => ({
       checkedAt: new Date().toISOString(),
       snapshots: [
         {
@@ -61,7 +60,7 @@ test('AI Usage & Provider Fleet Dashboard renders pixel-perfect with full functi
         }
       ]
     }));
-  });
+  }
 
   // Open Settings -> AI Usage
   await win.keyboard.press('ControlOrMeta+k');
