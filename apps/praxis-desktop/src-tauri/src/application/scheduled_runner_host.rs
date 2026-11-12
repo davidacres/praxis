@@ -633,6 +633,7 @@ impl ScheduledRunnerPorts for HostPorts {
                 }
             }
         }
+        let _ = std::fs::write("/private/tmp/claude-501/-Users-daveacres-dev-tools-praxis/5546166f-24b5-4695-a9bd-f8f60eef75d6/scratchpad/usage-debug.txt", format!("usable={usable:?} override={override_usage:?} thr={:?}", self.threshold()));
         Ok(ProviderUsageReading {
             usable,
             active: Some(self.host.settings().read().ai.active_provider.clone()).filter(|a| !a.is_empty()),
@@ -894,12 +895,29 @@ impl ScheduledRunnerPorts for HostPorts {
             stages.as_deref(),
         )?;
         let status = transition.to_status.clone().unwrap_or_else(|| transition.name.clone());
+        // A folder-backed ticket is a file in the repository: written and committed in one turn on the
+        // base checkout, or the checkout reads as dirty and the next ticket refuses to start.
+        let folder = run.project_id.as_deref().and_then(|id| workflows::project_folder(&self.host, id));
+        let _base = match &folder {
+            Some(folder) => Some(workflow_engine::base_checkout_guard(folder).await),
+            None => None,
+        };
+        let before = match &folder {
+            Some(folder) => workflow_engine::changed_paths(folder).await.ok(),
+            None => None,
+        };
         let moved = self
             .rpc(
                 "issue:transition",
                 vec![json!(ticket.issue_key), json!(transition.id), json!(ticket.connection_id)],
             )
             .await;
+        if let (Ok(_), Some(folder), Some(before)) = (&moved, &folder, &before) {
+            let message = format!("Move {} to {status}", ticket.issue_key);
+            if let Err(error) = workflow_engine::commit_praxis_write(folder, before, &message).await {
+                eprintln!("Moved {} to {status} but could not commit it: {error}", ticket.issue_key);
+            }
+        }
         Some(moved.map(|_| Some(status)))
     }
 

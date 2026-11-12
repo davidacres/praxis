@@ -1155,6 +1155,10 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
         )));
     }
     let typed: WorkflowDefinition = serde_json::from_value(definition.clone()).map_err(failure)?;
+    // A run started from a template needs the agents and skills it names, as instantiating one installs them.
+    if instantiated {
+        ensure_workflow_dependencies_installed(host, &definition);
+    }
 
     let has_agent_stage = typed.nodes.iter().any(|n| matches!(n, WorkflowNode::AgentTask(_)));
     if has_agent_stage {

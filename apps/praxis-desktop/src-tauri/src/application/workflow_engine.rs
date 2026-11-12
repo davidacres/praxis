@@ -87,6 +87,41 @@ pub async fn base_blocking_paths(folder: &Path) -> Result<Vec<String>, String> {
     Ok(paths)
 }
 
+/// The base checkout is the one thing parallel runs share: writes to it and merges into it take turns.
+pub async fn base_checkout_guard(folder: &Path) -> tokio::sync::OwnedMutexGuard<()> {
+    static LOCKS: OnceLock<Mutex<std::collections::HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let key = std::fs::canonicalize(folder).unwrap_or_else(|_| folder.to_path_buf());
+    let lock = {
+        let mut all = LOCKS
+            .get_or_init(Mutex::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Arc::clone(all.entry(key).or_default())
+    };
+    lock.lock_owned().await
+}
+
+/// Every path git reports as changed or untracked (`changedPaths`).
+pub async fn changed_paths(folder: &Path) -> Result<Vec<String>, String> {
+    let status = git_raw(folder, &["status", "--porcelain=v1", "-z", "--untracked-files=all"]).await?;
+    Ok(status
+        .split('\0')
+        .filter(|e| e.len() > 3)
+        .map(|e| e[3..].to_string())
+        .collect())
+}
+
+/// Commits what a Praxis write (a ticket move, say) changed since `before`, so the checkout does not
+/// read as dirty and the schedule's next ticket can start (`commitPraxisWrite`).
+pub async fn commit_praxis_write(folder: &Path, before: &[String], message: &str) -> Result<(), String> {
+    let after = changed_paths(folder).await?;
+    let fresh: Vec<String> = after.into_iter().filter(|p| !before.contains(p)).collect();
+    if fresh.is_empty() {
+        return Ok(());
+    }
+    commit_paths(folder, &fresh, message).await
+}
+
 /// Commits exactly `paths` (the product files a run would otherwise leave out) on the base checkout.
 pub async fn commit_paths(folder: &Path, paths: &[String], message: &str) -> Result<(), String> {
     let mut add = vec!["add", "--"];
@@ -241,6 +276,9 @@ impl WorkflowWorkspaceProvider for GitWorkspace {
         {
             return Err("The requested delivery branch name is invalid.".into());
         }
+        // Branched in turn with other writes to the base, so a ticket move being committed for another
+        // run is never mistaken for the person's uncommitted work.
+        let _base = base_checkout_guard(&folder).await;
         let worktree_root = repo_root.join(".worktrees");
         let worktree_path = worktree_root.join(&name);
         std::fs::create_dir_all(&worktree_root).map_err(|e| e.to_string())?;
@@ -487,6 +525,106 @@ fn describe_failure(result: &praxis_workflows::check_process::CheckProcessResult
 }
 
 impl HostDispatcher {
+    /// Merges the run's branch into the target branch of the base checkout (`runWorkflowMerge`).
+    async fn merge_into_base(
+        &self,
+        node: &praxis_workflows::types::WorkflowMergeNode,
+        context: &StageDispatchContext,
+        folder: &Path,
+    ) -> Result<StageOutcome, String> {
+        let run = &context.run;
+        let Some(root) = praxis_core::git::run_work::repository_root(folder).await else {
+            return Ok(StageOutcome::failure("No Git repository found for this project."));
+        };
+        let root = PathBuf::from(root);
+        // Whatever the run's worktree left uncommitted is kept before the branch is merged.
+        if let Some(worktree) = &context.worktree_path {
+            let _ = preserve_uncommitted_work(Path::new(worktree), "WIP: preserve changes for merge").await;
+        }
+        let source = match &run.shared_delivery_branch {
+            Some(branch) => branch.clone(),
+            None => praxis_core::git::run_work::find_run_branch(&root, &run.run_id)
+                .await
+                .unwrap_or_else(|| run_worktree_key(&run.run_id)),
+        };
+        let target = match node.target_branch.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+            Some(t) => t.to_string(),
+            None => git(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await.ok().filter(|b| !b.is_empty()).unwrap_or_else(|| "main".to_string()),
+        };
+        let mut log = format!("Initiating merge of branch {source} into {target}...\n");
+        let evidence = |log: &str| {
+            let dir = evidence_dir(&self.host, run, &node.base.id);
+            if std::fs::create_dir_all(&dir).is_ok() {
+                let _ = std::fs::write(dir.join("combined.log"), log);
+            }
+        };
+        if git(&root, &["rev-parse", "--verify", &source]).await.is_err() {
+            log.push_str(&format!("Source branch {source} was not found in the repository.\n"));
+            evidence(&log);
+            return Ok(StageOutcome::failure(format!("Source branch {source} was not found.")));
+        }
+        // Praxis's own metadata is not work the merge could lose, the same rule the start-of-run check uses.
+        let dirty = base_blocking_paths(&root).await?;
+        if !dirty.is_empty() {
+            log.push_str(&format!("Target checkout has uncommitted changes:\n{}\nCannot safely merge into dirty checkout.\n", dirty.join("\n")));
+            evidence(&log);
+            return Ok(StageOutcome::failure(
+                "Target checkout contains uncommitted changes. Please commit or stash them before merging.",
+            ));
+        }
+        let current = git(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await.unwrap_or_default();
+        if current != target {
+            log.push_str(&format!("Switching checkout to {target}...\n"));
+            if git(&root, &["checkout", &target]).await.is_err() {
+                evidence(&log);
+                return Ok(StageOutcome::failure(format!("Could not switch to target branch {target}.")));
+            }
+        }
+        let message = format!(
+            "Merge delivery run {}: {}",
+            &run.run_id[..run.run_id.len().min(8)],
+            run.definition.name
+        );
+        let mut args = vec!["-c", "user.name=Praxis", "-c", "user.email=praxis@localhost", "-c", "commit.gpgsign=false", "merge"];
+        if node.no_fast_forward != Some(false) {
+            args.push("--no-ff");
+        }
+        args.extend(["-m", &message, &source]);
+        log.push_str(&format!("$ git {}\n", args.join(" ")));
+        match git(&root, &args).await {
+            Ok(output) => {
+                log.push_str(&output);
+                log.push_str(&format!("\nMerge succeeded cleanly into {target}.\n"));
+                evidence(&log);
+                Ok(StageOutcome { succeeded: true, exit_code: Some(0), ..StageOutcome::default() })
+            }
+            Err(error) => {
+                log.push_str(&error);
+                let conflicted: Vec<String> = git(&root, &["diff", "--name-only", "--diff-filter=U"])
+                    .await
+                    .unwrap_or_default()
+                    .lines()
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| !l.is_empty())
+                    .collect();
+                log.push_str("\nMerge conflict encountered!\n");
+                let _ = git(&root, &["merge", "--abort"]).await;
+                log.push_str("Merge aborted cleanly.\n");
+                evidence(&log);
+                Ok(StageOutcome {
+                    error: Some(format!(
+                        "Merge conflict in {} file(s): {}. Nothing was merged. Choose \"Let AI resolve the conflicts\" on the run, or resolve them yourself and retry.",
+                        conflicted.len(),
+                        conflicted.join(", ")
+                    )),
+                    exit_code: Some(1),
+                    conflict_files: Some(conflicted),
+                    ..StageOutcome::default()
+                })
+            }
+        }
+    }
+
     /// Gives a run's worktree its dependencies, and its build output, before its first stage works
     /// in it (`ensureRunDependencies`). Resolves to an error message when the install failed.
     async fn ensure_run_dependencies(
@@ -717,6 +855,7 @@ impl StageDispatcher for HostDispatcher {
         match node {
             WorkflowNode::Check(_) => true,
             WorkflowNode::AgentTask(_) => workflow_agent_stage::can_dispatch(&self.host),
+            WorkflowNode::Merge(_) => true,
             _ => false,
         }
     }
@@ -740,6 +879,24 @@ impl StageDispatcher for HostDispatcher {
             }
         }
         workflow_agent_stage::run_agent_stage(&self.host, node, context).await
+    }
+
+    async fn run_merge(
+        &self,
+        node: &praxis_workflows::types::WorkflowMergeNode,
+        context: &StageDispatchContext,
+    ) -> Result<StageOutcome, String> {
+        let Some(folder) = workflows::project_folder(&self.host, &context.run.project_id) else {
+            return Ok(StageOutcome::failure("No Git repository found for this project."));
+        };
+        // Merges into one base checkout never overlap, whichever runs (or parallel lanes) start them.
+        let _base = base_checkout_guard(&folder).await;
+        let outcome = self.merge_into_base(node, context, &folder).await;
+        // E2E only: hold the checkout a little longer, so a spec can tell turns from overlap.
+        if let Some(ms) = std::env::var("PRAXIS_E2E_MERGE_HOLD_MS").ok().and_then(|v| v.parse::<u64>().ok()).filter(|ms| *ms > 0) {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+        }
+        outcome
     }
 
     async fn cancel_stage(&self, node_id: &str, run: &WorkflowRun) -> Result<(), String> {
