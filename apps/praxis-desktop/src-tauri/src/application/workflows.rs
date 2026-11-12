@@ -810,12 +810,8 @@ pub fn summarize(host: &HostContext, run: &WorkflowRun) -> Value {
 
 /// The live Agent Hub catalog (`agentRuntime:list`) as preflight reads it.
 fn agent_catalog(host: &HostContext) -> Value {
-    let response = host.dispatch_rpc(praxis_contracts::RustRpcRequest {
-        id: "workflow-preflight".into(),
-        channel: "agentRuntime:list".into(),
-        args: Vec::new(),
-    });
-    if response.ok { response.result.unwrap_or(Value::Null) } else { Value::Null }
+    // Read directly: this runs under the profile lock, which a nested RPC would wait on forever.
+    super::agent_runtime::list(host, &host.config().user_data_dir)
 }
 
 /// Resolves each agent stage against what is discovered and trusted right now (`preflightWorkflow`).

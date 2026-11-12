@@ -222,7 +222,7 @@ fn refresh(host: &HostContext, user_data_dir: &Path) -> Value {
     })
 }
 
-fn list(host: &HostContext, user_data_dir: &Path) -> Value {
+pub(super) fn list(host: &HostContext, user_data_dir: &Path) -> Value {
     match with_state(user_data_dir, |state| state.snapshot.clone()) {
         Some(snapshot) => snapshot,
         None => refresh(host, user_data_dir),

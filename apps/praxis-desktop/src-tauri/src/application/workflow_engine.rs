@@ -16,13 +16,14 @@ use praxis_workflows::orchestrator::{
     StageDispatchContext, StageDispatcher, StageOutcome, WorkflowOrchestrator,
     WorkflowOrchestratorOptions, WorkflowRunPersistence, WorkflowWorkspaceProvider,
 };
-use praxis_workflows::run::{DeclaredArtifact, WorkflowRun};
+use praxis_workflows::run::{DeclaredArtifact, WorkflowPauseReason, WorkflowRun};
 use praxis_workflows::run::is_run_settled;
 use praxis_workflows::types::{WorkflowAgentTaskNode, WorkflowCheckNode, WorkflowNode};
 use serde_json::json;
 use tokio::process::Command;
 
 use super::workflow_agent_stage;
+use super::workflow_env_failure::{CheckEnvironmentInput, classify_check_environment_failure};
 use super::workflows;
 
 /// Metadata Praxis writes into a checkout; it is not product source and never blocks a run.
@@ -643,19 +644,26 @@ impl HostDispatcher {
             outcome.artifacts = Some(artifacts);
             return Ok(outcome);
         }
+        let args_list: Vec<String> = node.args.clone().unwrap_or_default();
         if spawn_failed {
             let message = result.error.clone().unwrap_or_default();
-            let missing = message.contains("No such file") || message.contains("not found");
-            outcome.error = Some(if missing {
-                format!(
-                    "Scanner binary \"{}\" not found. Please install it or disable this check node.",
-                    node.command
-                )
-            } else if message.is_empty() {
+            let missing_reason = if message.is_empty() {
                 format!("Could not start {}.", node.command)
             } else {
-                message
+                message.clone()
+            };
+            let env_failure = classify_check_environment_failure(&CheckEnvironmentInput {
+                command: &node.command,
+                args: &args_list,
+                exit_code: None,
+                output: "",
+                spawn_error: &format!("{message} {missing_reason}"),
             });
+            outcome.error = Some(match &env_failure {
+                Some(f) => format!("{missing_reason} {}", f.hint),
+                None => missing_reason,
+            });
+            outcome.pause = env_failure.map(|_| WorkflowPauseReason::Environment);
             outcome.artifacts = Some(Vec::new());
             return Ok(outcome);
         }
@@ -678,7 +686,21 @@ impl HostDispatcher {
         } else {
             format!(":\n{}", tail(&result.output))
         };
-        outcome.error = Some(format!("{} exited {code}{body}", node.command));
+        // A non-zero exit is usually the check's verdict. When the output shows the tool itself could
+        // not do its job it is not: pause the run instead of failing it and spending the attempt.
+        let env_failure = classify_check_environment_failure(&CheckEnvironmentInput {
+            command: &node.command,
+            args: &args_list,
+            exit_code: result.code,
+            output: &result.output,
+            spawn_error: "",
+        });
+        let prefix = env_failure
+            .as_ref()
+            .map(|f| format!("{} {}\n\n", f.reason, f.hint))
+            .unwrap_or_default();
+        outcome.pause = env_failure.map(|_| WorkflowPauseReason::Environment);
+        outcome.error = Some(format!("{prefix}{} exited {code}{body}", node.command));
         outcome.exit_code = result.code.map(i64::from);
         outcome.artifacts = Some(artifacts);
         Ok(outcome)
