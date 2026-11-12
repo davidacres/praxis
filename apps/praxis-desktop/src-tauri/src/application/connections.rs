@@ -161,12 +161,25 @@ pub fn tracker_input(host: &HostContext, connection: &Value) -> Result<Value> {
             "apiKey": secret.as_deref().or(settings["apiKey"].as_str()).unwrap_or(""), "allowIssueCreation": settings["allowIssueCreation"] == true, "defaultPageSize": 25}}),
         ),
         "jiracloud" => {
-            let secret_named = |name: &str| host.secrets().get(&format!("praxis.connection.{id}.{name}")).unwrap_or_default();
+            let secret_named = |name: &str| {
+                host.secrets()
+                    .get(&format!("praxis.connection.{id}.{name}"))
+                    .unwrap_or_default()
+            };
             let text = |key: &str| settings[key].as_str().unwrap_or("").trim().to_owned();
             // The form stores arguments as one-per-line text; a seeded file may hold an array.
             let args: Vec<String> = match &settings["stdioArgs"] {
-                Value::Array(items) => items.iter().filter_map(Value::as_str).map(str::to_owned).collect(),
-                Value::String(lines) => lines.lines().map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect(),
+                Value::Array(items) => items
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect(),
+                Value::String(lines) => lines
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
                 _ => Vec::new(),
             };
             let mut headers = serde_json::Map::new();

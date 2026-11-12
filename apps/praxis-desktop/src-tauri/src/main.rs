@@ -39,7 +39,12 @@ impl application::task_notifications::NoticeShell for NativeNoticeShell {
 
     fn show(&self, notice: &application::task_notifications::Notice, silent: bool) {
         use tauri_plugin_notification::NotificationExt;
-        let mut builder = self.app.notification().builder().title(&notice.title).body(&notice.body);
+        let mut builder = self
+            .app
+            .notification()
+            .builder()
+            .title(&notice.title)
+            .body(&notice.body);
         if !silent {
             builder = builder.sound("default");
         }
@@ -196,10 +201,24 @@ async fn praxis_rpc(
         }
         "aiUsage:alibabaConsoleSignIn" => {
             // The window is the shell's; the backend decides where it goes and keeps what it finds.
-            let provider = args.first().and_then(Value::as_str).ok_or_else(|| error("INVALID_ARGUMENT", "Provider required."))?.to_owned();
-            let target = invoke_host(state.host.clone(), "aiUsage:alibabaConsoleTarget".into(), vec![json!(provider)]).await?;
+            let provider = args
+                .first()
+                .and_then(Value::as_str)
+                .ok_or_else(|| error("INVALID_ARGUMENT", "Provider required."))?
+                .to_owned();
+            let target = invoke_host(
+                state.host.clone(),
+                "aiUsage:alibabaConsoleTarget".into(),
+                vec![json!(provider)],
+            )
+            .await?;
             let cookies = alibaba_window::sign_in(window.app_handle(), &target).await?;
-            invoke_host(state.host.clone(), "aiUsage:alibabaConsoleStoreSession".into(), vec![json!(provider), json!(cookies)]).await
+            invoke_host(
+                state.host.clone(),
+                "aiUsage:alibabaConsoleStoreSession".into(),
+                vec![json!(provider), json!(cookies)],
+            )
+            .await
         }
         "workspaces:saveToFile" | "workspaces:openFromFile" => {
             let save = channel == "workspaces:saveToFile";
@@ -261,13 +280,20 @@ async fn praxis_rpc(
             let html = prepared["html"].as_str().unwrap_or_default();
             let url = format!("data:text/html;charset=utf-8,{}", percent_encode(html));
             let url = url.parse().map_err(shell_error)?;
-            let label = format!("html-preview-{}", PREVIEW_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
-            tauri::WebviewWindowBuilder::new(window.app_handle(), label, tauri::WebviewUrl::External(url))
-                .title(title)
-                .inner_size(1000.0, 760.0)
-                .min_inner_size(560.0, 360.0)
-                .build()
-                .map_err(shell_error)?;
+            let label = format!(
+                "html-preview-{}",
+                PREVIEW_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            );
+            tauri::WebviewWindowBuilder::new(
+                window.app_handle(),
+                label,
+                tauri::WebviewUrl::External(url),
+            )
+            .title(title)
+            .inner_size(1000.0, 760.0)
+            .min_inner_size(560.0, 360.0)
+            .build()
+            .map_err(shell_error)?;
             Ok(Value::Null)
         }
         _ => invoke_host(state.host.clone(), channel, args).await,

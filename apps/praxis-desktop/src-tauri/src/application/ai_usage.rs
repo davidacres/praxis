@@ -14,7 +14,10 @@ const USAGE_SECRET_PREFIX: &str = "ai-usage:";
 fn default_provider_snapshot(host: &HostContext, provider: &str) -> Value {
     if provider == "openai" {
         let has_key = std::env::var("OPENAI_ADMIN_KEY").is_ok_and(|v| !v.is_empty())
-            || host.secrets().get(&format!("{USAGE_SECRET_PREFIX}openai")).is_some_and(|v| !v.is_empty());
+            || host
+                .secrets()
+                .get(&format!("{USAGE_SECRET_PREFIX}openai"))
+                .is_some_and(|v| !v.is_empty());
         if !has_key {
             return json!({
                 "provider": provider,
@@ -39,8 +42,13 @@ fn default_provider_snapshot(host: &HostContext, provider: &str) -> Value {
 fn enabled_usage_providers(host: &HostContext) -> Vec<String> {
     let ai = serde_json::to_value(host.settings().read().ai).unwrap_or(Value::Null);
     let providers = ai["providers"].as_object().cloned().unwrap_or_default();
-    let is_enabled = |id: &str| providers.get(id).and_then(|p| p["enabled"].as_bool()) != Some(false);
-    let mut out: Vec<String> = providers.keys().filter(|id| is_enabled(id)).cloned().collect();
+    let is_enabled =
+        |id: &str| providers.get(id).and_then(|p| p["enabled"].as_bool()) != Some(false);
+    let mut out: Vec<String> = providers
+        .keys()
+        .filter(|id| is_enabled(id))
+        .cloned()
+        .collect();
     for endpoint in ai["customProviders"].as_array().into_iter().flatten() {
         if let Some(id) = endpoint["id"].as_str().filter(|id| is_enabled(id)) {
             out.push(id.to_owned());
@@ -78,18 +86,42 @@ pub fn dispatch(
 ) -> Result<Value> {
     match channel {
         "aiUsage:listEvents" => Ok(json!(stats::list_events(user_data_dir))),
-        "aiUsage:dashboardSummary" => Ok(stats::dashboard_summary(&stats::list_events(user_data_dir), chrono::Utc::now())),
+        "aiUsage:dashboardSummary" => Ok(stats::dashboard_summary(
+            &stats::list_events(user_data_dir),
+            chrono::Utc::now(),
+        )),
         "aiUsage:series" => {
-            let granularity = stats::Granularity::parse(text(args, 0)?).ok_or_else(|| failure("Unknown usage granularity."))?;
+            let granularity = stats::Granularity::parse(text(args, 0)?)
+                .ok_or_else(|| failure("Unknown usage granularity."))?;
             let periods = args.get(1).and_then(Value::as_u64).unwrap_or(1) as usize;
-            let provider = args.get(2).and_then(Value::as_str).filter(|p| !p.is_empty());
-            let model = args.get(3).and_then(Value::as_str).filter(|m| !m.is_empty());
-            let events: Vec<Value> = stats::list_events(user_data_dir).into_iter().filter(|e| model.is_none_or(|m| e["model"].as_str() == Some(m))).collect();
-            Ok(json!(stats::series(&events, granularity, periods, chrono::Utc::now(), provider)))
+            let provider = args
+                .get(2)
+                .and_then(Value::as_str)
+                .filter(|p| !p.is_empty());
+            let model = args
+                .get(3)
+                .and_then(Value::as_str)
+                .filter(|m| !m.is_empty());
+            let events: Vec<Value> = stats::list_events(user_data_dir)
+                .into_iter()
+                .filter(|e| model.is_none_or(|m| e["model"].as_str() == Some(m)))
+                .collect();
+            Ok(json!(stats::series(
+                &events,
+                granularity,
+                periods,
+                chrono::Utc::now(),
+                provider
+            )))
         }
         "aiUsage:compareLatestPeriod" => {
-            let granularity = stats::Granularity::parse(text(args, 0)?).ok_or_else(|| failure("Unknown usage granularity."))?;
-            Ok(stats::compare_latest_period(&stats::list_events(user_data_dir), granularity, chrono::Utc::now()))
+            let granularity = stats::Granularity::parse(text(args, 0)?)
+                .ok_or_else(|| failure("Unknown usage granularity."))?;
+            Ok(stats::compare_latest_period(
+                &stats::list_events(user_data_dir),
+                granularity,
+                chrono::Utc::now(),
+            ))
         }
         "aiUsage:providerSnapshot" => {
             let provider = text(args, 0)?;
@@ -142,12 +174,19 @@ pub fn dispatch(
         // Shell-only: where the sign-in window should go, and the cookies it ended up with.
         "aiUsage:alibabaConsoleTarget" => {
             let provider = text(args, 0)?;
-            super::alibaba_usage::sign_in_target(host, provider).ok_or_else(|| failure("Console sign-in is only for an Alibaba Coding Plan endpoint."))
+            super::alibaba_usage::sign_in_target(host, provider).ok_or_else(|| {
+                failure("Console sign-in is only for an Alibaba Coding Plan endpoint.")
+            })
         }
         "aiUsage:alibabaConsoleStoreSession" => {
             let provider = text(args, 0)?;
             require_coding_plan(host, provider)?;
-            super::alibaba_usage::store_session(host, args.get(1).and_then(Value::as_array).map_or(&[][..], Vec::as_slice));
+            super::alibaba_usage::store_session(
+                host,
+                args.get(1)
+                    .and_then(Value::as_array)
+                    .map_or(&[][..], Vec::as_slice),
+            );
             Ok(console_status(host, provider))
         }
         _ => Err(failure(format!("Unknown aiUsage channel: {channel}"))),

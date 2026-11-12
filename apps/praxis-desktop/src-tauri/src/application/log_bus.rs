@@ -17,8 +17,13 @@ const DEFAULT_CAPACITY: usize = 500;
 
 /// The bus of a profile, shared by the `log:getRecent` handler and everything that writes to it.
 pub fn shared(root: &Path) -> std::sync::Arc<LogBus> {
-    let mut all = static_buses().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    std::sync::Arc::clone(all.entry(root.to_path_buf()).or_insert_with(|| std::sync::Arc::new(LogBus::new(root))))
+    let mut all = static_buses()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    std::sync::Arc::clone(
+        all.entry(root.to_path_buf())
+            .or_insert_with(|| std::sync::Arc::new(LogBus::new(root))),
+    )
 }
 
 /// Starts the profile's bus afresh from its log file. Called once when the application registers,
@@ -31,7 +36,10 @@ pub fn restart(root: &Path) -> std::sync::Arc<LogBus> {
 }
 
 fn restart_slot(root: &Path, bus: std::sync::Arc<LogBus>) {
-    static_buses().lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(root.to_path_buf(), bus);
+    static_buses()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(root.to_path_buf(), bus);
 }
 
 type BusMap = Mutex<std::collections::HashMap<PathBuf, std::sync::Arc<LogBus>>>;

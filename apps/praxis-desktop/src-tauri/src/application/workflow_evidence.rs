@@ -32,7 +32,11 @@ pub struct EvidenceKey<'a> {
 }
 
 pub fn bundle_dir(root: &Path, key: &EvidenceKey) -> Result<PathBuf, String> {
-    for (field, value) in [("projectId", key.project_id), ("runId", key.run_id), ("nodeId", key.node_id)] {
+    for (field, value) in [
+        ("projectId", key.project_id),
+        ("runId", key.run_id),
+        ("nodeId", key.node_id),
+    ] {
         if !is_safe_segment(value) {
             return Err(format!("Unsafe evidence {field}: {value}"));
         }
@@ -57,12 +61,16 @@ pub fn redact(content: &str) -> (String, bool) {
         Regex::new(r#"(?i)\b((?:api[_-]?key|secret|token|password|passwd|access[_-]?key|client[_-]?secret|private[_-]?key)\s*[:=]\s*)(["']?)([^\s"',]{4,})(["']?)"#)
             .expect("regex")
     });
-    let bearer = BEARER.get_or_init(|| Regex::new(r"\b(Bearer\s+)([A-Za-z0-9._~+/=-]{10,})").expect("regex"));
+    let bearer = BEARER
+        .get_or_init(|| Regex::new(r"\b(Bearer\s+)([A-Za-z0-9._~+/=-]{10,})").expect("regex"));
     let bare = BARE.get_or_init(|| {
         vec![
             Regex::new(r"\bAKIA[0-9A-Z]{16}\b").expect("regex"),
             Regex::new(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b").expect("regex"),
-            Regex::new(r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----").expect("regex"),
+            Regex::new(
+                r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+            )
+            .expect("regex"),
         ]
     });
     let mut redacted = false;
@@ -134,7 +142,8 @@ pub fn write_log_bundle(
     let dir = bundle_dir(root, key)?;
     let now = chrono::Utc::now();
     let captured_at = now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let expires = (now + chrono::Duration::days(RETENTION_DAYS)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let expires = (now + chrono::Duration::days(RETENTION_DAYS))
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let bundle_id = format!("{}-{}-{}", key.run_id, key.node_id, key.attempt);
     let label = "combined";
     let mut entry = json!({
@@ -150,7 +159,11 @@ pub fn write_log_bundle(
     match &captured.content {
         None => {
             entry["presence"] = json!("missing");
-            let reason = captured.missing_reason.as_deref().map(str::trim).filter(|r| !r.is_empty());
+            let reason = captured
+                .missing_reason
+                .as_deref()
+                .map(str::trim)
+                .filter(|r| !r.is_empty());
             entry["missingReason"] = json!(reason.unwrap_or("Not captured."));
         }
         Some(content) if content.is_empty() => {
@@ -158,7 +171,11 @@ pub fn write_log_bundle(
         }
         Some(content) => {
             let truncated = content.len() > MAX_BYTES;
-            let body = if truncated { truncate_tail(content, MAX_BYTES) } else { content.clone() };
+            let body = if truncated {
+                truncate_tail(content, MAX_BYTES)
+            } else {
+                content.clone()
+            };
             let name = file_name(label);
             entry["presence"] = json!("present");
             entry["path"] = json!(name);
@@ -208,7 +225,9 @@ fn is_expired(entry: &Value) -> bool {
 
 /// The `workflows:getEvidence` view of one attempt: its entry and, when present and unexpired, its content.
 pub fn read_view(root: &Path, key: &EvidenceKey, project_id: &str) -> Value {
-    let Ok(dir) = bundle_dir(root, key) else { return json!({ "expired": false }) };
+    let Ok(dir) = bundle_dir(root, key) else {
+        return json!({ "expired": false });
+    };
     let Some(bundle) = std::fs::read_to_string(dir.join("bundle.json"))
         .ok()
         .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
@@ -219,7 +238,11 @@ pub fn read_view(root: &Path, key: &EvidenceKey, project_id: &str) -> Value {
     if bundle["projectId"] != project_id {
         return json!({ "expired": false });
     }
-    let Some(entry) = bundle["entries"].as_array().and_then(|e| e.first()).cloned() else {
+    let Some(entry) = bundle["entries"]
+        .as_array()
+        .and_then(|e| e.first())
+        .cloned()
+    else {
         return json!({ "expired": false });
     };
     let expired = is_expired(&entry);
@@ -242,7 +265,9 @@ mod tests {
 
     #[test]
     fn echoed_secrets_are_redacted_but_the_key_stays() {
-        let (out, redacted) = redact("missing dependency, API_KEY=sk_live_abcdef1234567890 and Bearer abcdefghijklmnop");
+        let (out, redacted) = redact(
+            "missing dependency, API_KEY=sk_live_abcdef1234567890 and Bearer abcdefghijklmnop",
+        );
         assert!(redacted);
         assert!(out.contains("API_KEY=[REDACTED]"));
         assert!(out.contains("Bearer [REDACTED]"));
@@ -252,15 +277,64 @@ mod tests {
     #[test]
     fn missing_empty_and_present_are_distinct() {
         let root = std::env::temp_dir().join(format!("praxis-evidence-{}", std::process::id()));
-        let key = |attempt| EvidenceKey { project_id: "p", run_id: "r", node_id: "n", attempt };
-        write_log_bundle(&root, &key(1), None, &Captured { content: None, missing_reason: Some("never started".into()), redacted: false }).unwrap();
-        write_log_bundle(&root, &key(2), None, &Captured { content: Some(String::new()), missing_reason: None, redacted: false }).unwrap();
-        write_log_bundle(&root, &key(3), Some("abcdef1"), &Captured { content: Some("hi".into()), missing_reason: None, redacted: false }).unwrap();
-        assert_eq!(read_view(&root, &key(1), "p")["entry"]["presence"], "missing");
+        let key = |attempt| EvidenceKey {
+            project_id: "p",
+            run_id: "r",
+            node_id: "n",
+            attempt,
+        };
+        write_log_bundle(
+            &root,
+            &key(1),
+            None,
+            &Captured {
+                content: None,
+                missing_reason: Some("never started".into()),
+                redacted: false,
+            },
+        )
+        .unwrap();
+        write_log_bundle(
+            &root,
+            &key(2),
+            None,
+            &Captured {
+                content: Some(String::new()),
+                missing_reason: None,
+                redacted: false,
+            },
+        )
+        .unwrap();
+        write_log_bundle(
+            &root,
+            &key(3),
+            Some("abcdef1"),
+            &Captured {
+                content: Some("hi".into()),
+                missing_reason: None,
+                redacted: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            read_view(&root, &key(1), "p")["entry"]["presence"],
+            "missing"
+        );
         assert_eq!(read_view(&root, &key(2), "p")["entry"]["presence"], "empty");
         assert_eq!(read_view(&root, &key(3), "p")["content"], "hi");
         assert_eq!(read_view(&root, &key(3), "other")["expired"], false);
-        assert!(bundle_dir(&root, &EvidenceKey { project_id: "..", run_id: "r", node_id: "n", attempt: 1 }).is_err());
+        assert!(
+            bundle_dir(
+                &root,
+                &EvidenceKey {
+                    project_id: "..",
+                    run_id: "r",
+                    node_id: "n",
+                    attempt: 1
+                }
+            )
+            .is_err()
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 }

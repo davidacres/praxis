@@ -45,16 +45,22 @@ const MAX_LINE: usize = 1_000_000;
 /// wall clock when this process started, plus monotonic time since. Immune to clock changes.
 pub fn broker_clock() -> i64 {
     static ORIGIN: OnceLock<(i64, Instant)> = OnceLock::new();
-    let (wall, started) = ORIGIN.get_or_init(|| (chrono::Utc::now().timestamp_millis(), Instant::now()));
+    let (wall, started) =
+        ORIGIN.get_or_init(|| (chrono::Utc::now().timestamp_millis(), Instant::now()));
     wall + i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX)
 }
 
 /// The OS-user coordination root, shared by every Praxis profile; a test sets its own.
 pub fn default_root() -> PathBuf {
-    if let Some(root) = std::env::var_os("PRAXIS_COORDINATION_ROOT").filter(|value| !value.is_empty()) {
+    if let Some(root) =
+        std::env::var_os("PRAXIS_COORDINATION_ROOT").filter(|value| !value.is_empty())
+    {
         return PathBuf::from(root);
     }
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
     home.join(".praxis").join("coordination")
 }
 
@@ -82,7 +88,9 @@ fn process_alive(pid: u32) -> bool {
     use nix::errno::Errno;
     use nix::sys::signal::kill;
     use nix::unistd::Pid;
-    let Ok(raw) = i32::try_from(pid) else { return false };
+    let Ok(raw) = i32::try_from(pid) else {
+        return false;
+    };
     if raw <= 0 {
         return false;
     }
@@ -103,7 +111,12 @@ fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// Writes JSON atomically: a unique temp file in the same directory, flushed, then renamed over.
 fn write_atomic(file: &Path, state: &State) -> std::io::Result<()> {
-    let temp = file.with_file_name(format!("{}.{}.{}.tmp", file.file_name().and_then(|n| n.to_str()).unwrap_or("state"), std::process::id(), &hex(uuid::Uuid::new_v4().as_bytes())[..8]));
+    let temp = file.with_file_name(format!(
+        "{}.{}.{}.tmp",
+        file.file_name().and_then(|n| n.to_str()).unwrap_or("state"),
+        std::process::id(),
+        &hex(uuid::Uuid::new_v4().as_bytes())[..8]
+    ));
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -111,7 +124,9 @@ fn write_atomic(file: &Path, state: &State) -> std::io::Result<()> {
     let mut handle = options.open(&temp)?;
     let mut body = serde_json::to_string_pretty(state).map_err(std::io::Error::other)?;
     body.push('\n');
-    let written = handle.write_all(body.as_bytes()).and_then(|()| handle.sync_all());
+    let written = handle
+        .write_all(body.as_bytes())
+        .and_then(|()| handle.sync_all());
     drop(handle);
     if let Err(error) = written {
         let _ = std::fs::remove_file(&temp);
@@ -132,7 +147,10 @@ fn read_state(file: &Path, epoch: &str) -> (State, Option<String>) {
         Ok(mut state) if state.schema_version == SCHEMA_VERSION => {
             // A new broker, a new epoch: whatever the last one saw executing may still be running.
             for claim in &mut state.claims {
-                if matches!(claim.state, super::types::ClaimState::Executing | super::types::ClaimState::CleaningUp) {
+                if matches!(
+                    claim.state,
+                    super::types::ClaimState::Executing | super::types::ClaimState::CleaningUp
+                ) {
                     claim.state = super::types::ClaimState::RecoveryRequired;
                 }
             }
@@ -146,17 +164,28 @@ fn read_state(file: &Path, epoch: &str) -> (State, Option<String>) {
             }
             (state, None)
         }
-        Ok(state) => unreadable(file, epoch, &format!("unexpected shape (schema {})", state.schema_version)),
+        Ok(state) => unreadable(
+            file,
+            epoch,
+            &format!("unexpected shape (schema {})", state.schema_version),
+        ),
         Err(error) => unreadable(file, epoch, &error.to_string()),
     }
 }
 
 fn unreadable(file: &Path, epoch: &str, why: &str) -> (State, Option<String>) {
-    let aside = PathBuf::from(format!("{}.unreadable-{}", file.display(), chrono::Utc::now().timestamp_millis()));
+    let aside = PathBuf::from(format!(
+        "{}.unreadable-{}",
+        file.display(),
+        chrono::Utc::now().timestamp_millis()
+    ));
     let _ = std::fs::copy(file, &aside);
     (
         empty_state(epoch),
-        Some(format!("Coordination state could not be read ({why}); a copy is at {}. No resources are granted until it is reset.", aside.display())),
+        Some(format!(
+            "Coordination state could not be read ({why}); a copy is at {}. No resources are granted until it is reset.",
+            aside.display()
+        )),
     )
 }
 
@@ -192,7 +221,18 @@ pub struct Leader {
 impl Leader {
     fn new(root: &Path, token: String, epoch: &str, options: LeaderOptions) -> Self {
         let (state, blocked_reason) = read_state(&root.join(COORDINATION_FILE), epoch);
-        let leader = Self { root: root.to_path_buf(), token, inner: Mutex::new(LeaderInner { state, blocked_reason, last_beat: 0 }), options, tasks: Mutex::new(Vec::new()), shutdown: tokio_util::sync::CancellationToken::new() };
+        let leader = Self {
+            root: root.to_path_buf(),
+            token,
+            inner: Mutex::new(LeaderInner {
+                state,
+                blocked_reason,
+                last_beat: 0,
+            }),
+            options,
+            tasks: Mutex::new(Vec::new()),
+            shutdown: tokio_util::sync::CancellationToken::new(),
+        };
         {
             let inner = lock_ignoring_poison(&leader.inner);
             if inner.blocked_reason.is_none() {
@@ -203,7 +243,10 @@ impl Leader {
     }
 
     fn now(&self) -> i64 {
-        self.options.now.as_ref().map_or_else(broker_clock, |clock| clock())
+        self.options
+            .now
+            .as_ref()
+            .map_or_else(broker_clock, |clock| clock())
     }
 
     fn tick_ms(&self) -> i64 {
@@ -219,12 +262,23 @@ impl Leader {
         let at = self.now();
         let gap = {
             let mut inner = lock_ignoring_poison(&self.inner);
-            let gap = if inner.last_beat == 0 { 0 } else { at - inner.last_beat };
+            let gap = if inner.last_beat == 0 {
+                0
+            } else {
+                at - inner.last_beat
+            };
             inner.last_beat = at;
             gap
         };
-        if gap > self.options.suspended_after_ms.unwrap_or(self.tick_ms() * 3) {
-            self.send(&Command::Suspended { paused_ms: (gap - self.tick_ms()) as f64 });
+        if gap
+            > self
+                .options
+                .suspended_after_ms
+                .unwrap_or(self.tick_ms() * 3)
+        {
+            self.send(&Command::Suspended {
+                paused_ms: (gap - self.tick_ms()) as f64,
+            });
         }
         self.send(&Command::Tick);
     }
@@ -234,7 +288,9 @@ impl Leader {
     pub fn send(&self, command: &Command) -> CommandResult {
         let (result, changed) = {
             let mut inner = lock_ignoring_poison(&self.inner);
-            if inner.blocked_reason.is_some() && matches!(command, Command::Acquire { .. } | Command::Start { .. }) {
+            if inner.blocked_reason.is_some()
+                && matches!(command, Command::Acquire { .. } | Command::Start { .. })
+            {
                 return CommandResult::fail(inner.blocked_reason.clone().unwrap_or_default());
             }
             let now = self.now();
@@ -275,14 +331,20 @@ impl Leader {
         let id = message["id"].clone();
         // Every request carries the token from the user-only token file: another user cannot speak to this broker.
         if message["token"].as_str() != Some(self.token.as_str()) {
-            return Some(json!({ "id": id, "result": { "ok": false, "error": "Not authorised." } }));
+            return Some(
+                json!({ "id": id, "result": { "ok": false, "error": "Not authorised." } }),
+            );
         }
         let result = match message["op"].as_str() {
             Some("send") => match serde_json::from_value::<Command>(message["command"].clone()) {
                 Ok(command) => serde_json::to_value(self.send(&command)).unwrap_or(Value::Null),
-                Err(error) => json!({ "ok": false, "error": format!("Unrecognised coordination command: {error}") }),
+                Err(error) => {
+                    json!({ "ok": false, "error": format!("Unrecognised coordination command: {error}") })
+                }
             },
-            Some("snapshot") => self.snapshot(message["sessionKey"].as_str(), message["since"].as_i64()),
+            Some("snapshot") => {
+                self.snapshot(message["sessionKey"].as_str(), message["since"].as_i64())
+            }
             _ => json!({ "ok": false, "error": "Unknown operation." }),
         };
         Some(json!({ "id": id, "result": result }))
@@ -326,9 +388,15 @@ impl Leader {
                         let request = line.trim_end().to_owned();
                         let handler = Arc::clone(&leader);
                         // Applying a command takes a lock and a disk write: keep it off the reactor.
-                        let reply = tokio::task::spawn_blocking(move || handler.answer(&request)).await.ok().flatten();
+                        let reply = tokio::task::spawn_blocking(move || handler.answer(&request))
+                            .await
+                            .ok()
+                            .flatten();
                         if let Some(reply) = reply
-                            && write.write_all(format!("{reply}\n").as_bytes()).await.is_err()
+                            && write
+                                .write_all(format!("{reply}\n").as_bytes())
+                                .await
+                                .is_err()
                         {
                             break;
                         }
@@ -339,7 +407,9 @@ impl Leader {
         // Leases and stale sessions are judged on the broker's clock, on a steady beat.
         let leader = Arc::clone(self);
         let ticker = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(u64::try_from(leader.tick_ms()).unwrap_or(15_000).max(1)));
+            let mut interval = tokio::time::interval(Duration::from_millis(
+                u64::try_from(leader.tick_ms()).unwrap_or(15_000).max(1),
+            ));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             interval.tick().await;
             loop {
@@ -357,7 +427,9 @@ impl Leader {
         lock_ignoring_poison(&self.inner).last_beat = self.now();
         let leader = Arc::clone(self);
         let ticker = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(u64::try_from(leader.tick_ms()).unwrap_or(15_000).max(1)));
+            let mut interval = tokio::time::interval(Duration::from_millis(
+                u64::try_from(leader.tick_ms()).unwrap_or(15_000).max(1),
+            ));
             interval.tick().await;
             loop {
                 interval.tick().await;
@@ -376,7 +448,10 @@ impl Leader {
         }
         let _ = std::fs::remove_file(socket_path(&self.root));
         if let Ok(raw) = std::fs::read_to_string(self.root.join(LOCK_FILE))
-            && serde_json::from_str::<Value>(&raw).ok().and_then(|lock| lock["pid"].as_u64()) == Some(u64::from(std::process::id()))
+            && serde_json::from_str::<Value>(&raw)
+                .ok()
+                .and_then(|lock| lock["pid"].as_u64())
+                == Some(u64::from(std::process::id()))
         {
             let _ = std::fs::remove_file(self.root.join(LOCK_FILE));
         }
@@ -390,7 +465,12 @@ const NOT_CONNECTED: &str = "Not connected to the coordination broker; nothing w
 pub struct Follower {
     token: String,
     #[cfg(unix)]
-    stream: Mutex<Option<(std::os::unix::net::UnixStream, BufReader<std::os::unix::net::UnixStream>)>>,
+    stream: Mutex<
+        Option<(
+            std::os::unix::net::UnixStream,
+            BufReader<std::os::unix::net::UnixStream>,
+        )>,
+    >,
     next_id: std::sync::atomic::AtomicU64,
 }
 
@@ -400,22 +480,32 @@ impl Follower {
         let stream = std::os::unix::net::UnixStream::connect(socket_path(root))?;
         stream.set_read_timeout(Some(Duration::from_secs(30)))?;
         let reader = BufReader::new(stream.try_clone()?);
-        Ok(Self { token: token.to_owned(), stream: Mutex::new(Some((stream, reader))), next_id: std::sync::atomic::AtomicU64::new(1) })
+        Ok(Self {
+            token: token.to_owned(),
+            stream: Mutex::new(Some((stream, reader))),
+            next_id: std::sync::atomic::AtomicU64::new(1),
+        })
     }
 
     #[cfg(not(unix))]
     fn connect(_root: &Path, _token: &str) -> std::io::Result<Self> {
-        Err(std::io::Error::other("joining another process's coordination broker is not supported on this platform"))
+        Err(std::io::Error::other(
+            "joining another process's coordination broker is not supported on this platform",
+        ))
     }
 
     /// One request, one reply: lock-step on the connection. A lost broker is not a grant.
     #[cfg(unix)]
     fn call(&self, mut payload: Value) -> Value {
-        let id = self.next_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = self
+            .next_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         payload["id"] = json!(id);
         payload["token"] = json!(self.token);
         let mut guard = lock_ignoring_poison(&self.stream);
-        let Some((stream, reader)) = guard.as_mut() else { return json!({ "ok": false, "error": NOT_CONNECTED }) };
+        let Some((stream, reader)) = guard.as_mut() else {
+            return json!({ "ok": false, "error": NOT_CONNECTED });
+        };
         let sent = stream.write_all(format!("{payload}\n").as_bytes());
         let mut line = String::new();
         let outcome = sent.and_then(|()| reader.read_line(&mut line));
@@ -438,7 +528,11 @@ impl Follower {
 
     pub fn send(&self, command: &Command) -> CommandResult {
         let reply = self.call(json!({ "op": "send", "command": command }));
-        serde_json::from_value(reply).unwrap_or_else(|error| CommandResult::fail(format!("The coordination broker sent an unreadable answer ({error}); nothing was granted.")))
+        serde_json::from_value(reply).unwrap_or_else(|error| {
+            CommandResult::fail(format!(
+                "The coordination broker sent an unreadable answer ({error}); nothing was granted."
+            ))
+        })
     }
 
     pub fn snapshot(&self, session_key: Option<&str>, since: Option<i64>) -> Value {
@@ -496,11 +590,15 @@ impl Endpoint {
         match self {
             Self::Leader(leader) => {
                 let leader = Arc::clone(leader);
-                tokio::task::spawn_blocking(move || leader.send(&command)).await.unwrap_or_else(|error| CommandResult::fail(error.to_string()))
+                tokio::task::spawn_blocking(move || leader.send(&command))
+                    .await
+                    .unwrap_or_else(|error| CommandResult::fail(error.to_string()))
             }
             Self::Follower(follower) => {
                 let follower = Arc::clone(follower);
-                tokio::task::spawn_blocking(move || follower.send(&command)).await.unwrap_or_else(|error| CommandResult::fail(error.to_string()))
+                tokio::task::spawn_blocking(move || follower.send(&command))
+                    .await
+                    .unwrap_or_else(|error| CommandResult::fail(error.to_string()))
             }
         }
     }
@@ -510,7 +608,11 @@ impl Endpoint {
             Self::Leader(leader) => leader.snapshot(session_key.as_deref(), since),
             Self::Follower(follower) => {
                 let follower = Arc::clone(follower);
-                tokio::task::spawn_blocking(move || follower.snapshot(session_key.as_deref(), since)).await.unwrap_or(Value::Null)
+                tokio::task::spawn_blocking(move || {
+                    follower.snapshot(session_key.as_deref(), since)
+                })
+                .await
+                .unwrap_or(Value::Null)
             }
         }
     }
@@ -547,10 +649,15 @@ pub async fn join(root: &Path, options: LeaderOptions) -> Result<Endpoint, Strin
     for attempt in 0..5u64 {
         // Exclusive creation publishes the filename before its bytes. A competing process
         // must not cache an empty/partial credential for the whole connection.
-        let token = std::fs::read_to_string(&token_file).unwrap_or_default().trim().to_owned();
+        let token = std::fs::read_to_string(&token_file)
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
         if token.len() != 64 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
             if attempt == 4 {
-                return Err("The coordination broker token is incomplete; joining was refused.".into());
+                return Err(
+                    "The coordination broker token is incomplete; joining was refused.".into(),
+                );
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
             continue;
@@ -570,7 +677,10 @@ pub async fn join(root: &Path, options: LeaderOptions) -> Result<Endpoint, Strin
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(error.to_string()),
         }
-        let holder = std::fs::read_to_string(&lock_file).ok().and_then(|raw| serde_json::from_str::<Value>(&raw).ok()).and_then(|lock| lock["pid"].as_u64());
+        let holder = std::fs::read_to_string(&lock_file)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+            .and_then(|lock| lock["pid"].as_u64());
         match holder {
             Some(pid) if u32::try_from(pid).is_ok_and(process_alive) => {
                 let (root, token) = (root.to_path_buf(), token.clone());
@@ -588,7 +698,10 @@ pub async fn join(root: &Path, options: LeaderOptions) -> Result<Endpoint, Strin
             None => tokio::time::sleep(Duration::from_millis(100)).await,
         }
     }
-    Err(format!("Could not join the coordination broker at {}: another process holds it but does not answer.", root.display()))
+    Err(format!(
+        "Could not join the coordination broker at {}: another process holds it but does not answer.",
+        root.display()
+    ))
 }
 
 /// Creates a file exclusively with owner-only permissions and writes `bytes` to it.
@@ -603,8 +716,13 @@ fn create_private(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// Connects to a running broker without ever becoming one — for a short-lived process such as
 /// a native hook, whose exit would otherwise strand its claims.
 pub fn connect(root: &Path) -> Option<Endpoint> {
-    let token = std::fs::read_to_string(root.join(TOKEN_FILE)).ok()?.trim().to_owned();
-    Follower::connect(root, &token).ok().map(|follower| Endpoint::Follower(Arc::new(follower)))
+    let token = std::fs::read_to_string(root.join(TOKEN_FILE))
+        .ok()?
+        .trim()
+        .to_owned();
+    Follower::connect(root, &token)
+        .ok()
+        .map(|follower| Endpoint::Follower(Arc::new(follower)))
 }
 
 /// A coordination endpoint that survives its broker going away: a follower whose leader died
@@ -619,15 +737,24 @@ pub struct Resilient {
 
 impl Resilient {
     pub fn new(root: PathBuf, options: LeaderOptions) -> Self {
-        Self { root, options, endpoint: Mutex::new(None), joining: tokio::sync::Mutex::new(()) }
+        Self {
+            root,
+            options,
+            endpoint: Mutex::new(None),
+            joining: tokio::sync::Mutex::new(()),
+        }
     }
 
     pub fn role(&self) -> Role {
-        lock_ignoring_poison(&self.endpoint).as_ref().map_or(Role::Follower, Endpoint::role)
+        lock_ignoring_poison(&self.endpoint)
+            .as_ref()
+            .map_or(Role::Follower, Endpoint::role)
     }
 
     pub fn blocked_reason(&self) -> Option<String> {
-        lock_ignoring_poison(&self.endpoint).as_ref().and_then(Endpoint::blocked_reason)
+        lock_ignoring_poison(&self.endpoint)
+            .as_ref()
+            .and_then(Endpoint::blocked_reason)
     }
 
     async fn current(&self) -> Result<Endpoint, String> {
@@ -641,7 +768,9 @@ impl Resilient {
     }
 
     fn lost(result: &CommandResult) -> bool {
-        !result.ok && (result.error_text().contains("went away") || result.error_text().contains("Not connected"))
+        !result.ok
+            && (result.error_text().contains("went away")
+                || result.error_text().contains("Not connected"))
     }
 
     pub async fn send(&self, command: Command) -> CommandResult {
@@ -663,7 +792,11 @@ impl Resilient {
 
     pub async fn snapshot(&self, session_key: Option<&str>, since: Option<i64>) -> Value {
         match self.current().await {
-            Ok(endpoint) => endpoint.snapshot(session_key.map(str::to_owned), since).await,
+            Ok(endpoint) => {
+                endpoint
+                    .snapshot(session_key.map(str::to_owned), since)
+                    .await
+            }
             Err(error) => json!({ "ok": false, "error": error }),
         }
     }
@@ -687,29 +820,54 @@ impl Resilient {
 }
 
 fn unavailable(error: &str) -> CommandResult {
-    CommandResult::fail(format!("Coordination is unavailable ({error}); nothing was granted."))
+    CommandResult::fail(format!(
+        "Coordination is unavailable ({error}); nothing was granted."
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coordination::types::{AcquireResult, ClaimMode, Coverage, Lifetime, Owner, Registration, RequestItem, Resource, Wait};
+    use crate::coordination::types::{
+        AcquireResult, ClaimMode, Coverage, Lifetime, Owner, Registration, RequestItem, Resource,
+        Wait,
+    };
 
     fn temp_root(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("praxis-coord-{name}-{}", &hex(uuid::Uuid::new_v4().as_bytes())[..8]));
+        let root = std::env::temp_dir().join(format!(
+            "praxis-coord-{name}-{}",
+            &hex(uuid::Uuid::new_v4().as_bytes())[..8]
+        ));
         std::fs::create_dir_all(&root).expect("root");
         root
     }
 
     fn register(key: &str) -> Command {
-        Command::Register { session: Registration { session_key: key.into(), runtime: "gateway".into(), coverage: Coverage::Enforced, parent_session_key: None, scope: None, worktree: None, branch: None, head: None } }
+        Command::Register {
+            session: Registration {
+                session_key: key.into(),
+                runtime: "gateway".into(),
+                coverage: Coverage::Enforced,
+                parent_session_key: None,
+                scope: None,
+                worktree: None,
+                branch: None,
+                head: None,
+            },
+        }
     }
 
     fn acquire(id: &str, key: &str, path: &str) -> Command {
         Command::Acquire {
             request_id: id.into(),
             owner: Owner::session(key),
-            items: vec![RequestItem { resource: Resource::File { worktree: "/r".into(), path: path.into() }, mode: ClaimMode::Exclusive }],
+            items: vec![RequestItem {
+                resource: Resource::File {
+                    worktree: "/r".into(),
+                    path: path.into(),
+                },
+                mode: ClaimMode::Exclusive,
+            }],
             reason: "editing".into(),
             lifetime: Lifetime::Sequence,
             wait: Wait::never(),
@@ -722,7 +880,9 @@ mod tests {
         let leader = join(&root, LeaderOptions::default()).await.expect("leads");
         assert_eq!(leader.role(), Role::Leader);
         // The lock names a live process (this one), so the second join follows.
-        let follower = join(&root, LeaderOptions::default()).await.expect("follows");
+        let follower = join(&root, LeaderOptions::default())
+            .await
+            .expect("follows");
         assert_eq!(follower.role(), Role::Follower);
 
         assert!(follower.send(register("OTHER")).await.ok);
@@ -731,7 +891,9 @@ mod tests {
 
         assert!(leader.send(register("MINE")).await.ok);
         let refused = leader.send(acquire("r2", "MINE", "sum.js")).await;
-        let Some(AcquireResult::Blocked { reason, .. }) = refused.acquire else { panic!("expected blocked") };
+        let Some(AcquireResult::Blocked { reason, .. }) = refused.acquire else {
+            panic!("expected blocked")
+        };
         assert!(reason.contains("held by OTHER"), "{reason}");
 
         // The follower reads the same state.
@@ -747,10 +909,19 @@ mod tests {
     async fn a_request_with_the_wrong_token_is_refused() {
         let root = temp_root("token");
         let leader = join(&root, LeaderOptions::default()).await.expect("leads");
-        let Endpoint::Leader(inner) = &leader else { panic!("leader") };
-        let reply = inner.answer(r#"{"op":"snapshot","id":1,"token":"nope"}"#).expect("answers");
+        let Endpoint::Leader(inner) = &leader else {
+            panic!("leader")
+        };
+        let reply = inner
+            .answer(r#"{"op":"snapshot","id":1,"token":"nope"}"#)
+            .expect("answers");
         assert_eq!(reply["result"]["error"], "Not authorised.");
-        let good = inner.answer(&format!(r#"{{"op":"snapshot","id":2,"token":"{}"}}"#, inner.token)).expect("answers");
+        let good = inner
+            .answer(&format!(
+                r#"{{"op":"snapshot","id":2,"token":"{}"}}"#,
+                inner.token
+            ))
+            .expect("answers");
         assert_eq!(good["result"]["schemaVersion"], 1);
         leader.close();
         let _ = std::fs::remove_dir_all(&root);
@@ -762,12 +933,17 @@ mod tests {
         let leader = join(&root, LeaderOptions::default()).await.expect("leads");
         leader.send(register("A")).await;
         leader.send(acquire("r1", "A", "x.rs")).await;
-        let on_disk: Value = serde_json::from_str(&std::fs::read_to_string(root.join(COORDINATION_FILE)).expect("file")).expect("json");
+        let on_disk: Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join(COORDINATION_FILE)).expect("file"),
+        )
+        .expect("json");
         assert_eq!(on_disk["claims"][0]["state"], "executing");
         leader.close();
 
         // A new broker, a new epoch: what was executing may still be running.
-        let again = join(&root, LeaderOptions::default()).await.expect("leads again");
+        let again = join(&root, LeaderOptions::default())
+            .await
+            .expect("leads again");
         let view = again.snapshot(None, None).await;
         assert_eq!(view["claims"][0]["state"], "recovery-required");
         assert_eq!(view["sessions"]["A"]["state"], "stale");
@@ -782,8 +958,16 @@ mod tests {
         std::fs::write(root.join(COORDINATION_FILE), "{ not json").expect("seed");
         let leader = join(&root, LeaderOptions::default()).await.expect("leads");
         let reason = leader.blocked_reason().expect("blocked");
-        assert!(reason.contains("No resources are granted until it is reset"), "{reason}");
-        assert!(std::fs::read_dir(&root).expect("dir").flatten().any(|entry| entry.file_name().to_string_lossy().contains(".unreadable-")));
+        assert!(
+            reason.contains("No resources are granted until it is reset"),
+            "{reason}"
+        );
+        assert!(
+            std::fs::read_dir(&root)
+                .expect("dir")
+                .flatten()
+                .any(|entry| entry.file_name().to_string_lossy().contains(".unreadable-"))
+        );
         assert!(leader.send(register("A")).await.ok);
         let refused = leader.send(acquire("r1", "A", "x.rs")).await;
         assert!(!refused.ok);
@@ -801,7 +985,9 @@ mod tests {
         let root = temp_root("lock");
         // PID 2^31-1 is not a running process.
         std::fs::write(root.join(LOCK_FILE), r#"{"pid":2147483646,"epoch":"old"}"#).expect("lock");
-        let leader = join(&root, LeaderOptions::default()).await.expect("takes over");
+        let leader = join(&root, LeaderOptions::default())
+            .await
+            .expect("takes over");
         assert_eq!(leader.role(), Role::Leader);
         leader.close();
         let _ = std::fs::remove_dir_all(&root);
@@ -831,14 +1017,24 @@ mod tests {
         let socket = socket_path(&long);
         assert!(socket.starts_with(std::env::temp_dir()));
         assert!(socket.to_string_lossy().len() < 100);
-        assert_eq!(socket_path(Path::new("/tmp/short")), PathBuf::from("/tmp/short/broker.sock"));
+        assert_eq!(
+            socket_path(Path::new("/tmp/short")),
+            PathBuf::from("/tmp/short/broker.sock")
+        );
     }
 
     #[test]
     fn the_beat_extends_leases_after_a_suspension_instead_of_expiring_them() {
         let root = temp_root("beat");
         let clock = Arc::new(std::sync::atomic::AtomicI64::new(1_000_000));
-        let options = LeaderOptions { now: Some({ let clock = Arc::clone(&clock); Arc::new(move || clock.load(std::sync::atomic::Ordering::SeqCst)) }), tick_ms: Some(1000), ..LeaderOptions::default() };
+        let options = LeaderOptions {
+            now: Some({
+                let clock = Arc::clone(&clock);
+                Arc::new(move || clock.load(std::sync::atomic::Ordering::SeqCst))
+            }),
+            tick_ms: Some(1000),
+            ..LeaderOptions::default()
+        };
         let leader = Leader::new(&root, "t".repeat(64), "e", options);
         leader.send(&register("A"));
         leader.send(&acquire("r1", "A", "x.rs"));
@@ -848,7 +1044,11 @@ mod tests {
         leader.beat();
         let view = leader.snapshot(None, None);
         assert_eq!(view["claims"][0]["state"], "executing");
-        assert!(view["events"].as_array().expect("events").iter().any(|e| e["text"].as_str().is_some_and(|t| t.contains("Coordination was paused"))));
+        assert!(view["events"].as_array().expect("events").iter().any(|e| {
+            e["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("Coordination was paused"))
+        }));
         let _ = std::fs::remove_dir_all(&root);
     }
 }

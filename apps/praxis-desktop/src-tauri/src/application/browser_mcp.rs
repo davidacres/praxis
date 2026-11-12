@@ -37,12 +37,17 @@ fn server(host: &HostContext) -> Option<&'static Server> {
             listener.set_nonblocking(true).ok()?;
             let port = listener.local_addr().ok()?.port();
             super::runtime::runtime().spawn(async move {
-                let Ok(listener) = TcpListener::from_std(listener) else { return };
+                let Ok(listener) = TcpListener::from_std(listener) else {
+                    return;
+                };
                 while let Ok((stream, _)) = listener.accept().await {
                     tokio::spawn(serve(stream));
                 }
             });
-            Some(Server { port, sessions: Mutex::new(BTreeMap::new()) })
+            Some(Server {
+                port,
+                sessions: Mutex::new(BTreeMap::new()),
+            })
         })
         .as_ref();
     if let Some(server) = server {
@@ -51,21 +56,43 @@ fn server(host: &HostContext) -> Option<&'static Server> {
     server
 }
 
-fn token_for(registrations: &BTreeMap<String, Registration>, dir: &std::path::Path, key: &str) -> Option<String> {
-    registrations.iter().find(|(_, r)| r.key == key && r.dir == dir).map(|(token, _)| token.clone())
+fn token_for(
+    registrations: &BTreeMap<String, Registration>,
+    dir: &std::path::Path,
+    key: &str,
+) -> Option<String> {
+    registrations
+        .iter()
+        .find(|(_, r)| r.key == key && r.dir == dir)
+        .map(|(token, _)| token.clone())
 }
 
 /// The ACP `mcpServers` entry that gives `key`'s session the in-app browser, or `None` when the
 /// feature is off or the session is not full-tools.
-pub fn server_for_session(host: &HostContext, dir: &std::path::Path, key: &str, tool_mode: &str) -> Option<Value> {
+pub fn server_for_session(
+    host: &HostContext,
+    dir: &std::path::Path,
+    key: &str,
+    tool_mode: &str,
+) -> Option<Value> {
     if tool_mode != "full" || !host.settings().read().ai.browser_tools.enabled {
         return None;
     }
     let server = server(host)?;
-    let mut sessions = server.sessions.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut sessions = server
+        .sessions
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let token = token_for(&sessions, dir, key).unwrap_or_else(|| {
         let token = uuid::Uuid::new_v4().simple().to_string();
-        sessions.insert(token.clone(), Registration { key: key.to_owned(), dir: dir.to_path_buf(), host: host.clone() });
+        sessions.insert(
+            token.clone(),
+            Registration {
+                key: key.to_owned(),
+                dir: dir.to_path_buf(),
+                host: host.clone(),
+            },
+        );
         token
     });
     Some(json!({
@@ -79,14 +106,19 @@ pub fn server_for_session(host: &HostContext, dir: &std::path::Path, key: &str, 
 #[allow(dead_code)]
 pub fn dispose_for_session(host: &HostContext, dir: &std::path::Path, key: &str) {
     if let Some(server) = server(host) {
-        let mut sessions = server.sessions.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut sessions = server
+            .sessions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
         if let Some(token) = token_for(&sessions, dir, key) {
             sessions.remove(&token);
         }
     }
 }
 
-async fn read_request(stream: &mut TcpStream) -> Option<(String, BTreeMap<String, String>, Vec<u8>)> {
+async fn read_request(
+    stream: &mut TcpStream,
+) -> Option<(String, BTreeMap<String, String>, Vec<u8>)> {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 4096];
     let head_end = loop {
@@ -105,8 +137,14 @@ async fn read_request(stream: &mut TcpStream) -> Option<(String, BTreeMap<String
     let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
     let mut lines = head.lines();
     let request_line = lines.next()?.to_owned();
-    let headers: BTreeMap<String, String> = lines.filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim().to_lowercase(), v.trim().to_owned())).collect();
-    let length: usize = headers.get("content-length").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let headers: BTreeMap<String, String> = lines
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim().to_lowercase(), v.trim().to_owned()))
+        .collect();
+    let length: usize = headers
+        .get("content-length")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let mut body = buffer[head_end + 4..].to_vec();
     while body.len() < length {
         let read = stream.read(&mut chunk).await.ok()?;
@@ -119,17 +157,33 @@ async fn read_request(stream: &mut TcpStream) -> Option<(String, BTreeMap<String
 }
 
 async fn respond(stream: &mut TcpStream, status: &str, extra: &str, body: &str) {
-    let response = format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n{body}", body.len());
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n{body}",
+        body.len()
+    );
     let _ = stream.write_all(response.as_bytes()).await;
     let _ = stream.shutdown().await;
 }
 
 async fn serve(mut stream: TcpStream) {
-    let Some((request_line, headers, body)) = read_request(&mut stream).await else { return };
+    let Some((request_line, headers, body)) = read_request(&mut stream).await else {
+        return;
+    };
     let registration = {
-        let token = headers.get("authorization").and_then(|v| v.strip_prefix("Bearer ")).map(str::trim).unwrap_or_default().to_owned();
+        let token = headers
+            .get("authorization")
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_owned();
         let Some(server) = lookup(&token) else {
-            respond(&mut stream, "401 Unauthorized", "", r#"{"error":"unauthorized"}"#).await;
+            respond(
+                &mut stream,
+                "401 Unauthorized",
+                "",
+                r#"{"error":"unauthorized"}"#,
+            )
+            .await;
             return;
         };
         server
@@ -139,11 +193,23 @@ async fn serve(mut stream: TcpStream) {
         return;
     }
     if !request_line.starts_with("POST") {
-        respond(&mut stream, "405 Method Not Allowed", "", r#"{"error":"method not allowed"}"#).await;
+        respond(
+            &mut stream,
+            "405 Method Not Allowed",
+            "",
+            r#"{"error":"method not allowed"}"#,
+        )
+        .await;
         return;
     }
     let Ok(message) = serde_json::from_slice::<Value>(&body) else {
-        respond(&mut stream, "400 Bad Request", "", r#"{"error":"bad json"}"#).await;
+        respond(
+            &mut stream,
+            "400 Bad Request",
+            "",
+            r#"{"error":"bad json"}"#,
+        )
+        .await;
         return;
     };
     let Some(id) = message.get("id").cloned() else {
@@ -168,13 +234,28 @@ async fn serve(mut stream: TcpStream) {
             return;
         }
     };
-    let session = if message["method"] == "initialize" { "Mcp-Session-Id: praxis-browser\r\n" } else { "" };
-    respond(&mut stream, "200 OK", session, &json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string()).await;
+    let session = if message["method"] == "initialize" {
+        "Mcp-Session-Id: praxis-browser\r\n"
+    } else {
+        ""
+    };
+    respond(
+        &mut stream,
+        "200 OK",
+        session,
+        &json!({ "jsonrpc": "2.0", "id": id, "result": result }).to_string(),
+    )
+    .await;
 }
 
 fn lookup(token: &str) -> Option<Registration> {
     let server = SERVER_REF.get()?;
-    server.sessions.lock().unwrap_or_else(PoisonError::into_inner).get(token).cloned()
+    server
+        .sessions
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(token)
+        .cloned()
 }
 
 static SERVER_REF: OnceLock<&'static Server> = OnceLock::new();
@@ -190,11 +271,19 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
     let task = acp_host::find_task_public(&registration.dir, &registration.key);
     let settings = host.settings().read().ai.browser_tools.clone();
     if !settings.enabled {
-        return tool_result(false, "The in-app browser is turned off in Settings.".into());
+        return tool_result(
+            false,
+            "The in-app browser is turned off in Settings.".into(),
+        );
     }
     if name == "browser_navigate" {
-        if let Some(host_name) = ai_browser::host_of(arguments["url"].as_str().unwrap_or_default()) {
-            if !settings.allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(&host_name)) {
+        if let Some(host_name) = ai_browser::host_of(arguments["url"].as_str().unwrap_or_default())
+        {
+            if !settings
+                .allowed_hosts
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case(&host_name))
+            {
                 let request = json!({ "toolCallId": format!("browser-{}", uuid::Uuid::new_v4().simple()), "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": arguments });
                 let decision = match &task {
                     Some(task) => task.request_permission(request).await,
@@ -205,7 +294,10 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
                 }
                 let mut hosts = settings.allowed_hosts.clone();
                 hosts.push(host_name);
-                let _ = super::ai_providers::write_settings(host, &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }));
+                let _ = super::ai_providers::write_settings(
+                    host,
+                    &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }),
+                );
             }
         }
     }
@@ -215,7 +307,15 @@ async fn call_tool(registration: &Registration, params: &Value) -> Value {
     }
     let (ok, text) = ai_browser::run_tool(host, &name, &arguments).await;
     if let Some(task) = &task {
-        task.append(acp_host::evt("tool_complete", format!("Tool {}: {name}", if ok { "completed" } else { "failed" }), Some(text.chars().take(2000).collect()), Some(json!({ "toolName": name, "ok": ok, "kind": "fetch" }))), 1);
+        task.append(
+            acp_host::evt(
+                "tool_complete",
+                format!("Tool {}: {name}", if ok { "completed" } else { "failed" }),
+                Some(text.chars().take(2000).collect()),
+                Some(json!({ "toolName": name, "ok": ok, "kind": "fetch" })),
+            ),
+            1,
+        );
     }
     tool_result(ok, text)
 }

@@ -343,7 +343,9 @@ fn tree_fingerprint(roots: &[String]) -> u64 {
         if depth > 8 {
             return;
         }
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
         let mut entries: Vec<_> = entries.flatten().collect();
         entries.sort_by_key(std::fs::DirEntry::path);
         for entry in entries {
@@ -357,7 +359,11 @@ fn tree_fingerprint(roots: &[String]) -> u64 {
             } else {
                 path.hash(hasher);
                 meta.len().hash(hasher);
-                meta.modified().ok().and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).hash(hasher);
+                meta.modified()
+                    .ok()
+                    .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_nanos())
+                    .hash(hasher);
             }
         }
     }
@@ -373,7 +379,11 @@ fn watched_roots(state: &FolderServiceState) -> Vec<String> {
     if state.board_roots.is_empty() {
         state.configured_roots.clone()
     } else {
-        state.board_roots.iter().map(|r| r.root_path.clone()).collect()
+        state
+            .board_roots
+            .iter()
+            .map(|r| r.root_path.clone())
+            .collect()
     }
 }
 
@@ -402,16 +412,25 @@ fn sync_issues_by_root(state: &mut FolderServiceState) {
     if state.board_roots.is_empty() {
         return;
     }
-    let roots: Vec<String> = state.board_roots.iter().map(|r| r.root_path.clone()).collect();
-    let mut by_root: HashMap<String, Vec<LiveIssue>> =
-        roots.iter().map(|root| (root.clone(), Vec::new())).collect();
+    let roots: Vec<String> = state
+        .board_roots
+        .iter()
+        .map(|r| r.root_path.clone())
+        .collect();
+    let mut by_root: HashMap<String, Vec<LiveIssue>> = roots
+        .iter()
+        .map(|root| (root.clone(), Vec::new()))
+        .collect();
     for issue in &state.issues {
         let owner = roots
             .iter()
             .filter(|root| Path::new(&issue.source_path).starts_with(root))
             .max_by_key(|root| root.len());
         if let Some(owner) = owner {
-            by_root.entry(owner.clone()).or_default().push(issue.clone());
+            by_root
+                .entry(owner.clone())
+                .or_default()
+                .push(issue.clone());
         }
     }
     state.issues_by_root = by_root;
@@ -2236,18 +2255,48 @@ mod tests {
             project_key: "KEPT".to_string(),
             ..StaticFolderConfig::default()
         });
-        let key = service.get_issues(&IssueFilters::default(), 0, 10).expect("list").issues[0].key.clone();
+        let key = service
+            .get_issues(&IssueFilters::default(), 0, 10)
+            .expect("list")
+            .issues[0]
+            .key
+            .clone();
 
         // A description with its own heading is stored whole; re-reading the file would split it there.
         let described = "Users cannot log in.\n\n## Acceptance criteria\n- Login works";
-        service.update_issue(&key, &UpdateIssueInput { description: Some(described.to_string()), ..UpdateIssueInput::default() }).expect("update description");
-        assert_eq!(service.get_issue(&key).expect("get").summary.description.as_deref(), Some(described));
+        service
+            .update_issue(
+                &key,
+                &UpdateIssueInput {
+                    description: Some(described.to_string()),
+                    ..UpdateIssueInput::default()
+                },
+            )
+            .expect("update description");
+        assert_eq!(
+            service
+                .get_issue(&key)
+                .expect("get")
+                .summary
+                .description
+                .as_deref(),
+            Some(described)
+        );
 
         // Something other than the service edits the file: the next call sees it.
         std::thread::sleep(std::time::Duration::from_millis(20));
-        let edited = std::fs::read_to_string(&feature_file).expect("read").replace("# Core Design", "# Renamed Outside");
+        let edited = std::fs::read_to_string(&feature_file)
+            .expect("read")
+            .replace("# Core Design", "# Renamed Outside");
         std::fs::write(&feature_file, edited).expect("edit outside");
-        assert_eq!(service.get_issue(&key).expect("get after outside edit").summary.summary, "Renamed Outside");
+        assert_eq!(
+            service
+                .get_issue(&key)
+                .expect("get after outside edit")
+                .summary
+                .summary,
+            "Renamed Outside"
+        );
 
         service.dispose();
         let _ = std::fs::remove_dir_all(&root);
@@ -2258,28 +2307,47 @@ mod tests {
         let root = temp_dir("praxis-folder-board-scope");
         let feature_dir = root.join("features").join("feature-01-demo");
         std::fs::create_dir_all(&feature_dir).expect("mkdir feature");
-        std::fs::write(feature_dir.join("feature.md"), "# Demo\n\n**Status:** Proposed\n**Type:** Feature\n\n## Description\nDemo\n").expect("write feature.md");
+        std::fs::write(
+            feature_dir.join("feature.md"),
+            "# Demo\n\n**Status:** Proposed\n**Type:** Feature\n\n## Description\nDemo\n",
+        )
+        .expect("write feature.md");
         let service = FolderService::from_static(StaticFolderConfig {
             folder_roots: vec![root.to_string_lossy().to_string()],
             project_key: "SCOPE".to_string(),
             ..StaticFolderConfig::default()
         });
-        let board = service.get_boards(&BoardFilters::default()).expect("boards").remove(0);
-        let scoped = IssueFilters { board_id: Some(board.id.clone()), ..IssueFilters::default() };
-        let key = service.get_issues(&scoped, 0, 10).expect("list").issues[0].key.clone();
+        let board = service
+            .get_boards(&BoardFilters::default())
+            .expect("boards")
+            .remove(0);
+        let scoped = IssueFilters {
+            board_id: Some(board.id.clone()),
+            ..IssueFilters::default()
+        };
+        let key = service.get_issues(&scoped, 0, 10).expect("list").issues[0]
+            .key
+            .clone();
         let to_progress = service
             .get_transitions(&key)
             .expect("transitions")
             .into_iter()
             .find(|t| t.to_status.as_deref() == Some("In Progress"))
             .expect("In Progress transition");
-        service.transition_issue(&key, &to_progress.id).expect("transition");
+        service
+            .transition_issue(&key, &to_progress.id)
+            .expect("transition");
 
         let listed = service.get_issues(&scoped, 0, 10).expect("scoped list");
         assert_eq!(listed.issues[0].status, "In Progress");
         let details = service.get_board_details(&board).expect("board details");
         assert_eq!(details.issues[0].status, "In Progress");
-        assert!(details.columns.iter().any(|c| c.name == "In Progress" && c.issues.len() == 1));
+        assert!(
+            details
+                .columns
+                .iter()
+                .any(|c| c.name == "In Progress" && c.issues.len() == 1)
+        );
 
         service.dispose();
         let _ = std::fs::remove_dir_all(&root);

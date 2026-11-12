@@ -41,7 +41,12 @@ pub struct ShellRun {
 /// Members of a process group. Empty when the group is gone; `None` means observation failed,
 /// not that the processes exited.
 pub fn read_process_group_members(pgid: i64) -> Option<Vec<i64>> {
-    let output = std::process::Command::new("ps").args(["-A", "-o", "pid=,pgid=,stat="]).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+    let output = std::process::Command::new("ps")
+        .args(["-A", "-o", "pid=,pgid=,stat="])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -54,8 +59,14 @@ fn members_in(listing: &str, pgid: i64) -> Vec<i64> {
         .lines()
         .filter_map(|line| {
             let mut fields = line.split_whitespace();
-            let (pid, group, stat) = (fields.next()?, fields.next()?, fields.next().unwrap_or_default());
-            (group.parse::<i64>().ok()? == pgid && !stat.starts_with('Z')).then(|| pid.parse::<i64>().ok()).flatten()
+            let (pid, group, stat) = (
+                fields.next()?,
+                fields.next()?,
+                fields.next().unwrap_or_default(),
+            );
+            (group.parse::<i64>().ok()? == pgid && !stat.starts_with('Z'))
+                .then(|| pid.parse::<i64>().ok())
+                .flatten()
         })
         .collect()
 }
@@ -69,14 +80,35 @@ pub fn listening_ports(pids: &[i64]) -> Vec<u32> {
     if pids.is_empty() {
         return Vec::new();
     }
-    let list = pids.iter().map(i64::to_string).collect::<Vec<_>>().join(",");
+    let list = pids
+        .iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     // lsof exits 1 when nothing matches.
-    let Ok(output) = std::process::Command::new("lsof").args(["-nP", "-a", "-p", &list, "-iTCP", "-sTCP:LISTEN", "-Fn"]).stdin(Stdio::null()).stderr(Stdio::null()).output() else { return Vec::new() };
+    let Ok(output) = std::process::Command::new("lsof")
+        .args(["-nP", "-a", "-p", &list, "-iTCP", "-sTCP:LISTEN", "-Fn"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
     ports_in(&String::from_utf8_lossy(&output.stdout))
 }
 
 fn ports_in(listing: &str) -> Vec<u32> {
-    let mut ports: Vec<u32> = listing.lines().filter_map(|line| line.trim().strip_prefix('n')?.rsplit(':').next()?.parse::<u32>().ok()).collect();
+    let mut ports: Vec<u32> = listing
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix('n')?
+                .rsplit(':')
+                .next()?
+                .parse::<u32>()
+                .ok()
+        })
+        .collect();
     ports.sort_unstable();
     ports.dedup();
     ports
@@ -84,7 +116,9 @@ fn ports_in(listing: &str) -> Vec<u32> {
 
 #[cfg(unix)]
 fn signal_process_group(pgid: i64, signal: nix::sys::signal::Signal) -> bool {
-    i32::try_from(pgid).is_ok_and(|raw| raw > 1 && nix::sys::signal::killpg(nix::unistd::Pid::from_raw(raw), signal).is_ok())
+    i32::try_from(pgid).is_ok_and(|raw| {
+        raw > 1 && nix::sys::signal::killpg(nix::unistd::Pid::from_raw(raw), signal).is_ok()
+    })
 }
 
 #[cfg(not(unix))]
@@ -147,23 +181,60 @@ async fn read_capped(mut stream: impl tokio::io::AsyncRead + Unpin, into: Arc<Mu
 }
 
 fn text_of(buffer: &Mutex<Vec<u8>>) -> String {
-    buffer.lock().map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_default()
+    buffer
+        .lock()
+        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+        .unwrap_or_default()
 }
 
 /// Runs `command` in its own process group. Dropping the returned future stops the group.
-pub async fn run_shell_command(command: &str, cwd: &Path, timeout: Duration, path_env: String) -> ShellRun {
+pub async fn run_shell_command(
+    command: &str,
+    cwd: &Path,
+    timeout: Duration,
+    path_env: String,
+) -> ShellRun {
     let mut shell = tokio::process::Command::new("/bin/sh");
-    shell.arg("-c").arg(command).current_dir(cwd).env("PATH", path_env).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(false);
+    shell
+        .arg("-c")
+        .arg(command)
+        .current_dir(cwd)
+        .env("PATH", path_env)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(false);
     #[cfg(unix)]
     shell.process_group(0);
     let mut child = match shell.spawn() {
         Ok(child) => child,
-        Err(error) => return ShellRun { exit_code: 1, error: Some(error.to_string()), ..ShellRun::default() },
+        Err(error) => {
+            return ShellRun {
+                exit_code: 1,
+                error: Some(error.to_string()),
+                ..ShellRun::default()
+            };
+        }
     };
     let pgid = child.id().map(i64::from);
     let mut guard = GroupGuard { pgid };
-    let (out, err) = (Arc::new(Mutex::new(Vec::new())), Arc::new(Mutex::new(Vec::new())));
-    let readers: Vec<tokio::task::JoinHandle<()>> = [child.stdout.take().map(|s| tokio::spawn(read_capped(s, Arc::clone(&out)))), child.stderr.take().map(|s| tokio::spawn(read_capped(s, Arc::clone(&err))))].into_iter().flatten().collect();
+    let (out, err) = (
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(Mutex::new(Vec::new())),
+    );
+    let readers: Vec<tokio::task::JoinHandle<()>> = [
+        child
+            .stdout
+            .take()
+            .map(|s| tokio::spawn(read_capped(s, Arc::clone(&out)))),
+        child
+            .stderr
+            .take()
+            .map(|s| tokio::spawn(read_capped(s, Arc::clone(&err)))),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let waited = tokio::time::timeout(timeout, child.wait()).await;
     let (exit_code, signalled, timed_out) = match waited {
@@ -177,7 +248,12 @@ pub async fn run_shell_command(command: &str, cwd: &Path, timeout: Duration, pat
         Ok(Ok(status)) => (status.code().unwrap_or(128), status.code().is_none(), false),
         Ok(Err(error)) => {
             guard.pgid = None;
-            return ShellRun { exit_code: 1, error: Some(error.to_string()), pgid, ..ShellRun::default() };
+            return ShellRun {
+                exit_code: 1,
+                error: Some(error.to_string()),
+                pgid,
+                ..ShellRun::default()
+            };
         }
     };
     // Read what was written until both pipes end — or, if a background process inherited them
@@ -199,13 +275,26 @@ pub async fn run_shell_command(command: &str, cwd: &Path, timeout: Duration, pat
     // The command ended normally: whatever survived is a service, not something to kill.
     guard.pgid = None;
     let error = if timed_out {
-        Some(format!("timed out after {} s; the command's processes were stopped", timeout.as_secs()))
+        Some(format!(
+            "timed out after {} s; the command's processes were stopped",
+            timeout.as_secs()
+        ))
     } else if exit_code != 0 {
-        Some(format!("exited with code {exit_code}{}", if signalled { " (signal)" } else { "" }))
+        Some(format!(
+            "exited with code {exit_code}{}",
+            if signalled { " (signal)" } else { "" }
+        ))
     } else {
         None
     };
-    ShellRun { stdout: text_of(&out), stderr: text_of(&err), exit_code, error, pgid, survivors }
+    ShellRun {
+        stdout: text_of(&out),
+        stderr: text_of(&err),
+        exit_code,
+        error,
+        pgid,
+        survivors,
+    }
 }
 
 // ── services ─────────────────────────────────────────────────────────────
@@ -230,15 +319,25 @@ fn services() -> &'static Services {
 }
 
 fn with_services<T>(change: impl FnOnce(&mut HashMap<i64, Service>) -> T) -> T {
-    change(&mut services().lock().unwrap_or_else(std::sync::PoisonError::into_inner))
+    change(
+        &mut services()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
 }
 
 fn label(command: &str) -> String {
-    if command.chars().count() > 60 { format!("{}…", command.chars().take(60).collect::<String>()) } else { command.to_owned() }
+    if command.chars().count() > 60 {
+        format!("{}…", command.chars().take(60).collect::<String>())
+    } else {
+        command.to_owned()
+    }
 }
 
 fn iso(ms: i64) -> String {
-    chrono::DateTime::from_timestamp_millis(ms).map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)).unwrap_or_default()
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        .unwrap_or_default()
 }
 
 fn task_id(pgid: i64, started_at: i64) -> String {
@@ -252,7 +351,13 @@ pub(super) fn report_background(task: &Task, incoming: Value) {
 
 fn report(task: &Task, incoming: Value) {
     // A task from an earlier run of this session must not write into the session's new one.
-    if task.store.get(&task.key).ok().flatten().is_none_or(|record| record["sessionId"] != task.owner_session_id.as_str()) {
+    if task
+        .store
+        .get(&task.key)
+        .ok()
+        .flatten()
+        .is_none_or(|record| record["sessionId"] != task.owner_session_id.as_str())
+    {
         return;
     }
     let changed = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -260,39 +365,80 @@ fn report(task: &Task, incoming: Value) {
     let live = |state: &Value| matches!(state.as_str(), Some("running" | "paused"));
     let summary = incoming.clone();
     task.mutate(true, move |record| {
-        let current = record["backgroundTasks"].as_array().cloned().unwrap_or_default();
+        let current = record["backgroundTasks"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         let id = incoming["id"].clone();
         let previous = current.iter().find(|item| item["id"] == id).cloned();
         // A replayed beat must never resurrect a finished task.
-        if previous.as_ref().is_some_and(|p| !live(&p["state"]) && p["state"] != "unknown") && live(&incoming["state"]) {
+        if previous
+            .as_ref()
+            .is_some_and(|p| !live(&p["state"]) && p["state"] != "unknown")
+            && live(&incoming["state"])
+        {
             return;
         }
         let mut next = previous.clone().unwrap_or_else(|| json!({}));
         for (key, value) in incoming.as_object().into_iter().flatten() {
             next[key] = value.clone();
         }
-        next["label"] = json!(next["label"].as_str().unwrap_or_default().chars().take(180).collect::<String>());
+        next["label"] = json!(
+            next["label"]
+                .as_str()
+                .unwrap_or_default()
+                .chars()
+                .take(180)
+                .collect::<String>()
+        );
         if let Some(detail) = next["detail"].as_str() {
             next["detail"] = json!(detail.chars().take(2000).collect::<String>());
         }
-        if previous.as_ref().is_some_and(|p| p["state"] == next["state"] && p["label"] == next["label"] && p["detail"] == next["detail"]) {
+        if previous.as_ref().is_some_and(|p| {
+            p["state"] == next["state"]
+                && p["label"] == next["label"]
+                && p["detail"] == next["detail"]
+        }) {
             return;
         }
         // A provider's structured launch result is superseded once the same call reports real status.
-        let supersedes = |item: &Value| !incoming["callId"].is_null() && item["state"] == "unknown" && item["source"] == incoming["source"] && item["producerId"] == incoming["producerId"] && item["callId"] == incoming["callId"];
-        let others: Vec<Value> = current.into_iter().filter(|item| item["id"] != id && !supersedes(item)).collect();
-        let (running, finished): (Vec<Value>, Vec<Value>) = others.into_iter().partition(|item| live(&item["state"]));
+        let supersedes = |item: &Value| {
+            !incoming["callId"].is_null()
+                && item["state"] == "unknown"
+                && item["source"] == incoming["source"]
+                && item["producerId"] == incoming["producerId"]
+                && item["callId"] == incoming["callId"]
+        };
+        let others: Vec<Value> = current
+            .into_iter()
+            .filter(|item| item["id"] != id && !supersedes(item))
+            .collect();
+        let (running, finished): (Vec<Value>, Vec<Value>) =
+            others.into_iter().partition(|item| live(&item["state"]));
         let keep = finished.len().saturating_sub(49);
         let mut all = running;
         all.extend(finished.into_iter().skip(keep));
-        flag.store(previous.as_ref().is_none_or(|p| p["state"] != next["state"]), std::sync::atomic::Ordering::SeqCst);
+        flag.store(
+            previous
+                .as_ref()
+                .is_none_or(|p| p["state"] != next["state"]),
+            std::sync::atomic::Ordering::SeqCst,
+        );
         all.push(next);
         record["backgroundTasks"] = json!(all);
     });
     if changed.load(std::sync::atomic::Ordering::SeqCst) {
         let state = summary["state"].as_str().unwrap_or("unknown");
         let label = summary["label"].as_str().unwrap_or_default();
-        task.append(evt("background_task", format!("Background task {state}: {label}"), summary["detail"].as_str().map(str::to_owned), None), 0);
+        task.append(
+            evt(
+                "background_task",
+                format!("Background task {state}: {label}"),
+                summary["detail"].as_str().map(str::to_owned),
+                None,
+            ),
+            0,
+        );
     }
 }
 
@@ -301,7 +447,9 @@ fn running_report(service: &Service, pgid: i64, detail: &str) -> Value {
 }
 
 async fn settle_service(pgid: i64, how: &str) {
-    let Some(service) = with_services(|all| all.remove(&pgid)) else { return };
+    let Some(service) = with_services(|all| all.remove(&pgid)) else {
+        return;
+    };
     service.poller.abort();
     let exited = how == "exited";
     let now = iso(super::coordination::epoch_ms());
@@ -345,22 +493,43 @@ async fn claim_new_ports(pgid: i64, members: Vec<i64>) -> Result<Vec<u32>, Strin
     let (fresh, gate, command) = {
         let found = with_services(|all| {
             all.get_mut(&pgid).map(|service| {
-                let fresh: Vec<u32> = listening_ports(&members).into_iter().filter(|port| !service.ports.contains(port)).collect();
+                let fresh: Vec<u32> = listening_ports(&members)
+                    .into_iter()
+                    .filter(|port| !service.ports.contains(port))
+                    .collect();
                 service.ports.extend(&fresh);
                 (fresh, service.gate.clone(), service.command.clone())
             })
         });
-        let Some(found) = found else { return Ok(Vec::new()) };
+        let Some(found) = found else {
+            return Ok(Vec::new());
+        };
         found
     };
     if fresh.is_empty() {
         return Ok(Vec::new());
     }
     let Some(gate) = gate else { return Ok(fresh) };
-    let items = fresh.iter().map(|port| RequestItem { resource: Resource::Port { port: *port }, mode: ClaimMode::Exclusive }).collect();
-    match gate.acquire(items, &format!("service `{}` listening", label(&command)), Lifetime::Service).await {
+    let items = fresh
+        .iter()
+        .map(|port| RequestItem {
+            resource: Resource::Port { port: *port },
+            mode: ClaimMode::Exclusive,
+        })
+        .collect();
+    match gate
+        .acquire(
+            items,
+            &format!("service `{}` listening", label(&command)),
+            Lifetime::Service,
+        )
+        .await
+    {
         Decision::Granted(grant) => {
-            with_services(|all| all.get_mut(&pgid).map(|service| service.releases.push(grant)));
+            with_services(|all| {
+                all.get_mut(&pgid)
+                    .map(|service| service.releases.push(grant))
+            });
             Ok(fresh)
         }
         Decision::Refused(reason) => Err(reason),
@@ -368,17 +537,27 @@ async fn claim_new_ports(pgid: i64, members: Vec<i64>) -> Result<Vec<u32>, Strin
 }
 
 async fn poll_service(pgid: i64) {
-    let busy = with_services(|all| all.get_mut(&pgid).is_none_or(|service| std::mem::replace(&mut service.checking, true)));
+    let busy = with_services(|all| {
+        all.get_mut(&pgid)
+            .is_none_or(|service| std::mem::replace(&mut service.checking, true))
+    });
     if busy {
         return;
     }
-    let members = tokio::task::spawn_blocking(move || read_process_group_members(pgid)).await.ok().flatten();
+    let members = tokio::task::spawn_blocking(move || read_process_group_members(pgid))
+        .await
+        .ok()
+        .flatten();
     match members {
         None => {
             with_services(|all| {
                 if let Some(service) = all.get_mut(&pgid) {
                     if !service.unobserved {
-                        let mut update = running_report(service, pgid, "Process observation failed. Completion has not been confirmed; Praxis will retry.");
+                        let mut update = running_report(
+                            service,
+                            pgid,
+                            "Process observation failed. Completion has not been confirmed; Praxis will retry.",
+                        );
                         update["state"] = json!("unknown");
                         report(&service.task, update);
                     }
@@ -396,7 +575,10 @@ async fn poll_service(pgid: i64) {
                     && service.unobserved
                 {
                     service.unobserved = false;
-                    report(&service.task, running_report(service, pgid, "Process observation resumed."));
+                    report(
+                        &service.task,
+                        running_report(service, pgid, "Process observation resumed."),
+                    );
                 }
             });
             let _ = claim_new_ports(pgid, members).await;
@@ -406,10 +588,29 @@ async fn poll_service(pgid: i64) {
 }
 
 /// Tracks what a shell command left running and describes it for the agent.
-pub async fn track_service(task: &Arc<Task>, gate: Option<&Gate>, command: &str, pgid: i64, survivors: Vec<i64>) -> String {
+pub async fn track_service(
+    task: &Arc<Task>,
+    gate: Option<&Gate>,
+    command: &str,
+    pgid: i64,
+    survivors: Vec<i64>,
+) -> String {
     // Claimed before the command's own tool claim is released, so nothing slips in between.
     let decision = match gate {
-        Some(gate) => Some(gate.acquire(vec![RequestItem { resource: Resource::Process { host: hostname(), pgid }, mode: ClaimMode::Exclusive }], &format!("service `{}`", label(command)), Lifetime::Service).await),
+        Some(gate) => Some(
+            gate.acquire(
+                vec![RequestItem {
+                    resource: Resource::Process {
+                        host: hostname(),
+                        pgid,
+                    },
+                    mode: ClaimMode::Exclusive,
+                }],
+                &format!("service `{}`", label(command)),
+                Lifetime::Service,
+            )
+            .await,
+        ),
         None => None,
     };
     let started_at = super::coordination::epoch_ms();
@@ -426,8 +627,25 @@ pub async fn track_service(task: &Arc<Task>, gate: Option<&Gate>, command: &str,
         Some(Decision::Refused(reason)) => refused = Some(reason),
         None => {}
     }
-    let service = Service { command: command.to_owned(), ports: Vec::new(), started_at, releases, task: Arc::clone(task), gate: gate.cloned(), checking: false, unobserved: false, poller };
-    report(task, running_report(&service, pgid, "Praxis is watching the processes left running by this shell command."));
+    let service = Service {
+        command: command.to_owned(),
+        ports: Vec::new(),
+        started_at,
+        releases,
+        task: Arc::clone(task),
+        gate: gate.cloned(),
+        checking: false,
+        unobserved: false,
+        poller,
+    };
+    report(
+        task,
+        running_report(
+            &service,
+            pgid,
+            "Praxis is watching the processes left running by this shell command.",
+        ),
+    );
     with_services(|all| all.insert(pgid, service));
     let ports = match claim_new_ports(pgid, survivors.clone()).await {
         Ok(ports) => ports,
@@ -437,16 +655,41 @@ pub async fn track_service(task: &Arc<Task>, gate: Option<&Gate>, command: &str,
         }
     };
     let count = survivors.len();
-    let listening = if ports.is_empty() { String::new() } else { format!(", listening on port {}", ports.iter().map(u32::to_string).collect::<Vec<_>>().join(", ")) };
-    let what = format!("{count} process{} (group {pgid}){listening}", if count == 1 { "" } else { "es" });
+    let listening = if ports.is_empty() {
+        String::new()
+    } else {
+        format!(
+            ", listening on port {}",
+            ports
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    let what = format!(
+        "{count} process{} (group {pgid}){listening}",
+        if count == 1 { "" } else { "es" }
+    );
     match refused {
-        Some(reason) => format!("Still running in the background: {what}. It could not be claimed — {reason} Stop it with `kill -- -{pgid}` unless you meant to share it."),
-        None => format!("Still running in the background: {what}. It stays claimed for this session (with any port it opens) until it exits; stop it with `kill -- -{pgid}` when you are done."),
+        Some(reason) => format!(
+            "Still running in the background: {what}. It could not be claimed — {reason} Stop it with `kill -- -{pgid}` unless you meant to share it."
+        ),
+        None => format!(
+            "Still running in the background: {what}. It stays claimed for this session (with any port it opens) until it exits; stop it with `kill -- -{pgid}` when you are done."
+        ),
     }
 }
 
 fn hostname() -> String {
-    std::process::Command::new("hostname").stdin(Stdio::null()).stderr(Stdio::null()).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned()).filter(|h| !h.is_empty()).unwrap_or_else(|| "localhost".to_owned())
+    std::process::Command::new("hostname")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| "localhost".to_owned())
 }
 
 #[cfg(test)]
@@ -476,11 +719,21 @@ mod tests {
     #[tokio::test]
     async fn a_command_that_leaves_a_process_running_reports_it_as_a_survivor() {
         let dir = std::env::temp_dir();
-        let run = run_shell_command("sleep 30 > /dev/null 2>&1 & echo started", &dir, Duration::from_secs(20), std::env::var("PATH").unwrap_or_default()).await;
+        let run = run_shell_command(
+            "sleep 30 > /dev/null 2>&1 & echo started",
+            &dir,
+            Duration::from_secs(20),
+            std::env::var("PATH").unwrap_or_default(),
+        )
+        .await;
         assert_eq!(run.stdout.trim(), "started");
         assert!(run.error.is_none(), "{:?}", run.error);
         let pgid = run.pgid.expect("a process group");
-        assert_eq!(run.survivors.len(), 1, "the backgrounded sleep survives its shell");
+        assert_eq!(
+            run.survivors.len(),
+            1,
+            "the backgrounded sleep survives its shell"
+        );
         assert!(stop_process_group(pgid).await);
         assert!(process_group_members(pgid).is_empty());
     }
@@ -489,14 +742,26 @@ mod tests {
     async fn a_failing_command_reports_its_exit_code_and_a_timeout_stops_the_group() {
         let dir = std::env::temp_dir();
         let path = std::env::var("PATH").unwrap_or_default();
-        let failed = run_shell_command("echo out; echo err >&2; exit 3", &dir, Duration::from_secs(20), path.clone()).await;
+        let failed = run_shell_command(
+            "echo out; echo err >&2; exit 3",
+            &dir,
+            Duration::from_secs(20),
+            path.clone(),
+        )
+        .await;
         assert_eq!(failed.exit_code, 3);
         assert_eq!(failed.error.as_deref(), Some("exited with code 3"));
         assert_eq!((failed.stdout.trim(), failed.stderr.trim()), ("out", "err"));
         assert!(failed.survivors.is_empty());
 
         let slow = run_shell_command("sleep 30", &dir, Duration::from_millis(300), path).await;
-        assert!(slow.error.as_deref().is_some_and(|e| e.starts_with("timed out after")), "{:?}", slow.error);
+        assert!(
+            slow.error
+                .as_deref()
+                .is_some_and(|e| e.starts_with("timed out after")),
+            "{:?}",
+            slow.error
+        );
         assert!(process_group_members(slow.pgid.expect("pgid")).is_empty());
     }
 }

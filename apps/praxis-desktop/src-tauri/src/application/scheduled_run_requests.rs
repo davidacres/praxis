@@ -12,7 +12,9 @@ use std::sync::Mutex;
 
 use praxis_contracts::{IssueSummary, RustRpcRequest};
 use praxis_host::HostContext;
-use praxis_workflows::scheduled_run::{ComposeScheduledRunInput, ScheduledRunStatus, compose_scheduled_run};
+use praxis_workflows::scheduled_run::{
+    ComposeScheduledRunInput, ScheduledRunStatus, compose_scheduled_run,
+};
 use praxis_workflows::scheduled_run_request::{
     SCHEDULED_RUN_REQUEST_FOLDER, ScheduledRunRequestError, ScheduledRunRequestState,
     ScheduledRunRequestStatus, is_scheduled_run_request_file, parse_scheduled_run_request,
@@ -46,12 +48,23 @@ fn project_issues(host: &HostContext, project_id: &str) -> Vec<IssueSummary> {
         let response = host.dispatch_rpc(RustRpcRequest {
             id: "scheduled-request".into(),
             channel: "issue:list".into(),
-            args: vec![filter.clone(), json!(offset), json!(200), json!(format!("project:{project_id}"))],
+            args: vec![
+                filter.clone(),
+                json!(offset),
+                json!(200),
+                json!(format!("project:{project_id}")),
+            ],
         });
-        let Some(page) = response.ok.then_some(response.result).flatten() else { break };
+        let Some(page) = response.ok.then_some(response.result).flatten() else {
+            break;
+        };
         let batch: Vec<IssueSummary> = page["issues"]
             .as_array()
-            .map(|list| list.iter().filter_map(|i| serde_json::from_value(i.clone()).ok()).collect())
+            .map(|list| {
+                list.iter()
+                    .filter_map(|i| serde_json::from_value(i.clone()).ok())
+                    .collect()
+            })
             .unwrap_or_default();
         let count = batch.len();
         issues.extend(batch);
@@ -118,12 +131,18 @@ fn import_one(
     };
     let fail = |problems: Vec<String>| rejected(Some(project_id.clone()), problems);
 
-    let file_name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let file_name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let run_id = scheduled_run_request_run_id(&project_id, &file_name);
     let existing = scheduled_runs::get_run(host, &run_id);
     if let Some(existing) = &existing {
         if existing.status != ScheduledRunStatus::Draft {
-            let status = serde_json::to_value(existing.status).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+            let status = serde_json::to_value(existing.status)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default();
             return fail(vec![format!(
                 "The schedule this file created is now {status}, so a request can no longer change it. Hold it in Praxis first, or write a request with a new file name."
             )]);
@@ -131,18 +150,26 @@ fn import_one(
     }
 
     let issues = project_issues(host, &project_id);
-    let resolved = match resolve_scheduled_run_request(&request, &issues, &format!("project:{project_id}")) {
-        Ok(resolved) => resolved,
-        Err(error) => return fail(error.problems),
-    };
+    let resolved =
+        match resolve_scheduled_run_request(&request, &issues, &format!("project:{project_id}")) {
+            Ok(resolved) => resolved,
+            Err(error) => return fail(error.problems),
+        };
     let choices = workflows::workflow_choices_for(host, &project_id);
     let mut workflow_id = request.workflow_id.clone();
     if let Some(wanted) = &workflow_id {
         if !choices.iter().any(|c| c["workflowId"] == json!(wanted)) {
-            let available: Vec<String> = choices.iter().filter_map(|c| c["workflowId"].as_str().map(str::to_string)).collect();
+            let available: Vec<String> = choices
+                .iter()
+                .filter_map(|c| c["workflowId"].as_str().map(str::to_string))
+                .collect();
             return fail(vec![format!(
                 "Workflow \"{wanted}\" is not available in this project. Available: {}.",
-                if available.is_empty() { "none".to_string() } else { available.join(", ") }
+                if available.is_empty() {
+                    "none".to_string()
+                } else {
+                    available.join(", ")
+                }
             )]);
         }
     }
@@ -150,7 +177,11 @@ fn import_one(
         workflow_id = choices
             .iter()
             .find(|c| c["trigger"] == "ticket")
-            .or_else(|| choices.iter().find(|c| c["workflowId"] == "governed-delivery"))
+            .or_else(|| {
+                choices
+                    .iter()
+                    .find(|c| c["workflowId"] == "governed-delivery")
+            })
             .and_then(|c| c["workflowId"].as_str().map(str::to_string));
     }
     let mut warnings = resolved.warnings.clone();
@@ -190,11 +221,15 @@ fn import_one(
         .zip(chrono::DateTime::parse_from_rfc3339(&checked_at).ok())
         .is_some_and(|(start, now)| start <= now);
     if passed {
-        warnings.push("The start time has already passed; choose a later time before arming.".to_string());
+        warnings.push(
+            "The start time has already passed; choose a later time before arming.".to_string(),
+        );
     }
     let mut status = base(ScheduledRunRequestState::Imported, Vec::new());
     status.run_id = Some(saved.id.clone());
-    status.run_status = serde_json::to_value(saved.status).ok().and_then(|v| v.as_str().map(str::to_string));
+    status.run_status = serde_json::to_value(saved.status)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string));
     status.project_id = Some(project_id);
     status.workflow_id = workflow_id;
     status.scheduled_start_at = Some(saved.scheduled_start_at.clone());
@@ -209,19 +244,35 @@ fn read_status(file: &Path) -> Option<ScheduledRunRequestStatus> {
 
 fn write_status(file: &Path, status: &ScheduledRunRequestStatus) -> std::io::Result<()> {
     let temp = file.with_extension(format!("json.{}.tmp", std::process::id()));
-    std::fs::write(&temp, format!("{}\n", serde_json::to_string_pretty(status).unwrap_or_default()))?;
+    std::fs::write(
+        &temp,
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(status).unwrap_or_default()
+        ),
+    )?;
     std::fs::rename(temp, file)
 }
 
 /// Reads every project's request folder once and imports new or changed requests.
 pub fn check(host: &HostContext) {
-    let _serial = serial().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Ok(catalog) = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path) else {
+    let _serial = serial()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Ok(catalog) =
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+    else {
         return;
     };
     let mut by_folder: Vec<(std::path::PathBuf, Vec<String>)> = Vec::new();
     for project in catalog.list(storage::PROJECTS) {
-        let Some(folder) = project["workspaceFolder"].as_str().map(str::trim).filter(|f| !f.is_empty()) else { continue };
+        let Some(folder) = project["workspaceFolder"]
+            .as_str()
+            .map(str::trim)
+            .filter(|f| !f.is_empty())
+        else {
+            continue;
+        };
         let key = std::path::absolute(folder).unwrap_or_else(|_| folder.into());
         let id = project["id"].as_str().unwrap_or_default().to_string();
         match by_folder.iter_mut().find(|(k, _)| *k == key) {
@@ -231,7 +282,9 @@ pub fn check(host: &HostContext) {
     }
     for (folder, projects) in by_folder {
         let dir = folder.join(SCHEDULED_RUN_REQUEST_FOLDER);
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         let mut names: Vec<String> = entries
             .filter_map(std::result::Result::ok)
             .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -241,16 +294,24 @@ pub fn check(host: &HostContext) {
         for name in names {
             let file = dir.join(&name);
             let status_file = dir.join(scheduled_run_request_status_file(&name));
-            let Ok(meta) = std::fs::symlink_metadata(&file) else { continue };
+            let Ok(meta) = std::fs::symlink_metadata(&file) else {
+                continue;
+            };
             if !meta.is_file() {
                 continue;
             }
             let oversize = meta.len() > MAX_REQUEST_BYTES;
             let (text, hash) = if oversize {
-                let mtime = meta.modified().ok().and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis());
+                let mtime = meta
+                    .modified()
+                    .ok()
+                    .and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_millis());
                 (String::new(), format!("oversize:{}:{mtime}", meta.len()))
             } else {
-                let Ok(text) = std::fs::read_to_string(&file) else { continue };
+                let Ok(text) = std::fs::read_to_string(&file) else {
+                    continue;
+                };
                 let hash = scheduled_run_request_hash(&text);
                 (text, hash)
             };
@@ -269,7 +330,9 @@ pub fn check(host: &HostContext) {
                     workflow_id: None,
                     scheduled_start_at: None,
                     entries: None,
-                    errors: vec![format!("The request is larger than {MAX_REQUEST_BYTES} bytes.")],
+                    errors: vec![format!(
+                        "The request is larger than {MAX_REQUEST_BYTES} bytes."
+                    )],
                     warnings: Vec::new(),
                 }
             } else {

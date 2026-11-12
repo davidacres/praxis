@@ -27,7 +27,8 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600)).map_err(|error| error.to_string())?;
+        fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))
+            .map_err(|error| error.to_string())?;
     }
     fs::rename(&tmp, path).map_err(|error| error.to_string())
 }
@@ -42,7 +43,10 @@ pub struct FileSecretBackend {
 impl FileSecretBackend {
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
-        Self { path, lock: Mutex::new(()) }
+        Self {
+            path,
+            lock: Mutex::new(()),
+        }
     }
 
     fn read(&self) -> BTreeMap<String, String> {
@@ -66,17 +70,29 @@ impl SecretBackend for FileSecretBackend {
     }
 
     fn store(&self, key: &str, value: &str) -> Result<(), String> {
-        let _guard = self.lock.lock().map_err(|_| "secret file lock poisoned".to_string())?;
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| "secret file lock poisoned".to_string())?;
         let mut all = self.read();
         all.insert(key.to_owned(), value.to_owned());
-        write_private(&self.path, &serde_json::to_vec_pretty(&all).map_err(|e| e.to_string())?)
+        write_private(
+            &self.path,
+            &serde_json::to_vec_pretty(&all).map_err(|e| e.to_string())?,
+        )
     }
 
     fn remove(&self, key: &str) -> Result<(), String> {
-        let _guard = self.lock.lock().map_err(|_| "secret file lock poisoned".to_string())?;
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| "secret file lock poisoned".to_string())?;
         let mut all = self.read();
         if all.remove(key).is_some() {
-            write_private(&self.path, &serde_json::to_vec_pretty(&all).map_err(|e| e.to_string())?)?;
+            write_private(
+                &self.path,
+                &serde_json::to_vec_pretty(&all).map_err(|e| e.to_string())?,
+            )?;
         }
         Ok(())
     }
@@ -93,7 +109,10 @@ impl KeychainSecretBackend {
     /// `profile_dir` holds only the non-sensitive key-name index.
     #[must_use]
     pub fn new(profile_dir: &Path) -> Self {
-        Self { index_path: profile_dir.join("secrets.index.json"), lock: Mutex::new(()) }
+        Self {
+            index_path: profile_dir.join("secrets.index.json"),
+            lock: Mutex::new(()),
+        }
     }
 
     fn read_index(&self) -> BTreeSet<String> {
@@ -104,7 +123,10 @@ impl KeychainSecretBackend {
     }
 
     fn write_index(&self, index: &BTreeSet<String>) -> Result<(), String> {
-        write_private(&self.index_path, &serde_json::to_vec_pretty(index).map_err(|e| e.to_string())?)
+        write_private(
+            &self.index_path,
+            &serde_json::to_vec_pretty(index).map_err(|e| e.to_string())?,
+        )
     }
 
     fn entry(key: &str) -> Result<keyring::Entry, String> {
@@ -116,20 +138,29 @@ impl SecretBackend for KeychainSecretBackend {
     fn load(&self) -> BTreeMap<String, String> {
         let mut loaded = BTreeMap::new();
         for key in self.read_index() {
-            match Self::entry(&key).and_then(|entry| entry.get_password().map_err(|e| e.to_string())) {
+            match Self::entry(&key)
+                .and_then(|entry| entry.get_password().map_err(|e| e.to_string()))
+            {
                 Ok(value) if !value.is_empty() => {
                     loaded.insert(key, value);
                 }
                 Ok(_) => {}
-                Err(error) => eprintln!("[secrets] could not read '{key}' from the OS credential store: {error}"),
+                Err(error) => eprintln!(
+                    "[secrets] could not read '{key}' from the OS credential store: {error}"
+                ),
             }
         }
         loaded
     }
 
     fn store(&self, key: &str, value: &str) -> Result<(), String> {
-        let _guard = self.lock.lock().map_err(|_| "secret index lock poisoned".to_string())?;
-        Self::entry(key)?.set_password(value).map_err(|error| error.to_string())?;
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| "secret index lock poisoned".to_string())?;
+        Self::entry(key)?
+            .set_password(value)
+            .map_err(|error| error.to_string())?;
         let mut index = self.read_index();
         if index.insert(key.to_owned()) {
             self.write_index(&index)?;
@@ -138,7 +169,10 @@ impl SecretBackend for KeychainSecretBackend {
     }
 
     fn remove(&self, key: &str) -> Result<(), String> {
-        let _guard = self.lock.lock().map_err(|_| "secret index lock poisoned".to_string())?;
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| "secret index lock poisoned".to_string())?;
         match Self::entry(key)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
             Err(error) => return Err(error.to_string()),
@@ -164,11 +198,17 @@ mod tests {
         backend.store("b", "2").expect("store");
         backend.remove("a").expect("remove");
         backend.remove("never-there").expect("absent key is fine");
-        assert_eq!(backend.load(), BTreeMap::from([("b".to_string(), "2".to_string())]));
+        assert_eq!(
+            backend.load(),
+            BTreeMap::from([("b".to_string(), "2".to_string())])
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(fs::metadata(&path).expect("meta").permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                fs::metadata(&path).expect("meta").permissions().mode() & 0o777,
+                0o600
+            );
         }
         let _ = fs::remove_dir_all(dir);
     }
@@ -177,14 +217,21 @@ mod tests {
     #[test]
     fn reading_repairs_a_permissive_secrets_file() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = std::env::temp_dir().join(format!("praxis-secrets-repair-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("praxis-secrets-repair-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("dir");
         let path = dir.join("secrets.json");
         fs::write(&path, r#"{"k":"fixture-only-value"}"#).expect("write");
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).expect("chmod");
         let backend = FileSecretBackend::new(path.clone());
-        assert_eq!(backend.load().get("k").map(String::as_str), Some("fixture-only-value"));
-        assert_eq!(fs::metadata(&path).expect("meta").permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            backend.load().get("k").map(String::as_str),
+            Some("fixture-only-value")
+        );
+        assert_eq!(
+            fs::metadata(&path).expect("meta").permissions().mode() & 0o777,
+            0o600
+        );
         let _ = fs::remove_dir_all(dir);
     }
 

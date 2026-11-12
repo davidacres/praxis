@@ -22,7 +22,9 @@ pub struct Hold {
 /// `None` when a handover for the key is already in progress.
 pub fn hold(key: &str) -> Option<Hold> {
     let mut all = held().lock().ok()?;
-    all.insert(key.to_owned()).then(|| Hold { key: key.to_owned() })
+    all.insert(key.to_owned()).then(|| Hold {
+        key: key.to_owned(),
+    })
 }
 
 impl Drop for Hold {

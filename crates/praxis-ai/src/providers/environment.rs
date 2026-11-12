@@ -21,23 +21,54 @@ const MARKER_END: &str = "__PRAXIS_PATH_END__";
 /// Directories that commonly hold user-installed developer tools.
 #[must_use]
 pub fn candidate_tool_paths(home: &Path) -> Vec<PathBuf> {
-    let mut paths = vec![home.join(".local/bin"), home.join(".cargo/bin"), home.join(".yarn/bin")];
+    let mut paths = vec![
+        home.join(".local/bin"),
+        home.join(".cargo/bin"),
+        home.join(".yarn/bin"),
+    ];
     let nvm = home.join(".nvm/versions/node");
     if let Ok(entries) = std::fs::read_dir(&nvm) {
-        let mut versions: Vec<_> = entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect();
+        let mut versions: Vec<_> = entries
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
         versions.sort();
         versions.reverse();
-        paths.extend(versions.into_iter().map(|version| nvm.join(version).join("bin")));
+        paths.extend(
+            versions
+                .into_iter()
+                .map(|version| nvm.join(version).join("bin")),
+        );
     }
-    paths.extend([home.join(".fnm/current/bin"), home.join(".volta/bin"), home.join(".asdf/shims")]);
+    paths.extend([
+        home.join(".fnm/current/bin"),
+        home.join(".volta/bin"),
+        home.join(".asdf/shims"),
+    ]);
     paths
 }
 
 fn well_known(platform_macos: bool) -> Vec<PathBuf> {
     let base: &[&str] = if platform_macos {
-        &["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        &[
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+        ]
     } else {
-        &["/usr/local/bin", "/usr/local/sbin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        &[
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+        ]
     };
     base.iter().map(PathBuf::from).collect()
 }
@@ -63,18 +94,35 @@ pub fn merge_path(shell: Option<&str>, current: &str, fallback_dirs: &[PathBuf])
     for dir in fallback_dirs.iter().filter(|dir| dir.exists()) {
         push(&dir.to_string_lossy());
     }
-    std::env::join_paths(ordered).map_or_else(|_| current.to_owned(), |joined| joined.to_string_lossy().into_owned())
+    std::env::join_paths(ordered).map_or_else(
+        |_| current.to_owned(),
+        |joined| joined.to_string_lossy().into_owned(),
+    )
 }
 
 /// The user's interactive login-shell `PATH`, or `None` when it cannot be read within 3 seconds.
 #[cfg(unix)]
 fn resolve_shell_path() -> Option<String> {
-    let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty()).unwrap_or_else(|| {
-        if cfg!(target_os = "macos") { "/bin/zsh".into() } else { "/bin/bash".into() }
-    });
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|shell| !shell.is_empty())
+        .unwrap_or_else(|| {
+            if cfg!(target_os = "macos") {
+                "/bin/zsh".into()
+            } else {
+                "/bin/bash".into()
+            }
+        });
     let script = format!("echo -n {MARKER_START}; printenv PATH; echo -n {MARKER_END}");
     // -i evaluates .zshrc/.bashrc, -l evaluates .zprofile/.bash_profile.
-    let mut child = Command::new(shell).args(["-ilc", &script]).env("CI", "1").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let mut child = Command::new(shell)
+        .args(["-ilc", &script])
+        .env("CI", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
     let mut stdout = child.stdout.take()?;
     let reader = std::thread::spawn(move || {
         let mut output = String::new();
@@ -96,7 +144,9 @@ fn resolve_shell_path() -> Option<String> {
     let output = reader.join().ok()?;
     let start = output.find(MARKER_START)? + MARKER_START.len();
     let end = output.find(MARKER_END)?;
-    (end > start).then(|| output[start..end].trim().to_owned()).filter(|path| !path.is_empty())
+    (end > start)
+        .then(|| output[start..end].trim().to_owned())
+        .filter(|path| !path.is_empty())
 }
 
 #[cfg(not(unix))]
@@ -113,7 +163,9 @@ pub fn effective_path() -> &'static str {
         if cfg!(windows) {
             return current;
         }
-        let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default();
         let mut dirs = well_known(cfg!(target_os = "macos"));
         dirs.extend(candidate_tool_paths(&home));
         merge_path(resolve_shell_path().as_deref(), &current, &dirs)
@@ -129,9 +181,23 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("praxis-path-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).expect("dir");
         let missing = tmp.join("does-not-exist");
-        let merged = merge_path(Some("/opt/shell/bin:/usr/bin"), "/usr/bin:/bin", &[tmp.clone(), missing]);
-        let parts: Vec<_> = std::env::split_paths(&merged).map(|p| p.to_string_lossy().into_owned()).collect();
-        assert_eq!(parts, vec!["/opt/shell/bin".to_string(), "/usr/bin".into(), "/bin".into(), tmp.to_string_lossy().into_owned()]);
+        let merged = merge_path(
+            Some("/opt/shell/bin:/usr/bin"),
+            "/usr/bin:/bin",
+            &[tmp.clone(), missing],
+        );
+        let parts: Vec<_> = std::env::split_paths(&merged)
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            parts,
+            vec![
+                "/opt/shell/bin".to_string(),
+                "/usr/bin".into(),
+                "/bin".into(),
+                tmp.to_string_lossy().into_owned()
+            ]
+        );
         let _ = std::fs::remove_dir_all(tmp);
     }
 
@@ -141,7 +207,15 @@ mod tests {
         for version in ["v18.0.0", "v22.1.0", "v20.5.0"] {
             std::fs::create_dir_all(home.join(".nvm/versions/node").join(version)).expect("dir");
         }
-        let found: Vec<_> = candidate_tool_paths(&home).iter().filter_map(|p| p.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned())).filter(|n| n.starts_with('v')).collect();
+        let found: Vec<_> = candidate_tool_paths(&home)
+            .iter()
+            .filter_map(|p| {
+                p.parent()
+                    .and_then(|p| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+            })
+            .filter(|n| n.starts_with('v'))
+            .collect();
         assert_eq!(found, vec!["v22.1.0", "v20.5.0", "v18.0.0"]);
         let _ = std::fs::remove_dir_all(home);
     }

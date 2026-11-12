@@ -13,4 +13,7 @@ pub mod store;
 pub mod types;
 
 pub use scorer::{build_suggested_prompt, evaluate, finding_rule_key};
-pub use types::{CLARITY_CHECKLIST_VERSION, EvaluationInput, PriorContext, SCORING_RUBRIC_VERSION, Symbol, WorkspaceHints};
+pub use types::{
+    CLARITY_CHECKLIST_VERSION, EvaluationInput, PriorContext, SCORING_RUBRIC_VERSION, Symbol,
+    WorkspaceHints,
+};

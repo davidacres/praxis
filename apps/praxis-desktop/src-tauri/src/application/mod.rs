@@ -1,66 +1,66 @@
 //! Rust desktop application adapters: ownership, stores and portable workspaces.
+mod acp_host;
 mod activity;
-mod alibaba_usage;
-mod ai_browser;
-mod html_preview;
-mod browser_mcp;
 mod agent_runtime;
 mod ai;
-mod acp_host;
-mod background_tasks;
-mod context_snapshot;
-mod stage_handover_guard;
-mod api_host;
+mod ai_browser;
 mod ai_delegate;
-mod ai_review;
-mod ai_workflows;
-mod gadget_service;
-mod ai_session_ops;
-mod session_handover;
-mod ai_models;
-mod session_store;
-mod user_mcp;
-mod ai_providers;
 mod ai_feedback;
+mod ai_models;
+mod ai_providers;
+mod ai_review;
+mod ai_session_ops;
 mod ai_usage;
 mod ai_usage_stats;
+mod ai_workflows;
+mod alibaba_usage;
+mod api_host;
 mod artifacts;
 mod assistant;
-mod team_chat;
-mod team_chat_core;
+mod background_tasks;
 mod board_prefs;
 mod boards;
+mod browser_mcp;
 mod builtin_mcp;
 mod connections;
+mod context_snapshot;
 mod coordination;
-mod shell_services;
 mod deployments;
+mod gadget_service;
+mod html_preview;
 mod log_bus;
+mod marketplace;
 mod mobile_host;
 mod mobile_services;
-mod semantic_model;
-mod task_designer_plan;
-mod task_designer_state;
-mod plan_watch;
-mod marketplace;
 mod notes;
+mod plan_watch;
 mod projects;
-pub(crate) mod runtime;
 mod runs;
+pub(crate) mod runtime;
 mod scheduled_run_requests;
 mod scheduled_runner_host;
 mod scheduled_runs;
+mod semantic_model;
+mod session_handover;
+mod session_store;
+mod shell_services;
+mod stage_handover_guard;
 pub(crate) mod storage;
 mod system;
 mod task_designer;
+mod task_designer_plan;
+mod task_designer_state;
 pub mod task_notifications;
+mod team_chat;
+mod team_chat_core;
+mod user_mcp;
 mod webviews;
 mod workflow_affected_tests;
 mod workflow_agent_stage;
+mod workflow_diagnosis;
 mod workflow_engine;
 mod workflow_env_failure;
 mod workflow_estimate;
-mod workflow_diagnosis;
 mod workflow_evidence;
 mod workflow_packs;
 mod workflow_summary;
@@ -454,7 +454,9 @@ fn issue_connection<'a>(channel: &str, args: &'a [Value]) -> Option<&'a str> {
         "issue:create" | "issue:delete" => 1,
         _ => 2,
     };
-    args.get(index).and_then(Value::as_str).filter(|id| !id.trim().is_empty())
+    args.get(index)
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
 }
 
 /// How many AI sessions are mid-turn, for the close guard.
@@ -466,7 +468,11 @@ pub fn dispose() {
 /// Test seam (e2e server only): stores `record` as the session manager would after a state change
 /// and publishes `ai:sessionChanged`, so a spec can walk a session through its states.
 pub fn e2e_apply_session(host: &HostContext, record: Value) -> Result<()> {
-    let key = record["issueKey"].as_str().filter(|k| !k.is_empty()).ok_or_else(|| failure("record needs an issueKey"))?.to_owned();
+    let key = record["issueKey"]
+        .as_str()
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| failure("record needs an issueKey"))?
+        .to_owned();
     let stored = session_store::store(&host.config().user_data_dir).put(&key, record)?;
     host.events().emit("ai:sessionChanged", Some(stored));
     Ok(())
@@ -485,7 +491,10 @@ pub fn set_provider_usage_override(raw: Option<String>) {
 }
 
 pub fn running_session_count(dir: &std::path::Path) -> usize {
-    acp_host::active_keys(dir).iter().filter(|key| acp_host::is_running(dir, key)).count()
+    acp_host::active_keys(dir)
+        .iter()
+        .filter(|key| acp_host::is_running(dir, key))
+        .count()
 }
 
 /// All desktop metadata mutations, including settings writes sharing the same
@@ -543,7 +552,10 @@ impl Application {
         if marketplace::has_retired_pins(&host.config().user_data_dir) {
             let reconcile_host = host.clone();
             std::thread::spawn(move || {
-                marketplace::reconcile_installed_on_launch(&reconcile_host, &reconcile_host.config().user_data_dir);
+                marketplace::reconcile_installed_on_launch(
+                    &reconcile_host,
+                    &reconcile_host.config().user_data_dir,
+                );
             });
         }
         mobile_host::register_internal_channels(host, &application.mobile);
@@ -579,25 +591,37 @@ impl Application {
             // These spawn a CLI agent or call a model endpoint and can run for many seconds when the
             // agent is unresponsive. Holding the profile lock for that long freezes every other
             // call, including the shutdown handshake, so they never touch it.
-            "ai:listCliModelOptions" | "ai:listApiModelOptions" | "ai:probeProviderCapability" | "ai:testCustomProvider"
-            | "ai:getLatestCliProviderVersion" | "ai:installCliProvider" | "ai:detectLocalRuntimes" | "ai:testMcpServer"
+            "ai:listCliModelOptions"
+            | "ai:listApiModelOptions"
+            | "ai:probeProviderCapability"
+            | "ai:testCustomProvider"
+            | "ai:getLatestCliProviderVersion"
+            | "ai:installCliProvider"
+            | "ai:detectLocalRuntimes"
+            | "ai:testMcpServer"
             | "ai:testProviderApiKey" => {
                 return ai::dispatch(host, &host.config().user_data_dir, channel, args);
             }
             // One-shot model calls: the reply can take many seconds, and saving the result goes back
             // through the host (taking the profile lock itself), so they must not hold it.
-            "workflows:recommendTemplate" | "workflows:recommendModelTiers" | "workflows:recommendAgent" => {
+            "workflows:recommendTemplate"
+            | "workflows:recommendModelTiers"
+            | "workflows:recommendAgent" => {
                 return workflows::dispatch(host, channel, args);
             }
             // Launching only spawns, and an abort can take seconds: neither may hold the profile lock.
             _ if ai_delegate::CHANNELS.contains(&channel) => {
-                if let Some(result) = ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args) {
+                if let Some(result) =
+                    ai_delegate::dispatch(host, &host.config().user_data_dir, channel, args)
+                {
                     return result;
                 }
             }
             // Prompt checks wait on a model, so scoring must not hold the profile lock either.
             _ if ai_feedback::CHANNELS.contains(&channel) => {
-                if let Some(result) = ai_feedback::dispatch(host, &host.config().user_data_dir, channel, args) {
+                if let Some(result) =
+                    ai_feedback::dispatch(host, &host.config().user_data_dir, channel, args)
+                {
                     return result;
                 }
             }
@@ -608,23 +632,31 @@ impl Application {
                 return coordination::dispatch(channel, args);
             }
             _ if ai_review::CHANNELS.contains(&channel) => {
-                if let Some(result) = ai_review::dispatch(host, &host.config().user_data_dir, channel, args) {
+                if let Some(result) =
+                    ai_review::dispatch(host, &host.config().user_data_dir, channel, args)
+                {
                     return result;
                 }
             }
             // Workflow runs launch agents, call the tracker and GitLab, and wait on model replies.
             _ if ai_workflows::CHANNELS.contains(&channel) => {
-                if let Some(result) = ai_workflows::dispatch(host, &host.config().user_data_dir, channel, args) {
+                if let Some(result) =
+                    ai_workflows::dispatch(host, &host.config().user_data_dir, channel, args)
+                {
                     return result;
                 }
             }
             _ if gadget_service::CHANNELS.contains(&channel) => {
-                if let Some(result) = gadget_service::dispatch(host, &host.config().user_data_dir, channel, args) {
+                if let Some(result) =
+                    gadget_service::dispatch(host, &host.config().user_data_dir, channel, args)
+                {
                     return result;
                 }
             }
             _ if ai_session_ops::CHANNELS.contains(&channel) => {
-                if let Some(result) = ai_session_ops::dispatch(host, &host.config().user_data_dir, channel, args) {
+                if let Some(result) =
+                    ai_session_ops::dispatch(host, &host.config().user_data_dir, channel, args)
+                {
                     return result;
                 }
             }
@@ -704,9 +736,13 @@ impl Application {
         let mut catalog =
             Catalog::load(&host.config().user_data_dir, &host.config().settings_path)?;
         let before = connections::list(&catalog);
-        if matches!(channel, "activity:list" | "board:list" | "board:get" | "issue:list") {
+        if matches!(
+            channel,
+            "activity:list" | "board:list" | "board:get" | "issue:list"
+        ) {
             // Reading a board is what starts watching its plan folder.
-            self.plan_watchers.ensure(host, &catalog.list(storage::PROJECTS));
+            self.plan_watchers
+                .ensure(host, &catalog.list(storage::PROJECTS));
         }
         if !state.initialized {
             projects::heal(&mut catalog)?;
@@ -769,13 +805,14 @@ impl Application {
                 | "settings:revokeMobilePairedDevice"
                 | "settings:rotateMobileHostKey"
         )
-        .then(|| self.mobile.dispatch(channel, args, catalog.list(storage::PROJECTS)))
+        .then(|| {
+            self.mobile
+                .dispatch(channel, args, catalog.list(storage::PROJECTS))
+        })
         .flatten()
         {
             result?
-        } else if channel.starts_with("settings:")
-            || channel.starts_with("update:")
-        {
+        } else if channel.starts_with("settings:") || channel.starts_with("update:") {
             system::dispatch(
                 host,
                 &mut catalog,
@@ -790,7 +827,13 @@ impl Application {
         } else if channel.starts_with("runs:") {
             runs::dispatch(host, &host.config().user_data_dir, channel, args)?
         } else if channel.starts_with("taskDesigner:") {
-            task_designer::dispatch(host, &mut catalog, &host.config().user_data_dir, channel, args)?
+            task_designer::dispatch(
+                host,
+                &mut catalog,
+                &host.config().user_data_dir,
+                channel,
+                args,
+            )?
         } else if channel.starts_with("browser:")
             || channel.starts_with("preview:")
             || channel.starts_with("detachedChat:")
@@ -818,7 +861,11 @@ impl Application {
                 boards::dispatch(host, &mut catalog, "issue:get", &probe).ok()
             };
             let result = boards::dispatch(host, &mut catalog, channel, args)?;
-            let issue = if channel == "issue:create" { Some(&result) } else { existing.as_ref() };
+            let issue = if channel == "issue:create" {
+                Some(&result)
+            } else {
+                existing.as_ref()
+            };
             if let (Some(issue), Some(connection_id)) = (issue, issue_connection(channel, args)) {
                 let projects: Vec<Value> = catalog
                     .list(storage::PROJECTS)
@@ -827,7 +874,9 @@ impl Application {
                         project["id"].as_str().is_some_and(|id| {
                             connection_id == format!("project:{id}")
                                 || project["linkedBoards"].as_array().is_some_and(|links| {
-                                    links.iter().any(|link| link["connectionId"] == connection_id)
+                                    links
+                                        .iter()
+                                        .any(|link| link["connectionId"] == connection_id)
                                 })
                         })
                     })

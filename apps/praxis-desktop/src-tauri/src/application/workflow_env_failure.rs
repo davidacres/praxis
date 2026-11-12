@@ -89,25 +89,37 @@ pub fn classify_check_environment_failure(
     input: &CheckEnvironmentInput<'_>,
 ) -> Option<CheckEnvironmentFailure> {
     let command = base_name(input.command);
-    if matches(r"(?i)ENOENT|not found|not recognized", input.spawn_error) || input.exit_code == Some(127) {
+    if matches(r"(?i)ENOENT|not found|not recognized", input.spawn_error)
+        || input.exit_code == Some(127)
+    {
         return Some(CheckEnvironmentFailure {
             reason: format!("\"{}\" was not found on this machine.", input.command),
-            hint: format!("Install {} (or fix the stage's command), then retry.", input.command),
+            hint: format!(
+                "Install {} (or fix the stage's command), then retry.",
+                input.command
+            ),
         });
     }
     let failed = input.exit_code != Some(0);
     if failed && PACKAGE_MANAGERS.contains(&command.as_str()) {
         if let Some(script) = missing_script(&command, input.args, input.output) {
             return Some(CheckEnvironmentFailure {
-                reason: format!("This project has no \"{script}\" script, so the stage did not run."),
-                hint: format!("Add a \"{script}\" script to package.json, or change the stage's command to one this project has, then retry."),
+                reason: format!(
+                    "This project has no \"{script}\" script, so the stage did not run."
+                ),
+                hint: format!(
+                    "Add a \"{script}\" script to package.json, or change the stage's command to one this project has, then retry."
+                ),
             });
         }
     }
-    let is_tsc = command == "tsc" || (command == "npx" && subcommand(input.args).as_deref() == Some("tsc"));
+    let is_tsc =
+        command == "tsc" || (command == "npx" && subcommand(input.args).as_deref() == Some("tsc"));
     if failed
         && is_tsc
-        && input.output.contains("tsc: The TypeScript Compiler - Version")
+        && input
+            .output
+            .contains("tsc: The TypeScript Compiler - Version")
         && input.output.contains("COMMON COMMANDS")
     {
         return Some(CheckEnvironmentFailure {
@@ -138,12 +150,18 @@ pub fn classify_check_environment_failure(
             hint: "Point this stage at the public registry, for example by adding --registry=https://registry.npmjs.org/ to its arguments, then retry.".into(),
         });
     }
-    if matches(r"(?i)\b(?:E401|E403|ENEEDAUTH)\b|unable to authenticate|401 Unauthorized", out) {
+    if matches(
+        r"(?i)\b(?:E401|E403|ENEEDAUTH)\b|unable to authenticate|401 Unauthorized",
+        out,
+    ) {
         let host = failed_host(out);
         return Some(CheckEnvironmentFailure {
             reason: format!(
                 "{} rejected the credentials.",
-                host.map_or_else(|| "The package registry".to_string(), |h| format!("The package registry {h}"))
+                host.map_or_else(
+                    || "The package registry".to_string(),
+                    |h| format!("The package registry {h}")
+                )
             ),
             hint: "Check the auth token in your .npmrc, then retry.".into(),
         });
@@ -173,8 +191,19 @@ pub fn classify_check_environment_failure(
 mod tests {
     use super::*;
 
-    fn input<'a>(command: &'a str, args: &'a [String], code: Option<i32>, output: &'a str) -> CheckEnvironmentInput<'a> {
-        CheckEnvironmentInput { command, args, exit_code: code, output, spawn_error: "" }
+    fn input<'a>(
+        command: &'a str,
+        args: &'a [String],
+        code: Option<i32>,
+        output: &'a str,
+    ) -> CheckEnvironmentInput<'a> {
+        CheckEnvironmentInput {
+            command,
+            args,
+            exit_code: code,
+            output,
+            spawn_error: "",
+        }
     }
 
     #[test]
@@ -186,7 +215,10 @@ mod tests {
     #[test]
     fn a_real_test_failure_is_never_second_guessed() {
         let args = vec!["test".to_string()];
-        assert!(classify_check_environment_failure(&input("npm", &args, Some(1), "1 failing")).is_none());
+        assert!(
+            classify_check_environment_failure(&input("npm", &args, Some(1), "1 failing"))
+                .is_none()
+        );
     }
 
     #[test]
@@ -200,7 +232,13 @@ mod tests {
     #[test]
     fn a_missing_script_is_not_configured() {
         let args = vec!["run".to_string(), "lint".to_string()];
-        let found = classify_check_environment_failure(&input("npm", &args, Some(1), "npm error Missing script: \"lint\"\n")).unwrap();
+        let found = classify_check_environment_failure(&input(
+            "npm",
+            &args,
+            Some(1),
+            "npm error Missing script: \"lint\"\n",
+        ))
+        .unwrap();
         assert!(found.reason.contains("no \"lint\" script"));
     }
 }

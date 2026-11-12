@@ -828,7 +828,9 @@ pub async fn consume_chat_stream(
             if let Some(reasoning) = delta.get(key).and_then(serde_json::Value::as_str) {
                 if !reasoning.is_empty() {
                     thought.push_str(reasoning);
-                    on_event(ChatStreamEvent::Reasoning { text: reasoning.to_string() });
+                    on_event(ChatStreamEvent::Reasoning {
+                        text: reasoning.to_string(),
+                    });
                 }
             }
         }

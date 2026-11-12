@@ -48,9 +48,13 @@ pub fn attach_secret_persistence(host: &HostContext, use_os_keychain: bool) {
     use praxis_host::secret_backends::{FileSecretBackend, KeychainSecretBackend};
     let profile = host.config().user_data_dir.clone();
     if use_os_keychain {
-        host.secrets().attach_backend(std::sync::Arc::new(KeychainSecretBackend::new(&profile)));
+        host.secrets()
+            .attach_backend(std::sync::Arc::new(KeychainSecretBackend::new(&profile)));
     } else {
-        host.secrets().attach_backend(std::sync::Arc::new(FileSecretBackend::new(profile.join("praxis-secrets.json"))));
+        host.secrets()
+            .attach_backend(std::sync::Arc::new(FileSecretBackend::new(
+                profile.join("praxis-secrets.json"),
+            )));
     }
     let report = import_legacy(&profile, host.secrets(), || {
         if !use_os_keychain {
@@ -60,8 +64,11 @@ pub fn attach_secret_persistence(host: &HostContext, use_os_keychain: bool) {
         {
             // Verified against a real Electron profile: service "Praxis Safe Storage",
             // account "Praxis Key".
-            praxis_host::electron_secrets::macos_safe_storage_password("Praxis Safe Storage", "Praxis Key")
-                .map(|password| derive_key(&password))
+            praxis_host::electron_secrets::macos_safe_storage_password(
+                "Praxis Safe Storage",
+                "Praxis Key",
+            )
+            .map(|password| derive_key(&password))
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -163,9 +170,13 @@ impl DesktopState {
 }
 
 /// The generated renderer contract: allowed method channels and event channels.
-pub fn contract_channels() -> Result<(BTreeSet<String>, BTreeSet<String>), Box<dyn std::error::Error>> {
+pub fn contract_channels()
+-> Result<(BTreeSet<String>, BTreeSet<String>), Box<dyn std::error::Error>> {
     let contract: Contract = serde_json::from_str(include_str!("../desktop-contract.json"))?;
-    Ok((contract.methods.into_iter().map(|m| m.channel).collect(), contract.events))
+    Ok((
+        contract.methods.into_iter().map(|m| m.channel).collect(),
+        contract.events,
+    ))
 }
 
 pub fn contract_audit(host: &HostContext) -> Value {
@@ -245,15 +256,44 @@ mod tests {
 
     #[test]
     fn capabilities_grant_the_contract_to_the_local_main_window_only() {
-        let main: Value = serde_json::from_str(include_str!("../capabilities/main.json")).expect("main");
-        assert_eq!(main["local"], true, "remote origins must not inherit the main capability");
+        let main: Value =
+            serde_json::from_str(include_str!("../capabilities/main.json")).expect("main");
+        assert_eq!(
+            main["local"], true,
+            "remote origins must not inherit the main capability"
+        );
         assert_eq!(main["windows"], json!(["main"]));
-        assert!(main["permissions"].as_array().expect("permissions").iter().any(|p| p == "allow-desktop-contract"));
-        let child: Value = serde_json::from_str(include_str!("../capabilities/child-browsers.json")).expect("child");
+        assert!(
+            main["permissions"]
+                .as_array()
+                .expect("permissions")
+                .iter()
+                .any(|p| p == "allow-desktop-contract")
+        );
+        let child: Value =
+            serde_json::from_str(include_str!("../capabilities/child-browsers.json"))
+                .expect("child");
         assert_eq!(child["local"], false);
-        assert_eq!(child["permissions"], json!([]), "child browser webviews get no RPC permission");
-        assert!(child["windows"].as_array().expect("windows").iter().any(|w| w == crate::alibaba_window::WINDOW_LABEL), "the console sign-in window is a zero-permission child");
-        assert!(!main["windows"].as_array().expect("windows").iter().any(|w| w == crate::alibaba_window::WINDOW_LABEL));
+        assert_eq!(
+            child["permissions"],
+            json!([]),
+            "child browser webviews get no RPC permission"
+        );
+        assert!(
+            child["windows"]
+                .as_array()
+                .expect("windows")
+                .iter()
+                .any(|w| w == crate::alibaba_window::WINDOW_LABEL),
+            "the console sign-in window is a zero-permission child"
+        );
+        assert!(
+            !main["windows"]
+                .as_array()
+                .expect("windows")
+                .iter()
+                .any(|w| w == crate::alibaba_window::WINDOW_LABEL)
+        );
     }
 
     #[test]

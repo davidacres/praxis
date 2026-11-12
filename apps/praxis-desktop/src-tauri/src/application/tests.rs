@@ -366,10 +366,7 @@ fn portable_export_strips_secrets_and_resolves_paths_after_moving_the_tree() {
         ))],
     );
     let restored = profile.rpc("projects:get", vec![project["id"].clone()]);
-    assert_eq!(
-        restored["workspaceFolder"],
-        json!(moved.join("checkout"))
-    );
+    assert_eq!(restored["workspaceFolder"], json!(moved.join("checkout")));
 }
 
 #[test]
@@ -930,7 +927,8 @@ fn scheduled_runs_crud_lifecycle_and_views() {
     // skips it and finishes by itself rather than staying "running".
     let started = profile.rpc("scheduledRuns:startNow", vec![json!(run_id)]);
     assert!(
-        ["running", "paused", "completed"].contains(&started["run"]["status"].as_str().expect("status")),
+        ["running", "paused", "completed"]
+            .contains(&started["run"]["status"].as_str().expect("status")),
         "unexpected status {}",
         started["run"]["status"]
     );
@@ -949,7 +947,11 @@ fn scheduled_runs_crud_lifecycle_and_views() {
     // 8. Workflow choices
     let choices = profile.rpc("scheduledRuns:workflowChoices", vec![json!("p1")]);
     assert!(choices["choices"].as_array().expect("choices").len() >= 2);
-    assert!(choices["defaultWorkflowId"].as_str().is_some_and(|id| !id.is_empty()));
+    assert!(
+        choices["defaultWorkflowId"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty())
+    );
 
     // 9. Remove
     profile.rpc("scheduledRuns:remove", vec![json!(run_id)]);
@@ -1079,11 +1081,20 @@ fn system_mobile_pairing_and_clear_data() {
 
     // 2. Create pairing invitation: a single-use token, never a private key.
     let invitation = profile.rpc("settings:createMobilePairingInvitation", vec![]);
-    assert_eq!(invitation["invitation"]["tokenId"].as_str().expect("token").len(), 12);
+    assert_eq!(
+        invitation["invitation"]["tokenId"]
+            .as_str()
+            .expect("token")
+            .len(),
+        12
+    );
     assert!(!invitation.to_string().contains("rivate"));
 
     // 3. Revoking an unknown device is harmless.
-    let revoked = profile.rpc("settings:revokeMobilePairedDevice", vec![json!("device:none")]);
+    let revoked = profile.rpc(
+        "settings:revokeMobilePairedDevice",
+        vec![json!("device:none")],
+    );
     assert_eq!(revoked["devices"].as_array().expect("devices").len(), 0);
 
     // 5. Update checks and coordination
@@ -1112,18 +1123,26 @@ fn mock_registry(addons: Vec<(&'static str, Value, Vec<(&'static str, String)>)>
         .into_iter()
         .map(|(name, manifest, files)| {
             let mut builder = tar::Builder::new(Vec::new());
-            let package = json!({ "name": name, "version": "1.0.0", "praxis": manifest }).to_string();
+            let package =
+                json!({ "name": name, "version": "1.0.0", "praxis": manifest }).to_string();
             let mut all = vec![("package/package.json".to_string(), package)];
-            all.extend(files.into_iter().map(|(file, body)| (format!("package/addon/{file}"), body)));
+            all.extend(
+                files
+                    .into_iter()
+                    .map(|(file, body)| (format!("package/addon/{file}"), body)),
+            );
             for (path, body) in all {
                 let mut header = tar::Header::new_gnu();
                 header.set_size(body.len() as u64);
                 header.set_mode(0o644);
                 header.set_cksum();
-                builder.append_data(&mut header, path, body.as_bytes()).expect("tar entry");
+                builder
+                    .append_data(&mut header, path, body.as_bytes())
+                    .expect("tar entry");
             }
             let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-            gz.write_all(&builder.into_inner().expect("tar")).expect("gz");
+            gz.write_all(&builder.into_inner().expect("tar"))
+                .expect("gz");
             (name, manifest, gz.finish().expect("gz"))
         })
         .collect();
@@ -1134,16 +1153,34 @@ fn mock_registry(addons: Vec<(&'static str, Value, Vec<(&'static str, String)>)>
             let mut buffer = [0u8; 4096];
             let read = stream.read(&mut buffer).unwrap_or(0);
             let request = String::from_utf8_lossy(&buffer[..read]).to_string();
-            let path = request.split_whitespace().nth(1).unwrap_or("/").split('?').next().unwrap_or("/").to_string();
-            let found = built.iter().find(|(name, _, _)| path == format!("/{name}") || path == format!("/{name}/-/{name}-1.0.0.tgz"));
-            let (status, content_type, body): (u16, &str, Vec<u8>) = if path == "/users/acme/packages" {
+            let path = request
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("/")
+                .split('?')
+                .next()
+                .unwrap_or("/")
+                .to_string();
+            let found = built.iter().find(|(name, _, _)| {
+                path == format!("/{name}") || path == format!("/{name}/-/{name}-1.0.0.tgz")
+            });
+            let (status, content_type, body): (u16, &str, Vec<u8>) = if path
+                == "/users/acme/packages"
+            {
                 let list: Vec<Value> = built.iter().map(|(name, _, _)| json!({ "name": name, "updated_at": "2026-01-01T00:00:00Z" })).collect();
-                (200, "application/json", json!(list).to_string().into_bytes())
+                (
+                    200,
+                    "application/json",
+                    json!(list).to_string().into_bytes(),
+                )
             } else if let Some((name, manifest, tarball)) = found {
                 if path.ends_with(".tgz") {
                     (200, "application/octet-stream", tarball.clone())
                 } else {
-                    let integrity = format!("sha512-{}", base64::engine::general_purpose::STANDARD.encode(Sha512::digest(tarball)));
+                    let integrity = format!(
+                        "sha512-{}",
+                        base64::engine::general_purpose::STANDARD.encode(Sha512::digest(tarball))
+                    );
                     let packument = json!({
                         "dist-tags": { "latest": "1.0.0" },
                         "versions": { "1.0.0": { "praxis": manifest, "dist": { "tarball": format!("{served}/{name}/-/{name}-1.0.0.tgz"), "integrity": integrity } } }
@@ -1151,9 +1188,16 @@ fn mock_registry(addons: Vec<(&'static str, Value, Vec<(&'static str, String)>)>
                     (200, "application/json", packument.to_string().into_bytes())
                 }
             } else {
-                (404, "application/json", b"{\"message\":\"no such package\"}".to_vec())
+                (
+                    404,
+                    "application/json",
+                    b"{\"message\":\"no such package\"}".to_vec(),
+                )
             };
-            let head = format!("HTTP/1.1 {status} X\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n", body.len());
+            let head = format!(
+                "HTTP/1.1 {status} X\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+                body.len()
+            );
             let _ = stream.write_all(head.as_bytes());
             let _ = stream.write_all(&body);
         }
@@ -1165,10 +1209,26 @@ fn mock_registry(addons: Vec<(&'static str, Value, Vec<(&'static str, String)>)>
 fn marketplace_catalog_install_and_trust() {
     let profile = Profile::new();
     let theme = json!({ "schemaVersion": 1, "kind": "theme", "id": "nord", "name": "Nord" });
-    let agent = json!({ "schemaVersion": 1, "kind": "agent", "id": "tidy-bot", "name": "Tidy Bot" });
+    let agent =
+        json!({ "schemaVersion": 1, "kind": "agent", "id": "tidy-bot", "name": "Tidy Bot" });
     let registry = mock_registry(vec![
-        ("praxis-addon-nord", theme, vec![("theme.json", json!({ "name": "Nord", "mode": "dark", "preview": { "canvas": "#2e3440" } }).to_string())]),
-        ("praxis-addon-tidy", agent, vec![("agent.json", json!({ "id": "tidy-bot", "name": "Tidy Bot", "type": "acp" }).to_string())]),
+        (
+            "praxis-addon-nord",
+            theme,
+            vec![(
+                "theme.json",
+                json!({ "name": "Nord", "mode": "dark", "preview": { "canvas": "#2e3440" } })
+                    .to_string(),
+            )],
+        ),
+        (
+            "praxis-addon-tidy",
+            agent,
+            vec![(
+                "agent.json",
+                json!({ "id": "tidy-bot", "name": "Tidy Bot", "type": "acp" }).to_string(),
+            )],
+        ),
         ("unrelated-package", json!({}), vec![]),
     ]);
 
@@ -1185,15 +1245,26 @@ fn marketplace_catalog_install_and_trust() {
     assert_eq!(configured["owner"], "acme");
     profile.rpc("marketplace:setToken", vec![json!("ghp_test_token")]);
     let ready = profile.rpc("marketplace:getStatus", vec![]);
-    assert_eq!((ready["hasToken"].clone(), ready["ready"].clone()), (json!(true), json!(true)));
+    assert_eq!(
+        (ready["hasToken"].clone(), ready["ready"].clone()),
+        (json!(true), json!(true))
+    );
 
     let catalog = profile.rpc("marketplace:listCatalog", vec![]);
-    let names: Vec<&str> = catalog.as_array().expect("catalog").iter().map(|e| e["packageName"].as_str().unwrap_or_default()).collect();
+    let names: Vec<&str> = catalog
+        .as_array()
+        .expect("catalog")
+        .iter()
+        .map(|e| e["packageName"].as_str().unwrap_or_default())
+        .collect();
     assert_eq!(names, ["praxis-addon-tidy", "praxis-addon-nord"]); // sorted by kind: agent < theme
 
     // A declarative add-on is active the moment it installs.
     let nord = profile.rpc("marketplace:install", vec![json!("praxis-addon-nord")]);
-    assert_eq!((nord["manifest"]["id"].clone(), nord["enabled"].clone()), (json!("nord"), json!(true)));
+    assert_eq!(
+        (nord["manifest"]["id"].clone(), nord["enabled"].clone()),
+        (json!("nord"), json!(true))
+    );
     let appearance = profile.rpc("marketplace:listActiveAppearance", vec![]);
     assert_eq!(appearance["themes"][0]["preview"]["canvas"], "#2e3440");
 
@@ -1202,19 +1273,54 @@ fn marketplace_catalog_install_and_trust() {
     assert_eq!(tidy["enabled"], false);
     let mirrored = profile.root.join("agents/tidy-bot/agent.json");
     assert!(!mirrored.exists());
-    profile.rpc("marketplace:setTrust", vec![json!("agent"), json!("tidy-bot"), json!(true)]);
+    profile.rpc(
+        "marketplace:setTrust",
+        vec![json!("agent"), json!("tidy-bot"), json!(true)],
+    );
     assert!(mirrored.is_file());
-    assert!(!profile.root.join("agents/tidy-bot/.praxis-addon.json").exists());
-    profile.rpc("marketplace:setTrust", vec![json!("agent"), json!("tidy-bot"), json!(false)]);
+    assert!(
+        !profile
+            .root
+            .join("agents/tidy-bot/.praxis-addon.json")
+            .exists()
+    );
+    profile.rpc(
+        "marketplace:setTrust",
+        vec![json!("agent"), json!("tidy-bot"), json!(false)],
+    );
     assert!(!mirrored.exists());
 
-    assert_eq!(profile.rpc("marketplace:listInstalled", vec![]).as_array().expect("installed").len(), 2);
-    assert_eq!(profile.rpc("marketplace:checkForUpdates", vec![]), json!([]));
-    assert!(profile.try_rpc("marketplace:install", vec![json!("praxis-addon-missing")]).is_err());
+    assert_eq!(
+        profile
+            .rpc("marketplace:listInstalled", vec![])
+            .as_array()
+            .expect("installed")
+            .len(),
+        2
+    );
+    assert_eq!(
+        profile.rpc("marketplace:checkForUpdates", vec![]),
+        json!([])
+    );
+    assert!(
+        profile
+            .try_rpc("marketplace:install", vec![json!("praxis-addon-missing")])
+            .is_err()
+    );
 
     profile.rpc("marketplace:remove", vec![json!("theme"), json!("nord")]);
-    assert_eq!(profile.rpc("marketplace:listInstalled", vec![]).as_array().expect("installed").len(), 1);
-    assert_eq!(profile.rpc("marketplace:listActiveAppearance", vec![])["themes"], json!([]));
+    assert_eq!(
+        profile
+            .rpc("marketplace:listInstalled", vec![])
+            .as_array()
+            .expect("installed")
+            .len(),
+        1
+    );
+    assert_eq!(
+        profile.rpc("marketplace:listActiveAppearance", vec![])["themes"],
+        json!([])
+    );
 }
 
 #[test]
@@ -1325,7 +1431,6 @@ fn runs_services_and_task_designer_canvases() {
         1
     );
     assert_eq!(retrieved_canvas["zoom"], 1.5);
-
 }
 
 #[test]
@@ -1342,7 +1447,11 @@ fn webviews_navigation_and_detached_chats() {
                 let mut request = [0u8; 2048];
                 let _ = stream.read(&mut request);
                 let body = "<!doctype html><title>Test page</title><h1>Hello</h1>";
-                let _ = write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
             }
         });
         url
@@ -1474,9 +1583,21 @@ async fn guard_proxy_and_preview_security() {
 fn gadgets_publishing_and_submission() {
     let profile = Profile::new();
     // A gadget is pinned to a live session; text published for no session mints nothing.
-    let unscoped = profile.rpc("gadgets:publishFromText", vec![json!("sess-1"), json!("pref"), json!("```praxis-gadget\n{}\n```")]);
+    let unscoped = profile.rpc(
+        "gadgets:publishFromText",
+        vec![
+            json!("sess-1"),
+            json!("pref"),
+            json!("```praxis-gadget\n{}\n```"),
+        ],
+    );
     assert!(unscoped.as_array().expect("blocks").is_empty());
-    super::session_store::store(&profile.root).put("SESSION-1", json!({ "issueKey": "SESSION-1", "sessionId": "sess-1", "state": "completed" })).expect("session");
+    super::session_store::store(&profile.root)
+        .put(
+            "SESSION-1",
+            json!({ "issueKey": "SESSION-1", "sessionId": "sess-1", "state": "completed" }),
+        )
+        .expect("session");
 
     // 1. Publish from text with a choice gadget
     let text_with_gadget = r#"
@@ -1505,16 +1626,27 @@ Here is a choice for you:
     assert_eq!(result["status"], "completed");
     assert_eq!(result["replay"], false);
     let blocks = profile.rpc("gadgets:getBlocks", vec![json!("sess-1")]);
-    let gadget = blocks.as_array().expect("blocks").iter().find(|b| b["type"] == "gadget").expect("gadget");
+    let gadget = blocks
+        .as_array()
+        .expect("blocks")
+        .iter()
+        .find(|b| b["type"] == "gadget")
+        .expect("gadget");
     assert_eq!(gadget["gadget"]["state"], "completed");
     assert_eq!(gadget["gadget"]["answer"]["selected"], "yes");
 
     // The same submission again is a replay, and a different answer under that key is refused.
     let mut again = submit_req.clone();
     again["idempotencyKey"] = result["idempotencyKey"].clone();
-    assert_eq!(profile.rpc("gadgets:submit", vec![again.clone()])["replay"], true);
+    assert_eq!(
+        profile.rpc("gadgets:submit", vec![again.clone()])["replay"],
+        true
+    );
     again["value"] = json!({ "kind": "choice", "selected": "no" });
-    assert_eq!(profile.rpc("gadgets:submit", vec![again])["error"]["code"], "duplicate-action");
+    assert_eq!(
+        profile.rpc("gadgets:submit", vec![again])["error"]["code"],
+        "duplicate-action"
+    );
 
     // 3. Clear session gadgets
     profile.rpc("gadgets:clear", vec![json!("sess-1")]);
@@ -1610,13 +1742,31 @@ fn agent_runtime_roots_and_authoring() {
 
     // The roots Settings renders carry both scopes for every catalog.
     for catalog in ["agents", "runtimeHosts", "profiles", "skills"] {
-        assert!(roots[catalog]["global"].as_str().is_some(), "{catalog}.global");
-        assert!(roots[catalog]["project"].as_str().is_some(), "{catalog}.project");
+        assert!(
+            roots[catalog]["global"].as_str().is_some(),
+            "{catalog}.global"
+        );
+        assert!(
+            roots[catalog]["project"].as_str().is_some(),
+            "{catalog}.project"
+        );
     }
 
     // Built-ins are mirrored and listed on first use.
-    assert!(items["profiles"].as_array().expect("profiles").iter().any(|p| p["profile"]["id"] == "praxis-scheduler"));
-    assert!(items["skills"].as_array().expect("skills").iter().any(|s| s["metadata"]["name"] == "praxis-scheduled-runs"));
+    assert!(
+        items["profiles"]
+            .as_array()
+            .expect("profiles")
+            .iter()
+            .any(|p| p["profile"]["id"] == "praxis-scheduler")
+    );
+    assert!(
+        items["skills"]
+            .as_array()
+            .expect("skills")
+            .iter()
+            .any(|s| s["metadata"]["name"] == "praxis-scheduled-runs")
+    );
 
     // 3. Create a launch binding: returns the refreshed snapshot and writes a real manifest.
     let created = profile.rpc(
@@ -1626,9 +1776,19 @@ fn agent_runtime_roots_and_authoring() {
             "command": "sleep", "args": ["30"], "scaffold": false
         })],
     );
-    let host = created["runtimeHosts"].as_array().expect("hosts").iter().find(|h| h["manifest"]["id"] == "code-debugger").expect("listed");
+    let host = created["runtimeHosts"]
+        .as_array()
+        .expect("hosts")
+        .iter()
+        .find(|h| h["manifest"]["id"] == "code-debugger")
+        .expect("listed");
     assert_eq!(host["trusted"], true);
-    assert!(profile.root.join("agents/code-debugger/agent.json").exists());
+    assert!(
+        profile
+            .root
+            .join("agents/code-debugger/agent.json")
+            .exists()
+    );
 
     // A duplicate or invalid request is refused and writes nothing.
     assert!(profile.try_rpc("agentRuntime:createAgent", vec![json!({"scope":"global","id":"code-debugger","name":"X","transport":"acp","command":"sleep"})]).is_err());
@@ -1646,8 +1806,14 @@ fn agent_runtime_roots_and_authoring() {
     }
 
     // Starting something undiscovered fails with the TypeScript wording.
-    let missing = profile.try_rpc("agentRuntime:start", vec![json!("nope")]).expect_err("undiscovered");
-    assert!(missing.message.contains("Runtime host nope was not discovered."));
+    let missing = profile
+        .try_rpc("agentRuntime:start", vec![json!("nope")])
+        .expect_err("undiscovered");
+    assert!(
+        missing
+            .message
+            .contains("Runtime host nope was not discovered.")
+    );
 }
 
 #[test]
@@ -1657,7 +1823,10 @@ fn ai_sessions_and_analysis_lifecycle() {
     // 1. Provider status
     // The active provider is unconfigured until it has a key; it is never reported ready for free.
     let status = profile.rpc("ai:getStatus", vec![]);
-    assert_eq!((status["provider"].as_str(), status["configured"].as_bool()), (Some("vercel-gateway"), Some(false)));
+    assert_eq!(
+        (status["provider"].as_str(), status["configured"].as_bool()),
+        (Some("vercel-gateway"), Some(false))
+    );
     profile.rpc("ai:setApiKey", vec![json!("gateway-key")]);
     assert_eq!(profile.rpc("ai:getStatus", vec![])["configured"], true);
 
@@ -1665,11 +1834,29 @@ fn ai_sessions_and_analysis_lifecycle() {
     assert!(providers.as_array().expect("providers").len() >= 3);
 
     // 2. A multi-AI conversation needs a session, a mode and a second AI.
-    let error = profile.try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({})]).expect_err("mode required");
+    let error = profile
+        .try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({})])
+        .expect_err("mode required");
     assert!(error.message.contains("Choose a conversation mode"));
-    let error = profile.try_rpc("ai:startConversation", vec![json!("TASK-99"), json!({ "mode": "consult", "provider": "openai", "turnCap": 2 })]).expect_err("no session");
+    let error = profile
+        .try_rpc(
+            "ai:startConversation",
+            vec![
+                json!("TASK-99"),
+                json!({ "mode": "consult", "provider": "openai", "turnCap": 2 }),
+            ],
+        )
+        .expect_err("no session");
     assert!(error.message.contains("No agent session found for TASK-99"));
-    let error = profile.try_rpc("ai:sendConversationMessage", vec![json!("TASK-99"), json!({ "participantId": "host", "message": "hi" })]).expect_err("no conversation");
+    let error = profile
+        .try_rpc(
+            "ai:sendConversationMessage",
+            vec![
+                json!("TASK-99"),
+                json!({ "participantId": "host", "message": "hi" }),
+            ],
+        )
+        .expect_err("no conversation");
     assert!(error.message.contains("No running multi-AI conversation"));
 
     // 3. Analysis submit, confirm, clear
@@ -1682,7 +1869,10 @@ fn ai_sessions_and_analysis_lifecycle() {
         vec![json!("TASK-99"), analysis_data.clone()],
     );
     let analysis = profile.rpc("ai:getAnalysis", vec![json!("TASK-99")]);
-    assert_eq!(analysis["messages"][0]["text"], "High CPU utilization in PTY reader");
+    assert_eq!(
+        analysis["messages"][0]["text"],
+        "High CPU utilization in PTY reader"
+    );
     assert_eq!(analysis["issueKey"], "TASK-99");
     assert_eq!(analysis["busy"], false);
 
@@ -1822,11 +2012,17 @@ fn electron_durable_chats_preserve_activation_and_unknown_fields() {
         json!([])
     );
     // Listing never rewrites the file.
-    assert_eq!(fs::read(&file).expect("valid compatibility fixture"), before);
+    assert_eq!(
+        fs::read(&file).expect("valid compatibility fixture"),
+        before
+    );
     // Opening a conversation starts a coordinator epoch, which is a committed revision.
     let conversation = profile.rpc("assistant:getConversation", vec![json!("chat-existing")]);
     assert_eq!(conversation["futureField"], true);
-    assert_eq!(conversation["messages"], doc["conversations"][0]["messages"]);
+    assert_eq!(
+        conversation["messages"],
+        doc["conversations"][0]["messages"]
+    );
     profile.rpc(
         "assistant:renameChat",
         vec![json!("chat-existing"), json!("New title")],
@@ -2033,31 +2229,86 @@ fn provider_statuses_are_real_and_keys_use_the_migrated_secret_names() {
     fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).expect("chmod");
     profile.rpc("settings:set", vec![json!({"ai": {"providers": {"claude-code-cli": {"cliPath": tool}, "codex-cli": {"cliPath": profile.root.join("absent")}}}})]);
     let statuses = profile.rpc("ai:listProviderStatuses", vec![]);
-    let by_id = |id: &str| statuses.as_array().expect("list").iter().find(|s| s["provider"] == id).cloned().expect("provider listed");
+    let by_id = |id: &str| {
+        statuses
+            .as_array()
+            .expect("list")
+            .iter()
+            .find(|s| s["provider"] == id)
+            .cloned()
+            .expect("provider listed")
+    };
     let claude = by_id("claude-code-cli");
-    assert_eq!((claude["kind"].as_str(), claude["configured"].as_bool()), (Some("cli-agent"), Some(true)));
-    assert_eq!((claude["preflight"]["status"].as_str(), claude["preflight"]["providerVersion"].as_str()), (Some("ready"), Some("4.5.6")));
-    assert_eq!(by_id("codex-cli")["configured"], false, "a missing CLI is not configured");
+    assert_eq!(
+        (claude["kind"].as_str(), claude["configured"].as_bool()),
+        (Some("cli-agent"), Some(true))
+    );
+    assert_eq!(
+        (
+            claude["preflight"]["status"].as_str(),
+            claude["preflight"]["providerVersion"].as_str()
+        ),
+        (Some("ready"), Some("4.5.6"))
+    );
+    assert_eq!(
+        by_id("codex-cli")["configured"],
+        false,
+        "a missing CLI is not configured"
+    );
     assert_eq!(by_id("codex-cli")["preflight"]["status"], "unavailable");
-    assert_eq!(statuses.as_array().expect("list").len(), 10, "every built-in provider is listed");
+    assert_eq!(
+        statuses.as_array().expect("list").len(),
+        10,
+        "every built-in provider is listed"
+    );
 
     // API keys: stored under the Electron-era name, trimmed, never echoed, cleared by an empty value.
     assert_eq!(by_id("gemini")["configured"], false);
-    let set = profile.rpc("ai:setProviderApiKey", vec![json!("gemini"), json!("  sk-secret  ")]);
-    assert_eq!((set["configured"].as_bool(), set["keySource"].as_str()), (Some(true), Some("secret")));
-    assert!(!set.to_string().contains("sk-secret"), "the key value never crosses IPC");
-    assert_eq!(profile.host.secrets().get("praxis.geminiApiKey").as_deref(), Some("sk-secret"));
+    let set = profile.rpc(
+        "ai:setProviderApiKey",
+        vec![json!("gemini"), json!("  sk-secret  ")],
+    );
+    assert_eq!(
+        (set["configured"].as_bool(), set["keySource"].as_str()),
+        (Some(true), Some("secret"))
+    );
+    assert!(
+        !set.to_string().contains("sk-secret"),
+        "the key value never crosses IPC"
+    );
+    assert_eq!(
+        profile.host.secrets().get("praxis.geminiApiKey").as_deref(),
+        Some("sk-secret")
+    );
     let cleared = profile.rpc("ai:setProviderApiKey", vec![json!("gemini"), json!("")]);
     assert_eq!(cleared["configured"], false);
     assert!(!profile.host.secrets().has("praxis.geminiApiKey"));
 
     // Keys must never be written in the clear next to the profile's legacy secrets file.
-    profile.rpc("ai:setProviderApiKey", vec![json!("openai"), json!("sk-also-secret")]);
-    assert!(!profile.root.join("secrets.json").exists(), "no plaintext side file");
+    profile.rpc(
+        "ai:setProviderApiKey",
+        vec![json!("openai"), json!("sk-also-secret")],
+    );
+    assert!(
+        !profile.root.join("secrets.json").exists(),
+        "no plaintext side file"
+    );
 
     // Unknown providers and built-ins that cannot be removed are refused with a reason.
-    assert!(profile.try_rpc("ai:setProviderApiKey", vec![json!("nope"), json!("x")]).expect_err("unknown").message.contains("Unknown AI provider"));
-    assert!(profile.try_rpc("ai:removeCustomProvider", vec![json!("openai")]).expect_err("built-in").message.contains("built-in provider"));
+    assert!(
+        profile
+            .try_rpc("ai:setProviderApiKey", vec![json!("nope"), json!("x")])
+            .expect_err("unknown")
+            .message
+            .contains("Unknown AI provider")
+    );
+    assert!(
+        profile
+            .try_rpc("ai:removeCustomProvider", vec![json!("openai")])
+            .expect_err("built-in")
+            .message
+            .contains("built-in provider")
+    );
 
     // Reset clears every API provider's key.
     profile.rpc("ai:resetProviderApiKeys", vec![]);
@@ -2071,42 +2322,125 @@ fn other_tools_project_files_are_untrusted_until_approved_and_can_be_copied() {
     fs::create_dir_all(repo.join(".git")).expect("git dir");
     fs::create_dir_all(repo.join(".claude/agents")).expect("agents dir");
     fs::create_dir_all(repo.join(".claude/skills/deploy")).expect("skills dir");
-    fs::write(repo.join(".claude/agents/release-notes.md"), "---\nname: release-notes\ndescription: Drafts notes.\ntools: Read\n---\nSign off.").expect("agent");
-    fs::write(repo.join(".claude/skills/deploy/SKILL.md"), "---\nname: deploy\ndescription: Deploys.\n---\nSteps.").expect("skill");
+    fs::write(
+        repo.join(".claude/agents/release-notes.md"),
+        "---\nname: release-notes\ndescription: Drafts notes.\ntools: Read\n---\nSign off.",
+    )
+    .expect("agent");
+    fs::write(
+        repo.join(".claude/skills/deploy/SKILL.md"),
+        "---\nname: deploy\ndescription: Deploys.\n---\nSteps.",
+    )
+    .expect("skill");
     fs::write(repo.join("AGENTS.md"), "Be kind.").expect("instructions");
-    profile.rpc("settings:set", vec![json!({ "ai": { "workingDirectory": repo } })]);
+    profile.rpc(
+        "settings:set",
+        vec![json!({ "ai": { "workingDirectory": repo } })],
+    );
 
-    let find = |snapshot: &Value, id: &str| snapshot["profiles"].as_array().expect("profiles").iter().find(|p| p["profile"]["id"] == id).cloned();
+    let find = |snapshot: &Value, id: &str| {
+        snapshot["profiles"]
+            .as_array()
+            .expect("profiles")
+            .iter()
+            .find(|p| p["profile"]["id"] == id)
+            .cloned()
+    };
     let snapshot = profile.rpc("agentRuntime:refresh", vec![]);
     let agent = find(&snapshot, "release-notes").expect("discovered in place");
-    assert_eq!((agent["trusted"].as_bool(), agent["source"]["ecosystem"].as_str(), agent["profile"]["toolMode"].as_str()), (Some(false), Some("claude"), Some("read-only")));
+    assert_eq!(
+        (
+            agent["trusted"].as_bool(),
+            agent["source"]["ecosystem"].as_str(),
+            agent["profile"]["toolMode"].as_str()
+        ),
+        (Some(false), Some("claude"), Some("read-only"))
+    );
     assert_eq!(snapshot["nativeProject"]["approved"], false);
-    assert!(snapshot["instructions"].as_array().expect("instructions").iter().any(|file| file["displayPath"] == "AGENTS.md"));
-    assert!(profile.try_rpc("agentRuntime:copyNative", vec![json!("agent"), json!("release-notes")]).expect_err("untrusted").message.contains("Approve this project"));
+    assert!(
+        snapshot["instructions"]
+            .as_array()
+            .expect("instructions")
+            .iter()
+            .any(|file| file["displayPath"] == "AGENTS.md")
+    );
+    assert!(
+        profile
+            .try_rpc(
+                "agentRuntime:copyNative",
+                vec![json!("agent"), json!("release-notes")]
+            )
+            .expect_err("untrusted")
+            .message
+            .contains("Approve this project")
+    );
 
-    let root = snapshot["nativeProject"]["root"].as_str().expect("root").to_owned();
-    let approved = profile.rpc("agentRuntime:approveNativeProject", vec![json!(root), json!(true)]);
+    let root = snapshot["nativeProject"]["root"]
+        .as_str()
+        .expect("root")
+        .to_owned();
+    let approved = profile.rpc(
+        "agentRuntime:approveNativeProject",
+        vec![json!(root), json!(true)],
+    );
     assert_eq!(approved["nativeProject"]["approved"], true);
-    assert_eq!(find(&approved, "release-notes").expect("still listed")["trusted"], true);
+    assert_eq!(
+        find(&approved, "release-notes").expect("still listed")["trusted"],
+        true
+    );
 
-    let copied = profile.rpc("agentRuntime:copyNative", vec![json!("agent"), json!("release-notes")]);
+    let copied = profile.rpc(
+        "agentRuntime:copyNative",
+        vec![json!("agent"), json!("release-notes")],
+    );
     assert!(profile.root.join("agents/release-notes/AGENT.md").is_file());
     let own = find(&copied, "release-notes").expect("copy listed");
-    assert!(own.get("source").is_none_or(Value::is_null), "the copy takes over from the original");
-    assert!(own["alsoIn"].as_array().expect("also in")[0].as_str().expect("label").starts_with("Claude Code"));
-    profile.rpc("agentRuntime:copyNative", vec![json!("skill"), json!("deploy")]);
+    assert!(
+        own.get("source").is_none_or(Value::is_null),
+        "the copy takes over from the original"
+    );
+    assert!(
+        own["alsoIn"].as_array().expect("also in")[0]
+            .as_str()
+            .expect("label")
+            .starts_with("Claude Code")
+    );
+    profile.rpc(
+        "agentRuntime:copyNative",
+        vec![json!("skill"), json!("deploy")],
+    );
     assert!(profile.root.join("skills/deploy/SKILL.md").is_file());
-    assert!(profile.try_rpc("agentRuntime:revealNative", vec![json!("/etc/passwd")]).expect_err("only discovered paths").message.contains("not found by discovery"));
+    assert!(
+        profile
+            .try_rpc("agentRuntime:revealNative", vec![json!("/etc/passwd")])
+            .expect_err("only discovered paths")
+            .message
+            .contains("not found by discovery")
+    );
 }
 
 #[test]
 fn a_bound_session_needs_both_halves_and_a_discovered_trusted_host() {
     let profile = Profile::new();
-    let launch = |input: Value| profile.try_rpc("ai:delegate", vec![input]).expect_err("launch refused").message;
-    assert_eq!(launch(json!({ "profileId": "x", "goal": "g" })), "A session binding requires both an agent profile and runtime host.");
-    assert_eq!(launch(json!({ "profileId": "x", "hostId": "missing-host", "goal": "g" })), "Runtime host \"missing-host\" was not discovered.");
+    let launch = |input: Value| {
+        profile
+            .try_rpc("ai:delegate", vec![input])
+            .expect_err("launch refused")
+            .message
+    };
+    assert_eq!(
+        launch(json!({ "profileId": "x", "goal": "g" })),
+        "A session binding requires both an agent profile and runtime host."
+    );
+    assert_eq!(
+        launch(json!({ "profileId": "x", "hostId": "missing-host", "goal": "g" })),
+        "Runtime host \"missing-host\" was not discovered."
+    );
     profile.rpc("agentRuntime:createAgent", vec![json!({ "scope": "global", "id": "bound-host", "name": "Bound Host", "transport": "acp", "command": "sleep" })]);
-    assert_eq!(launch(json!({ "profileId": "no-profile", "hostId": "bound-host", "goal": "g" })), "Agent profile no-profile was not discovered.");
+    assert_eq!(
+        launch(json!({ "profileId": "no-profile", "hostId": "bound-host", "goal": "g" })),
+        "Agent profile no-profile was not discovered."
+    );
 }
 
 /// An unresponsive CLI agent makes `ai:listCliModelOptions` wait out its handshake timeout. That wait
@@ -2118,12 +2452,20 @@ fn a_hung_cli_model_listing_does_not_hold_the_profile_lock() {
     profile.rpc("settings:set", vec![json!({ "ai": { "providers": { "antigravity-cli": { "enabled": true, "cliPath": "/bin/cat" } } } })]);
     let host = profile.host.clone();
     std::thread::spawn(move || {
-        let _ = invoke(&host, "ai:listCliModelOptions", vec![json!("antigravity-cli")]);
+        let _ = invoke(
+            &host,
+            "ai:listCliModelOptions",
+            vec![json!("antigravity-cli")],
+        );
     });
     std::thread::sleep(std::time::Duration::from_millis(500));
     let started = std::time::Instant::now();
     profile.rpc("projects:list", vec![]);
-    assert!(started.elapsed() < std::time::Duration::from_secs(4), "projects:list waited {:?} behind the model listing", started.elapsed());
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(4),
+        "projects:list waited {:?} behind the model listing",
+        started.elapsed()
+    );
 }
 
 #[test]
@@ -2132,7 +2474,10 @@ fn phone_reads_and_commands_run_on_the_desktops_own_services() {
     let folder = profile.root.join("source");
     fs::create_dir_all(&folder).expect("folder");
     let workspace = profile.rpc("workspaces:openFolder", vec![json!(folder)]);
-    let project = profile.rpc("projects:create", vec![project_input(&folder), workspace["id"].clone()]);
+    let project = profile.rpc(
+        "projects:create",
+        vec![project_input(&folder), workspace["id"].clone()],
+    );
     let caller = json!({"deviceId": "phone-1", "capabilities": ["view", "execute"]});
     let host_id = profile.rpc("settings:getMobileHostInfo", vec![])["hostId"].clone();
     let read = |operation: &str, target: Value| {
@@ -2146,7 +2491,8 @@ fn phone_reads_and_commands_run_on_the_desktops_own_services() {
     assert_eq!(info["scheduledRunExecution"], "planning-only");
     assert_eq!(info["hostId"], host_id);
 
-    let snapshot = read("projects.snapshot", json!({"hostId": host_id})).expect("projects.snapshot");
+    let snapshot =
+        read("projects.snapshot", json!({"hostId": host_id})).expect("projects.snapshot");
     assert_eq!(snapshot["projects"][0]["projectId"], project["id"]);
 
     // An unregistered operation is refused by name, never silently empty.
@@ -2161,5 +2507,13 @@ fn phone_reads_and_commands_run_on_the_desktops_own_services() {
     let first = profile.rpc("mobile:internal:command", vec![command.clone()]);
     assert_eq!(profile.rpc("mobile:internal:command", vec![command]), first);
     let saved = profile.rpc("scheduledRuns:list", vec![]);
-    assert_eq!(saved.as_array().expect("runs").iter().filter(|view| view["run"]["id"] == first["id"]).count(), 1);
+    assert_eq!(
+        saved
+            .as_array()
+            .expect("runs")
+            .iter()
+            .filter(|view| view["run"]["id"] == first["id"])
+            .count(),
+        1
+    );
 }

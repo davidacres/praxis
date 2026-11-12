@@ -40,7 +40,10 @@ pub fn is_test_file(file: &str) -> bool {
     let spec = Regex::new(r"\.(spec|test)\.[cm]?[jt]sx?$").expect("static regex");
     let tests_dir = Regex::new(r"(^|/)__tests__/.+\.[cm]?[jt]sx?$").expect("static regex");
     let py = Regex::new(r"^test_.+\.py$|_test\.py$").expect("static regex");
-    spec.is_match(base) || tests_dir.is_match(&normalized) || py.is_match(base) || base.ends_with("_test.go")
+    spec.is_match(base)
+        || tests_dir.is_match(&normalized)
+        || py.is_match(base)
+        || base.ends_with("_test.go")
 }
 
 async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
@@ -59,19 +62,34 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 /// Scheduled QA contract: the test files added or modified since this ticket acquired its branch.
-pub async fn select_changed_tests(worktree: &Path, base_commit: &str) -> Result<AffectedTestSelection, String> {
+pub async fn select_changed_tests(
+    worktree: &Path,
+    base_commit: &str,
+) -> Result<AffectedTestSelection, String> {
     let range = format!("{base_commit}..HEAD");
-    let out = git(worktree, &["diff", "--name-only", "--diff-filter=ACMR", &range]).await?;
+    let out = git(
+        worktree,
+        &["diff", "--name-only", "--diff-filter=ACMR", &range],
+    )
+    .await?;
     let files: BTreeSet<String> = out
         .lines()
         .map(str::trim)
-        .filter(|f| !f.is_empty() && !f.starts_with(".praxis/") && !f.starts_with(".praxis-run/") && is_test_file(f))
+        .filter(|f| {
+            !f.is_empty()
+                && !f.starts_with(".praxis/")
+                && !f.starts_with(".praxis-run/")
+                && is_test_file(f)
+        })
         .map(str::to_string)
         .collect();
     Ok(AffectedTestSelection {
         tests: files
             .into_iter()
-            .map(|file| AffectedTest { file, reasons: vec!["added or updated in this ticket".to_string()] })
+            .map(|file| AffectedTest {
+                file,
+                reasons: vec!["added or updated in this ticket".to_string()],
+            })
             .collect(),
         dropped: 0,
     })
@@ -99,12 +117,18 @@ fn runner_for(worktree: &Path, file: &str) -> Option<(Runner, PathBuf)> {
         return Some((Runner::Pytest, worktree.to_path_buf()));
     }
     let spec = Regex::new(r"\.spec\.[cm]?[jt]sx?$").expect("static regex");
-    let is_playwright_file = spec.is_match(file) || file.split(['/', '\\']).any(|part| part == "e2e");
+    let is_playwright_file =
+        spec.is_match(file) || file.split(['/', '\\']).any(|part| part == "e2e");
     let root = worktree.to_path_buf();
     let mut dir = worktree.join(file).parent()?.to_path_buf();
     while dir.starts_with(&root) {
         if is_playwright_file {
-            for name in ["playwright.config.ts", "playwright.config.js", "playwright.config.mjs", "playwright.config.cjs"] {
+            for name in [
+                "playwright.config.ts",
+                "playwright.config.js",
+                "playwright.config.mjs",
+                "playwright.config.cjs",
+            ] {
                 if dir.join(name).exists() {
                     return Some((Runner::Playwright, dir));
                 }
@@ -125,13 +149,19 @@ fn runner_for(worktree: &Path, file: &str) -> Option<(Runner, PathBuf)> {
                 .as_object()
                 .map(|o| o.values().filter_map(|v| v.as_str()).collect())
                 .unwrap_or_default();
-            if scripts.iter().any(|s| s.contains("node --import ./test/register.mjs --test")) {
+            if scripts
+                .iter()
+                .any(|s| s.contains("node --import ./test/register.mjs --test"))
+            {
                 return Some((Runner::RendererNodeTest, dir));
             }
             if scripts.iter().any(|s| s.contains("node --test out/")) {
                 return Some((Runner::NodeTest, dir));
             }
-            let has_dep = |name: &str| pkg["dependencies"].get(name).is_some() || pkg["devDependencies"].get(name).is_some();
+            let has_dep = |name: &str| {
+                pkg["dependencies"].get(name).is_some()
+                    || pkg["devDependencies"].get(name).is_some()
+            };
             if has_dep("vitest") {
                 return Some((Runner::Vitest, dir));
             }
@@ -147,9 +177,22 @@ fn runner_for(worktree: &Path, file: &str) -> Option<(Runner, PathBuf)> {
     None
 }
 
-fn check_node(id: &str, name: &str, command: &str, args: Vec<String>, timeout_ms: u64) -> WorkflowCheckNode {
+fn check_node(
+    id: &str,
+    name: &str,
+    command: &str,
+    args: Vec<String>,
+    timeout_ms: u64,
+) -> WorkflowCheckNode {
     WorkflowCheckNode {
-        base: WorkflowNodeBase { id: id.to_string(), name: name.to_string(), x: 0.0, y: 0.0, inputs: Vec::new(), enabled: None },
+        base: WorkflowNodeBase {
+            id: id.to_string(),
+            name: name.to_string(),
+            x: 0.0,
+            y: 0.0,
+            inputs: Vec::new(),
+            enabled: None,
+        },
         command: command.to_string(),
         args: Some(args),
         success_exit_codes: None,
@@ -193,7 +236,11 @@ fn command_for(runner: Runner, project: Option<&str>, files: &[String]) -> (Stri
             "node"
         }
         Runner::RendererNodeTest => {
-            args = vec!["--import".into(), "./test/register.mjs".into(), "--test".into()];
+            args = vec![
+                "--import".into(),
+                "./test/register.mjs".into(),
+                "--test".into(),
+            ];
             "node"
         }
     };
@@ -205,9 +252,13 @@ type FileProjects = Vec<(String, BTreeSet<String>)>;
 
 fn collect_projects(suite: &serde_json::Value, by_file: &mut FileProjects) {
     for spec in suite["specs"].as_array().into_iter().flatten() {
-        let Some(file) = spec["file"].as_str().or_else(|| suite["file"].as_str()) else { continue };
+        let Some(file) = spec["file"].as_str().or_else(|| suite["file"].as_str()) else {
+            continue;
+        };
         for run in spec["tests"].as_array().into_iter().flatten() {
-            let Some(project) = run["projectName"].as_str() else { continue };
+            let Some(project) = run["projectName"].as_str() else {
+                continue;
+            };
             match by_file.iter_mut().find(|(f, _)| f == file) {
                 Some((_, set)) => {
                     set.insert(project.to_string());
@@ -227,14 +278,27 @@ async fn playwright_projects(
     env: &BTreeMap<String, String>,
     cancel: Option<&CancellationToken>,
 ) -> Option<Vec<(String, Vec<String>)>> {
-    let mut args: Vec<String> = ["playwright", "test", "--list", "--reporter=json"].map(String::from).to_vec();
+    let mut args: Vec<String> = ["playwright", "test", "--list", "--reporter=json"]
+        .map(String::from)
+        .to_vec();
     args.extend(group.files.iter().cloned());
-    let listed = spawn_check(&check_node("affected-tests-list", "List tests", "npx", args, 120_000), &group.cwd, env, cancel, None).await;
+    let listed = spawn_check(
+        &check_node("affected-tests-list", "List tests", "npx", args, 120_000),
+        &group.cwd,
+        env,
+        cancel,
+        None,
+    )
+    .await;
     let json = &listed.output[listed.output.find('{')?..];
     let report: serde_json::Value = serde_json::from_str(json).ok()?;
     let order: Vec<String> = report["config"]["projects"]
         .as_array()
-        .map(|p| p.iter().filter_map(|p| p["name"].as_str().map(str::to_string)).collect())
+        .map(|p| {
+            p.iter()
+                .filter_map(|p| p["name"].as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let mut by_file: FileProjects = Vec::new();
     for suite in report["suites"].as_array().into_iter().flatten() {
@@ -243,8 +307,15 @@ async fn playwright_projects(
     let mut by_project: Vec<(String, Vec<String>)> = Vec::new();
     for file in &group.files {
         // The JSON report names files relative to the config's test directory.
-        let listed = by_file.iter().find(|(name, _)| file == name || file.ends_with(&format!("/{name}")));
-        let Some(chosen) = order.iter().find(|name| listed.is_some_and(|(_, set)| set.contains(*name))) else { continue };
+        let listed = by_file
+            .iter()
+            .find(|(name, _)| file == name || file.ends_with(&format!("/{name}")));
+        let Some(chosen) = order
+            .iter()
+            .find(|name| listed.is_some_and(|(_, set)| set.contains(*name)))
+        else {
+            continue;
+        };
         match by_project.iter_mut().find(|(p, _)| p == chosen) {
             Some((_, files)) => files.push(file.clone()),
             None => by_project.push((chosen.clone(), vec![file.clone()])),
@@ -265,13 +336,30 @@ pub async fn run_affected_tests(
     let mut lines: Vec<String> = vec!["== Tests for this change ==".into()];
     if selection.tests.is_empty() {
         lines.push("No test files were added or updated in this ticket.".into());
-        return CheckProcessResult { code: Some(0), output: lines.join("\n"), timed_out: false, error: None };
+        return CheckProcessResult {
+            code: Some(0),
+            output: lines.join("\n"),
+            timed_out: false,
+            error: None,
+        };
     }
     for test in &selection.tests {
-        lines.push(format!("- {}: {}", test.file, test.reasons.iter().take(3).cloned().collect::<Vec<_>>().join("; ")));
+        lines.push(format!(
+            "- {}: {}",
+            test.file,
+            test.reasons
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
     }
     if selection.dropped > 0 {
-        lines.push(format!("({} more matched less strongly and were left out.)", selection.dropped));
+        lines.push(format!(
+            "({} more matched less strongly and were left out.)",
+            selection.dropped
+        ));
     }
 
     let mut groups: Vec<RunnerGroup> = Vec::new();
@@ -287,24 +375,43 @@ pub async fn run_affected_tests(
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .unwrap_or_else(|_| test.file.clone());
         let file = if runner == Runner::NodeTest {
-            let swapped = Regex::new(r"^src/").expect("static regex").replace(&relative, "out/").into_owned();
-            Regex::new(r"\.tsx?$").expect("static regex").replace(&swapped, ".js").into_owned()
+            let swapped = Regex::new(r"^src/")
+                .expect("static regex")
+                .replace(&relative, "out/")
+                .into_owned();
+            Regex::new(r"\.tsx?$")
+                .expect("static regex")
+                .replace(&swapped, ".js")
+                .into_owned()
         } else {
             relative
         };
-        match groups.iter_mut().find(|g| g.runner == runner && g.cwd == cwd) {
+        match groups
+            .iter_mut()
+            .find(|g| g.runner == runner && g.cwd == cwd)
+        {
             Some(group) => group.files.push(file),
-            None => groups.push(RunnerGroup { runner, cwd, files: vec![file] }),
+            None => groups.push(RunnerGroup {
+                runner,
+                cwd,
+                files: vec![file],
+            }),
         }
     }
     if !unclaimed.is_empty() {
-        lines.push(format!("Could not run because no supported test runner setup claims them: {}", unclaimed.join(", ")));
+        lines.push(format!(
+            "Could not run because no supported test runner setup claims them: {}",
+            unclaimed.join(", ")
+        ));
     }
 
     let mut failed = !unclaimed.is_empty();
     let mut timed_out = false;
     let vars: Vec<(String, String)> = std::env::vars().collect();
-    let env = check_environment("affected-tests", vars.iter().map(|(k, v)| (k.as_str(), v.as_str())));
+    let env = check_environment(
+        "affected-tests",
+        vars.iter().map(|(k, v)| (k.as_str(), v.as_str())),
+    );
     for group in &groups {
         let runs: Vec<(Option<String>, Vec<String>)> = if group.runner == Runner::Playwright {
             match playwright_projects(group, &env, cancel).await {
@@ -319,10 +426,24 @@ pub async fn run_affected_tests(
                 break;
             }
             let (command, args) = command_for(group.runner, project.as_deref(), &files);
-            let relative = group.cwd.strip_prefix(worktree).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+            let relative = group
+                .cwd
+                .strip_prefix(worktree)
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
             lines.push(String::new());
-            lines.push(format!("$ {command} {}  (in {})", args.join(" "), if relative.is_empty() { "." } else { &relative }));
-            let node = check_node("affected-tests", "Tests for this change", &command, args, timeout_ms.unwrap_or(1_800_000));
+            lines.push(format!(
+                "$ {command} {}  (in {})",
+                args.join(" "),
+                if relative.is_empty() { "." } else { &relative }
+            ));
+            let node = check_node(
+                "affected-tests",
+                "Tests for this change",
+                &command,
+                args,
+                timeout_ms.unwrap_or(1_800_000),
+            );
             let result = spawn_check(&node, &group.cwd, &env, cancel, Some(&mut *on_line)).await;
             lines.push(result.output.trim_end().to_string());
             if let Some(error) = &result.error {
@@ -336,7 +457,12 @@ pub async fn run_affected_tests(
             }
         }
     }
-    CheckProcessResult { code: Some(i32::from(failed || timed_out)), output: lines.join("\n"), timed_out, error: None }
+    CheckProcessResult {
+        code: Some(i32::from(failed || timed_out)),
+        output: lines.join("\n"),
+        timed_out,
+        error: None,
+    }
 }
 
 fn looks_like_sha(value: &str) -> bool {
@@ -346,7 +472,12 @@ fn looks_like_sha(value: &str) -> bool {
 /// Where the run's branch left the project's current branch: the newest commit the run did not
 /// make. None when the project checkout has no branch (detached HEAD) or git cannot answer.
 pub async fn run_fork_point(worktree: &Path, project_folder: &Path) -> Option<String> {
-    let branch = git(project_folder, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await.ok()?;
+    let branch = git(
+        project_folder,
+        &["symbolic-ref", "--quiet", "--short", "HEAD"],
+    )
+    .await
+    .ok()?;
     let branch = branch.trim();
     if branch.is_empty() {
         return None;
@@ -358,14 +489,22 @@ pub async fn run_fork_point(worktree: &Path, project_folder: &Path) -> Option<St
 
 /// The ticket-start commit for scheduled runs: the captured base when it is still an ancestor of
 /// HEAD, else the last commit before the run started.
-pub async fn scheduled_ticket_base(worktree: &Path, started_at: &str, captured: Option<&str>) -> Option<String> {
+pub async fn scheduled_ticket_base(
+    worktree: &Path,
+    started_at: &str,
+    captured: Option<&str>,
+) -> Option<String> {
     if let Some(captured) = captured.filter(|c| !c.is_empty())
-        && git(worktree, &["merge-base", "--is-ancestor", captured, "HEAD"]).await.is_ok()
+        && git(worktree, &["merge-base", "--is-ancestor", captured, "HEAD"])
+            .await
+            .is_ok()
     {
         return Some(captured.to_string());
     }
     let before = format!("--before={started_at}");
-    let commit = git(worktree, &["log", &before, "-n", "1", "--format=%H"]).await.ok()?;
+    let commit = git(worktree, &["log", &before, "-n", "1", "--format=%H"])
+        .await
+        .ok()?;
     let commit = commit.trim();
     looks_like_sha(commit).then(|| commit.to_string())
 }
@@ -377,7 +516,8 @@ mod tests {
     struct Repo(PathBuf);
     impl Repo {
         fn new() -> Self {
-            let dir = std::env::temp_dir().join(format!("praxis-affected-{}", uuid::Uuid::new_v4()));
+            let dir =
+                std::env::temp_dir().join(format!("praxis-affected-{}", uuid::Uuid::new_v4()));
             std::fs::create_dir_all(&dir).unwrap();
             let repo = Self(std::fs::canonicalize(&dir).unwrap());
             repo.git(&["init", "-q", "--initial-branch=main"]);
@@ -406,7 +546,11 @@ mod tests {
             self.git(&["commit", "-qm", message]);
         }
         fn head(&self) -> String {
-            let out = std::process::Command::new("git").args(["rev-parse", "HEAD"]).current_dir(&self.0).output().unwrap();
+            let out = std::process::Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .current_dir(&self.0)
+                .output()
+                .unwrap();
             String::from_utf8(out.stdout).unwrap().trim().to_string()
         }
     }
@@ -440,7 +584,11 @@ mod tests {
         let result = run_affected_tests(repo.path(), &none, None, None, &mut |_| {}).await;
         assert_eq!(result.code, Some(0));
         assert!(result.output.contains("== Tests for this change =="));
-        assert!(result.output.contains("No test files were added or updated in this ticket."));
+        assert!(
+            result
+                .output
+                .contains("No test files were added or updated in this ticket.")
+        );
 
         repo.write("test/new.test.js", "x\n");
         repo.commit("test");
@@ -450,8 +598,16 @@ mod tests {
         // No runner setup claims it: that fails QA rather than passing unrun.
         let result = run_affected_tests(repo.path(), &some, None, None, &mut |_| {}).await;
         assert_eq!(result.code, Some(1));
-        assert!(result.output.contains("- test/new.test.js: added or updated in this ticket"));
-        assert!(result.output.contains("no supported test runner setup claims them"));
+        assert!(
+            result
+                .output
+                .contains("- test/new.test.js: added or updated in this ticket")
+        );
+        assert!(
+            result
+                .output
+                .contains("no supported test runner setup claims them")
+        );
     }
 
     #[tokio::test]
@@ -466,7 +622,13 @@ mod tests {
         repo.write("out/a.test.js", "require('node:test')('ok', () => {});\n");
         let selection = select_changed_tests(repo.path(), &base).await.unwrap();
         let result = run_affected_tests(repo.path(), &selection, None, None, &mut |_| {}).await;
-        assert!(result.output.contains("$ node --test out/a.test.js  (in .)"), "{}", result.output);
+        assert!(
+            result
+                .output
+                .contains("$ node --test out/a.test.js  (in .)"),
+            "{}",
+            result.output
+        );
     }
 
     #[tokio::test]
@@ -479,6 +641,9 @@ mod tests {
         repo.commit("next");
         let got = scheduled_ticket_base(repo.path(), "2000-01-01T00:00:00.000Z", Some(&base)).await;
         assert_eq!(got.as_deref(), Some(base.as_str()));
-        assert_eq!(run_fork_point(repo.path(), repo.path()).await.as_deref(), Some(repo.head().as_str()));
+        assert_eq!(
+            run_fork_point(repo.path(), repo.path()).await.as_deref(),
+            Some(repo.head().as_str())
+        );
     }
 }

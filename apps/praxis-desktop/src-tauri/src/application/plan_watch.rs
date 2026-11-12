@@ -30,11 +30,22 @@ impl PlanWatchers {
         let live: HashSet<String> = projects
             .iter()
             .filter(|project| project["storage"] == "folder")
-            .filter_map(|project| Some(format!("{}\u{0}{}", project["id"].as_str()?, project["workspaceFolder"].as_str()?)))
+            .filter_map(|project| {
+                Some(format!(
+                    "{}\u{0}{}",
+                    project["id"].as_str()?,
+                    project["workspaceFolder"].as_str()?
+                ))
+            })
             .collect();
         watchers.retain(|key, _| live.contains(key));
-        for project in projects.iter().filter(|project| project["storage"] == "folder") {
-            let (Some(id), Some(folder)) = (project["id"].as_str(), project["workspaceFolder"].as_str()) else {
+        for project in projects
+            .iter()
+            .filter(|project| project["storage"] == "folder")
+        {
+            let (Some(id), Some(folder)) =
+                (project["id"].as_str(), project["workspaceFolder"].as_str())
+            else {
                 continue;
             };
             let key = format!("{id}\u{0}{folder}");
@@ -49,7 +60,10 @@ impl PlanWatchers {
                 last_event: Mutex::new(HashMap::new()),
             };
             let observer = Arc::new(observer);
-            watchers.insert(key, watch_folder(Path::new(folder), move |path| observer.changed(&path)));
+            watchers.insert(
+                key,
+                watch_folder(Path::new(folder), move |path| observer.changed(&path)),
+            );
         }
     }
 }
@@ -70,7 +84,10 @@ impl Observer {
         }
         if let Ok(mut last) = self.last_event.lock() {
             let now = Instant::now();
-            if last.get(path).is_some_and(|previous| now.duration_since(*previous) < BURST_WINDOW) {
+            if last
+                .get(path)
+                .is_some_and(|previous| now.duration_since(*previous) < BURST_WINDOW)
+            {
                 return;
             }
             last.insert(path.to_path_buf(), now);
@@ -84,7 +101,9 @@ impl Observer {
             .map(|relative| relative.to_string_lossy().replace('\\', "/"))
             .unwrap_or_else(|| path.to_string_lossy().into_owned());
         let summary = heading.unwrap_or_else(|| {
-            path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default()
         });
         let connection_id = format!("project:{}", self.project_id);
         activity::record(
@@ -94,12 +113,18 @@ impl Observer {
                 kind: "plan",
                 target_key: &target,
                 summary: &summary,
-                action: if exists { "Plan file edited" } else { "Plan file removed" },
+                action: if exists {
+                    "Plan file edited"
+                } else {
+                    "Plan file removed"
+                },
                 connection_id: Some(&connection_id),
                 actor: "external",
             },
         );
-        self.host.events().emit("board:changed", Some(serde_json::json!(connection_id)));
+        self.host
+            .events()
+            .emit("board:changed", Some(serde_json::json!(connection_id)));
     }
 }
 
@@ -122,7 +147,10 @@ mod tests {
 
     #[test]
     fn heading_is_the_first_level_one_title() {
-        assert_eq!(heading("intro\n# Plan title \n## Sub").as_deref(), Some("Plan title"));
+        assert_eq!(
+            heading("intro\n# Plan title \n## Sub").as_deref(),
+            Some("Plan title")
+        );
         assert_eq!(heading("## only sub"), None);
     }
 }

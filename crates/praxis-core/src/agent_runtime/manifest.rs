@@ -6,7 +6,9 @@ pub const TRANSPORTS: &[&str] = &["acp", "copilot-sdk", "http", "gateway", "cust
 
 /// A non-empty (after trimming) string.
 pub(crate) fn is_text(value: Option<&Value>) -> bool {
-    value.and_then(Value::as_str).is_some_and(|text| !text.trim().is_empty())
+    value
+        .and_then(Value::as_str)
+        .is_some_and(|text| !text.trim().is_empty())
 }
 
 fn error(path: &str, message: impl Into<String>) -> Value {
@@ -36,7 +38,10 @@ pub fn validate_agent_manifest(value: &Value, manifest_path: &str) -> Vec<Value>
     match candidate.get("entry") {
         Some(Value::String(entry)) if !entry.trim().is_empty() => {
             if entry.contains("..") {
-                errors.push(error("entry", "Entry paths may not contain traversal segments."));
+                errors.push(error(
+                    "entry",
+                    "Entry paths may not contain traversal segments.",
+                ));
             }
         }
         Some(Value::Object(entry)) => {
@@ -44,23 +49,36 @@ pub fn validate_agent_manifest(value: &Value, manifest_path: &str) -> Vec<Value>
                 errors.push(error("entry", "entry requires command or url."));
             }
             if let Some(args) = entry.get("args")
-                && !args.as_array().is_some_and(|items| items.iter().all(Value::is_string))
+                && !args
+                    .as_array()
+                    .is_some_and(|items| items.iter().all(Value::is_string))
             {
                 errors.push(error("entry.args", "args must be an array of strings."));
             }
         }
-        _ => errors.push(error("entry", "entry must be a command/path string or an entry object.")),
+        _ => errors.push(error(
+            "entry",
+            "entry must be a command/path string or an entry object.",
+        )),
     }
     if let Some(skills) = candidate.get("skills")
-        && !skills.as_array().is_some_and(|items| items.iter().all(|item| is_text(Some(item))))
+        && !skills
+            .as_array()
+            .is_some_and(|items| items.iter().all(|item| is_text(Some(item))))
     {
-        errors.push(error("skills", "skills must be an array of non-empty paths."));
+        errors.push(error(
+            "skills",
+            "skills must be an array of non-empty paths.",
+        ));
     }
     if let Some(activation) = candidate.get("activation")
         && activation != "onDemand"
         && activation != "startup"
     {
-        errors.push(error("activation", "activation must be onDemand or startup."));
+        errors.push(error(
+            "activation",
+            "activation must be onDemand or startup.",
+        ));
     }
     errors
 }
@@ -80,7 +98,8 @@ mod tests {
     fn accepts_a_command_manifest_and_rejects_an_unknown_transport() {
         let good = json!({"schemaVersion":1,"id":"a","name":"A","type":"acp","entry":{"command":"node","args":["x.js"]}});
         assert!(messages(&good).is_empty());
-        let bad = json!({"schemaVersion":1,"id":"b","name":"B","type":"telepathy","entry":"run.js"});
+        let bad =
+            json!({"schemaVersion":1,"id":"b","name":"B","type":"telepathy","entry":"run.js"});
         assert_eq!(messages(&bad), vec!["Unsupported transport: telepathy"]);
     }
 
@@ -95,6 +114,9 @@ mod tests {
         assert!(found.contains(&"activation must be onDemand or startup.".to_owned()));
         let args = json!({"schemaVersion":1,"id":"a","name":"A","type":"acp","entry":{"command":"n","args":[1]}});
         assert_eq!(messages(&args), vec!["args must be an array of strings."]);
-        assert_eq!(messages(&json!([])), vec!["Manifest must be a JSON object."]);
+        assert_eq!(
+            messages(&json!([])),
+            vec!["Manifest must be a JSON object."]
+        );
     }
 }

@@ -12,26 +12,51 @@ pub const SCHEMA_VERSION: u32 = 1;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Resource {
-    File { worktree: String, path: String },
-    Directory { worktree: String, path: String },
+    File {
+        worktree: String,
+        path: String,
+    },
+    Directory {
+        worktree: String,
+        path: String,
+    },
     /// Arbitrary edits whose files cannot be named (a shell command). Shared mode = a stable read.
-    Worktree { worktree: String },
+    Worktree {
+        worktree: String,
+    },
     /// Branch checkout, reset or rebase: everything in the worktree.
-    Checkout { worktree: String },
+    Checkout {
+        worktree: String,
+    },
     /// Staging and committing in one worktree's index.
-    GitIndex { worktree: String },
+    GitIndex {
+        worktree: String,
+    },
     /// One live app instance, for a whole interaction sequence.
-    AppUi { instance: String },
+    AppUi {
+        instance: String,
+    },
     /// One in-app browser surface, for a whole navigate/inspect sequence.
-    Browser { surface: String },
+    Browser {
+        surface: String,
+    },
     /// The machine's global focus, mouse and keyboard.
     Desktop,
     /// A build output directory; shared mode = tests consuming it.
-    BuildOutput { dir: String },
-    Port { port: u32 },
-    Fixture { id: String },
+    BuildOutput {
+        dir: String,
+    },
+    Port {
+        port: u32,
+    },
+    Fixture {
+        id: String,
+    },
     /// A process group a session started that outlived its tool call (a dev server, a watcher).
-    Process { host: String, pgid: i64 },
+    Process {
+        host: String,
+        pgid: i64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,7 +99,11 @@ pub struct Owner {
 
 impl Owner {
     pub fn session(key: impl Into<String>) -> Self {
-        Self { session_key: key.into(), turn_id: None, execution_id: None }
+        Self {
+            session_key: key.into(),
+            turn_id: None,
+            execution_id: None,
+        }
     }
 }
 
@@ -248,11 +277,24 @@ pub struct Blocker {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "lowercase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "status",
+    rename_all = "lowercase",
+    rename_all_fields = "camelCase"
+)]
 pub enum AcquireResult {
-    Granted { claim_ids: Vec<String>, generation: i64 },
-    Queued { position: usize, blockers: Vec<Blocker> },
-    Blocked { blockers: Vec<Blocker>, reason: String },
+    Granted {
+        claim_ids: Vec<String>,
+        generation: i64,
+    },
+    Queued {
+        position: usize,
+        blockers: Vec<Blocker>,
+    },
+    Blocked {
+        blockers: Vec<Blocker>,
+        reason: String,
+    },
 }
 
 /// How long to wait when busy; `wait: false` fails at once.
@@ -273,7 +315,10 @@ impl Wait {
         Self::Flag(false)
     }
     pub fn for_ms(ms: i64) -> Self {
-        Self::Bounded { until_ms: None, for_ms: Some(ms) }
+        Self::Bounded {
+            until_ms: None,
+            for_ms: Some(ms),
+        }
     }
 }
 
@@ -284,11 +329,22 @@ impl Default for Wait {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    rename_all_fields = "camelCase"
+)]
 pub enum Command {
-    Register { session: Registration },
-    Heartbeat { session_key: String },
-    Activity { session_key: String, activity: String },
+    Register {
+        session: Registration,
+    },
+    Heartbeat {
+        session_key: String,
+    },
+    Activity {
+        session_key: String,
+        activity: String,
+    },
     Acquire {
         request_id: String,
         owner: Owner,
@@ -304,7 +360,10 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         generation: Option<i64>,
     },
-    Cleanup { owner: Owner, claim_ids: Vec<String> },
+    Cleanup {
+        owner: Owner,
+        claim_ids: Vec<String>,
+    },
     Release {
         owner: Owner,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -312,7 +371,10 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<String>,
     },
-    Cancel { owner: Owner, request_id: String },
+    Cancel {
+        owner: Owner,
+        request_id: String,
+    },
     /// A turn ended and its tools are reaped: release its non-service claims, cancel its waits.
     EndTurn {
         owner: Owner,
@@ -324,11 +386,24 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         summary: Option<String>,
     },
-    Delegate { owner: Owner, claim_id: String, to: Owner },
+    Delegate {
+        owner: Owner,
+        claim_id: String,
+        to: Owner,
+    },
     /// The host or a person confirms a recovery-required claim's work stopped.
-    Recover { claim_id: String, actor: String, note: String },
+    Recover {
+        claim_id: String,
+        actor: String,
+        note: String,
+    },
     /// A person took over a live UI surface (browser, app, desktop) an agent may hold.
-    Takeover { request_id: String, session_key: String, items: Vec<RequestItem>, reason: String },
+    Takeover {
+        request_id: String,
+        session_key: String,
+        items: Vec<RequestItem>,
+        reason: String,
+    },
     Message {
         from: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -337,9 +412,14 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         needs_ack: Option<bool>,
     },
-    Ack { session_key: String, sequence: i64 },
+    Ack {
+        session_key: String,
+        sequence: i64,
+    },
     /// The broker was not running for `paused_ms`: every lease moves forward by it.
-    Suspended { paused_ms: f64 },
+    Suspended {
+        paused_ms: f64,
+    },
     Tick,
 }
 
@@ -357,13 +437,28 @@ pub struct CommandResult {
 
 impl CommandResult {
     pub fn ok() -> Self {
-        Self { ok: true, acquire: None, sequence: None, error: None }
+        Self {
+            ok: true,
+            acquire: None,
+            sequence: None,
+            error: None,
+        }
     }
     pub fn with_acquire(acquire: AcquireResult) -> Self {
-        Self { ok: true, acquire: Some(acquire), sequence: None, error: None }
+        Self {
+            ok: true,
+            acquire: Some(acquire),
+            sequence: None,
+            error: None,
+        }
     }
     pub fn fail(error: impl Into<String>) -> Self {
-        Self { ok: false, acquire: None, sequence: None, error: Some(error.into()) }
+        Self {
+            ok: false,
+            acquire: None,
+            sequence: None,
+            error: Some(error.into()),
+        }
     }
     pub fn error_text(&self) -> &str {
         self.error.as_deref().unwrap_or_default()

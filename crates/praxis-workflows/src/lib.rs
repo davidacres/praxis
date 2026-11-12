@@ -50,8 +50,8 @@ pub mod scheduler;
 pub mod stage_model;
 pub mod stage_session;
 pub mod terminal_manager;
-pub mod validation;
 pub mod types;
+pub mod validation;
 pub mod waivers;
 
 #[cfg(test)]

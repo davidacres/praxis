@@ -46,7 +46,9 @@ fn comment_body(run: &WorkflowRun, with_duration: bool) -> String {
         other => other,
     };
     let duration = if with_duration {
-        run.ended_at.as_deref().and_then(|end| duration_text(&run.started_at, end))
+        run.ended_at
+            .as_deref()
+            .and_then(|end| duration_text(&run.started_at, end))
     } else {
         None
     };
@@ -63,7 +65,10 @@ fn comment_body(run: &WorkflowRun, with_duration: bool) -> String {
                 "skipped" | "cancelled" => "⏭️",
                 _ => "⏳",
             };
-            format!("- {icon} {}: {outcome}", stage["name"].as_str().unwrap_or(""))
+            format!(
+                "- {icon} {}: {outcome}",
+                stage["name"].as_str().unwrap_or("")
+            )
         })
         .collect();
     let mut lines = vec![
@@ -92,14 +97,21 @@ fn comment_body(run: &WorkflowRun, with_duration: bool) -> String {
 async fn rpc(host: &HostContext, channel: &'static str, args: Vec<Value>) -> Result<Value, String> {
     let h = host.clone();
     let response = tokio::task::spawn_blocking(move || {
-        h.dispatch_rpc(praxis_contracts::RustRpcRequest { id: "run-write-back".into(), channel: channel.into(), args })
+        h.dispatch_rpc(praxis_contracts::RustRpcRequest {
+            id: "run-write-back".into(),
+            channel: channel.into(),
+            args,
+        })
     })
     .await
     .map_err(|e| e.to_string())?;
     if response.ok {
         Ok(response.result.unwrap_or(Value::Null))
     } else {
-        Err(response.error.map(|e| e.message).unwrap_or_else(|| "The board refused the request.".into()))
+        Err(response
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "The board refused the request.".into()))
     }
 }
 
@@ -122,14 +134,28 @@ async fn send(host: &HostContext, run: &WorkflowRun) -> Result<(), String> {
         None => None,
     };
     let comment = comment_body(run, true);
-    rpc(host, "issue:addComment", vec![json!(key), json!(comment), json!(connection)]).await?;
+    rpc(
+        host,
+        "issue:addComment",
+        vec![json!(key), json!(comment), json!(connection)],
+    )
+    .await?;
     if let (Some(root), Some(before)) = (root, before) {
-        let marker = comment.lines().find(|l| !l.trim().is_empty()).unwrap_or(&comment).trim().to_string();
+        let marker = comment
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or(&comment)
+            .trim()
+            .to_string();
         let message = format!("{marker}\n\nRecord run outcome on {key}");
-        if let Err(error) = workflow_engine::commit_praxis_write(Path::new(&root), &before, &message).await {
+        if let Err(error) =
+            workflow_engine::commit_praxis_write(Path::new(&root), &before, &message).await
+        {
             log_bus::log(
                 host,
-                &format!("[workflow] Recorded the outcome on {key} but could not commit it: {error}"),
+                &format!(
+                    "[workflow] Recorded the outcome on {key} but could not commit it: {error}"
+                ),
             );
         }
     }
@@ -148,7 +174,9 @@ pub fn write_back(host: &HostContext, run: &WorkflowRun) {
         return;
     }
     {
-        let mut busy = pending().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut busy = pending()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if !busy.insert(run.run_id.clone()) {
             return;
         }
@@ -156,8 +184,12 @@ pub fn write_back(host: &HostContext, run: &WorkflowRun) {
     let (host, run_id) = (host.clone(), run.run_id.clone());
     runtime::runtime().spawn(async move {
         let result = async {
-            let Some(run) = workflows::stored_run(&host, &run_id) else { return Ok(()) };
-            if run.issue_key.as_deref().is_none_or(str::is_empty) || run.issue_write_back_at.is_some() {
+            let Some(run) = workflows::stored_run(&host, &run_id) else {
+                return Ok(());
+            };
+            if run.issue_key.as_deref().is_none_or(str::is_empty)
+                || run.issue_write_back_at.is_some()
+            {
                 return Ok(());
             }
             let outcome = comment_body(&run, false);
@@ -175,14 +207,19 @@ pub fn write_back(host: &HostContext, run: &WorkflowRun) {
                 .await
         }
         .await;
-        pending().lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&run_id);
+        pending()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&run_id);
         if let Err(error) = result {
             let key = workflows::stored_run(&host, &run_id)
                 .and_then(|r| r.issue_key)
                 .unwrap_or_default();
             log_bus::log(
                 &host,
-                &format!("[workflow] Could not write the outcome of run {run_id} back to {key}: {error}"),
+                &format!(
+                    "[workflow] Could not write the outcome of run {run_id} back to {key}: {error}"
+                ),
             );
         }
     });

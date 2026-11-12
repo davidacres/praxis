@@ -21,8 +21,14 @@ fn demo(host: &HostContext) -> Option<Arc<DemoService>> {
         return None;
     }
     static DEMOS: OnceLock<Mutex<HashMap<PathBuf, Arc<DemoService>>>> = OnceLock::new();
-    let mut all = DEMOS.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    Some(Arc::clone(all.entry(host.config().user_data_dir.clone()).or_insert_with(|| Arc::new(DemoService::default()))))
+    let mut all = DEMOS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Some(Arc::clone(
+        all.entry(host.config().user_data_dir.clone())
+            .or_insert_with(|| Arc::new(DemoService::default())),
+    ))
 }
 
 fn with_connection(mut board: Value, id: &str) -> Value {
@@ -34,7 +40,11 @@ fn with_connection(mut board: Value, id: &str) -> Value {
 fn demo_issue(demo: &DemoService, channel: &str, args: &[Value]) -> Result<Value> {
     let arg = |index: usize| args.get(index).cloned().unwrap_or(Value::Null);
     let key = || text(args, 0);
-    let page = |index: usize, default: usize| args.get(index).and_then(Value::as_u64).map_or(default, |n| n as usize);
+    let page = |index: usize, default: usize| {
+        args.get(index)
+            .and_then(Value::as_u64)
+            .map_or(default, |n| n as usize)
+    };
     match channel {
         "issue:list" => demo.get_issues(&arg(0), page(1, 0), page(2, demo.default_page_size())),
         "issue:getFilterMetadata" => demo.get_filter_metadata(&arg(0)),
@@ -42,13 +52,20 @@ fn demo_issue(demo: &DemoService, channel: &str, args: &[Value]) -> Result<Value
         "issue:create" => demo.create_issue(&arg(0)),
         "issue:update" => demo.update_issue(key()?, &arg(1)),
         "issue:delete" => demo.delete_issue(key()?).map(|()| Value::Null),
-        "issue:transition" => demo.transition_issue(key()?, text(args, 1)?).map(|()| Value::Null),
-        "issue:addComment" => demo.add_comment(key()?, text(args, 1)?).map(|()| Value::Null),
+        "issue:transition" => demo
+            .transition_issue(key()?, text(args, 1)?)
+            .map(|()| Value::Null),
+        "issue:addComment" => demo
+            .add_comment(key()?, text(args, 1)?)
+            .map(|()| Value::Null),
         "issue:getSelfAssigneeLabel" => Ok(json!(DemoService::self_assignee_label())),
         "issue:getProjects" => Ok(json!(DemoService::projects())),
         "issue:getParentItems" => {
-            let child = args.get(2).and_then(|options| options["childIssueType"].as_str());
-            demo.get_parent_items(&arg(0), args.get(1).and_then(Value::as_str), child).map(Value::from)
+            let child = args
+                .get(2)
+                .and_then(|options| options["childIssueType"].as_str());
+            demo.get_parent_items(&arg(0), args.get(1).and_then(Value::as_str), child)
+                .map(Value::from)
         }
         _ => Err("Unknown issue operation.".to_owned()),
     }
@@ -158,7 +175,12 @@ fn boards_for(
         && let Some(demo) = demo(host)
     {
         let id = connection["id"].as_str().unwrap_or("");
-        return Ok(demo.get_boards(filters).map_err(failure)?.into_iter().map(|board| with_connection(board, id)).collect());
+        return Ok(demo
+            .get_boards(filters)
+            .map_err(failure)?
+            .into_iter()
+            .map(|board| with_connection(board, id))
+            .collect());
     }
     if connection["mode"] == "app" {
         let project = app_project(catalog, connection)?;
@@ -528,10 +550,17 @@ pub fn dispatch(
         "issue:getParentItems" => ("tracker:getParentItems", 3),
         _ => return Err(failure("Unknown issue operation.")),
     };
-    let id = args.get(index).and_then(Value::as_str).filter(|id| !id.trim().is_empty());
+    let id = args
+        .get(index)
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty());
     let connection = id.map(|id| connections::require(catalog, id)).transpose()?;
     // No connection (or a demo-mode one) means the built-in demo tracker, but only under `--demo`.
-    let demo_target = demo(host).filter(|_| connection.as_ref().is_none_or(|connection| connection["mode"] == "demo"));
+    let demo_target = demo(host).filter(|_| {
+        connection
+            .as_ref()
+            .is_none_or(|connection| connection["mode"] == "demo")
+    });
     if connection.is_none() && demo_target.is_none() {
         return Err(failure("Choose a connection before working with issues."));
     }

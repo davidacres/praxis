@@ -36,16 +36,28 @@ pub fn canonical_path(value: &str, case_insensitive: bool) -> String {
         }
         collapsed.push(ch);
     }
-    if case_insensitive { collapsed.to_lowercase() } else { collapsed }
+    if case_insensitive {
+        collapsed.to_lowercase()
+    } else {
+        collapsed
+    }
 }
 
 fn within(child: &str, parent: &str) -> bool {
-    parent.is_empty() || child == parent || child.strip_prefix(parent).is_some_and(|rest| rest.starts_with('/'))
+    parent.is_empty()
+        || child == parent
+        || child
+            .strip_prefix(parent)
+            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 fn worktree_of(resource: &Resource) -> Option<&str> {
     match resource {
-        Resource::File { worktree, .. } | Resource::Directory { worktree, .. } | Resource::Worktree { worktree } | Resource::Checkout { worktree } | Resource::GitIndex { worktree } => Some(worktree),
+        Resource::File { worktree, .. }
+        | Resource::Directory { worktree, .. }
+        | Resource::Worktree { worktree }
+        | Resource::Checkout { worktree }
+        | Resource::GitIndex { worktree } => Some(worktree),
         _ => None,
     }
 }
@@ -76,7 +88,9 @@ pub fn resources_overlap(left: &Resource, right: &Resource, case_insensitive: bo
         let b = canonical_path(path_of(right), case_insensitive);
         return match (left, right) {
             (Resource::File { .. }, Resource::File { .. }) => a == b,
-            (Resource::Directory { .. }, Resource::Directory { .. }) => within(&a, &b) || within(&b, &a),
+            (Resource::Directory { .. }, Resource::Directory { .. }) => {
+                within(&a, &b) || within(&b, &a)
+            }
             (Resource::Directory { .. }, _) => within(&b, &a),
             _ => within(&a, &b),
         };
@@ -87,9 +101,14 @@ pub fn resources_overlap(left: &Resource, right: &Resource, case_insensitive: bo
         (Resource::Browser { surface: a }, Resource::Browser { surface: b }) => a == b,
         (Resource::Port { port: a }, Resource::Port { port: b }) => a == b,
         (Resource::Fixture { id: a }, Resource::Fixture { id: b }) => a == b,
-        (Resource::Process { host: ha, pgid: a }, Resource::Process { host: hb, pgid: b }) => ha == hb && a == b,
+        (Resource::Process { host: ha, pgid: a }, Resource::Process { host: hb, pgid: b }) => {
+            ha == hb && a == b
+        }
         (Resource::BuildOutput { dir: a }, Resource::BuildOutput { dir: b }) => {
-            let (a, b) = (canonical_path(a, case_insensitive), canonical_path(b, case_insensitive));
+            let (a, b) = (
+                canonical_path(a, case_insensitive),
+                canonical_path(b, case_insensitive),
+            );
             within(&a, &b) || within(&b, &a)
         }
         _ => false,
@@ -127,10 +146,16 @@ mod tests {
     use super::*;
 
     fn file(worktree: &str, path: &str) -> Resource {
-        Resource::File { worktree: worktree.into(), path: path.into() }
+        Resource::File {
+            worktree: worktree.into(),
+            path: path.into(),
+        }
     }
     fn dir(worktree: &str, path: &str) -> Resource {
-        Resource::Directory { worktree: worktree.into(), path: path.into() }
+        Resource::Directory {
+            worktree: worktree.into(),
+            path: path.into(),
+        }
     }
     fn overlap(a: &Resource, b: &Resource) -> bool {
         resources_overlap(a, b, false)
@@ -157,44 +182,110 @@ mod tests {
     #[test]
     fn different_worktrees_never_conflict() {
         assert!(!overlap(&file("/one", "a.rs"), &file("/two", "a.rs")));
-        assert!(!overlap(&Resource::Checkout { worktree: "/one".into() }, &Resource::Worktree { worktree: "/two".into() }));
+        assert!(!overlap(
+            &Resource::Checkout {
+                worktree: "/one".into()
+            },
+            &Resource::Worktree {
+                worktree: "/two".into()
+            }
+        ));
     }
 
     #[test]
     fn checkout_and_worktree_cover_everything_but_the_index_is_separate() {
-        let checkout = Resource::Checkout { worktree: "/r".into() };
-        let worktree = Resource::Worktree { worktree: "/r".into() };
-        let index = Resource::GitIndex { worktree: "/r".into() };
+        let checkout = Resource::Checkout {
+            worktree: "/r".into(),
+        };
+        let worktree = Resource::Worktree {
+            worktree: "/r".into(),
+        };
+        let index = Resource::GitIndex {
+            worktree: "/r".into(),
+        };
         assert!(overlap(&checkout, &file("/r", "a")));
         assert!(overlap(&worktree, &dir("/r", "a")));
         assert!(!overlap(&index, &file("/r", "a")));
         assert!(!overlap(&worktree, &index));
         assert!(overlap(&checkout, &index));
-        assert!(overlap(&index, &Resource::GitIndex { worktree: "/r".into() }));
+        assert!(overlap(
+            &index,
+            &Resource::GitIndex {
+                worktree: "/r".into()
+            }
+        ));
     }
 
     #[test]
     fn single_instance_resources_match_on_identity() {
         assert!(overlap(&Resource::Desktop, &Resource::Desktop));
-        assert!(overlap(&Resource::Port { port: 80 }, &Resource::Port { port: 80 }));
-        assert!(!overlap(&Resource::Port { port: 80 }, &Resource::Port { port: 81 }));
-        assert!(!overlap(&Resource::Browser { surface: "a".into() }, &Resource::AppUi { instance: "a".into() }));
-        assert!(overlap(&Resource::Process { host: "h".into(), pgid: 5 }, &Resource::Process { host: "h".into(), pgid: 5 }));
-        assert!(!overlap(&Resource::Process { host: "h".into(), pgid: 5 }, &Resource::Process { host: "g".into(), pgid: 5 }));
-        assert!(overlap(&Resource::BuildOutput { dir: "out".into() }, &Resource::BuildOutput { dir: "out/x".into() }));
+        assert!(overlap(
+            &Resource::Port { port: 80 },
+            &Resource::Port { port: 80 }
+        ));
+        assert!(!overlap(
+            &Resource::Port { port: 80 },
+            &Resource::Port { port: 81 }
+        ));
+        assert!(!overlap(
+            &Resource::Browser {
+                surface: "a".into()
+            },
+            &Resource::AppUi {
+                instance: "a".into()
+            }
+        ));
+        assert!(overlap(
+            &Resource::Process {
+                host: "h".into(),
+                pgid: 5
+            },
+            &Resource::Process {
+                host: "h".into(),
+                pgid: 5
+            }
+        ));
+        assert!(!overlap(
+            &Resource::Process {
+                host: "h".into(),
+                pgid: 5
+            },
+            &Resource::Process {
+                host: "g".into(),
+                pgid: 5
+            }
+        ));
+        assert!(overlap(
+            &Resource::BuildOutput { dir: "out".into() },
+            &Resource::BuildOutput {
+                dir: "out/x".into()
+            }
+        ));
     }
 
     #[test]
     fn two_shared_claims_never_conflict() {
         let a = file("/r", "a");
-        assert!(!claims_conflict((&a, ClaimMode::Shared), (&a, ClaimMode::Shared)));
-        assert!(claims_conflict((&a, ClaimMode::Shared), (&a, ClaimMode::Exclusive)));
+        assert!(!claims_conflict(
+            (&a, ClaimMode::Shared),
+            (&a, ClaimMode::Shared)
+        ));
+        assert!(claims_conflict(
+            (&a, ClaimMode::Shared),
+            (&a, ClaimMode::Exclusive)
+        ));
     }
 
     #[test]
     fn resources_are_described_for_a_blocker_message() {
         assert_eq!(describe_resource(&file("/r", "sum.js")), "file sum.js");
         assert_eq!(describe_resource(&dir("/r", "src")), "folder src/");
-        assert_eq!(describe_resource(&Resource::Process { host: "h".into(), pgid: 42 }), "process group 42");
+        assert_eq!(
+            describe_resource(&Resource::Process {
+                host: "h".into(),
+                pgid: 42
+            }),
+            "process group 42"
+        );
     }
 }

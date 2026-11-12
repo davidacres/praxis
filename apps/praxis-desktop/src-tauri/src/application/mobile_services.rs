@@ -15,7 +15,9 @@ use async_trait::async_trait;
 use praxis_contracts::{RustRpcError, RustRpcRequest};
 use praxis_core::git::git_graph::{GitDiffDocument, GitDiffRequest, GitStatusSnapshot};
 use praxis_host::HostContext;
-use praxis_mobile::host::application::{MobileHostApplication, MobileHostReads, default_payload_digest, handle_mobile_command};
+use praxis_mobile::host::application::{
+    MobileHostApplication, MobileHostReads, default_payload_digest, handle_mobile_command,
+};
 use praxis_mobile::host::ledger::InMemoryMobileCommandLedger;
 use praxis_mobile::host::permissions::{MobilePermissionAnswer, respond_to_mobile_permission};
 use praxis_mobile::host::protocol::{MobileCommand, MobileReadRequest};
@@ -31,8 +33,8 @@ use praxis_mobile::host::services::{
     create_mobile_host_execution_handlers, create_mobile_host_reads,
 };
 use praxis_mobile::host::session_changes::{
-    MobileSessionChangesGit, read_mobile_session_changes, read_mobile_session_file_diff,
-    MAX_MOBILE_DIFF_LINES,
+    MAX_MOBILE_DIFF_LINES, MobileSessionChangesGit, read_mobile_session_changes,
+    read_mobile_session_file_diff,
 };
 use praxis_mobile::host::session_projection::{
     MobileSessionSnapshot, MobileSessionSummary, mobile_session_snapshot, mobile_session_summary,
@@ -64,7 +66,12 @@ pub struct DesktopMobileDeps {
 
 impl DesktopMobileDeps {
     pub fn new(host: &HostContext, mobile: &Arc<MobileHost>) -> Arc<Self> {
-        Arc::new(Self { host: host.clone(), mobile: Arc::clone(mobile), epoch: uuid::Uuid::new_v4().to_string(), host_id: Arc::new(OnceLock::new()) })
+        Arc::new(Self {
+            host: host.clone(),
+            mobile: Arc::clone(mobile),
+            epoch: uuid::Uuid::new_v4().to_string(),
+            host_id: Arc::new(OnceLock::new()),
+        })
     }
 
     /// Calls one of the desktop's own channels without holding up an async worker: several of them
@@ -92,7 +99,11 @@ impl DesktopMobileDeps {
             {
                 // A workflow stage's session is started by its run, so it belongs to the run's project.
                 if !run_projects.contains_key(&run_id) {
-                    let project = self.call("workflows:getRun", vec![json!(run_id)]).await.ok().and_then(|run| run["projectId"].as_str().map(str::to_owned));
+                    let project = self
+                        .call("workflows:getRun", vec![json!(run_id)])
+                        .await
+                        .ok()
+                        .and_then(|run| run["projectId"].as_str().map(str::to_owned));
                     run_projects.insert(run_id.clone(), project);
                 }
                 record.project_id = run_projects.get(&run_id).cloned().flatten();
@@ -108,17 +119,24 @@ impl DesktopMobileDeps {
         if value.is_null() {
             return Ok(None);
         }
-        let mut record: MobileSessionRecord = serde_json::from_value(value).map_err(|error| error.to_string())?;
+        let mut record: MobileSessionRecord =
+            serde_json::from_value(value).map_err(|error| error.to_string())?;
         if record.project().is_none()
             && let Some(run_id) = record.workflow_run_id.clone().filter(|id| !id.is_empty())
         {
-            record.project_id = self.call("workflows:getRun", vec![json!(run_id)]).await.ok().and_then(|run| run["projectId"].as_str().map(str::to_owned));
+            record.project_id = self
+                .call("workflows:getRun", vec![json!(run_id)])
+                .await
+                .ok()
+                .and_then(|run| run["projectId"].as_str().map(str::to_owned));
         }
         Ok(Some(record))
     }
 
     async fn require_record(&self, session_id: &str) -> Fallible<MobileSessionRecord> {
-        self.full_record(session_id).await?.ok_or_else(|| format!("No agent session found for {session_id}."))
+        self.full_record(session_id)
+            .await?
+            .ok_or_else(|| format!("No agent session found for {session_id}."))
     }
 
     /// Resolves what needs the (blocking) identity store, on the caller's own thread.
@@ -148,7 +166,12 @@ impl DesktopMobileDeps {
         let mut offset = 0u64;
         loop {
             let filters = json!({ "projectKeys": [], "statuses": [], "issueTypes": [], "searchText": "", "assigneeMode": "all", "grouping": "none" });
-            let page = self.call("issue:list", vec![filters, json!(offset), json!(200), json!(connection)]).await?;
+            let page = self
+                .call(
+                    "issue:list",
+                    vec![filters, json!(offset), json!(200), json!(connection)],
+                )
+                .await?;
             let issues = page["issues"].as_array().cloned().unwrap_or_default();
             let fetched = issues.len() as u64;
             items.extend(issues);
@@ -161,22 +184,34 @@ impl DesktopMobileDeps {
     }
 
     async fn run_summaries(&self, project_id: &str) -> Fallible<Vec<Value>> {
-        let runs = self.call("workflows:listRuns", vec![json!(project_id)]).await?;
+        let runs = self
+            .call("workflows:listRuns", vec![json!(project_id)])
+            .await?;
         Ok(runs.as_array().cloned().unwrap_or_default())
     }
 
     async fn require_run(&self, run_id: &str) -> Fallible<Value> {
         let run = self.call("workflows:getRun", vec![json!(run_id)]).await?;
-        if run.is_null() { Err(format!("Run {run_id} was not found.")) } else { Ok(run) }
+        if run.is_null() {
+            Err(format!("Run {run_id} was not found."))
+        } else {
+            Ok(run)
+        }
     }
 }
 
 fn call_sync(host: &HostContext, channel: &str, args: Vec<Value>) -> Fallible<Value> {
-    let response = host.dispatch_rpc(RustRpcRequest { id: "mobile-services".into(), channel: channel.into(), args });
+    let response = host.dispatch_rpc(RustRpcRequest {
+        id: "mobile-services".into(),
+        channel: channel.into(),
+        args,
+    });
     if response.ok {
         Ok(response.result.unwrap_or(Value::Null))
     } else {
-        Err(response.error.map_or_else(|| format!("{channel} failed."), |error| error.message))
+        Err(response
+            .error
+            .map_or_else(|| format!("{channel} failed."), |error| error.message))
     }
 }
 
@@ -187,8 +222,15 @@ impl MobileSessionChangesGit for DesktopGit {
     async fn status(&self, repository_path: &str) -> Fallible<GitStatusSnapshot> {
         self.0.git_service().get_git_status(repository_path).await
     }
-    async fn comparison(&self, repository_path: &str, request: GitDiffRequest) -> Fallible<GitDiffDocument> {
-        self.0.git_service().get_git_comparison(repository_path, request).await
+    async fn comparison(
+        &self,
+        repository_path: &str,
+        request: GitDiffRequest,
+    ) -> Fallible<GitDiffDocument> {
+        self.0
+            .git_service()
+            .get_git_comparison(repository_path, request)
+            .await
     }
 }
 
@@ -233,19 +275,30 @@ impl MobileScheduleDeps for ScheduleDeps {
         super::scheduled_runs::announce_changed(&self.deps.host);
     }
     async fn default_workflow(&self, project_id: &str) -> Fallible<Option<String>> {
-        let choices = self.deps.call("scheduledRuns:workflowChoices", vec![json!(project_id)]).await?;
+        let choices = self
+            .deps
+            .call("scheduledRuns:workflowChoices", vec![json!(project_id)])
+            .await?;
         Ok(choices["defaultWorkflowId"].as_str().map(str::to_owned))
     }
     async fn start_now(&self) -> Fallible<()> {
         let host = self.deps.host.clone();
-        tokio::task::spawn_blocking(move || super::scheduled_runner_host::tick_now(&host)).await.map_err(|e| e.to_string())
+        tokio::task::spawn_blocking(move || super::scheduled_runner_host::tick_now(&host))
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 
 fn project_summary(project: &Value) -> MobileProjectSummary {
     let workflow = project["workflowStages"]
         .as_array()
-        .map(|stages| stages.iter().filter_map(|stage| stage["name"].as_str()).collect::<Vec<_>>().join(" → "))
+        .map(|stages| {
+            stages
+                .iter()
+                .filter_map(|stage| stage["name"].as_str())
+                .collect::<Vec<_>>()
+                .join(" → ")
+        })
         .filter(|text| !text.is_empty());
     MobileProjectSummary {
         project_id: project["id"].as_str().unwrap_or_default().to_owned(),
@@ -272,7 +325,9 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
         self.mobile.latest_sequence()
     }
     fn schedules(&self) -> Option<Arc<dyn MobileSchedules>> {
-        Some(create_mobile_schedules(ScheduleDeps { deps: self.self_arc() }))
+        Some(create_mobile_schedules(ScheduleDeps {
+            deps: self.self_arc(),
+        }))
     }
 
     async fn provider_catalog(&self, project_id: Option<&str>) -> Fallible<MobileProviderCatalog> {
@@ -325,8 +380,15 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
             Some(id) => self.project(id).await?,
             None => None,
         };
-        let chat_tools = project.as_ref().and_then(|p| p["defaultAiToolMode"].as_str()).unwrap_or("full");
-        let has_folder = project.as_ref().and_then(|p| p["workspaceFolder"].as_str()).is_some_and(|f| !f.trim().is_empty()) || !working_directory.is_empty();
+        let chat_tools = project
+            .as_ref()
+            .and_then(|p| p["defaultAiToolMode"].as_str())
+            .unwrap_or("full");
+        let has_folder = project
+            .as_ref()
+            .and_then(|p| p["workspaceFolder"].as_str())
+            .is_some_and(|f| !f.trim().is_empty())
+            || !working_directory.is_empty();
         let session_modes = vec![
             if chat_tools == "full" && !has_folder {
                 MobileSessionModeOption {
@@ -339,7 +401,12 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
                 MobileSessionModeOption {
                     mode: "chat".into(),
                     available: true,
-                    tool_access: if chat_tools == "read-only" { "read-only" } else { "full" }.into(),
+                    tool_access: if chat_tools == "read-only" {
+                        "read-only"
+                    } else {
+                        "full"
+                    }
+                    .into(),
                     unavailable_message: None,
                 }
             },
@@ -351,12 +418,30 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
                     unavailable_message: Some("Set an analysis system prompt under Settings → AI Provider on the desktop first.".into()),
                 }
             } else {
-                MobileSessionModeOption { mode: "analysis".into(), available: true, tool_access: "read-only".into(), unavailable_message: None }
+                MobileSessionModeOption {
+                    mode: "analysis".into(),
+                    available: true,
+                    tool_access: "read-only".into(),
+                    unavailable_message: None,
+                }
             },
-            MobileSessionModeOption { mode: "review".into(), available: true, tool_access: "read-only".into(), unavailable_message: None },
+            MobileSessionModeOption {
+                mode: "review".into(),
+                available: true,
+                tool_access: "read-only".into(),
+                unavailable_message: None,
+            },
         ];
-        let default_model = providers.iter().find(|option| option.provider == active).and_then(|option| option.default_model.clone());
-        Ok(MobileProviderCatalog { default_provider: active, default_model, providers, session_modes })
+        let default_model = providers
+            .iter()
+            .find(|option| option.provider == active)
+            .and_then(|option| option.default_model.clone());
+        Ok(MobileProviderCatalog {
+            default_provider: active,
+            default_model,
+            providers,
+            session_modes,
+        })
     }
 
     async fn model_catalog(&self, provider: &str, refresh: bool) -> Fallible<MobileModelCatalog> {
@@ -371,27 +456,49 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
         let label = status["label"].as_str().unwrap_or(provider).to_owned();
         let cli = status["kind"] == "cli-agent";
         let listed = if cli {
-            self.call("ai:listCliModelOptions", vec![json!(provider)]).await
+            self.call("ai:listCliModelOptions", vec![json!(provider)])
+                .await
         } else {
-            self.call("ai:listApiModelOptions", vec![json!(provider), json!(refresh)]).await
+            self.call(
+                "ai:listApiModelOptions",
+                vec![json!(provider), json!(refresh)],
+            )
+            .await
         };
-        let unavailable = |message: String| MobileModelCatalog { provider: provider.to_owned(), status: "unavailable".into(), message: Some(message), default_model: None, models: Vec::new() };
+        let unavailable = |message: String| MobileModelCatalog {
+            provider: provider.to_owned(),
+            status: "unavailable".into(),
+            message: Some(message),
+            default_model: None,
+            models: Vec::new(),
+        };
         let options = match listed {
             Ok(options) => options,
             Err(message) => return Ok(unavailable(message)),
         };
         if options.is_null() {
             return Ok(if cli {
-                MobileModelCatalog { provider: provider.to_owned(), status: "ok".into(), message: Some(format!("{label} uses its own default model.")), default_model: None, models: Vec::new() }
+                MobileModelCatalog {
+                    provider: provider.to_owned(),
+                    status: "ok".into(),
+                    message: Some(format!("{label} uses its own default model.")),
+                    default_model: None,
+                    models: Vec::new(),
+                }
             } else {
-                unavailable(format!("The desktop could not load {label}’s model list. Check its API key and network on the desktop."))
+                unavailable(format!(
+                    "The desktop could not load {label}’s model list. Check its API key and network on the desktop."
+                ))
             });
         }
         Ok(MobileModelCatalog {
             provider: provider.to_owned(),
             status: "ok".into(),
             message: None,
-            default_model: options["currentValue"].as_str().filter(|v| !v.is_empty()).map(str::to_owned),
+            default_model: options["currentValue"]
+                .as_str()
+                .filter(|v| !v.is_empty())
+                .map(str::to_owned),
             models: options["options"]
                 .as_array()
                 .into_iter()
@@ -399,7 +506,8 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
                 .map(|option| MobileModelOption {
                     model_id: option["value"].as_str().unwrap_or_default().to_owned(),
                     name: option["name"].as_str().unwrap_or_default().to_owned(),
-                    context_length: Some(option["contextLength"].clone()).filter(|v| !v.is_null() && v != &json!(0)),
+                    context_length: Some(option["contextLength"].clone())
+                        .filter(|v| !v.is_null() && v != &json!(0)),
                 })
                 .collect(),
         })
@@ -408,16 +516,35 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
     async fn describe_device(&self, device_id: &str) -> Fallible<MobileDeviceRecord> {
         let mobile = Arc::clone(&self.mobile);
         let id = device_id.to_owned();
-        let (device, fingerprint, access_mode) = tokio::task::spawn_blocking(move || mobile.device_view(&id)).await.map_err(|e| e.to_string())?;
+        let (device, fingerprint, access_mode) =
+            tokio::task::spawn_blocking(move || mobile.device_view(&id))
+                .await
+                .map_err(|e| e.to_string())?;
         let mut projects = Vec::new();
-        for project_id in device.as_ref().and_then(|d| d.project_ids.clone()).unwrap_or_default() {
-            let name = self.project(&project_id).await.ok().flatten().and_then(|p| p["name"].as_str().map(str::to_owned)).unwrap_or_else(|| project_id.clone());
+        for project_id in device
+            .as_ref()
+            .and_then(|d| d.project_ids.clone())
+            .unwrap_or_default()
+        {
+            let name = self
+                .project(&project_id)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|p| p["name"].as_str().map(str::to_owned))
+                .unwrap_or_else(|| project_id.clone());
             projects.push(MobileProjectRef { project_id, name });
         }
         Ok(MobileDeviceRecord {
-            label: device.as_ref().map(|d| d.label.clone()).filter(|l| !l.is_empty()),
+            label: device
+                .as_ref()
+                .map(|d| d.label.clone())
+                .filter(|l| !l.is_empty()),
             projects,
-            paired_at: device.as_ref().map(|d| d.paired_at.clone()).filter(|p| !p.is_empty()),
+            paired_at: device
+                .as_ref()
+                .map(|d| d.paired_at.clone())
+                .filter(|p| !p.is_empty()),
             last_seen_at: device.as_ref().and_then(|d| d.last_seen_at.clone()),
             host_name: self.host_name(),
             host_key_fingerprint: fingerprint,
@@ -427,11 +554,20 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
 
     async fn list_projects(&self) -> Fallible<Vec<MobileProjectSummary>> {
         let projects = self.call("projects:list", vec![]).await?;
-        Ok(projects.as_array().into_iter().flatten().map(project_summary).collect())
+        Ok(projects
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(project_summary)
+            .collect())
     }
 
     async fn get_project(&self, project_id: &str) -> Fallible<Option<MobileProjectSummary>> {
-        Ok(self.project(project_id).await?.as_ref().map(project_summary))
+        Ok(self
+            .project(project_id)
+            .await?
+            .as_ref()
+            .map(project_summary))
     }
 
     async fn list_work(&self, project_id: &str) -> Fallible<Value> {
@@ -440,7 +576,10 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
         }
         let mut runs_by_work: HashMap<String, String> = HashMap::new();
         for run in self.run_summaries(project_id).await? {
-            if let (Some(key), Some(id)) = (run["issueKey"].as_str().filter(|k| !k.is_empty()), run["runId"].as_str()) {
+            if let (Some(key), Some(id)) = (
+                run["issueKey"].as_str().filter(|k| !k.is_empty()),
+                run["runId"].as_str(),
+            ) {
                 runs_by_work.insert(key.to_owned(), id.to_owned());
             }
         }
@@ -461,27 +600,44 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
     }
 
     async fn list_sessions(&self, project_id: Option<&str>) -> Fallible<Vec<MobileSessionSummary>> {
-        Ok(self.sessions(project_id).await?.iter().map(mobile_session_summary).collect())
+        Ok(self
+            .sessions(project_id)
+            .await?
+            .iter()
+            .map(mobile_session_summary)
+            .collect())
     }
 
     async fn get_session(&self, session_id: &str) -> Fallible<Option<MobileSessionSnapshot>> {
-        Ok(self.full_record(session_id).await?.map(|record| self.snapshot(&record)))
+        Ok(self
+            .full_record(session_id)
+            .await?
+            .map(|record| self.snapshot(&record)))
     }
 
     async fn list_workflows(&self, project_id: &str) -> Fallible<Value> {
-        let choices = self.call("scheduledRuns:workflowChoices", vec![json!(project_id)]).await?;
+        let choices = self
+            .call("scheduledRuns:workflowChoices", vec![json!(project_id)])
+            .await?;
         Ok(choices["choices"].clone())
     }
 
     async fn list_runs(&self, project_id: &str) -> Fallible<Value> {
         let mut runs = self.run_summaries(project_id).await?;
         runs.retain(|run| run["archived"] != true);
-        runs.sort_by(|a, b| b["startedAt"].as_str().unwrap_or_default().cmp(a["startedAt"].as_str().unwrap_or_default()));
+        runs.sort_by(|a, b| {
+            b["startedAt"]
+                .as_str()
+                .unwrap_or_default()
+                .cmp(a["startedAt"].as_str().unwrap_or_default())
+        });
         let sequence = self.latest_sequence();
         let snapshots = runs
             .into_iter()
             .filter_map(|run| serde_json::from_value::<MobileRunSummaryInput>(run).ok())
-            .map(|summary| serde_json::to_value(mobile_run_snapshot(&summary, sequence)).unwrap_or(Value::Null))
+            .map(|summary| {
+                serde_json::to_value(mobile_run_snapshot(&summary, sequence)).unwrap_or(Value::Null)
+            })
             .collect();
         Ok(Value::Array(snapshots))
     }
@@ -504,30 +660,61 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
 
     async fn session_file_diff(&self, session_id: &str, path: &str) -> Fallible<Value> {
         let record = self.require_record(session_id).await?;
-        let diff = read_mobile_session_file_diff(&record, path, &DesktopGit(self.host.clone()), MAX_MOBILE_DIFF_LINES).await?;
+        let diff = read_mobile_session_file_diff(
+            &record,
+            path,
+            &DesktopGit(self.host.clone()),
+            MAX_MOBILE_DIFF_LINES,
+        )
+        .await?;
         serde_json::to_value(diff).map_err(|e| e.to_string())
     }
 
-    async fn session_image_preview(&self, session_id: &str, params: MobileImagePreviewParams) -> Fallible<Option<Value>> {
+    async fn session_image_preview(
+        &self,
+        session_id: &str,
+        params: MobileImagePreviewParams,
+    ) -> Fallible<Option<Value>> {
         let record = self.require_record(session_id).await?;
-        let Some(path) = params.path.filter(|p| !p.is_empty()) else { return Ok(None) };
+        let Some(path) = params.path.filter(|p| !p.is_empty()) else {
+            return Ok(None);
+        };
         // Only an image the session itself produced or referenced may be previewed.
         let referenced = record.events.iter().any(|event| {
-            event.detail.as_deref().is_some_and(|d| d.contains(&path)) || event.summary.contains(&path) || event.data.as_ref().is_some_and(|d| d.to_string().contains(&path))
+            event.detail.as_deref().is_some_and(|d| d.contains(&path))
+                || event.summary.contains(&path)
+                || event
+                    .data
+                    .as_ref()
+                    .is_some_and(|d| d.to_string().contains(&path))
         });
         if !referenced {
             return Err("That image is not part of this session.".into());
         }
-        let preview = self.call("ai:loadImagePreview", vec![json!(record.issue_key), json!(path)]).await?;
+        let preview = self
+            .call(
+                "ai:loadImagePreview",
+                vec![json!(record.issue_key), json!(path)],
+            )
+            .await?;
         Ok((!preview.is_null()).then_some(preview))
     }
 
     fn find_gadget(&self, session_id: &str, gadget_id: &str) -> Option<Value> {
         let blocks = call_sync(&self.host, "gadgets:getBlocks", vec![json!(session_id)]).ok()?;
-        blocks.as_array()?.iter().find(|block| block["gadget"]["gadgetId"] == gadget_id).map(|block| block["gadget"].clone())
+        blocks
+            .as_array()?
+            .iter()
+            .find(|block| block["gadget"]["gadgetId"] == gadget_id)
+            .map(|block| block["gadget"].clone())
     }
 
-    async fn submit_gadget(&self, session_id: &str, payload: MobileGadgetSubmitPayload, _actor: &str) -> Fallible<Value> {
+    async fn submit_gadget(
+        &self,
+        session_id: &str,
+        payload: MobileGadgetSubmitPayload,
+        _actor: &str,
+    ) -> Fallible<Value> {
         self.call(
             "gadgets:submit",
             vec![json!({
@@ -549,7 +736,8 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
                 records.push(record);
             }
         }
-        for request in praxis_mobile::host::permissions::pending_mobile_permissions(records.iter()) {
+        for request in praxis_mobile::host::permissions::pending_mobile_permissions(records.iter())
+        {
             if request.project_id.as_deref() == Some(project_id) {
                 items.push(json!({
                     "id": format!("permission:{}", request.request_id), "kind": "permission", "hostId": host_id, "projectId": project_id,
@@ -559,7 +747,10 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
             }
         }
         for run in self.run_summaries(project_id).await? {
-            let (run_id, name) = (run["runId"].as_str().unwrap_or_default(), run["workflowName"].as_str().unwrap_or_default());
+            let (run_id, name) = (
+                run["runId"].as_str().unwrap_or_default(),
+                run["workflowName"].as_str().unwrap_or_default(),
+            );
             if run["status"] == "awaiting-approval" {
                 items.push(json!({ "id": format!("approval:{run_id}"), "kind": "approval", "hostId": host_id, "projectId": project_id, "runId": run_id, "summary": name, "createdAt": run["startedAt"], "resolved": false }));
             }
@@ -577,14 +768,24 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
     }
 
     async fn create_session(&self, input: MobileCreateSession) -> Fallible<MobileSessionSnapshot> {
-        let project = self.project(&input.project_id).await?.ok_or_else(|| format!("Project {} was not found.", input.project_id))?;
+        let project = self
+            .project(&input.project_id)
+            .await?
+            .ok_or_else(|| format!("Project {} was not found.", input.project_id))?;
         let key = format!("SESSION-{}", &uuid::Uuid::new_v4().to_string()[..8]);
         let issue = json!({
             "key": key, "summary": input.title, "issueType": "Task", "status": "New",
             "projectKey": project["key"].as_str().unwrap_or("SESSION")
         });
         // Analysis and Review are read-only by contract; a chat uses the project's default tools.
-        let tool_mode = if input.mode == "chat" { project["defaultAiToolMode"].as_str().unwrap_or("full").to_owned() } else { "read-only".into() };
+        let tool_mode = if input.mode == "chat" {
+            project["defaultAiToolMode"]
+                .as_str()
+                .unwrap_or("full")
+                .to_owned()
+        } else {
+            "read-only".into()
+        };
         let mut request = json!({
             "issue": issue, "projectId": input.project_id, "provider": input.provider, "mode": input.mode, "toolMode": tool_mode,
             "task": {
@@ -593,33 +794,68 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
                 "definitionOfDone": "Respond to the user and remain available for follow-up turns."
             }
         });
-        if let Some(model) = input.model.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
+        if let Some(model) = input
+            .model
+            .as_deref()
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+        {
             request["model"] = json!(model);
         }
         let record = self.call("ai:delegate", vec![request]).await?;
         let issue_key = record["issueKey"].as_str().unwrap_or(&key).to_owned();
-        let _ = self.call("ai:renameSession", vec![json!(issue_key), json!(input.title)]).await;
+        let _ = self
+            .call(
+                "ai:renameSession",
+                vec![json!(issue_key), json!(input.title)],
+            )
+            .await;
         let record = self.require_record(&issue_key).await?;
         Ok(self.snapshot(&record))
     }
 
     async fn start_run(&self, input: MobileStartRun) -> Fallible<Value> {
-        let title = input.task.as_deref().map(str::trim).filter(|t| !t.is_empty()).unwrap_or("Started from Praxis mobile").to_owned();
-        self.call("workflows:startRun", vec![json!(input.project_id), json!(input.workflow_id), json!(title)]).await
+        let title = input
+            .task
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .unwrap_or("Started from Praxis mobile")
+            .to_owned();
+        self.call(
+            "workflows:startRun",
+            vec![
+                json!(input.project_id),
+                json!(input.workflow_id),
+                json!(title),
+            ],
+        )
+        .await
     }
 
-    async fn cancel_run(&self, run_id: &str, reason: Option<&str>, _actor: &str) -> Fallible<Value> {
-        self.call("workflows:cancelRun", vec![json!(run_id), json!(reason)]).await?;
+    async fn cancel_run(
+        &self,
+        run_id: &str,
+        reason: Option<&str>,
+        _actor: &str,
+    ) -> Fallible<Value> {
+        self.call("workflows:cancelRun", vec![json!(run_id), json!(reason)])
+            .await?;
         self.require_run(run_id).await
     }
 
     async fn retry_stage(&self, run_id: &str, node_id: &str, _actor: &str) -> Fallible<Value> {
-        self.call("workflows:retryStage", vec![json!(run_id), json!(node_id)]).await?;
+        self.call("workflows:retryStage", vec![json!(run_id), json!(node_id)])
+            .await?;
         self.require_run(run_id).await
     }
 
     async fn approve_run(&self, run_id: &str, actor: &str, note: Option<&str>) -> Fallible<Value> {
-        self.call("workflows:approveRun", vec![json!(run_id), json!(actor), json!(note)]).await?;
+        self.call(
+            "workflows:approveRun",
+            vec![json!(run_id), json!(actor), json!(note)],
+        )
+        .await?;
         self.require_run(run_id).await
     }
 
@@ -627,32 +863,53 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
         Err("Rejecting a workflow gate from the phone is not available in this build. Reject it on the desktop.".into())
     }
 
-    async fn continue_session(&self, session_id: &str, message: &str, _actor: &str) -> Fallible<Value> {
+    async fn continue_session(
+        &self,
+        session_id: &str,
+        message: &str,
+        _actor: &str,
+    ) -> Fallible<Value> {
         let record = self.require_record(session_id).await?;
         if super::acp_host::has_active_task(&self.host.config().user_data_dir, &record.issue_key) {
             return Err("This session already has an active turn.".into());
         }
-        self.call("ai:continueSession", vec![json!(record.issue_key), json!(message)]).await?;
+        self.call(
+            "ai:continueSession",
+            vec![json!(record.issue_key), json!(message)],
+        )
+        .await?;
         let record = self.require_record(session_id).await?;
         serde_json::to_value(self.snapshot(&record)).map_err(|e| e.to_string())
     }
 
-    async fn configure_session(&self, session_id: &str, change: MobileSessionRuntimeChange, _actor: &str) -> Fallible<MobileSessionSnapshot> {
+    async fn configure_session(
+        &self,
+        session_id: &str,
+        change: MobileSessionRuntimeChange,
+        _actor: &str,
+    ) -> Fallible<MobileSessionSnapshot> {
         let record = self.require_record(session_id).await?;
         let key = json!(record.issue_key);
         if let Some(mode) = change.mode {
-            self.call("ai:switchSessionMode", vec![key.clone(), json!(mode)]).await?;
+            self.call("ai:switchSessionMode", vec![key.clone(), json!(mode)])
+                .await?;
         }
         if let Some(model) = change.model {
-            self.call("ai:updateSessionModel", vec![key.clone(), json!(model)]).await?;
+            self.call("ai:updateSessionModel", vec![key.clone(), json!(model)])
+                .await?;
         }
         if let Some(handover) = change.handover {
-            let revision = self.call("ai:getSession", vec![key.clone()]).await?["handoverBrief"]["revision"].as_u64().unwrap_or(0);
-            let mut input = json!({ "provider": handover.provider, "expectedBriefRevision": revision });
+            let revision =
+                self.call("ai:getSession", vec![key.clone()]).await?["handoverBrief"]["revision"]
+                    .as_u64()
+                    .unwrap_or(0);
+            let mut input =
+                json!({ "provider": handover.provider, "expectedBriefRevision": revision });
             if let Some(model) = handover.model {
                 input["model"] = json!(model);
             }
-            self.call("ai:handoverSession", vec![key.clone(), input]).await?;
+            self.call("ai:handoverSession", vec![key.clone(), input])
+                .await?;
         }
         let record = self.require_record(session_id).await?;
         Ok(self.snapshot(&record))
@@ -665,7 +922,13 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
         serde_json::to_value(self.snapshot(&record)).map_err(|e| e.to_string())
     }
 
-    async fn respond_to_permission(&self, request_id: &str, decision: MobilePermissionAnswer, _actor: &str, project_id: &str) -> Fallible<Value> {
+    async fn respond_to_permission(
+        &self,
+        request_id: &str,
+        decision: MobilePermissionAnswer,
+        _actor: &str,
+        project_id: &str,
+    ) -> Fallible<Value> {
         let mut records = Vec::new();
         for summary in self.sessions(Some(project_id)).await? {
             if summary.state == "awaiting_approval"
@@ -683,9 +946,15 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
             |key| super::acp_host::has_active_task(&dir, key),
             |key, decision| {
                 let decision = match decision {
-                    praxis_mobile::host::permissions::PermissionDecision::AllowOnce => super::acp_host::Decision::AllowOnce,
-                    praxis_mobile::host::permissions::PermissionDecision::AllowAlways => super::acp_host::Decision::AllowAlways,
-                    praxis_mobile::host::permissions::PermissionDecision::Deny => super::acp_host::Decision::Deny,
+                    praxis_mobile::host::permissions::PermissionDecision::AllowOnce => {
+                        super::acp_host::Decision::AllowOnce
+                    }
+                    praxis_mobile::host::permissions::PermissionDecision::AllowAlways => {
+                        super::acp_host::Decision::AllowAlways
+                    }
+                    praxis_mobile::host::permissions::PermissionDecision::Deny => {
+                        super::acp_host::Decision::Deny
+                    }
                 };
                 super::acp_host::respond_to_permission(&dir, key, decision);
             },
@@ -696,7 +965,12 @@ impl MobileHostServiceDeps for DesktopMobileDeps {
 
 impl DesktopMobileDeps {
     fn self_arc(&self) -> Arc<DesktopMobileDeps> {
-        Arc::new(DesktopMobileDeps { host: self.host.clone(), mobile: Arc::clone(&self.mobile), epoch: self.epoch.clone(), host_id: Arc::clone(&self.host_id) })
+        Arc::new(DesktopMobileDeps {
+            host: self.host.clone(),
+            mobile: Arc::clone(&self.mobile),
+            epoch: self.epoch.clone(),
+            host_id: Arc::clone(&self.host_id),
+        })
     }
 }
 
@@ -725,25 +999,35 @@ pub fn register(host: &HostContext, mobile: &Arc<MobileHost>) {
     let read_tables = Arc::clone(&tables);
     let read_build = build.clone();
     host.register_handler("mobile:internal:read", move |_, args| {
-        let request: MobileReadRequest = serde_json::from_value(args.first().cloned().unwrap_or(Value::Null))
-            .map_err(|error| failure(format!("Malformed phone read: {error}")))?;
+        let request: MobileReadRequest =
+            serde_json::from_value(args.first().cloned().unwrap_or(Value::Null))
+                .map_err(|error| failure(format!("Malformed phone read: {error}")))?;
         read_deps.prime();
         let tables = read_tables.get_or_init(&read_build);
-        let handler = tables.reads.get(&request.operation).cloned().ok_or_else(|| rpc_error("Read operation is not available."))?;
+        let handler = tables
+            .reads
+            .get(&request.operation)
+            .cloned()
+            .ok_or_else(|| rpc_error("Read operation is not available."))?;
         runtime::block_on(handler(request)).map_err(|error| rpc_error(&error.0))
     });
     let command_tables = tables;
     host.register_handler("mobile:internal:command", move |_, args| {
-        let command: MobileCommand = serde_json::from_value(args.first().cloned().unwrap_or(Value::Null))
-            .map_err(|error| failure(format!("Malformed phone command: {error}")))?;
+        let command: MobileCommand =
+            serde_json::from_value(args.first().cloned().unwrap_or(Value::Null))
+                .map_err(|error| failure(format!("Malformed phone command: {error}")))?;
         command_deps.prime();
         let tables = command_tables.get_or_init(&build);
-        runtime::block_on(handle_mobile_command(&tables.app, command)).map_err(|error| rpc_error(&error.0))
+        runtime::block_on(handle_mobile_command(&tables.app, command))
+            .map_err(|error| rpc_error(&error.0))
     });
 }
 
 fn rpc_error(message: &str) -> RustRpcError {
-    RustRpcError { code: "MOBILE_HOST_ERROR".into(), message: message.to_owned() }
+    RustRpcError {
+        code: "MOBILE_HOST_ERROR".into(),
+        message: message.to_owned(),
+    }
 }
 
 #[cfg(test)]
@@ -752,8 +1036,20 @@ mod tests {
 
     #[test]
     fn project_summaries_join_the_workflow_stage_names() {
-        let summary = project_summary(&json!({ "id": "p1", "name": "Mobile", "workflowStages": [{ "name": "To do" }, { "name": "Done" }] }));
-        assert_eq!(summary, MobileProjectSummary { project_id: "p1".into(), name: "Mobile".into(), workflow: Some("To do → Done".into()) });
-        assert_eq!(project_summary(&json!({ "id": "p2", "name": "Bare" })).workflow, None);
+        let summary = project_summary(
+            &json!({ "id": "p1", "name": "Mobile", "workflowStages": [{ "name": "To do" }, { "name": "Done" }] }),
+        );
+        assert_eq!(
+            summary,
+            MobileProjectSummary {
+                project_id: "p1".into(),
+                name: "Mobile".into(),
+                workflow: Some("To do → Done".into())
+            }
+        );
+        assert_eq!(
+            project_summary(&json!({ "id": "p2", "name": "Bare" })).workflow,
+            None
+        );
     }
 }

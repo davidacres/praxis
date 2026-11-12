@@ -6,19 +6,30 @@
 //! an abort can take seconds, which must not freeze every other call.
 
 use praxis_ai::providers::registry::{DescriptorKind, built_in_descriptors};
-use praxis_host::HostContext;
 use praxis_contracts::RustRpcRequest;
+use praxis_host::HostContext;
 use serde_json::{Value, json};
 
 use super::acp_host::{self, Continue, Decision, StartTask};
 use super::session_store::store;
 use super::{Result, failure, text};
 
-pub const CHANNELS: [&str; 6] = ["ai:delegate", "ai:abort", "ai:respondToPermission", "ai:setAcpMode", "ai:continueSession", "ai:resumeInterruptedSession"];
+pub const CHANNELS: [&str; 6] = [
+    "ai:delegate",
+    "ai:abort",
+    "ai:respondToPermission",
+    "ai:setAcpMode",
+    "ai:continueSession",
+    "ai:resumeInterruptedSession",
+];
 
 fn default_task(issue: &Value, overrides: &Value) -> Value {
     let summary = issue["summary"].as_str().unwrap_or_default();
-    let description = issue["description"].as_str().filter(|d| !d.is_empty()).map(|d| format!("\n{}", d.chars().take(500).collect::<String>())).unwrap_or_default();
+    let description = issue["description"]
+        .as_str()
+        .filter(|d| !d.is_empty())
+        .map(|d| format!("\n{}", d.chars().take(500).collect::<String>()))
+        .unwrap_or_default();
     let mut task = json!({
         "kind": "general",
         "goal": overrides["goal"].as_str().map_or_else(|| format!("{summary}{description}"), str::to_owned),
@@ -39,11 +50,24 @@ fn default_task(issue: &Value, overrides: &Value) -> Value {
 }
 
 /// The task contract of a read-only mode, shared with sessions started from the phone.
-fn read_only_mode_task(mode: &str, issue: &Value, analysis_prompt: &str, goal: Option<&str>) -> Value {
-    let (key, summary) = (issue["key"].as_str().unwrap_or_default(), issue["summary"].as_str().unwrap_or_default());
+fn read_only_mode_task(
+    mode: &str,
+    issue: &Value,
+    analysis_prompt: &str,
+    goal: Option<&str>,
+) -> Value {
+    let (key, summary) = (
+        issue["key"].as_str().unwrap_or_default(),
+        issue["summary"].as_str().unwrap_or_default(),
+    );
     if mode == "analysis" {
         let goal = goal.map_or_else(|| format!("Analyze {key} — {summary}."), str::to_owned);
-        let full_goal = [analysis_prompt, goal.as_str(), "This is a read-only analysis; do not implement anything yet."].join("\n\n");
+        let full_goal = [
+            analysis_prompt,
+            goal.as_str(),
+            "This is a read-only analysis; do not implement anything yet.",
+        ]
+        .join("\n\n");
         return json!({
             "kind": "analysis", "sessionMode": "analysis",
             "goal": full_goal,
@@ -73,15 +97,30 @@ fn build_mode_task(mode: &str, issue: &Value, analysis_prompt: &str, overrides: 
 }
 
 fn host_call(host: &HostContext, channel: &str, args: Vec<Value>) -> Result<Value> {
-    let response = host.dispatch_rpc(RustRpcRequest { id: "delegate".into(), channel: channel.into(), args });
-    if response.ok { Ok(response.result.unwrap_or(Value::Null)) } else { Err(response.error.map_or_else(|| failure("The host returned no error."), |e| failure(e.message))) }
+    let response = host.dispatch_rpc(RustRpcRequest {
+        id: "delegate".into(),
+        channel: channel.into(),
+        args,
+    });
+    if response.ok {
+        Ok(response.result.unwrap_or(Value::Null))
+    } else {
+        Err(response.error.map_or_else(
+            || failure("The host returned no error."),
+            |e| failure(e.message),
+        ))
+    }
 }
 
 fn non_empty<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value[key].as_str().map(str::trim).filter(|v| !v.is_empty())
 }
 
-pub(super) fn delegate_channel(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
+pub(super) fn delegate_channel(
+    host: &HostContext,
+    dir: &std::path::Path,
+    args: &[Value],
+) -> Result<Value> {
     delegate(host, dir, args)
 }
 
@@ -91,55 +130,127 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
     let review = input.get("ticketReview").filter(|r| r.is_object()).cloned();
     let settings = host.settings().read();
     let ai = &settings.ai;
-    let mode = input["mode"].as_str().unwrap_or(if input["purpose"] == "analysis" { "analysis" } else { "chat" }).to_owned();
+    let mode = input["mode"]
+        .as_str()
+        .unwrap_or(if input["purpose"] == "analysis" {
+            "analysis"
+        } else {
+            "chat"
+        })
+        .to_owned();
     let is_analysis = mode == "analysis" || input["purpose"] == "analysis";
     let analysis_prompt = ai.analysis_prompt.trim().to_owned();
     if is_analysis && analysis_prompt.is_empty() {
-        return Err(failure("Set an analysis system prompt under Settings → AI Provider first."));
+        return Err(failure(
+            "Set an analysis system prompt under Settings → AI Provider first.",
+        ));
     }
-    let provider = non_empty(&input, "provider").map_or_else(|| ai.active_provider.clone(), str::to_owned);
-    let custom_configs: Vec<Value> = ai.custom_providers.iter().flatten().filter_map(|c| serde_json::to_value(c).ok()).collect();
+    let provider =
+        non_empty(&input, "provider").map_or_else(|| ai.active_provider.clone(), str::to_owned);
+    let custom_configs: Vec<Value> = ai
+        .custom_providers
+        .iter()
+        .flatten()
+        .filter_map(|c| serde_json::to_value(c).ok())
+        .collect();
     let custom = custom_configs.iter().find(|c| c["id"] == provider).cloned();
-    let builtin = built_in_descriptors().into_iter().find(|d| d.id == provider);
+    let builtin = built_in_descriptors()
+        .into_iter()
+        .find(|d| d.id == provider);
     let (kind, label, default_command, default_args) = match (&builtin, &custom) {
-        (Some(d), _) => (d.kind, d.label.clone(), d.default_command.clone(), d.default_args.clone()),
-        (None, Some(c)) => (DescriptorKind::Api, c["label"].as_str().unwrap_or(&provider).to_owned(), None, Vec::new()),
-        (None, None) => return Err(failure(if provider.starts_with("custom:") { format!("The AI endpoint “{}” was removed. Choose another provider in Settings → AI Provider.", provider.trim_start_matches("custom:")) } else { format!("Unknown AI provider “{provider}”.") })),
+        (Some(d), _) => (
+            d.kind,
+            d.label.clone(),
+            d.default_command.clone(),
+            d.default_args.clone(),
+        ),
+        (None, Some(c)) => (
+            DescriptorKind::Api,
+            c["label"].as_str().unwrap_or(&provider).to_owned(),
+            None,
+            Vec::new(),
+        ),
+        (None, None) => {
+            return Err(failure(if provider.starts_with("custom:") {
+                format!(
+                    "The AI endpoint “{}” was removed. Choose another provider in Settings → AI Provider.",
+                    provider.trim_start_matches("custom:")
+                )
+            } else {
+                format!("Unknown AI provider “{provider}”.")
+            }));
+        }
     };
-    let has_binding = ["profileId", "hostId", "agentId"].iter().any(|k| non_empty(&input, k).is_some());
+    let has_binding = ["profileId", "hostId", "agentId"]
+        .iter()
+        .any(|k| non_empty(&input, k).is_some());
     if !has_binding && ai.providers.get(&provider).and_then(|c| c.enabled) == Some(false) {
-        return Err(failure(format!("{label} is turned off. Enable it under Settings → AI Provider.")));
+        return Err(failure(format!(
+            "{label} is turned off. Enable it under Settings → AI Provider."
+        )));
     }
     if !has_binding && kind == DescriptorKind::Api {
-        let has_key = host.secrets().has(&praxis_ai::providers::registry::secret_key_for_provider(&provider)) || (provider == "vercel-gateway" && praxis_ai::providers::registry::gateway_key_from_env().is_some());
+        let has_key = host
+            .secrets()
+            .has(&praxis_ai::providers::registry::secret_key_for_provider(
+                &provider,
+            ))
+            || (provider == "vercel-gateway"
+                && praxis_ai::providers::registry::gateway_key_from_env().is_some());
         let needs_key = custom.as_ref().is_none_or(|c| c["auth"]["kind"] != "none");
         if !has_key && needs_key {
-            return Err(failure(format!("No {label} API key configured. Add one under Settings → AI Provider.")));
+            return Err(failure(format!(
+                "No {label} API key configured. Add one under Settings → AI Provider."
+            )));
         }
     }
     // An endpoint whose connection test showed no tool calling would fail on its first tool use.
-    if !has_binding && let Some(c) = &custom && !c["capabilities"].is_null() && c["capabilities"]["tools"] != true {
-        return Err(failure(format!("{label} didn't pass tool calling, which agent sessions need. Run its connection test in Settings → AI Provider after changing the model or server.")));
+    if !has_binding
+        && let Some(c) = &custom
+        && !c["capabilities"].is_null()
+        && c["capabilities"]["tools"] != true
+    {
+        return Err(failure(format!(
+            "{label} didn't pass tool calling, which agent sessions need. Run its connection test in Settings → AI Provider after changing the model or server."
+        )));
     }
 
     // The issue: a tracker issue, or a synthesized one for a free-form session.
     let issue = if let Some(review) = &review {
         review["issue"].clone()
     } else if let Some(issue_key) = non_empty(&input, "issueKey") {
-        host_call(host, "issue:get", vec![json!(issue_key), input.get("connectionId").cloned().unwrap_or(Value::Null)])?
+        host_call(
+            host,
+            "issue:get",
+            vec![
+                json!(issue_key),
+                input.get("connectionId").cloned().unwrap_or(Value::Null),
+            ],
+        )?
     } else if input["issue"].is_object() {
         // A caller-supplied stand-in (the Virtual Team assistant has no ticket of its own).
         input["issue"].clone()
     } else {
-        let goal = non_empty(&input, "goal").or_else(|| non_empty(&input["task"], "goal")).ok_or_else(|| failure("Delegate needs either an issue key or a goal."))?;
+        let goal = non_empty(&input, "goal")
+            .or_else(|| non_empty(&input["task"], "goal"))
+            .ok_or_else(|| failure("Delegate needs either an issue key or a goal."))?;
         json!({ "key": format!("SESSION-{}", &uuid::Uuid::new_v4().to_string()[..8]), "summary": goal, "issueType": "Task", "status": "New", "projectKey": "SESSION" })
     };
-    if review.is_none() && non_empty(&input, "issueKey").is_some() && ai.analysis_gate_enabled && input["mode"].is_null() && !is_analysis {
+    if review.is_none()
+        && non_empty(&input, "issueKey").is_some()
+        && ai.analysis_gate_enabled
+        && input["mode"].is_null()
+        && !is_analysis
+    {
         // Mirrors the gate in Electron: confirmed analysis is required for legacy callers.
         let key = non_empty(&input, "issueKey").unwrap_or_default();
-        let confirmed = host_call(host, "ai:getAnalysis", vec![json!(key)]).ok().is_some_and(|a| a["confirmed"] == true || a["state"] == "confirmed");
+        let confirmed = host_call(host, "ai:getAnalysis", vec![json!(key)])
+            .ok()
+            .is_some_and(|a| a["confirmed"] == true || a["state"] == "confirmed");
         if !confirmed {
-            return Err(failure(format!("Analysis for {key} must be confirmed before delegating (the analysis gate is enabled in Settings → AI Provider).")));
+            return Err(failure(format!(
+                "Analysis for {key} must be confirmed before delegating (the analysis gate is enabled in Settings → AI Provider)."
+            )));
         }
     }
 
@@ -150,66 +261,167 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         // A workflow run (delivery, decomposition, merge-request feedback) brings its own contract.
         input["taskDefinition"].clone()
     } else if !input["mode"].is_null() {
-        build_mode_task(&mode, &issue, &analysis_prompt, task_overrides.unwrap_or(&Value::Null))
+        build_mode_task(
+            &mode,
+            &issue,
+            &analysis_prompt,
+            task_overrides.unwrap_or(&Value::Null),
+        )
     } else if let Some(overrides) = task_overrides {
         default_task(&issue, overrides)
     } else {
         build_mode_task(&mode, &issue, &analysis_prompt, &Value::Null)
     };
 
-    let existing_folder = non_empty(&input, "issueKey").and_then(|key| store(dir).get(key).ok().flatten()).and_then(|r| r["workingDirectory"].as_str().map(str::trim).filter(|w| !w.is_empty()).map(str::to_owned));
+    let existing_folder = non_empty(&input, "issueKey")
+        .and_then(|key| store(dir).get(key).ok().flatten())
+        .and_then(|r| {
+            r["workingDirectory"]
+                .as_str()
+                .map(str::trim)
+                .filter(|w| !w.is_empty())
+                .map(str::to_owned)
+        });
     // A project ticket's session starts in the project's own folder.
     let project_folder = non_empty(&input, "projectId")
         .or_else(|| non_empty(&input, "connectionId").and_then(|c| c.strip_prefix("project:")))
         .and_then(|project_id| super::workflows::project_folder(host, project_id))
         .map(|folder| folder.to_string_lossy().into_owned());
-    let working_directory = non_empty(&input, "workingDirectory").map(str::to_owned)
+    let working_directory = non_empty(&input, "workingDirectory")
+        .map(str::to_owned)
         .or(project_folder)
         .or(existing_folder)
         .or_else(|| Some(ai.working_directory.trim().to_owned()).filter(|w| !w.is_empty()))
-        .or_else(|| std::env::var("PRAXIS_AI_WORKING_DIR").ok().map(|w| w.trim().to_owned()).filter(|w| !w.is_empty()));
+        .or_else(|| {
+            std::env::var("PRAXIS_AI_WORKING_DIR")
+                .ok()
+                .map(|w| w.trim().to_owned())
+                .filter(|w| !w.is_empty())
+        });
 
     // Optionally run in a dedicated git worktree branched off the folder's current branch.
     let mut working_directory = working_directory;
     if input["runInWorktree"] == true {
-        let folder = working_directory.clone().ok_or_else(|| failure("Pick a git repository folder to run this session in a worktree."))?;
-        let prepared = super::ai_session_ops::prepare_worktree(&settings.delivery.default_base_branch, &issue, &folder, false, None)?;
-        working_directory = Some(prepared["worktreePath"].as_str().unwrap_or_default().to_owned());
+        let folder = working_directory.clone().ok_or_else(|| {
+            failure("Pick a git repository folder to run this session in a worktree.")
+        })?;
+        let prepared = super::ai_session_ops::prepare_worktree(
+            &settings.delivery.default_base_branch,
+            &issue,
+            &folder,
+            false,
+            None,
+        )?;
+        working_directory = Some(
+            prepared["worktreePath"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
+        );
         input["__worktree"] = prepared;
     }
 
-    let mut tool_mode = if is_analysis { Some("read-only".to_owned()) } else { non_empty(&input, "toolMode").map(str::to_owned) };
+    let mut tool_mode = if is_analysis {
+        Some("read-only".to_owned())
+    } else {
+        non_empty(&input, "toolMode").map(str::to_owned)
+    };
     // With no folder, a session that did not explicitly ask for tools converses with none.
     if working_directory.is_none() && (non_empty(&input, "toolMode").is_none() || mode == "chat") {
         tool_mode = Some("project-only".to_owned());
     }
-    let tool_mode = tool_mode.unwrap_or_else(|| if working_directory.is_some() { "full".into() } else { "project-only".into() });
+    let tool_mode = tool_mode.unwrap_or_else(|| {
+        if working_directory.is_some() {
+            "full".into()
+        } else {
+            "project-only".into()
+        }
+    });
     // A review reads and never writes, whether or not it has a folder.
-    let tool_mode = if review.is_some() { "read-only".to_owned() } else { tool_mode };
+    let tool_mode = if review.is_some() {
+        "read-only".to_owned()
+    } else {
+        tool_mode
+    };
     if tool_mode == "full" && working_directory.is_none() {
-        return Err(failure("Choose a working folder for this session — full-tools sessions no longer default to the app directory."));
+        return Err(failure(
+            "Choose a working folder for this session — full-tools sessions no longer default to the app directory.",
+        ));
     }
 
-    let model_default = non_empty(&input, "model").map(str::to_owned).or_else(|| ai.providers.get(&provider).and_then(|c| c.default_model.clone()));
-    let reasoning = non_empty(&input, "reasoningEffort").map(str::to_owned)
-        .or_else(|| model_default.as_deref().and_then(|m| ai.providers.get(&provider)?.model_reasoning_defaults.as_ref()?.get(m).cloned()))
+    let model_default = non_empty(&input, "model").map(str::to_owned).or_else(|| {
+        ai.providers
+            .get(&provider)
+            .and_then(|c| c.default_model.clone())
+    });
+    let reasoning = non_empty(&input, "reasoningEffort")
+        .map(str::to_owned)
+        .or_else(|| {
+            model_default.as_deref().and_then(|m| {
+                ai.providers
+                    .get(&provider)?
+                    .model_reasoning_defaults
+                    .as_ref()?
+                    .get(m)
+                    .cloned()
+            })
+        })
         .unwrap_or_else(|| "medium".into());
-    let permission_mode = non_empty(&input, "permissionMode").unwrap_or("manual").to_owned();
+    let permission_mode = non_empty(&input, "permissionMode")
+        .unwrap_or("manual")
+        .to_owned();
 
-    let override_path = ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
+    let override_path = ai
+        .providers
+        .get(&provider)
+        .and_then(|c| c.cli_path.as_deref())
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned);
     let provider_command = override_path.clone().or(default_command.clone());
-    let skill_names: Vec<String> = input["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect();
-    let (profile_id, host_id) = (non_empty(&input, "profileId").or_else(|| non_empty(&input, "agentId")).map(str::to_owned), non_empty(&input, "hostId").or_else(|| non_empty(&input, "agentId")).map(str::to_owned));
+    let skill_names: Vec<String> = input["skillNames"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
+    let (profile_id, host_id) = (
+        non_empty(&input, "profileId")
+            .or_else(|| non_empty(&input, "agentId"))
+            .map(str::to_owned),
+        non_empty(&input, "hostId")
+            .or_else(|| non_empty(&input, "agentId"))
+            .map(str::to_owned),
+    );
     let cli_providers = cli_commands(ai);
     drop(settings);
-    let prepared = prepare_launch(host, dir, profile_id.as_deref(), host_id.as_deref(), &provider, kind, provider_command.as_deref(), &default_args, &skill_names)?;
+    let prepared = prepare_launch(
+        host,
+        dir,
+        profile_id.as_deref(),
+        host_id.as_deref(),
+        &provider,
+        kind,
+        provider_command.as_deref(),
+        &default_args,
+        &skill_names,
+    )?;
     let mut task = task;
     if let Some(binding) = &prepared.binding {
         let goal = task["goal"].as_str().unwrap_or_default().to_owned();
         task["goal"] = json!(format!("{goal}\n\n{}", binding.context));
     }
-    let is_autonomous = tool_mode == "full" && (matches!(permission_mode.as_str(), "bypass" | "autopilot") || task["kind"] == "implementation");
-    apply_session_context(host, &mut task, &effective_runtime(&provider, kind, &prepared.plan, &cli_providers), working_directory.as_deref(), is_autonomous);
+    let is_autonomous = tool_mode == "full"
+        && (matches!(permission_mode.as_str(), "bypass" | "autopilot")
+            || task["kind"] == "implementation");
+    apply_session_context(
+        host,
+        &mut task,
+        &effective_runtime(&provider, kind, &prepared.plan, &cli_providers),
+        working_directory.as_deref(),
+        is_autonomous,
+    );
     let settings_key = issue["key"].as_str().unwrap_or_default().to_owned();
 
     if prepared.plan.state == "gateway" {
@@ -218,36 +430,93 @@ fn delegate(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result
         let default_model_hint = model_default.clone();
         let (connection, default_model) = super::ai_providers::api_connection(host, &provider)?;
         let needs_key = custom.as_ref().is_none_or(|c| c["auth"]["kind"] != "none");
-        if prepared.binding.is_some() && connection.options.api_key.as_deref().is_none_or(str::is_empty) && needs_key {
-            return Err(failure(format!("No {label} API key configured for this session.")));
+        if prepared.binding.is_some()
+            && connection
+                .options
+                .api_key
+                .as_deref()
+                .is_none_or(str::is_empty)
+            && needs_key
+        {
+            return Err(failure(format!(
+                "No {label} API key configured for this session."
+            )));
         }
-        let model = selected_model.or(default_model_hint).unwrap_or(default_model);
+        let model = selected_model
+            .or(default_model_hint)
+            .unwrap_or(default_model);
         let images = sanitize_images(input.get("images").unwrap_or(&Value::Null));
-        super::api_host::start_api_task(host, dir, super::api_host::ApiStart {
-            issue, task, model, reasoning_effort: Some(reasoning), working_directory, tool_mode, auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"),
-            permission_mode: Some(permission_mode), images, connection,
-        })?;
+        super::api_host::start_api_task(
+            host,
+            dir,
+            super::api_host::ApiStart {
+                issue,
+                task,
+                model,
+                reasoning_effort: Some(reasoning),
+                working_directory,
+                tool_mode,
+                auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"),
+                permission_mode: Some(permission_mode),
+                images,
+                connection,
+            },
+        )?;
         return finish_launch(dir, &key, &input, &prepared, &skill_names);
     }
     let key = settings_key;
-    let command = prepared.plan.command.clone().ok_or_else(|| failure("No command is configured for this provider."))?;
+    let command = prepared
+        .plan
+        .command
+        .clone()
+        .ok_or_else(|| failure("No command is configured for this provider."))?;
     let args = prepared.plan.args.clone();
     // Praxis's own tracker and coordination tools come first, then the servers the user added.
     let mut mcp_servers: Vec<Value> = Vec::new();
     if prepared.plan.state == "acp" {
         if let Some(issue_key) = non_empty(&input, "issueKey") {
-            mcp_servers.extend(super::builtin_mcp::tracker_server(host, dir, &key, non_empty(&input, "connectionId"), &tool_mode).filter(|_| !issue_key.is_empty()));
+            mcp_servers.extend(
+                super::builtin_mcp::tracker_server(
+                    host,
+                    dir,
+                    &key,
+                    non_empty(&input, "connectionId"),
+                    &tool_mode,
+                )
+                .filter(|_| !issue_key.is_empty()),
+            );
         }
-        mcp_servers.extend(super::builtin_mcp::coordination_server(dir, &key, working_directory.as_deref(), &tool_mode));
-        mcp_servers.extend(super::browser_mcp::server_for_session(host, dir, &key, &tool_mode));
+        mcp_servers.extend(super::builtin_mcp::coordination_server(
+            dir,
+            &key,
+            working_directory.as_deref(),
+            &tool_mode,
+        ));
+        mcp_servers.extend(super::browser_mcp::server_for_session(
+            host, dir, &key, &tool_mode,
+        ));
     }
     mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
 
-    acp_host::start_task(host, dir, StartTask {
-        issue, task, provider, model: non_empty(&input, "model").map(str::to_owned), reasoning_effort: Some(reasoning),
-        working_directory, tool_mode, auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"), permission_mode: Some(permission_mode),
-        command, args, mcp_servers, images: sanitize_images(input.get("images").unwrap_or(&Value::Null)),
-    })?;
+    acp_host::start_task(
+        host,
+        dir,
+        StartTask {
+            issue,
+            task,
+            provider,
+            model: non_empty(&input, "model").map(str::to_owned),
+            reasoning_effort: Some(reasoning),
+            working_directory,
+            tool_mode,
+            auto_approve: matches!(permission_mode.as_str(), "bypass" | "autopilot"),
+            permission_mode: Some(permission_mode),
+            command,
+            args,
+            mcp_servers,
+            images: sanitize_images(input.get("images").unwrap_or(&Value::Null)),
+        },
+    )?;
 
     finish_launch(dir, &key, &input, &prepared, &skill_names)
 }
@@ -273,51 +542,116 @@ fn is_bundled_host(host_id: &str) -> bool {
 /// A manifest `entry` as a command: bare executable names stay, files relative to the host's own
 /// folder are resolved against it (never the app cwd).
 fn entry_command(entry: &Value, root_path: &str) -> Result<(String, Vec<String>)> {
-    let raw = entry.as_str().or_else(|| entry["command"].as_str()).map(str::trim).filter(|c| !c.is_empty()).ok_or_else(|| failure("The selected agent host does not declare an executable entry point."))?;
+    let raw = entry
+        .as_str()
+        .or_else(|| entry["command"].as_str())
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+        .ok_or_else(|| {
+            failure("The selected agent host does not declare an executable entry point.")
+        })?;
     let root = std::path::Path::new(root_path);
-    let path_like = std::path::Path::new(raw).is_absolute() || raw.contains('/') || raw.contains('\\') || raw.ends_with(".js");
-    let command = if path_like { praxis_core::agent_runtime::resolve_against(root, raw) } else { raw.to_owned() };
-    let args = entry["args"].as_array().into_iter().flatten().filter_map(Value::as_str).map(|arg| {
-        let path_like = std::path::Path::new(arg).is_absolute() || arg.starts_with("./") || arg.starts_with(".\\") || arg.ends_with(".js");
-        if path_like && !std::path::Path::new(arg).is_absolute() { praxis_core::agent_runtime::resolve_against(root, arg) } else { arg.to_owned() }
-    }).collect();
+    let path_like = std::path::Path::new(raw).is_absolute()
+        || raw.contains('/')
+        || raw.contains('\\')
+        || raw.ends_with(".js");
+    let command = if path_like {
+        praxis_core::agent_runtime::resolve_against(root, raw)
+    } else {
+        raw.to_owned()
+    };
+    let args = entry["args"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(|arg| {
+            let path_like = std::path::Path::new(arg).is_absolute()
+                || arg.starts_with("./")
+                || arg.starts_with(".\\")
+                || arg.ends_with(".js");
+            if path_like && !std::path::Path::new(arg).is_absolute() {
+                praxis_core::agent_runtime::resolve_against(root, arg)
+            } else {
+                arg.to_owned()
+            }
+        })
+        .collect();
     Ok((command, args))
 }
 
 fn is_scaffold_host(root_path: &str) -> bool {
-    std::fs::read_to_string(std::path::Path::new(root_path).join("index.js")).is_ok_and(|entry| entry.contains("SCAFFOLD") && entry.contains("scaffold not implemented"))
+    std::fs::read_to_string(std::path::Path::new(root_path).join("index.js"))
+        .is_ok_and(|entry| entry.contains("SCAFFOLD") && entry.contains("scaffold not implemented"))
 }
 
 /// Compiles a discovered manifest into an explicit, supported session adapter.
-fn compile_host_launch(definition: &Value, kind: DescriptorKind, provider_label: &str, provider_command: Option<&str>, provider_args: &[String]) -> Result<Plan> {
+fn compile_host_launch(
+    definition: &Value,
+    kind: DescriptorKind,
+    provider_label: &str,
+    provider_command: Option<&str>,
+    provider_args: &[String],
+) -> Result<Plan> {
     let manifest = &definition["manifest"];
     let id = manifest["id"].as_str().unwrap_or_default().to_owned();
     // Built-in agents, agents found in other AI tools' folders and copies of them
     // (`entry: "session"`) all run on the session's own runtime.
-    if is_bundled_host(&id) || definition["followsSessionRuntime"] == true || manifest["entry"] == "session" {
+    if is_bundled_host(&id)
+        || definition["followsSessionRuntime"] == true
+        || manifest["entry"] == "session"
+    {
         if kind == DescriptorKind::Api {
-            return Ok(Plan { state: "gateway", host_id: Some(id), command: None, args: Vec::new() });
+            return Ok(Plan {
+                state: "gateway",
+                host_id: Some(id),
+                command: None,
+                args: Vec::new(),
+            });
         }
-        let command = provider_command.ok_or_else(|| failure("No command is configured for this provider."))?.to_owned();
-        return Ok(Plan { state: "acp", host_id: Some(id), command: Some(command), args: provider_args.to_vec() });
+        let command = provider_command
+            .ok_or_else(|| failure("No command is configured for this provider."))?
+            .to_owned();
+        return Ok(Plan {
+            state: "acp",
+            host_id: Some(id),
+            command: Some(command),
+            args: provider_args.to_vec(),
+        });
     }
     match manifest["type"].as_str().unwrap_or_default() {
         "acp" => {
             let root = definition["rootPath"].as_str().unwrap_or_default();
             if is_scaffold_host(root) {
-                return Err(failure(format!("Agent host \"{id}\" is a scaffold and has no working protocol adapter.")));
+                return Err(failure(format!(
+                    "Agent host \"{id}\" is a scaffold and has no working protocol adapter."
+                )));
             }
             let (command, args) = entry_command(&manifest["entry"], root)?;
-            Ok(Plan { state: "acp", host_id: Some(id), command: Some(command), args })
+            Ok(Plan {
+                state: "acp",
+                host_id: Some(id),
+                command: Some(command),
+                args,
+            })
         }
         // A gateway manifest opts into the provider-backed transport and must name an API provider.
         "gateway" => {
             if kind != DescriptorKind::Api {
-                return Err(failure(format!("Gateway host \"{id}\" requires an API provider; \"{provider_label}\" is CLI-hosted.")));
+                return Err(failure(format!(
+                    "Gateway host \"{id}\" requires an API provider; \"{provider_label}\" is CLI-hosted."
+                )));
             }
-            Ok(Plan { state: "gateway", host_id: Some(id), command: None, args: Vec::new() })
+            Ok(Plan {
+                state: "gateway",
+                host_id: Some(id),
+                command: None,
+                args: Vec::new(),
+            })
         }
-        other => Err(failure(format!("Agent host \"{id}\" declares unsupported transport \"{other}\"."))),
+        other => Err(failure(format!(
+            "Agent host \"{id}\" declares unsupported transport \"{other}\"."
+        ))),
     }
 }
 
@@ -335,21 +669,51 @@ pub(super) fn prepare_launch(
     skill_names: &[String],
 ) -> Result<Prepared> {
     if profile_id.is_some() != host_id.is_some() {
-        return Err(failure("A session binding requires both an agent profile and runtime host."));
+        return Err(failure(
+            "A session binding requires both an agent profile and runtime host.",
+        ));
     }
     let (Some(profile_id), Some(host_id)) = (profile_id, host_id) else {
         let plan = if kind == DescriptorKind::CliAgent {
-            let command = provider_command.ok_or_else(|| failure("No command is configured for this provider."))?.to_owned();
-            Plan { state: "acp", host_id: None, command: Some(command), args: provider_args.to_vec() }
+            let command = provider_command
+                .ok_or_else(|| failure("No command is configured for this provider."))?
+                .to_owned();
+            Plan {
+                state: "acp",
+                host_id: None,
+                command: Some(command),
+                args: provider_args.to_vec(),
+            }
         } else {
-            Plan { state: "gateway", host_id: None, command: None, args: Vec::new() }
+            Plan {
+                state: "gateway",
+                host_id: None,
+                command: None,
+                args: Vec::new(),
+            }
         };
-        return Ok(Prepared { plan, binding: None });
+        return Ok(Prepared {
+            plan,
+            binding: None,
+        });
     };
-    let binding = super::agent_runtime::create_binding(host, dir, profile_id, host_id, provider, skill_names)?;
-    let label = built_in_descriptors().into_iter().find(|d| d.id == provider).map_or_else(|| provider.to_owned(), |d| d.label);
+    let binding = super::agent_runtime::create_binding(
+        host,
+        dir,
+        profile_id,
+        host_id,
+        provider,
+        skill_names,
+    )?;
+    let label = built_in_descriptors()
+        .into_iter()
+        .find(|d| d.id == provider)
+        .map_or_else(|| provider.to_owned(), |d| d.label);
     let plan = compile_host_launch(&binding.host, kind, &label, provider_command, provider_args)?;
-    Ok(Prepared { plan, binding: Some(binding) })
+    Ok(Prepared {
+        plan,
+        binding: Some(binding),
+    })
 }
 
 /// The `[provider id -> configured command]` of every CLI runtime.
@@ -358,25 +722,58 @@ fn cli_commands(ai: &praxis_core::config::app_settings::AiSettings) -> Vec<(Stri
         .into_iter()
         .filter(|d| d.kind == DescriptorKind::CliAgent)
         .filter_map(|d| {
-            let configured = ai.providers.get(&d.id).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
-            configured.or(d.default_command.clone()).map(|command| (d.id, command))
+            let configured = ai
+                .providers
+                .get(&d.id)
+                .and_then(|c| c.cli_path.as_deref())
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+                .map(str::to_owned);
+            configured
+                .or(d.default_command.clone())
+                .map(|command| (d.id, command))
         })
         .collect()
 }
 
 /// Which runtime really runs a launch: an API provider reads no tool files; a built-in CLI runtime
 /// reads its own; a custom ACP binding reads none of the files Praxis knows about (`custom`).
-fn effective_runtime(provider: &str, kind: DescriptorKind, plan: &Plan, clis: &[(String, String)]) -> String {
+fn effective_runtime(
+    provider: &str,
+    kind: DescriptorKind,
+    plan: &Plan,
+    clis: &[(String, String)],
+) -> String {
     if plan.state != "acp" {
         return provider.to_owned();
     }
-    let configured = clis.iter().find(|(id, _)| id == provider).map(|(_, command)| command.as_str());
-    if kind == DescriptorKind::CliAgent && plan.command.as_deref().is_none_or(|command| Some(command) == configured) {
+    let configured = clis
+        .iter()
+        .find(|(id, _)| id == provider)
+        .map(|(_, command)| command.as_str());
+    if kind == DescriptorKind::CliAgent
+        && plan
+            .command
+            .as_deref()
+            .is_none_or(|command| Some(command) == configured)
+    {
         return provider.to_owned();
     }
-    let base = |command: &str| std::path::Path::new(command).file_name().map(|n| n.to_string_lossy().into_owned());
+    let base = |command: &str| {
+        std::path::Path::new(command)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+    };
     // A custom ACP binding that launches one of the known runtimes reads what it reads.
-    plan.command.as_deref().and_then(base).and_then(|launched| clis.iter().find(|(_, command)| base(command).as_deref() == Some(launched.as_str())).map(|(id, _)| id.clone())).unwrap_or_else(|| "custom".to_owned())
+    plan.command
+        .as_deref()
+        .and_then(base)
+        .and_then(|launched| {
+            clis.iter()
+                .find(|(_, command)| base(command).as_deref() == Some(launched.as_str()))
+                .map(|(id, _)| id.clone())
+        })
+        .unwrap_or_else(|| "custom".to_owned())
 }
 
 /// The working style every session carries, whichever AI runs it (Settings > Agent Runtime).
@@ -385,20 +782,34 @@ fn session_working_style(host: &HostContext, autonomous: bool) -> Option<String>
     if !style.enabled {
         return None;
     }
-    let raw = if style.text.trim().is_empty() { praxis_core::config::app_settings::DEFAULT_WORKING_STYLE.to_owned() } else { style.text.trim().to_owned() };
+    let raw = if style.text.trim().is_empty() {
+        praxis_core::config::app_settings::DEFAULT_WORKING_STYLE.to_owned()
+    } else {
+        style.text.trim().to_owned()
+    };
     if !autonomous {
         return Some(raw);
     }
-    let undo = regex::Regex::new(r"- Before anything that is hard to undo[^\n]*\n?").expect("static pattern");
-    let plan = regex::Regex::new(r"- Before a multi-step change, state a short plan[^\n]*\n?").expect("static pattern");
+    let undo = regex::Regex::new(r"- Before anything that is hard to undo[^\n]*\n?")
+        .expect("static pattern");
+    let plan = regex::Regex::new(r"- Before a multi-step change, state a short plan[^\n]*\n?")
+        .expect("static pattern");
     let raw = undo.replace_all(&raw, "- You have full autonomous execution authority in this isolated worktree. Proceed directly with all necessary edits, test executions, and commits without pausing to request approval.\n");
     let raw = plan.replace_all(&raw, "- Proceed directly to implement all planned changes, run verification tests, and commit cleanly to git.\n");
     Some(raw.trim().to_owned())
 }
 
 /// The project instructions (minus what the runtime reads itself) and working style a session carries.
-fn apply_session_context(host: &HostContext, task: &mut Value, runtime: &str, working_directory: Option<&str>, autonomous: bool) {
-    if let Some(instructions) = super::agent_runtime::session_instructions(host, runtime, working_directory) {
+fn apply_session_context(
+    host: &HostContext,
+    task: &mut Value,
+    runtime: &str,
+    working_directory: Option<&str>,
+    autonomous: bool,
+) {
+    if let Some(instructions) =
+        super::agent_runtime::session_instructions(host, runtime, working_directory)
+    {
         task["projectInstructions"] = json!(instructions);
     }
     if let Some(style) = session_working_style(host, autonomous) {
@@ -409,7 +820,11 @@ fn apply_session_context(host: &HostContext, task: &mut Value, runtime: &str, wo
 /// Records which adapter ran the session (`AgentRuntimeLaunch`).
 fn runtime_launch(prepared: &Prepared) -> Value {
     let transport = prepared.plan.state;
-    let adapter = if prepared.binding.is_some() { transport.to_owned() } else { format!("legacy-{transport}") };
+    let adapter = if prepared.binding.is_some() {
+        transport.to_owned()
+    } else {
+        format!("legacy-{transport}")
+    };
     let mut launch = json!({ "adapter": adapter, "transport": transport });
     if let Some(host_id) = &prepared.plan.host_id {
         launch["hostId"] = json!(host_id);
@@ -420,7 +835,13 @@ fn runtime_launch(prepared: &Prepared) -> Value {
     launch
 }
 
-fn finish_launch(dir: &std::path::Path, key: &str, input: &Value, prepared: &Prepared, skill_names: &[String]) -> Result<Value> {
+fn finish_launch(
+    dir: &std::path::Path,
+    key: &str,
+    input: &Value,
+    prepared: &Prepared,
+    skill_names: &[String],
+) -> Result<Value> {
     let sessions = store(dir);
     let launch = runtime_launch(prepared);
     let _ = sessions.mutate(key, true, |record| record["runtimeLaunch"] = launch);
@@ -435,7 +856,10 @@ fn finish_launch(dir: &std::path::Path, key: &str, input: &Value, prepared: &Pre
         });
     }
     if let (Some(binding), Some(host_id)) = (&prepared.binding, prepared.plan.host_id.as_deref()) {
-        let profile_id = non_empty(input, "profileId").or_else(|| non_empty(input, "agentId")).unwrap_or_default().to_owned();
+        let profile_id = non_empty(input, "profileId")
+            .or_else(|| non_empty(input, "agentId"))
+            .unwrap_or_default()
+            .to_owned();
         let (host_id, activations) = (host_id.to_owned(), binding.skill_activations.clone());
         let skills = skill_names.to_vec();
         let _ = sessions.mutate(key, true, |record| {
@@ -456,9 +880,13 @@ fn finish_launch(dir: &std::path::Path, key: &str, input: &Value, prepared: &Pre
         }
     }
     if let Some(parent) = non_empty(&input, "parentSessionKey").map(str::to_owned) {
-        let _ = sessions.mutate(key, true, |record| record["parentSessionKey"] = json!(parent));
+        let _ = sessions.mutate(key, true, |record| {
+            record["parentSessionKey"] = json!(parent)
+        });
     }
-    sessions.get(key)?.ok_or_else(|| failure(format!("Session for {key} did not start.")))
+    sessions
+        .get(key)?
+        .ok_or_else(|| failure(format!("Session for {key} did not start.")))
 }
 
 /// Normalises untrusted pasted images: base64 on a known image type, capped in count and size.
@@ -471,9 +899,24 @@ pub(super) fn sanitize_images(images: &Value) -> Vec<Value> {
         if out.len() >= MAX_IMAGES {
             break;
         }
-        let mime = raw["mimeType"].as_str().map(str::to_lowercase).unwrap_or_default();
-        let data: String = raw["dataBase64"].as_str().map(|d| d.split_once(',').filter(|(head, _)| head.starts_with("data:")).map_or(d, |(_, rest)| rest)).unwrap_or_default().split_whitespace().collect();
-        if !["image/png", "image/jpeg", "image/webp", "image/gif"].contains(&mime.as_str()) || data.is_empty() || data.len() % 4 != 0 {
+        let mime = raw["mimeType"]
+            .as_str()
+            .map(str::to_lowercase)
+            .unwrap_or_default();
+        let data: String = raw["dataBase64"]
+            .as_str()
+            .map(|d| {
+                d.split_once(',')
+                    .filter(|(head, _)| head.starts_with("data:"))
+                    .map_or(d, |(_, rest)| rest)
+            })
+            .unwrap_or_default()
+            .split_whitespace()
+            .collect();
+        if !["image/png", "image/jpeg", "image/webp", "image/gif"].contains(&mime.as_str())
+            || data.is_empty()
+            || data.len() % 4 != 0
+        {
             continue;
         }
         total += data.len() * 3 / 4;
@@ -487,73 +930,195 @@ pub(super) fn sanitize_images(images: &Value) -> Vec<Value> {
 
 /// `ai:continueSession(issueKey, message, images?, options?)`.
 fn continue_session(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
-    if store(dir).get(text(args, 0)?)?.is_some_and(|record| record["conversation"]["state"] == "running") {
-        return Err(failure("Stop the multi-AI conversation before sending a single-agent follow-up."));
+    if store(dir)
+        .get(text(args, 0)?)?
+        .is_some_and(|record| record["conversation"]["state"] == "running")
+    {
+        return Err(failure(
+            "Stop the multi-AI conversation before sending a single-agent follow-up.",
+        ));
     }
     continue_with(host, dir, args, false, None)
 }
 
 /// Continues a recorded session. `internal` marks a turn Praxis schedules between the AIs of a
 /// multi-AI conversation; `conversation_context` is the system context that turn adds.
-pub(super) fn continue_with(host: &HostContext, dir: &std::path::Path, args: &[Value], internal: bool, conversation_context: Option<&str>) -> Result<Value> {
+pub(super) fn continue_with(
+    host: &HostContext,
+    dir: &std::path::Path,
+    args: &[Value],
+    internal: bool,
+    conversation_context: Option<&str>,
+) -> Result<Value> {
     let key = text(args, 0)?;
-    let record = store(dir).get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
-    let provider = record["provider"].as_str().map(str::to_owned).unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
-    let cli = built_in_descriptors().into_iter().find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent);
-    let kind = if cli.is_some() { DescriptorKind::CliAgent } else { DescriptorKind::Api };
-    let override_path = host.settings().read().ai.providers.get(&provider).and_then(|c| c.cli_path.as_deref()).map(str::trim).filter(|p| !p.is_empty()).map(str::to_owned);
+    let record = store(dir)
+        .get(key)?
+        .ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
+    let provider = record["provider"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| host.settings().read().ai.active_provider.clone());
+    let cli = built_in_descriptors()
+        .into_iter()
+        .find(|d| d.id == provider && d.kind == DescriptorKind::CliAgent);
+    let kind = if cli.is_some() {
+        DescriptorKind::CliAgent
+    } else {
+        DescriptorKind::Api
+    };
+    let override_path = host
+        .settings()
+        .read()
+        .ai
+        .providers
+        .get(&provider)
+        .and_then(|c| c.cli_path.as_deref())
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned);
     let provider_command = override_path.or(cli.as_ref().and_then(|d| d.default_command.clone()));
-    let provider_args = cli.as_ref().map(|d| d.default_args.clone()).unwrap_or_default();
+    let provider_args = cli
+        .as_ref()
+        .map(|d| d.default_args.clone())
+        .unwrap_or_default();
     // A bound session continues through the same compiled adapter as its first turn.
-    let skills: Vec<String> = record["activeSkills"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect();
-    let (profile_id, host_id) = (non_empty(&record, "profileId"), non_empty(&record, "hostId"));
-    let prepared = prepare_launch(host, dir, profile_id, host_id, &provider, kind, provider_command.as_deref(), &provider_args, &skills)?;
+    let skills: Vec<String> = record["activeSkills"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect();
+    let (profile_id, host_id) = (
+        non_empty(&record, "profileId"),
+        non_empty(&record, "hostId"),
+    );
+    let prepared = prepare_launch(
+        host,
+        dir,
+        profile_id,
+        host_id,
+        &provider,
+        kind,
+        provider_command.as_deref(),
+        &provider_args,
+        &skills,
+    )?;
     // Recomputed each turn: a handover can move the session to a runtime that reads different files.
     let mut task = record["taskDefinition"].clone();
     if task.is_object() {
         for field in ["projectInstructions", "workingStyle"] {
             task.as_object_mut().map(|object| object.remove(field));
         }
-        let autonomous = record["autoApprovePermissions"] == true || record["permissionMode"] == "autopilot" || task["kind"] == "implementation";
-        let runtime = effective_runtime(&provider, kind, &prepared.plan, &cli_commands(&host.settings().read().ai));
-        apply_session_context(host, &mut task, &runtime, record["workingDirectory"].as_str(), autonomous);
+        let autonomous = record["autoApprovePermissions"] == true
+            || record["permissionMode"] == "autopilot"
+            || task["kind"] == "implementation";
+        let runtime = effective_runtime(
+            &provider,
+            kind,
+            &prepared.plan,
+            &cli_commands(&host.settings().read().ai),
+        );
+        apply_session_context(
+            host,
+            &mut task,
+            &runtime,
+            record["workingDirectory"].as_str(),
+            autonomous,
+        );
         let _ = store(dir).mutate(key, true, |stored| stored["taskDefinition"] = task);
     }
     if prepared.plan.state == "gateway" {
         let (connection, _) = super::ai_providers::api_connection(host, &provider)?;
-        let custom_without_auth = host.settings().read().ai.custom_providers.iter().flatten().any(|c| c.id == provider && serde_json::to_value(c).is_ok_and(|v| v["auth"]["kind"] == "none"));
-        if connection.options.api_key.as_deref().is_none_or(str::is_empty) && !custom_without_auth {
-            return Err(failure(format!("No {} API key configured for this session.", connection.label)));
+        let custom_without_auth = host
+            .settings()
+            .read()
+            .ai
+            .custom_providers
+            .iter()
+            .flatten()
+            .any(|c| {
+                c.id == provider
+                    && serde_json::to_value(c).is_ok_and(|v| v["auth"]["kind"] == "none")
+            });
+        if connection
+            .options
+            .api_key
+            .as_deref()
+            .is_none_or(str::is_empty)
+            && !custom_without_auth
+        {
+            return Err(failure(format!(
+                "No {} API key configured for this session.",
+                connection.label
+            )));
         }
-        super::api_host::continue_api_task(host, dir, key, text(args, 1)?, sanitize_images(args.get(2).unwrap_or(&Value::Null)), connection, internal, args.get(3).is_some_and(|o| o["gadgetAnswer"] == true), conversation_context)?;
+        super::api_host::continue_api_task(
+            host,
+            dir,
+            key,
+            text(args, 1)?,
+            sanitize_images(args.get(2).unwrap_or(&Value::Null)),
+            connection,
+            internal,
+            args.get(3).is_some_and(|o| o["gadgetAnswer"] == true),
+            conversation_context,
+        )?;
         let launch = runtime_launch(&prepared);
         let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
         return Ok(Value::Null);
     }
-    let command = prepared.plan.command.clone().ok_or_else(|| failure("No command is configured for this provider."))?;
+    let command = prepared
+        .plan
+        .command
+        .clone()
+        .ok_or_else(|| failure("No command is configured for this provider."))?;
     let tool_mode = record["toolMode"].as_str().unwrap_or("full").to_owned();
     let mut mcp_servers: Vec<Value> = Vec::new();
     // A free-form session has no tracker issue behind it.
     if !key.starts_with("SESSION-") {
-        mcp_servers.extend(super::builtin_mcp::tracker_server(host, dir, key, non_empty(&record, "connectionId"), &tool_mode));
+        mcp_servers.extend(super::builtin_mcp::tracker_server(
+            host,
+            dir,
+            key,
+            non_empty(&record, "connectionId"),
+            &tool_mode,
+        ));
     }
-    mcp_servers.extend(super::builtin_mcp::coordination_server(dir, key, record["workingDirectory"].as_str(), &tool_mode));
-    mcp_servers.extend(super::browser_mcp::server_for_session(host, dir, key, &tool_mode));
+    mcp_servers.extend(super::builtin_mcp::coordination_server(
+        dir,
+        key,
+        record["workingDirectory"].as_str(),
+        &tool_mode,
+    ));
+    mcp_servers.extend(super::browser_mcp::server_for_session(
+        host, dir, key, &tool_mode,
+    ));
     mcp_servers.extend(super::user_mcp::acp_servers(host, &tool_mode, &provider));
-    acp_host::continue_task(host, dir, key, Continue {
-        message: text(args, 1)?.to_owned(),
-        images: sanitize_images(args.get(2).unwrap_or(&Value::Null)),
-        provider, command, args: prepared.plan.args.clone(), mcp_servers,
-        gadget_answer: args.get(3).is_some_and(|o| o["gadgetAnswer"] == true),
-        internal, conversation_context: conversation_context.map(str::to_owned),
-    })?;
+    acp_host::continue_task(
+        host,
+        dir,
+        key,
+        Continue {
+            message: text(args, 1)?.to_owned(),
+            images: sanitize_images(args.get(2).unwrap_or(&Value::Null)),
+            provider,
+            command,
+            args: prepared.plan.args.clone(),
+            mcp_servers,
+            gadget_answer: args.get(3).is_some_and(|o| o["gadgetAnswer"] == true),
+            internal,
+            conversation_context: conversation_context.map(str::to_owned),
+        },
+    )?;
     let launch = runtime_launch(&prepared);
     let _ = store(dir).mutate(key, true, |stored| stored["runtimeLaunch"] = launch);
     Ok(Value::Null)
 }
 
 fn recovering() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
-    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    static SET: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
     SET.get_or_init(Default::default)
 }
 
@@ -561,10 +1126,22 @@ fn recovering() -> &'static std::sync::Mutex<std::collections::HashSet<String>> 
 fn resume_interrupted(host: &HostContext, dir: &std::path::Path, args: &[Value]) -> Result<Value> {
     let key = text(args, 0)?;
     let record = store(dir).get(key)?;
-    let awaiting = record.as_ref().is_some_and(|r| r["interruptedByRestart"] == true && r["archived"] != true && r["workflowNodeId"].is_null() && matches!(r["state"].as_str(), Some("aborted" | "paused")));
+    let awaiting = record.as_ref().is_some_and(|r| {
+        r["interruptedByRestart"] == true
+            && r["archived"] != true
+            && r["workflowNodeId"].is_null()
+            && matches!(r["state"].as_str(), Some("aborted" | "paused"))
+    });
     let gate = format!("{}\u{0}{key}", dir.display());
-    if !awaiting || acp_host::has_active_task(dir, key) || !recovering().lock().map_or(false, |mut set| set.insert(gate.clone())) {
-        return Err(failure("This session is no longer awaiting startup recovery."));
+    if !awaiting
+        || acp_host::has_active_task(dir, key)
+        || !recovering()
+            .lock()
+            .map_or(false, |mut set| set.insert(gate.clone()))
+    {
+        return Err(failure(
+            "This session is no longer awaiting startup recovery.",
+        ));
     }
     let outcome = (|| {
         let record = record.unwrap_or(Value::Null);
@@ -573,11 +1150,26 @@ fn resume_interrupted(host: &HostContext, dir: &std::path::Path, args: &[Value])
         if record["conversation"]["state"] == "running" {
             let _ = store(dir).mutate(key, true, |r| r["conversation"]["state"] = json!("stopped"));
         }
-        continue_session(host, dir, &[json!(key), json!("Resume the task interrupted by the app restart. Review the existing conversation and current state before continuing.")])?;
+        continue_session(
+            host,
+            dir,
+            &[
+                json!(key),
+                json!(
+                    "Resume the task interrupted by the app restart. Review the existing conversation and current state before continuing."
+                ),
+            ],
+        )?;
         let _ = store(dir).mutate(key, true, |r| {
             r.as_object_mut().map(|o| o.remove("interruptedByRestart"));
         });
-        super::log_bus::log(host, &format!("[ai] Resuming interrupted session provider={provider} session={key} at={}", super::now()));
+        super::log_bus::log(
+            host,
+            &format!(
+                "[ai] Resuming interrupted session provider={provider} session={key} at={}",
+                super::now()
+            ),
+        );
         Ok(Value::Null)
     })();
     if let Ok(mut set) = recovering().lock() {
@@ -586,7 +1178,12 @@ fn resume_interrupted(host: &HostContext, dir: &std::path::Path, args: &[Value])
     outcome
 }
 
-pub fn dispatch(host: &HostContext, dir: &std::path::Path, channel: &str, args: &[Value]) -> Option<Result<Value>> {
+pub fn dispatch(
+    host: &HostContext,
+    dir: &std::path::Path,
+    channel: &str,
+    args: &[Value],
+) -> Option<Result<Value>> {
     Some(match channel {
         "ai:delegate" => delegate(host, dir, args),
         "ai:continueSession" => continue_session(host, dir, args),
@@ -600,18 +1197,26 @@ pub fn dispatch(host: &HostContext, dir: &std::path::Path, channel: &str, args: 
                 && !acp_host::has_active_task(dir, key)
                 && !acp_host::is_terminal(record["state"].as_str().unwrap_or_default())
             {
-                if let Some(updated) = sessions.mutate(key, true, |r| r["state"] = json!("aborted"))? {
+                if let Some(updated) =
+                    sessions.mutate(key, true, |r| r["state"] = json!("aborted"))?
+                {
                     host.events().emit("ai:sessionChanged", Some(updated));
                 }
             }
             Ok(Value::Null)
         })(),
         "ai:respondToPermission" => (|| {
-            let decision = Decision::parse(text(args, 1)?).ok_or_else(|| failure("Unknown permission decision."))?;
+            let decision = Decision::parse(text(args, 1)?)
+                .ok_or_else(|| failure("Unknown permission decision."))?;
             acp_host::respond_to_permission(dir, text(args, 0)?, decision);
             Ok(Value::Null)
         })(),
-        "ai:setAcpMode" => acp_host::set_acp_mode(dir, text(args, 0).unwrap_or_default(), text(args, 1).unwrap_or_default()).map(|()| Value::Null),
+        "ai:setAcpMode" => acp_host::set_acp_mode(
+            dir,
+            text(args, 0).unwrap_or_default(),
+            text(args, 1).unwrap_or_default(),
+        )
+        .map(|()| Value::Null),
         _ => return None,
     })
 }

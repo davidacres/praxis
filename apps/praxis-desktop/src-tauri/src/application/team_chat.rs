@@ -16,10 +16,10 @@ use praxis_host::HostContext;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+use super::now;
 use super::runtime::runtime;
 use super::session_store::store;
 use super::team_chat_core::*;
-use super::now;
 
 // ── fault injection (e2e only) ───────────────────────────────────────────
 
@@ -51,7 +51,9 @@ pub mod faults {
     });
 
     fn faults() -> std::sync::MutexGuard<'static, Faults> {
-        FAULTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        FAULTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Applies a control message: a present key sets that fault (`null` clears it); `reset` clears all.
@@ -103,7 +105,8 @@ pub fn chats_file(dir: &Path) -> PathBuf {
 
 fn write_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: Mutex<()> = Mutex::new(());
-    LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn empty_snapshot() -> Value {
@@ -121,21 +124,46 @@ fn decode(raw: &str) -> Fallible<Value> {
         return Err("Missing teamChats array.".into());
     }
     for chat in arr_of(&value, "teamChats") {
-        let ok = ["id", "projectId", "title", "createdAt", "updatedAt"].iter().all(|k| is_text(&chat[*k])) && chat["messages"].is_array();
+        let ok = ["id", "projectId", "title", "createdAt", "updatedAt"]
+            .iter()
+            .all(|k| is_text(&chat[*k]))
+            && chat["messages"].is_array();
         if !ok {
             return Err("Invalid chat record.".into());
         }
     }
-    if value["schemaVersion"].is_null() && value.as_object().is_some_and(|o| o.keys().all(|k| k == "teamChats")) {
-        return Ok(json!({ "schemaVersion": 2, "revision": 0, "teamChats": value["teamChats"], "conversations": [] }));
+    if value["schemaVersion"].is_null()
+        && value
+            .as_object()
+            .is_some_and(|o| o.keys().all(|k| k == "teamChats"))
+    {
+        return Ok(
+            json!({ "schemaVersion": 2, "revision": 0, "teamChats": value["teamChats"], "conversations": [] }),
+        );
     }
-    if value["schemaVersion"] != 2 || !value["revision"].is_i64() || !value["conversations"].is_array() {
+    if value["schemaVersion"] != 2
+        || !value["revision"].is_i64()
+        || !value["conversations"].is_array()
+    {
         return Err("Invalid conversation envelope.".into());
     }
     let mut ids: HashSet<String> = HashSet::new();
     for conversation in arr_of(&value, "conversations") {
-        let arrays = ["messages", "participants", "turns", "bindings", "summaries", "pinnedMessageIds", "commandReceipts"];
-        if conversation["schemaVersion"] != 2 || !is_text(&conversation["id"]) || !conversation["revision"].is_i64() || !is_text(&conversation["coordinatorEpoch"]) || !arrays.iter().all(|k| conversation[*k].is_array()) {
+        let arrays = [
+            "messages",
+            "participants",
+            "turns",
+            "bindings",
+            "summaries",
+            "pinnedMessageIds",
+            "commandReceipts",
+        ];
+        if conversation["schemaVersion"] != 2
+            || !is_text(&conversation["id"])
+            || !conversation["revision"].is_i64()
+            || !is_text(&conversation["coordinatorEpoch"])
+            || !arrays.iter().all(|k| conversation[*k].is_array())
+        {
             return Err("Invalid durable conversation.".into());
         }
         if !ids.insert(str_of(conversation, "id").to_owned()) {
@@ -144,7 +172,12 @@ fn decode(raw: &str) -> Fallible<Value> {
         let mut sequence = 0;
         for message in arr_of(conversation, "messages") {
             let next = message["sequence"].as_i64().unwrap_or(0);
-            if next <= sequence || !is_text(&message["turnId"]) || !is_text(&message["text"]) || !is_text(&message["createdAt"]) || !message["attachments"].is_array() {
+            if next <= sequence
+                || !is_text(&message["turnId"])
+                || !is_text(&message["text"])
+                || !is_text(&message["createdAt"])
+                || !message["attachments"].is_array()
+            {
                 return Err("Invalid conversation message.".into());
             }
             sequence = next;
@@ -156,9 +189,17 @@ fn decode(raw: &str) -> Fallible<Value> {
 pub fn read_snapshot(dir: &Path) -> Fallible<Value> {
     let path = chats_file(dir);
     match std::fs::read_to_string(&path) {
-        Ok(raw) => decode(&raw).map_err(|e| format!("Cannot read team chat storage {}: Error: {e}", path.display())),
+        Ok(raw) => decode(&raw).map_err(|e| {
+            format!(
+                "Cannot read team chat storage {}: Error: {e}",
+                path.display()
+            )
+        }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(empty_snapshot()),
-        Err(error) => Err(format!("Cannot read team chat storage {}: {error}", path.display())),
+        Err(error) => Err(format!(
+            "Cannot read team chat storage {}: {error}",
+            path.display()
+        )),
     }
 }
 
@@ -172,7 +213,10 @@ fn commit(path: &Path, serialized: &str) -> Fallible {
     std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
     let temp = PathBuf::from(format!("{}.{}.tmp", path.display(), uuid::Uuid::new_v4()));
     let written = (|| -> std::io::Result<()> {
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
         file.write_all(serialized.as_bytes())?;
         file.sync_all()
     })();
@@ -203,7 +247,9 @@ pub fn transaction<T>(dir: &Path, mutate: impl FnOnce(&mut Value) -> Fallible<T>
 /// Pre-durable runtime session records, for migration to prove links from (read only).
 fn legacy_evidence(dir: &Path) -> Vec<LegacyEvidence> {
     let sessions = store(dir);
-    let Ok(all) = sessions.all() else { return Vec::new() };
+    let Ok(all) = sessions.all() else {
+        return Vec::new();
+    };
     let mut evidence = Vec::new();
     for (key, summary) in all {
         if parse_legacy_key(&key).is_none() || !summary["teamChatExecution"].is_null() {
@@ -212,13 +258,23 @@ fn legacy_evidence(dir: &Path) -> Vec<LegacyEvidence> {
         let record = sessions.get(&key).ok().flatten().unwrap_or(summary);
         let checkpoints = arr_of(&record, "events")
             .iter()
-            .filter(|e| e["type"] == "info" && e["summary"] == "Virtual Team transcript checkpoint" && !e["detail"].is_null())
+            .filter(|e| {
+                e["type"] == "info"
+                    && e["summary"] == "Virtual Team transcript checkpoint"
+                    && !e["detail"].is_null()
+            })
             .filter_map(|e| e["detail"].as_str().map(str::to_owned))
             .collect();
         evidence.push(LegacyEvidence {
             issue_key: key,
-            provider: record["provider"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
-            definition_of_done: record["taskDefinition"]["definitionOfDone"].as_str().filter(|p| !p.is_empty()).map(str::to_owned),
+            provider: record["provider"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(str::to_owned),
+            definition_of_done: record["taskDefinition"]["definitionOfDone"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(str::to_owned),
             checkpoint_message_ids: checkpoints,
         });
     }
@@ -238,14 +294,21 @@ pub fn activate(dir: &Path) -> Fallible {
     let serialized = serde_json::to_string_pretty(&candidate).map_err(|e| e.to_string())?;
     decode(&serialized)?;
     let path = chats_file(dir);
-    let original = std::fs::read_to_string(&path).unwrap_or_else(|_| json!({ "teamChats": [] }).to_string());
+    let original =
+        std::fs::read_to_string(&path).unwrap_or_else(|_| json!({ "teamChats": [] }).to_string());
     let backup = json!({ "version": 1, "original": original }).to_string();
     let backup_path = PathBuf::from(format!("{}.v1-backup", path.display()));
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    match std::fs::OpenOptions::new().write(true).create_new(true).open(&backup_path) {
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&backup_path)
+    {
         Ok(mut file) => {
             use std::io::Write;
-            file.write_all(backup.as_bytes()).and_then(|()| file.sync_all()).map_err(|e| e.to_string())?;
+            file.write_all(backup.as_bytes())
+                .and_then(|()| file.sync_all())
+                .map_err(|e| e.to_string())?;
         }
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error.to_string()),
@@ -270,10 +333,17 @@ fn attachment_location(dir: &Path, conversation_id: &str, digest: &str) -> Falli
     if digest.len() != 64 || !digest.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')) {
         return Err("Invalid attachment digest.".into());
     }
-    Ok(dir.join("team-chat-attachments").join(sha256_hex(conversation_id.as_bytes())).join(digest))
+    Ok(dir
+        .join("team-chat-attachments")
+        .join(sha256_hex(conversation_id.as_bytes()))
+        .join(digest))
 }
 
-pub fn stage_attachments(dir: &Path, conversation_id: &str, images: &[Value]) -> Fallible<Vec<Value>> {
+pub fn stage_attachments(
+    dir: &Path,
+    conversation_id: &str,
+    images: &[Value],
+) -> Fallible<Vec<Value>> {
     if images.len() > 8 {
         return Err("At most eight images may be attached.".into());
     }
@@ -284,19 +354,31 @@ pub fn stage_attachments(dir: &Path, conversation_id: &str, images: &[Value]) ->
             return Err("Unsupported attachment media type.".into());
         }
         let encoded = image["dataBase64"].as_str().unwrap_or_default();
-        let bytes = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap_or_default();
-        if bytes.is_empty() || bytes.len() > 10 * 1024 * 1024 || base64::engine::general_purpose::STANDARD.encode(&bytes) != encoded {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .unwrap_or_default();
+        if bytes.is_empty()
+            || bytes.len() > 10 * 1024 * 1024
+            || base64::engine::general_purpose::STANDARD.encode(&bytes) != encoded
+        {
             return Err("Invalid attachment bytes or size.".into());
         }
         let digest = sha256_hex(&bytes);
-        let reference = json!({ "id": digest, "digest": digest, "mediaType": media, "size": bytes.len() });
+        let reference =
+            json!({ "id": digest, "digest": digest, "mediaType": media, "size": bytes.len() });
         let file = attachment_location(dir, conversation_id, &digest)?;
         std::fs::create_dir_all(file.parent().unwrap_or(dir)).map_err(|e| e.to_string())?;
         let body = json!({ "ref": reference, "image": image }).to_string();
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&file) {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file)
+        {
             Ok(mut handle) => {
                 use std::io::Write;
-                handle.write_all(body.as_bytes()).map_err(|e| e.to_string())?;
+                handle
+                    .write_all(body.as_bytes())
+                    .map_err(|e| e.to_string())?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(error.to_string()),
@@ -307,14 +389,30 @@ pub fn stage_attachments(dir: &Path, conversation_id: &str, images: &[Value]) ->
     Ok(refs)
 }
 
-pub fn resolve_attachments(dir: &Path, conversation_id: &str, refs: &[Value]) -> Fallible<Vec<Value>> {
+pub fn resolve_attachments(
+    dir: &Path,
+    conversation_id: &str,
+    refs: &[Value],
+) -> Fallible<Vec<Value>> {
     let mut images = Vec::new();
     for reference in refs {
         let file = attachment_location(dir, conversation_id, str_of(reference, "digest"))?;
-        let raw = std::fs::read_to_string(&file).map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { "ENOENT".to_owned() } else { e.to_string() })?;
+        let raw = std::fs::read_to_string(&file).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "ENOENT".to_owned()
+            } else {
+                e.to_string()
+            }
+        })?;
         let stored: Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-        let bytes = base64::engine::general_purpose::STANDARD.decode(stored["image"]["dataBase64"].as_str().unwrap_or_default()).unwrap_or_default();
-        if stored["ref"]["id"] != reference["id"] || stored["ref"]["mediaType"] != reference["mediaType"] || bytes.len() as i64 != reference["size"].as_i64().unwrap_or(-1) || sha256_hex(&bytes) != str_of(reference, "digest") {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(stored["image"]["dataBase64"].as_str().unwrap_or_default())
+            .unwrap_or_default();
+        if stored["ref"]["id"] != reference["id"]
+            || stored["ref"]["mediaType"] != reference["mediaType"]
+            || bytes.len() as i64 != reference["size"].as_i64().unwrap_or(-1)
+            || sha256_hex(&bytes) != str_of(reference, "digest")
+        {
             return Err("Attachment integrity or ownership failure.".into());
         }
         images.push(stored["image"].clone());
@@ -335,7 +433,10 @@ pub struct Abort {
 
 impl Abort {
     fn new() -> Arc<Self> {
-        Arc::new(Self { flag: AtomicBool::new(false), sender: tokio::sync::watch::channel(false).0 })
+        Arc::new(Self {
+            flag: AtomicBool::new(false),
+            sender: tokio::sync::watch::channel(false).0,
+        })
     }
     fn trigger(&self) {
         self.flag.store(true, Ordering::SeqCst);
@@ -369,8 +470,18 @@ pub struct Coordinator {
 pub fn coordinator(host: &HostContext) -> Arc<Coordinator> {
     static ALL: OnceLock<Mutex<HashMap<PathBuf, Arc<Coordinator>>>> = OnceLock::new();
     let dir = host.config().user_data_dir.clone();
-    let mut all = ALL.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    Arc::clone(all.entry(dir.clone()).or_insert_with(|| Arc::new(Coordinator { host: host.clone(), dir, loops: Mutex::default(), initialized: Mutex::new(false) })))
+    let mut all = ALL
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Arc::clone(all.entry(dir.clone()).or_insert_with(|| {
+        Arc::new(Coordinator {
+            host: host.clone(),
+            dir,
+            loops: Mutex::default(),
+            initialized: Mutex::new(false),
+        })
+    }))
 }
 
 struct ExecError {
@@ -381,41 +492,64 @@ struct ExecError {
 
 impl ExecError {
     fn plain(message: impl ToString) -> Self {
-        Self { message: message.to_string(), unknown: false }
+        Self {
+            message: message.to_string(),
+            unknown: false,
+        }
     }
 }
 
 impl Coordinator {
     fn loops(&self) -> std::sync::MutexGuard<'_, Loops> {
-        self.loops.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        self.loops
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn notify(&self, update: Value) {
-        if let (Some(id), Some(revision)) = (update["conversationId"].as_str(), update["revision"].as_i64()) {
+        if let (Some(id), Some(revision)) = (
+            update["conversationId"].as_str(),
+            update["revision"].as_i64(),
+        ) {
             let mut loops = self.loops();
             let seen = loops.notified.entry(id.to_owned()).or_insert(-1);
             *seen = (*seen).max(revision);
         }
-        self.host.events().emit("assistant:conversationUpdate", Some(update));
+        self.host
+            .events()
+            .emit("assistant:conversationUpdate", Some(update));
         self.host.events().emit("assistant:chatsChanged", None);
     }
 
     pub fn get_conversation(&self, id: &str) -> Fallible<Option<Value>> {
-        Ok(arr_of(&read_snapshot(&self.dir)?, "conversations").iter().find(|c| c["id"] == id).cloned())
+        Ok(arr_of(&read_snapshot(&self.dir)?, "conversations")
+            .iter()
+            .find(|c| c["id"] == id)
+            .cloned())
     }
 
     /// One validated conversation transition. `mutate` works on a copy; an error commits nothing.
-    fn transition(self: &Arc<Self>, id: &str, touch_updated_at: bool, mutate: impl FnOnce(&mut Value) -> Fallible) -> Fallible<Value> {
+    fn transition(
+        self: &Arc<Self>,
+        id: &str,
+        touch_updated_at: bool,
+        mutate: impl FnOnce(&mut Value) -> Fallible,
+    ) -> Fallible<Value> {
         let clock = now();
         let committed = transaction(&self.dir, |snapshot| {
-            let index = arr_of(snapshot, "conversations").iter().position(|c| c["id"] == id).ok_or_else(|| format!("Conversation {id} was not found."))?;
+            let index = arr_of(snapshot, "conversations")
+                .iter()
+                .position(|c| c["id"] == id)
+                .ok_or_else(|| format!("Conversation {id} was not found."))?;
             let current = snapshot["conversations"][index].clone();
             let mut next = current.clone();
             mutate(&mut next)?;
             if touch_updated_at && next["revision"].as_i64() > current["revision"].as_i64() {
                 next["updatedAt"] = json!(clock);
             }
-            if snapshot["activation"].is_object() && arr_of(&next, "turns").len() > arr_of(&current, "turns").len() {
+            if snapshot["activation"].is_object()
+                && arr_of(&next, "turns").len() > arr_of(&current, "turns").len()
+            {
                 snapshot["activation"]["acceptedNewTurns"] = json!(true);
             }
             snapshot["conversations"][index] = next.clone();
@@ -438,7 +572,10 @@ impl Coordinator {
 
     /// Persist a new generation once before accepting scheduling work (`initialize`).
     pub fn initialize(self: &Arc<Self>) -> Fallible {
-        let mut done = self.initialized.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut done = self
+            .initialized
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if *done {
             return Ok(());
         }
@@ -451,15 +588,32 @@ impl Coordinator {
                 begin_epoch(c, revision, &epoch, &now())
             })?;
             for turn in arr_of(&updated, "turns").to_vec() {
-                let Some(attempt) = arr_of(&turn, "attempts").last().cloned() else { continue };
-                let recoverable = ["prepared", "dispatching", "running", "awaiting_approval", "interrupted", "outcome_unknown", "failed"].contains(&str_of(&attempt, "state"));
-                if recoverable && arr_of(&attempt, "recoveryEvidence").iter().any(|e| e["kind"] == "final_result" && evidence_text(e).is_some()) {
+                let Some(attempt) = arr_of(&turn, "attempts").last().cloned() else {
+                    continue;
+                };
+                let recoverable = [
+                    "prepared",
+                    "dispatching",
+                    "running",
+                    "awaiting_approval",
+                    "interrupted",
+                    "outcome_unknown",
+                    "failed",
+                ]
+                .contains(&str_of(&attempt, "state"));
+                if recoverable
+                    && arr_of(&attempt, "recoveryEvidence")
+                        .iter()
+                        .any(|e| e["kind"] == "final_result" && evidence_text(e).is_some())
+                {
                     self.import_recovered_result(&id, str_of(&turn, "id"), str_of(&attempt, "id"))?;
                 }
             }
             updated = self.get_conversation(&id)?.unwrap_or(updated);
             for turn in arr_of(&updated, "turns").to_vec() {
-                let Some(attempt) = arr_of(&turn, "attempts").last().cloned() else { continue };
+                let Some(attempt) = arr_of(&turn, "attempts").last().cloned() else {
+                    continue;
+                };
                 if attempt["pendingApproval"]["status"] != "invalidated" {
                     continue;
                 }
@@ -469,7 +623,15 @@ impl Coordinator {
                     let restored = self.transition(&id, false, |c| {
                         let revision = c["revision"].as_i64().unwrap_or(0);
                         let epoch = str_of(c, "coordinatorEpoch").to_owned();
-                        restore_approval(c, revision, str_of(&turn, "id"), str_of(&attempt, "id"), &epoch, &request_id, &now())
+                        restore_approval(
+                            c,
+                            revision,
+                            str_of(&turn, "id"),
+                            str_of(&attempt, "id"),
+                            &epoch,
+                            &request_id,
+                            &now(),
+                        )
                     })?;
                     self.notify(json!({ "conversationId": id, "revision": restored["revision"], "type": "approval_restored", "turnId": turn["id"], "attemptId": attempt["id"] }));
                 } else {
@@ -477,7 +639,10 @@ impl Coordinator {
                 }
             }
             let updated = self.get_conversation(&id)?.unwrap_or(updated);
-            if let Some(turn) = arr_of(&updated, "turns").iter().find(|t| matches!(str_of(t, "state"), "interrupted" | "outcome_unknown")) {
+            if let Some(turn) = arr_of(&updated, "turns")
+                .iter()
+                .find(|t| matches!(str_of(t, "state"), "interrupted" | "outcome_unknown"))
+            {
                 self.notify(json!({ "conversationId": id, "revision": updated["revision"], "type": "turn_failed", "turnId": turn["id"], "state": turn["state"] }));
             }
         }
@@ -491,8 +656,13 @@ impl Coordinator {
 
     /// Live runtime permission requests for an attempt (a request survives only while its session waits).
     fn live_approvals(&self, attempt_id: &str) -> Vec<String> {
-        let Ok(all) = store(&self.dir).all() else { return Vec::new() };
-        all.values().filter(|r| r["teamChatExecution"]["attemptId"] == attempt_id).filter_map(approval_request_id).collect()
+        let Ok(all) = store(&self.dir).all() else {
+            return Vec::new();
+        };
+        all.values()
+            .filter(|r| r["teamChatExecution"]["attemptId"] == attempt_id)
+            .filter_map(approval_request_id)
+            .collect()
     }
 
     fn spawn_process(self: &Arc<Self>, id: &str) {
@@ -539,7 +709,11 @@ impl Coordinator {
             return Err("A message text is required.".into());
         }
         let options = &command["runtimeOptions"];
-        let invalid = |key: &str, allowed: &[&str]| options.get(key).is_some_and(|v| !v.is_null() && !allowed.contains(&v.as_str().unwrap_or("\u{0}")));
+        let invalid = |key: &str, allowed: &[&str]| {
+            options
+                .get(key)
+                .is_some_and(|v| !v.is_null() && !allowed.contains(&v.as_str().unwrap_or("\u{0}")))
+        };
         if invalid("permissionMode", &["manual", "auto", "bypass", "autopilot"]) {
             return Err("Invalid permission choice.".into());
         }
@@ -550,21 +724,34 @@ impl Coordinator {
             return Err("Invalid execution mode.".into());
         }
         for attachment in command["attachmentRefs"].as_array().into_iter().flatten() {
-            if attachment["digest"].as_str().is_none_or(str::is_empty) || attachment["mediaType"].as_str().is_none_or(str::is_empty) {
+            if attachment["digest"].as_str().is_none_or(str::is_empty)
+                || attachment["mediaType"].as_str().is_none_or(str::is_empty)
+            {
                 return Err("Invalid attachment reference.".into());
             }
         }
         let conversation_id = str_of(command, "conversationId").to_owned();
         let command_id = str_of(command, "commandId").to_owned();
         let snapshot = read_snapshot(&self.dir)?;
-        let conversation = arr_of(&snapshot, "conversations").iter().find(|c| c["id"] == conversation_id.as_str()).cloned().ok_or_else(|| format!("Conversation {conversation_id} was not found."))?;
+        let conversation = arr_of(&snapshot, "conversations")
+            .iter()
+            .find(|c| c["id"] == conversation_id.as_str())
+            .cloned()
+            .ok_or_else(|| format!("Conversation {conversation_id} was not found."))?;
         let payload_digest = payload_digest(command)?;
-        if let Some(receipt) = arr_of(&conversation, "commandReceipts").iter().find(|r| r["commandId"] == command_id.as_str()) {
+        if let Some(receipt) = arr_of(&conversation, "commandReceipts")
+            .iter()
+            .find(|r| r["commandId"] == command_id.as_str())
+        {
             if receipt["payloadDigest"] != payload_digest {
                 return Err("Command payload conflict.".into());
             }
-            let turn = arr_of(&conversation, "turns").iter().find(|t| t["id"] == receipt["turnId"]);
-            return Ok(json!({ "turnId": receipt["turnId"], "revision": conversation["revision"], "state": turn.map_or(json!("completed"), |t| t["state"].clone()) }));
+            let turn = arr_of(&conversation, "turns")
+                .iter()
+                .find(|t| t["id"] == receipt["turnId"]);
+            return Ok(
+                json!({ "turnId": receipt["turnId"], "revision": conversation["revision"], "state": turn.map_or(json!("completed"), |t| t["state"].clone()) }),
+            );
         }
         assert_known_participants(&conversation, command)?;
         let turn_id = new_id();
@@ -603,31 +790,73 @@ impl Coordinator {
             let revision = conv["revision"].as_i64().unwrap_or(0);
             submit_turn(conv, revision, command, &turn, &message)
         })?;
-        let accepted_id = arr_of(&updated, "commandReceipts").iter().find(|r| r["commandId"] == command_id.as_str()).map(|r| r["turnId"].clone()).unwrap_or(Value::Null);
-        let accepted = arr_of(&updated, "turns").iter().find(|t| t["id"] == accepted_id).cloned().ok_or("The accepted turn is missing.")?;
+        let accepted_id = arr_of(&updated, "commandReceipts")
+            .iter()
+            .find(|r| r["commandId"] == command_id.as_str())
+            .map(|r| r["turnId"].clone())
+            .unwrap_or(Value::Null);
+        let accepted = arr_of(&updated, "turns")
+            .iter()
+            .find(|t| t["id"] == accepted_id)
+            .cloned()
+            .ok_or("The accepted turn is missing.")?;
         if accepted["id"] != turn_id.as_str() {
-            return Ok(json!({ "turnId": accepted["id"], "revision": updated["revision"], "state": accepted["state"] }));
+            return Ok(
+                json!({ "turnId": accepted["id"], "revision": updated["revision"], "state": accepted["state"] }),
+            );
         }
-        let message = arr_of(&updated, "messages").iter().find(|m| m["id"] == accepted["userMessageId"]).cloned().unwrap_or(Value::Null);
+        let message = arr_of(&updated, "messages")
+            .iter()
+            .find(|m| m["id"] == accepted["userMessageId"])
+            .cloned()
+            .unwrap_or(Value::Null);
         self.notify(json!({ "conversationId": conversation_id, "revision": updated["revision"], "type": "turn_accepted", "turnId": accepted["id"], "message": message, "state": "queued" }));
         self.spawn_process(&conversation_id);
-        Ok(json!({ "turnId": accepted["id"], "revision": updated["revision"], "state": accepted["state"] }))
+        Ok(
+            json!({ "turnId": accepted["id"], "revision": updated["revision"], "state": accepted["state"] }),
+        )
     }
 
     /// `captureRuntimeOptions`: fix the provider, model, tool mode and folder at acceptance.
     fn capture_runtime_options(&self, options: &Value) -> Value {
         let settings = self.host.settings().read();
         let ai = &settings.ai;
-        let provider = options["provider"].as_str().map_or_else(|| ai.active_provider.clone(), str::to_owned);
-        let configured = if provider == "vercel-gateway" { Some(ai.default_model.clone()) } else { ai.providers.get(&provider).and_then(|c| c.default_model.clone()) };
-        let model = options["model"].as_str().filter(|m| !m.is_empty()).map(str::to_owned).or(configured.filter(|m| !m.is_empty()));
+        let provider = options["provider"]
+            .as_str()
+            .map_or_else(|| ai.active_provider.clone(), str::to_owned);
+        let configured = if provider == "vercel-gateway" {
+            Some(ai.default_model.clone())
+        } else {
+            ai.providers
+                .get(&provider)
+                .and_then(|c| c.default_model.clone())
+        };
+        let model = options["model"]
+            .as_str()
+            .filter(|m| !m.is_empty())
+            .map(str::to_owned)
+            .or(configured.filter(|m| !m.is_empty()));
         let mut captured = options.as_object().cloned().unwrap_or_default();
         captured.insert("provider".into(), json!(provider));
         if let Some(model) = model {
             captured.insert("model".into(), json!(model));
         }
-        captured.insert("toolMode".into(), if options["toolMode"].is_null() { json!("project-only") } else { options["toolMode"].clone() });
-        captured.insert("workingDirectory".into(), if options["workingDirectory"].is_null() { json!(ai.working_directory) } else { options["workingDirectory"].clone() });
+        captured.insert(
+            "toolMode".into(),
+            if options["toolMode"].is_null() {
+                json!("project-only")
+            } else {
+                options["toolMode"].clone()
+            },
+        );
+        captured.insert(
+            "workingDirectory".into(),
+            if options["workingDirectory"].is_null() {
+                json!(ai.working_directory)
+            } else {
+                options["workingDirectory"].clone()
+            },
+        );
         Value::Object(captured)
     }
 
@@ -635,7 +864,16 @@ impl Coordinator {
     pub fn control_with_outcome(self: &Arc<Self>, command: &Value) -> Fallible<Value> {
         self.initialize()?;
         let action = str_of(command, "action").to_owned();
-        if !["cancel", "retry", "pin", "unpin", "resume-context", "reconcile"].contains(&action.as_str()) {
+        if ![
+            "cancel",
+            "retry",
+            "pin",
+            "unpin",
+            "resume-context",
+            "reconcile",
+        ]
+        .contains(&action.as_str())
+        {
             return Err("Invalid conversation control.".into());
         }
         let digest = payload_digest(command)?;
@@ -765,12 +1003,19 @@ impl Coordinator {
             self.notify(json!({ "conversationId": updated["id"], "revision": updated["revision"], "type": "turn_accepted" }));
             self.spawn_process(&conversation_id);
         }
-        let mut outcome = rejection.into_inner().unwrap_or_else(|| json!({ "status": "applied" }));
+        let mut outcome = rejection
+            .into_inner()
+            .unwrap_or_else(|| json!({ "status": "applied" }));
         outcome["conversation"] = updated;
         Ok(outcome)
     }
 
-    fn import_recovered_result(self: &Arc<Self>, conversation_id: &str, turn_id: &str, attempt_id: &str) -> Fallible {
+    fn import_recovered_result(
+        self: &Arc<Self>,
+        conversation_id: &str,
+        turn_id: &str,
+        attempt_id: &str,
+    ) -> Fallible {
         self.transition(conversation_id, true, |conv| {
             let turn = arr_of(conv, "turns").iter().find(|t| t["id"] == turn_id).cloned();
             let attempt = turn.as_ref().and_then(|t| arr_of(t, "attempts").iter().find(|a| a["id"] == attempt_id).cloned());
@@ -822,12 +1067,18 @@ impl Coordinator {
         if !self.spawn_loop_guard(&id) {
             return;
         }
-        let loop_epoch = self.get_conversation(&id).ok().flatten().map(|c| c["coordinatorEpoch"].clone());
+        let loop_epoch = self
+            .get_conversation(&id)
+            .ok()
+            .flatten()
+            .map(|c| c["coordinatorEpoch"].clone());
         let result = Arc::clone(&self).run_loop(&id).await;
         if let Err(message) = result {
             // A deleted conversation or a newer epoch fences this loop: late callbacks only drain.
             let current = self.get_conversation(&id).ok().flatten();
-            if current.as_ref().map(|c| c["coordinatorEpoch"].clone()) == loop_epoch && current.is_some() {
+            if current.as_ref().map(|c| c["coordinatorEpoch"].clone()) == loop_epoch
+                && current.is_some()
+            {
                 self.loops().halted.insert(id.clone(), message.clone());
                 self.report_loop_stop(&id, &message);
             }
@@ -837,8 +1088,13 @@ impl Coordinator {
 
     fn report_loop_stop(&self, id: &str, message: &str) {
         eprintln!("Team chat {id} stopped: {message}");
-        let Ok(Some(current)) = self.get_conversation(id) else { return };
-        let turn = arr_of(&current, "turns").iter().find(|t| !matches!(str_of(t, "state"), "queued" | "completed" | "cancelled")).cloned();
+        let Ok(Some(current)) = self.get_conversation(id) else {
+            return;
+        };
+        let turn = arr_of(&current, "turns")
+            .iter()
+            .find(|t| !matches!(str_of(t, "state"), "queued" | "completed" | "cancelled"))
+            .cloned();
         let mut update = json!({ "conversationId": id, "revision": current["revision"], "type": "turn_failed", "error": format!("{message} Restart Praxis to recover this team chat.") });
         if let Some(turn) = turn {
             update["turnId"] = turn["id"].clone();
@@ -849,28 +1105,53 @@ impl Coordinator {
 
     async fn run_loop(self: Arc<Self>, id: &str) -> Fallible {
         loop {
-            let Some(mut conversation) = self.get_conversation(id)? else { return Ok(()) };
-            let mut active_turn = arr_of(&conversation, "turns").iter().find(|t| t["state"] == "running").cloned();
+            let Some(mut conversation) = self.get_conversation(id)? else {
+                return Ok(());
+            };
+            let mut active_turn = arr_of(&conversation, "turns")
+                .iter()
+                .find(|t| t["state"] == "running")
+                .cloned();
             if active_turn.is_none() {
-                if arr_of(&conversation, "turns").iter().any(|t| !matches!(str_of(t, "state"), "queued" | "completed" | "cancelled")) {
+                if arr_of(&conversation, "turns")
+                    .iter()
+                    .any(|t| !matches!(str_of(t, "state"), "queued" | "completed" | "cancelled"))
+                {
                     return Ok(());
                 }
-                let Some(next) = arr_of(&conversation, "turns").iter().find(|t| t["state"] == "queued").cloned() else { return Ok(()) };
+                let Some(next) = arr_of(&conversation, "turns")
+                    .iter()
+                    .find(|t| t["state"] == "queued")
+                    .cloned()
+                else {
+                    return Ok(());
+                };
                 let started = self.transition(id, true, |c| {
                     let revision = c["revision"].as_i64().unwrap_or(0);
                     start_turn(c, revision, str_of(&next, "id"))
                 })?;
                 self.notify(json!({ "conversationId": id, "revision": started["revision"], "type": "turn_started", "turnId": next["id"], "state": "running" }));
-                active_turn = arr_of(&started, "turns").iter().find(|t| t["id"] == next["id"]).cloned();
+                active_turn = arr_of(&started, "turns")
+                    .iter()
+                    .find(|t| t["id"] == next["id"])
+                    .cloned();
                 conversation = started;
             }
-            let Some(turn) = active_turn.filter(|t| t["state"] == "running") else { return Ok(()) };
+            let Some(turn) = active_turn.filter(|t| t["state"] == "running") else {
+                return Ok(());
+            };
             let turn_id = str_of(&turn, "id").to_owned();
             let completed = arr_of(&turn, "completedParticipantIds").to_vec();
             let skipped = arr_of(&turn, "skippedParticipantIds").to_vec();
-            let Some(participant) = arr_of(&turn["plan"], "participants").iter().find(|p| !completed.contains(&p["id"]) && !skipped.contains(&p["id"])).cloned() else {
+            let Some(participant) = arr_of(&turn["plan"], "participants")
+                .iter()
+                .find(|p| !completed.contains(&p["id"]) && !skipped.contains(&p["id"]))
+                .cloned()
+            else {
                 self.transition(id, true, |c| {
-                    if let Some(t) = arr_mut(c, "turns").iter_mut().find(|t| t["id"] == turn_id.as_str())
+                    if let Some(t) = arr_mut(c, "turns")
+                        .iter_mut()
+                        .find(|t| t["id"] == turn_id.as_str())
                         && t["state"] != "completed"
                     {
                         t["state"] = json!("completed");
@@ -887,40 +1168,80 @@ impl Coordinator {
 
             // Prepare the attempt.
             let attempt_id = new_id();
-            let ordinal = arr_of(&turn, "attempts").iter().filter(|a| a["participantId"] == participant["id"]).count() + 1;
+            let ordinal = arr_of(&turn, "attempts")
+                .iter()
+                .filter(|a| a["participantId"] == participant["id"])
+                .count()
+                + 1;
             let visible = eligible_messages(&conversation, &turn);
             let mut binding: Option<Value> = None;
             let mut context_limit: i64 = 32768;
             let prepared: Result<(PreparedContext, PreparedContext), (String, bool)> = (|| {
-                let configuration = self.prepare_configuration(&conversation, &turn, &participant).map_err(|e| (e, false))?;
+                let configuration = self
+                    .prepare_configuration(&conversation, &turn, &participant)
+                    .map_err(|e| (e, false))?;
                 if let Some(limit) = configuration["contextLimit"].as_i64() {
                     context_limit = limit;
                 }
                 let configuration_id = new_id();
                 let mut resolved = None;
                 self.transition(id, true, |c| {
-                    resolved = Some(resolve_binding(arr_mut(c, "bindings"), &configuration, &configuration_id)?);
+                    resolved = Some(resolve_binding(
+                        arr_mut(c, "bindings"),
+                        &configuration,
+                        &configuration_id,
+                    )?);
                     let revision = c["revision"].as_i64().unwrap_or(0);
                     c["revision"] = json!(revision + 1);
                     Ok(())
                 })
                 .map_err(|e| (e, false))?;
                 binding = resolved;
-                conversation = self.get_conversation(id).map_err(|e| (e, false))?.ok_or_else(|| ("The conversation was removed.".to_owned(), false))?;
-                let first = prepare_context(&conversation, &turn, &participant, binding.as_ref(), false, context_limit, 12288).map_err(|e| (e.message, true))?;
-                let native = if binding.as_ref().is_some_and(|b| !arr_of(b, "deliveredMessageIds").is_empty()) {
-                    prepare_context(&conversation, &turn, &participant, binding.as_ref(), true, context_limit, 12288).map_err(|e| (e.message, true))?
+                conversation = self
+                    .get_conversation(id)
+                    .map_err(|e| (e, false))?
+                    .ok_or_else(|| ("The conversation was removed.".to_owned(), false))?;
+                let first = prepare_context(
+                    &conversation,
+                    &turn,
+                    &participant,
+                    binding.as_ref(),
+                    false,
+                    context_limit,
+                    12288,
+                )
+                .map_err(|e| (e.message, true))?;
+                let native = if binding
+                    .as_ref()
+                    .is_some_and(|b| !arr_of(b, "deliveredMessageIds").is_empty())
+                {
+                    prepare_context(
+                        &conversation,
+                        &turn,
+                        &participant,
+                        binding.as_ref(),
+                        true,
+                        context_limit,
+                        12288,
+                    )
+                    .map_err(|e| (e.message, true))?
                 } else {
-                    PreparedContext { prompt: first.prompt.clone(), receipt: first.receipt.clone() }
+                    PreparedContext {
+                        prompt: first.prompt.clone(),
+                        receipt: first.receipt.clone(),
+                    }
                 };
                 Ok((first, native))
-            })();
+            })(
+            );
             let _ = visible;
             let (prepared, native_prepared) = match prepared {
                 Ok(both) => both,
                 Err((message, _)) => {
                     let paused = self.transition(id, true, |c| {
-                        if let Some(t) = arr_mut(c, "turns").iter_mut().find(|t| t["id"] == turn_id.as_str())
+                        if let Some(t) = arr_mut(c, "turns")
+                            .iter_mut()
+                            .find(|t| t["id"] == turn_id.as_str())
                             && t["state"] == "running"
                         {
                             t["state"] = json!("context_required");
@@ -930,7 +1251,10 @@ impl Coordinator {
                         }
                         Ok(())
                     })?;
-                    if arr_of(&paused, "turns").iter().any(|t| t["id"] == turn_id.as_str() && t["state"] == "context_required") {
+                    if arr_of(&paused, "turns")
+                        .iter()
+                        .any(|t| t["id"] == turn_id.as_str() && t["state"] == "context_required")
+                    {
                         self.notify(json!({ "conversationId": id, "revision": paused["revision"], "type": "context_required", "turnId": turn_id, "state": "context_required", "error": message }));
                     }
                     return Ok(());
@@ -942,12 +1266,22 @@ impl Coordinator {
             if let Some(binding) = &binding {
                 attempt["bindingId"] = binding["id"].clone();
             }
-            let still_running = self.get_conversation(id)?.and_then(|c| arr_of(&c, "turns").iter().find(|t| t["id"] == turn_id.as_str()).map(|t| t["state"] == "running")).unwrap_or(false);
+            let still_running = self
+                .get_conversation(id)?
+                .and_then(|c| {
+                    arr_of(&c, "turns")
+                        .iter()
+                        .find(|t| t["id"] == turn_id.as_str())
+                        .map(|t| t["state"] == "running")
+                })
+                .unwrap_or(false);
             if !still_running {
                 return Ok(());
             }
             let reserved = self.transition(id, true, |c| {
-                let running = arr_of(c, "turns").iter().any(|t| t["id"] == turn_id.as_str() && t["state"] == "running");
+                let running = arr_of(c, "turns")
+                    .iter()
+                    .any(|t| t["id"] == turn_id.as_str() && t["state"] == "running");
                 if !running {
                     return Ok(());
                 }
@@ -960,25 +1294,54 @@ impl Coordinator {
                 Err(message) if message == "Invalid or fenced attempt." => return Ok(()),
                 Err(message) => return Err(message),
             };
-            if !arr_of(&current, "turns").iter().any(|t| t["id"] == turn_id.as_str() && t["state"] == "running") {
+            if !arr_of(&current, "turns")
+                .iter()
+                .any(|t| t["id"] == turn_id.as_str() && t["state"] == "running")
+            {
                 return Ok(());
             }
             let dispatch_time = now();
             let current = self.transition(id, true, |c| {
                 let revision = c["revision"].as_i64().unwrap_or(0);
                 let epoch = str_of(c, "coordinatorEpoch").to_owned();
-                advance_attempt(c, revision, &turn_id, &attempt_id, &epoch, "dispatching", &dispatch_time)
+                advance_attempt(
+                    c,
+                    revision,
+                    &turn_id,
+                    &attempt_id,
+                    &epoch,
+                    "dispatching",
+                    &dispatch_time,
+                )
             })?;
 
             let abort = Abort::new();
             let abort_key = format!("{id}:{turn_id}:{attempt_id}");
-            self.loops().aborts.insert(abort_key.clone(), Arc::clone(&abort));
-            let context = Arc::new(ExecContext { coordinator: Arc::clone(&self), conversation_id: id.to_owned(), turn_id: turn_id.clone(), attempt_id: attempt_id.clone(), epoch: epoch.clone(), accepted: Mutex::new(false) });
+            self.loops()
+                .aborts
+                .insert(abort_key.clone(), Arc::clone(&abort));
+            let context = Arc::new(ExecContext {
+                coordinator: Arc::clone(&self),
+                conversation_id: id.to_owned(),
+                turn_id: turn_id.clone(),
+                attempt_id: attempt_id.clone(),
+                epoch: epoch.clone(),
+                accepted: Mutex::new(false),
+            });
             while faults::dispatch_held() {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
             let outcome = Arc::clone(&self)
-                .execute(Arc::clone(&context), &current, &turn, &attempt, &participant, &prepared.prompt, &native_prepared.prompt, Arc::clone(&abort))
+                .execute(
+                    Arc::clone(&context),
+                    &current,
+                    &turn,
+                    &attempt,
+                    &participant,
+                    &prepared.prompt,
+                    &native_prepared.prompt,
+                    Arc::clone(&abort),
+                )
                 .await;
             let mut execution_error: Option<ExecError> = None;
             let mut result: Option<Value> = None;
@@ -1028,15 +1391,26 @@ impl Coordinator {
                     self.import_recovered_result(id, &turn_id, &attempt_id)?;
                 }
                 if let Some(settled) = self.get_conversation(id)? {
-                    let state = arr_of(&settled, "turns").iter().find(|t| t["id"] == turn_id.as_str()).map(|t| t["state"].clone());
+                    let state = arr_of(&settled, "turns")
+                        .iter()
+                        .find(|t| t["id"] == turn_id.as_str())
+                        .map(|t| t["state"].clone());
                     self.notify(json!({ "conversationId": id, "revision": settled["revision"], "type": "turn_cancelled", "turnId": turn_id, "state": state }));
                 }
                 return Ok(());
             }
 
             let latest = self.get_conversation(id)?;
-            let latest_turn = latest.as_ref().and_then(|c| arr_of(c, "turns").iter().find(|t| t["id"] == turn_id.as_str()).cloned());
-            if latest_turn.as_ref().is_none_or(|t| t["state"] == "cancelled") {
+            let latest_turn = latest.as_ref().and_then(|c| {
+                arr_of(c, "turns")
+                    .iter()
+                    .find(|t| t["id"] == turn_id.as_str())
+                    .cloned()
+            });
+            if latest_turn
+                .as_ref()
+                .is_none_or(|t| t["state"] == "cancelled")
+            {
                 return Ok(());
             }
 
@@ -1046,22 +1420,49 @@ impl Coordinator {
                     let epoch_now = str_of(c, "coordinatorEpoch").to_owned();
                     let binding_updates: Vec<Value>;
                     {
-                        let Some(turn) = arr_mut(c, "turns").iter_mut().find(|t| t["id"] == turn_id.as_str()) else { return Ok(()) };
-                        let last_is_target = arr_of(turn, "attempts").last().is_some_and(|a| a["id"] == attempt_id.as_str());
-                        let Some(index) = arr_of(turn, "attempts").iter().position(|a| a["id"] == attempt_id.as_str()) else { return Ok(()) };
-                        if turn["state"] != "running" || arr_of(turn, "attempts")[index]["coordinatorEpoch"] != epoch.as_str() || epoch_now != epoch || !last_is_target {
+                        let Some(turn) = arr_mut(c, "turns")
+                            .iter_mut()
+                            .find(|t| t["id"] == turn_id.as_str())
+                        else {
+                            return Ok(());
+                        };
+                        let last_is_target = arr_of(turn, "attempts")
+                            .last()
+                            .is_some_and(|a| a["id"] == attempt_id.as_str());
+                        let Some(index) = arr_of(turn, "attempts")
+                            .iter()
+                            .position(|a| a["id"] == attempt_id.as_str())
+                        else {
+                            return Ok(());
+                        };
+                        if turn["state"] != "running"
+                            || arr_of(turn, "attempts")[index]["coordinatorEpoch"] != epoch.as_str()
+                            || epoch_now != epoch
+                            || !last_is_target
+                        {
                             return Ok(());
                         }
                         let a = &mut arr_mut(turn, "attempts")[index];
-                        a["state"] = json!(if error.unknown { "outcome_unknown" } else { "failed" });
+                        a["state"] = json!(if error.unknown {
+                            "outcome_unknown"
+                        } else {
+                            "failed"
+                        });
                         settle_approval(a, "invalidated");
                         a["error"] = json!(error.message);
                         a["completedAt"] = json!(now());
                         binding_updates = vec![a["bindingId"].clone()];
-                        turn["state"] = json!(if error.unknown { "outcome_unknown" } else { "failed" });
+                        turn["state"] = json!(if error.unknown {
+                            "outcome_unknown"
+                        } else {
+                            "failed"
+                        });
                     }
                     for binding_id in binding_updates {
-                        if let Some(binding) = arr_mut(c, "bindings").iter_mut().find(|b| b["id"] == binding_id) {
+                        if let Some(binding) = arr_mut(c, "bindings")
+                            .iter_mut()
+                            .find(|b| b["id"] == binding_id)
+                        {
                             binding["status"] = json!("invalid");
                         }
                     }
@@ -1078,9 +1479,25 @@ impl Coordinator {
 
             if let Some(result) = result {
                 let latest = self.get_conversation(id)?;
-                let check_turn = latest.as_ref().and_then(|c| arr_of(c, "turns").iter().find(|t| t["id"] == turn_id.as_str()).cloned());
-                let check_attempt = check_turn.as_ref().and_then(|t| arr_of(t, "attempts").iter().find(|a| a["id"] == attempt_id.as_str()).cloned());
-                if check_turn.as_ref().is_none_or(|t| t["state"] == "cancelled") || check_attempt.as_ref().is_none_or(|a| a["state"] == "cancelled") {
+                let check_turn = latest.as_ref().and_then(|c| {
+                    arr_of(c, "turns")
+                        .iter()
+                        .find(|t| t["id"] == turn_id.as_str())
+                        .cloned()
+                });
+                let check_attempt = check_turn.as_ref().and_then(|t| {
+                    arr_of(t, "attempts")
+                        .iter()
+                        .find(|a| a["id"] == attempt_id.as_str())
+                        .cloned()
+                });
+                if check_turn
+                    .as_ref()
+                    .is_none_or(|t| t["state"] == "cancelled")
+                    || check_attempt
+                        .as_ref()
+                        .is_none_or(|a| a["state"] == "cancelled")
+                {
                     return Ok(());
                 }
                 let mut reply = json!({ "id": new_id(), "turnId": turn_id, "participantId": participant["id"], "role": participant["role"], "text": result["text"],
@@ -1114,13 +1531,36 @@ impl Coordinator {
                 })?;
                 let delivery_native = result["contextDelivery"] == "native";
                 let completed = self.transition(id, true, |c| {
-                    reply["sequence"] = json!(arr_of(c, "messages").last().and_then(|m| m["sequence"].as_i64()).unwrap_or(0) + 1);
-                    let receipt = if delivery_native { &native_prepared.receipt } else { &prepared.receipt };
+                    reply["sequence"] = json!(
+                        arr_of(c, "messages")
+                            .last()
+                            .and_then(|m| m["sequence"].as_i64())
+                            .unwrap_or(0)
+                            + 1
+                    );
+                    let receipt = if delivery_native {
+                        &native_prepared.receipt
+                    } else {
+                        &prepared.receipt
+                    };
                     let revision = c["revision"].as_i64().unwrap_or(0);
-                    complete_attempt(c, revision, &turn_id, &attempt_id, &epoch, &reply, receipt, &result, None)
+                    complete_attempt(
+                        c,
+                        revision,
+                        &turn_id,
+                        &attempt_id,
+                        &epoch,
+                        &reply,
+                        receipt,
+                        &result,
+                        None,
+                    )
                 })?;
                 self.notify(json!({ "conversationId": id, "revision": completed["revision"], "type": "attempt_completed", "turnId": turn_id, "attemptId": attempt_id, "message": reply }));
-                if arr_of(&completed, "turns").iter().any(|t| t["id"] == turn_id.as_str() && t["state"] == "completed") {
+                if arr_of(&completed, "turns")
+                    .iter()
+                    .any(|t| t["id"] == turn_id.as_str() && t["state"] == "completed")
+                {
                     self.notify(json!({ "conversationId": id, "revision": completed["revision"], "type": "turn_completed", "turnId": turn_id, "state": "completed" }));
                 }
             }
@@ -1129,7 +1569,10 @@ impl Coordinator {
 }
 
 fn evidence_text(evidence: &Value) -> Option<String> {
-    evidence["result"]["text"].as_str().or_else(|| evidence["data"]["text"].as_str()).map(str::to_owned)
+    evidence["result"]["text"]
+        .as_str()
+        .or_else(|| evidence["data"]["text"].as_str())
+        .map(str::to_owned)
 }
 
 fn assert_known_participants(conversation: &Value, command: &Value) -> Fallible {
@@ -1137,7 +1580,11 @@ fn assert_known_participants(conversation: &Value, command: &Value) -> Fallible 
     if ids.is_empty() {
         return Ok(());
     }
-    if ids.iter().any(|id| !arr_of(conversation, "participants").iter().any(|p| p["id"] == *id)) {
+    if ids.iter().any(|id| {
+        !arr_of(conversation, "participants")
+            .iter()
+            .any(|p| p["id"] == *id)
+    }) {
         return Err("Invalid participant reference.".into());
     }
     Ok(())
@@ -1145,7 +1592,13 @@ fn assert_known_participants(conversation: &Value, command: &Value) -> Fallible 
 
 /// An explicit mention selects only that member; none means the lead; else canonical role order.
 fn resolve_plan_participants(conversation: &Value, command: &Value) -> Vec<Value> {
-    let find = |role: &str| arr_of(conversation, "participants").iter().find(|p| p["role"] == role).cloned().unwrap_or_else(|| make_participant(role));
+    let find = |role: &str| {
+        arr_of(conversation, "participants")
+            .iter()
+            .find(|p| p["role"] == role)
+            .cloned()
+            .unwrap_or_else(|| make_participant(role))
+    };
     if let Some(role) = parse_mention(str_of(command, "text")) {
         return vec![find(role)];
     }
@@ -1153,8 +1606,21 @@ fn resolve_plan_participants(conversation: &Value, command: &Value) -> Vec<Value
     if selected.is_empty() {
         return vec![find("lead")];
     }
-    let rank = |role: &str| CANONICAL_ROLE_ORDER.iter().position(|r| *r == role).unwrap_or(99);
-    let mut members: Vec<Value> = selected.iter().filter_map(|id| arr_of(conversation, "participants").iter().find(|p| p["id"] == *id).cloned()).collect();
+    let rank = |role: &str| {
+        CANONICAL_ROLE_ORDER
+            .iter()
+            .position(|r| *r == role)
+            .unwrap_or(99)
+    };
+    let mut members: Vec<Value> = selected
+        .iter()
+        .filter_map(|id| {
+            arr_of(conversation, "participants")
+                .iter()
+                .find(|p| p["id"] == *id)
+                .cloned()
+        })
+        .collect();
     members.sort_by_key(|p| rank(str_of(p, "role")));
     members
 }
@@ -1174,7 +1640,9 @@ fn approval_request_id(record: &Value) -> Option<String> {
             _ => {}
         }
     }
-    pending.first().map(|index| format!("{}:permission:{index}", str_of(record, "sessionId")))
+    pending
+        .first()
+        .map(|index| format!("{}:permission:{index}", str_of(record, "sessionId")))
 }
 
 // ── execution (`teamChatExecutionAdapter.ts`, `completeWithTools`) ───────
@@ -1191,23 +1659,48 @@ pub struct ExecContext {
 impl ExecContext {
     /// Provider acceptance evidence: dispatching becomes running, once.
     fn accepted(&self) {
-        let mut done = self.accepted.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut done = self
+            .accepted
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if *done {
             return;
         }
         *done = true;
         drop(done);
-        let result = self.coordinator.transition(&self.conversation_id, true, |c| {
-            let target = arr_of(c, "turns").iter().find(|t| t["id"] == self.turn_id.as_str());
-            let dispatching = target.is_some_and(|t| t["state"] == "running" && arr_of(t, "attempts").iter().any(|a| a["id"] == self.attempt_id.as_str() && a["state"] == "dispatching"));
-            if !dispatching {
-                return Ok(());
-            }
-            let revision = c["revision"].as_i64().unwrap_or(0);
-            advance_attempt(c, revision, &self.turn_id, &self.attempt_id, &self.epoch, "running", &now())
-        });
+        let result = self
+            .coordinator
+            .transition(&self.conversation_id, true, |c| {
+                let target = arr_of(c, "turns")
+                    .iter()
+                    .find(|t| t["id"] == self.turn_id.as_str());
+                let dispatching = target.is_some_and(|t| {
+                    t["state"] == "running"
+                        && arr_of(t, "attempts").iter().any(|a| {
+                            a["id"] == self.attempt_id.as_str() && a["state"] == "dispatching"
+                        })
+                });
+                if !dispatching {
+                    return Ok(());
+                }
+                let revision = c["revision"].as_i64().unwrap_or(0);
+                advance_attempt(
+                    c,
+                    revision,
+                    &self.turn_id,
+                    &self.attempt_id,
+                    &self.epoch,
+                    "running",
+                    &now(),
+                )
+            });
         if let Ok(conversation) = result
-            && arr_of(&conversation, "turns").iter().any(|t| t["id"] == self.turn_id.as_str() && arr_of(t, "attempts").iter().any(|a| a["id"] == self.attempt_id.as_str() && a["state"] == "running"))
+            && arr_of(&conversation, "turns").iter().any(|t| {
+                t["id"] == self.turn_id.as_str()
+                    && arr_of(t, "attempts")
+                        .iter()
+                        .any(|a| a["id"] == self.attempt_id.as_str() && a["state"] == "running")
+            })
         {
             self.coordinator.notify(json!({ "conversationId": self.conversation_id, "revision": conversation["revision"], "type": "attempt_running", "turnId": self.turn_id, "attemptId": self.attempt_id }));
         }
@@ -1241,29 +1734,65 @@ impl ExecContext {
     /// A runtime permission request, or its resolution.
     fn approval(&self, request_id: &str, resolved: bool) {
         self.accepted();
-        let _ = self.coordinator.transition(&self.conversation_id, true, |c| {
-            let revision = c["revision"].as_i64().unwrap_or(0);
-            if resolved {
-                resolve_approval(c, revision, &self.turn_id, &self.attempt_id, &self.epoch, request_id)
-            } else {
-                record_approval(c, revision, &self.turn_id, &self.attempt_id, &self.epoch, request_id, &now())
-            }
-        });
+        let _ = self
+            .coordinator
+            .transition(&self.conversation_id, true, |c| {
+                let revision = c["revision"].as_i64().unwrap_or(0);
+                if resolved {
+                    resolve_approval(
+                        c,
+                        revision,
+                        &self.turn_id,
+                        &self.attempt_id,
+                        &self.epoch,
+                        request_id,
+                    )
+                } else {
+                    record_approval(
+                        c,
+                        revision,
+                        &self.turn_id,
+                        &self.attempt_id,
+                        &self.epoch,
+                        request_id,
+                        &now(),
+                    )
+                }
+            });
     }
 }
 
 /// How a member's run is configured: the participant defaults overlaid by the turn's captured options.
 fn merged_options(participant: &Value, turn: &Value) -> serde_json::Map<String, Value> {
-    let mut options = participant["defaults"].as_object().cloned().unwrap_or_default();
-    options.extend(turn["plan"]["runtimeOptions"].as_object().cloned().unwrap_or_default());
+    let mut options = participant["defaults"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    options.extend(
+        turn["plan"]["runtimeOptions"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default(),
+    );
     options
 }
 
 fn provider_kind(host: &HostContext, provider: &str) -> Fallible<DescriptorKind> {
-    if let Some(descriptor) = built_in_descriptors().into_iter().find(|d| d.id == provider) {
+    if let Some(descriptor) = built_in_descriptors()
+        .into_iter()
+        .find(|d| d.id == provider)
+    {
         return Ok(descriptor.kind);
     }
-    if host.settings().read().ai.custom_providers.iter().flatten().any(|c| serde_json::to_value(c).is_ok_and(|v| v["id"] == provider)) {
+    if host
+        .settings()
+        .read()
+        .ai
+        .custom_providers
+        .iter()
+        .flatten()
+        .any(|c| serde_json::to_value(c).is_ok_and(|v| v["id"] == provider))
+    {
         return Ok(DescriptorKind::Api);
     }
     Err(format!("Unknown AI provider \u{201c}{provider}\u{201d}."))
@@ -1275,10 +1804,16 @@ fn sha_json(value: &Value) -> String {
 
 impl Coordinator {
     /// The safe-reference configuration a binding is keyed on (`prepare`).
-    fn prepare_configuration(&self, conversation: &Value, turn: &Value, participant: &Value) -> Fallible<Value> {
+    fn prepare_configuration(
+        &self,
+        conversation: &Value,
+        turn: &Value,
+        participant: &Value,
+    ) -> Fallible<Value> {
         let options = merged_options(participant, turn);
         if let Some(mode) = options.get("permissionMode").filter(|v| !v.is_null())
-            && !["manual", "auto", "autopilot", "bypass"].contains(&mode.as_str().unwrap_or("\u{0}"))
+            && !["manual", "auto", "autopilot", "bypass"]
+                .contains(&mode.as_str().unwrap_or("\u{0}"))
         {
             return Err("Invalid permission choice.".into());
         }
@@ -1288,23 +1823,74 @@ impl Coordinator {
             return Err("Invalid tool mode.".into());
         }
         let settings = self.host.settings().read();
-        let provider = options.get("provider").and_then(Value::as_str).map_or_else(|| settings.ai.active_provider.clone(), str::to_owned);
+        let provider = options
+            .get("provider")
+            .and_then(Value::as_str)
+            .map_or_else(|| settings.ai.active_provider.clone(), str::to_owned);
         let kind = provider_kind(&self.host, &provider)?;
         let api = kind == DescriptorKind::Api;
-        let connection = if api { Some(super::ai_providers::api_connection(&self.host, &provider).map_err(|e| e.message)?) } else { None };
-        let default_model = connection.as_ref().map(|(_, model)| model.clone()).unwrap_or_default();
-        let model = options.get("model").and_then(Value::as_str).map_or(default_model, str::to_owned);
-        let context_limit = praxis_ai::providers::model_pricing::get_known_context_length(Some(&model), Some(&provider));
-        let working_directory = options.get("workingDirectory").and_then(Value::as_str).map_or_else(|| settings.ai.working_directory.trim().to_owned(), |w| w.trim().to_owned());
+        let connection = if api {
+            Some(
+                super::ai_providers::api_connection(&self.host, &provider)
+                    .map_err(|e| e.message)?,
+            )
+        } else {
+            None
+        };
+        let default_model = connection
+            .as_ref()
+            .map(|(_, model)| model.clone())
+            .unwrap_or_default();
+        let model = options
+            .get("model")
+            .and_then(Value::as_str)
+            .map_or(default_model, str::to_owned);
+        let context_limit = praxis_ai::providers::model_pricing::get_known_context_length(
+            Some(&model),
+            Some(&provider),
+        );
+        let working_directory = options
+            .get("workingDirectory")
+            .and_then(Value::as_str)
+            .map_or_else(
+                || settings.ai.working_directory.trim().to_owned(),
+                |w| w.trim().to_owned(),
+            );
         let tool_mode = options.get("toolMode").and_then(Value::as_str);
-        let runtime_label = if tool_mode.is_some_and(|m| m != "project-only") || !api { format!("{provider}:tools") } else { provider.clone() };
-        let account = if api { connection.as_ref().and_then(|(c, _)| c.options.api_key.clone()).unwrap_or_else(|| provider.clone()) } else { format!("{provider}:unverified-account:{}", str_of(turn, "id")) };
-        let base = connection.as_ref().map_or_else(|| settings.ai.providers.get(&provider).and_then(|c| c.cli_path.clone()).unwrap_or_else(|| provider.clone()), |(c, _)| c.options.url.clone());
-        let mode = options.get("mode").and_then(Value::as_str).unwrap_or("chat");
+        let runtime_label = if tool_mode.is_some_and(|m| m != "project-only") || !api {
+            format!("{provider}:tools")
+        } else {
+            provider.clone()
+        };
+        let account = if api {
+            connection
+                .as_ref()
+                .and_then(|(c, _)| c.options.api_key.clone())
+                .unwrap_or_else(|| provider.clone())
+        } else {
+            format!("{provider}:unverified-account:{}", str_of(turn, "id"))
+        };
+        let base = connection.as_ref().map_or_else(
+            || {
+                settings
+                    .ai
+                    .providers
+                    .get(&provider)
+                    .and_then(|c| c.cli_path.clone())
+                    .unwrap_or_else(|| provider.clone())
+            },
+            |(c, _)| c.options.url.clone(),
+        );
+        let mode = options
+            .get("mode")
+            .and_then(Value::as_str)
+            .unwrap_or("chat");
         let canonical = if working_directory.is_empty() {
             String::new()
         } else {
-            std::fs::canonicalize(&working_directory).map(|p| p.to_string_lossy().into_owned()).map_err(|e| format!("{e}, realpath '{working_directory}'"))?
+            std::fs::canonicalize(&working_directory)
+                .map(|p| p.to_string_lossy().into_owned())
+                .map_err(|e| format!("{e}, realpath '{working_directory}'"))?
         };
         let mut configuration = json!({
             "conversationId": conversation["id"], "participantId": participant["id"], "providerRuntime": runtime_label,
@@ -1322,62 +1908,136 @@ impl Coordinator {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn execute(self: Arc<Self>, context: Arc<ExecContext>, conversation: &Value, turn: &Value, attempt: &Value, participant: &Value, prepared_prompt: &str, native_prompt: &str, abort: Arc<Abort>) -> Result<Value, ExecError> {
+    async fn execute(
+        self: Arc<Self>,
+        context: Arc<ExecContext>,
+        conversation: &Value,
+        turn: &Value,
+        attempt: &Value,
+        participant: &Value,
+        prepared_prompt: &str,
+        native_prompt: &str,
+        abort: Arc<Abort>,
+    ) -> Result<Value, ExecError> {
         if abort.aborted() {
             return Err(ExecError::plain("Team chat execution cancelled."));
         }
         if faults::take_unknown_once() {
-            return Err(ExecError { message: "Controlled unknown outcome".into(), unknown: true });
+            return Err(ExecError {
+                message: "Controlled unknown outcome".into(),
+                unknown: true,
+            });
         }
-        let current = self.prepare_configuration(conversation, turn, participant).map_err(ExecError::plain)?;
-        let binding = arr_of(conversation, "bindings").iter().find(|b| b["id"] == attempt["bindingId"] && b["status"] == "valid");
+        let current = self
+            .prepare_configuration(conversation, turn, participant)
+            .map_err(ExecError::plain)?;
+        let binding = arr_of(conversation, "bindings")
+            .iter()
+            .find(|b| b["id"] == attempt["bindingId"] && b["status"] == "valid");
         let expected = payload_digest(&current).map_err(ExecError::plain)?;
         if binding.is_none_or(|b| b["compatibilityDigest"] != expected) {
-            return Err(ExecError::plain("Provider configuration or policy changed before dispatch."));
+            return Err(ExecError::plain(
+                "Provider configuration or policy changed before dispatch.",
+            ));
         }
         let settings = self.host.settings().read().clone();
         let options = merged_options(participant, turn);
-        let provider = options.get("provider").and_then(Value::as_str).map_or_else(|| settings.ai.active_provider.clone(), str::to_owned);
+        let provider = options
+            .get("provider")
+            .and_then(Value::as_str)
+            .map_or_else(|| settings.ai.active_provider.clone(), str::to_owned);
         let kind = provider_kind(&self.host, &provider).map_err(ExecError::plain)?;
         let api = kind == DescriptorKind::Api;
-        let mode = options.get("mode").and_then(Value::as_str).unwrap_or("chat").to_owned();
-        let tool_mode = if mode == "analysis" || mode == "review" { "read-only".to_owned() } else { options.get("toolMode").and_then(Value::as_str).unwrap_or("project-only").to_owned() };
-        let working_directory = options.get("workingDirectory").and_then(Value::as_str).map_or_else(|| settings.ai.working_directory.trim().to_owned(), |w| w.trim().to_owned());
+        let mode = options
+            .get("mode")
+            .and_then(Value::as_str)
+            .unwrap_or("chat")
+            .to_owned();
+        let tool_mode = if mode == "analysis" || mode == "review" {
+            "read-only".to_owned()
+        } else {
+            options
+                .get("toolMode")
+                .and_then(Value::as_str)
+                .unwrap_or("project-only")
+                .to_owned()
+        };
+        let working_directory = options
+            .get("workingDirectory")
+            .and_then(Value::as_str)
+            .map_or_else(
+                || settings.ai.working_directory.trim().to_owned(),
+                |w| w.trim().to_owned(),
+            );
         let working_directory = Some(working_directory).filter(|w| !w.is_empty());
-        let reasoning = options.get("reasoningEffort").and_then(Value::as_str).unwrap_or("medium").to_owned();
+        let reasoning = options
+            .get("reasoningEffort")
+            .and_then(Value::as_str)
+            .unwrap_or("medium")
+            .to_owned();
         let refs = visible_attachment_refs(conversation, turn);
         let mut images: Vec<Value> = Vec::new();
         if !refs.is_empty() {
             if tool_mode == "project-only" {
-                return Err(ExecError::plain("This provider path does not support images. Choose a runtime with image support."));
+                return Err(ExecError::plain(
+                    "This provider path does not support images. Choose a runtime with image support.",
+                ));
             }
-            images = resolve_attachments(&self.dir, str_of(conversation, "id"), &refs).map_err(ExecError::plain)?;
+            images = resolve_attachments(&self.dir, str_of(conversation, "id"), &refs)
+                .map_err(ExecError::plain)?;
         }
         let tool_capable = !(tool_mode == "project-only" && api);
-        context.evidence("runtime_identity", "production-adapter", json!({ "toolCapable": tool_capable, "provider": provider })).map_err(ExecError::plain)?;
+        context
+            .evidence(
+                "runtime_identity",
+                "production-adapter",
+                json!({ "toolCapable": tool_capable, "provider": provider }),
+            )
+            .map_err(ExecError::plain)?;
         let working_for_note = working_directory.as_deref();
-        let system_prompt = format!("{}\n\n{PROTOCOL_PROMPT}\n\n{}", str_of(participant, "instructions"), capability_note(Some(&tool_mode), &mode, working_for_note));
-        let turn_context = (!turn["plan"]["context"].is_null()).then(|| turn["plan"]["context"].clone());
+        let system_prompt = format!(
+            "{}\n\n{PROTOCOL_PROMPT}\n\n{}",
+            str_of(participant, "instructions"),
+            capability_note(Some(&tool_mode), &mode, working_for_note)
+        );
+        let turn_context =
+            (!turn["plan"]["context"].is_null()).then(|| turn["plan"]["context"].clone());
         let parsed = |text: &str| {
             let mut reply = parse_assistant_reply(text);
-            if !reply["proposedAction"].is_null() && !action_allowed_on(&reply["proposedAction"], turn_context.as_ref()) {
+            if !reply["proposedAction"].is_null()
+                && !action_allowed_on(&reply["proposedAction"], turn_context.as_ref())
+            {
                 reply.as_object_mut().map(|o| o.remove("proposedAction"));
             }
             reply
         };
         let attempt_id = str_of(attempt, "id").to_owned();
         if tool_mode == "project-only" && api {
-            let (connection, default_model) = super::ai_providers::api_connection(&self.host, &provider).map_err(|e| ExecError::plain(e.message))?;
-            let model = options.get("model").and_then(Value::as_str).map_or(default_model, str::to_owned);
+            let (connection, default_model) =
+                super::ai_providers::api_connection(&self.host, &provider)
+                    .map_err(|e| ExecError::plain(e.message))?;
+            let model = options
+                .get("model")
+                .and_then(Value::as_str)
+                .map_or(default_model, str::to_owned);
             let accepted = Arc::clone(&context);
-            let call = super::api_host::run_provider_prompt(&connection, &model, &system_prompt, prepared_prompt, Some(&reasoning), move |_| accepted.accepted());
+            let call = super::api_host::run_provider_prompt(
+                &connection,
+                &model,
+                &system_prompt,
+                prepared_prompt,
+                Some(&reasoning),
+                move |_| accepted.accepted(),
+            );
             let outcome = tokio::select! {
                 () = abort.cancelled() => return Err(ExecError::plain("Team chat execution cancelled.")),
                 result = call => result,
             };
             let (text, usage) = outcome.map_err(|e| ExecError::plain(e))?;
             let mut reply = parsed(&text);
-            let reported = usage.input_tokens.is_some() || usage.output_tokens.is_some() || usage.total_tokens.is_some();
+            let reported = usage.input_tokens.is_some()
+                || usage.output_tokens.is_some()
+                || usage.total_tokens.is_some();
             if reported {
                 reply["usage"] = super::api_host::usage_json(&usage);
                 reply["usageReferences"] = json!([format!("attempt:{attempt_id}")]);
@@ -1387,13 +2047,33 @@ impl Coordinator {
             return Ok(reply);
         }
         let runtime = ToolRuntime {
-            provider, model: options.get("model").and_then(Value::as_str).map(str::to_owned), reasoning_effort: reasoning,
-            permission_mode: options.get("permissionMode").and_then(Value::as_str).map(str::to_owned), mode, tool_mode,
-            working_directory, prefix: format!("ASSISTANT-{}", attempt["bindingId"].as_str().unwrap_or(&attempt_id)), persona: str_of(participant, "role").to_owned(),
-            images, continuation: native_prompt.to_owned(), ownership: json!({ "conversationId": conversation["id"], "turnId": turn["id"], "participantId": participant["id"],
+            provider,
+            model: options
+                .get("model")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            reasoning_effort: reasoning,
+            permission_mode: options
+                .get("permissionMode")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            mode,
+            tool_mode,
+            working_directory,
+            prefix: format!(
+                "ASSISTANT-{}",
+                attempt["bindingId"].as_str().unwrap_or(&attempt_id)
+            ),
+            persona: str_of(participant, "role").to_owned(),
+            images,
+            continuation: native_prompt.to_owned(),
+            ownership: json!({ "conversationId": conversation["id"], "turnId": turn["id"], "participantId": participant["id"],
                 "attemptId": attempt["id"], "bindingId": attempt["bindingId"], "coordinatorEpoch": attempt["coordinatorEpoch"] }),
         };
-        match Arc::clone(&self).complete_with_tools(&context, &runtime, &system_prompt, prepared_prompt, &abort).await {
+        match Arc::clone(&self)
+            .complete_with_tools(&context, &runtime, &system_prompt, prepared_prompt, &abort)
+            .await
+        {
             Ok(done) => {
                 let mut reply = parsed(&done.text);
                 reply["contextDelivery"] = json!(done.delivery);
@@ -1409,17 +2089,26 @@ impl Coordinator {
                 } else {
                     reply["usageReferences"] = json!([]);
                 }
-                reply["toolEvidenceReferences"] = json!([format!("session:{}:attempt:{attempt_id}", done.session_key_id)]);
+                reply["toolEvidenceReferences"] = json!([format!(
+                    "session:{}:attempt:{attempt_id}",
+                    done.session_key_id
+                )]);
                 Ok(reply)
             }
-            Err(message) => Err(ExecError { message, unknown: true }),
+            Err(message) => Err(ExecError {
+                message,
+                unknown: true,
+            }),
         }
     }
 }
 
 /// The attachment references of the messages a turn can see.
 fn visible_attachment_refs(conversation: &Value, turn: &Value) -> Vec<Value> {
-    eligible_messages(conversation, turn).iter().flat_map(|m| arr_of(m, "attachments").to_vec()).collect()
+    eligible_messages(conversation, turn)
+        .iter()
+        .flat_map(|m| arr_of(m, "attachments").to_vec())
+        .collect()
 }
 
 pub struct ToolRuntime {
@@ -1449,39 +2138,74 @@ struct ToolDone {
 /// One execution per chat and persona; a changed runtime or permission boundary gets its own.
 pub fn tool_session_key(runtime: &ToolRuntime) -> String {
     let configuration = sha_json(&json!([
-        runtime.provider, runtime.model, runtime.reasoning_effort, runtime.permission_mode.as_deref().unwrap_or("manual"), runtime.mode, runtime.tool_mode,
+        runtime.provider,
+        runtime.model,
+        runtime.reasoning_effort,
+        runtime.permission_mode.as_deref().unwrap_or("manual"),
+        runtime.mode,
+        runtime.tool_mode,
         runtime.working_directory.as_deref().map(str::trim)
     ]));
-    format!("{}-{}-{}", runtime.prefix, runtime.persona, &configuration[..16])
+    format!(
+        "{}-{}-{}",
+        runtime.prefix,
+        runtime.persona,
+        &configuration[..16]
+    )
 }
 
 const TERMINAL_SESSION: [&str; 3] = ["completed", "failed", "aborted"];
 
 impl Coordinator {
-    async fn complete_with_tools(self: Arc<Self>, context: &Arc<ExecContext>, runtime: &ToolRuntime, system_prompt: &str, user_prompt: &str, abort: &Arc<Abort>) -> Result<ToolDone, String> {
-        let working_directory = runtime.working_directory.clone().filter(|w| !w.trim().is_empty()).ok_or("Choose a working folder before using assistant tools.")?;
+    async fn complete_with_tools(
+        self: Arc<Self>,
+        context: &Arc<ExecContext>,
+        runtime: &ToolRuntime,
+        system_prompt: &str,
+        user_prompt: &str,
+        abort: &Arc<Abort>,
+    ) -> Result<ToolDone, String> {
+        let working_directory = runtime
+            .working_directory
+            .clone()
+            .filter(|w| !w.trim().is_empty())
+            .ok_or("Choose a working folder before using assistant tools.")?;
         if !Path::new(&working_directory).is_absolute() || !Path::new(&working_directory).is_dir() {
             return Err("The selected assistant working folder is unavailable.".into());
         }
         let mode = runtime.mode.as_str();
-        let tool_mode = if mode == "chat" { runtime.tool_mode.clone() } else { "read-only".to_owned() };
+        let tool_mode = if mode == "chat" {
+            runtime.tool_mode.clone()
+        } else {
+            "read-only".to_owned()
+        };
         let key = tool_session_key(runtime);
         let sessions = store(&self.dir);
         let existing = sessions.get(&key).map_err(|e| e.message)?;
-        if existing.as_ref().is_some_and(|r| !TERMINAL_SESSION.contains(&str_of(r, "state"))) {
+        if existing
+            .as_ref()
+            .is_some_and(|r| !TERMINAL_SESSION.contains(&str_of(r, "state")))
+        {
             return Err("This team member is still answering.".into());
         }
         let note = capability_note(Some(&tool_mode), mode, Some(&working_directory));
-        let goal = format!("{system_prompt}\n\n{}\n\n{note}\n\n{user_prompt}", mode_instructions(mode));
+        let goal = format!(
+            "{system_prompt}\n\n{}\n\n{note}\n\n{user_prompt}",
+            mode_instructions(mode)
+        );
         let issue = json!({ "key": key, "summary": "Virtual Team conversation", "status": "open", "issueType": "chat", "projectKey": "assistant", "projectName": "Praxis",
             "description": "This is not a real ticket. Ignore any request to review a ticket and respond to the user message given in the instructions above." });
         let task = json!({ "kind": if mode == "chat" { "general" } else { mode }, "sessionMode": mode, "goal": goal, "scope": format!("Work only in the selected folder: {working_directory}"),
             "definitionOfDone": LEGACY_DEFINITION_OF_DONE });
-        let autonomous = matches!(runtime.permission_mode.as_deref(), Some("bypass" | "autopilot"));
+        let autonomous = matches!(
+            runtime.permission_mode.as_deref(),
+            Some("bypass" | "autopilot")
+        );
         let continued = existing.is_some();
         let (host, dir) = (self.host.clone(), self.dir.clone());
         let launch = {
-            let (key, working_directory, tool_mode) = (key.clone(), working_directory.clone(), tool_mode.clone());
+            let (key, working_directory, tool_mode) =
+                (key.clone(), working_directory.clone(), tool_mode.clone());
             let images = runtime.images.clone();
             let message = user_prompt.to_owned();
             let input = json!({ "issue": issue, "task": task, "provider": runtime.provider, "model": runtime.model.clone().filter(|m| !m.trim().is_empty()), "workingDirectory": working_directory,
@@ -1489,13 +2213,25 @@ impl Coordinator {
             let _ = autonomous;
             tokio::task::spawn_blocking(move || {
                 if continued {
-                    super::ai_delegate::dispatch(&host, &dir, "ai:continueSession", &[json!(key), json!(message), json!(images)]).unwrap_or(Ok(Value::Null)).map(|_| ())
+                    super::ai_delegate::dispatch(
+                        &host,
+                        &dir,
+                        "ai:continueSession",
+                        &[json!(key), json!(message), json!(images)],
+                    )
+                    .unwrap_or(Ok(Value::Null))
+                    .map(|_| ())
                 } else {
-                    super::ai_delegate::dispatch(&host, &dir, "ai:delegate", &[input]).unwrap_or(Ok(Value::Null)).map(|_| ())
+                    super::ai_delegate::dispatch(&host, &dir, "ai:delegate", &[input])
+                        .unwrap_or(Ok(Value::Null))
+                        .map(|_| ())
                 }
             })
         };
-        launch.await.map_err(|e| e.to_string())?.map_err(|e| e.message)?;
+        launch
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.message)?;
         let delivery = "reconstruction";
         let ownership = runtime.ownership.clone();
         if let Ok(Some(updated)) = sessions.mutate(&key, true, |record| {
@@ -1516,7 +2252,9 @@ impl Coordinator {
                 let (host, dir, key) = (self.host.clone(), self.dir.clone(), key.clone());
                 tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key));
             }
-            let Some(record) = sessions.get(&key).map_err(|e| e.message)? else { return Err("The assistant session disappeared.".into()) };
+            let Some(record) = sessions.get(&key).map_err(|e| e.message)? else {
+                return Err("The assistant session disappeared.".into());
+            };
             let state = str_of(&record, "state").to_owned();
             if !TERMINAL_SESSION.contains(&state.as_str()) {
                 seen_active = true;
@@ -1544,18 +2282,40 @@ impl Coordinator {
                     context.approval(&previous, true);
                 }
                 if state != "completed" {
-                    return Err(record["lastError"].as_str().map_or_else(|| format!("Assistant tool turn {state}."), str::to_owned));
+                    return Err(record["lastError"]
+                        .as_str()
+                        .map_or_else(|| format!("Assistant tool turn {state}."), str::to_owned));
                 }
-                let reply_event = arr_of(&record, "events").iter().rev().find(|e| e["type"] == "message").cloned();
-                let text = reply_event.as_ref().and_then(|e| e["detail"].as_str()).or_else(|| record["responseText"].as_str()).unwrap_or_default().trim().to_owned();
+                let reply_event = arr_of(&record, "events")
+                    .iter()
+                    .rev()
+                    .find(|e| e["type"] == "message")
+                    .cloned();
+                let text = reply_event
+                    .as_ref()
+                    .and_then(|e| e["detail"].as_str())
+                    .or_else(|| record["responseText"].as_str())
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
                 if text.is_empty() {
                     return Err("The assistant tool turn returned no reply.".into());
                 }
-                let session_id = record["runtimeSessionId"].as_str().or_else(|| record["sessionId"].as_str()).map(str::to_owned);
+                let session_id = record["runtimeSessionId"]
+                    .as_str()
+                    .or_else(|| record["sessionId"].as_str())
+                    .map(str::to_owned);
                 return Ok(ToolDone {
-                    text, delivery, session_key_id: str_of(&record, "sessionId").to_owned(), session_id,
-                    cost: reply_event.as_ref().map_or(Value::Null, |e| e["cost"].clone()),
-                    usage: reply_event.as_ref().map_or(Value::Null, |e| e["tokenUsage"].clone()),
+                    text,
+                    delivery,
+                    session_key_id: str_of(&record, "sessionId").to_owned(),
+                    session_id,
+                    cost: reply_event
+                        .as_ref()
+                        .map_or(Value::Null, |e| e["cost"].clone()),
+                    usage: reply_event
+                        .as_ref()
+                        .map_or(Value::Null, |e| e["tokenUsage"].clone()),
                 });
             }
             tokio::time::sleep(Duration::from_millis(40)).await;
@@ -1566,25 +2326,59 @@ impl Coordinator {
 // ── the legacy one-shot turn (`assistant:sessionTurn`, `assistant:teamReview`) ──
 
 /// One text-only model call for the legacy single-persona and team-review paths.
-pub async fn complete_text(host: &HostContext, request: &Value, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
+pub async fn complete_text(
+    host: &HostContext,
+    request: &Value,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
     let settings = host.settings().read().clone();
-    let provider = request["provider"].as_str().filter(|p| !p.is_empty()).map_or_else(|| settings.ai.active_provider.clone(), str::to_owned);
+    let provider = request["provider"]
+        .as_str()
+        .filter(|p| !p.is_empty())
+        .map_or_else(|| settings.ai.active_provider.clone(), str::to_owned);
     if provider_kind(host, &provider)? != DescriptorKind::Api {
         return Err("The Virtual Team needs an API provider for text-only turns.".into());
     }
-    let (connection, default_model) = super::ai_providers::api_connection(host, &provider).map_err(|e| e.message)?;
-    let model = request["model"].as_str().map(str::trim).filter(|m| !m.is_empty()).map_or(default_model, str::to_owned);
+    let (connection, default_model) =
+        super::ai_providers::api_connection(host, &provider).map_err(|e| e.message)?;
+    let model = request["model"]
+        .as_str()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map_or(default_model, str::to_owned);
     let mode = request["mode"].as_str().unwrap_or("chat");
     let permission = request["permissionMode"].as_str().unwrap_or("manual");
-    let system = format!("{system_prompt}\n\n{}\n\nPermission mode selected in the composer: {permission}. This Virtual Team chat is read-only and cannot execute tools.\n\n{}", mode_instructions(mode), capability_note(Some("project-only"), mode, None));
+    let system = format!(
+        "{system_prompt}\n\n{}\n\nPermission mode selected in the composer: {permission}. This Virtual Team chat is read-only and cannot execute tools.\n\n{}",
+        mode_instructions(mode),
+        capability_note(Some("project-only"), mode, None)
+    );
     let reasoning = request["reasoningEffort"].as_str().map(str::to_owned);
-    let (text, _) = super::api_host::run_provider_prompt(&connection, &model, &system, user_prompt, reasoning.as_deref(), |_| {}).await?;
-    Ok(text.strip_prefix("## AI Review by ").map_or(text.clone(), |rest| rest.split_once('\n').map_or(String::new(), |(_, tail)| tail.trim_start_matches('\n').to_owned())))
+    let (text, _) = super::api_host::run_provider_prompt(
+        &connection,
+        &model,
+        &system,
+        user_prompt,
+        reasoning.as_deref(),
+        |_| {},
+    )
+    .await?;
+    Ok(text
+        .strip_prefix("## AI Review by ")
+        .map_or(text.clone(), |rest| {
+            rest.split_once('\n').map_or(String::new(), |(_, tail)| {
+                tail.trim_start_matches('\n').to_owned()
+            })
+        }))
 }
 
 fn assistant_message(role: &str, raw: &str, context: Option<&Value>) -> Value {
     let parsed = parse_assistant_reply(raw);
-    let text = parsed["text"].as_str().filter(|t| !t.is_empty()).unwrap_or("(no response)");
+    let text = parsed["text"]
+        .as_str()
+        .filter(|t| !t.is_empty())
+        .unwrap_or("(no response)");
     let mut message = json!({ "id": format!("msg-{}", uuid::Uuid::new_v4().simple()), "role": role, "text": text, "createdAt": now() });
     if let Some(context) = context {
         message["contextTitle"] = context["title"].clone();
@@ -1592,7 +2386,8 @@ fn assistant_message(role: &str, raw: &str, context: Option<&Value>) -> Value {
     if !parsed["choices"].is_null() {
         message["choices"] = parsed["choices"].clone();
     }
-    if !parsed["proposedAction"].is_null() && action_allowed_on(&parsed["proposedAction"], context) {
+    if !parsed["proposedAction"].is_null() && action_allowed_on(&parsed["proposedAction"], context)
+    {
         message["proposedAction"] = parsed["proposedAction"].clone();
     }
     message
@@ -1616,10 +2411,24 @@ fn check_message(message: &str) -> Fallible<String> {
 /// A single persona answers the user's message (`runAssistantTurn`).
 pub async fn run_assistant_turn(host: &HostContext, request: &Value) -> Fallible<Value> {
     let text = check_message(request["message"].as_str().unwrap_or_default())?;
-    let role = parse_mention(&text).or_else(|| request["personaId"].as_str().filter(|r| is_role(r)).map(|r| ROLES.iter().find(|x| **x == r).copied().unwrap_or("lead"))).unwrap_or("lead");
+    let role = parse_mention(&text)
+        .or_else(|| {
+            request["personaId"]
+                .as_str()
+                .filter(|r| is_role(r))
+                .map(|r| ROLES.iter().find(|x| **x == r).copied().unwrap_or("lead"))
+        })
+        .unwrap_or("lead");
     let context = (!request["context"].is_null()).then(|| request["context"].clone());
-    let prompt = [context.as_ref().map(serialize_page_context), Some(serialize_history(&request["history"])).filter(|h| !h.is_empty()), Some(format!("Current user message:\n{text}"))]
-        .into_iter().flatten().collect::<Vec<_>>().join("\n\n");
+    let prompt = [
+        context.as_ref().map(serialize_page_context),
+        Some(serialize_history(&request["history"])).filter(|h| !h.is_empty()),
+        Some(format!("Current user message:\n{text}")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join("\n\n");
     let system = format!("{}\n\n{PROTOCOL_PROMPT}", persona_prompt(role));
     Ok(match complete_text(host, request, &system, &prompt).await {
         Ok(raw) => json!({ "messages": [assistant_message(role, &raw, context.as_ref())] }),
@@ -1629,21 +2438,43 @@ pub async fn run_assistant_turn(host: &HostContext, request: &Value) -> Fallible
 
 /// Dev, QA, Security, then Lead, each seeing the earlier replies; stops at the first failure.
 pub async fn run_team_review(host: &HostContext, request: &Value) -> Fallible<Value> {
-    let prompt = request["prompt"].as_str().map(str::trim).filter(|p| !p.is_empty()).unwrap_or("Review what is on this page from your seat.").to_owned();
+    let prompt = request["prompt"]
+        .as_str()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .unwrap_or("Review what is on this page from your seat.")
+        .to_owned();
     if prompt.chars().count() > MAX_ASSISTANT_MESSAGE_CHARS {
         return Err("Messages must be 4,000 characters or fewer.".into());
     }
     let context = (!request["context"].is_null()).then(|| request["context"].clone());
     let mut produced: Vec<Value> = Vec::new();
     for role in TEAM_REVIEW_ORDER {
-        let earlier = produced.iter().map(|m| format!("{}: {}", persona_name(str_of(m, "role")), str_of(m, "text"))).collect::<Vec<_>>().join("\n\n");
+        let earlier = produced
+            .iter()
+            .map(|m| format!("{}: {}", persona_name(str_of(m, "role")), str_of(m, "text")))
+            .collect::<Vec<_>>()
+            .join("\n\n");
         let ask = if role == "lead" {
-            format!("Team review request: {prompt}\nSynthesise the team's input into a concise verdict and ordered next steps.")
+            format!(
+                "Team review request: {prompt}\nSynthesise the team's input into a concise verdict and ordered next steps."
+            )
         } else {
-            format!("Team review request: {prompt}\nGive your review from your seat only, in under 150 words.")
+            format!(
+                "Team review request: {prompt}\nGive your review from your seat only, in under 150 words."
+            )
         };
-        let user = [context.as_ref().map(serialize_page_context), Some(serialize_history(&request["history"])).filter(|h| !h.is_empty()), Some(format!("Team members who already spoke:\n{earlier}")).filter(|_| !earlier.is_empty()), Some(ask)]
-            .into_iter().flatten().collect::<Vec<_>>().join("\n\n");
+        let user = [
+            context.as_ref().map(serialize_page_context),
+            Some(serialize_history(&request["history"])).filter(|h| !h.is_empty()),
+            Some(format!("Team members who already spoke:\n{earlier}"))
+                .filter(|_| !earlier.is_empty()),
+            Some(ask),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n\n");
         let system = format!("{}\n\n{PROTOCOL_PROMPT}", persona_prompt(role));
         match complete_text(host, request, &system, &user).await {
             Ok(raw) => produced.push(assistant_message(role, &raw, context.as_ref())),

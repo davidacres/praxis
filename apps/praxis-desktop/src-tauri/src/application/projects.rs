@@ -470,7 +470,9 @@ fn create(catalog: &mut Catalog, args: &[Value], version: &str) -> Result<Value>
         default_board_id: format!("{id}-board"),
         linked_boards: Vec::new(),
         default_ai_tool_mode: if folder.is_some() {
-            input.default_ai_tool_mode.unwrap_or_else(|| "project-only".into())
+            input
+                .default_ai_tool_mode
+                .unwrap_or_else(|| "project-only".into())
         } else {
             "project-only".into()
         },
@@ -997,7 +999,11 @@ fn suggested_project_key(folder_path: &str) -> String {
         .chars()
         .filter(char::is_ascii_alphanumeric)
         .collect();
-    if compact.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
+    if compact
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic())
+    {
         compact.chars().take(15).collect::<String>().to_uppercase()
     } else {
         "PLANS".into()
@@ -1035,8 +1041,8 @@ fn discover_imports(catalog: &Catalog, folder_path: &str) -> Result<Value> {
         .into_iter()
         .map(|root| root.plans_root_path)
         .collect();
-    let repositories = praxis_core::folder::discover_repository_folders(folder_path)
-        .map_err(failure)?;
+    let repositories =
+        praxis_core::folder::discover_repository_folders(folder_path).map_err(failure)?;
 
     let pairs: Vec<(String, String)> = if repositories.is_empty() {
         plan_roots
@@ -1081,7 +1087,10 @@ fn discover_imports(catalog: &Catalog, folder_path: &str) -> Result<Value> {
                 let suffix_text = suffix.to_string();
                 suffix += 1;
                 let keep = 15usize.saturating_sub(suffix_text.len()).max(1);
-                key = format!("{}{suffix_text}", base.chars().take(keep).collect::<String>());
+                key = format!(
+                    "{}{suffix_text}",
+                    base.chars().take(keep).collect::<String>()
+                );
             }
             used_keys.insert(key.clone());
             json!({
@@ -1098,7 +1107,10 @@ fn discover_imports(catalog: &Catalog, folder_path: &str) -> Result<Value> {
 }
 
 fn to_stored(path: &str) -> String {
-    praxis_core::folder::to_stored_folder_path(path, praxis_core::folder::SupportedPathPlatform::current())
+    praxis_core::folder::to_stored_folder_path(
+        path,
+        praxis_core::folder::SupportedPathPlatform::current(),
+    )
 }
 
 fn validate_imports(catalog: &Catalog, rows_val: Option<&Value>) -> Result<Value> {

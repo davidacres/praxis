@@ -15,7 +15,12 @@ fn normalize(text: &str) -> String {
 }
 
 fn strip_markdown(value: &str) -> String {
-    value.chars().filter(|c| !matches!(c, '`' | '*' | '_' | '>' | '#')).collect::<String>().trim().to_string()
+    value
+        .chars()
+        .filter(|c| !matches!(c, '`' | '*' | '_' | '>' | '#'))
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 fn frontmatter(text: &str) -> Option<String> {
@@ -43,7 +48,10 @@ fn heading(text: &str) -> Option<String> {
 
 fn first_paragraph(text: &str) -> Option<String> {
     let text = normalize(text);
-    let body = match text.strip_prefix("---\n").and_then(|rest| rest.find("\n---").map(|i| &rest[i + 4..])) {
+    let body = match text
+        .strip_prefix("---\n")
+        .and_then(|rest| rest.find("\n---").map(|i| &rest[i + 4..]))
+    {
         Some(rest) => rest.trim_start_matches('\n').to_string(),
         None => text.clone(),
     };
@@ -78,23 +86,32 @@ fn title_from_slug(value: &str) -> String {
         .filter(|p| !p.is_empty())
         .map(|p| {
             let mut chars = p.chars();
-            chars.next().map_or(String::new(), |c| c.to_uppercase().collect::<String>() + chars.as_str())
+            chars.next().map_or(String::new(), |c| {
+                c.to_uppercase().collect::<String>() + chars.as_str()
+            })
         })
         .collect::<Vec<_>>()
         .join(" ")
 }
 
 fn pack_at(root: &Path, dir: &Path) -> Option<Value> {
-    let file = if dir.is_dir() { dir.join("SKILL.md") } else { dir.to_path_buf() };
+    let file = if dir.is_dir() {
+        dir.join("SKILL.md")
+    } else {
+        dir.to_path_buf()
+    };
     let markdown = std::fs::read_to_string(&file).ok()?;
     let front = frontmatter(&markdown);
     let fallback = file.parent()?.file_name()?.to_string_lossy().into_owned();
     let id = frontmatter_value(front.as_deref(), "name").unwrap_or(fallback);
     let name = heading(&markdown).unwrap_or_else(|| title_from_slug(&id));
-    let description = frontmatter_value(front.as_deref(), "description").or_else(|| first_paragraph(&markdown));
+    let description =
+        frontmatter_value(front.as_deref(), "description").or_else(|| first_paragraph(&markdown));
     let version = frontmatter_value(front.as_deref(), "version");
     let stored = match file.strip_prefix(root) {
-        Ok(relative) if !relative.as_os_str().is_empty() => relative.to_string_lossy().replace('\\', "/"),
+        Ok(relative) if !relative.as_os_str().is_empty() => {
+            relative.to_string_lossy().replace('\\', "/")
+        }
         _ => file.to_string_lossy().into_owned(),
     };
     let mut pack = json!({ "id": id, "name": name, "instructionsPath": stored });
@@ -119,26 +136,43 @@ pub fn discover(root: Option<&Path>) -> Vec<Value> {
         .filter_map(|e| pack_at(root, &e.path()))
         .collect();
     packs.sort_by(|a, b| {
-        a["name"].as_str().unwrap_or("").to_lowercase().cmp(&b["name"].as_str().unwrap_or("").to_lowercase())
+        a["name"]
+            .as_str()
+            .unwrap_or("")
+            .to_lowercase()
+            .cmp(&b["name"].as_str().unwrap_or("").to_lowercase())
     });
     packs
 }
 
 /// The folder packs are discovered in: the configured working directory, else the first project's.
 pub fn discovery_root(host: &HostContext) -> Option<PathBuf> {
-    let configured = host.settings().read().ai.working_directory.trim().to_string();
+    let configured = host
+        .settings()
+        .read()
+        .ai
+        .working_directory
+        .trim()
+        .to_string();
     if !configured.is_empty() {
         return Some(PathBuf::from(configured));
     }
-    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
-    catalog
-        .list(PROJECTS)
-        .into_iter()
-        .find_map(|p| p["workspaceFolder"].as_str().map(str::trim).filter(|s| !s.is_empty()).map(PathBuf::from))
+    let catalog =
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+            .ok()?;
+    catalog.list(PROJECTS).into_iter().find_map(|p| {
+        p["workspaceFolder"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+    })
 }
 
 fn assignments_file(host: &HostContext) -> PathBuf {
-    host.config().user_data_dir.join("issue-workflow-assignments.json")
+    host.config()
+        .user_data_dir
+        .join("issue-workflow-assignments.json")
 }
 
 fn read_assignments(host: &HostContext) -> BTreeMap<String, Value> {
@@ -149,11 +183,18 @@ fn read_assignments(host: &HostContext) -> BTreeMap<String, Value> {
 }
 
 pub fn assignment(host: &HostContext, issue_key: &str) -> Value {
-    read_assignments(host).remove(issue_key).unwrap_or(Value::Null)
+    read_assignments(host)
+        .remove(issue_key)
+        .unwrap_or(Value::Null)
 }
 
 /// Assigns (or, with `None`, clears) the issue's pack; a manual choice, as the picker makes it.
-pub fn assign(host: &HostContext, issue_key: &str, workflow: Option<Value>, source: &str) -> Result<(), String> {
+pub fn assign(
+    host: &HostContext,
+    issue_key: &str,
+    workflow: Option<Value>,
+    source: &str,
+) -> Result<(), String> {
     let mut all = read_assignments(host);
     match workflow {
         Some(workflow) => {

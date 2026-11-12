@@ -64,11 +64,16 @@ fn typed_control(host: &HostContext, channel: &str, command: &Value) -> Fallible
             base["attemptId"] = command["attemptId"].clone();
             if resolution == Some("reconcile") {
                 base["action"] = json!("reconcile");
-                base["reconciliationNote"] = json!(command["reconciliationNote"].as_str().unwrap_or_default());
+                base["reconciliationNote"] =
+                    json!(command["reconciliationNote"].as_str().unwrap_or_default());
             } else {
                 base["action"] = json!("retry");
-                base["acknowledgeDuplicateActionRisk"] = json!(command["acknowledgeDuplicateActionRisk"] == true);
-                if command["reconciliationEvidenceId"].as_str().is_some_and(|a| !a.is_empty()) {
+                base["acknowledgeDuplicateActionRisk"] =
+                    json!(command["acknowledgeDuplicateActionRisk"] == true);
+                if command["reconciliationEvidenceId"]
+                    .as_str()
+                    .is_some_and(|a| !a.is_empty())
+                {
                     base["reconciliationEvidenceId"] = command["reconciliationEvidenceId"].clone();
                 }
             }
@@ -88,9 +93,15 @@ fn changed(host: &HostContext) {
 fn chat_by_id(dir: &Path, id: &str) -> Fallible<Value> {
     let snapshot = chat::read_snapshot(dir)?;
     let record = if snapshot["activation"].is_null() {
-        arr_of(&snapshot, "teamChats").iter().find(|c| c["id"] == id).cloned()
+        arr_of(&snapshot, "teamChats")
+            .iter()
+            .find(|c| c["id"] == id)
+            .cloned()
     } else {
-        arr_of(&snapshot, "conversations").iter().find(|c| c["id"] == id).map(chat_record)
+        arr_of(&snapshot, "conversations")
+            .iter()
+            .find(|c| c["id"] == id)
+            .map(chat_record)
     };
     Ok(record.unwrap_or(Value::Null))
 }
@@ -101,7 +112,10 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
     match channel {
         "assistant:listChats" => {
             chat::activate(&dir)?;
-            Ok(json!(summaries_for(&chat::read_snapshot(&dir)?, arg(0).as_str().unwrap_or_default())))
+            Ok(json!(summaries_for(
+                &chat::read_snapshot(&dir)?,
+                arg(0).as_str().unwrap_or_default()
+            )))
         }
         "assistant:getChat" => {
             chat::activate(&dir)?;
@@ -110,7 +124,9 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
         "assistant:getConversation" => {
             let coordinator = activate_and_coordinate(host)?;
             coordinator.initialize()?;
-            Ok(coordinator.get_conversation(&required(&arg(0), "A conversation ID")?)?.unwrap_or(Value::Null))
+            Ok(coordinator
+                .get_conversation(&required(&arg(0), "A conversation ID")?)?
+                .unwrap_or(Value::Null))
         }
         "assistant:createChat" => {
             chat::activate(&dir)?;
@@ -129,7 +145,9 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
         }
         "assistant:saveChat" => {
             if !chat::read_snapshot(&dir)?["activation"].is_null() {
-                return Err("Legacy assistant writes are disabled after durable activation.".into());
+                return Err(
+                    "Legacy assistant writes are disabled after durable activation.".into(),
+                );
             }
             Err("Whole-transcript replacement is rejected for durable conversations.".into())
         }
@@ -141,9 +159,13 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
                 return Err("A chat needs a name.".into());
             }
             chat::transaction(&dir, |snapshot| {
-                let conversation = arr_mut(snapshot, "conversations").iter_mut().find(|c| c["id"] == id.as_str()).ok_or_else(|| format!("Conversation {id} was not found."))?;
+                let conversation = arr_mut(snapshot, "conversations")
+                    .iter_mut()
+                    .find(|c| c["id"] == id.as_str())
+                    .ok_or_else(|| format!("Conversation {id} was not found."))?;
                 conversation["title"] = json!(title.chars().take(120).collect::<String>());
-                conversation["revision"] = json!(conversation["revision"].as_i64().unwrap_or(0) + 1);
+                conversation["revision"] =
+                    json!(conversation["revision"].as_i64().unwrap_or(0) + 1);
                 Ok(())
             })?;
             changed(host);
@@ -154,13 +176,17 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
             let id = arg(0).as_str().unwrap_or_default().to_owned();
             let archived = arg(1) == true;
             chat::transaction(&dir, |snapshot| {
-                let conversation = arr_mut(snapshot, "conversations").iter_mut().find(|c| c["id"] == id.as_str()).ok_or_else(|| format!("Team chat {id} was not found."))?;
+                let conversation = arr_mut(snapshot, "conversations")
+                    .iter_mut()
+                    .find(|c| c["id"] == id.as_str())
+                    .ok_or_else(|| format!("Team chat {id} was not found."))?;
                 if archived {
                     conversation["archived"] = json!(true);
                 } else {
                     conversation.as_object_mut().map(|o| o.remove("archived"));
                 }
-                conversation["revision"] = json!(conversation["revision"].as_i64().unwrap_or(0) + 1);
+                conversation["revision"] =
+                    json!(conversation["revision"].as_i64().unwrap_or(0) + 1);
                 Ok(())
             })?;
             changed(host);
@@ -178,23 +204,47 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
             if coordinator.get_conversation(&id)?.is_none() {
                 return Err("Conversation was not found.".into());
             }
-            Ok(json!(chat::stage_attachments(&dir, &id, arg(1).as_array().map_or(&[], Vec::as_slice))?))
+            Ok(json!(chat::stage_attachments(
+                &dir,
+                &id,
+                arg(1).as_array().map_or(&[], Vec::as_slice)
+            )?))
         }
         "assistant:submitTurn" => {
             let command = arg(0);
             let coordinator = activate_and_coordinate(host)?;
             let id = required(&command["conversationId"], "A conversation ID")?;
             coordinator.initialize()?;
-            let target = coordinator.get_conversation(&id)?.ok_or_else(|| format!("Conversation {id} was not found."))?;
-            if command["context"]["projectId"].as_str().is_some_and(|p| !p.is_empty()) && target["projectId"].as_str().is_some_and(|p| !p.is_empty()) && command["context"]["projectId"] != target["projectId"] {
+            let target = coordinator
+                .get_conversation(&id)?
+                .ok_or_else(|| format!("Conversation {id} was not found."))?;
+            if command["context"]["projectId"]
+                .as_str()
+                .is_some_and(|p| !p.is_empty())
+                && target["projectId"].as_str().is_some_and(|p| !p.is_empty())
+                && command["context"]["projectId"] != target["projectId"]
+            {
                 return Err("Page context belongs to a different project.".into());
             }
-            let refs = command["attachmentRefs"].as_array().cloned().unwrap_or_default();
-            chat::resolve_attachments(&dir, &id, &refs).map_err(|message| if message == "ENOENT" || message.contains("Invalid attachment digest") { "Unknown attachment reference.".to_owned() } else { message })?;
+            let refs = command["attachmentRefs"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            chat::resolve_attachments(&dir, &id, &refs).map_err(|message| {
+                if message == "ENOENT" || message.contains("Invalid attachment digest") {
+                    "Unknown attachment reference.".to_owned()
+                } else {
+                    message
+                }
+            })?;
             if !refs.is_empty() {
                 let options = &command["runtimeOptions"];
-                if options["mode"].as_str().unwrap_or("chat") == "chat" && options["toolMode"].as_str().unwrap_or("project-only") == "project-only" {
-                    return Err("Choose an image-capable agent runtime before attaching images.".into());
+                if options["mode"].as_str().unwrap_or("chat") == "chat"
+                    && options["toolMode"].as_str().unwrap_or("project-only") == "project-only"
+                {
+                    return Err(
+                        "Choose an image-capable agent runtime before attaching images.".into(),
+                    );
                 }
             }
             coordinator.submit_turn(&command)
@@ -204,7 +254,16 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
             required(&command["conversationId"], "A conversation ID")?;
             required(&command["commandId"], "A command ID")?;
             let action = command["action"].as_str().unwrap_or_default();
-            if !["cancel", "retry", "pin", "unpin", "resume-context", "reconcile"].contains(&action) {
+            if ![
+                "cancel",
+                "retry",
+                "pin",
+                "unpin",
+                "resume-context",
+                "reconcile",
+            ]
+            .contains(&action)
+            {
                 return Err("Unknown control action.".into());
             }
             if !command["expectedRevision"].is_i64() {
@@ -218,7 +277,9 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
             }
             Ok(control(host, &command)?["conversation"].clone())
         }
-        "assistant:cancelTurn" | "assistant:retryParticipant" | "assistant:resolveAttempt" => typed_control(host, channel, &arg(0)),
+        "assistant:cancelTurn" | "assistant:retryParticipant" | "assistant:resolveAttempt" => {
+            typed_control(host, channel, &arg(0))
+        }
         "assistant:turn" => {
             if !chat::read_snapshot(&dir)?["activation"].is_null() {
                 return Err("Legacy assistant turns are disabled.".into());
@@ -231,6 +292,11 @@ fn run(host: &HostContext, channel: &str, args: &[Value]) -> Fallible<Value> {
     }
 }
 
-pub fn dispatch(host: &HostContext, _user_data_dir: &Path, channel: &str, args: &[Value]) -> Result<Value> {
+pub fn dispatch(
+    host: &HostContext,
+    _user_data_dir: &Path,
+    channel: &str,
+    args: &[Value],
+) -> Result<Value> {
     run(host, channel, args).map_err(failure)
 }

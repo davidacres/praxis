@@ -92,7 +92,10 @@ pub fn safe_segment(value: &str) -> Result<String, String> {
     if valid {
         Ok(trimmed.to_owned())
     } else {
-        Err("Use 2–64 lowercase letters, digits, or dashes (must start and end alphanumeric).".into())
+        Err(
+            "Use 2–64 lowercase letters, digits, or dashes (must start and end alphanumeric)."
+                .into(),
+        )
     }
 }
 
@@ -129,17 +132,27 @@ pub fn build_agent_manifest(input: &NewAgentInput) -> (Value, Vec<String>) {
         if blank(&input.command) {
             errors.push("A command is required for this transport.".to_owned());
         } else {
-            entry.insert("command".into(), json!(input.command.as_deref().unwrap_or_default().trim()));
+            entry.insert(
+                "command".into(),
+                json!(input.command.as_deref().unwrap_or_default().trim()),
+            );
         }
         if let Some(args) = input.args.as_ref().filter(|args| !args.is_empty()) {
-            let args: Vec<String> = args.iter().map(|arg| arg.trim().to_owned()).filter(|arg| !arg.is_empty()).collect();
+            let args: Vec<String> = args
+                .iter()
+                .map(|arg| arg.trim().to_owned())
+                .filter(|arg| !arg.is_empty())
+                .collect();
             entry.insert("args".into(), json!(args));
         }
     } else if NETWORK_TRANSPORTS.contains(&input.transport.as_str()) {
         if blank(&input.url) {
             errors.push("A URL is required for this transport.".to_owned());
         } else {
-            entry.insert("url".into(), json!(input.url.as_deref().unwrap_or_default().trim()));
+            entry.insert(
+                "url".into(),
+                json!(input.url.as_deref().unwrap_or_default().trim()),
+            );
         }
     }
     let mut manifest = Map::new();
@@ -152,20 +165,30 @@ pub fn build_agent_manifest(input: &NewAgentInput) -> (Value, Vec<String>) {
         manifest.insert("skills".into(), json!(skills));
     }
     if !blank(&input.config) {
-        manifest.insert("config".into(), json!(input.config.as_deref().unwrap_or_default().trim()));
+        manifest.insert(
+            "config".into(),
+            json!(input.config.as_deref().unwrap_or_default().trim()),
+        );
     }
     if let Some(activation) = &input.activation {
         manifest.insert("activation".into(), json!(activation));
     }
     let manifest = Value::Object(manifest);
     for issue in validate_agent_manifest(&manifest, &format!("{}/agent.json", input.id)) {
-        errors.push(format!("{}: {}", issue["path"].as_str().unwrap_or_default(), issue["message"].as_str().unwrap_or_default()));
+        errors.push(format!(
+            "{}: {}",
+            issue["path"].as_str().unwrap_or_default(),
+            issue["message"].as_str().unwrap_or_default()
+        ));
     }
     (manifest, errors)
 }
 
 fn pretty(value: &Value) -> String {
-    format!("{}\n", serde_json::to_string_pretty(value).unwrap_or_default())
+    format!(
+        "{}\n",
+        serde_json::to_string_pretty(value).unwrap_or_default()
+    )
 }
 
 fn agent_scaffold_files(input: &NewAgentInput) -> Vec<GeneratedFile> {
@@ -182,7 +205,9 @@ fn agent_scaffold_files(input: &NewAgentInput) -> Vec<GeneratedFile> {
             },
             GeneratedFile {
                 path: "package.json".into(),
-                content: pretty(&json!({ "name": input.id, "private": true, "type": "module", "scripts": { "start": "node index.js" } })),
+                content: pretty(
+                    &json!({ "name": input.id, "private": true, "type": "module", "scripts": { "start": "node index.js" } }),
+                ),
             },
         ];
     }
@@ -216,32 +241,68 @@ pub fn plan_new_agent(input: &NewAgentInput, existing_ids: &[String]) -> Creatio
     let (manifest, built) = build_agent_manifest(input);
     errors.extend(built);
     if !errors.is_empty() {
-        return CreationPlan { folder: folder.unwrap_or_default(), files: Vec::new(), errors };
+        return CreationPlan {
+            folder: folder.unwrap_or_default(),
+            files: Vec::new(),
+            errors,
+        };
     }
-    let mut files = vec![GeneratedFile { path: "agent.json".into(), content: pretty(&manifest) }];
+    let mut files = vec![GeneratedFile {
+        path: "agent.json".into(),
+        content: pretty(&manifest),
+    }];
     if input.scaffold == Some(true) {
         files.extend(agent_scaffold_files(input));
     }
-    CreationPlan { folder: folder.unwrap_or_default(), files, errors: Vec::new() }
+    CreationPlan {
+        folder: folder.unwrap_or_default(),
+        files,
+        errors: Vec::new(),
+    }
 }
 
 /// The `SKILL.md` front matter and body for a new skill.
 #[must_use]
 pub fn build_skill_doc(input: &NewSkillInput) -> String {
-    let mut lines = vec!["---".to_owned(), format!("name: {}", input.name.trim()), format!("description: {}", input.description.trim())];
-    if let Some(version) = input.version.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    let mut lines = vec![
+        "---".to_owned(),
+        format!("name: {}", input.name.trim()),
+        format!("description: {}", input.description.trim()),
+    ];
+    if let Some(version) = input
+        .version
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         lines.push(format!("version: {version}"));
     }
-    let triggers: Vec<&str> = input.triggers.iter().flatten().map(|t| t.trim()).filter(|t| !t.is_empty()).collect();
+    let triggers: Vec<&str> = input
+        .triggers
+        .iter()
+        .flatten()
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .collect();
     if !triggers.is_empty() {
         lines.push(format!("triggers: {}", triggers.join(", ")));
     }
     lines.push("---".into());
     lines.push(String::new());
-    let body = input.instructions.as_deref().map(str::trim).filter(|b| !b.is_empty()).map_or_else(
-        || format!("# {}\n\nDescribe when and how to use this skill.", input.name.trim()),
-        str::to_owned,
-    );
+    let body = input
+        .instructions
+        .as_deref()
+        .map(str::trim)
+        .filter(|b| !b.is_empty())
+        .map_or_else(
+            || {
+                format!(
+                    "# {}\n\nDescribe when and how to use this skill.",
+                    input.name.trim()
+                )
+            },
+            str::to_owned,
+        );
     lines.push(body);
     format!("{}\n", lines.join("\n"))
 }
@@ -260,44 +321,100 @@ pub fn plan_new_skill(input: &NewSkillInput, existing_names: &[String]) -> Creat
     if let Ok(name) = &folder
         && existing_names.contains(name)
     {
-        errors.push(format!("name: A skill named \"{name}\" already exists in this scope."));
+        errors.push(format!(
+            "name: A skill named \"{name}\" already exists in this scope."
+        ));
     }
     if !errors.is_empty() {
-        return CreationPlan { folder: folder.unwrap_or_default(), files: Vec::new(), errors };
+        return CreationPlan {
+            folder: folder.unwrap_or_default(),
+            files: Vec::new(),
+            errors,
+        };
     }
-    let mut files = vec![GeneratedFile { path: "SKILL.md".into(), content: build_skill_doc(input) }];
+    let mut files = vec![GeneratedFile {
+        path: "SKILL.md".into(),
+        content: build_skill_doc(input),
+    }];
     for (enabled, path, content) in [
-        (input.include_scripts, "scripts/README.md", "# scripts\n\nExecutable helpers for this skill. Nothing here runs during discovery.\n"),
-        (input.include_references, "references/README.md", "# references\n\nReference material the skill can cite.\n"),
-        (input.include_examples, "examples/README.md", "# examples\n\nWorked examples of the skill in use.\n"),
+        (
+            input.include_scripts,
+            "scripts/README.md",
+            "# scripts\n\nExecutable helpers for this skill. Nothing here runs during discovery.\n",
+        ),
+        (
+            input.include_references,
+            "references/README.md",
+            "# references\n\nReference material the skill can cite.\n",
+        ),
+        (
+            input.include_examples,
+            "examples/README.md",
+            "# examples\n\nWorked examples of the skill in use.\n",
+        ),
     ] {
         if enabled == Some(true) {
-            files.push(GeneratedFile { path: path.into(), content: content.into() });
+            files.push(GeneratedFile {
+                path: path.into(),
+                content: content.into(),
+            });
         }
     }
-    CreationPlan { folder: folder.unwrap_or_default(), files, errors: Vec::new() }
+    CreationPlan {
+        folder: folder.unwrap_or_default(),
+        files,
+        errors: Vec::new(),
+    }
 }
 
 /// Canonical AGENT.md document for a provider-neutral role profile.
 #[must_use]
 pub fn build_agent_profile_doc(input: &NewAgentProfileInput) -> String {
-    let mut lines = vec!["---".to_owned(), format!("id: {}", input.id.trim()), format!("name: {}", input.name.trim())];
-    if let Some(description) = input.description.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    let mut lines = vec![
+        "---".to_owned(),
+        format!("id: {}", input.id.trim()),
+        format!("name: {}", input.name.trim()),
+    ];
+    if let Some(description) = input
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         lines.push(format!("description: {description}"));
     }
-    if let Some(version) = input.version.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+    if let Some(version) = input
+        .version
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
         lines.push(format!("version: {version}"));
     }
-    let skills: Vec<&str> = input.preferred_skills.iter().flatten().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let skills: Vec<&str> = input
+        .preferred_skills
+        .iter()
+        .flatten()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if !skills.is_empty() {
         lines.push(format!("skills: {}", skills.join(", ")));
     }
-    lines.extend(["---".to_owned(), String::new(), input.instructions.trim().to_owned(), String::new()]);
+    lines.extend([
+        "---".to_owned(),
+        String::new(),
+        input.instructions.trim().to_owned(),
+        String::new(),
+    ]);
     lines.join("\n")
 }
 
 #[must_use]
-pub fn plan_new_agent_profile(input: &NewAgentProfileInput, existing_ids: &[String]) -> CreationPlan {
+pub fn plan_new_agent_profile(
+    input: &NewAgentProfileInput,
+    existing_ids: &[String],
+) -> CreationPlan {
     let mut errors = Vec::new();
     let folder = safe_segment(&input.id);
     if let Err(error) = &folder {
@@ -315,11 +432,18 @@ pub fn plan_new_agent_profile(input: &NewAgentProfileInput, existing_ids: &[Stri
         errors.push(format!("id: \"{name}\" already exists in this scope."));
     }
     if !errors.is_empty() {
-        return CreationPlan { folder: folder.unwrap_or_default(), files: Vec::new(), errors };
+        return CreationPlan {
+            folder: folder.unwrap_or_default(),
+            files: Vec::new(),
+            errors,
+        };
     }
     CreationPlan {
         folder: folder.unwrap_or_default(),
-        files: vec![GeneratedFile { path: "AGENT.md".into(), content: build_agent_profile_doc(input) }],
+        files: vec![GeneratedFile {
+            path: "AGENT.md".into(),
+            content: build_agent_profile_doc(input),
+        }],
         errors: Vec::new(),
     }
 }
@@ -335,10 +459,24 @@ fn preview(kind: &str, name: String, duplicate: bool, errors: Vec<String>) -> Va
 pub fn validate_agent_import(manifest: &Value, existing_ids: &[String]) -> Value {
     let mut errors: Vec<String> = validate_agent_manifest(manifest, "agent.json")
         .iter()
-        .map(|issue| format!("{}: {}", issue["path"].as_str().unwrap_or_default(), issue["message"].as_str().unwrap_or_default()))
+        .map(|issue| {
+            format!(
+                "{}: {}",
+                issue["path"].as_str().unwrap_or_default(),
+                issue["message"].as_str().unwrap_or_default()
+            )
+        })
         .collect();
-    let id = manifest["id"].as_str().map(str::trim).unwrap_or_default().to_owned();
-    let safe = if id.is_empty() { Err("id: missing".to_owned()) } else { safe_segment(&id) };
+    let id = manifest["id"]
+        .as_str()
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_owned();
+    let safe = if id.is_empty() {
+        Err("id: missing".to_owned())
+    } else {
+        safe_segment(&id)
+    };
     if let Err(error) = &safe
         && !errors.iter().any(|e| e.starts_with("id:"))
     {
@@ -354,9 +492,17 @@ pub fn validate_agent_profile_import(markdown: &str, existing_ids: &[String]) ->
     let (profile, error) = parse_agent_profile(markdown, "");
     let mut errors: Vec<String> = error.into_iter().collect();
     let id = profile["id"].as_str().unwrap_or_default().to_owned();
-    let safe = if id.is_empty() { Err("id: missing".to_owned()) } else { safe_segment(&id) };
+    let safe = if id.is_empty() {
+        Err("id: missing".to_owned())
+    } else {
+        safe_segment(&id)
+    };
     if let Err(error) = &safe {
-        errors.push(if error.starts_with("id") { error.clone() } else { format!("id: {error}") });
+        errors.push(if error.starts_with("id") {
+            error.clone()
+        } else {
+            format!("id: {error}")
+        });
     }
     let duplicate = safe.as_ref().is_ok_and(|name| existing_ids.contains(name));
     preview("profile", safe.unwrap_or(id), duplicate, errors)
@@ -364,16 +510,26 @@ pub fn validate_agent_profile_import(markdown: &str, existing_ids: &[String]) ->
 
 /// Minimal front-matter read for import validation: `(name, description, error)`.
 #[must_use]
-pub fn parse_skill_front_matter(content: &str) -> (Option<String>, Option<String>, Option<&'static str>) {
+pub fn parse_skill_front_matter(
+    content: &str,
+) -> (Option<String>, Option<String>, Option<&'static str>) {
     if !content.starts_with("---") {
-        return (None, None, Some("SKILL.md must start with YAML front matter."));
+        return (
+            None,
+            None,
+            Some("SKILL.md must start with YAML front matter."),
+        );
     }
     let Some(block) = front_matter_block_pub(content) else {
         return (None, None, Some("SKILL.md front matter is not closed."));
     };
     let strip = |value: &str| {
         let value = value.strip_prefix(['\'', '"']).unwrap_or(value);
-        value.strip_suffix(['\'', '"']).unwrap_or(value).trim().to_owned()
+        value
+            .strip_suffix(['\'', '"'])
+            .unwrap_or(value)
+            .trim()
+            .to_owned()
     };
     let (mut name, mut description) = (None, None);
     for (key, value) in block.lines().filter_map(front_matter_pair) {
@@ -386,7 +542,11 @@ pub fn parse_skill_front_matter(content: &str) -> (Option<String>, Option<String
     let name = name.filter(|n| !n.is_empty());
     let description = description.filter(|d| !d.is_empty());
     if name.is_none() || description.is_none() {
-        return (name, description, Some("name and description are required."));
+        return (
+            name,
+            description,
+            Some("name and description are required."),
+        );
     }
     (name, description, None)
 }
@@ -401,20 +561,35 @@ pub fn validate_skill_import(markdown: &str, existing_names: &[String]) -> Value
         None => Err("name: missing".to_owned()),
     };
     if let Err(error) = &safe {
-        errors.push(if error.starts_with("name") { error.clone() } else { format!("name: {error}") });
+        errors.push(if error.starts_with("name") {
+            error.clone()
+        } else {
+            format!("name: {error}")
+        });
     }
     let duplicate = safe.as_ref().is_ok_and(|n| existing_names.contains(n));
-    preview("skill", safe.unwrap_or_else(|_| name.unwrap_or_default()), duplicate, errors)
+    preview(
+        "skill",
+        safe.unwrap_or_else(|_| name.unwrap_or_default()),
+        duplicate,
+        errors,
+    )
 }
 
 /// A non-clashing folder name, deriving `-2`, `-3`… when `rename` is requested.
-pub fn resolve_import_folder(base: &str, existing: &[String], on_duplicate: &str) -> Result<String, String> {
+pub fn resolve_import_folder(
+    base: &str,
+    existing: &[String],
+    on_duplicate: &str,
+) -> Result<String, String> {
     let name = safe_segment(base)?;
     if !existing.contains(&name) {
         return Ok(name);
     }
     if on_duplicate == "block" {
-        return Err(format!("\"{name}\" already exists — choose rename or a different source."));
+        return Err(format!(
+            "\"{name}\" already exists — choose rename or a different source."
+        ));
     }
     (2..100)
         .map(|n| format!("{name}-{n}"))
@@ -444,7 +619,10 @@ mod tests {
 
     #[test]
     fn safe_segment_matches_the_wizard_rule() {
-        assert_eq!(safe_segment("scaffolded-agent").as_deref(), Ok("scaffolded-agent"));
+        assert_eq!(
+            safe_segment("scaffolded-agent").as_deref(),
+            Ok("scaffolded-agent")
+        );
         for bad in ["Bad Id", "a", "-ab", "ab-", "a/b", "a..b", ""] {
             assert!(safe_segment(bad).is_err(), "{bad}");
         }
@@ -466,10 +644,21 @@ mod tests {
         assert!(plan.errors.is_empty(), "{:?}", plan.errors);
         assert_eq!(plan.folder, "scaffolded-agent");
         let manifest: Value = serde_json::from_str(&plan.files[0].content).expect("json");
-        assert_eq!(manifest["entry"], json!({ "command": "node", "args": ["index.js"] }));
+        assert_eq!(
+            manifest["entry"],
+            json!({ "command": "node", "args": ["index.js"] })
+        );
         assert_eq!(manifest["type"], "acp");
-        assert!(plan.files.iter().any(|f| f.path == "index.js") && plan.files.iter().any(|f| f.path == "package.json"));
-        assert!(plan.files[0].content.starts_with("{\n  \"schemaVersion\": 1,"), "key order is stable");
+        assert!(
+            plan.files.iter().any(|f| f.path == "index.js")
+                && plan.files.iter().any(|f| f.path == "package.json")
+        );
+        assert!(
+            plan.files[0]
+                .content
+                .starts_with("{\n  \"schemaVersion\": 1,"),
+            "key order is stable"
+        );
     }
 
     #[test]
@@ -480,25 +669,59 @@ mod tests {
         assert!(dup.files.is_empty() && dup.errors[0].contains("already exists"));
         let mut no_command = agent("x-agent");
         no_command.command = None;
-        assert!(plan_new_agent(&no_command, &[]).errors.iter().any(|e| e.contains("A command is required")));
+        assert!(
+            plan_new_agent(&no_command, &[])
+                .errors
+                .iter()
+                .any(|e| e.contains("A command is required"))
+        );
     }
 
     #[test]
     fn imports_reject_bad_manifests_and_flag_duplicates() {
-        let bad = validate_agent_import(&json!({"schemaVersion":1,"id":"x","name":"X","type":"telepathy","entry":"run.js"}), &[]);
+        let bad = validate_agent_import(
+            &json!({"schemaVersion":1,"id":"x","name":"X","type":"telepathy","entry":"run.js"}),
+            &[],
+        );
         assert!(!bad["errors"].as_array().expect("errors").is_empty());
-        let good = validate_agent_import(&json!({"schemaVersion":1,"id":"imported-agent","name":"I","type":"acp","entry":"run.js"}), &["imported-agent".into()]);
-        assert_eq!((good["errors"].as_array().map(Vec::len), good["duplicate"].as_bool()), (Some(0), Some(true)));
+        let good = validate_agent_import(
+            &json!({"schemaVersion":1,"id":"imported-agent","name":"I","type":"acp","entry":"run.js"}),
+            &["imported-agent".into()],
+        );
+        assert_eq!(
+            (
+                good["errors"].as_array().map(Vec::len),
+                good["duplicate"].as_bool()
+            ),
+            (Some(0), Some(true))
+        );
         let skill = validate_skill_import("---\nname: code-audit\ndescription: d\n---\nx", &[]);
-        assert_eq!((skill["name"].as_str(), skill["errors"].as_array().map(Vec::len)), (Some("code-audit"), Some(0)));
-        assert!(!validate_skill_import("no front matter", &[])["errors"].as_array().expect("e").is_empty());
+        assert_eq!(
+            (
+                skill["name"].as_str(),
+                skill["errors"].as_array().map(Vec::len)
+            ),
+            (Some("code-audit"), Some(0))
+        );
+        assert!(
+            !validate_skill_import("no front matter", &[])["errors"]
+                .as_array()
+                .expect("e")
+                .is_empty()
+        );
     }
 
     #[test]
     fn resolve_import_folder_renames_or_blocks() {
         let existing = vec!["tool".to_owned(), "tool-2".to_owned()];
-        assert_eq!(resolve_import_folder("tool", &existing, "rename").as_deref(), Ok("tool-3"));
+        assert_eq!(
+            resolve_import_folder("tool", &existing, "rename").as_deref(),
+            Ok("tool-3")
+        );
         assert!(resolve_import_folder("tool", &existing, "block").is_err());
-        assert_eq!(resolve_import_folder("fresh", &existing, "block").as_deref(), Ok("fresh"));
+        assert_eq!(
+            resolve_import_folder("fresh", &existing, "block").as_deref(),
+            Ok("fresh")
+        );
     }
 }

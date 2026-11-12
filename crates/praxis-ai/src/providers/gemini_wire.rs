@@ -103,7 +103,9 @@ fn gemini_parts(message: &WireMessage) -> Vec<Value> {
     }
     let mut parts = vec![json!({ "text": message.content.clone().unwrap_or_default() })];
     for image in message.images.iter().flatten() {
-        parts.push(json!({ "inlineData": { "mimeType": image.mime_type, "data": image.data_base64 } }));
+        parts.push(
+            json!({ "inlineData": { "mimeType": image.mime_type, "data": image.data_base64 } }),
+        );
     }
     parts
 }

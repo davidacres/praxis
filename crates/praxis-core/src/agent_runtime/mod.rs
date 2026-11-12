@@ -21,11 +21,13 @@ use sha2::{Digest, Sha256};
 
 /// Lowercase hex SHA-256, the fingerprint format the TypeScript catalog used.
 pub(crate) fn fingerprint(content: &str) -> String {
-    Sha256::digest(content.as_bytes()).iter().fold(String::new(), |mut hex, byte| {
-        use std::fmt::Write as _;
-        let _ = write!(hex, "{byte:02x}");
-        hex
-    })
+    Sha256::digest(content.as_bytes())
+        .iter()
+        .fold(String::new(), |mut hex, byte| {
+            use std::fmt::Write as _;
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
 }
 
 /// Immediate subdirectories of `root`, sorted by full path; empty when unreadable.
@@ -52,7 +54,11 @@ pub(crate) fn resolve(path: &Path) -> PathBuf {
 #[must_use]
 pub fn resolve_against(root: &Path, child: &str) -> String {
     use std::path::Component;
-    let joined = if Path::new(child).is_absolute() { PathBuf::from(child) } else { resolve(root).join(child) };
+    let joined = if Path::new(child).is_absolute() {
+        PathBuf::from(child)
+    } else {
+        resolve(root).join(child)
+    };
     let mut normalized = PathBuf::new();
     for component in joined.components() {
         match component {
@@ -72,7 +78,9 @@ pub(crate) fn front_matter_pair(line: &str) -> Option<(&str, &str)> {
     let (key, rest) = line.split_once(':')?;
     let mut chars = key.chars();
     let first = chars.next()?;
-    if !first.is_ascii_alphabetic() || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !first.is_ascii_alphabetic()
+        || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
         return None;
     }
     Some((key, rest.trim_start()))
@@ -80,5 +88,7 @@ pub(crate) fn front_matter_pair(line: &str) -> Option<(&str, &str)> {
 
 /// Case-insensitive ordering, the closest std equivalent of `localeCompare` for these names.
 pub(crate) fn locale_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    a.to_lowercase().cmp(&b.to_lowercase()).then_with(|| a.cmp(b))
+    a.to_lowercase()
+        .cmp(&b.to_lowercase())
+        .then_with(|| a.cmp(b))
 }

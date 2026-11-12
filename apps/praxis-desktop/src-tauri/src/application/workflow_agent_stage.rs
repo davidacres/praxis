@@ -13,7 +13,9 @@ use praxis_ai::providers::registry::{DescriptorKind, built_in_descriptors};
 use praxis_host::HostContext;
 use praxis_workflows::orchestrator::{StageDispatchContext, StageOutcome};
 use praxis_workflows::run::{DeclaredArtifact, WorkflowPauseReason, WorkflowRun, stage_provider};
-use praxis_workflows::stage_model::{ModelTierMap, StageModelNode, choose_stage_model, named_model};
+use praxis_workflows::stage_model::{
+    ModelTierMap, StageModelNode, choose_stage_model, named_model,
+};
 use praxis_workflows::stage_session::find_snapshot;
 use praxis_workflows::types::{
     CheckFinding, CheckFindingSeverity, CheckFindings, FindingVerdict, WorkflowAgentTaskNode,
@@ -52,7 +54,10 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 async fn head_of(worktree: &Path) -> Option<String> {
-    git(worktree, &["rev-parse", "HEAD"]).await.ok().filter(|s| !s.is_empty())
+    git(worktree, &["rev-parse", "HEAD"])
+        .await
+        .ok()
+        .filter(|s| !s.is_empty())
 }
 
 /// Commits whatever the stage changed and returns the sha: the stage's immutable snapshot.
@@ -92,9 +97,19 @@ fn write_run_file(worktree: &Path, name: &str, text: &str) -> Option<String> {
     std::fs::create_dir_all(&dir).ok()?;
     let safe: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
-    let body = if text.ends_with('\n') { text.to_string() } else { format!("{text}\n") };
+    let body = if text.ends_with('\n') {
+        text.to_string()
+    } else {
+        format!("{text}\n")
+    };
     std::fs::write(dir.join(&safe), body).ok()?;
     Some(format!("{RUN_FILES_DIR}/{safe}"))
 }
@@ -116,7 +131,10 @@ async fn write_diff_run_file(
         target = head_of(worktree).await?;
     }
     let fork_point = match base_ref {
-        Some(base) => git(worktree, &["merge-base", base, &target]).await.ok().filter(|s| !s.is_empty()),
+        Some(base) => git(worktree, &["merge-base", base, &target])
+            .await
+            .ok()
+            .filter(|s| !s.is_empty()),
         None => None,
     };
     let base = match fork_point {
@@ -182,7 +200,10 @@ fn build_task_definition(
                     "- {} \"{}\"{}",
                     i.kind,
                     i.contract_id,
-                    i.path.as_ref().map(|p| format!(" at {p}")).unwrap_or_default()
+                    i.path
+                        .as_ref()
+                        .map(|p| format!(" at {p}"))
+                        .unwrap_or_default()
                 )
             })
             .collect::<Vec<_>>()
@@ -198,7 +219,11 @@ fn build_task_definition(
                     "- {} \"{}\"{}",
                     kind_name(o.kind),
                     o.id,
-                    if o.required { " (required)" } else { " (optional)" }
+                    if o.required {
+                        " (required)"
+                    } else {
+                        " (optional)"
+                    }
                 )
             })
             .collect::<Vec<_>>()
@@ -324,7 +349,9 @@ fn format_upstream(
                 let head: String = chars[..half].iter().collect();
                 let tail: String = chars[chars.len() - half..].iter().collect();
                 let read_whole = full_path.as_ref().map_or(String::new(), |path| {
-                    format!(" — read the whole report from `{path}` before relying on any part of it")
+                    format!(
+                        " — read the whole report from `{path}` before relying on any part of it"
+                    )
                 });
                 format!(
                     "{}\n\n[… {} characters omitted{read_whole} …]\n\n{}",
@@ -367,7 +394,11 @@ fn environment_block(response: &str) -> Option<String> {
     if !reason.is_empty() && pseudo.is_match(&reason) {
         return None;
     }
-    Some(if reason.is_empty() { "no reason given".to_string() } else { reason })
+    Some(if reason.is_empty() {
+        "no reason given".to_string()
+    } else {
+        reason
+    })
 }
 
 /// The plan's own verdict on itself: its last `Plan status:` line.
@@ -378,7 +409,9 @@ fn plan_status(response: &str) -> Result<(), String> {
         .rev()
         .find(|l| l.to_lowercase().starts_with("plan status"));
     let Some(line) = line else {
-        return Err("it did not confirm the plan was complete (no \"Plan status: ready\" line)".into());
+        return Err(
+            "it did not confirm the plan was complete (no \"Plan status: ready\" line)".into(),
+        );
     };
     let verdict = line
         .split_once(':')
@@ -457,7 +490,10 @@ fn parse_review_findings(content: &str) -> Result<CheckFindings, String> {
         };
         let message = text_of("message").unwrap_or_else(|| "Review finding".to_string());
         let file = text_of("file");
-        let line = item.get("line").and_then(Value::as_f64).map(|l| l.floor() as i64);
+        let line = item
+            .get("line")
+            .and_then(Value::as_f64)
+            .map(|l| l.floor() as i64);
         let rule_id = text_of("ruleId");
         findings.push(CheckFinding {
             fingerprint: compute_finding_fingerprint(
@@ -536,8 +572,16 @@ fn outcome_from_session(
                     .unwrap_or_else(|| l.to_string())
             });
             let error = match detail {
-                Some(d) if d.starts_with("The AI provider's") || d.starts_with("Provider limit reached") => d,
-                Some(d) => format!("The AI provider's credits or usage limit were reached: {}", first_line(&d)),
+                Some(d)
+                    if d.starts_with("The AI provider's")
+                        || d.starts_with("Provider limit reached") =>
+                {
+                    d
+                }
+                Some(d) => format!(
+                    "The AI provider's credits or usage limit were reached: {}",
+                    first_line(&d)
+                ),
                 None => "The AI provider's credits or usage limit were reached.".to_string(),
             };
             return StageOutcome {
@@ -546,17 +590,18 @@ fn outcome_from_session(
                 ..StageOutcome::default()
             };
         }
-        let detail = finished
-            .last_error
-            .clone()
-            .or_else(|| (!finished.response.trim().is_empty()).then(|| first_line(&finished.response)));
+        let detail = finished.last_error.clone().or_else(|| {
+            (!finished.response.trim().is_empty()).then(|| first_line(&finished.response))
+        });
         return StageOutcome {
             error: Some(if finished.state == "aborted" {
                 "The stage session was aborted.".to_string()
             } else {
                 format!(
                     "The stage session failed{}",
-                    detail.map(|d| format!(": {d}")).unwrap_or_else(|| ".".to_string())
+                    detail
+                        .map(|d| format!(": {d}"))
+                        .unwrap_or_else(|| ".".to_string())
                 )
             }),
             retryable: finished.state == "aborted",
@@ -720,15 +765,17 @@ pub(super) fn launch(
     let permission = if autopilot { "autopilot" } else { "manual" }.to_string();
     let settings = host.settings().read();
     let reasoning = "medium".to_string();
-    let descriptor = built_in_descriptors().into_iter().find(|d| d.id == provider);
+    let descriptor = built_in_descriptors()
+        .into_iter()
+        .find(|d| d.id == provider);
     let api = match &descriptor {
         Some(d) => d.kind == DescriptorKind::Api,
         None => true,
     };
     if api {
         drop(settings);
-        let (connection, default_model) = super::ai_providers::api_connection(host, provider)
-            .map_err(|e| e.message)?;
+        let (connection, default_model) =
+            super::ai_providers::api_connection(host, provider).map_err(|e| e.message)?;
         super::api_host::start_api_task(
             host,
             &dir,
@@ -824,10 +871,13 @@ async fn wait_for_session(
         if let Some(record) = &record {
             let state = record["state"].as_str().unwrap_or("");
             // A continued session still shows its previous turn until the next one starts.
-            let previous_turn = after.is_some_and(|a| {
-                state == "completed" && record["completedAt"].as_str() == Some(a)
-            });
-            if is_terminal(state) && !previous_turn && !acp_host::has_active_task(&dir, key) && !super::stage_handover_guard::is_held(key) {
+            let previous_turn = after
+                .is_some_and(|a| state == "completed" && record["completedAt"].as_str() == Some(a));
+            if is_terminal(state)
+                && !previous_turn
+                && !acp_host::has_active_task(&dir, key)
+                && !super::stage_handover_guard::is_held(key)
+            {
                 return Some(Finished {
                     state: state.to_string(),
                     response: record["responseText"].as_str().unwrap_or("").to_string(),
@@ -914,7 +964,12 @@ pub async fn run_agent_stage(
             let full_path = (can_read_run_files && text.trim().chars().count() > 24_000)
                 .then(|| write_run_file(&worktree, &format!("{}.md", i.contract_id), &text))
                 .flatten();
-            (i.contract_id.clone(), stage_name(run, &i.node_id), text, full_path)
+            (
+                i.contract_id.clone(),
+                stage_name(run, &i.node_id),
+                text,
+                full_path,
+            )
         })
         .collect();
     if let Some(block) = format_upstream(
@@ -923,14 +978,22 @@ pub async fn run_agent_stage(
         24_000,
         false,
     ) {
-        task["scope"] = json!(format!("{}\n\n{block}", task["scope"].as_str().unwrap_or("")));
+        task["scope"] = json!(format!(
+            "{}\n\n{block}",
+            task["scope"].as_str().unwrap_or("")
+        ));
     }
     let logs: Vec<(String, String, String, Option<String>)> = inputs
         .iter()
         .filter(|i| i.kind == "log" && i.path.is_some())
         .map(|i| {
             let text = std::fs::read_to_string(i.path.as_deref().unwrap_or("")).unwrap_or_default();
-            (i.contract_id.clone(), stage_name(run, &i.node_id), text, None)
+            (
+                i.contract_id.clone(),
+                stage_name(run, &i.node_id),
+                text,
+                None,
+            )
         })
         .collect();
     if let Some(block) = format_upstream(
@@ -939,14 +1002,26 @@ pub async fn run_agent_stage(
         12_000,
         true,
     ) {
-        task["scope"] = json!(format!("{}\n\n{block}", task["scope"].as_str().unwrap_or("")));
+        task["scope"] = json!(format!(
+            "{}\n\n{block}",
+            task["scope"].as_str().unwrap_or("")
+        ));
     }
     // A diff input is only a commit ref, and a read-only stage has no diff tool: hand it the
     // whole change since the run branched as a file for its file tools.
     if can_read_run_files {
-        for input in inputs.iter().filter(|i| i.kind == "diff" && i.path.is_some()) {
+        for input in inputs
+            .iter()
+            .filter(|i| i.kind == "diff" && i.path.is_some())
+        {
             let reference = input.path.as_deref().unwrap_or("");
-            let patch = write_diff_run_file(&worktree, &input.contract_id, reference, run.worktree_base_ref.as_deref()).await;
+            let patch = write_diff_run_file(
+                &worktree,
+                &input.contract_id,
+                reference,
+                run.worktree_base_ref.as_deref(),
+            )
+            .await;
             let note = match patch {
                 Some(path) => format!(
                     "The full patch for diff \"{}\" (the change since this run branched, up to {}) is the file {path} in your working directory. Read it with your file tools; there is no diff tool.",
@@ -958,19 +1033,32 @@ pub async fn run_agent_stage(
                     input.contract_id
                 ),
             };
-            task["scope"] = json!(format!("{}\n\n{note}", task["scope"].as_str().unwrap_or("")));
+            task["scope"] = json!(format!(
+                "{}\n\n{note}",
+                task["scope"].as_str().unwrap_or("")
+            ));
         }
     }
 
-    let failed_attempts = run
-        .nodes
-        .get(&node.base.id)
-        .map_or(0, |s| s.attempts.iter().filter(|a| a.outcome == praxis_workflows::types::WorkflowNodeOutcome::Failed && a.pause.is_none()).count());
+    let failed_attempts = run.nodes.get(&node.base.id).map_or(0, |s| {
+        s.attempts
+            .iter()
+            .filter(|a| {
+                a.outcome == praxis_workflows::types::WorkflowNodeOutcome::Failed
+                    && a.pause.is_none()
+            })
+            .count()
+    });
     let switched = run
         .stage_providers
         .as_ref()
         .is_some_and(|m| m.contains_key(&node.base.id));
-    let own = node.agent.provider_id.as_deref().map(str::trim).filter(|p| !p.is_empty());
+    let own = node
+        .agent
+        .provider_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
     let switched_model = named_model(
         run.stage_models
             .as_ref()
@@ -990,7 +1078,11 @@ pub async fn run_agent_stage(
             },
             &provider,
             tiers.as_ref(),
-            if provider == run_provider { run.ai_model.as_deref() } else { None },
+            if provider == run_provider {
+                run.ai_model.as_deref()
+            } else {
+                None
+            },
             failed_attempts as u32,
         )
         .model
@@ -1000,10 +1092,25 @@ pub async fn run_agent_stage(
         .ok()
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_else(|| "full".into());
-    let start_ref = if node.mutates_worktree { head_of(&worktree).await } else { None };
-    let autopilot = run.permission_mode.is_some_and(|m| serde_json::to_value(m).ok() == Some(json!("auto")));
+    let start_ref = if node.mutates_worktree {
+        head_of(&worktree).await
+    } else {
+        None
+    };
+    let autopilot = run
+        .permission_mode
+        .is_some_and(|m| serde_json::to_value(m).ok() == Some(json!("auto")));
 
-    let launched = launch(host, &key, &provider, model.clone(), task, &worktree, &tool_mode, autopilot);
+    let launched = launch(
+        host,
+        &key,
+        &provider,
+        model.clone(),
+        task,
+        &worktree,
+        &tool_mode,
+        autopilot,
+    );
     let session_id = match launched {
         Ok(id) => id,
         Err(error) => {
@@ -1011,8 +1118,10 @@ pub async fn run_agent_stage(
             let limit = praxis_ai::providers::provider_limit_error::is_provider_limit_error(&error);
             return Ok(StageOutcome {
                 error: Some(if limit {
-                    praxis_ai::providers::provider_limit_error::extract_provider_limit_message(&error)
-                        .unwrap_or(error)
+                    praxis_ai::providers::provider_limit_error::extract_provider_limit_message(
+                        &error,
+                    )
+                    .unwrap_or(error)
                 } else {
                     error
                 }),
@@ -1086,15 +1195,19 @@ pub async fn run_agent_stage(
         }
     }
     remove_run_files(&worktree);
-    let snapshot_ref = if node.mutates_worktree
-        && !context.cancel.is_cancelled()
-        && finished.state == "completed"
-    {
-        freeze_worktree(&worktree, &node.base.name).await
-    } else {
-        None
-    };
-    let mut outcome = outcome_from_session(node, &finished, snapshot_ref.as_deref(), start_ref.as_deref());
+    let snapshot_ref =
+        if node.mutates_worktree && !context.cancel.is_cancelled() && finished.state == "completed"
+        {
+            freeze_worktree(&worktree, &node.base.name).await
+        } else {
+            None
+        };
+    let mut outcome = outcome_from_session(
+        node,
+        &finished,
+        snapshot_ref.as_deref(),
+        start_ref.as_deref(),
+    );
     outcome.provider = Some(provider);
     outcome.model = model;
     Ok(publish_plan_outputs(host, node, run, outcome, &finished.response).await)
@@ -1118,7 +1231,10 @@ fn board_priority(priority: &str) -> &'static str {
 }
 
 fn plan_text(value: &Value) -> String {
-    value.as_str().map(|s| s.trim().to_string()).unwrap_or_default()
+    value
+        .as_str()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 fn clip(value: &str, max: usize) -> String {
@@ -1147,14 +1263,17 @@ struct PublishablePlan {
 /// Reads the last `praxis-plan` block from a stage's response; the message says what is wrong so
 /// a retry can fix it.
 fn parse_publishable_plan(response: &str) -> Result<PublishablePlan, String> {
-    let re = regex::Regex::new(r"```praxis-plan[^\n]*\n([\s\S]*?)```").map_err(|e| e.to_string())?;
+    let re =
+        regex::Regex::new(r"```praxis-plan[^\n]*\n([\s\S]*?)```").map_err(|e| e.to_string())?;
     let Some(block) = re.captures_iter(response).last().map(|c| c[1].to_string()) else {
         return Err("The stage finished without a `praxis-plan` block, so there was no plan to create on the board.".into());
     };
     let raw: Value = serde_json::from_str(&block)
         .map_err(|e| format!("The `praxis-plan` block is not valid JSON: {e}"))?;
     let (Some(feature), Some(items)) = (raw["feature"].as_object(), raw["items"].as_array()) else {
-        return Err("The `praxis-plan` block needs a \"feature\" object and an \"items\" array.".into());
+        return Err(
+            "The `praxis-plan` block needs a \"feature\" object and an \"items\" array.".into(),
+        );
     };
     let feature_title = plan_text(&feature["title"]);
     if feature_title.is_empty() {
@@ -1164,7 +1283,10 @@ fn parse_publishable_plan(response: &str) -> Result<PublishablePlan, String> {
         return Err("The plan has no items.".into());
     }
     if items.len() > PLAN_MAX_ITEMS {
-        return Err(format!("The plan has {} items; at most {PLAN_MAX_ITEMS} can be created.", items.len()));
+        return Err(format!(
+            "The plan has {} items; at most {PLAN_MAX_ITEMS} can be created.",
+            items.len()
+        ));
     }
     let prefix = regex::Regex::new(r"(?i)^\[?P[0-3]\]?[\s:·-]*").map_err(|e| e.to_string())?;
     let mut parsed = Vec::new();
@@ -1177,7 +1299,11 @@ fn parse_publishable_plan(response: &str) -> Result<PublishablePlan, String> {
             return Err(format!("Plan item {} has no title.", index + 1));
         }
         let priority_text = plan_text(&entry["priority"]).to_uppercase();
-        let priority = PLAN_PRIORITIES.iter().copied().find(|p| *p == priority_text).unwrap_or("P2");
+        let priority = PLAN_PRIORITIES
+            .iter()
+            .copied()
+            .find(|p| *p == priority_text)
+            .unwrap_or("P2");
         let kind_text = plan_text(&entry["type"]).to_lowercase();
         let kind = ["Story", "Task", "Bug"]
             .iter()
@@ -1221,14 +1347,21 @@ fn parse_publishable_plan(response: &str) -> Result<PublishablePlan, String> {
 async fn rpc(host: &HostContext, channel: &'static str, args: Vec<Value>) -> Result<Value, String> {
     let h = host.clone();
     let response = tokio::task::spawn_blocking(move || {
-        h.dispatch_rpc(praxis_contracts::RustRpcRequest { id: "plan-publish".into(), channel: channel.into(), args })
+        h.dispatch_rpc(praxis_contracts::RustRpcRequest {
+            id: "plan-publish".into(),
+            channel: channel.into(),
+            args,
+        })
     })
     .await
     .map_err(|e| e.to_string())?;
     if response.ok {
         Ok(response.result.unwrap_or(Value::Null))
     } else {
-        Err(response.error.map(|e| e.message).unwrap_or_else(|| "The board refused the request.".into()))
+        Err(response
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "The board refused the request.".into()))
     }
 }
 
@@ -1238,10 +1371,13 @@ async fn publish_plan_to_board(
     response: &str,
 ) -> Result<praxis_workflows::types::WorkflowBoardReference, String> {
     let mut plan = parse_publishable_plan(response)?;
-    plan.items.sort_by_key(|item| PLAN_PRIORITIES.iter().position(|p| *p == item.priority));
+    plan.items
+        .sort_by_key(|item| PLAN_PRIORITIES.iter().position(|p| *p == item.priority));
     let connection = format!("project:{}", run.project_id);
     // The board's own key: a folder board can name a different key from the project's.
-    let projects = rpc(host, "issue:getProjects", vec![json!(connection)]).await.unwrap_or(Value::Null);
+    let projects = rpc(host, "issue:getProjects", vec![json!(connection)])
+        .await
+        .unwrap_or(Value::Null);
     let project_key = projects
         .as_array()
         .and_then(|a| a.first())
@@ -1279,7 +1415,12 @@ async fn publish_plan_to_board(
             input["severity"] = json!(severity);
         }
         if !item.sections.is_empty() {
-            input["sections"] = Value::Object(item.sections.iter().map(|(k, v)| ((*k).to_string(), json!(v))).collect());
+            input["sections"] = Value::Object(
+                item.sections
+                    .iter()
+                    .map(|(k, v)| ((*k).to_string(), json!(v)))
+                    .collect(),
+            );
         }
         match rpc(host, "issue:create", vec![input, json!(connection)]).await {
             Ok(created) => item_keys.push(created["key"].as_str().unwrap_or_default().to_string()),
@@ -1294,7 +1435,10 @@ async fn publish_plan_to_board(
     }
     Ok(praxis_workflows::types::WorkflowBoardReference {
         key: feature_key,
-        title: feature["summary"].as_str().unwrap_or(&plan.title).to_string(),
+        title: feature["summary"]
+            .as_str()
+            .unwrap_or(&plan.title)
+            .to_string(),
         item_keys,
     })
 }
@@ -1308,7 +1452,12 @@ async fn publish_plan_outputs(
     outcome: StageOutcome,
     response: &str,
 ) -> StageOutcome {
-    let contracts: Vec<&str> = node.outputs.iter().filter(|c| c.publish_to.is_some()).map(|c| c.id.as_str()).collect();
+    let contracts: Vec<&str> = node
+        .outputs
+        .iter()
+        .filter(|c| c.publish_to.is_some())
+        .map(|c| c.id.as_str())
+        .collect();
     if !outcome.succeeded || contracts.is_empty() {
         return outcome;
     }
@@ -1322,7 +1471,11 @@ async fn publish_plan_outputs(
             }
             outcome
         }
-        Err(error) => StageOutcome { provider: outcome.provider, model: outcome.model, ..StageOutcome::failure(error) },
+        Err(error) => StageOutcome {
+            provider: outcome.provider,
+            model: outcome.model,
+            ..StageOutcome::failure(error)
+        },
     }
 }
 
@@ -1332,7 +1485,8 @@ mod tests {
 
     #[test]
     fn a_stage_blocked_by_its_environment_pauses_instead_of_failing() {
-        let text = "I looked around.\nStage status: blocked-environment: the registry is unreachable";
+        let text =
+            "I looked around.\nStage status: blocked-environment: the registry is unreachable";
         assert_eq!(
             environment_block(text).as_deref(),
             Some("the registry is unreachable")
@@ -1343,10 +1497,16 @@ mod tests {
     #[test]
     fn a_plan_must_confirm_itself() {
         assert!(plan_status("The plan.\nPlan status: ready").is_ok());
-        assert!(plan_status("The plan.").unwrap_err().contains("no \"Plan status: ready\" line"));
-        assert!(plan_status("Plan status: blocked: no repo")
-            .unwrap_err()
-            .contains("blocked: no repo"));
+        assert!(
+            plan_status("The plan.")
+                .unwrap_err()
+                .contains("no \"Plan status: ready\" line")
+        );
+        assert!(
+            plan_status("Plan status: blocked: no repo")
+                .unwrap_err()
+                .contains("blocked: no repo")
+        );
     }
 
     #[test]

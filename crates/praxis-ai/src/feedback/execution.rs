@@ -7,7 +7,9 @@ use regex::Regex;
 use serde_json::{Map, Value};
 
 use super::grounding::pick_test_command;
-use super::types::{DimensionScore, Finding, Remediation, StepRef, WorkspaceHints, js_round, locale_cmp};
+use super::types::{
+    DimensionScore, Finding, Remediation, StepRef, WorkspaceHints, js_round, locale_cmp,
+};
 
 fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
     cell.get_or_init(|| Regex::new(pattern).expect("static pattern"))
@@ -23,12 +25,30 @@ macro_rules! lazy_re {
 }
 
 lazy_re!(shell_search, r"(?i)\b(grep|rg|ripgrep|find|ack|ag)\b");
-lazy_re!(shell_tracker, r"(?i)\b(gh\s+issue|glab\s+issue|jira\s+issue|curl\b.*/issues)\b");
-lazy_re!(verification_shell, r"(?i)\b(test|tsc|check-types|compile|build|playwright|vitest|jest|mocha|pytest|cargo\s+test|dotnet\s+test|go\s+test|npm\s+run\s+(?:test|build|check))\b");
-lazy_re!(write_tool, r"(?i)\b(write_file|edit_file|edit|create_file|patch|str_replace|apply_patch|multiedit)\b");
-lazy_re!(read_search_tool, r"\b(read_file|read|view|list_dir|search|grep|glob|find_symbol|search_code|get_source)\b");
-lazy_re!(edit_in_place_tool, r"(?i)\b(edit_file|edit|str_replace|str_replace_editor|multiedit|apply_patch|patch|replace)\b");
-lazy_re!(subagent_tool, r"(?i)^(task|agent|subagent|delegate|spawn_agent)$");
+lazy_re!(
+    shell_tracker,
+    r"(?i)\b(gh\s+issue|glab\s+issue|jira\s+issue|curl\b.*/issues)\b"
+);
+lazy_re!(
+    verification_shell,
+    r"(?i)\b(test|tsc|check-types|compile|build|playwright|vitest|jest|mocha|pytest|cargo\s+test|dotnet\s+test|go\s+test|npm\s+run\s+(?:test|build|check))\b"
+);
+lazy_re!(
+    write_tool,
+    r"(?i)\b(write_file|edit_file|edit|create_file|patch|str_replace|apply_patch|multiedit)\b"
+);
+lazy_re!(
+    read_search_tool,
+    r"\b(read_file|read|view|list_dir|search|grep|glob|find_symbol|search_code|get_source)\b"
+);
+lazy_re!(
+    edit_in_place_tool,
+    r"(?i)\b(edit_file|edit|str_replace|str_replace_editor|multiedit|apply_patch|patch|replace)\b"
+);
+lazy_re!(
+    subagent_tool,
+    r"(?i)^(task|agent|subagent|delegate|spawn_agent)$"
+);
 lazy_re!(shell_read, r"\b(cat|sed|head|tail|less|grep|rg|nl|awk)\b");
 lazy_re!(path_like, r"[\w@./-]+\.[A-Za-z0-9]{1,6}\b");
 lazy_re!(failed_type, r"(?i)failed|error");
@@ -36,13 +56,27 @@ lazy_re!(undo_edit, r"(?i)You undid the edit to");
 
 fn is_mcp_or_structured(tool: &str) -> bool {
     let lower = tool.to_lowercase();
-    ["mcp__", "mcp_", "code_intelligence", "tracker_", "browser_"].iter().any(|p| lower.starts_with(p))
-        || ["find_symbol", "search_code", "get_callers", "get_callees", "trace_flow", "search_knowledge"].contains(&lower.as_str())
+    ["mcp__", "mcp_", "code_intelligence", "tracker_", "browser_"]
+        .iter()
+        .any(|p| lower.starts_with(p))
+        || [
+            "find_symbol",
+            "search_code",
+            "get_callers",
+            "get_callees",
+            "trace_flow",
+            "search_knowledge",
+        ]
+        .contains(&lower.as_str())
 }
 
 pub fn file_name(path: &str) -> String {
     let last = path.rsplit(['/', '\\']).next().unwrap_or_default();
-    if last.is_empty() { path.to_owned() } else { last.to_owned() }
+    if last.is_empty() {
+        path.to_owned()
+    } else {
+        last.to_owned()
+    }
 }
 
 fn one_line(text: Option<&str>, max: usize) -> Option<String> {
@@ -50,7 +84,11 @@ fn one_line(text: Option<&str>, max: usize) -> Option<String> {
     if clean.is_empty() {
         return None;
     }
-    Some(if clean.chars().count() > max { format!("{}…", clean.chars().take(max - 1).collect::<String>()) } else { clean })
+    Some(if clean.chars().count() > max {
+        format!("{}…", clean.chars().take(max - 1).collect::<String>())
+    } else {
+        clean
+    })
 }
 
 fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -58,10 +96,18 @@ fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 fn arg_path(args: &Value) -> Option<String> {
-    ["path", "file_path", "filePath", "Path", "target_file", "file", "notebook_path"]
-        .iter()
-        .find_map(|key| args[*key].as_str().map(str::trim).filter(|v| !v.is_empty()))
-        .map(str::to_owned)
+    [
+        "path",
+        "file_path",
+        "filePath",
+        "Path",
+        "target_file",
+        "file",
+        "notebook_path",
+    ]
+    .iter()
+    .find_map(|key| args[*key].as_str().map(str::trim).filter(|v| !v.is_empty()))
+    .map(str::to_owned)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -106,27 +152,44 @@ fn format_step_range(calls: &[&ToolCall]) -> String {
     if steps.len() >= 3 && steps.windows(2).all(|w| w[1] > w[0]) {
         return format!("#{}–#{}", steps[0], steps[steps.len() - 1]);
     }
-    steps.iter().map(|s| format!("#{s}")).collect::<Vec<_>>().join(", ")
+    steps
+        .iter()
+        .map(|s| format!("#{s}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn is_shell_event(data: &Value) -> bool {
     let tool = data["toolName"].as_str().unwrap_or_default().to_lowercase();
-    data["kind"] == "shell" || ["run_shell", "run_command", "bash", "shell", "execute"].contains(&tool.as_str())
+    data["kind"] == "shell"
+        || ["run_shell", "run_command", "bash", "shell", "execute"].contains(&tool.as_str())
 }
 
 fn is_write_event(data: &Value) -> bool {
     let tool = data["toolName"].as_str().unwrap_or_default().to_lowercase();
-    data["kind"] == "write" || write_tool().is_match(&tool) || data["fileChanges"].as_array().is_some_and(|c| !c.is_empty())
+    data["kind"] == "write"
+        || write_tool().is_match(&tool)
+        || data["fileChanges"]
+            .as_array()
+            .is_some_and(|c| !c.is_empty())
 }
 
 fn shell_command_text(event: &Value, data: &Value) -> String {
     let args = &data["args"];
-    let from_args = ["command", "cmd", "CommandLine"].iter().find_map(|k| args[*k].as_str()).unwrap_or_default();
-    [from_args, data["argsSummary"].as_str().unwrap_or_default(), event["summary"].as_str().unwrap_or_default(), event["detail"].as_str().unwrap_or_default()]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+    let from_args = ["command", "cmd", "CommandLine"]
+        .iter()
+        .find_map(|k| args[*k].as_str())
+        .unwrap_or_default();
+    [
+        from_args,
+        data["argsSummary"].as_str().unwrap_or_default(),
+        event["summary"].as_str().unwrap_or_default(),
+        event["detail"].as_str().unwrap_or_default(),
+    ]
+    .into_iter()
+    .filter(|s| !s.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
 }
 
 fn build_call(event: &Value, index: usize, start: Option<&Value>) -> ToolCall {
@@ -138,51 +201,124 @@ fn build_call(event: &Value, index: usize, start: Option<&Value>) -> ToolCall {
         data.extend(e.clone());
     }
     let start_args = start.map(|s| &s["data"]["args"]).filter(|a| !a.is_null());
-    let args = start_args.or_else(|| Some(&event["data"]["args"]).filter(|a| !a.is_null())).cloned().unwrap_or(Value::Null);
+    let args = start_args
+        .or_else(|| Some(&event["data"]["args"]).filter(|a| !a.is_null()))
+        .cloned()
+        .unwrap_or(Value::Null);
     if !args.is_null() {
         data.insert("args".into(), args.clone());
     }
     let data = Value::Object(data);
     let tool_name = {
-        let named = data["toolName"].as_str().unwrap_or_default().trim().to_owned();
-        if named.is_empty() { data["kind"].as_str().unwrap_or("tool").to_owned() } else { named }
+        let named = data["toolName"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        if named.is_empty() {
+            data["kind"].as_str().unwrap_or("tool").to_owned()
+        } else {
+            named
+        }
     };
     let is_shell = is_shell_event(&data);
-    let command = if is_shell { shell_command_text(event, &data) } else { String::new() };
-    let command_arg = ["command", "cmd", "CommandLine"].iter().find_map(|k| args[*k].as_str().filter(|v| !v.trim().is_empty())).map(|v| v.trim().to_owned());
-    let changed_paths: Vec<String> = data["fileChanges"].as_array().into_iter().flatten().filter_map(|c| c["path"].as_str().filter(|p| !p.is_empty()).map(str::to_owned)).collect();
-    let args_summary = str_of(&data, "argsSummary").or_else(|| start.and_then(|s| s["data"]["argsSummary"].as_str()));
+    let command = if is_shell {
+        shell_command_text(event, &data)
+    } else {
+        String::new()
+    };
+    let command_arg = ["command", "cmd", "CommandLine"]
+        .iter()
+        .find_map(|k| args[*k].as_str().filter(|v| !v.trim().is_empty()))
+        .map(|v| v.trim().to_owned());
+    let changed_paths: Vec<String> = data["fileChanges"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| {
+            c["path"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(str::to_owned)
+        })
+        .collect();
+    let args_summary = str_of(&data, "argsSummary")
+        .or_else(|| start.and_then(|s| s["data"]["argsSummary"].as_str()));
     let summary = one_line(args_summary, 120);
-    let path = arg_path(&args).or_else(|| changed_paths.first().cloned()).or_else(|| summary.as_deref().and_then(|s| path_like().find(s)).map(|m| m.as_str().to_owned()));
-    let detail = summary.clone().or_else(|| path.clone()).or_else(|| command_arg.as_deref().and_then(|c| one_line(Some(c), 120)));
+    let path = arg_path(&args)
+        .or_else(|| changed_paths.first().cloned())
+        .or_else(|| {
+            summary
+                .as_deref()
+                .and_then(|s| path_like().find(s))
+                .map(|m| m.as_str().to_owned())
+        });
+    let detail = summary
+        .clone()
+        .or_else(|| path.clone())
+        .or_else(|| command_arg.as_deref().and_then(|c| one_line(Some(c), 120)));
     let is_write = is_write_event(&data);
     let kind = data["kind"].as_str().unwrap_or_default();
-    let is_read = !is_write && (kind == "read" || kind == "list" || read_search_tool().is_match(&tool_name));
+    let is_read =
+        !is_write && (kind == "read" || kind == "list" || read_search_tool().is_match(&tool_name));
     let is_search = !is_write && kind == "search";
-    let failed = data["ok"] == false || failed_type().is_match(event["type"].as_str().unwrap_or_default());
+    let failed =
+        data["ok"] == false || failed_type().is_match(event["type"].as_str().unwrap_or_default());
     let mut read_names = Vec::new();
-    if (is_read || is_search) && let Some(p) = &path {
+    if (is_read || is_search)
+        && let Some(p) = &path
+    {
         read_names.push(file_name(p));
     }
     if !command.is_empty() && shell_read().is_match(&command) {
-        read_names.extend(path_like().find_iter(&command).map(|m| file_name(m.as_str())));
+        read_names.extend(
+            path_like()
+                .find_iter(&command)
+                .map(|m| file_name(m.as_str())),
+        );
     }
-    let edit_in_place = is_write && if kind == "write" { edit_in_place_tool().is_match(&tool_name) || tool_name == "write" } else { edit_in_place_tool().is_match(&tool_name) };
+    let edit_in_place = is_write
+        && if kind == "write" {
+            edit_in_place_tool().is_match(&tool_name) || tool_name == "write"
+        } else {
+            edit_in_place_tool().is_match(&tool_name)
+        };
     ToolCall {
         step: index + 1,
         tool_name,
-        ok: if failed { Some(false) } else if data["ok"] == true { Some(true) } else { None },
-        call_id: str_of(&data, "callId").filter(|c| !c.is_empty()).map(str::to_owned),
-        timestamp: event["timestamp"].as_str().filter(|t| !t.is_empty()).map(str::to_owned),
+        ok: if failed {
+            Some(false)
+        } else if data["ok"] == true {
+            Some(true)
+        } else {
+            None
+        },
+        call_id: str_of(&data, "callId")
+            .filter(|c| !c.is_empty())
+            .map(str::to_owned),
+        timestamp: event["timestamp"]
+            .as_str()
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned),
         detail,
-        error: if failed { one_line(data["output"].as_str().or_else(|| event["detail"].as_str()), 160) } else { None },
+        error: if failed {
+            one_line(
+                data["output"].as_str().or_else(|| event["detail"].as_str()),
+                160,
+            )
+        } else {
+            None
+        },
         path,
         changed_paths,
         read_names,
         command_arg,
         is_write,
         is_edit_in_place: edit_in_place,
-        is_read: is_read || (!command.is_empty() && shell_read().is_match(&command) && !shell_search().is_match(&command)),
+        is_read: is_read
+            || (!command.is_empty()
+                && shell_read().is_match(&command)
+                && !shell_search().is_match(&command)),
         is_search,
         is_shell,
         command,
@@ -214,7 +350,9 @@ fn collect_tool_calls(events: &[Value]) -> Vec<ToolCall> {
 
 /// Slices events to a single turn when `turn_index` is given, or returns all events.
 pub fn select_turn_events(events: &[Value], turn_index: Option<usize>) -> Vec<Value> {
-    let Some(turn_index) = turn_index else { return events.to_vec() };
+    let Some(turn_index) = turn_index else {
+        return events.to_vec();
+    };
     let mut turns: Vec<Vec<Value>> = Vec::new();
     let mut current: Vec<Value> = Vec::new();
     for event in events {
@@ -226,7 +364,10 @@ pub fn select_turn_events(events: &[Value], turn_index: Option<usize>) -> Vec<Va
     if !current.is_empty() {
         turns.push(current);
     }
-    turns.into_iter().nth(turn_index).unwrap_or_else(|| events.to_vec())
+    turns
+        .into_iter()
+        .nth(turn_index)
+        .unwrap_or_else(|| events.to_vec())
 }
 
 #[derive(Debug, Clone)]
@@ -263,7 +404,15 @@ pub struct ExecutionInput<'a> {
 }
 
 fn dimension(id: &str, label: &str, earned: i64, max: i64, summary: String) -> DimensionScore {
-    DimensionScore { dimension: id.into(), label: label.into(), earned_points: earned, max_points: max, normalized_score: js_round(earned as f64 / max as f64 * 100.0), summary, signals: None }
+    DimensionScore {
+        dimension: id.into(),
+        label: label.into(),
+        earned_points: earned,
+        max_points: max,
+        normalized_score: js_round(earned as f64 / max as f64 * 100.0),
+        summary,
+        signals: None,
+    }
 }
 
 struct FailedGroup<'a> {
@@ -276,16 +425,28 @@ struct FailedGroup<'a> {
 #[allow(clippy::too_many_lines)]
 pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
     let mut findings: Vec<Finding> = Vec::new();
-    let configured: BTreeSet<String> = input.configured_mcp_servers.iter().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect();
+    let configured: BTreeSet<String> = input
+        .configured_mcp_servers
+        .iter()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .collect();
     let has_code_intel = input.code_intelligence_available != Some(false);
-    let has_tracker = input.tracker_tools_available || input.session.is_some_and(|s| s["connectionId"].as_str().is_some_and(|c| !c.is_empty()));
+    let has_tracker = input.tracker_tools_available
+        || input
+            .session
+            .is_some_and(|s| s["connectionId"].as_str().is_some_and(|c| !c.is_empty()));
 
     let session = match input.session {
         Some(session) if input.kind != "prompt-readiness" => session,
         _ => {
             let mcp_max = 15;
             let mut mcp_earned = 15;
-            if re_text(r"(?i)\b(use grep|run grep|run find|use curl)\b", input.prompt_text.trim()) && has_code_intel {
+            if re_text(
+                r"(?i)\b(use grep|run grep|run find|use curl)\b",
+                input.prompt_text.trim(),
+            ) && has_code_intel
+            {
                 mcp_earned -= 5;
                 findings.push(Finding::new(
                     "prompt-shell-search-instead-of-mcp", "mcp-leverage", "info", -5,
@@ -296,16 +457,52 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
                         .snippet("Use `code_intelligence` (`find_symbol`, `search_code`) for symbol and codebase lookups."),
                 ));
             }
-            let ready_list: Vec<String> = std::iter::once(if has_code_intel { "code_intelligence".to_owned() } else { String::new() }).chain(configured.iter().cloned()).filter(|s| !s.is_empty()).collect();
-            let summary = if mcp_earned == mcp_max {
-                format!("Ready ({}).", if ready_list.is_empty() { "standard tools".to_owned() } else { ready_list.join(", ") })
+            let ready_list: Vec<String> = std::iter::once(if has_code_intel {
+                "code_intelligence".to_owned()
             } else {
-                findings.iter().map(|f| f.title.clone()).collect::<Vec<_>>().join("; ")
+                String::new()
+            })
+            .chain(configured.iter().cloned())
+            .filter(|s| !s.is_empty())
+            .collect();
+            let summary = if mcp_earned == mcp_max {
+                format!(
+                    "Ready ({}).",
+                    if ready_list.is_empty() {
+                        "standard tools".to_owned()
+                    } else {
+                        ready_list.join(", ")
+                    }
+                )
+            } else {
+                findings
+                    .iter()
+                    .map(|f| f.title.clone())
+                    .collect::<Vec<_>>()
+                    .join("; ")
             };
             return ExecutionAnalysis {
-                tool_dimension: dimension("tool-efficiency", "Tool & Execution Efficiency", 25, 25, "Pre-send check (evaluated after session execution).".into()),
-                mcp_dimension: dimension("mcp-leverage", "MCP & Capability Readiness", mcp_earned, mcp_max, summary),
-                outcome_dimension: dimension("outcome-verification", "Outcome & Verification", 20, 20, "Pre-send check (evaluated after session execution).".into()),
+                tool_dimension: dimension(
+                    "tool-efficiency",
+                    "Tool & Execution Efficiency",
+                    25,
+                    25,
+                    "Pre-send check (evaluated after session execution).".into(),
+                ),
+                mcp_dimension: dimension(
+                    "mcp-leverage",
+                    "MCP & Capability Readiness",
+                    mcp_earned,
+                    mcp_max,
+                    summary,
+                ),
+                outcome_dimension: dimension(
+                    "outcome-verification",
+                    "Outcome & Verification",
+                    20,
+                    20,
+                    "Pre-send check (evaluated after session execution).".into(),
+                ),
                 findings,
                 tools_used: Vec::new(),
                 mcp_tools_used: Vec::new(),
@@ -332,8 +529,16 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
     let mut touched = BTreeSet::new();
     let mut path_write_steps: BTreeMap<String, StepRef> = BTreeMap::new();
 
-    let permission_requests = events.iter().filter(|e| e["type"] == "permission_requested").count();
-    let undo_edits = events.iter().filter(|e| e["type"] == "info" && undo_edit().is_match(e["summary"].as_str().unwrap_or_default())).count();
+    let permission_requests = events
+        .iter()
+        .filter(|e| e["type"] == "permission_requested")
+        .count();
+    let undo_edits = events
+        .iter()
+        .filter(|e| {
+            e["type"] == "info" && undo_edit().is_match(e["summary"].as_str().unwrap_or_default())
+        })
+        .count();
 
     let mut successful = 0usize;
     let mut failed_calls = 0usize;
@@ -382,19 +587,28 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
             if let Some(name) = &name {
                 let blind = call.is_edit_in_place && !read_names.contains(name);
                 if call.ok == Some(false) {
-                    let run = open_runs.entry(name.clone()).or_insert_with(|| (Vec::new(), blind));
+                    let run = open_runs
+                        .entry(name.clone())
+                        .or_insert_with(|| (Vec::new(), blind));
                     run.0.push(call);
                 } else {
                     if let Some(run) = open_runs.remove(name) {
                         if run.0.len() >= 2 {
-                            groups.push(FailedGroup { calls: run.0, blind: run.1, resolved_by: Some(call), read_before_resolve: read_names.contains(name) });
+                            groups.push(FailedGroup {
+                                calls: run.0,
+                                blind: run.1,
+                                resolved_by: Some(call),
+                                read_before_resolve: read_names.contains(name),
+                            });
                         }
                     } else if blind {
                         isolated_blind.push(call);
                     }
                     writes_by_name.entry(name.clone()).or_default().push(call);
                     if let Some(p) = &call.path {
-                        path_write_steps.entry(p.clone()).or_insert_with(|| step_ref(call));
+                        path_write_steps
+                            .entry(p.clone())
+                            .or_insert_with(|| step_ref(call));
                     }
                 }
             }
@@ -435,11 +649,19 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
     }
     for (_, run) in std::mem::take(&mut open_runs) {
         if run.0.len() >= 2 {
-            groups.push(FailedGroup { calls: run.0, blind: run.1, resolved_by: None, read_before_resolve: false });
+            groups.push(FailedGroup {
+                calls: run.0,
+                blind: run.1,
+                resolved_by: None,
+                read_before_resolve: false,
+            });
         }
     }
 
-    let attributed: BTreeSet<usize> = groups.iter().flat_map(|g| g.calls.iter().map(|c| c.step)).collect();
+    let attributed: BTreeSet<usize> = groups
+        .iter()
+        .flat_map(|g| g.calls.iter().map(|c| c.step))
+        .collect();
 
     // Tool & execution efficiency (25)
     let tool_max = 25;
@@ -447,7 +669,12 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
     let total = calls.len();
 
     let mut ranked: Vec<&FailedGroup<'_>> = groups.iter().collect();
-    ranked.sort_by(|a, b| b.calls.len().cmp(&a.calls.len()).then(a.calls[0].step.cmp(&b.calls[0].step)));
+    ranked.sort_by(|a, b| {
+        b.calls
+            .len()
+            .cmp(&a.calls.len())
+            .then(a.calls[0].step.cmp(&b.calls[0].step))
+    });
     for group in ranked.iter().take(2) {
         let first = group.calls[0];
         let name = file_name(first.path.as_deref().unwrap_or_default());
@@ -455,11 +682,16 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
         let deduction = std::cmp::min(8, 2 + count as i64 * 2);
         tool_earned -= deduction;
         let recovery = match group.resolved_by {
-            Some(by) if group.read_before_resolve => format!(" and only succeeded after reading it on step #{}.", by.step),
+            Some(by) if group.read_before_resolve => {
+                format!(" and only succeeded after reading it on step #{}.", by.step)
+            }
             Some(by) => format!("; step #{} finally applied it.", by.step),
             None => " and never recovered.".to_owned(),
         };
-        let error_note = first.error.as_ref().map_or(String::new(), |e| format!(" Error: {e}"));
+        let error_note = first
+            .error
+            .as_ref()
+            .map_or(String::new(), |e| format!(" Error: {e}"));
         let path = first.path.clone().unwrap_or_default();
         findings.push(
             Finding::new(
@@ -500,7 +732,10 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
         );
     }
 
-    let thrashed = writes_by_name.iter().filter(|(_, w)| w.len() >= 5).max_by(|a, b| a.1.len().cmp(&b.1.len()).then_with(|| locale_cmp(b.0, a.0)));
+    let thrashed = writes_by_name
+        .iter()
+        .filter(|(_, w)| w.len() >= 5)
+        .max_by(|a, b| a.1.len().cmp(&b.1.len()).then_with(|| locale_cmp(b.0, a.0)));
     if let Some((name, writes)) = thrashed {
         tool_earned -= 3;
         let target = writes[0].path.clone().unwrap_or_else(|| name.clone());
@@ -516,10 +751,14 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
         );
     }
 
-    let unattributed: Vec<&ToolCall> = calls.iter().filter(|c| c.ok == Some(false) && !attributed.contains(&c.step)).collect();
+    let unattributed: Vec<&ToolCall> = calls
+        .iter()
+        .filter(|c| c.ok == Some(false) && !attributed.contains(&c.step))
+        .collect();
     if !unattributed.is_empty() && total > 0 {
         let rate = unattributed.len() as f64 / total as f64;
-        let deduction = (js_round(rate * 15.0) + if unattributed.len() >= 3 { 2 } else { 0 }).clamp(2, 10);
+        let deduction =
+            (js_round(rate * 15.0) + if unattributed.len() >= 3 { 2 } else { 0 }).clamp(2, 10);
         tool_earned -= deduction;
         let mut tool_names: Vec<&String> = Vec::new();
         for c in &unattributed {
@@ -550,13 +789,19 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
             if attributed.contains(&call.step) {
                 continue;
             }
-            if call.ok == Some(false) && streak.last().is_some_and(|p| p.tool_name == call.tool_name) {
+            if call.ok == Some(false)
+                && streak.last().is_some_and(|p| p.tool_name == call.tool_name)
+            {
                 streak.push(call);
             } else {
                 if streak.len() >= 3 {
                     loop_steps.append(&mut streak);
                 }
-                streak = if call.ok == Some(false) { vec![call] } else { Vec::new() };
+                streak = if call.ok == Some(false) {
+                    vec![call]
+                } else {
+                    Vec::new()
+                };
             }
         }
         if streak.len() >= 3 {
@@ -586,7 +831,10 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
             Remediation::new("refine-prompt", "Delegate exploration", "Hand broad exploration to a research subagent and keep the main context for the change.")
                 .snippet("Delegate broad codebase exploration to a subagent and report back only what matters."),
         ));
-    } else if read_or_search > 12 && write_count > 0 && read_or_search as f64 / write_count.max(1) as f64 > 8.0 {
+    } else if read_or_search > 12
+        && write_count > 0
+        && read_or_search as f64 / write_count.max(1) as f64 > 8.0
+    {
         tool_earned -= 4;
         findings.push(Finding::new(
             "tool-high-read-churn", "tool-efficiency", "info", -4,
@@ -599,22 +847,41 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
     if permission_requests >= 3 {
         tool_earned -= 3;
         findings.push(Finding::new(
-            "tool-permission-friction", "tool-efficiency", "info", -3,
+            "tool-permission-friction",
+            "tool-efficiency",
+            "info",
+            -3,
             format!("Repeated permission prompts ({permission_requests} requests)"),
             format!("Session paused {permission_requests} times waiting for tool approval."),
-            Remediation::new("change-tool-mode", "Use Autopilot Permission Mode", "Switch permission policy to Autopilot when running trusted multi-step tasks."),
+            Remediation::new(
+                "change-tool-mode",
+                "Use Autopilot Permission Mode",
+                "Switch permission policy to Autopilot when running trusted multi-step tasks.",
+            ),
         ));
     }
 
-    let max_steps = session["taskDefinition"]["maxSteps"].as_f64().unwrap_or(500.0);
+    let max_steps = session["taskDefinition"]["maxSteps"]
+        .as_f64()
+        .unwrap_or(500.0);
     let step_count = session["stepCount"].as_f64().unwrap_or(0.0);
     if step_count > 0.0 && max_steps > 0.0 && step_count / max_steps >= 0.8 {
         tool_earned -= 3;
         findings.push(Finding::new(
-            "tool-step-budget-exhaustion", "tool-efficiency", "warning", -3,
+            "tool-step-budget-exhaustion",
+            "tool-efficiency",
+            "warning",
+            -3,
             format!("Near step-budget ceiling ({step_count}/{max_steps} steps)"),
-            format!("Session consumed {}% of its step budget.", js_round(step_count / max_steps * 100.0)),
-            Remediation::new("refine-prompt", "Split Into Focused Subtasks", "Decompose large multi-stage goals into smaller tasks or a governed workflow."),
+            format!(
+                "Session consumed {}% of its step budget.",
+                js_round(step_count / max_steps * 100.0)
+            ),
+            Remediation::new(
+                "refine-prompt",
+                "Split Into Focused Subtasks",
+                "Decompose large multi-stage goals into smaller tasks or a governed workflow.",
+            ),
         ));
     }
     let tool_earned = tool_earned.clamp(0, tool_max);
@@ -668,15 +935,39 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
             Remediation::new("avoid-tool-pattern", "Check MCP Tool Schema", "Verify required MCP arguments (such as repository name or issueKey) before calling."),
         ));
     }
-    let tags: Vec<&str> = input.user_feedback.map(|f| f["frictionTags"].as_array().into_iter().flatten().filter_map(Value::as_str).collect()).unwrap_or_default();
-    let notes = input.user_feedback.and_then(|f| f["notes"].as_str()).map(str::trim).filter(|n| !n.is_empty());
+    let tags: Vec<&str> = input
+        .user_feedback
+        .map(|f| {
+            f["frictionTags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect()
+        })
+        .unwrap_or_default();
+    let notes = input
+        .user_feedback
+        .and_then(|f| f["notes"].as_str())
+        .map(str::trim)
+        .filter(|n| !n.is_empty());
     if tags.contains(&"missed-mcp") {
         mcp_earned -= 4;
         findings.push(Finding::new(
-            "user-flagged-missed-mcp", "mcp-leverage", "warning", -4,
+            "user-flagged-missed-mcp",
+            "mcp-leverage",
+            "warning",
+            -4,
             "User feedback flagged missed MCP server / structured tool",
-            notes.map_or_else(|| "User marked `missed-mcp` in session feedback.".to_owned(), |n| format!("User note: \"{n}\"")),
-            Remediation::new("enable-mcp", "Name Required MCP in Prompt", "Explicitly instruct the agent which MCP server or tool to invoke first."),
+            notes.map_or_else(
+                || "User marked `missed-mcp` in session feedback.".to_owned(),
+                |n| format!("User note: \"{n}\""),
+            ),
+            Remediation::new(
+                "enable-mcp",
+                "Name Required MCP in Prompt",
+                "Explicitly instruct the agent which MCP server or tool to invoke first.",
+            ),
         ));
     }
     let mcp_earned = mcp_earned.clamp(0, mcp_max);
@@ -684,50 +975,113 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
     // Outcome & verification integrity (20)
     let outcome_max = 20;
     let mut outcome_earned = outcome_max;
-    let has_post_edit_verification = write_count == 0 || matches!((last_success_verification, last_write), (Some(v), Some(w)) if v.step > w.step);
-    let unresolved = last_verification_attempt.filter(|attempt| attempt.ok == Some(false) && last_success_verification.is_none_or(|v| v.step != attempt.step));
+    let has_post_edit_verification = write_count == 0
+        || matches!((last_success_verification, last_write), (Some(v), Some(w)) if v.step > w.step);
+    let unresolved = last_verification_attempt.filter(|attempt| {
+        attempt.ok == Some(false)
+            && last_success_verification.is_none_or(|v| v.step != attempt.step)
+    });
     let state = session["state"].as_str().unwrap_or_default();
     if state == "failed" {
         outcome_earned -= 10;
         findings.push(Finding::new(
-            "outcome-session-failed", "outcome-verification", "critical", -10,
+            "outcome-session-failed",
+            "outcome-verification",
+            "critical",
+            -10,
             "Session terminated in `failed` state",
-            session["lastError"].as_str().filter(|e| !e.is_empty()).map_or_else(|| "Session ended with a failure state before completing the goal.".to_owned(), |e| format!("Terminal error: {e}")),
-            Remediation::new("refine-prompt", "Retry With Scoped Recovery Prompt", "Address the terminal error or narrow the task scope before re-running."),
+            session["lastError"]
+                .as_str()
+                .filter(|e| !e.is_empty())
+                .map_or_else(
+                    || "Session ended with a failure state before completing the goal.".to_owned(),
+                    |e| format!("Terminal error: {e}"),
+                ),
+            Remediation::new(
+                "refine-prompt",
+                "Retry With Scoped Recovery Prompt",
+                "Address the terminal error or narrow the task scope before re-running.",
+            ),
         ));
     } else if state == "aborted" {
         outcome_earned -= 6;
         findings.push(Finding::new(
-            "outcome-session-aborted", "outcome-verification", "warning", -6,
+            "outcome-session-aborted",
+            "outcome-verification",
+            "warning",
+            -6,
             "Session was aborted before completion",
             "Execution was stopped mid-flight before reaching a verified terminal outcome.",
-            Remediation::new("refine-prompt", "Resume With Focused Prompt", "Continue from the completed steps and state the remaining verification check."),
+            Remediation::new(
+                "refine-prompt",
+                "Resume With Focused Prompt",
+                "Continue from the completed steps and state the remaining verification check.",
+            ),
         ));
     }
     if let Some(attempt) = unresolved {
         outcome_earned -= 6;
-        let command: String = attempt.command_arg.clone().or_else(|| attempt.detail.clone()).unwrap_or_else(|| attempt.tool_name.clone()).chars().take(80).collect();
-        let label_command = if command.chars().count() > 32 { format!("{}…", command.chars().take(32).collect::<String>()) } else { command.clone() };
+        let command: String = attempt
+            .command_arg
+            .clone()
+            .or_else(|| attempt.detail.clone())
+            .unwrap_or_else(|| attempt.tool_name.clone())
+            .chars()
+            .take(80)
+            .collect();
+        let label_command = if command.chars().count() > 32 {
+            format!("{}…", command.chars().take(32).collect::<String>())
+        } else {
+            command.clone()
+        };
         findings.push(
             Finding::new(
-                "outcome-unresolved-failure", "outcome-verification", "critical", -6,
+                "outcome-unresolved-failure",
+                "outcome-verification",
+                "critical",
+                -6,
                 format!("`{command}` failed and was never fixed"),
-                format!("Step #{} exited with a failure and the turn ended without a passing re-run{}", attempt.step, attempt.error.as_ref().map_or_else(|| ".".to_owned(), |e| format!(": {e}"))),
-                Remediation::new("add-test-command", format!("Re-run {label_command}"), "Fix the failure and re-run the same command until it passes.")
-                    .target(command.clone())
-                    .snippet(format!("Fix the failure from `{command}` and re-run it until it passes.")),
+                format!(
+                    "Step #{} exited with a failure and the turn ended without a passing re-run{}",
+                    attempt.step,
+                    attempt
+                        .error
+                        .as_ref()
+                        .map_or_else(|| ".".to_owned(), |e| format!(": {e}"))
+                ),
+                Remediation::new(
+                    "add-test-command",
+                    format!("Re-run {label_command}"),
+                    "Fix the failure and re-run the same command until it passes.",
+                )
+                .target(command.clone())
+                .snippet(format!(
+                    "Fix the failure from `{command}` and re-run it until it passes."
+                )),
             )
             .with_steps(vec![step_ref(attempt)]),
         );
-    } else if write_count > 0 && !has_post_edit_verification && let Some(last) = last_write {
+    } else if write_count > 0
+        && !has_post_edit_verification
+        && let Some(last) = last_write
+    {
         outcome_earned -= 6;
         let touched_list: Vec<String> = touched.iter().cloned().collect();
         let test = pick_test_command(input.prompt_text, input.workspace_hints, &touched_list);
         let remediation = match test {
-            Some(t) => Remediation::new("add-test-command", format!("Run {}", t.label), format!("Run `{}` after the final edit.", t.command))
-                .target(t.command.clone())
-                .snippet(format!("Run `{}` and fix anything it reports.", t.command)),
-            None => Remediation::new("add-verification", "Run typecheck & tests", "Run the typecheck or relevant tests after the last file write.").snippet("Run the typecheck and the relevant tests after the final edit."),
+            Some(t) => Remediation::new(
+                "add-test-command",
+                format!("Run {}", t.label),
+                format!("Run `{}` after the final edit.", t.command),
+            )
+            .target(t.command.clone())
+            .snippet(format!("Run `{}` and fix anything it reports.", t.command)),
+            None => Remediation::new(
+                "add-verification",
+                "Run typecheck & tests",
+                "Run the typecheck or relevant tests after the last file write.",
+            )
+            .snippet("Run the typecheck and the relevant tests after the final edit."),
         };
         findings.push(
             Finding::new(
@@ -743,10 +1097,20 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
         let deduction = std::cmp::min(6, undo_edits as i64 * 3);
         outcome_earned -= deduction;
         findings.push(Finding::new(
-            "outcome-user-undid-edits", "outcome-verification", "warning", -deduction,
-            format!("User reverted {undo_edits} agent file {}", if undo_edits == 1 { "edit" } else { "edits" }),
+            "outcome-user-undid-edits",
+            "outcome-verification",
+            "warning",
+            -deduction,
+            format!(
+                "User reverted {undo_edits} agent file {}",
+                if undo_edits == 1 { "edit" } else { "edits" }
+            ),
             format!("Transcript records {undo_edits} `undoToolFileChange` action(s) by the user."),
-            Remediation::new("refine-prompt", "Constrain Allowed Files", "Specify which files may be modified and which files must remain untouched."),
+            Remediation::new(
+                "refine-prompt",
+                "Constrain Allowed Files",
+                "Specify which files may be modified and which files must remain untouched.",
+            ),
         ));
     }
     if let Some(feedback) = input.user_feedback {
@@ -754,59 +1118,166 @@ pub fn analyze(input: &ExecutionInput<'_>) -> ExecutionAnalysis {
             Some("failed-goal") => {
                 outcome_earned -= 10;
                 findings.push(Finding::new(
-                    "user-verdict-failed-goal", "outcome-verification", "critical", -10,
+                    "user-verdict-failed-goal",
+                    "outcome-verification",
+                    "critical",
+                    -10,
                     "User rated session outcome as Failed Goal",
-                    notes.map_or_else(|| "User submitted a `failed-goal` verdict.".to_owned(), |n| format!("User feedback: \"{n}\"")),
-                    Remediation::new("refine-prompt", "Apply User Feedback to Follow-Up", notes.map_or_else(|| "Re-run with explicit acceptance criteria and recommended skills.".to_owned(), |n| format!("Address user feedback: {n}"))),
+                    notes.map_or_else(
+                        || "User submitted a `failed-goal` verdict.".to_owned(),
+                        |n| format!("User feedback: \"{n}\""),
+                    ),
+                    Remediation::new(
+                        "refine-prompt",
+                        "Apply User Feedback to Follow-Up",
+                        notes.map_or_else(
+                            || {
+                                "Re-run with explicit acceptance criteria and recommended skills."
+                                    .to_owned()
+                            },
+                            |n| format!("Address user feedback: {n}"),
+                        ),
+                    ),
                 ));
             }
             Some("needs-work") => {
                 outcome_earned -= 5;
                 findings.push(Finding::new(
-                    "user-verdict-needs-work", "outcome-verification", "warning", -5,
+                    "user-verdict-needs-work",
+                    "outcome-verification",
+                    "warning",
+                    -5,
                     "User rated session outcome as Needs Work",
-                    notes.map_or_else(|| "User submitted a `needs-work` verdict.".to_owned(), |n| format!("User feedback: \"{n}\"")),
-                    Remediation::new("refine-prompt", "Apply User Feedback to Follow-Up", notes.map_or_else(|| "Refine the follow-up prompt using the flagged friction items.".to_owned(), |n| format!("Address user feedback: {n}"))),
+                    notes.map_or_else(
+                        || "User submitted a `needs-work` verdict.".to_owned(),
+                        |n| format!("User feedback: \"{n}\""),
+                    ),
+                    Remediation::new(
+                        "refine-prompt",
+                        "Apply User Feedback to Follow-Up",
+                        notes.map_or_else(
+                            || {
+                                "Refine the follow-up prompt using the flagged friction items."
+                                    .to_owned()
+                            },
+                            |n| format!("Address user feedback: {n}"),
+                        ),
+                    ),
                 ));
             }
             _ => {}
         }
-        let extra: Vec<&str> = tags.iter().copied().filter(|t| ["wrong-scope", "ignored-instructions", "unverified-changes", "wasted-steps"].contains(t)).collect();
+        let extra: Vec<&str> = tags
+            .iter()
+            .copied()
+            .filter(|t| {
+                [
+                    "wrong-scope",
+                    "ignored-instructions",
+                    "unverified-changes",
+                    "wasted-steps",
+                ]
+                .contains(t)
+            })
+            .collect();
         if !extra.is_empty() {
             let deduction = std::cmp::min(6, extra.len() as i64 * 2);
             outcome_earned -= deduction;
             let joined = extra.join(", ");
             findings.push(Finding::new(
-                "user-friction-tags", "outcome-verification", "warning", -deduction,
+                "user-friction-tags",
+                "outcome-verification",
+                "warning",
+                -deduction,
                 format!("User flagged friction: {joined}"),
-                notes.map_or_else(|| format!("User tagged session with: {joined}."), |n| format!("Tags [{joined}] — \"{n}\"")),
-                Remediation::new("refine-prompt", "Tighten Guardrails in Follow-Up", format!("Add explicit constraints addressing: {joined}.")),
+                notes.map_or_else(
+                    || format!("User tagged session with: {joined}."),
+                    |n| format!("Tags [{joined}] — \"{n}\""),
+                ),
+                Remediation::new(
+                    "refine-prompt",
+                    "Tighten Guardrails in Follow-Up",
+                    format!("Add explicit constraints addressing: {joined}."),
+                ),
             ));
         }
     }
     let outcome_earned = outcome_earned.clamp(0, outcome_max);
 
     let tool_summary = if tool_earned == tool_max {
-        format!("{total} tool {}, 0 failures, 0 retry loops.", if total == 1 { "call" } else { "calls" })
+        format!(
+            "{total} tool {}, 0 failures, 0 retry loops.",
+            if total == 1 { "call" } else { "calls" }
+        )
     } else {
         format!("{successful}/{total} succeeded · {failed_calls} failed.")
     };
     let mcp_list: Vec<String> = mcp_tools_used.iter().cloned().collect();
     let mcp_summary = if mcp_earned == mcp_max {
-        if mcp_list.is_empty() { "No raw shell workarounds detected.".to_owned() } else { format!("Used structured MCP tools ({}).", mcp_list.iter().take(3).cloned().collect::<Vec<_>>().join(", ")) }
+        if mcp_list.is_empty() {
+            "No raw shell workarounds detected.".to_owned()
+        } else {
+            format!(
+                "Used structured MCP tools ({}).",
+                mcp_list
+                    .iter()
+                    .take(3)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
     } else {
-        format!("{} MCP calls · {shell_search_count} raw shell search {}.", mcp_list.len(), if shell_search_count == 1 { "call" } else { "calls" })
+        format!(
+            "{} MCP calls · {shell_search_count} raw shell search {}.",
+            mcp_list.len(),
+            if shell_search_count == 1 {
+                "call"
+            } else {
+                "calls"
+            }
+        )
     };
     let outcome_summary = if outcome_earned == outcome_max {
         "Session completed cleanly with verified changes.".to_owned()
     } else {
-        findings.iter().filter(|f| f.dimension == "outcome-verification").map(|f| f.title.clone()).collect::<Vec<_>>().join("; ")
+        findings
+            .iter()
+            .filter(|f| f.dimension == "outcome-verification")
+            .map(|f| f.title.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
     };
-    let retry_loop_count = findings.iter().filter(|f| f.id == "tool-retry-loop" || f.id.starts_with("tool-blind-edit-loop:") || f.id.starts_with("tool-edit-retry-loop:")).count();
+    let retry_loop_count = findings
+        .iter()
+        .filter(|f| {
+            f.id == "tool-retry-loop"
+                || f.id.starts_with("tool-blind-edit-loop:")
+                || f.id.starts_with("tool-edit-retry-loop:")
+        })
+        .count();
     ExecutionAnalysis {
-        tool_dimension: dimension("tool-efficiency", "Tool & Execution Efficiency", tool_earned, tool_max, tool_summary),
-        mcp_dimension: dimension("mcp-leverage", "MCP & Capability Leverage", mcp_earned, mcp_max, mcp_summary),
-        outcome_dimension: dimension("outcome-verification", "Outcome & Verification", outcome_earned, outcome_max, outcome_summary),
+        tool_dimension: dimension(
+            "tool-efficiency",
+            "Tool & Execution Efficiency",
+            tool_earned,
+            tool_max,
+            tool_summary,
+        ),
+        mcp_dimension: dimension(
+            "mcp-leverage",
+            "MCP & Capability Leverage",
+            mcp_earned,
+            mcp_max,
+            mcp_summary,
+        ),
+        outcome_dimension: dimension(
+            "outcome-verification",
+            "Outcome & Verification",
+            outcome_earned,
+            outcome_max,
+            outcome_summary,
+        ),
         tools_used: tools_used.into_iter().collect(),
         mcp_tools_used: mcp_list,
         total_tool_calls: total,
@@ -845,8 +1316,15 @@ mod tests {
 
     fn run(session: &Value, turn: Option<usize>) -> ExecutionAnalysis {
         analyze(&ExecutionInput {
-            kind: "session-execution", prompt_text: "update docs/plans/feature.md", session: Some(session), turn_index: turn,
-            configured_mcp_servers: &[], code_intelligence_available: Some(true), tracker_tools_available: false, user_feedback: None, workspace_hints: None,
+            kind: "session-execution",
+            prompt_text: "update docs/plans/feature.md",
+            session: Some(session),
+            turn_index: turn,
+            configured_mcp_servers: &[],
+            code_intelligence_available: Some(true),
+            tracker_tools_available: false,
+            user_feedback: None,
+            workspace_hints: None,
         })
     }
 
@@ -860,7 +1338,11 @@ mod tests {
         assert_eq!(result.failed_edit_count, 2);
         assert_eq!(result.blind_edit_count, 1);
         assert_eq!(result.shell_search_fallback_count, 1);
-        let blind = result.findings.iter().find(|f| f.id.starts_with("tool-blind")).unwrap();
+        let blind = result
+            .findings
+            .iter()
+            .find(|f| f.id.starts_with("tool-blind"))
+            .unwrap();
         assert_eq!(blind.title, "Blind edit failed 2× on `feature.md`");
         assert_eq!(blind.delta_points, -6);
     }
@@ -868,16 +1350,29 @@ mod tests {
     #[test]
     fn turn_slicing_isolates_a_turn() {
         let mut s = session();
-        s["events"].as_array_mut().unwrap().push(json!({ "type": "user_input_completed", "detail": "again" }));
-        assert_eq!(select_turn_events(s["events"].as_array().unwrap(), Some(1)).len(), 1);
+        s["events"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "type": "user_input_completed", "detail": "again" }));
+        assert_eq!(
+            select_turn_events(s["events"].as_array().unwrap(), Some(1)).len(),
+            1
+        );
         assert_eq!(run(&s, Some(1)).total_tool_calls, 0);
     }
 
     #[test]
     fn prompt_readiness_has_no_execution_findings() {
         let result = analyze(&ExecutionInput {
-            kind: "prompt-readiness", prompt_text: "use grep for it", session: None, turn_index: None, configured_mcp_servers: &[],
-            code_intelligence_available: Some(true), tracker_tools_available: false, user_feedback: None, workspace_hints: None,
+            kind: "prompt-readiness",
+            prompt_text: "use grep for it",
+            session: None,
+            turn_index: None,
+            configured_mcp_servers: &[],
+            code_intelligence_available: Some(true),
+            tracker_tools_available: false,
+            user_feedback: None,
+            workspace_hints: None,
         });
         assert_eq!(result.findings[0].id, "prompt-shell-search-instead-of-mcp");
         assert_eq!(result.mcp_dimension.earned_points, 10);

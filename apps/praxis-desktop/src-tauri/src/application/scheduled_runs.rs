@@ -16,15 +16,16 @@ use chrono::{SecondsFormat, Utc};
 use praxis_contracts::RustRpcRequest;
 use praxis_host::HostContext;
 use praxis_workflows::scheduled_run::{
-    ComposeScheduledRunInput, MissedResolution, ScheduledRun, ScheduledRunStatus, ScheduledTicketRef,
-    arm_scheduled_run, compose_scheduled_run, hold_scheduled_run, resolve_missed_scheduled_run,
+    ComposeScheduledRunInput, MissedResolution, ScheduledRun, ScheduledRunStatus,
+    ScheduledTicketRef, arm_scheduled_run, compose_scheduled_run, hold_scheduled_run,
+    resolve_missed_scheduled_run,
 };
 use praxis_workflows::scheduled_run_readiness::{
     ScheduledReadinessContext, ScheduledTicketProbe, ScheduledTicketProbeSource, TicketProbeState,
     assess_scheduled_run_readiness,
 };
 use praxis_workflows::scheduled_run_store::{RUNS_KEY, ScheduledRunBackend, ScheduledRunStore};
-use praxis_workflows::scheduled_run_time::{instant_to_zoned_parts, ZonedParts};
+use praxis_workflows::scheduled_run_time::{ZonedParts, instant_to_zoned_parts};
 use serde_json::{Value, json};
 
 use super::scheduled_runner_host::{self, runner};
@@ -71,7 +72,9 @@ fn scheduled_runs_path(host: &HostContext) -> PathBuf {
 }
 
 fn store(host: &HostContext) -> ScheduledRunStore<JsonFileBackend> {
-    ScheduledRunStore::new(JsonFileBackend { path: scheduled_runs_path(host) })
+    ScheduledRunStore::new(JsonFileBackend {
+        path: scheduled_runs_path(host),
+    })
 }
 
 // The runner's view of the store: serialised, because lanes save concurrently.
@@ -86,7 +89,10 @@ pub fn get_run(host: &HostContext, id: &str) -> Option<ScheduledRun> {
     store(host).get(id)
 }
 
-pub fn save_run(host: &HostContext, run: ScheduledRun) -> std::result::Result<ScheduledRun, String> {
+pub fn save_run(
+    host: &HostContext,
+    run: ScheduledRun,
+) -> std::result::Result<ScheduledRun, String> {
     let _guard = store_lock().lock().unwrap_or_else(PoisonError::into_inner);
     store(host).save(run)
 }
@@ -107,13 +113,19 @@ fn require_run(host: &HostContext, id: &str) -> Result<ScheduledRun> {
 // ── the monitor's view ───────────────────────────────────────────────────
 
 fn rpc(host: &HostContext, channel: &str, args: Vec<Value>) -> Option<Value> {
-    let response = host.dispatch_rpc(RustRpcRequest { id: "scheduled-view".into(), channel: channel.into(), args });
+    let response = host.dispatch_rpc(RustRpcRequest {
+        id: "scheduled-view".into(),
+        channel: channel.into(),
+        args,
+    });
     if response.ok { response.result } else { None }
 }
 
 /// Whether the ticket's board has a folder to work in, when that can be known.
 fn folder_for(host: &HostContext, connection_id: &str) -> Option<bool> {
-    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+    let catalog =
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+            .ok()?;
     if let Some(project_id) = connection_id.strip_prefix("project:") {
         return Some(
             catalog
@@ -123,8 +135,10 @@ fn folder_for(host: &HostContext, connection_id: &str) -> Option<bool> {
                 .unwrap_or(false),
         );
     }
-    let connection = rpc(host, "connection:list", Vec::new())
-        .and_then(|list| list.as_array().and_then(|l| l.iter().find(|c| c["id"] == connection_id).cloned()));
+    let connection = rpc(host, "connection:list", Vec::new()).and_then(|list| {
+        list.as_array()
+            .and_then(|l| l.iter().find(|c| c["id"] == connection_id).cloned())
+    });
     if connection.as_ref().is_some_and(|c| c["mode"] == "folder") {
         return Some(true);
     }
@@ -136,7 +150,11 @@ fn folder_for(host: &HostContext, connection_id: &str) -> Option<bool> {
                 .as_array()
                 .is_some_and(|links| links.iter().any(|l| l["connectionId"] == connection_id))
         })
-        .map(|p| p["workspaceFolder"].as_str().is_some_and(|f| !f.trim().is_empty()))
+        .map(|p| {
+            p["workspaceFolder"]
+                .as_str()
+                .is_some_and(|f| !f.trim().is_empty())
+        })
 }
 
 struct BoardProbe<'a> {
@@ -152,10 +170,15 @@ impl ScheduledTicketProbeSource for BoardProbe<'_> {
             "issue:get",
             vec![json!(ticket.issue_key), json!(ticket.connection_id)],
         ) else {
-            return ScheduledTicketProbe { state: TicketProbeState::Missing, ..ScheduledTicketProbe::found() };
+            return ScheduledTicketProbe {
+                state: TicketProbeState::Missing,
+                ..ScheduledTicketProbe::found()
+            };
         };
         let mut probe = ScheduledTicketProbe::found();
-        probe.closed = issue["statusCategory"].as_str().is_some_and(|c| c.eq_ignore_ascii_case("done"));
+        probe.closed = issue["statusCategory"]
+            .as_str()
+            .is_some_and(|c| c.eq_ignore_ascii_case("done"));
         let description = issue["description"].as_str().unwrap_or("").to_lowercase();
         probe.has_acceptance_criteria = Some(
             description.contains("acceptance")
@@ -182,23 +205,40 @@ impl ScheduledTicketProbeSource for BoardProbe<'_> {
 
 /// A schedule with its derived readiness and editable start parts.
 fn build_view(host: &HostContext, run: &ScheduledRun, all: &[ScheduledRun]) -> Value {
-    let probe = BoardProbe { host, others: all, self_id: &run.id };
+    let probe = BoardProbe {
+        host,
+        others: all,
+        self_id: &run.id,
+    };
     let usable = scheduled_runner_host::usable_providers(host);
     let (workflow_trusted, base_dirty) = match (&run.project_id, run.policy.workflow_id()) {
-        (Some(project_id), Some(workflow_id)) => match workflows::runnable_definition(host, project_id, workflow_id) {
-            Some(definition) => {
-                let trust = workflows::project_workflow_trust(host, project_id, workflow_id, Some(&definition), false);
-                let dirty = workflows::blocking_files(host, project_id).map(|f| !f.is_empty()).unwrap_or(false);
-                (Some(trust.trusted), dirty)
+        (Some(project_id), Some(workflow_id)) => {
+            match workflows::runnable_definition(host, project_id, workflow_id) {
+                Some(definition) => {
+                    let trust = workflows::project_workflow_trust(
+                        host,
+                        project_id,
+                        workflow_id,
+                        Some(&definition),
+                        false,
+                    );
+                    let dirty = workflows::blocking_files(host, project_id)
+                        .map(|f| !f.is_empty())
+                        .unwrap_or(false);
+                    (Some(trust.trusted), dirty)
+                }
+                None => (None, false),
             }
-            None => (None, false),
-        },
+        }
         _ => (None, false),
     };
     let threshold = f64::from(host.settings().read().ai.provider_handover_percent) / 100.0;
     let usage = scheduled_runner_host::usage_override();
     let low_allowance = usage.as_ref().and_then(|used| {
-        usable.iter().find(|p| used.get(*p).is_some_and(|u| *u >= threshold)).cloned()
+        usable
+            .iter()
+            .find(|p| used.get(*p).is_some_and(|u| *u >= threshold))
+            .cloned()
     });
     let context = ScheduledReadinessContext {
         now: now(),
@@ -209,9 +249,15 @@ fn build_view(host: &HostContext, run: &ScheduledRun, all: &[ScheduledRun]) -> V
         low_allowance_provider: low_allowance,
     };
     let readiness = assess_scheduled_run_readiness(run, &context);
-    let start = instant_to_zoned_parts(&run.scheduled_start_at, &run.timezone)
-        .unwrap_or(ZonedParts { date: String::new(), time: String::new() });
-    let in_flight = matches!(run.status, ScheduledRunStatus::Running | ScheduledRunStatus::Paused);
+    let start =
+        instant_to_zoned_parts(&run.scheduled_start_at, &run.timezone).unwrap_or(ZonedParts {
+            date: String::new(),
+            time: String::new(),
+        });
+    let in_flight = matches!(
+        run.status,
+        ScheduledRunStatus::Running | ScheduledRunStatus::Paused
+    );
     let mut view = json!({
         "run": run,
         "readiness": readiness,
@@ -220,7 +266,9 @@ fn build_view(host: &HostContext, run: &ScheduledRun, all: &[ScheduledRun]) -> V
     let shows_work = in_flight
         || matches!(
             run.status,
-            ScheduledRunStatus::Completed | ScheduledRunStatus::Cancelled | ScheduledRunStatus::Failed
+            ScheduledRunStatus::Completed
+                | ScheduledRunStatus::Cancelled
+                | ScheduledRunStatus::Failed
         );
     if shows_work {
         let details = scheduled_runner_host::entry_details(host, run);
@@ -268,8 +316,16 @@ fn parse_ticket_refs(val: Option<&Value>) -> Vec<ScheduledTicketRef> {
                     let obj = item.as_object()?;
                     let connection_id = obj.get("connectionId")?.as_str()?.to_string();
                     let issue_key = obj.get("issueKey")?.as_str()?.to_string();
-                    let title = obj.get("title").and_then(Value::as_str).unwrap_or(&issue_key).to_string();
-                    Some(ScheduledTicketRef { connection_id, issue_key, title })
+                    let title = obj
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .unwrap_or(&issue_key)
+                        .to_string();
+                    Some(ScheduledTicketRef {
+                        connection_id,
+                        issue_key,
+                        title,
+                    })
                 })
                 .collect()
         })
@@ -278,7 +334,11 @@ fn parse_ticket_refs(val: Option<&Value>) -> Vec<ScheduledTicketRef> {
 
 fn parse_string_list(val: Option<&Value>) -> Vec<String> {
     val.and_then(Value::as_array)
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -287,7 +347,11 @@ fn default_schedule_workflow(choices: &[Value]) -> Option<String> {
     choices
         .iter()
         .find(|c| c["trigger"] == "ticket")
-        .or_else(|| choices.iter().find(|c| c["workflowId"] == "governed-delivery"))
+        .or_else(|| {
+            choices
+                .iter()
+                .find(|c| c["workflowId"] == "governed-delivery")
+        })
         .and_then(|c| c["workflowId"].as_str().map(str::to_string))
 }
 
@@ -303,21 +367,42 @@ fn compose_input(
         .and_then(Value::as_str)
         .map(str::to_string)
         .or_else(|| existing.and_then(|e| e.project_id.clone()));
-    let mut workflow_id = input.get("workflowId").and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_string);
+    let mut workflow_id = input
+        .get("workflowId")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     if workflow_id.is_none() {
         workflow_id = existing.and_then(|e| e.policy.workflow_id().cloned());
     }
     if workflow_id.is_none() {
         if let Some(project_id) = &project_id {
-            workflow_id = default_schedule_workflow(&workflows::workflow_choices_for(host, project_id));
+            workflow_id =
+                default_schedule_workflow(&workflows::workflow_choices_for(host, project_id));
         }
     }
     ComposeScheduledRunInput {
         project_id,
-        name: input.get("name").and_then(Value::as_str).unwrap_or("Scheduled run").to_string(),
-        date: input.get("date").and_then(Value::as_str).unwrap_or_default().to_string(),
-        time: input.get("time").and_then(Value::as_str).unwrap_or_default().to_string(),
-        timezone: input.get("timezone").and_then(Value::as_str).unwrap_or("UTC").to_string(),
+        name: input
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("Scheduled run")
+            .to_string(),
+        date: input
+            .get("date")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        time: input
+            .get("time")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        timezone: input
+            .get("timezone")
+            .and_then(Value::as_str)
+            .unwrap_or("UTC")
+            .to_string(),
         tickets: parse_ticket_refs(input.get("tickets")),
         with_previous: parse_string_list(input.get("withPrevious")),
         workflow_id,
@@ -332,7 +417,11 @@ pub fn list(host: &HostContext) -> Result<Value> {
     // Pick up any request file an agent has just written, so the list is current.
     super::scheduled_run_requests::check(host);
     let runs = list_runs(host);
-    Ok(json!(runs.iter().map(|run| build_view(host, run, &runs)).collect::<Vec<_>>()))
+    Ok(json!(
+        runs.iter()
+            .map(|run| build_view(host, run, &runs))
+            .collect::<Vec<_>>()
+    ))
 }
 
 pub fn get(host: &HostContext, args: &[Value]) -> Result<Value> {
@@ -342,14 +431,25 @@ pub fn get(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn save(host: &HostContext, args: &[Value]) -> Result<Value> {
     scheduled_runner_host::ensure_started(host);
-    let input = args.first().ok_or_else(|| failure("save requires input object"))?;
+    let input = args
+        .first()
+        .ok_or_else(|| failure("save requires input object"))?;
     let existing = match input.get("id").and_then(Value::as_str) {
         Some(id) => Some(require_run(host, id)?),
         None => None,
     };
-    let start_now = input.get("startNow").and_then(Value::as_bool).unwrap_or(false);
+    let start_now = input
+        .get("startNow")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let at = now();
-    let mut compose = compose_input(host, input, existing.as_ref(), input.get("arm").and_then(Value::as_bool).unwrap_or(false), &at);
+    let mut compose = compose_input(
+        host,
+        input,
+        existing.as_ref(),
+        input.get("arm").and_then(Value::as_bool).unwrap_or(false),
+        &at,
+    );
     if start_now {
         // An immediate start does not require a future date or a valid scheduled wall time.
         let parts = instant_to_zoned_parts(&at, &compose.timezone)
@@ -369,8 +469,13 @@ pub fn save(host: &HostContext, args: &[Value]) -> Result<Value> {
 }
 
 pub fn preview(host: &HostContext, args: &[Value]) -> Result<Value> {
-    let input = args.first().ok_or_else(|| failure("preview requires input object"))?;
-    let existing = input.get("id").and_then(Value::as_str).and_then(|id| get_run(host, id));
+    let input = args
+        .first()
+        .ok_or_else(|| failure("preview requires input object"))?;
+    let existing = input
+        .get("id")
+        .and_then(Value::as_str)
+        .and_then(|id| get_run(host, id));
     let compose = compose_input(host, input, existing.as_ref(), false, &now());
     match compose_scheduled_run(existing, compose) {
         Ok(run) => {
@@ -384,7 +489,10 @@ pub fn preview(host: &HostContext, args: &[Value]) -> Result<Value> {
 pub fn remove(host: &HostContext, args: &[Value]) -> Result<Value> {
     let id = text(args, 0)?;
     if let Some(run) = get_run(host, id) {
-        if matches!(run.status, ScheduledRunStatus::Running | ScheduledRunStatus::Paused) {
+        if matches!(
+            run.status,
+            ScheduledRunStatus::Running | ScheduledRunStatus::Paused
+        ) {
             let _ = runtime::block_on(runner(host).cancel(id));
         }
     }
@@ -408,10 +516,15 @@ pub fn rename(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn archive(host: &HostContext, args: &[Value]) -> Result<Value> {
     let id = text(args, 0)?;
-    let archived = args.get(1).and_then(Value::as_bool).ok_or_else(|| failure("archived boolean required"))?;
+    let archived = args
+        .get(1)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| failure("archived boolean required"))?;
     let updated = {
         let _guard = store_lock().lock().unwrap_or_else(PoisonError::into_inner);
-        store(host).set_archived(id, archived, &now()).map_err(failure)?
+        store(host)
+            .set_archived(id, archived, &now())
+            .map_err(failure)?
     };
     changed(host);
     Ok(view_of(host, &updated))
@@ -454,22 +567,34 @@ pub fn cancel(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn skip_entry(host: &HostContext, args: &[Value]) -> Result<Value> {
     let (id, entry_id) = (text(args, 0)?, text(args, 1)?);
-    decided(host, runtime::block_on(runner(host).skip_entry(id, entry_id)))
+    decided(
+        host,
+        runtime::block_on(runner(host).skip_entry(id, entry_id)),
+    )
 }
 
 pub fn retry_entry(host: &HostContext, args: &[Value]) -> Result<Value> {
     let (id, entry_id) = (text(args, 0)?, text(args, 1)?);
-    decided(host, runtime::block_on(runner(host).retry_entry(id, entry_id)))
+    decided(
+        host,
+        runtime::block_on(runner(host).retry_entry(id, entry_id)),
+    )
 }
 
 pub fn approve_gate(host: &HostContext, args: &[Value]) -> Result<Value> {
     let (id, entry_id) = (text(args, 0)?, text(args, 1)?);
-    decided(host, runtime::block_on(runner(host).approve_gate(id, entry_id)))
+    decided(
+        host,
+        runtime::block_on(runner(host).approve_gate(id, entry_id)),
+    )
 }
 
 pub fn set_armed(host: &HostContext, args: &[Value]) -> Result<Value> {
     let id = text(args, 0)?;
-    let armed = args.get(1).and_then(Value::as_bool).ok_or_else(|| failure("armed boolean required"))?;
+    let armed = args
+        .get(1)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| failure("armed boolean required"))?;
     let run = require_run(host, id)?;
     let at = now();
     let modified = if armed {
@@ -519,6 +644,8 @@ pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Result<Val
         "scheduledRuns:approveGate" => approve_gate(host, args),
         "scheduledRuns:setArmed" => set_armed(host, args),
         "scheduledRuns:resolveMissed" => resolve_missed(host, args),
-        _ => Err(failure(format!("Unsupported scheduled-runs channel: {channel}"))),
+        _ => Err(failure(format!(
+            "Unsupported scheduled-runs channel: {channel}"
+        ))),
     }
 }

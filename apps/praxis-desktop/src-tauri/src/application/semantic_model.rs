@@ -28,8 +28,18 @@ struct Asset {
 }
 
 const ASSETS: [Asset; 2] = [
-    Asset { name: "vocab.txt", path: "vocab.txt", size: 231_508, sha256: "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3" },
-    Asset { name: "model.onnx", path: "onnx/model.onnx", size: 133_093_490, sha256: "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35" },
+    Asset {
+        name: "vocab.txt",
+        path: "vocab.txt",
+        size: 231_508,
+        sha256: "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+    },
+    Asset {
+        name: "model.onnx",
+        path: "onnx/model.onnx",
+        size: 133_093_490,
+        sha256: "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35",
+    },
 ];
 const TOTAL_BYTES: u64 = 231_508 + 133_093_490;
 
@@ -58,14 +68,19 @@ pub fn model_directory(user_data_dir: &Path) -> PathBuf {
 }
 
 fn has_model_files(dir: &Path) -> bool {
-    ["manifest.json", "model.onnx", "vocab.txt"].iter().all(|name| dir.join(name).exists())
+    ["manifest.json", "model.onnx", "vocab.txt"]
+        .iter()
+        .all(|name| dir.join(name).exists())
 }
 
 fn is_installed(dir: &Path) -> bool {
     if !has_model_files(dir) {
         return false;
     }
-    let Some(installed) = fs::read_to_string(dir.join("manifest.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
+    let Some(installed) = fs::read_to_string(dir.join("manifest.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+    else {
         return false;
     };
     installed["modelId"] == MODEL_ID && installed["revision"] == MODEL_REVISION
@@ -77,7 +92,11 @@ pub fn status(user_data_dir: &Path) -> Value {
     let fingerprint = FINGERPRINT.lock().ok().and_then(|f| f.clone());
     let mut size = 0;
     if installed {
-        size = ["model.onnx", "vocab.txt"].iter().filter_map(|n| fs::metadata(dir.join(n)).ok()).map(|m| m.len()).sum::<u64>();
+        size = ["model.onnx", "vocab.txt"]
+            .iter()
+            .filter_map(|n| fs::metadata(dir.join(n)).ok())
+            .map(|m| m.len())
+            .sum::<u64>();
     }
     let mut value = json!({
         "installed": installed,
@@ -98,20 +117,43 @@ pub fn status(user_data_dir: &Path) -> Value {
 }
 
 fn emit(host: &HostContext, downloaded: u64) {
-    let percent = ((downloaded as f64 / TOTAL_BYTES as f64) * 100.0).round().min(100.0) as u32;
+    let percent = ((downloaded as f64 / TOTAL_BYTES as f64) * 100.0)
+        .round()
+        .min(100.0) as u32;
     PROGRESS.store(percent, Ordering::SeqCst);
-    host.events().emit("ai:semanticModelProgress", Some(json!({ "bytesDownloaded": downloaded, "totalBytes": TOTAL_BYTES, "percent": percent })));
+    host.events().emit(
+        "ai:semanticModelProgress",
+        Some(
+            json!({ "bytesDownloaded": downloaded, "totalBytes": TOTAL_BYTES, "percent": percent }),
+        ),
+    );
 }
 
-async fn fetch(host: &HostContext, asset: &Asset, dest: &Path, done: &mut u64) -> std::result::Result<(), String> {
-    let base = std::env::var("PRAXIS_MODEL_BASE_URL").unwrap_or_else(|_| format!("https://huggingface.co/{MODEL_ID}/resolve/{MODEL_REVISION}"));
+async fn fetch(
+    host: &HostContext,
+    asset: &Asset,
+    dest: &Path,
+    done: &mut u64,
+) -> std::result::Result<(), String> {
+    let base = std::env::var("PRAXIS_MODEL_BASE_URL")
+        .unwrap_or_else(|_| format!("https://huggingface.co/{MODEL_ID}/resolve/{MODEL_REVISION}"));
     let url = format!("{}/{}", base.trim_end_matches('/'), asset.path);
-    let client = reqwest::Client::builder().user_agent("Praxis-Desktop").timeout(std::time::Duration::from_secs(600)).build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .user_agent("Praxis-Desktop")
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
     let mut response = client.get(&url).send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
-        return Err(format!("Download failed with status {}: {url}", response.status().as_u16()));
+        return Err(format!(
+            "Download failed with status {}: {url}",
+            response.status().as_u16()
+        ));
     }
-    let partial = dest.with_extension(format!("{}.partial", dest.extension().and_then(|e| e.to_str()).unwrap_or("")));
+    let partial = dest.with_extension(format!(
+        "{}.partial",
+        dest.extension().and_then(|e| e.to_str()).unwrap_or("")
+    ));
     let mut file = fs::File::create(&partial).map_err(|e| e.to_string())?;
     let mut hash = Sha256::new();
     let mut count = 0u64;
@@ -125,12 +167,18 @@ async fn fetch(host: &HostContext, asset: &Asset, dest: &Path, done: &mut u64) -
     drop(file);
     if count != asset.size {
         let _ = fs::remove_file(&partial);
-        return Err(format!("Size mismatch for {}: expected {}, got {count}", asset.name, asset.size));
+        return Err(format!(
+            "Size mismatch for {}: expected {}, got {count}",
+            asset.name, asset.size
+        ));
     }
     let actual: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
     if actual != asset.sha256 {
         let _ = fs::remove_file(&partial);
-        return Err(format!("Checksum mismatch for {}: expected {}, got {actual}", asset.name, asset.sha256));
+        return Err(format!(
+            "Checksum mismatch for {}: expected {}, got {actual}",
+            asset.name, asset.sha256
+        ));
     }
     fs::rename(&partial, dest).map_err(|e| e.to_string())
 }
@@ -146,7 +194,10 @@ pub fn download(host: &HostContext, user_data_dir: &Path) -> Result<Value> {
         let mut done = 0u64;
         for asset in &ASSETS {
             let dest = dir.join(asset.name);
-            if fs::metadata(&dest).map(|m| m.len() == asset.size).unwrap_or(false) {
+            if fs::metadata(&dest)
+                .map(|m| m.len() == asset.size)
+                .unwrap_or(false)
+            {
                 done += asset.size;
                 emit(host, done);
                 continue;

@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use praxis_workflows::edges::{
     PendingLoopKind, dag_edges, describe_findings_predicate, loop_statuses, pending_loop,
 };
-use praxis_workflows::gates::{approval_readiness, GateState};
+use praxis_workflows::gates::{GateState, approval_readiness};
 use praxis_workflows::recovery::{next_actions, outstanding_nodes};
 use praxis_workflows::run::{
     WorkflowPauseReason, WorkflowRun, best_iteration, downstream_node_ids, exhausted_providers,
@@ -106,11 +106,15 @@ pub fn summarize_loops(run: &WorkflowRun) -> Vec<Value> {
         .map(|status| {
             let edge = &status.edge;
             let keep_best = edge.loop_budget.as_ref().and_then(|l| l.keep_best.as_ref());
-            let best = keep_best
-                .and_then(|kb| best_iteration(history_all, &edge.id, kb.higher_is_better));
+            let best =
+                keep_best.and_then(|kb| best_iteration(history_all, &edge.id, kb.higher_is_better));
             let source = run.nodes.get(&edge.from);
             let current_score = keep_best
-                .and_then(|kb| source.and_then(|s| s.findings.as_ref()).and_then(|f| f.metrics.get(&kb.metric)))
+                .and_then(|kb| {
+                    source
+                        .and_then(|s| s.findings.as_ref())
+                        .and_then(|f| f.metrics.get(&kb.metric))
+                })
                 .copied();
             let needs_decision = pending.as_ref().is_some_and(|(kind, p)| {
                 matches!(kind, PendingLoopKind::Decide) && p.edge.id == edge.id
@@ -127,15 +131,25 @@ pub fn summarize_loops(run: &WorkflowRun) -> Vec<Value> {
                     row.insert("findingCount".into(), json!(entry.finding_count));
                     row.insert(
                         "topFindings".into(),
-                        json!(top_findings(findings.as_array().map_or(&[][..], Vec::as_slice))),
+                        json!(top_findings(
+                            findings.as_array().map_or(&[][..], Vec::as_slice)
+                        )),
                     );
                     put(&mut row, "error", entry.error.clone().map(Value::from));
                     put(&mut row, "score", entry.score.map(Value::from));
-                    put(&mut row, "restoredTo", entry.restored_to.clone().map(Value::from));
+                    put(
+                        &mut row,
+                        "restoredTo",
+                        entry.restored_to.clone().map(Value::from),
+                    );
                     Value::Object(row)
                 })
                 .collect();
-            let condition = match serde_json::to_value(edge.on).ok().as_ref().and_then(Value::as_str) {
+            let condition = match serde_json::to_value(edge.on)
+                .ok()
+                .as_ref()
+                .and_then(Value::as_str)
+            {
                 Some("findings") => {
                     describe_findings_predicate(edge.when.as_ref(), run.parameters.as_ref())
                 }
@@ -178,7 +192,10 @@ pub fn summarize_loops(run: &WorkflowRun) -> Vec<Value> {
             }
             let settled = source.is_some_and(|s| {
                 matches!(
-                    serde_json::to_value(s.outcome).ok().as_ref().and_then(Value::as_str),
+                    serde_json::to_value(s.outcome)
+                        .ok()
+                        .as_ref()
+                        .and_then(Value::as_str),
                     Some("succeeded" | "failed")
                 )
             });
@@ -256,7 +273,12 @@ fn outcome_of(run: &WorkflowRun, node_id: &str) -> String {
         .unwrap_or_else(|| "pending".to_string())
 }
 
-fn lane_for(run: &WorkflowRun, node_id: &str, ready: &BTreeSet<&str>, awaiting: &BTreeSet<&str>) -> &'static str {
+fn lane_for(
+    run: &WorkflowRun,
+    node_id: &str,
+    ready: &BTreeSet<&str>,
+    awaiting: &BTreeSet<&str>,
+) -> &'static str {
     let outcome = outcome_of(run, node_id);
     if outcome == "running" {
         return "running";
@@ -290,7 +312,11 @@ fn parse_millis(text: &str) -> Option<i64> {
 pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyProfile>) -> Value {
     let schedule = schedule_workflow_run(run);
     let ready: BTreeSet<&str> = schedule.ready.iter().map(String::as_str).collect();
-    let awaiting: BTreeSet<&str> = schedule.awaiting_approval.iter().map(String::as_str).collect();
+    let awaiting: BTreeSet<&str> = schedule
+        .awaiting_approval
+        .iter()
+        .map(String::as_str)
+        .collect();
     let in_loop = loop_iterations_by_node(run);
 
     let stages: Vec<Value> = run
@@ -302,7 +328,10 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
             let state = run.nodes.get(&base.id);
             let last = state.and_then(|s| s.attempts.last());
             let duration = last.and_then(|a| {
-                let (start, end) = (parse_millis(&a.started_at)?, parse_millis(a.ended_at.as_deref()?)?);
+                let (start, end) = (
+                    parse_millis(&a.started_at)?,
+                    parse_millis(a.ended_at.as_deref()?)?,
+                );
                 Some((end - start).max(0))
             });
             let mut row = Map::new();
@@ -310,7 +339,10 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
             row.insert("name".into(), json!(base.name));
             row.insert("type".into(), json!(type_name(node)));
             row.insert("outcome".into(), json!(outcome_of(run, &base.id)));
-            row.insert("lane".into(), json!(lane_for(run, &base.id, &ready, &awaiting)));
+            row.insert(
+                "lane".into(),
+                json!(lane_for(run, &base.id, &ready, &awaiting)),
+            );
             let attempts = state.map_or(0, |s| s.attempts.len());
             row.insert("attempts".into(), json!(attempts));
             let revision_base = state.and_then(|s| s.revision_base).unwrap_or(0);
@@ -332,7 +364,11 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
                     json!(stage_session_key(&run.run_id, &base.id)),
                 );
             }
-            put(&mut row, "snapshotRef", state.and_then(|s| s.snapshot_ref.clone()).map(Value::from));
+            put(
+                &mut row,
+                "snapshotRef",
+                state.and_then(|s| s.snapshot_ref.clone()).map(Value::from),
+            );
             put(&mut row, "gate", node_gate(node).map(Value::from));
             if !base.inputs.is_empty() {
                 row.insert("inputs".into(), json!(base.inputs));
@@ -354,24 +390,45 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
                 })
                 .unwrap_or_default();
             row.insert("artifacts".into(), json!(artifacts));
-            put(&mut row, "lastError", last.and_then(|a| a.error.clone()).map(Value::from));
+            put(
+                &mut row,
+                "lastError",
+                last.and_then(|a| a.error.clone()).map(Value::from),
+            );
             put(
                 &mut row,
                 "pause",
-                state.and_then(pause_reason_of).and_then(|p| serde_json::to_value(p).ok()),
+                state
+                    .and_then(pause_reason_of)
+                    .and_then(|p| serde_json::to_value(p).ok()),
             );
-            put(&mut row, "phase", state.and_then(|s| s.phase.clone()).map(Value::from));
+            put(
+                &mut row,
+                "phase",
+                state.and_then(|s| s.phase.clone()).map(Value::from),
+            );
             put(
                 &mut row,
                 "findings",
-                state.and_then(|s| s.findings.as_ref()).and_then(|f| serde_json::to_value(f).ok()),
+                state
+                    .and_then(|s| s.findings.as_ref())
+                    .and_then(|f| serde_json::to_value(f).ok()),
             );
-            put(&mut row, "provider", last.and_then(|a| a.provider.clone()).map(Value::from));
-            put(&mut row, "model", last.and_then(|a| a.model.clone()).map(Value::from));
+            put(
+                &mut row,
+                "provider",
+                last.and_then(|a| a.provider.clone()).map(Value::from),
+            );
+            put(
+                &mut row,
+                "model",
+                last.and_then(|a| a.model.clone()).map(Value::from),
+            );
             put(
                 &mut row,
                 "independence",
-                last.and_then(|a| a.independence.as_ref()).and_then(|i| serde_json::to_value(i).ok()),
+                last.and_then(|a| a.independence.as_ref())
+                    .and_then(|i| serde_json::to_value(i).ok()),
             );
             if let WorkflowNode::AgentTask(task) = node {
                 let provider = run
@@ -408,9 +465,17 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
                     row.insert("command".into(), json!(parts.join(" ")));
                 }
             }
-            put(&mut row, "exitCode", last.and_then(|a| a.exit_code).map(Value::from));
+            put(
+                &mut row,
+                "exitCode",
+                last.and_then(|a| a.exit_code).map(Value::from),
+            );
             put(&mut row, "durationMs", duration.map(Value::from));
-            put(&mut row, "startedAt", last.map(|a| Value::from(a.started_at.clone())));
+            put(
+                &mut row,
+                "startedAt",
+                last.map(|a| Value::from(a.started_at.clone())),
+            );
             if let WorkflowNode::Approval(approval) = node {
                 row.insert("prompt".into(), json!(approval.prompt));
                 row.insert("requiredGates".into(), json!(approval.required_gates));
@@ -429,7 +494,9 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
     // Union across every approval node; the first evaluation of a gate wins the dedupe.
     let mut gates_by_kind: Vec<(String, Value)> = Vec::new();
     for node in &run.definition.nodes {
-        let WorkflowNode::Approval(approval) = node else { continue };
+        let WorkflowNode::Approval(approval) = node else {
+            continue;
+        };
         let readiness = approval_readiness(run, &approval.base.id, policy, None);
         let bypassable: BTreeSet<String> = readiness
             .bypassable
@@ -462,7 +529,13 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
         .ok()
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default();
-    let explanation = explain_run(run, &status_text, schedule.blocked.as_deref(), &gates, &loops);
+    let explanation = explain_run(
+        run,
+        &status_text,
+        schedule.blocked.as_deref(),
+        &gates,
+        &loops,
+    );
 
     let nodes_graph: Vec<Value> = run
         .definition
@@ -480,7 +553,11 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
     summary.insert("workflowId".into(), json!(run.workflow_id));
     summary.insert(
         "workflowName".into(),
-        json!(run.display_name.clone().unwrap_or_else(|| run.definition.name.clone())),
+        json!(
+            run.display_name
+                .clone()
+                .unwrap_or_else(|| run.definition.name.clone())
+        ),
     );
     summary.insert("status".into(), json!(status_text));
     summary.insert("explanation".into(), json!(explanation));
@@ -506,28 +583,69 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
         let environment = stages.iter().any(|s| s["pause"] == "environment");
         summary.insert(
             "pauseReason".into(),
-            json!(if environment { "environment" } else { "provider-limit" }),
+            json!(if environment {
+                "environment"
+            } else {
+                "provider-limit"
+            }),
         );
     }
     summary.insert("outstanding".into(), json!(outstanding_nodes(run)));
     summary.insert("events".into(), json!(run.events));
     summary.insert("startedAt".into(), json!(run.started_at));
-    put(&mut summary, "endedAt", run.ended_at.clone().map(Value::from));
-    put(&mut summary, "issueKey", run.issue_key.clone().map(Value::from));
-    put(&mut summary, "controllerSessionKey", run.controller_session_key.clone().map(Value::from));
-    put(&mut summary, "controllerSessionId", run.controller_session_id.clone().map(Value::from));
-    put(&mut summary, "planInput", run.plan_input.as_ref().and_then(|p| serde_json::to_value(p).ok()));
-    put(&mut summary, "aiProvider", run.ai_provider.clone().map(Value::from));
-    put(&mut summary, "aiModel", run.ai_model.clone().map(Value::from));
+    put(
+        &mut summary,
+        "endedAt",
+        run.ended_at.clone().map(Value::from),
+    );
+    put(
+        &mut summary,
+        "issueKey",
+        run.issue_key.clone().map(Value::from),
+    );
+    put(
+        &mut summary,
+        "controllerSessionKey",
+        run.controller_session_key.clone().map(Value::from),
+    );
+    put(
+        &mut summary,
+        "controllerSessionId",
+        run.controller_session_id.clone().map(Value::from),
+    );
+    put(
+        &mut summary,
+        "planInput",
+        run.plan_input
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok()),
+    );
+    put(
+        &mut summary,
+        "aiProvider",
+        run.ai_provider.clone().map(Value::from),
+    );
+    put(
+        &mut summary,
+        "aiModel",
+        run.ai_model.clone().map(Value::from),
+    );
     if run.archived == Some(true) {
         summary.insert("archived".into(), json!(true));
-        put(&mut summary, "archivedAt", run.archived_at.clone().map(Value::from));
+        put(
+            &mut summary,
+            "archivedAt",
+            run.archived_at.clone().map(Value::from),
+        );
     }
     let auto = run
         .permission_mode
         .and_then(|m| serde_json::to_value(m).ok())
         .is_some_and(|v| v == "auto");
-    summary.insert("permissionMode".into(), json!(if auto { "auto" } else { "ask" }));
+    summary.insert(
+        "permissionMode".into(),
+        json!(if auto { "auto" } else { "ask" }),
+    );
     summary.insert(
         "providerLimitPolicy".into(),
         run.provider_limit_policy
@@ -542,7 +660,13 @@ pub fn summarize_workflow_run(run: &WorkflowRun, policy: Option<&WorkflowPolicyP
             json!({ "edgeId": deciding["edgeId"], "message": blocked }),
         );
     }
-    put(&mut summary, "parameters", run.parameters.as_ref().and_then(|p| serde_json::to_value(p).ok()));
+    put(
+        &mut summary,
+        "parameters",
+        run.parameters
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok()),
+    );
     Value::Object(summary)
 }
 
@@ -595,17 +719,27 @@ fn explain_run(
 ) -> String {
     if status == "succeeded" {
         let short = loops.iter().find(|l| {
-            matches!(l["stoppedBecause"].as_str(), Some("accepted" | "no-improvement"))
+            matches!(
+                l["stoppedBecause"].as_str(),
+                Some("accepted" | "no-improvement")
+            )
         });
         if let Some(short) = short {
-            let best = match (short["keepBest"]["bestScore"].as_f64(), short["keepBest"]["metric"].as_str()) {
+            let best = match (
+                short["keepBest"]["bestScore"].as_f64(),
+                short["keepBest"]["metric"].as_str(),
+            ) {
                 (Some(score), Some(metric)) => format!(
                     " The best {metric} was {score} (iteration {}).",
                     short["keepBest"]["bestIteration"]
                 ),
                 _ => String::new(),
             };
-            let improving = if short["stoppedBecause"] == "no-improvement" { " improving" } else { "" };
+            let improving = if short["stoppedBecause"] == "no-improvement" {
+                " improving"
+            } else {
+                ""
+            };
             return format!(
                 "The run completed, but the target was not reached: {} still matched \"{}\" when it stopped{improving}.{best}",
                 short["fromName"].as_str().unwrap_or(""),
@@ -649,7 +783,13 @@ fn explain_run(
         let failing: Vec<String> = gates
             .iter()
             .filter(|g| !matches!(g["state"].as_str(), Some("passed" | "bypassed")))
-            .map(|g| format!("{} {}", g["gate"].as_str().unwrap_or(""), g["state"].as_str().unwrap_or("")))
+            .map(|g| {
+                format!(
+                    "{} {}",
+                    g["gate"].as_str().unwrap_or(""),
+                    g["state"].as_str().unwrap_or("")
+                )
+            })
             .collect();
         return if failing.is_empty() {
             "Every required gate has resolved; the run is waiting for a human approval.".into()
@@ -665,8 +805,11 @@ fn explain_run(
         return blocked.to_string();
     }
 
-    let paused: Vec<(&String, &praxis_workflows::run::WorkflowNodeState)> =
-        run.nodes.iter().filter(|(_, s)| is_paused_node(s)).collect();
+    let paused: Vec<(&String, &praxis_workflows::run::WorkflowNodeState)> = run
+        .nodes
+        .iter()
+        .filter(|(_, s)| is_paused_node(s))
+        .collect();
     if !paused.is_empty() {
         let names = sorted_names(paused.iter().map(|(id, _)| *id).collect());
         let environment = paused
@@ -689,7 +832,10 @@ fn explain_run(
         let who = if ais.is_empty() {
             "The AI provider".to_string()
         } else {
-            ais.iter().map(|id| provider_display_name(id)).collect::<Vec<_>>().join(" and ")
+            ais.iter()
+                .map(|id| provider_display_name(id))
+                .collect::<Vec<_>>()
+                .join(" and ")
         };
         return format!(
             "{who} ran out of credits or hit its usage limit at {}. Switch to another AI, or restore them and retry — nothing is lost and no attempt was used.",

@@ -25,9 +25,7 @@ use praxis_workflows::run::{
 };
 use praxis_workflows::scheduled_budget::ProviderUsage;
 use praxis_workflows::scheduled_run::{ScheduledPauseReason, ScheduledRun, ScheduledTicketRef};
-use praxis_workflows::scheduled_run_execution::{
-    EntryProgress, EntryProgressKind, StageRecovery,
-};
+use praxis_workflows::scheduled_run_execution::{EntryProgress, EntryProgressKind, StageRecovery};
 use praxis_workflows::scheduled_run_runner::{
     ProviderUsageReading, ScheduledGateDecisionResult, ScheduledHandOverRequest,
     ScheduledHandOverResult, ScheduledLaunchError, ScheduledLaunchRequest, ScheduledLaunched,
@@ -111,21 +109,37 @@ impl HostPorts {
     }
 
     fn run_is_running(&self, id: &str) -> bool {
-        self.run(id).is_some_and(|r| serde_json::to_value(r.status).ok() == Some(json!("running")))
+        self.run(id)
+            .is_some_and(|r| serde_json::to_value(r.status).ok() == Some(json!("running")))
     }
 
     /// The first usable AI not in `exclude` that can run this stage, preferring `preferred`, then the active AI.
-    fn stage_capable_provider(&self, run: &WorkflowRun, node_id: &str, exclude: &[String], preferred: &[String]) -> Option<String> {
+    fn stage_capable_provider(
+        &self,
+        run: &WorkflowRun,
+        node_id: &str,
+        exclude: &[String],
+        preferred: &[String],
+    ) -> Option<String> {
         let usable = usable_providers(&self.host);
         let mut order: Vec<String> = preferred.to_vec();
         order.push(self.host.settings().read().ai.active_provider.clone());
         order.extend(usable.iter().cloned());
         let mut seen = std::collections::HashSet::new();
-        order.into_iter().filter(|id| seen.insert(id.clone()) && usable.contains(id)).find(|id| !exclude.contains(id) && provider_can_run_stage(run, node_id, id))
+        order
+            .into_iter()
+            .filter(|id| seen.insert(id.clone()) && usable.contains(id))
+            .find(|id| !exclude.contains(id) && provider_can_run_stage(run, node_id, id))
     }
 
     /// No live stage to move: checkpoint the run's worktree and change the AI for every stage not yet started.
-    async fn switch_for_next_stages(&self, run: &WorkflowRun, workflow_run_id: &str, message: &str, to: String) -> Result<ScheduledHandOverResult, String> {
+    async fn switch_for_next_stages(
+        &self,
+        run: &WorkflowRun,
+        workflow_run_id: &str,
+        message: &str,
+        to: String,
+    ) -> Result<ScheduledHandOverResult, String> {
         let mut checkpoint = None;
         if let Some(worktree) = run.worktree_path.as_deref() {
             let path = std::path::Path::new(worktree);
@@ -139,7 +153,10 @@ impl HostPorts {
             current
         })
         .await?;
-        Ok(ScheduledHandOverResult { checkpoint_ref: checkpoint, provider: Some(to) })
+        Ok(ScheduledHandOverResult {
+            checkpoint_ref: checkpoint,
+            provider: Some(to),
+        })
     }
 }
 
@@ -156,29 +173,37 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
         let set_up = match descriptor.kind {
             praxis_ai::providers::registry::DescriptorKind::Api => {
                 host.secrets()
-                    .has(&praxis_ai::providers::registry::secret_key_for_provider(&descriptor.id))
+                    .has(&praxis_ai::providers::registry::secret_key_for_provider(
+                        &descriptor.id,
+                    ))
                     || (descriptor.id == "vercel-gateway"
                         && praxis_ai::providers::registry::gateway_key_from_env().is_some())
             }
             praxis_ai::providers::registry::DescriptorKind::CliAgent => {
                 // A CLI agent counts once it has been pointed at (or chosen as the active AI); one that
                 // merely happens to be installed on this machine is not set up for Praxis.
-                config.and_then(|c| c.cli_path.as_deref()).map(str::trim).is_some_and(|p| {
-                    !p.is_empty()
-                        && praxis_workflows::check_process::is_check_command_available(
-                            p,
-                            std::env::var("PATH").ok().as_deref(),
-                            std::env::var("PATHEXT").ok().as_deref(),
-                        )
-                })
-                    || (descriptor.id == ai.active_provider
-                        && descriptor.default_command.as_deref().is_some_and(|command| {
-                            praxis_workflows::check_process::is_check_command_available(
-                                command,
+                config
+                    .and_then(|c| c.cli_path.as_deref())
+                    .map(str::trim)
+                    .is_some_and(|p| {
+                        !p.is_empty()
+                            && praxis_workflows::check_process::is_check_command_available(
+                                p,
                                 std::env::var("PATH").ok().as_deref(),
                                 std::env::var("PATHEXT").ok().as_deref(),
                             )
-                        }))
+                    })
+                    || (descriptor.id == ai.active_provider
+                        && descriptor
+                            .default_command
+                            .as_deref()
+                            .is_some_and(|command| {
+                                praxis_workflows::check_process::is_check_command_available(
+                                    command,
+                                    std::env::var("PATH").ok().as_deref(),
+                                    std::env::var("PATHEXT").ok().as_deref(),
+                                )
+                            }))
             }
         };
         if set_up {
@@ -186,13 +211,26 @@ pub fn usable_providers(host: &HostContext) -> Vec<String> {
         }
     }
     // Endpoints the user added: usable unless switched off, with a key unless they need none.
-    for custom in ai.custom_providers.iter().flatten().filter_map(|c| serde_json::to_value(c).ok()) {
-        let Some(id) = custom["id"].as_str() else { continue };
-        if ai.providers.get(id).and_then(|c| c.enabled) == Some(false) || custom["enabled"] == json!(false) {
+    for custom in ai
+        .custom_providers
+        .iter()
+        .flatten()
+        .filter_map(|c| serde_json::to_value(c).ok())
+    {
+        let Some(id) = custom["id"].as_str() else {
+            continue;
+        };
+        if ai.providers.get(id).and_then(|c| c.enabled) == Some(false)
+            || custom["enabled"] == json!(false)
+        {
             continue;
         }
         let needs_key = custom["auth"]["kind"] != "none";
-        if !needs_key || host.secrets().has(&praxis_ai::providers::registry::secret_key_for_provider(id)) {
+        if !needs_key
+            || host
+                .secrets()
+                .has(&praxis_ai::providers::registry::secret_key_for_provider(id))
+        {
             usable.push(id.to_string());
         }
     }
@@ -226,13 +264,16 @@ pub fn set_usage_override(raw: Option<String>) {
 pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Value {
     let summary = workflows::summarize(host, run);
     let rows = summary["stages"].as_array().cloned().unwrap_or_default();
-    let ordered = praxis_workflows::scheduled_run_detail::ordered_workflow_stages(&run.definition, |id| {
-        run.nodes.get(id).is_some_and(|n| !n.attempts.is_empty())
-    });
+    let ordered =
+        praxis_workflows::scheduled_run_detail::ordered_workflow_stages(&run.definition, |id| {
+            run.nodes.get(id).is_some_and(|n| !n.attempts.is_empty())
+        });
     let mut stages = Vec::new();
     for node in ordered {
         let id = &node.base().id;
-        let Some(row) = rows.iter().find(|r| r["nodeId"] == json!(id)) else { continue };
+        let Some(row) = rows.iter().find(|r| r["nodeId"] == json!(id)) else {
+            continue;
+        };
         let total_ms: i64 = run
             .nodes
             .get(id)
@@ -241,7 +282,8 @@ pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Va
                     .attempts
                     .iter()
                     .filter_map(|a| {
-                        let end = chrono::DateTime::parse_from_rfc3339(a.ended_at.as_deref()?).ok()?;
+                        let end =
+                            chrono::DateTime::parse_from_rfc3339(a.ended_at.as_deref()?).ok()?;
                         let start = chrono::DateTime::parse_from_rfc3339(&a.started_at).ok()?;
                         Some((end - start).num_milliseconds().max(0))
                     })
@@ -250,8 +292,19 @@ pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Va
             .unwrap_or(0);
         let mut stage = serde_json::Map::new();
         for key in [
-            "nodeId", "name", "type", "lane", "attempts", "attemptsThisRevision", "maxAttempts", "provider",
-            "durationMs", "startedAt", "lastError", "command", "sessionKey",
+            "nodeId",
+            "name",
+            "type",
+            "lane",
+            "attempts",
+            "attemptsThisRevision",
+            "maxAttempts",
+            "provider",
+            "durationMs",
+            "startedAt",
+            "lastError",
+            "command",
+            "sessionKey",
         ] {
             if let Some(value) = row.get(key).filter(|v| !v.is_null()) {
                 stage.insert(key.to_string(), value.clone());
@@ -260,12 +313,18 @@ pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Va
         if total_ms > 0 {
             stage.insert("totalMs".into(), json!(total_ms));
         }
-        if let Some(iteration) = row["loopIteration"]["iteration"].as_u64().filter(|i| *i > 1) {
+        if let Some(iteration) = row["loopIteration"]["iteration"]
+            .as_u64()
+            .filter(|i| *i > 1)
+        {
             stage.insert("loopIteration".into(), json!(iteration));
         }
         if row["lane"] == "paused" {
             if let Some(error) = row["lastError"].as_str() {
-                stage.insert("activity".into(), json!({ "text": error, "source": "pause" }));
+                stage.insert(
+                    "activity".into(),
+                    json!({ "text": error, "source": "pause" }),
+                );
             }
         }
         stages.push(Value::Object(stage));
@@ -285,7 +344,11 @@ pub fn entry_detail(host: &HostContext, entry_id: &str, run: &WorkflowRun) -> Va
                             None => format!(" · {file}"),
                         })
                         .unwrap_or_default();
-                    format!("{}{place} — {}", f["severity"].as_str().unwrap_or(""), f["message"].as_str().unwrap_or(""))
+                    format!(
+                        "{}{place} — {}",
+                        f["severity"].as_str().unwrap_or(""),
+                        f["message"].as_str().unwrap_or("")
+                    )
                 })
                 .collect();
             loops.push(json!({
@@ -325,7 +388,9 @@ pub fn live_entries(host: &HostContext, run: &ScheduledRun) -> Vec<Value> {
                 Some(stored) => {
                     live["stages"] = entry_detail(host, &entry.id, &stored)["stages"].clone();
                     let progress = stage_progress(host, &stored);
-                    if let (Some(target), Some(source)) = (live.as_object_mut(), progress.as_object()) {
+                    if let (Some(target), Some(source)) =
+                        (live.as_object_mut(), progress.as_object())
+                    {
                         target.extend(source.clone());
                     }
                 }
@@ -385,7 +450,11 @@ fn stage_progress(host: &HostContext, run: &WorkflowRun) -> Value {
         Some(stage) => format!(
             "{}{}",
             stage["name"].as_str().unwrap_or(""),
-            if stage["outcome"] == "failed" { " — needs attention" } else { "" }
+            if stage["outcome"] == "failed" {
+                " — needs attention"
+            } else {
+                ""
+            }
         ),
         None if summary["status"] == "succeeded" => "Finished".to_string(),
         None => summary["explanation"].as_str().unwrap_or("").to_string(),
@@ -394,7 +463,8 @@ fn stage_progress(host: &HostContext, run: &WorkflowRun) -> Value {
         .as_ref()
         .and_then(|c| stages.iter().position(|s| s["nodeId"] == c["nodeId"]))
         .map_or(done, |p| p + 1);
-    let mut progress = json!({ "stageLabel": label, "stageIndex": index, "stageCount": stages.len() });
+    let mut progress =
+        json!({ "stageLabel": label, "stageIndex": index, "stageCount": stages.len() });
     if let Some(stage) = &blocker {
         progress["recovery"] = json!({
             "nodeId": stage["nodeId"],
@@ -425,9 +495,10 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
     let any_active = stages
         .iter()
         .any(|s| matches!(s["lane"].as_str(), Some("running" | "ready")));
-    let looping = summary["loops"]
-        .as_array()
-        .is_some_and(|l| l.iter().any(|x| x["firing"] == json!(true) && x["needsDecision"] != json!(true)));
+    let looping = summary["loops"].as_array().is_some_and(|l| {
+        l.iter()
+            .any(|x| x["firing"] == json!(true) && x["needsDecision"] != json!(true))
+    });
     let blocker = (status == "running"
         && summary.get("needsDecision").is_none_or(Value::is_null)
         && !any_active
@@ -435,7 +506,10 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
         .then(|| stages.iter().find(|s| s["lane"] == "failed").cloned())
         .flatten();
     let kind = match status {
-        "succeeded" => EntryProgressKind::Succeeded { spend: None, exhausted },
+        "succeeded" => EntryProgressKind::Succeeded {
+            spend: None,
+            exhausted,
+        },
         "failed" => {
             let failing = stages.iter().find(|s| s["outcome"] == "failed");
             EntryProgressKind::Failed {
@@ -443,12 +517,18 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
                     .and_then(|s| s["lastError"].as_str())
                     .filter(|e| !e.is_empty())
                     .map_or(explanation, str::to_string),
-                node_id: failing.and_then(|s| s["nodeId"].as_str()).map(str::to_string),
+                node_id: failing
+                    .and_then(|s| s["nodeId"].as_str())
+                    .map(str::to_string),
                 spend: None,
                 exhausted,
             }
         }
-        "cancelled" => EntryProgressKind::Cancelled { reason: explanation, spend: None, exhausted },
+        "cancelled" => EntryProgressKind::Cancelled {
+            reason: explanation,
+            spend: None,
+            exhausted,
+        },
         _ if summary["paused"] == json!(true) => {
             let stuck = (blocker.is_none() && summary["pauseReason"] == "environment")
                 .then(|| {
@@ -462,18 +542,31 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
                 Some(stage) => {
                     let name = stage["name"].as_str().unwrap_or("");
                     let error = stage["lastError"].as_str().unwrap_or("");
-                    let interrupted = error.contains("Interrupted — the app stopped while this stage was running.");
+                    let interrupted = error
+                        .contains("Interrupted — the app stopped while this stage was running.");
                     EntryProgressKind::Stalled {
                         reason: if interrupted {
-                            format!("{name} was interrupted when Praxis stopped. It will retry automatically when Praxis starts.")
+                            format!(
+                                "{name} was interrupted when Praxis stopped. It will retry automatically when Praxis starts."
+                            )
                         } else {
-                            format!("{name} could not run here: {} Fix that, then retry the stage.", if error.is_empty() { explanation.as_str() } else { error })
+                            format!(
+                                "{name} could not run here: {} Fix that, then retry the stage.",
+                                if error.is_empty() {
+                                    explanation.as_str()
+                                } else {
+                                    error
+                                }
+                            )
                         },
                         pause_reason: ScheduledPauseReason::Failure,
                         edge_id: None,
                         recovery: Some(StageRecovery {
                             node_id: stage["nodeId"].as_str().unwrap_or("").to_string(),
-                            attempts: stage["attemptsThisRevision"].as_u64().or(stage["attempts"].as_u64()).unwrap_or(1) as u32,
+                            attempts: stage["attemptsThisRevision"]
+                                .as_u64()
+                                .or(stage["attempts"].as_u64())
+                                .unwrap_or(1) as u32,
                             max_attempts: stage["maxAttempts"].as_u64().unwrap_or(1) as u32,
                             automatic: Some(interrupted),
                         }),
@@ -505,7 +598,12 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
                 .and_then(|s| s["name"].as_str())
                 .unwrap_or("Approval")
                 .to_string();
-            EntryProgressKind::Gate { node_id, label, spend: None, exhausted }
+            EntryProgressKind::Gate {
+                node_id,
+                label,
+                spend: None,
+                exhausted,
+            }
         }
         _ if blocker.is_some() => {
             let stage = blocker.unwrap_or(Value::Null);
@@ -513,13 +611,18 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
                 reason: format!(
                     "{} failed: {} Retry the stage or open the workflow to review it.",
                     stage["name"].as_str().unwrap_or(""),
-                    stage["lastError"].as_str().unwrap_or("No error was reported.")
+                    stage["lastError"]
+                        .as_str()
+                        .unwrap_or("No error was reported.")
                 ),
                 pause_reason: ScheduledPauseReason::Failure,
                 edge_id: None,
                 recovery: Some(StageRecovery {
                     node_id: stage["nodeId"].as_str().unwrap_or("").to_string(),
-                    attempts: stage["attemptsThisRevision"].as_u64().or(stage["attempts"].as_u64()).unwrap_or(1) as u32,
+                    attempts: stage["attemptsThisRevision"]
+                        .as_u64()
+                        .or(stage["attempts"].as_u64())
+                        .unwrap_or(1) as u32,
                     max_attempts: stage["maxAttempts"].as_u64().unwrap_or(1) as u32,
                     automatic: None,
                 }),
@@ -527,33 +630,52 @@ fn observe_run(host: &HostContext, run: &WorkflowRun) -> WorkflowObservation {
                 exhausted,
             }
         }
-        _ if summary.get("needsDecision").is_some_and(|d| !d.is_null()) => EntryProgressKind::Stalled {
-            reason: summary["needsDecision"]["message"].as_str().unwrap_or("").to_string(),
-            pause_reason: ScheduledPauseReason::Policy,
-            edge_id: summary["needsDecision"]["edgeId"].as_str().map(str::to_string),
-            recovery: None,
-            spend: None,
-            exhausted,
-        },
+        _ if summary.get("needsDecision").is_some_and(|d| !d.is_null()) => {
+            EntryProgressKind::Stalled {
+                reason: summary["needsDecision"]["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                pause_reason: ScheduledPauseReason::Policy,
+                edge_id: summary["needsDecision"]["edgeId"]
+                    .as_str()
+                    .map(str::to_string),
+                recovery: None,
+                spend: None,
+                exhausted,
+            }
+        }
         _ => {
-            let live = stages
-                .iter()
-                .find(|s| s["lane"] == "running")
-                .or_else(|| stages.iter().rev().find(|s| s.get("provider").is_some_and(|p| !p.is_null())));
+            let live = stages.iter().find(|s| s["lane"] == "running").or_else(|| {
+                stages
+                    .iter()
+                    .rev()
+                    .find(|s| s.get("provider").is_some_and(|p| !p.is_null()))
+            });
             EntryProgressKind::Running {
                 provider: live
                     .and_then(|s| s["provider"].as_str())
                     .or(summary["aiProvider"].as_str())
                     .map(str::to_string),
-                session_id: live.and_then(|s| s["sessionId"].as_str()).map(str::to_string),
+                session_id: live
+                    .and_then(|s| s["sessionId"].as_str())
+                    .map(str::to_string),
                 spend: None,
                 exhausted,
             }
         }
     };
-    let artifacts = run.nodes.values().flat_map(|n| n.artifacts.clone()).collect();
+    let artifacts = run
+        .nodes
+        .values()
+        .flat_map(|n| n.artifacts.clone())
+        .collect();
     WorkflowObservation {
-        progress: EntryProgress { kind, estimate: None, artifacts },
+        progress: EntryProgress {
+            kind,
+            estimate: None,
+            artifacts,
+        },
         idle: None,
     }
 }
@@ -585,7 +707,8 @@ impl ScheduledRunnerPorts for HostPorts {
     }
 
     fn observe(&self, workflow_run_id: &str) -> Option<WorkflowObservation> {
-        self.run(workflow_run_id).map(|run| observe_run(&self.host, &run))
+        self.run(workflow_run_id)
+            .map(|run| observe_run(&self.host, &run))
     }
 
     fn find_by_launch_token(&self, token: &str) -> Option<String> {
@@ -597,7 +720,10 @@ impl ScheduledRunnerPorts for HostPorts {
 
     async fn check_ticket(&self, ticket: &ScheduledTicketRef) -> Result<Option<String>, String> {
         match self
-            .rpc("issue:get", vec![json!(ticket.issue_key), json!(ticket.connection_id)])
+            .rpc(
+                "issue:get",
+                vec![json!(ticket.issue_key), json!(ticket.connection_id)],
+            )
             .await
         {
             Ok(issue) => Ok(issue["statusCategory"]
@@ -615,32 +741,53 @@ impl ScheduledRunnerPorts for HostPorts {
         &self,
         request: ScheduledLaunchRequest,
     ) -> Result<ScheduledLaunched, ScheduledLaunchError> {
-        let ScheduledLaunchRequest { run, entry, workflow_id, token, provider, delivery_branch_name, final_entry } = request;
+        let ScheduledLaunchRequest {
+            run,
+            entry,
+            workflow_id,
+            token,
+            provider,
+            delivery_branch_name,
+            final_entry,
+        } = request;
         let Some(project_id) = run.project_id.clone() else {
             return Err(ScheduledLaunchError::with_reason(
                 "This schedule is not tied to a project, so it has nowhere to run the tickets.",
                 ScheduledPauseReason::Policy,
             ));
         };
-        let sequential = matches!(run.policy.mode(), praxis_workflows::scheduled_run::ScheduledRunPolicyMode::Sequential);
+        let sequential = matches!(
+            run.policy.mode(),
+            praxis_workflows::scheduled_run::ScheduledRunPolicyMode::Sequential
+        );
         let mut shared = delivery_branch_name.clone();
         if sequential {
             // A ticket whose last attempt failed at its merge resumes on the branch that holds its work.
-            if let (Some(folder), Some(_)) = (workflows::project_folder(&self.host, &project_id), shared.as_ref()) {
+            if let (Some(folder), Some(_)) = (
+                workflows::project_folder(&self.host, &project_id),
+                shared.as_ref(),
+            ) {
                 let failed = workflows::all_runs(&self.host)
                     .into_iter()
                     .filter(|r| {
                         r.project_id == project_id
                             && r.issue_key.as_deref() == Some(entry.ticket.issue_key.as_str())
                             && serde_json::to_value(r.status).ok() == Some(json!("failed"))
-                            && r.nodes.get("merge").is_some_and(|n| serde_json::to_value(n.outcome).ok() == Some(json!("failed")))
+                            && r.nodes.get("merge").is_some_and(|n| {
+                                serde_json::to_value(n.outcome).ok() == Some(json!("failed"))
+                            })
                     })
                     .max_by(|a, b| a.started_at.cmp(&b.started_at));
                 if let (Some(root), Some(existing)) = (
                     praxis_core::git::run_work::repository_root(&folder).await,
                     failed,
                 ) {
-                    if let Some(branch) = praxis_core::git::run_work::find_run_branch(std::path::Path::new(&root), &existing.run_id).await {
+                    if let Some(branch) = praxis_core::git::run_work::find_run_branch(
+                        std::path::Path::new(&root),
+                        &existing.run_id,
+                    )
+                    .await
+                    {
                         shared = Some(branch);
                     }
                 }
@@ -667,9 +814,10 @@ impl ScheduledRunnerPorts for HostPorts {
             options,
             ..StartRunInput::default()
         };
-        let started = tokio::task::spawn_blocking(move || workflows::start_workflow_run(&host, input))
-            .await
-            .map_err(|e| ScheduledLaunchError::plain(e.to_string()))?;
+        let started =
+            tokio::task::spawn_blocking(move || workflows::start_workflow_run(&host, input))
+                .await
+                .map_err(|e| ScheduledLaunchError::plain(e.to_string()))?;
         match started {
             Ok(run_record) => Ok(ScheduledLaunched {
                 workflow_run_id: run_record.run_id,
@@ -702,7 +850,8 @@ impl ScheduledRunnerPorts for HostPorts {
         }
         Ok(ProviderUsageReading {
             usable,
-            active: Some(self.host.settings().read().ai.active_provider.clone()).filter(|a| !a.is_empty()),
+            active: Some(self.host.settings().read().ai.active_provider.clone())
+                .filter(|a| !a.is_empty()),
             used,
         })
     }
@@ -715,8 +864,17 @@ impl ScheduledRunnerPorts for HostPorts {
         &self,
         request: ScheduledHandOverRequest,
     ) -> Result<ScheduledHandOverResult, String> {
-        let ScheduledHandOverRequest { entry, workflow_run_id, from, to, used_fraction, .. } = request;
-        let run = self.run(&workflow_run_id).ok_or("The workflow run no longer exists.")?;
+        let ScheduledHandOverRequest {
+            entry,
+            workflow_run_id,
+            from,
+            to,
+            used_fraction,
+            ..
+        } = request;
+        let run = self
+            .run(&workflow_run_id)
+            .ok_or("The workflow run no longer exists.")?;
         let message = format!(
             "checkpoint: {} at {}% of {from}",
             entry.ticket.issue_key,
@@ -731,7 +889,10 @@ impl ScheduledRunnerPorts for HostPorts {
                         session["workflowRunId"] == workflow_run_id.as_str()
                             && session["workflowRole"] == "stage"
                             && session["provider"] == from.as_str()
-                            && !matches!(session["state"].as_str(), Some("completed" | "failed" | "aborted"))
+                            && !matches!(
+                                session["state"].as_str(),
+                                Some("completed" | "failed" | "aborted")
+                            )
                     })
                     .collect()
             })
@@ -739,12 +900,17 @@ impl ScheduledRunnerPorts for HostPorts {
         // Between stages, or with stages running side by side, nothing is cut off: the run's AI changes
         // for every stage not yet started, and each stage launch still checks it can run there.
         if active.len() != 1 {
-            return self.switch_for_next_stages(&run, &workflow_run_id, &message, to).await;
+            return self
+                .switch_for_next_stages(&run, &workflow_run_id, &message, to)
+                .await;
         }
         let session = &active[0];
         // A mid-turn handover moves the live session, so the AI must be able to run this stage (Antigravity
         // can't run a read-only or approval-gated one). If the planner's pick can't, take the next that can.
-        let node_id = session["workflowNodeId"].as_str().unwrap_or_default().to_owned();
+        let node_id = session["workflowNodeId"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
         let target = if provider_can_run_stage(&run, &node_id, &to) {
             Some(to.clone())
         } else {
@@ -753,17 +919,25 @@ impl ScheduledRunnerPorts for HostPorts {
             self.stage_capable_provider(&run, &node_id, &exclude, std::slice::from_ref(&to))
         };
         let Some(target) = target else {
-            return self.switch_for_next_stages(&run, &workflow_run_id, &message, to).await;
+            return self
+                .switch_for_next_stages(&run, &workflow_run_id, &message, to)
+                .await;
         };
         let key = session["issueKey"].as_str().unwrap_or_default().to_owned();
-        let worktree = session["worktreePath"].as_str().map(str::to_owned).or_else(|| run.worktree_path.clone());
+        let worktree = session["worktreePath"]
+            .as_str()
+            .map(str::to_owned)
+            .or_else(|| run.worktree_path.clone());
         let revision = session["handoverBrief"]["revision"].as_u64().unwrap_or(0);
         // Hold the stage attached for the whole interruption: the abort below is deliberate, not the stage ending.
-        let _hold = super::stage_handover_guard::hold(&key).ok_or("A provider handover is already in progress.")?;
+        let _hold = super::stage_handover_guard::hold(&key)
+            .ok_or("A provider handover is already in progress.")?;
         let host = self.host.clone();
         {
             let (host, dir, key) = (host.clone(), dir.clone(), key.clone());
-            tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key)).await.map_err(|e| e.to_string())?;
+            tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key))
+                .await
+                .map_err(|e| e.to_string())?;
         }
         let mut checkpoint = None;
         if let Some(worktree) = worktree.as_deref() {
@@ -779,14 +953,23 @@ impl ScheduledRunnerPorts for HostPorts {
         }
         {
             let (host, dir, key, target) = (host.clone(), dir.clone(), key.clone(), target.clone());
-            tokio::task::spawn_blocking(move || super::ai_session_ops::handover_to(&host, &dir, &key, json!({ "provider": target, "expectedBriefRevision": revision })))
-                .await
-                .map_err(|e| e.to_string())?
-                .map_err(|e| e.message)?;
+            tokio::task::spawn_blocking(move || {
+                super::ai_session_ops::handover_to(
+                    &host,
+                    &dir,
+                    &key,
+                    json!({ "provider": target, "expectedBriefRevision": revision }),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.message)?;
         }
         if !self.run_is_running(&workflow_run_id) {
             let (host, dir, key) = (host.clone(), dir.clone(), key.clone());
-            let _ = tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key)).await;
+            let _ =
+                tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key))
+                    .await;
             return Err("The workflow stopped during provider handover.".into());
         }
         let chosen = target.clone();
@@ -795,7 +978,10 @@ impl ScheduledRunnerPorts for HostPorts {
             current
         })
         .await?;
-        Ok(ScheduledHandOverResult { checkpoint_ref: checkpoint, provider: Some(target) })
+        Ok(ScheduledHandOverResult {
+            checkpoint_ref: checkpoint,
+            provider: Some(target),
+        })
     }
 
     async fn decide_gate(
@@ -886,8 +1072,14 @@ impl ScheduledRunnerPorts for HostPorts {
         if let Err(error) = result {
             return Some(Err(error));
         }
-        workflow_engine::engine(&self.host).orchestrator().step(workflow_run_id).await;
-        let decided = outcome.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        workflow_engine::engine(&self.host)
+            .orchestrator()
+            .step(workflow_run_id)
+            .await;
+        let decided = outcome
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         Some(Ok(decided.unwrap_or(ScheduledGateDecisionResult {
             decision: "rejected".into(),
             reason: "Unable to evaluate approval stage.".into(),
@@ -939,15 +1131,25 @@ impl ScheduledRunnerPorts for HostPorts {
         if let Err(error) = result {
             return Some(Err(error));
         }
-        workflow_engine::engine(&self.host).orchestrator().step(workflow_run_id).await;
-        let decided = outcome.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+        workflow_engine::engine(&self.host)
+            .orchestrator()
+            .step(workflow_run_id)
+            .await;
+        let decided = outcome
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         Some(Ok(decided.unwrap_or(ScheduledLoopDecisionResult {
             decision: "stop".into(),
             reason: "The repair loop could not be continued safely.".into(),
         })))
     }
 
-    async fn approve_gate(&self, workflow_run_id: &str, node_id: &str) -> Option<Result<(), String>> {
+    async fn approve_gate(
+        &self,
+        workflow_run_id: &str,
+        node_id: &str,
+    ) -> Option<Result<(), String>> {
         let policy = self
             .run(workflow_run_id)
             .and_then(|r| workflows::policy_for(&self.host, &r.project_id));
@@ -958,7 +1160,9 @@ impl ScheduledRunnerPorts for HostPorts {
                 let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
                 resolve_approval_target(&current, target)
                     .ok()
-                    .and_then(|a| approve_stage(&current, &a.base.id, ACTOR, &at, policy.as_ref(), None).ok())
+                    .and_then(|a| {
+                        approve_stage(&current, &a.base.id, ACTOR, &at, policy.as_ref(), None).ok()
+                    })
                     .filter(|r| r.ok)
                     .map_or(current, |r| r.run)
             })
@@ -966,11 +1170,18 @@ impl ScheduledRunnerPorts for HostPorts {
         if let Err(error) = result {
             return Some(Err(error));
         }
-        workflow_engine::engine(&self.host).orchestrator().step(workflow_run_id).await;
+        workflow_engine::engine(&self.host)
+            .orchestrator()
+            .step(workflow_run_id)
+            .await;
         Some(Ok(()))
     }
 
-    async fn retry_stage(&self, workflow_run_id: &str, node_id: &str) -> Option<Result<(), String>> {
+    async fn retry_stage(
+        &self,
+        workflow_run_id: &str,
+        node_id: &str,
+    ) -> Option<Result<(), String>> {
         let node_id = node_id.to_string();
         let result = self
             .update_run(workflow_run_id, move |current| {
@@ -982,7 +1193,10 @@ impl ScheduledRunnerPorts for HostPorts {
         if let Err(error) = result {
             return Some(Err(error));
         }
-        workflow_engine::engine(&self.host).orchestrator().step(workflow_run_id).await;
+        workflow_engine::engine(&self.host)
+            .orchestrator()
+            .step(workflow_run_id)
+            .await;
         Some(Ok(()))
     }
 
@@ -993,7 +1207,10 @@ impl ScheduledRunnerPorts for HostPorts {
         let ScheduledMoveTicketRequest { run, entry, phase } = request;
         let ticket = &entry.ticket;
         let issue = match self
-            .rpc("issue:get", vec![json!(ticket.issue_key), json!(ticket.connection_id)])
+            .rpc(
+                "issue:get",
+                vec![json!(ticket.issue_key), json!(ticket.connection_id)],
+            )
             .await
         {
             Ok(issue) => issue,
@@ -1001,7 +1218,11 @@ impl ScheduledRunnerPorts for HostPorts {
         };
         let transitions: Vec<WorkflowTransition> = issue["transitions"]
             .as_array()
-            .map(|list| list.iter().filter_map(|t| serde_json::from_value(t.clone()).ok()).collect())
+            .map(|list| {
+                list.iter()
+                    .filter_map(|t| serde_json::from_value(t.clone()).ok())
+                    .collect()
+            })
             .unwrap_or_default();
         let stages: Option<Vec<ProjectWorkflowStage>> = run
             .project_id
@@ -1013,10 +1234,16 @@ impl ScheduledRunnerPorts for HostPorts {
             *phase,
             stages.as_deref(),
         )?;
-        let status = transition.to_status.clone().unwrap_or_else(|| transition.name.clone());
+        let status = transition
+            .to_status
+            .clone()
+            .unwrap_or_else(|| transition.name.clone());
         // A folder-backed ticket is a file in the repository: written and committed in one turn on the
         // base checkout, or the checkout reads as dirty and the next ticket refuses to start.
-        let folder = run.project_id.as_deref().and_then(|id| workflows::project_folder(&self.host, id));
+        let folder = run
+            .project_id
+            .as_deref()
+            .and_then(|id| workflows::project_folder(&self.host, id));
         let _base = match &folder {
             Some(folder) => Some(workflow_engine::base_checkout_guard(folder).await),
             None => None,
@@ -1028,13 +1255,21 @@ impl ScheduledRunnerPorts for HostPorts {
         let moved = self
             .rpc(
                 "issue:transition",
-                vec![json!(ticket.issue_key), json!(transition.id), json!(ticket.connection_id)],
+                vec![
+                    json!(ticket.issue_key),
+                    json!(transition.id),
+                    json!(ticket.connection_id),
+                ],
             )
             .await;
         if let (Ok(_), Some(folder), Some(before)) = (&moved, &folder, &before) {
             let message = format!("Move {} to {status}", ticket.issue_key);
-            if let Err(error) = workflow_engine::commit_praxis_write(folder, before, &message).await {
-                eprintln!("Moved {} to {status} but could not commit it: {error}", ticket.issue_key);
+            if let Err(error) = workflow_engine::commit_praxis_write(folder, before, &message).await
+            {
+                eprintln!(
+                    "Moved {} to {status} but could not commit it: {error}",
+                    ticket.issue_key
+                );
             }
         }
         Some(moved.map(|_| Some(status)))
@@ -1049,11 +1284,22 @@ impl ScheduledRunnerPorts for HostPorts {
 /// effectively process-wide; keying by profile directory keeps a second profile (as in tests that open
 /// several) from being served the first one's runs.
 pub fn runner(host: &HostContext) -> &'static Arc<ScheduledRunRunner> {
-    static RUNNERS: OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, &'static Arc<ScheduledRunRunner>>>> = OnceLock::new();
-    let mut runners = RUNNERS.get_or_init(Default::default).lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    runners.entry(host.config().user_data_dir.clone()).or_insert_with(|| {
-        Box::leak(Box::new(Arc::new(ScheduledRunRunner::new(Arc::new(HostPorts { host: host.clone() })))))
-    })
+    static RUNNERS: OnceLock<
+        std::sync::Mutex<
+            std::collections::HashMap<std::path::PathBuf, &'static Arc<ScheduledRunRunner>>,
+        >,
+    > = OnceLock::new();
+    let mut runners = RUNNERS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    runners
+        .entry(host.config().user_data_dir.clone())
+        .or_insert_with(|| {
+            Box::leak(Box::new(Arc::new(ScheduledRunRunner::new(Arc::new(
+                HostPorts { host: host.clone() },
+            )))))
+        })
 }
 
 /// Starts the tick timer once: recover what was in flight, then advance the schedules on an interval.
@@ -1068,7 +1314,9 @@ pub fn ensure_started(host: &HostContext) {
     runtime::runtime().spawn(async move {
         loop {
             let host = requests_host.clone();
-            let _ = tokio::task::spawn_blocking(move || super::scheduled_run_requests::check(&host)).await;
+            let _ =
+                tokio::task::spawn_blocking(move || super::scheduled_run_requests::check(&host))
+                    .await;
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
     });
@@ -1077,7 +1325,8 @@ pub fn ensure_started(host: &HostContext) {
     // A run that was due while Praxis was closed shows as missed instead of starting.
     for run in super::scheduled_runs::list_runs(&host) {
         let before = run.status;
-        let reconciled = praxis_workflows::scheduled_run::reconcile_scheduled_run_on_launch(run, &super::now());
+        let reconciled =
+            praxis_workflows::scheduled_run::reconcile_scheduled_run_on_launch(run, &super::now());
         if reconciled.status != before {
             let _ = super::scheduled_runs::save_run(&host, reconciled);
         }
@@ -1115,8 +1364,17 @@ mod tests {
 
     #[test]
     fn a_launch_refused_for_trust_or_provider_pauses_for_that_reason() {
-        assert_eq!(launch_reason("This project workflow needs local workspace trust. Review"), Some(ScheduledPauseReason::Trust));
-        assert_eq!(launch_reason("This run needs Codex, which is not set up or turned off."), Some(ScheduledPauseReason::NoProvider));
-        assert_eq!(launch_reason("1 uncommitted file in this project"), Some(ScheduledPauseReason::Policy));
+        assert_eq!(
+            launch_reason("This project workflow needs local workspace trust. Review"),
+            Some(ScheduledPauseReason::Trust)
+        );
+        assert_eq!(
+            launch_reason("This run needs Codex, which is not set up or turned off."),
+            Some(ScheduledPauseReason::NoProvider)
+        );
+        assert_eq!(
+            launch_reason("1 uncommitted file in this project"),
+            Some(ScheduledPauseReason::Policy)
+        );
     }
 }

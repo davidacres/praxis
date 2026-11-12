@@ -16,7 +16,9 @@ use praxis_ai::acp::connection::{AcpConnection, AcpSpawn, Incoming};
 use praxis_ai::acp::host::is_read_only_shell_command;
 use praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path;
 use praxis_ai::providers::environment::effective_path;
-use praxis_ai::providers::provider_limit_error::{extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error};
+use praxis_ai::providers::provider_limit_error::{
+    extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error,
+};
 use praxis_ai::providers::registry::resolve_executable;
 use praxis_core::unified_diff::create_unified_diff;
 use praxis_host::HostContext;
@@ -146,17 +148,30 @@ fn forget_background_client(task: &Arc<Task>) {
 impl Task {
     /// This process's background tasks the provider has not finished.
     fn live_background(&self) -> Vec<Value> {
-        let Some(record) = self.store.get(&self.key).ok().flatten() else { return Vec::new() };
+        let Some(record) = self.store.get(&self.key).ok().flatten() else {
+            return Vec::new();
+        };
         if record["sessionId"] != self.owner_session_id.as_str() {
             return Vec::new();
         }
-        record["backgroundTasks"].as_array().into_iter().flatten().filter(|item| item["producerId"] == self.background.producer.as_str() && super::background_tasks::is_live(&item["state"])).cloned().collect()
+        record["backgroundTasks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|item| {
+                item["producerId"] == self.background.producer.as_str()
+                    && super::background_tasks::is_live(&item["state"])
+            })
+            .cloned()
+            .collect()
     }
 
     /// Reads background beats out of a `session/update`. Returns true when the notification is
     /// extension or child-session traffic that must not reach the parent transcript.
     fn observe_background(&self, params: &Value) -> bool {
-        use super::background_tasks::{read_provider_background_update, read_unobserved_background_launch};
+        use super::background_tasks::{
+            read_provider_background_update, read_unobserved_background_launch,
+        };
         let wire = &params["update"];
         let kind = wire["sessionUpdate"].as_str().unwrap_or_default();
         if let Some(call_id) = wire["toolCallId"].as_str()
@@ -164,9 +179,19 @@ impl Task {
         {
             let is_subagent = |s: &str| {
                 let lower = s.to_ascii_lowercase();
-                ["start subagent ", "complete subagent ", "interrupt subagent "].iter().any(|prefix| lower.starts_with(prefix))
+                [
+                    "start subagent ",
+                    "complete subagent ",
+                    "interrupt subagent ",
+                ]
+                .iter()
+                .any(|prefix| lower.starts_with(prefix))
             };
-            let name = wire["title"].as_str().filter(|t| is_subagent(t)).or_else(|| wire["name"].as_str()).or_else(|| wire["title"].as_str());
+            let name = wire["title"]
+                .as_str()
+                .filter(|t| is_subagent(t))
+                .or_else(|| wire["name"].as_str())
+                .or_else(|| wire["title"].as_str());
             if let Some(name) = name {
                 if names.len() >= 1000
                     && let Some(oldest) = names.keys().next().cloned()
@@ -179,15 +204,37 @@ impl Task {
         let mut observed = wire.clone();
         if let Some(call_id) = wire["toolCallId"].as_str()
             && wire["title"].is_null()
-            && let Some(name) = self.background.tool_names.lock().ok().and_then(|names| names.get(call_id).cloned())
+            && let Some(name) = self
+                .background
+                .tool_names
+                .lock()
+                .ok()
+                .and_then(|names| names.get(call_id).cloned())
         {
             observed["title"] = json!(name);
         }
         let extension = read_provider_background_update(&observed);
-        let is_async = matches!(kind, "async_task_spawned" | "async_task_progress" | "async_task_state_update" | "subagent_spawned" | "subagent_state_update");
+        let is_async = matches!(
+            kind,
+            "async_task_spawned"
+                | "async_task_progress"
+                | "async_task_state_update"
+                | "subagent_spawned"
+                | "subagent_state_update"
+        );
         let session = params["sessionId"].as_str().unwrap_or_default();
-        let is_child = !session.is_empty() && self.background.children.lock().is_ok_and(|children| children.contains(session));
-        let own = self.agent_session_id.lock().ok().and_then(|id| id.clone()).is_some_and(|id| id == session);
+        let is_child = !session.is_empty()
+            && self
+                .background
+                .children
+                .lock()
+                .is_ok_and(|children| children.contains(session));
+        let own = self
+            .agent_session_id
+            .lock()
+            .ok()
+            .and_then(|id| id.clone())
+            .is_some_and(|id| id == session);
         if (own || is_child) && self.background.accepting.load(Ordering::SeqCst) {
             if kind == "subagent_spawned"
                 && let Some(child) = wire["subagentSessionId"].as_str()
@@ -201,16 +248,25 @@ impl Task {
                 && let Some(text) = wire["content"]["text"].as_str()
                 && let Ok(mut results) = self.background.child_results.lock()
             {
-                let combined = format!("{}{text}", results.get(session).cloned().unwrap_or_default());
+                let combined = format!(
+                    "{}{text}",
+                    results.get(session).cloned().unwrap_or_default()
+                );
                 let skip = combined.chars().count().saturating_sub(2000);
                 results.insert(session.to_owned(), combined.chars().skip(skip).collect());
             }
-            if let Some(mut update) = extension.or_else(|| read_unobserved_background_launch(wire)) {
+            if let Some(mut update) = extension.or_else(|| read_unobserved_background_launch(wire))
+            {
                 if update.detail.is_none()
                     && kind == "subagent_state_update"
                     && let Some(child) = wire["subagentSessionId"].as_str()
                 {
-                    update.detail = self.background.child_results.lock().ok().and_then(|results| results.get(child).cloned());
+                    update.detail = self
+                        .background
+                        .child_results
+                        .lock()
+                        .ok()
+                        .and_then(|results| results.get(child).cloned());
                 }
                 self.handle_background_update(update);
             }
@@ -219,13 +275,26 @@ impl Task {
     }
 
     fn handle_background_update(&self, update: super::background_tasks::ProviderBackgroundUpdate) {
-        let Some(record) = self.store.get(&self.key).ok().flatten() else { return };
+        let Some(record) = self.store.get(&self.key).ok().flatten() else {
+            return;
+        };
         if record["sessionId"] != self.owner_session_id.as_str() {
             return;
         }
         let id = format!("provider:{}:{}", self.background.producer, update.id);
-        let previous = record["backgroundTasks"].as_array().into_iter().flatten().find(|item| item["id"] == id.as_str()).cloned();
-        let Some(state) = update.state.clone().or_else(|| previous.as_ref().and_then(|p| p["state"].as_str().map(str::to_owned))) else { return };
+        let previous = record["backgroundTasks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|item| item["id"] == id.as_str())
+            .cloned();
+        let Some(state) = update.state.clone().or_else(|| {
+            previous
+                .as_ref()
+                .and_then(|p| p["state"].as_str().map(str::to_owned))
+        }) else {
+            return;
+        };
         let now = now();
         let mut next = json!({
             "id": id, "source": "provider", "producerId": self.background.producer,
@@ -235,10 +304,18 @@ impl Task {
         if matches!(state.as_str(), "completed" | "failed" | "stopped") {
             next["completedAt"] = json!(now);
         }
-        if let Some(detail) = update.detail.clone().or_else(|| previous.as_ref().and_then(|p| p["detail"].as_str().map(str::to_owned))) {
+        if let Some(detail) = update.detail.clone().or_else(|| {
+            previous
+                .as_ref()
+                .and_then(|p| p["detail"].as_str().map(str::to_owned))
+        }) {
             next["detail"] = json!(detail);
         }
-        if let Some(call_id) = update.call_id.clone().or_else(|| previous.as_ref().and_then(|p| p["callId"].as_str().map(str::to_owned))) {
+        if let Some(call_id) = update.call_id.clone().or_else(|| {
+            previous
+                .as_ref()
+                .and_then(|p| p["callId"].as_str().map(str::to_owned))
+        }) {
             next["callId"] = json!(call_id);
         }
         super::shell_services::report_background(self, next);
@@ -252,7 +329,13 @@ impl Task {
         if !self.background.monitoring.swap(false, Ordering::SeqCst) {
             return;
         }
-        if let Some(monitor) = self.background.monitor.lock().ok().and_then(|mut m| m.take()) {
+        if let Some(monitor) = self
+            .background
+            .monitor
+            .lock()
+            .ok()
+            .and_then(|mut m| m.take())
+        {
             monitor.abort();
         }
         let connection = self.connection.lock().ok().and_then(|mut c| c.take());
@@ -273,7 +356,13 @@ impl Task {
             lost["detail"] = json!(detail);
             super::shell_services::report_background(self, lost);
         }
-        if let Some(monitor) = self.background.monitor.lock().ok().and_then(|mut m| m.take()) {
+        if let Some(monitor) = self
+            .background
+            .monitor
+            .lock()
+            .ok()
+            .and_then(|mut m| m.take())
+        {
             monitor.abort();
         }
         self.background.monitoring.store(false, Ordering::SeqCst);
@@ -282,8 +371,16 @@ impl Task {
 
 /// What a turn starts from: a new session, or a follow-up that tries to resume the agent's own.
 pub enum Launch {
-    Fresh { prompt: String, images: Vec<Value> },
-    FollowUp { prompt: String, resumed_prompt: String, resume_id: Option<String>, images: Vec<Value> },
+    Fresh {
+        prompt: String,
+        images: Vec<Value>,
+    },
+    FollowUp {
+        prompt: String,
+        resumed_prompt: String,
+        resume_id: Option<String>,
+        images: Vec<Value>,
+    },
 }
 
 type Tasks = Mutex<HashMap<(PathBuf, String), Arc<Task>>>;
@@ -298,12 +395,24 @@ pub(super) fn find_task_public(dir: &Path, key: &str) -> Option<Arc<Task>> {
 }
 
 fn find_task(dir: &Path, key: &str) -> Option<Arc<Task>> {
-    tasks().lock().ok()?.get(&(dir.to_path_buf(), key.to_owned())).cloned()
+    tasks()
+        .lock()
+        .ok()?
+        .get(&(dir.to_path_buf(), key.to_owned()))
+        .cloned()
 }
 
 /// Issue keys with a turn in flight for this profile.
 pub fn active_keys(dir: &Path) -> Vec<String> {
-    tasks().lock().map(|all| all.keys().filter(|(d, _)| d == dir).map(|(_, key)| key.clone()).collect()).unwrap_or_default()
+    tasks()
+        .lock()
+        .map(|all| {
+            all.keys()
+                .filter(|(d, _)| d == dir)
+                .map(|(_, key)| key.clone())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Whether a turn is genuinely in flight. A turn that has reached a terminal state is only
@@ -319,7 +428,12 @@ pub fn has_active_task(dir: &Path, key: &str) -> bool {
 // ── record changes ───────────────────────────────────────────────────────
 
 /// An event for the transcript. Same shape as `evt()` in the TypeScript host.
-pub fn evt(kind: &str, summary: impl Into<String>, detail: Option<String>, data: Option<Value>) -> Value {
+pub fn evt(
+    kind: &str,
+    summary: impl Into<String>,
+    detail: Option<String>,
+    data: Option<Value>,
+) -> Value {
     let mut event = json!({ "timestamp": now(), "type": kind, "summary": summary.into() });
     if let Some(detail) = detail {
         event["detail"] = json!(detail);
@@ -343,12 +457,20 @@ impl Task {
     }
 
     pub(super) fn state(&self) -> Option<String> {
-        self.store.get(&self.key).ok().flatten().and_then(|record| record["state"].as_str().map(str::to_owned))
+        self.store
+            .get(&self.key)
+            .ok()
+            .flatten()
+            .and_then(|record| record["state"].as_str().map(str::to_owned))
     }
 
     pub(super) fn set_state(&self, state: &str, reason: Option<&str>) {
         if state == "failed" {
-            eprintln!("[session] {} failed: {}", self.key, reason.unwrap_or("no reason given"));
+            eprintln!(
+                "[session] {} failed: {}",
+                self.key,
+                reason.unwrap_or("no reason given")
+            );
         }
         let reason = reason.map(str::to_owned);
         let state = state.to_owned();
@@ -360,10 +482,20 @@ impl Task {
                     record["providerLimitReached"] = Value::Null;
                 }
                 "failed" | "aborted" => {
-                    let limit = reason.as_deref().filter(|r| is_provider_limit_error(r)).map(str::to_owned).or_else(|| record["responseText"].as_str().filter(|r| is_provider_limit_error(r)).map(str::to_owned));
+                    let limit = reason
+                        .as_deref()
+                        .filter(|r| is_provider_limit_error(r))
+                        .map(str::to_owned)
+                        .or_else(|| {
+                            record["responseText"]
+                                .as_str()
+                                .filter(|r| is_provider_limit_error(r))
+                                .map(str::to_owned)
+                        });
                     if let Some(limit) = limit {
                         record["providerLimitReached"] = json!(true);
-                        record["lastError"] = json!(extract_provider_limit_message(&limit).unwrap_or(limit));
+                        record["lastError"] =
+                            json!(extract_provider_limit_message(&limit).unwrap_or(limit));
                     } else if let Some(reason) = &reason {
                         record["lastError"] = json!(reason);
                     }
@@ -425,7 +557,10 @@ impl Task {
     pub(super) fn progress(&self) {
         let active = self.active_tool.lock().ok().and_then(|tool| tool.clone());
         let steps = self.steps.load(Ordering::SeqCst);
-        let started = chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now() - self.started.elapsed()).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let started = chrono::DateTime::<chrono::Utc>::from(
+            std::time::SystemTime::now() - self.started.elapsed(),
+        )
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         self.mutate(false, move |record| {
             let mut progress = json!({ "stepCount": steps, "startedAt": started });
             if let Some((id, name)) = active {
@@ -441,9 +576,17 @@ impl Task {
     fn handle_update(&self, update: &Value) {
         match update["sessionUpdate"].as_str().unwrap_or_default() {
             "agent_message_chunk" => {
-                let Some(text) = update["content"]["text"].as_str().filter(|t| !t.is_empty() && update["content"]["type"] == "text") else { return };
+                let Some(text) = update["content"]["text"]
+                    .as_str()
+                    .filter(|t| !t.is_empty() && update["content"]["type"] == "text")
+                else {
+                    return;
+                };
                 let buffer = {
-                    let mut buffer = self.message.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut buffer = self
+                        .message
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     buffer.push_str(text);
                     buffer.clone()
                 };
@@ -455,9 +598,17 @@ impl Task {
                 });
             }
             "agent_thought_chunk" => {
-                let Some(text) = update["content"]["text"].as_str().filter(|t| !t.is_empty() && update["content"]["type"] == "text") else { return };
+                let Some(text) = update["content"]["text"]
+                    .as_str()
+                    .filter(|t| !t.is_empty() && update["content"]["type"] == "text")
+                else {
+                    return;
+                };
                 let buffer = {
-                    let mut buffer = self.reasoning.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut buffer = self
+                        .reasoning
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                     buffer.push_str(text);
                     buffer.clone()
                 };
@@ -491,7 +642,11 @@ impl Task {
                     return;
                 }
                 let id = update["toolCallId"].as_str().unwrap_or_default().to_owned();
-                let name = ["name", "title"].iter().find_map(|k| update[*k].as_str().filter(|s| !s.is_empty())).unwrap_or(&id).to_owned();
+                let name = ["name", "title"]
+                    .iter()
+                    .find_map(|k| update[*k].as_str().filter(|s| !s.is_empty()))
+                    .unwrap_or(&id)
+                    .to_owned();
                 if let Ok(mut tool) = self.active_tool.lock() {
                     *tool = Some((id.clone(), name.clone()));
                 }
@@ -503,12 +658,22 @@ impl Task {
                 if update["rawInput"].is_object() {
                     data["args"] = update["rawInput"].clone();
                 }
-                self.append(evt("tool_start", format!("Running tool: {name}"), None, Some(data)), 0);
+                self.append(
+                    evt(
+                        "tool_start",
+                        format!("Running tool: {name}"),
+                        None,
+                        Some(data),
+                    ),
+                    0,
+                );
             }
             "tool_call_update" => self.tool_update(update),
             "available_commands_update" => {
                 let commands: Vec<Value> = update["availableCommands"].as_array().into_iter().flatten().map(|c| json!({ "name": c["name"], "description": c["description"], "inputHint": c["input"]["hint"] })).collect();
-                self.mutate(true, move |record| record["acpAvailableCommands"] = json!(commands));
+                self.mutate(true, move |record| {
+                    record["acpAvailableCommands"] = json!(commands)
+                });
             }
             "current_mode_update" => {
                 let mode = update["currentModeId"].clone();
@@ -524,7 +689,10 @@ impl Task {
         if status != "completed" && status != "failed" {
             // A refinement resends only what changed, so merge it over what this call already had.
             if let Some(input) = update["rawInput"].as_object() {
-                let mut inputs = self.tool_inputs.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut inputs = self
+                    .tool_inputs
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 let merged = inputs.entry(id).or_insert_with(|| json!({}));
                 for (k, v) in input {
                     merged[k] = v.clone();
@@ -550,10 +718,22 @@ impl Task {
         } else {
             String::new()
         };
-        let diff_text = changes.iter().map(|c| c["diff"].as_str().unwrap_or_default()).collect::<Vec<_>>().join("\n");
-        let detail = Some(diff_text.trim().to_owned()).filter(|d| !d.is_empty()).or_else(|| Some(raw_output.clone()).filter(|r| !r.is_empty()));
-        let streamed = self.tool_inputs.lock().ok().and_then(|mut inputs| inputs.remove(&id));
-        let final_input = update["rawInput"].as_object().map(|o| Value::Object(o.clone()));
+        let diff_text = changes
+            .iter()
+            .map(|c| c["diff"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let detail = Some(diff_text.trim().to_owned())
+            .filter(|d| !d.is_empty())
+            .or_else(|| Some(raw_output.clone()).filter(|r| !r.is_empty()));
+        let streamed = self
+            .tool_inputs
+            .lock()
+            .ok()
+            .and_then(|mut inputs| inputs.remove(&id));
+        let final_input = update["rawInput"]
+            .as_object()
+            .map(|o| Value::Object(o.clone()));
         let args = match (streamed, final_input) {
             (None, None) => None,
             (a, b) => {
@@ -566,7 +746,11 @@ impl Task {
                 Some(merged)
             }
         };
-        let name = ["name", "title"].iter().find_map(|k| update[*k].as_str()).unwrap_or(&id).to_owned();
+        let name = ["name", "title"]
+            .iter()
+            .find_map(|k| update[*k].as_str())
+            .unwrap_or(&id)
+            .to_owned();
         let mut data = json!({
             "callId": id,
             "kind": if changes.is_empty() { map_tool_kind(update["kind"].as_str()) } else { "write" },
@@ -583,10 +767,25 @@ impl Task {
             data["fileChanges"] = json!(changes);
         }
         if !raw_output.is_empty() {
-            data["output"] = json!(if raw_output.chars().count() > 20_000 { format!("{}\n… [output truncated]", raw_output.chars().take(20_000).collect::<String>()) } else { raw_output });
+            data["output"] = json!(if raw_output.chars().count() > 20_000 {
+                format!(
+                    "{}\n… [output truncated]",
+                    raw_output.chars().take(20_000).collect::<String>()
+                )
+            } else {
+                raw_output
+            });
         }
         let summary = format!("Tool {}: {name}", if ok { "completed" } else { "failed" });
-        self.append(evt("tool_complete", summary, detail.map(|d| d.chars().take(2000).collect()), Some(data)), 1);
+        self.append(
+            evt(
+                "tool_complete",
+                summary,
+                detail.map(|d| d.chars().take(2000).collect()),
+                Some(data),
+            ),
+            1,
+        );
     }
 
     // ── permissions ──────────────────────────────────────────────────────
@@ -597,43 +796,88 @@ impl Task {
         }
         let kind = request["kind"].as_str();
         let title = request["title"].as_str().unwrap_or_default().to_owned();
-        let command = if matches!(kind, None | Some("execute" | "other")) { shell_command_of(&request["rawInput"]) } else { None };
+        let command = if matches!(kind, None | Some("execute" | "other")) {
+            shell_command_of(&request["rawInput"])
+        } else {
+            None
+        };
         // A refused tool ends Copilot's whole turn, so a command that can only look is not refused.
-        let read_only_kind = matches!(kind, Some("read" | "search" | "think" | "fetch")) || command.as_deref().is_some_and(is_read_only_shell_command);
+        let read_only_kind = matches!(kind, Some("read" | "search" | "think" | "fetch"))
+            || command.as_deref().is_some_and(is_read_only_shell_command);
         if self.tool_mode == "project-only" || (self.tool_mode == "read-only" && !read_only_kind) {
-            let shown = command.as_deref().map(|c| format!(" ({})", if c.chars().count() > 200 { format!("{}…", c.chars().take(200).collect::<String>()) } else { c.to_owned() })).unwrap_or_default();
-            self.append(evt("warning", format!("Blocked by read-only tools: {title}{shown}"), None, None), 0);
+            let shown = command
+                .as_deref()
+                .map(|c| {
+                    format!(
+                        " ({})",
+                        if c.chars().count() > 200 {
+                            format!("{}…", c.chars().take(200).collect::<String>())
+                        } else {
+                            c.to_owned()
+                        }
+                    )
+                })
+                .unwrap_or_default();
+            self.append(
+                evt(
+                    "warning",
+                    format!("Blocked by read-only tools: {title}{shown}"),
+                    None,
+                    None,
+                ),
+                0,
+            );
             return Decision::Deny;
         }
         if self.allow_all.load(Ordering::SeqCst) {
             return Decision::AllowAlways;
         }
         let text = format!("{} {title}", kind.unwrap_or_default()).to_lowercase();
-        let safe = if self.tool_mode == "read-only" { read_only_kind } else { text.split(|c: char| !c.is_alphanumeric()).any(|w| w == "read" || w == "list") };
+        let safe = if self.tool_mode == "read-only" {
+            read_only_kind
+        } else {
+            text.split(|c: char| !c.is_alphanumeric())
+                .any(|w| w == "read" || w == "list")
+        };
         if self.auto_allow_safe && safe {
             return Decision::AllowAlways;
         }
         let (reply, answer) = oneshot::channel();
         if let Ok(mut pending) = self.pending.lock() {
-            pending.push_back(Pending { request: request.clone(), reply });
+            pending.push_back(Pending {
+                request: request.clone(),
+                reply,
+            });
         }
         self.set_state("awaiting_approval", None);
         let action = permission_action(&request);
         let mut data = None;
-        if let Some(name) = permission_tool_name(request["name"].as_str(), request["toolCallId"].as_str().unwrap_or_default()) {
+        if let Some(name) = permission_tool_name(
+            request["name"].as_str(),
+            request["toolCallId"].as_str().unwrap_or_default(),
+        ) {
             data = Some(json!({ "toolName": name }));
         }
         // API-session tools describe their own request (`description` and `detail`).
         let (summary, detail) = match request["description"].as_str() {
-            Some(description) => (description.to_owned(), request["detail"].as_str().map(str::to_owned)),
-            None => (format!("Approval needed: {action}"), Some(format!("The agent is requesting permission to {action}."))),
+            Some(description) => (
+                description.to_owned(),
+                request["detail"].as_str().map(str::to_owned),
+            ),
+            None => (
+                format!("Approval needed: {action}"),
+                Some(format!("The agent is requesting permission to {action}.")),
+            ),
         };
         self.append(evt("permission_requested", summary, detail, data), 0);
         answer.await.unwrap_or(Decision::Deny)
     }
 
     fn respond_to_permission(&self, decision: Decision) {
-        let mut pending = self.pending.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if pending.is_empty() {
             return;
         }
@@ -645,16 +889,45 @@ impl Task {
             for waiting in all {
                 let _ = waiting.reply.send(decision);
             }
-            self.append(evt("permission_completed", format!("Permission: {} ({count} queued request{})", decision.label(), if count == 1 { "" } else { "s" }), None, None), 0);
+            self.append(
+                evt(
+                    "permission_completed",
+                    format!(
+                        "Permission: {} ({count} queued request{})",
+                        decision.label(),
+                        if count == 1 { "" } else { "s" }
+                    ),
+                    None,
+                    None,
+                ),
+                0,
+            );
             self.set_state("executing", None);
             return;
         }
-        let Some(first) = pending.pop_front() else { return };
+        let Some(first) = pending.pop_front() else {
+            return;
+        };
         let remaining = pending.len();
         drop(pending);
         let _ = first.reply.send(decision);
-        self.append(evt("permission_completed", format!("Permission: {}", decision.label()), None, None), 0);
-        self.set_state(if remaining > 0 { "awaiting_approval" } else { "executing" }, None);
+        self.append(
+            evt(
+                "permission_completed",
+                format!("Permission: {}", decision.label()),
+                None,
+                None,
+            ),
+            0,
+        );
+        self.set_state(
+            if remaining > 0 {
+                "awaiting_approval"
+            } else {
+                "executing"
+            },
+            None,
+        );
     }
 }
 
@@ -674,12 +947,34 @@ fn shell_command_of(raw_input: &Value) -> Option<String> {
     if let Some(text) = value.as_str() {
         return Some(text.to_owned());
     }
-    let parts: Vec<&str> = value.as_array()?.iter().map(Value::as_str).collect::<Option<_>>()?;
+    let parts: Vec<&str> = value
+        .as_array()?
+        .iter()
+        .map(Value::as_str)
+        .collect::<Option<_>>()?;
     // Codex sends ["bash", "-lc", "<script>"].
-    if parts.len() == 3 && matches!(parts[0].rsplit('/').next(), Some("sh" | "bash" | "zsh")) && matches!(parts[1], "-c" | "-lc") {
+    if parts.len() == 3
+        && matches!(parts[0].rsplit('/').next(), Some("sh" | "bash" | "zsh"))
+        && matches!(parts[1], "-c" | "-lc")
+    {
         return Some(parts[2].to_owned());
     }
-    Some(parts.iter().map(|p| if !p.is_empty() && p.chars().all(|c| c.is_ascii_alphanumeric() || "@%+=:,./-_".contains(c)) { (*p).to_owned() } else { format!("'{}'", p.replace('\'', "'\\''")) }).collect::<Vec<_>>().join(" "))
+    Some(
+        parts
+            .iter()
+            .map(|p| {
+                if !p.is_empty()
+                    && p.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || "@%+=:,./-_".contains(c))
+                {
+                    (*p).to_owned()
+                } else {
+                    format!("'{}'", p.replace('\'', "'\\''"))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
 }
 
 fn permission_action(request: &Value) -> String {
@@ -696,16 +991,32 @@ fn permission_action(request: &Value) -> String {
         Some("think") => "perform an extended reasoning step".into(),
         Some("browser-navigate") => {
             let mut chars = title.chars();
-            chars.next().map_or_else(|| "open a site in the in-app browser".into(), |first| first.to_lowercase().collect::<String>() + chars.as_str())
+            chars.next().map_or_else(
+                || "open a site in the in-app browser".into(),
+                |first| first.to_lowercase().collect::<String>() + chars.as_str(),
+            )
         }
-        _ => request["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).map_or_else(|| "perform an agent action".into(), |n| format!("run {n}")),
+        _ => request["name"]
+            .as_str()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .map_or_else(|| "perform an agent action".into(), |n| format!("run {n}")),
     }
 }
 
 fn permission_tool_name(value: Option<&str>, tool_call_id: &str) -> Option<String> {
     let name = value?.trim();
-    let opaque = name.is_empty() || name == tool_call_id || (name.len() >= 20 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')) || (name.len() >= 36 && name.chars().all(|c| c.is_ascii_hexdigit() || c == '-'));
-    let pathlike = name.contains('/') || name.contains('\\') || name.starts_with(['.', '~']) || name.chars().nth(1) == Some(':');
+    let opaque = name.is_empty()
+        || name == tool_call_id
+        || (name.len() >= 20
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+        || (name.len() >= 36 && name.chars().all(|c| c.is_ascii_hexdigit() || c == '-'));
+    let pathlike = name.contains('/')
+        || name.contains('\\')
+        || name.starts_with(['.', '~'])
+        || name.chars().nth(1) == Some(':');
     (!opaque && !pathlike).then(|| name.to_owned())
 }
 
@@ -722,13 +1033,21 @@ fn pick_option_id(decision: Decision, options: &[Value]) -> Option<String> {
         let found = options.iter().find(|o| {
             let option_kind = o["kind"].as_str().unwrap_or_default();
             let id = o["optionId"].as_str().unwrap_or_default();
-            option_kind == kind || (!known.contains(&option_kind) && (id == kind || id == kind.replace('_', "-")))
+            option_kind == kind
+                || (!known.contains(&option_kind) && (id == kind || id == kind.replace('_', "-")))
         });
         if let Some(found) = found {
             return found["optionId"].as_str().map(str::to_owned);
         }
     }
-    if decision == Decision::Deny { None } else { options.first().and_then(|o| o["optionId"].as_str()).map(str::to_owned) }
+    if decision == Decision::Deny {
+        None
+    } else {
+        options
+            .first()
+            .and_then(|o| o["optionId"].as_str())
+            .map(str::to_owned)
+    }
 }
 
 /// Diff blocks and text output out of an ACP tool-call content array.
@@ -736,11 +1055,19 @@ fn read_tool_content(content: &Value) -> (Vec<Value>, String) {
     let (mut changes, mut text) = (Vec::new(), Vec::new());
     for block in content.as_array().into_iter().flatten() {
         if block["type"] == "diff" {
-            let (old, new) = (block["oldText"].as_str().unwrap_or_default(), block["newText"].as_str().unwrap_or_default());
+            let (old, new) = (
+                block["oldText"].as_str().unwrap_or_default(),
+                block["newText"].as_str().unwrap_or_default(),
+            );
             let path = block["path"].as_str().unwrap_or_default();
             changes.push(json!({ "path": path, "oldText": old, "newText": new, "diff": create_unified_diff(path, old, new, 3) }));
         } else if block["type"] == "content" && block["content"]["type"] == "text" {
-            text.push(block["content"]["text"].as_str().unwrap_or_default().to_owned());
+            text.push(
+                block["content"]["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_owned(),
+            );
         }
     }
     (changes, text.join("\n").trim().to_owned())
@@ -752,12 +1079,18 @@ fn read_file(task: &Task, params: &Value) -> std::result::Result<Value, String> 
     if task.tool_mode == "project-only" {
         return Err("File reads are unavailable without a project workspace folder.".into());
     }
-    let path = resolve_sandboxed_path(&task.working_directory, params["path"].as_str().unwrap_or_default())?;
-    let mut content = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let path = resolve_sandboxed_path(
+        &task.working_directory,
+        params["path"].as_str().unwrap_or_default(),
+    )?;
+    let mut content =
+        std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let (line, limit) = (params["line"].as_u64(), params["limit"].as_u64());
     if line.is_some() || limit.is_some() {
         let lines: Vec<&str> = content.split('\n').collect();
-        let start = line.map_or(0, |l| l.saturating_sub(1) as usize).min(lines.len());
+        let start = line
+            .map_or(0, |l| l.saturating_sub(1) as usize)
+            .min(lines.len());
         let end = limit.map_or(lines.len(), |l| (start + l as usize).min(lines.len()));
         content = lines[start..end].join("\n");
     }
@@ -765,8 +1098,8 @@ fn read_file(task: &Task, params: &Value) -> std::result::Result<Value, String> 
 }
 
 async fn write_file(task: &Task, params: &Value) -> std::result::Result<Value, String> {
-    use praxis_ai::coordination::{Lifetime, refusal_for_agent};
     use super::coordination::{Decision, gate_for};
+    use praxis_ai::coordination::{Lifetime, refusal_for_agent};
     if matches!(task.tool_mode.as_str(), "read-only" | "project-only") {
         return Err("File writes are unavailable in read-only tool mode.".into());
     }
@@ -774,10 +1107,23 @@ async fn write_file(task: &Task, params: &Value) -> std::result::Result<Value, S
     let path = resolve_sandboxed_path(&task.working_directory, requested)?;
     // Owned before it is written: a file another session holds is not touched, and the agent is
     // told who has it instead of retrying blind.
-    let grant = match gate_for(&task.key, &task.working_directory, praxis_ai::coordination::Coverage::Cooperative) {
-        Some(gate) => match gate.acquire(vec![gate.file_item(&path, false)?], &format!("write {requested}"), Lifetime::Tool).await {
+    let grant = match gate_for(
+        &task.key,
+        &task.working_directory,
+        praxis_ai::coordination::Coverage::Cooperative,
+    ) {
+        Some(gate) => match gate
+            .acquire(
+                vec![gate.file_item(&path, false)?],
+                &format!("write {requested}"),
+                Lifetime::Tool,
+            )
+            .await
+        {
             Decision::Granted(grant) => Some(grant),
-            Decision::Refused(reason) => return Err(refusal_for_agent(&reason, Some("coordination_wait"))),
+            Decision::Refused(reason) => {
+                return Err(refusal_for_agent(&reason, Some("coordination_wait")));
+            }
         },
         None => None,
     };
@@ -785,7 +1131,8 @@ async fn write_file(task: &Task, params: &Value) -> std::result::Result<Value, S
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&path, params["content"].as_str().unwrap_or_default()).map_err(|e| format!("{}: {e}", path.display()))
+        std::fs::write(&path, params["content"].as_str().unwrap_or_default())
+            .map_err(|e| format!("{}: {e}", path.display()))
     })();
     if let Some(grant) = grant {
         grant.release(None).await;
@@ -794,7 +1141,11 @@ async fn write_file(task: &Task, params: &Value) -> std::result::Result<Value, S
     Ok(json!({}))
 }
 
-async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: tokio::sync::mpsc::UnboundedReceiver<Incoming>) {
+async fn serve(
+    task: Arc<Task>,
+    connection: Arc<AcpConnection>,
+    mut incoming: tokio::sync::mpsc::UnboundedReceiver<Incoming>,
+) {
     while let Some(message) = incoming.recv().await {
         match message {
             Incoming::Notification { method, params } => {
@@ -803,15 +1154,22 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
                 }
                 // Provider background work is observed on its own gate: it outlives the prompt.
                 if !task.background.accepting.load(Ordering::SeqCst) {
-                    task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+                    task.last_replay_ms
+                        .store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
                 }
                 if task.observe_background(&params) {
                     continue;
                 }
                 // A resumed session replays history; only the live prompt's updates count.
                 let current = task.agent_session_id.lock().ok().and_then(|id| id.clone());
-                if current.as_deref().is_some_and(|id| params["sessionId"] != id) || !task.prompt_in_flight.load(Ordering::SeqCst) || task.ending.load(Ordering::SeqCst) {
-                    task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+                if current
+                    .as_deref()
+                    .is_some_and(|id| params["sessionId"] != id)
+                    || !task.prompt_in_flight.load(Ordering::SeqCst)
+                    || task.ending.load(Ordering::SeqCst)
+                {
+                    task.last_replay_ms
+                        .store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
                     continue;
                 }
                 task.handle_update(&params["update"]);
@@ -829,7 +1187,9 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
                             let decision = task.request_permission(request).await;
                             let options = params["options"].as_array().cloned().unwrap_or_default();
                             Ok(match pick_option_id(decision, &options) {
-                                Some(option_id) => json!({ "outcome": { "outcome": "selected", "optionId": option_id } }),
+                                Some(option_id) => {
+                                    json!({ "outcome": { "outcome": "selected", "optionId": option_id } })
+                                }
                                 None => json!({ "outcome": { "outcome": "cancelled" } }),
                             })
                         }
@@ -837,7 +1197,19 @@ async fn serve(task: Arc<Task>, connection: Arc<AcpConnection>, mut incoming: to
                     };
                     let _ = match reply {
                         Ok(result) => connection.respond(&id, result).await,
-                        Err(message) => connection.respond_error(&id, if method.starts_with("fs/") { -32603 } else { -32601 }, &message).await,
+                        Err(message) => {
+                            connection
+                                .respond_error(
+                                    &id,
+                                    if method.starts_with("fs/") {
+                                        -32603
+                                    } else {
+                                        -32601
+                                    },
+                                    &message,
+                                )
+                                .await
+                        }
                     };
                 });
             }
@@ -871,8 +1243,19 @@ pub struct StartTask {
 }
 
 fn purpose_of(task: &Value, issue_key: &str) -> String {
-    let goal = task["goal"].as_str().unwrap_or_default().lines().next().unwrap_or_default().trim().to_owned();
-    if goal.is_empty() { issue_key.to_owned() } else { goal.chars().take(120).collect() }
+    let goal = task["goal"]
+        .as_str()
+        .unwrap_or_default()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if goal.is_empty() {
+        issue_key.to_owned()
+    } else {
+        goal.chars().take(120).collect()
+    }
 }
 
 /// Creates the session record, then runs the agent in the background. Returns the session id.
@@ -884,14 +1267,29 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
     let sessions = store(dir);
     let session_id = uuid::Uuid::new_v4().to_string();
     let started_at = now();
-    let mode = request.task["sessionMode"].as_str().map(str::to_owned).unwrap_or_else(|| match request.task["kind"].as_str() {
-        Some("analysis") => "analysis".into(),
-        Some("review") => "review".into(),
-        _ => "chat".into(),
-    });
-    let working = request.working_directory.as_deref().map(str::trim).filter(|w| !w.is_empty()).map(str::to_owned);
-    let model = request.model.as_deref().map(str::trim).filter(|m| !m.is_empty()).map(str::to_owned);
-    let cost_before = sessions.get(&key)?.and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
+    let mode = request.task["sessionMode"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| match request.task["kind"].as_str() {
+            Some("analysis") => "analysis".into(),
+            Some("review") => "review".into(),
+            _ => "chat".into(),
+        });
+    let working = request
+        .working_directory
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+        .map(str::to_owned);
+    let model = request
+        .model
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(str::to_owned);
+    let cost_before = sessions
+        .get(&key)?
+        .and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
     let mut record = json!({
         "issueKey": key, "sessionId": session_id, "provider": request.provider, "toolMode": request.tool_mode,
         "state": "not_started", "taskDefinition": request.task, "purpose": super::session_handover::purpose_from_task(&request.task, &key, None),
@@ -915,36 +1313,86 @@ pub fn start_task(host: &HostContext, dir: &Path, request: StartTask) -> Result<
     }
     sessions.put(&key, record.clone())?;
 
-    let working_directory = working.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+    let working_directory = working
+        .clone()
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
     let task = Arc::new(Task {
-        key: key.clone(), dir: dir.to_path_buf(), host: host.clone(), store: Arc::clone(&sessions), connection: Mutex::new(None), agent_session_id: Mutex::new(None),
-        ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(request.auto_approve),
-        auto_allow_safe: request.permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
-        steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(), tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(),
-        finished: AtomicBool::new(false), tool_mode: request.tool_mode.clone(), working_directory, owner_session_id: session_id.clone(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(), background: Default::default(),
+        key: key.clone(),
+        dir: dir.to_path_buf(),
+        host: host.clone(),
+        store: Arc::clone(&sessions),
+        connection: Mutex::new(None),
+        agent_session_id: Mutex::new(None),
+        ending: AtomicBool::new(false),
+        prompt_in_flight: AtomicBool::new(false),
+        allow_all: AtomicBool::new(request.auto_approve),
+        auto_allow_safe: request.permission_mode.as_deref() == Some("auto"),
+        pending: Mutex::default(),
+        message: Mutex::default(),
+        reasoning: Mutex::default(),
+        steps: AtomicU32::new(0),
+        started: Instant::now(),
+        cost_before,
+        active_tool: Mutex::default(),
+        tool_inputs: Mutex::default(),
+        done: tokio::sync::Notify::new(),
+        finished: AtomicBool::new(false),
+        tool_mode: request.tool_mode.clone(),
+        working_directory,
+        owner_session_id: session_id.clone(),
+        last_replay_ms: std::sync::atomic::AtomicU64::new(0),
+        cancel: tokio::sync::Notify::new(),
+        background: Default::default(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.clone()), Arc::clone(&task));
     }
     task.changed(Some(record));
     task.set_state("planning", None);
-    task.append(evt("session_start", "CLI agent session started", None, None), 0);
+    task.append(
+        evt("session_start", "CLI agent session started", None, None),
+        0,
+    );
 
-    let timeout = request.task["timeoutMs"].as_u64().map_or(DEFAULT_TIMEOUT, Duration::from_millis);
+    let timeout = request.task["timeoutMs"]
+        .as_u64()
+        .map_or(DEFAULT_TIMEOUT, Duration::from_millis);
     let prompt_text = praxis_ai::session::prompt::acp_launch_prompt(
         &request.task,
         &request.issue,
         &request.tool_mode,
-        request.mcp_servers.iter().any(|s| s["name"] == "praxis-browser"),
-        request.mcp_servers.iter().any(|s| s["name"] == praxis_ai::session::prompt::code_intelligence_server_name()),
+        request
+            .mcp_servers
+            .iter()
+            .any(|s| s["name"] == "praxis-browser"),
+        request
+            .mcp_servers
+            .iter()
+            .any(|s| s["name"] == praxis_ai::session::prompt::code_intelligence_server_name()),
         request.permission_mode.as_deref() == Some("autopilot"),
     );
     let runner = Arc::clone(&task);
-    let launch = Launch::Fresh { prompt: prompt_text, images: request.images.clone() };
+    let launch = Launch::Fresh {
+        prompt: prompt_text,
+        images: request.images.clone(),
+    };
     runtime().spawn(async move {
-        let outcome = tokio::time::timeout(timeout, run_turn(Arc::clone(&runner), request, launch)).await;
+        let outcome =
+            tokio::time::timeout(timeout, run_turn(Arc::clone(&runner), request, launch)).await;
         if outcome.is_err() {
-            stop(&runner, "failed", evt("error", format!("Task stopped after timing out at {}s.", timeout.as_secs()), None, None)).await;
+            stop(
+                &runner,
+                "failed",
+                evt(
+                    "error",
+                    format!("Task stopped after timing out at {}s.", timeout.as_secs()),
+                    None,
+                    None,
+                ),
+            )
+            .await;
         }
         finish(&runner).await;
     });
@@ -955,7 +1403,9 @@ async fn finish(task: &Arc<Task>) {
     task.finished.store(true, Ordering::SeqCst);
     task.done.notify_waiters();
     // Work the provider reported as still running keeps the connection open to hear how it ended.
-    let observing = !task.ending.load(Ordering::SeqCst) && task.connection.lock().is_ok_and(|c| c.is_some()) && !task.live_background().is_empty();
+    let observing = !task.ending.load(Ordering::SeqCst)
+        && task.connection.lock().is_ok_and(|c| c.is_some())
+        && !task.live_background().is_empty();
     if observing {
         task.background.monitoring.store(true, Ordering::SeqCst);
         if let Ok(mut all) = background_clients().lock() {
@@ -978,7 +1428,9 @@ async fn finish(task: &Arc<Task>) {
     }
     let _ = task.store.flush();
     if let Ok(mut all) = tasks().lock()
-        && all.get(&(task.dir.clone(), task.key.clone())).is_some_and(|current| Arc::ptr_eq(current, task))
+        && all
+            .get(&(task.dir.clone(), task.key.clone()))
+            .is_some_and(|current| Arc::ptr_eq(current, task))
     {
         all.remove(&(task.dir.clone(), task.key.clone()));
     }
@@ -1000,11 +1452,22 @@ fn fail_turn(task: &Task, message: String) {
     if is_terminal(&state) {
         return;
     }
-    let limit = [Some(message.clone()), Some(task.message.lock().map(|m| m.clone()).unwrap_or_default()), task.store.get(&task.key).ok().flatten().and_then(|r| r["responseText"].as_str().map(str::to_owned))]
-        .into_iter()
-        .flatten()
-        .find(|text| is_provider_limit_error(text));
-    let shown = limit.as_deref().map(|l| extract_provider_limit_message(l).unwrap_or_else(|| l.to_owned())).unwrap_or(message);
+    let limit = [
+        Some(message.clone()),
+        Some(task.message.lock().map(|m| m.clone()).unwrap_or_default()),
+        task.store
+            .get(&task.key)
+            .ok()
+            .flatten()
+            .and_then(|r| r["responseText"].as_str().map(str::to_owned)),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|text| is_provider_limit_error(text));
+    let shown = limit
+        .as_deref()
+        .map(|l| extract_provider_limit_message(l).unwrap_or_else(|| l.to_owned()))
+        .unwrap_or(message);
     task.set_state("failed", Some(&shown));
     task.append(evt("error", shown, None, None), 0);
 }
@@ -1016,8 +1479,17 @@ async fn run_turn(task: Arc<Task>, request: StartTask, launch: Launch) {
     }
 }
 
-async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::result::Result<(), String> {
-    let resolved = resolve_executable(&request.command, effective_path()).ok_or_else(|| format!("Failed to start '{}': spawn {} ENOENT", request.command, request.command))?;
+async fn drive(
+    task: &Arc<Task>,
+    request: &StartTask,
+    launch: Launch,
+) -> std::result::Result<(), String> {
+    let resolved = resolve_executable(&request.command, effective_path()).ok_or_else(|| {
+        format!(
+            "Failed to start '{}': spawn {} ENOENT",
+            request.command, request.command
+        )
+    })?;
     let (connection, incoming) = AcpConnection::spawn(AcpSpawn {
         command: resolved.to_string_lossy().into_owned(),
         args: request.args.clone(),
@@ -1041,14 +1513,20 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
         .map_err(|e| with_stderr(&e.to_string()))?;
     let capabilities = init["agentCapabilities"].clone();
     let http_supported = capabilities["mcpCapabilities"]["http"] == true;
-    let servers: Vec<Value> = request.mcp_servers.iter().filter_map(|server| mcp_for_session(server, http_supported)).collect();
+    let servers: Vec<Value> = request
+        .mcp_servers
+        .iter()
+        .filter_map(|server| mcp_for_session(server, http_supported))
+        .collect();
     if !capabilities.is_null() {
         let manifest = json!({
             "protocol": "acp", "sessionResume": capabilities["sessionCapabilities"]["resume"].is_object() || capabilities["sessionCapabilities"]["resume"] == true,
             "sessionLoad": capabilities["loadSession"] == true, "sessionClose": capabilities["sessionCapabilities"]["close"].is_object() || capabilities["sessionCapabilities"]["close"] == true,
             "mcpHttp": http_supported
         });
-        task.mutate(true, move |record| record["providerCapabilities"] = manifest);
+        task.mutate(true, move |record| {
+            record["providerCapabilities"] = manifest
+        });
     }
     if task.ending.load(Ordering::SeqCst) {
         return Ok(());
@@ -1060,30 +1538,57 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     let mut options: Vec<Value> = Vec::new();
     let mut session = Value::Null;
     let mut agent_session = String::new();
-    if let Launch::FollowUp { resume_id: Some(resume_id), .. } = &launch {
-        let can_resume = capabilities["sessionCapabilities"]["resume"].is_object() || capabilities["sessionCapabilities"]["resume"] == true;
+    if let Launch::FollowUp {
+        resume_id: Some(resume_id),
+        ..
+    } = &launch
+    {
+        let can_resume = capabilities["sessionCapabilities"]["resume"].is_object()
+            || capabilities["sessionCapabilities"]["resume"] == true;
         let can_load = capabilities["loadSession"] == true;
         let cwd = task.working_directory.to_string_lossy().into_owned();
         let attempt = if can_load && (!servers.is_empty() || !can_resume) {
             Some(connection.request("session/load", json!({ "sessionId": resume_id, "cwd": cwd, "mcpServers": servers, "additionalDirectories": [] })).await)
         } else if can_resume {
-            Some(connection.request("session/resume", json!({ "sessionId": resume_id, "cwd": cwd, "additionalDirectories": [] })).await)
+            Some(
+                connection
+                    .request(
+                        "session/resume",
+                        json!({ "sessionId": resume_id, "cwd": cwd, "additionalDirectories": [] }),
+                    )
+                    .await,
+            )
         } else {
             None
         };
         if let Some(Ok(response)) = attempt {
             resumed = true;
             agent_session = resume_id.clone();
-            options = response["configOptions"].as_array().cloned().unwrap_or_default();
+            options = response["configOptions"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             if let Ok(mut slot) = task.agent_session_id.lock() {
                 *slot = Some(agent_session.clone());
             }
         }
     }
     if !resumed {
-        session = connection.request("session/new", json!({ "cwd": task.working_directory, "mcpServers": servers })).await.map_err(|e| with_stderr(&e.to_string()))?;
-        agent_session = session["sessionId"].as_str().ok_or("The agent did not return a session id.")?.to_owned();
-        options = session["configOptions"].as_array().cloned().unwrap_or_default();
+        session = connection
+            .request(
+                "session/new",
+                json!({ "cwd": task.working_directory, "mcpServers": servers }),
+            )
+            .await
+            .map_err(|e| with_stderr(&e.to_string()))?;
+        agent_session = session["sessionId"]
+            .as_str()
+            .ok_or("The agent did not return a session id.")?
+            .to_owned();
+        options = session["configOptions"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         if let Ok(mut slot) = task.agent_session_id.lock() {
             *slot = Some(agent_session.clone());
         }
@@ -1094,15 +1599,54 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     }
     if let Some(model) = request.model.as_deref().filter(|m| !m.is_empty()) {
         // Not every agent exposes a model option; the prompt still runs.
-        let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": "model", "value": model })).await;
+        let _ = connection
+            .request(
+                "session/set_config_option",
+                json!({ "sessionId": agent_session, "configId": "model", "value": model }),
+            )
+            .await;
     }
     // The reasoning effort rides the agent's `thought_level` option; agents without one keep their default.
-    if let Some(effort) = request.reasoning_effort.as_deref().filter(|e| !e.is_empty()) {
-        let option = options.iter().find(|o| o["category"] == "thought_level" || o["id"] == "effort").cloned();
+    if let Some(effort) = request
+        .reasoning_effort
+        .as_deref()
+        .filter(|e| !e.is_empty())
+    {
+        let option = options
+            .iter()
+            .find(|o| o["category"] == "thought_level" || o["id"] == "effort")
+            .cloned();
         if let Some(option) = option.filter(|o| o["type"] == "select") {
-            let choices: Vec<Value> = option["options"].as_array().into_iter().flatten().flat_map(|e| if e.get("group").is_some() { e["options"].as_array().cloned().unwrap_or_default() } else { vec![e.clone()] }).collect();
-            let preferred: Vec<&str> = if effort == "off" { vec!["off", "none", "minimal", "default"] } else { vec![effort] };
-            let value = preferred.iter().find_map(|candidate| choices.iter().find(|c| c["value"].as_str().is_some_and(|v| v.eq_ignore_ascii_case(candidate)) || c["name"].as_str().is_some_and(|n| n.eq_ignore_ascii_case(candidate))).and_then(|c| c["value"].as_str().map(str::to_owned)));
+            let choices: Vec<Value> = option["options"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .flat_map(|e| {
+                    if e.get("group").is_some() {
+                        e["options"].as_array().cloned().unwrap_or_default()
+                    } else {
+                        vec![e.clone()]
+                    }
+                })
+                .collect();
+            let preferred: Vec<&str> = if effort == "off" {
+                vec!["off", "none", "minimal", "default"]
+            } else {
+                vec![effort]
+            };
+            let value = preferred.iter().find_map(|candidate| {
+                choices
+                    .iter()
+                    .find(|c| {
+                        c["value"]
+                            .as_str()
+                            .is_some_and(|v| v.eq_ignore_ascii_case(candidate))
+                            || c["name"]
+                                .as_str()
+                                .is_some_and(|n| n.eq_ignore_ascii_case(candidate))
+                    })
+                    .and_then(|c| c["value"].as_str().map(str::to_owned))
+            });
             if let Some(value) = value {
                 let _ = connection.request("session/set_config_option", json!({ "sessionId": agent_session, "configId": option["id"], "value": value })).await;
             }
@@ -1110,23 +1654,46 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     }
     if let Some(modes) = session["modes"].as_object() {
         let current = modes.get("currentModeId").cloned().unwrap_or(Value::Null);
-        let available: Vec<Value> = modes.get("availableModes").and_then(Value::as_array).into_iter().flatten().map(|m| json!({ "id": m["id"], "name": m["name"], "description": m["description"] })).collect();
+        let available: Vec<Value> = modes
+            .get("availableModes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|m| json!({ "id": m["id"], "name": m["name"], "description": m["description"] }))
+            .collect();
         task.mutate(true, move |record| {
             record["acpCurrentModeId"] = current;
             record["acpAvailableModes"] = json!(available);
         });
     }
-    let agent_model = request.model.is_none().then(|| options.iter().find(|o| o["category"] == "model" || o["id"] == "model").and_then(|o| o["currentValue"].as_str().map(str::to_owned))).flatten();
+    let agent_model = request
+        .model
+        .is_none()
+        .then(|| {
+            options
+                .iter()
+                .find(|o| o["category"] == "model" || o["id"] == "model")
+                .and_then(|o| o["currentValue"].as_str().map(str::to_owned))
+        })
+        .flatten();
     if task.ending.load(Ordering::SeqCst) {
         return Ok(());
     }
 
     let (text, images, follow_up) = match launch {
         Launch::Fresh { prompt, images } => (prompt, images, false),
-        Launch::FollowUp { prompt, resumed_prompt, images, .. } => (if resumed { resumed_prompt } else { prompt }, images, true),
+        Launch::FollowUp {
+            prompt,
+            resumed_prompt,
+            images,
+            ..
+        } => (if resumed { resumed_prompt } else { prompt }, images, true),
     };
     if text.chars().count() > 1_000_000 {
-        return Err(format!("ACP prompt is too large ({} characters; maximum 1000000). Shorten the message or attached context before retrying.", text.chars().count()));
+        return Err(format!(
+            "ACP prompt is too large ({} characters; maximum 1000000). Shorten the message or attached context before retrying.",
+            text.chars().count()
+        ));
     }
     // Replay and session-setup notifications arrive before the prompt gate opens; let the ones already
     // in flight drain so history is never mistaken for output of this turn. A fresh session can also
@@ -1134,11 +1701,15 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     {
         let deadline = Instant::now() + Duration::from_millis(if resumed { 500 } else { 150 });
         if resumed {
-            task.last_replay_ms.store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
+            task.last_replay_ms
+                .store(task.started.elapsed().as_millis() as u64, Ordering::SeqCst);
         }
         while Instant::now() < deadline {
             tokio::time::sleep(Duration::from_millis(20)).await;
-            if task.started.elapsed().as_millis() as u64 - task.last_replay_ms.load(Ordering::SeqCst) >= 50 {
+            if task.started.elapsed().as_millis() as u64
+                - task.last_replay_ms.load(Ordering::SeqCst)
+                >= 50
+            {
                 break;
             }
         }
@@ -1147,12 +1718,22 @@ async fn drive(task: &Arc<Task>, request: &StartTask, launch: Launch) -> std::re
     blocks.extend(images.iter().map(|image| json!({ "type": "image", "data": image["dataBase64"], "mimeType": image["mimeType"] })));
     task.background.accepting.store(true, Ordering::SeqCst);
     task.prompt_in_flight.store(true, Ordering::SeqCst);
-    let reply = connection.request("session/prompt", json!({ "sessionId": agent_session, "prompt": blocks })).await;
+    let reply = connection
+        .request(
+            "session/prompt",
+            json!({ "sessionId": agent_session, "prompt": blocks }),
+        )
+        .await;
     // The reply can overtake the last streamed chunks by a hair; let them land before the gate closes.
     tokio::time::sleep(Duration::from_millis(30)).await;
     task.prompt_in_flight.store(false, Ordering::SeqCst);
     let response = reply.map_err(|e| with_stderr(&e.to_string()))?;
-    settle(task, &response, request.model.as_deref().or(agent_model.as_deref()), follow_up);
+    settle(
+        task,
+        &response,
+        request.model.as_deref().or(agent_model.as_deref()),
+        follow_up,
+    );
     Ok(())
 }
 
@@ -1163,11 +1744,23 @@ fn with_stderr(message: &str) -> String {
 
 fn mcp_for_session(server: &Value, http_supported: bool) -> Option<Value> {
     if server["command"].is_string() {
-        let env: Vec<Value> = server["env"].as_object().into_iter().flatten().map(|(name, value)| json!({ "name": name, "value": value })).collect();
-        return Some(json!({ "name": server["name"], "command": server["command"], "args": server["args"].as_array().cloned().unwrap_or_default(), "env": env }));
+        let env: Vec<Value> = server["env"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(name, value)| json!({ "name": name, "value": value }))
+            .collect();
+        return Some(
+            json!({ "name": server["name"], "command": server["command"], "args": server["args"].as_array().cloned().unwrap_or_default(), "env": env }),
+        );
     }
     http_supported.then(|| {
-        let headers: Vec<Value> = server["headers"].as_object().into_iter().flatten().map(|(name, value)| json!({ "name": name, "value": value })).collect();
+        let headers: Vec<Value> = server["headers"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(name, value)| json!({ "name": name, "value": value }))
+            .collect();
         json!({ "type": "http", "name": server["name"], "url": server["url"], "headers": headers })
     })
 }
@@ -1178,15 +1771,28 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
         return;
     }
     let buffer = task.message.lock().map(|m| m.clone()).unwrap_or_default();
-    let reasoning = task.reasoning.lock().map(|m| m.trim().to_owned()).unwrap_or_default();
+    let reasoning = task
+        .reasoning
+        .lock()
+        .map(|m| m.trim().to_owned())
+        .unwrap_or_default();
     {
         let text = buffer.clone();
         task.mutate(true, move |record| record["responseText"] = json!(text));
     }
-    let stop = response["stopReason"].as_str().unwrap_or_default().to_owned();
+    let stop = response["stopReason"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
     // A turn that ended on a provider limit (or replied with a limit notice) fails; the notice is
     // not shown as an assistant bubble.
-    let limit_text = if is_limit_notice_reply(&buffer) { Some(buffer.as_str()) } else if is_provider_limit_error(&stop) { Some(stop.as_str()) } else { None };
+    let limit_text = if is_limit_notice_reply(&buffer) {
+        Some(buffer.as_str())
+    } else if is_provider_limit_error(&stop) {
+        Some(stop.as_str())
+    } else {
+        None
+    };
     if let Some(limit) = limit_text {
         let notice = extract_provider_limit_message(limit).unwrap_or_else(|| limit.to_owned());
         task.set_state("failed", Some(&notice));
@@ -1201,9 +1807,22 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
         telemetry["tokenUsage"] = usage.clone();
         task.mutate(true, move |record| add_tokens(record, &usage));
     }
-    let after = task.store.get(&task.key).ok().flatten().and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
-    if let Some(after) = after.as_ref().filter(|c| c["amount"].as_f64().unwrap_or(0.0) > 0.0) {
-        let base = task.cost_before.as_ref().filter(|b| b["currency"] == after["currency"]).and_then(|b| b["amount"].as_f64()).unwrap_or(0.0);
+    let after = task
+        .store
+        .get(&task.key)
+        .ok()
+        .flatten()
+        .and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
+    if let Some(after) = after
+        .as_ref()
+        .filter(|c| c["amount"].as_f64().unwrap_or(0.0) > 0.0)
+    {
+        let base = task
+            .cost_before
+            .as_ref()
+            .filter(|b| b["currency"] == after["currency"])
+            .and_then(|b| b["amount"].as_f64())
+            .unwrap_or(0.0);
         let turn = after["amount"].as_f64().unwrap_or(0.0) - base;
         if turn > 0.0 {
             telemetry["cost"] = json!({ "currency": after["currency"], "amount": turn });
@@ -1222,7 +1841,19 @@ fn settle(task: &Arc<Task>, response: &Value, fallback_model: Option<&str>, foll
     match stop.as_str() {
         "end_turn" | "max_turn_requests" => {
             task.set_state("completed", None);
-            task.append(evt("task_complete", if follow_up { "Agent completed the follow-up" } else { "Agent completed the task" }, None, None), 0);
+            task.append(
+                evt(
+                    "task_complete",
+                    if follow_up {
+                        "Agent completed the follow-up"
+                    } else {
+                        "Agent completed the task"
+                    },
+                    None,
+                    None,
+                ),
+                0,
+            );
         }
         // abort already set the terminal state.
         "cancelled" => {}
@@ -1240,7 +1871,9 @@ fn token_usage(usage: &Value) -> Option<Value> {
     if input.is_none() && output.is_none() {
         return None;
     }
-    let total = usage["totalTokens"].as_u64().unwrap_or(input.unwrap_or(0) + output.unwrap_or(0));
+    let total = usage["totalTokens"]
+        .as_u64()
+        .unwrap_or(input.unwrap_or(0) + output.unwrap_or(0));
     let mut value = json!({ "inputTokens": input.unwrap_or(0), "outputTokens": output.unwrap_or(0), "totalTokens": total });
     if let Some(thought) = usage["thoughtTokens"].as_u64() {
         value["reasoningTokens"] = json!(thought);
@@ -1256,7 +1889,13 @@ fn add_tokens(record: &mut Value, usage: &Value) {
     if !total.is_object() {
         *total = json!({ "inputTokens": 0, "outputTokens": 0, "totalTokens": 0 });
     }
-    for field in ["inputTokens", "outputTokens", "totalTokens", "reasoningTokens", "cachedInputTokens"] {
+    for field in [
+        "inputTokens",
+        "outputTokens",
+        "totalTokens",
+        "reasoningTokens",
+        "cachedInputTokens",
+    ] {
         if let Some(add) = usage[field].as_u64() {
             total[field] = json!(total[field].as_u64().unwrap_or(0) + add);
         }
@@ -1268,7 +1907,12 @@ fn quota_model(response: &Value) -> Option<String> {
     response["_meta"]["quota"]["model_usage"]
         .as_array()?
         .iter()
-        .filter_map(|row| Some((row["model"].as_str()?.trim().to_owned(), row["token_count"]["totalTokens"].as_u64().unwrap_or(0))))
+        .filter_map(|row| {
+            Some((
+                row["model"].as_str()?.trim().to_owned(),
+                row["token_count"]["totalTokens"].as_u64().unwrap_or(0),
+            ))
+        })
         .filter(|(model, _)| !model.is_empty())
         .max_by_key(|(_, total)| *total)
         .map(|(model, _)| model)
@@ -1282,7 +1926,12 @@ async fn stop(task: &Arc<Task>, terminal: &str, event: Value) {
         let _ = tokio::time::timeout(STOP_GRACE, task.done.notified()).await;
         return;
     }
-    for waiting in task.pending.lock().map(|mut p| p.drain(..).collect::<Vec<_>>()).unwrap_or_default() {
+    for waiting in task
+        .pending
+        .lock()
+        .map(|mut p| p.drain(..).collect::<Vec<_>>())
+        .unwrap_or_default()
+    {
         let _ = waiting.reply.send(Decision::Deny);
     }
     task.cancel.notify_waiters();
@@ -1290,7 +1939,11 @@ async fn stop(task: &Arc<Task>, terminal: &str, event: Value) {
     let connection = task.connection.lock().ok().and_then(|c| c.clone());
     let session = task.agent_session_id.lock().ok().and_then(|s| s.clone());
     if let (Some(connection), Some(session)) = (connection, session) {
-        let _ = tokio::time::timeout(CANCEL_GRACE, connection.notify("session/cancel", json!({ "sessionId": session }))).await;
+        let _ = tokio::time::timeout(
+            CANCEL_GRACE,
+            connection.notify("session/cancel", json!({ "sessionId": session })),
+        )
+        .await;
     }
     if !task.finished.load(Ordering::SeqCst) {
         let _ = tokio::time::timeout(STOP_GRACE, task.done.notified()).await;
@@ -1309,7 +1962,12 @@ pub fn abort_task(host: &HostContext, dir: &Path, key: &str) {
         let waiter = Arc::clone(&task);
         let (done, wait) = std::sync::mpsc::channel();
         runtime().spawn(async move {
-            stop(&waiter, "aborted", evt("aborted", "Task aborted by user", None, None)).await;
+            stop(
+                &waiter,
+                "aborted",
+                evt("aborted", "Task aborted by user", None, None),
+            )
+            .await;
             finish(&waiter).await;
             let _ = done.send(());
         });
@@ -1319,7 +1977,15 @@ pub fn abort_task(host: &HostContext, dir: &Path, key: &str) {
 
 /// Stops observing provider background work for a session the person aborted.
 fn abort_background(dir: &Path, key: &str) {
-    let observers: Vec<Arc<Task>> = background_clients().lock().map(|all| all.iter().filter(|t| t.dir == dir && t.key == key).cloned().collect()).unwrap_or_default();
+    let observers: Vec<Arc<Task>> = background_clients()
+        .lock()
+        .map(|all| {
+            all.iter()
+                .filter(|t| t.dir == dir && t.key == key)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
     for task in observers {
         task.ending.store(true, Ordering::SeqCst);
         task.background_connection_lost("Background monitoring was cancelled. The provider task outcome has not been confirmed.");
@@ -1342,11 +2008,31 @@ pub fn respond_to_permission(dir: &Path, key: &str, decision: Decision) {
 
 /// Switches the agent's own Session Mode (`session/set_mode`) on a running session.
 pub fn set_acp_mode(dir: &Path, key: &str, mode_id: &str) -> Result<()> {
-    let task = find_task(dir, key).filter(|task| !task.ending.load(Ordering::SeqCst)).ok_or_else(|| failure(format!("No active agent session for {key}.")))?;
-    let connection = task.connection.lock().ok().and_then(|c| c.clone()).ok_or_else(|| failure("The agent is not connected yet."))?;
-    let session = task.agent_session_id.lock().ok().and_then(|s| s.clone()).ok_or_else(|| failure("The agent has not created a session yet."))?;
+    let task = find_task(dir, key)
+        .filter(|task| !task.ending.load(Ordering::SeqCst))
+        .ok_or_else(|| failure(format!("No active agent session for {key}.")))?;
+    let connection = task
+        .connection
+        .lock()
+        .ok()
+        .and_then(|c| c.clone())
+        .ok_or_else(|| failure("The agent is not connected yet."))?;
+    let session = task
+        .agent_session_id
+        .lock()
+        .ok()
+        .and_then(|s| s.clone())
+        .ok_or_else(|| failure("The agent has not created a session yet."))?;
     let mode = mode_id.to_owned();
-    super::runtime::block_on(async move { connection.request("session/set_mode", json!({ "sessionId": session, "modeId": mode })).await }).map_err(|e| failure(e.to_string()))?;
+    super::runtime::block_on(async move {
+        connection
+            .request(
+                "session/set_mode",
+                json!({ "sessionId": session, "modeId": mode }),
+            )
+            .await
+    })
+    .map_err(|e| failure(e.to_string()))?;
     let mode = mode_id.to_owned();
     task.mutate(true, move |record| record["acpCurrentModeId"] = json!(mode));
     Ok(())
@@ -1373,7 +2059,10 @@ fn conversation_transcript(events: &[Value]) -> Option<String> {
     let turns: Vec<String> = events
         .iter()
         .filter_map(|event| {
-            let detail = event["detail"].as_str().map(str::trim).filter(|d| !d.is_empty())?;
+            let detail = event["detail"]
+                .as_str()
+                .map(str::trim)
+                .filter(|d| !d.is_empty())?;
             match event["type"].as_str()? {
                 "message" => Some(format!("Assistant:\n{detail}")),
                 "user_input_completed" => Some(format!("User:\n{detail}")),
@@ -1389,7 +2078,14 @@ fn conversation_transcript(events: &[Value]) -> Option<String> {
     let count = transcript.chars().count();
     Some(format!(
         "Previous conversation:\n\n{}",
-        if count > budget { format!("[Earlier conversation omitted to fit the prompt; the following is the most recent text.]\n{}", transcript.chars().skip(count - budget).collect::<String>()) } else { transcript }
+        if count > budget {
+            format!(
+                "[Earlier conversation omitted to fit the prompt; the following is the most recent text.]\n{}",
+                transcript.chars().skip(count - budget).collect::<String>()
+            )
+        } else {
+            transcript
+        }
     ))
 }
 
@@ -1400,7 +2096,10 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     // closing instead of refusing an otherwise completed conversation.
     if let Some(old) = find_task(dir, key) {
         let deadline = Instant::now() + Duration::from_secs(5);
-        while find_task(dir, key).is_some() && old.state().as_deref() == Some("completed") && Instant::now() < deadline {
+        while find_task(dir, key).is_some()
+            && old.state().as_deref() == Some("completed")
+            && Instant::now() < deadline
+        {
             std::thread::sleep(Duration::from_millis(25));
         }
     }
@@ -1408,43 +2107,113 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
         return Err(failure(format!("The agent is still working on {key}.")));
     }
     let sessions = store(dir);
-    let record = sessions.get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
+    let record = sessions
+        .get(key)?
+        .ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
     let follow_up = request.message.trim().to_owned();
     if follow_up.is_empty() {
         return Err(failure("Enter a follow-up message."));
     }
     let tool_mode = record["toolMode"].as_str().unwrap_or("full").to_owned();
-    let working = record["workingDirectory"].as_str().map(str::trim).filter(|w| !w.is_empty()).map(str::to_owned);
+    let working = record["workingDirectory"]
+        .as_str()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+        .map(str::to_owned);
     let issue = json!({ "key": key, "summary": record["taskDefinition"]["goal"], "issueType": "Task", "status": "In progress", "description": record["taskDefinition"]["scope"] });
-    let mut system = format!("{}\n\nTool mode: {}", praxis_ai::session::prompt::build_system_prompt(&record["taskDefinition"], &issue), praxis_ai::session::prompt::tool_mode_prompt(&tool_mode));
-    if request.mcp_servers.iter().any(|s| s["name"] == "praxis-browser") {
-        system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("BROWSER_TOOLS_PROMPT")));
+    let mut system = format!(
+        "{}\n\nTool mode: {}",
+        praxis_ai::session::prompt::build_system_prompt(&record["taskDefinition"], &issue),
+        praxis_ai::session::prompt::tool_mode_prompt(&tool_mode)
+    );
+    if request
+        .mcp_servers
+        .iter()
+        .any(|s| s["name"] == "praxis-browser")
+    {
+        system.push_str(&format!(
+            "\n\n{}",
+            praxis_ai::session::prompt::prompt("BROWSER_TOOLS_PROMPT")
+        ));
     }
-    if request.mcp_servers.iter().any(|s| s["name"] == praxis_ai::session::prompt::code_intelligence_server_name()) {
-        system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("CODE_INTELLIGENCE_PROMPT")));
+    if request
+        .mcp_servers
+        .iter()
+        .any(|s| s["name"] == praxis_ai::session::prompt::code_intelligence_server_name())
+    {
+        system.push_str(&format!(
+            "\n\n{}",
+            praxis_ai::session::prompt::prompt("CODE_INTELLIGENCE_PROMPT")
+        ));
     }
     if record["permissionMode"] == "autopilot" {
-        system.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")));
+        system.push_str(&format!(
+            "\n\n{}",
+            praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")
+        ));
     }
-    if let Some(context) = request.conversation_context.as_deref().filter(|c| !c.is_empty()) {
+    if let Some(context) = request
+        .conversation_context
+        .as_deref()
+        .filter(|c| !c.is_empty())
+    {
         system.push_str(&format!("\n\n{context}"));
     }
-    let current_turn = format!("{}:\n{follow_up}", if request.internal { "Conversation routing instruction" } else { "User follow-up" });
+    let current_turn = format!(
+        "{}:\n{follow_up}",
+        if request.internal {
+            "Conversation routing instruction"
+        } else {
+            "User follow-up"
+        }
+    );
     let resumed_prompt = [system.clone(), current_turn.clone()].join("\n\n");
     let events = record["events"].as_array().cloned().unwrap_or_default();
-    let prompt = [Some(system), conversation_transcript(&events), Some(current_turn)].into_iter().flatten().collect::<Vec<_>>().join("\n\n");
+    let prompt = [
+        Some(system),
+        conversation_transcript(&events),
+        Some(current_turn),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join("\n\n");
 
     let session_id = record["sessionId"].as_str().unwrap_or_default().to_owned();
     let permission_mode = record["permissionMode"].as_str().map(str::to_owned);
-    let working_directory = working.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+    let working_directory = working
+        .clone()
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
     let model = record["model"].as_str().map(str::to_owned);
     let task = Arc::new(Task {
-        key: key.to_owned(), dir: dir.to_path_buf(), host: host.clone(), store: Arc::clone(&sessions), connection: Mutex::new(None), agent_session_id: Mutex::new(None),
-        ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(record["autoApprovePermissions"] == true),
-        auto_allow_safe: permission_mode.as_deref() == Some("auto"), pending: Mutex::default(), message: Mutex::default(), reasoning: Mutex::default(),
-        steps: AtomicU32::new(0), started: Instant::now(), cost_before: Some(record["cost"].clone()).filter(|c| !c.is_null()), active_tool: Mutex::default(), tool_inputs: Mutex::default(),
-        done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.clone(), working_directory, owner_session_id: session_id,
-        last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(), background: Default::default(),
+        key: key.to_owned(),
+        dir: dir.to_path_buf(),
+        host: host.clone(),
+        store: Arc::clone(&sessions),
+        connection: Mutex::new(None),
+        agent_session_id: Mutex::new(None),
+        ending: AtomicBool::new(false),
+        prompt_in_flight: AtomicBool::new(false),
+        allow_all: AtomicBool::new(record["autoApprovePermissions"] == true),
+        auto_allow_safe: permission_mode.as_deref() == Some("auto"),
+        pending: Mutex::default(),
+        message: Mutex::default(),
+        reasoning: Mutex::default(),
+        steps: AtomicU32::new(0),
+        started: Instant::now(),
+        cost_before: Some(record["cost"].clone()).filter(|c| !c.is_null()),
+        active_tool: Mutex::default(),
+        tool_inputs: Mutex::default(),
+        done: tokio::sync::Notify::new(),
+        finished: AtomicBool::new(false),
+        tool_mode: tool_mode.clone(),
+        working_directory,
+        owner_session_id: session_id,
+        last_replay_ms: std::sync::atomic::AtomicU64::new(0),
+        cancel: tokio::sync::Notify::new(),
+        background: Default::default(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));
@@ -1452,7 +2221,11 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     // The previous turn recorded its own reply when it ended; clear the live buffer so the old answer
     // cannot briefly render after the new user message.
     task.mutate(true, |record| record["responseText"] = json!(""));
-    let mut event = if request.internal { evt("conversation_turn", "Conversation turn started", None, None) } else { evt("user_input_completed", "You", Some(follow_up), None) };
+    let mut event = if request.internal {
+        evt("conversation_turn", "Conversation turn started", None, None)
+    } else {
+        evt("user_input_completed", "You", Some(follow_up), None)
+    };
     if !request.images.is_empty() {
         event["attachments"] = json!(request.images);
     }
@@ -1463,10 +2236,26 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
     task.set_state("executing", None);
 
     let start = StartTask {
-        issue, task: record["taskDefinition"].clone(), provider: request.provider, model, reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned),
-        working_directory: working, tool_mode, permission_mode, auto_approve: record["autoApprovePermissions"] == true, command: request.command, args: request.args, mcp_servers: request.mcp_servers, images: Vec::new(),
+        issue,
+        task: record["taskDefinition"].clone(),
+        provider: request.provider,
+        model,
+        reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned),
+        working_directory: working,
+        tool_mode,
+        permission_mode,
+        auto_approve: record["autoApprovePermissions"] == true,
+        command: request.command,
+        args: request.args,
+        mcp_servers: request.mcp_servers,
+        images: Vec::new(),
     };
-    let launch = Launch::FollowUp { prompt, resumed_prompt, resume_id: record["runtimeSessionId"].as_str().map(str::to_owned), images: request.images };
+    let launch = Launch::FollowUp {
+        prompt,
+        resumed_prompt,
+        resume_id: record["runtimeSessionId"].as_str().map(str::to_owned),
+        images: request.images,
+    };
     let runner = Arc::clone(&task);
     runtime().spawn(async move {
         run_turn(Arc::clone(&runner), start, launch).await;
@@ -1478,13 +2267,44 @@ pub fn continue_task(host: &HostContext, dir: &Path, key: &str, request: Continu
 // ── shared with the API-provider host ───────────────────────────────────
 
 /// Builds and registers the shared task state for a turn with no ACP connection.
-pub(super) fn register_api_task(host: &HostContext, dir: &Path, key: &str, session_id: &str, tool_mode: &str, working_directory: PathBuf, allow_all: bool, auto_allow_safe: bool, cost_before: Option<Value>) -> Arc<Task> {
+pub(super) fn register_api_task(
+    host: &HostContext,
+    dir: &Path,
+    key: &str,
+    session_id: &str,
+    tool_mode: &str,
+    working_directory: PathBuf,
+    allow_all: bool,
+    auto_allow_safe: bool,
+    cost_before: Option<Value>,
+) -> Arc<Task> {
     let task = Arc::new(Task {
-        key: key.to_owned(), dir: dir.to_path_buf(), host: host.clone(), store: store(dir), connection: Mutex::new(None), agent_session_id: Mutex::new(None),
-        ending: AtomicBool::new(false), prompt_in_flight: AtomicBool::new(false), allow_all: AtomicBool::new(allow_all), auto_allow_safe, pending: Mutex::default(),
-        message: Mutex::default(), reasoning: Mutex::default(), steps: AtomicU32::new(0), started: Instant::now(), cost_before, active_tool: Mutex::default(),
-        tool_inputs: Mutex::default(), done: tokio::sync::Notify::new(), finished: AtomicBool::new(false), tool_mode: tool_mode.to_owned(), working_directory,
-        owner_session_id: session_id.to_owned(), last_replay_ms: std::sync::atomic::AtomicU64::new(0), cancel: tokio::sync::Notify::new(), background: Default::default(),
+        key: key.to_owned(),
+        dir: dir.to_path_buf(),
+        host: host.clone(),
+        store: store(dir),
+        connection: Mutex::new(None),
+        agent_session_id: Mutex::new(None),
+        ending: AtomicBool::new(false),
+        prompt_in_flight: AtomicBool::new(false),
+        allow_all: AtomicBool::new(allow_all),
+        auto_allow_safe,
+        pending: Mutex::default(),
+        message: Mutex::default(),
+        reasoning: Mutex::default(),
+        steps: AtomicU32::new(0),
+        started: Instant::now(),
+        cost_before,
+        active_tool: Mutex::default(),
+        tool_inputs: Mutex::default(),
+        done: tokio::sync::Notify::new(),
+        finished: AtomicBool::new(false),
+        tool_mode: tool_mode.to_owned(),
+        working_directory,
+        owner_session_id: session_id.to_owned(),
+        last_replay_ms: std::sync::atomic::AtomicU64::new(0),
+        cancel: tokio::sync::Notify::new(),
+        background: Default::default(),
     });
     if let Ok(mut all) = tasks().lock() {
         all.insert((dir.to_path_buf(), key.to_owned()), Arc::clone(&task));

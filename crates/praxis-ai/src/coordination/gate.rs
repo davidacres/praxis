@@ -12,8 +12,13 @@ pub enum GateDecision {
 
 /// The message a refused tool hands back to the agent: who has it, and what to do.
 pub fn refusal_for_agent(reason: &str, wait_tool: Option<&str>) -> String {
-    let wait = wait_tool.map_or_else(|| "or wait and try again later".to_owned(), |tool| format!("or call {tool} to wait for it (bounded)"));
-    format!("Not done: {reason} Another session is using it. Work on something else, {wait}; do not retry in a loop.")
+    let wait = wait_tool.map_or_else(
+        || "or wait and try again later".to_owned(),
+        |tool| format!("or call {tool} to wait for it (bounded)"),
+    );
+    format!(
+        "Not done: {reason} Another session is using it. Work on something else, {wait}; do not retry in a loop."
+    )
 }
 
 #[cfg(test)]
@@ -22,7 +27,10 @@ mod tests {
 
     #[test]
     fn a_refusal_names_the_wait_tool_when_there_is_one() {
-        assert!(refusal_for_agent("busy.", Some("wait_for_files")).contains("call wait_for_files to wait for it (bounded)"));
+        assert!(
+            refusal_for_agent("busy.", Some("wait_for_files"))
+                .contains("call wait_for_files to wait for it (bounded)")
+        );
         assert!(refusal_for_agent("busy.", None).contains("or wait and try again later"));
     }
 }

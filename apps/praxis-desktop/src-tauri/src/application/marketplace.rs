@@ -17,13 +17,17 @@ use praxis_core::marketplace::catalog_types::{
 };
 use praxis_core::marketplace::integrity::assert_tarball_integrity;
 use praxis_core::marketplace::registry::{
-    DEFAULT_ADDON_PACKAGE_PREFIX, DEFAULT_API_BASE_URL, DEFAULT_REGISTRY_BASE_URL, GITHUB_API_VERSION, Packument,
-    RegistryPackageRef, assert_same_origin, encode_packument_path, endpoint_origin, format_registry_error,
-    normalize_packument, parse_next_link,
+    DEFAULT_ADDON_PACKAGE_PREFIX, DEFAULT_API_BASE_URL, DEFAULT_REGISTRY_BASE_URL,
+    GITHUB_API_VERSION, Packument, RegistryPackageRef, assert_same_origin, encode_packument_path,
+    endpoint_origin, format_registry_error, normalize_packument, parse_next_link,
 };
-use praxis_core::marketplace::semver::{is_newer_version, max_version, meets_minimum, sort_versions_descending};
+use praxis_core::marketplace::semver::{
+    is_newer_version, max_version, meets_minimum, sort_versions_descending,
+};
 use praxis_core::marketplace::storage::AddonStorage;
-use praxis_core::marketplace::tarball_manifest::{MAX_UNPACKED_TARBALL_BYTES, read_praxis_manifest_from_tarball};
+use praxis_core::marketplace::tarball_manifest::{
+    MAX_UNPACKED_TARBALL_BYTES, read_praxis_manifest_from_tarball,
+};
 use praxis_host::HostContext;
 use serde_json::{Value, json};
 
@@ -78,8 +82,14 @@ fn emit_changed(host: &HostContext) {
 }
 
 fn configure(host: &HostContext, patch: &Value) -> Result<Value> {
-    let updated = host.settings().write(&json!({ "marketplace": patch })).map_err(failure)?;
-    host.events().emit("settings:changed", Some(serde_json::to_value(updated).map_err(failure)?));
+    let updated = host
+        .settings()
+        .write(&json!({ "marketplace": patch }))
+        .map_err(failure)?;
+    host.events().emit(
+        "settings:changed",
+        Some(serde_json::to_value(updated).map_err(failure)?),
+    );
     emit_changed(host);
     Ok(status(host))
 }
@@ -119,12 +129,19 @@ impl Client {
         }
         let owner = cfg.owner.trim().to_string();
         if owner.is_empty() {
-            return Err("Set a marketplace owner (a GitHub user or organisation) in Settings.".into());
+            return Err(
+                "Set a marketplace owner (a GitHub user or organisation) in Settings.".into(),
+            );
         }
-        let token = token(host).ok_or("Add a marketplace GitHub token in Settings (needs `read:packages`).")?;
+        let token = token(host)
+            .ok_or("Add a marketplace GitHub token in Settings (needs `read:packages`).")?;
         let or_default = |value: &str, default: &str| {
             let trimmed = value.trim().trim_end_matches('/');
-            if trimmed.is_empty() { default.to_string() } else { trimmed.to_string() }
+            if trimmed.is_empty() {
+                default.to_string()
+            } else {
+                trimmed.to_string()
+            }
         };
         let api_base = or_default(&cfg.api_base_url, DEFAULT_API_BASE_URL);
         let registry_base = or_default(&cfg.registry_base_url, DEFAULT_REGISTRY_BASE_URL);
@@ -137,7 +154,11 @@ impl Client {
                 .map_err(|e| e.to_string())?,
             api_origin: endpoint_origin(&api_base, "API URL")?,
             registry_origin: endpoint_origin(&registry_base, "registry URL")?,
-            prefix: if cfg.package_name_prefix.is_empty() { DEFAULT_ADDON_PACKAGE_PREFIX.into() } else { cfg.package_name_prefix },
+            prefix: if cfg.package_name_prefix.is_empty() {
+                DEFAULT_ADDON_PACKAGE_PREFIX.into()
+            } else {
+                cfg.package_name_prefix
+            },
             owner,
             owner_type: cfg.owner_type,
             token: token.trim().to_string(),
@@ -147,7 +168,11 @@ impl Client {
     }
 
     async fn list_addon_packages(&self) -> std::result::Result<Vec<RegistryPackageRef>, String> {
-        let scope = if self.owner_type == "org" { "orgs" } else { "users" };
+        let scope = if self.owner_type == "org" {
+            "orgs"
+        } else {
+            "users"
+        };
         let mut url = Some(format!(
             "{}/{scope}/{}/packages?package_type=npm&per_page=100",
             self.api_base,
@@ -155,7 +180,11 @@ impl Client {
         ));
         let mut refs = Vec::new();
         while let Some(current) = url.take() {
-            assert_same_origin(&current, &self.api_origin, "the next page of marketplace packages")?;
+            assert_same_origin(
+                &current,
+                &self.api_origin,
+                "the next page of marketplace packages",
+            )?;
             let response = self
                 .http
                 .get(&current)
@@ -166,7 +195,11 @@ impl Client {
                 .await
                 .map_err(|e| e.to_string())?;
             let code = response.status();
-            let link = response.headers().get("link").and_then(|v| v.to_str().ok()).map(str::to_string);
+            let link = response
+                .headers()
+                .get("link")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
             let body = response.text().await.map_err(|e| e.to_string())?;
             if !code.is_success() {
                 return Err(format_registry_error(
@@ -176,16 +209,25 @@ impl Client {
                     &body,
                 ));
             }
-            let page: Value = if body.trim().is_empty() { json!([]) } else { serde_json::from_str(&body).map_err(|e| e.to_string())? };
+            let page: Value = if body.trim().is_empty() {
+                json!([])
+            } else {
+                serde_json::from_str(&body).map_err(|e| e.to_string())?
+            };
             for item in page.as_array().into_iter().flatten() {
-                let Some(name) = item.get("name").and_then(Value::as_str) else { continue };
+                let Some(name) = item.get("name").and_then(Value::as_str) else {
+                    continue;
+                };
                 let unscoped = name.split_once('/').map_or(name, |(_, rest)| rest);
                 if !unscoped.starts_with(&self.prefix) {
                     continue;
                 }
                 refs.push(RegistryPackageRef {
                     name: name.to_string(),
-                    updated_at: item.get("updated_at").and_then(Value::as_str).map(str::to_string),
+                    updated_at: item
+                        .get("updated_at")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
                 });
             }
             url = parse_next_link(link.as_deref());
@@ -205,12 +247,25 @@ impl Client {
             .await
             .map_err(|e| FetchError::Other(e.to_string()))?;
         let code = response.status();
-        let body = response.text().await.map_err(|e| FetchError::Other(e.to_string()))?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| FetchError::Other(e.to_string()))?;
         if !code.is_success() {
-            let message = format_registry_error(&format!("Fetching {name}"), code.as_u16(), code.canonical_reason().unwrap_or_default(), &body);
-            return Err(if code.as_u16() == 404 { FetchError::NotFound(message) } else { FetchError::Other(message) });
+            let message = format_registry_error(
+                &format!("Fetching {name}"),
+                code.as_u16(),
+                code.canonical_reason().unwrap_or_default(),
+                &body,
+            );
+            return Err(if code.as_u16() == 404 {
+                FetchError::NotFound(message)
+            } else {
+                FetchError::Other(message)
+            });
         }
-        let raw: Value = serde_json::from_str(&body).map_err(|e| FetchError::Other(e.to_string()))?;
+        let raw: Value =
+            serde_json::from_str(&body).map_err(|e| FetchError::Other(e.to_string()))?;
         normalize_packument(name, &raw).map_err(FetchError::Other)
     }
 
@@ -239,9 +294,18 @@ impl Client {
         let code = response.status();
         if !code.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(format_registry_error("Downloading add-on tarball", code.as_u16(), code.canonical_reason().unwrap_or_default(), &body));
+            return Err(format_registry_error(
+                "Downloading add-on tarball",
+                code.as_u16(),
+                code.canonical_reason().unwrap_or_default(),
+                &body,
+            ));
         }
-        response.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
+        response
+            .bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| e.to_string())
     }
 }
 
@@ -266,11 +330,18 @@ async fn resolve_catalog_entry(client: &Client, pkg: RegistryPackageRef) -> Opti
         }
     };
     let Some(resolved) = resolve_latest(&packument) else {
-        log(&format!("[marketplace] skipping {}: no usable published version", pkg.name));
+        log(&format!(
+            "[marketplace] skipping {}: no usable published version",
+            pkg.name
+        ));
         return None;
     };
     let entry = packument.versions.get(&resolved);
-    let mut validation = validate_addon_manifest(entry.and_then(|e| e.praxis.as_ref()).unwrap_or(&Value::Null));
+    let mut validation = validate_addon_manifest(
+        entry
+            .and_then(|e| e.praxis.as_ref())
+            .unwrap_or(&Value::Null),
+    );
     // GitHub Packages' packument strips custom `package.json` fields; fall back to the tarball
     // only when the field is genuinely missing, not when it is invalid.
     if let Some(entry) = entry
@@ -282,19 +353,34 @@ async fn resolve_catalog_entry(client: &Client, pkg: RegistryPackageRef) -> Opti
                     read_praxis_manifest_from_tarball(&tarball, MAX_UNPACKED_TARBALL_BYTES)
                 });
                 match outcome {
-                    Ok(from_tarball) => validation = validate_addon_manifest(&from_tarball.unwrap_or(Value::Null)),
-                    Err(error) => log(&format!("[marketplace] tarball manifest fallback failed for {}: {error}", pkg.name)),
+                    Ok(from_tarball) => {
+                        validation = validate_addon_manifest(&from_tarball.unwrap_or(Value::Null))
+                    }
+                    Err(error) => log(&format!(
+                        "[marketplace] tarball manifest fallback failed for {}: {error}",
+                        pkg.name
+                    )),
                 }
             }
-            Err(error) => log(&format!("[marketplace] tarball manifest fallback failed for {}: {error}", pkg.name)),
+            Err(error) => log(&format!(
+                "[marketplace] tarball manifest fallback failed for {}: {error}",
+                pkg.name
+            )),
         }
     }
     let Some(manifest) = validation.manifest else {
-        log(&format!("[marketplace] skipping {}@{resolved}: invalid manifest ({})", pkg.name, validation.errors.join("; ")));
+        log(&format!(
+            "[marketplace] skipping {}@{resolved}: invalid manifest ({})",
+            pkg.name,
+            validation.errors.join("; ")
+        ));
         return None;
     };
     let versions = sort_versions_descending(&packument.versions.keys().collect::<Vec<_>>());
-    let incompatible = manifest.min_app_version.as_deref().is_some_and(|min| !meets_minimum(APP_VERSION, min));
+    let incompatible = manifest
+        .min_app_version
+        .as_deref()
+        .is_some_and(|min| !meets_minimum(APP_VERSION, min));
     let mut warnings = validation.warnings;
     if incompatible {
         warnings.push(format!(
@@ -336,7 +422,16 @@ fn list_catalog(host: &HostContext) -> Result<Value> {
     .map_err(failure)?;
     let mut entries = entries;
     entries.sort_by(|a, b| {
-        a.manifest.kind.as_str().cmp(b.manifest.kind.as_str()).then_with(|| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()))
+        a.manifest
+            .kind
+            .as_str()
+            .cmp(b.manifest.kind.as_str())
+            .then_with(|| {
+                a.manifest
+                    .name
+                    .to_lowercase()
+                    .cmp(&b.manifest.name.to_lowercase())
+            })
     });
     serde_json::to_value(entries).map_err(failure)
 }
@@ -369,16 +464,23 @@ async fn install_package(
     // The packument can lack `praxis` entirely even for a correct package (GitHub Packages).
     let manifest_value = match &entry.praxis {
         Some(value) => value.clone(),
-        None => read_praxis_manifest_from_tarball(&tarball, MAX_UNPACKED_TARBALL_BYTES)?.unwrap_or(Value::Null),
+        None => read_praxis_manifest_from_tarball(&tarball, MAX_UNPACKED_TARBALL_BYTES)?
+            .unwrap_or(Value::Null),
     };
     let validation = validate_addon_manifest(&manifest_value);
     let Some(manifest) = validation.manifest else {
-        return Err(format!("{package_name}@{version} has an invalid add-on manifest: {}", validation.errors.join("; ")));
+        return Err(format!(
+            "{package_name}@{version} has an invalid add-on manifest: {}",
+            validation.errors.join("; ")
+        ));
     };
     if let Some(min) = manifest.min_app_version.as_deref()
         && !meets_minimum(APP_VERSION, min)
     {
-        return Err(format!("{} needs Praxis {min} or newer; this build is {APP_VERSION}.", manifest.name));
+        return Err(format!(
+            "{} needs Praxis {min} or newer; this build is {APP_VERSION}.",
+            manifest.name
+        ));
     }
 
     let enabled = manifest.kind.is_declarative() || options.trust;
@@ -393,8 +495,14 @@ async fn install_package(
     store.write(&record, &tarball)?;
     log(&format!(
         "[marketplace] installed {}/{} {}{}",
-        record.manifest.kind, record.manifest.id, record.version,
-        if enabled { "" } else { " (disabled — grant trust to enable)" }
+        record.manifest.kind,
+        record.manifest.id,
+        record.version,
+        if enabled {
+            ""
+        } else {
+            " (disabled — grant trust to enable)"
+        }
     ));
     Ok(record)
 }
@@ -403,12 +511,16 @@ fn install(host: &HostContext, user_data_dir: &Path, args: &[Value]) -> Result<V
     let package_name = text(args, 0)?;
     let options = args.get(1).cloned().unwrap_or(Value::Null);
     let options = InstallOptions {
-        version: options.get("version").and_then(Value::as_str).map(str::to_string),
+        version: options
+            .get("version")
+            .and_then(Value::as_str)
+            .map(str::to_string),
         trust: options.get("trust").and_then(Value::as_bool) == Some(true),
     };
     let client = Client::new(host).map_err(failure)?;
     let store = storage(user_data_dir);
-    let record = block_on(install_package(&client, &store, package_name, &options)).map_err(failure)?;
+    let record =
+        block_on(install_package(&client, &store, package_name, &options)).map_err(failure)?;
     after_change(host, user_data_dir, record.manifest.kind);
     serde_json::to_value(record).map_err(failure)
 }
@@ -422,10 +534,21 @@ fn update(host: &HostContext, user_data_dir: &Path, args: &[Value]) -> Result<Va
     let kind = parse_kind(args)?;
     let id = text(args, 1)?;
     let store = storage(user_data_dir);
-    let current = store.get(kind, id).ok_or_else(|| failure(format!("No installed {kind} add-on with id \"{id}\".")))?;
+    let current = store
+        .get(kind, id)
+        .ok_or_else(|| failure(format!("No installed {kind} add-on with id \"{id}\".")))?;
     let client = Client::new(host).map_err(failure)?;
-    let options = InstallOptions { version: None, trust: current.enabled && !kind.is_declarative() };
-    let record = block_on(install_package(&client, &store, &current.package_name, &options)).map_err(failure)?;
+    let options = InstallOptions {
+        version: None,
+        trust: current.enabled && !kind.is_declarative(),
+    };
+    let record = block_on(install_package(
+        &client,
+        &store,
+        &current.package_name,
+        &options,
+    ))
+    .map_err(failure)?;
     after_change(host, user_data_dir, kind);
     serde_json::to_value(record).map_err(failure)
 }
@@ -439,7 +562,10 @@ fn check_for_updates(host: &HostContext, user_data_dir: &Path) -> Result<Value> 
             let packument = match client.get_packument(&addon.package_name).await {
                 Ok(packument) => packument,
                 Err(error) => {
-                    log(&format!("[marketplace] update check failed for {}: {error}", addon.package_name));
+                    log(&format!(
+                        "[marketplace] update check failed for {}: {error}",
+                        addon.package_name
+                    ));
                     continue;
                 }
             };
@@ -477,7 +603,11 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 fn discovery_root(user_data_dir: &Path, kind: AddonKind) -> PathBuf {
-    user_data_dir.join(if kind == AddonKind::Agent { "agents" } else { "skills" })
+    user_data_dir.join(if kind == AddonKind::Agent {
+        "agents"
+    } else {
+        "skills"
+    })
 }
 
 /// A built-in agent's folder holds its instructions; an add-on reusing its id never overwrites it.
@@ -513,8 +643,13 @@ fn sync_kind_into_discovery(user_data_dir: &Path, kind: AddonKind) {
 fn refresh_agent_runtime(host: &HostContext, user_data_dir: &Path) {
     sync_kind_into_discovery(user_data_dir, AddonKind::Agent);
     sync_kind_into_discovery(user_data_dir, AddonKind::Skill);
-    if let Err(error) = super::agent_runtime::dispatch(host, user_data_dir, "agentRuntime:refresh", &[]) {
-        log(&format!("[marketplace] agent runtime refresh failed: {}", error.message));
+    if let Err(error) =
+        super::agent_runtime::dispatch(host, user_data_dir, "agentRuntime:refresh", &[])
+    {
+        log(&format!(
+            "[marketplace] agent runtime refresh failed: {}",
+            error.message
+        ));
     }
 }
 
@@ -549,7 +684,9 @@ fn set_trust(host: &HostContext, user_data_dir: &Path, args: &[Value]) -> Result
     let enabled = args.get(2).and_then(Value::as_bool).unwrap_or(true);
     let store = storage(user_data_dir);
     if store.get(kind, id).is_none() {
-        return Err(failure(format!("No installed {kind} add-on with id \"{id}\".")));
+        return Err(failure(format!(
+            "No installed {kind} add-on with id \"{id}\"."
+        )));
     }
     store.set_enabled(kind, id, enabled).map_err(failure)?;
     refresh_agent_runtime(host, user_data_dir);
@@ -564,7 +701,10 @@ pub fn workflow_templates(user_data_dir: &Path) -> Vec<Value> {
 
 /// True when a retired runtime-pin package is installed and launch must reconcile.
 pub fn has_retired_pins(user_data_dir: &Path) -> bool {
-    storage(user_data_dir).list().iter().any(|a| a.manifest.kind == AddonKind::Agent && is_retired_pin(&a.package_name))
+    storage(user_data_dir)
+        .list()
+        .iter()
+        .any(|a| a.manifest.kind == AddonKind::Agent && is_retired_pin(&a.package_name))
 }
 
 /// Launch-time reconciliation: drop retired pin packages, then re-mirror agents and skills.
@@ -578,7 +718,9 @@ pub fn reconcile_installed_on_launch(host: &HostContext, user_data_dir: &Path) {
     for addon in &retired {
         let _ = store.remove(AddonKind::Agent, &addon.manifest.id);
         if !shadows_built_in(addon) {
-            let _ = fs::remove_dir_all(discovery_root(user_data_dir, AddonKind::Agent).join(&addon.manifest.id));
+            let _ = fs::remove_dir_all(
+                discovery_root(user_data_dir, AddonKind::Agent).join(&addon.manifest.id),
+            );
         }
     }
     if !retired.is_empty() {
@@ -589,12 +731,22 @@ pub fn reconcile_installed_on_launch(host: &HostContext, user_data_dir: &Path) {
 
 /// `@davidacres/praxis-addon-agent-[claude-|codex-]{planner,reviewer,implementer}`
 fn is_retired_pin(package_name: &str) -> bool {
-    let Some(rest) = package_name.strip_prefix(RETIRED_PIN_PACKAGE_PREFIX) else { return false };
-    let rest = rest.strip_prefix("claude-").or_else(|| rest.strip_prefix("codex-")).unwrap_or(rest);
+    let Some(rest) = package_name.strip_prefix(RETIRED_PIN_PACKAGE_PREFIX) else {
+        return false;
+    };
+    let rest = rest
+        .strip_prefix("claude-")
+        .or_else(|| rest.strip_prefix("codex-"))
+        .unwrap_or(rest);
     matches!(rest, "planner" | "reviewer" | "implementer")
 }
 
-pub fn dispatch(host: &HostContext, user_data_dir: &Path, channel: &str, args: &[Value]) -> Result<Value> {
+pub fn dispatch(
+    host: &HostContext,
+    user_data_dir: &Path,
+    channel: &str,
+    args: &[Value],
+) -> Result<Value> {
     match channel {
         "marketplace:getStatus" => Ok(status(host)),
         "marketplace:configure" => configure(host, args.first().unwrap_or(&Value::Null)),
@@ -612,7 +764,9 @@ pub fn dispatch(host: &HostContext, user_data_dir: &Path, channel: &str, args: &
         }
         "marketplace:listCatalog" => list_catalog(host),
         // Installed add-ons are read straight from disk: no registry, no token.
-        "marketplace:listInstalled" => serde_json::to_value(storage(user_data_dir).list()).map_err(failure),
+        "marketplace:listInstalled" => {
+            serde_json::to_value(storage(user_data_dir).list()).map_err(failure)
+        }
         "marketplace:listActiveAppearance" => {
             serde_json::to_value(storage(user_data_dir).read_active_appearance()).map_err(failure)
         }

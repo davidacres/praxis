@@ -18,7 +18,10 @@ pub struct Signal {
 }
 
 pub fn signal(label: impl Into<String>, tone: &str) -> Signal {
-    Signal { label: label.into(), tone: tone.to_owned() }
+    Signal {
+        label: label.into(),
+        tone: tone.to_owned(),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -54,7 +57,12 @@ pub struct Remediation {
 
 impl Remediation {
     pub fn new(kind: &str, label: impl Into<String>, description: impl Into<String>) -> Self {
-        Self { kind: kind.to_owned(), label: label.into(), description: description.into(), ..Self::default() }
+        Self {
+            kind: kind.to_owned(),
+            label: label.into(),
+            description: description.into(),
+            ..Self::default()
+        }
     }
     #[must_use]
     pub fn target(mut self, id: impl Into<String>) -> Self {
@@ -87,7 +95,15 @@ pub struct Finding {
 }
 
 impl Finding {
-    pub fn new(id: impl Into<String>, dimension: &str, severity: &str, delta: i64, title: impl Into<String>, evidence: impl Into<String>, remediation: Remediation) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        dimension: &str,
+        severity: &str,
+        delta: i64,
+        title: impl Into<String>,
+        evidence: impl Into<String>,
+        remediation: Remediation,
+    ) -> Self {
         Self {
             id: id.into(),
             dimension: dimension.to_owned(),
@@ -211,16 +227,31 @@ pub fn locale_cmp(a: &str, b: &str) -> Ordering {
             0
         }
     }
-    let primary = |s: &str| s.chars().map(|c| (class(c), c.to_lowercase().next().unwrap_or(c))).collect::<Vec<_>>();
+    let primary = |s: &str| {
+        s.chars()
+            .map(|c| (class(c), c.to_lowercase().next().unwrap_or(c)))
+            .collect::<Vec<_>>()
+    };
     primary(a).cmp(&primary(b)).then_with(|| {
-        a.chars().zip(b.chars()).find(|(x, y)| x != y).map_or(Ordering::Equal, |(x, _)| if x.is_lowercase() { Ordering::Less } else { Ordering::Greater })
+        a.chars()
+            .zip(b.chars())
+            .find(|(x, y)| x != y)
+            .map_or(Ordering::Equal, |(x, _)| {
+                if x.is_lowercase() {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            })
     })
 }
 
 /// `Number.prototype.toLocaleString('en-US')` for integers.
 pub fn group_digits(value: f64) -> String {
     let rounded = format!("{}", value.round() as i64);
-    let (sign, digits) = rounded.strip_prefix('-').map_or(("", rounded.as_str()), |d| ("-", d));
+    let (sign, digits) = rounded
+        .strip_prefix('-')
+        .map_or(("", rounded.as_str()), |d| ("-", d));
     let mut out = String::new();
     for (index, ch) in digits.chars().enumerate() {
         if index > 0 && (digits.len() - index) % 3 == 0 {
@@ -251,10 +282,24 @@ pub fn canonicalize(value: &Value) -> Value {
 pub fn bounded_messages(context: Option<&PriorContext>) -> Vec<Message> {
     let all: Vec<Message> = context
         .and_then(|c| c.recent_messages.as_ref())
-        .map(|messages| messages.iter().filter(|m| (m.role == "user" || m.role == "assistant") && !m.text.trim().is_empty()).cloned().collect())
+        .map(|messages| {
+            messages
+                .iter()
+                .filter(|m| {
+                    (m.role == "user" || m.role == "assistant") && !m.text.trim().is_empty()
+                })
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default();
     let start = all.len().saturating_sub(6);
-    all[start..].iter().map(|m| Message { role: m.role.clone(), text: m.text.trim().chars().take(1200).collect() }).collect()
+    all[start..]
+        .iter()
+        .map(|m| Message {
+            role: m.role.clone(),
+            text: m.text.trim().chars().take(1200).collect(),
+        })
+        .collect()
 }
 
 fn sorted_unique(items: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -265,7 +310,12 @@ fn sorted_unique(items: impl IntoIterator<Item = String>) -> Vec<String> {
 }
 
 fn strs(value: &Value) -> impl Iterator<Item = String> + '_ {
-    value.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned)
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
 }
 
 fn field<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -296,12 +346,25 @@ pub fn input_digest(input: &EvaluationInput) -> String {
         input
             .active_skills
             .clone()
-            .unwrap_or_else(|| session.map(|r| strs(&r["activeSkills"]).collect()).unwrap_or_default())
+            .unwrap_or_else(|| {
+                session
+                    .map(|r| strs(&r["activeSkills"]).collect())
+                    .unwrap_or_default()
+            })
             .into_iter()
             .map(|s| s.trim().to_owned()),
     );
-    let mcp = sorted_unique(input.configured_mcp_servers.iter().map(|s| s.trim().to_owned()));
-    let tags = sorted_unique(input.user_feedback.iter().flat_map(|f| strs(&f["frictionTags"]).map(|t| t.trim().to_owned()).collect::<Vec<_>>()));
+    let mcp = sorted_unique(
+        input
+            .configured_mcp_servers
+            .iter()
+            .map(|s| s.trim().to_owned()),
+    );
+    let tags = sorted_unique(input.user_feedback.iter().flat_map(|f| {
+        strs(&f["frictionTags"])
+            .map(|t| t.trim().to_owned())
+            .collect::<Vec<_>>()
+    }));
     let session_snapshot = session.map_or(Value::Null, |r| {
         let events: Vec<Value> = r["events"]
             .as_array()
@@ -371,7 +434,10 @@ pub fn input_digest(input: &EvaluationInput) -> String {
         "session": session_snapshot, "priorContext": prior, "clarity": clarity, "workspaceHints": hints, "userFeedback": user_feedback,
     }));
     let bytes = serde_json::to_string(&payload).unwrap_or_default();
-    Sha256::digest(bytes.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+    Sha256::digest(bytes.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 #[cfg(test)]
@@ -388,7 +454,11 @@ mod tests {
 
     #[test]
     fn digest_is_order_independent_for_catalogs() {
-        let mut a = EvaluationInput { kind: "prompt-readiness".into(), prompt_text: "x".into(), ..EvaluationInput::default() };
+        let mut a = EvaluationInput {
+            kind: "prompt-readiness".into(),
+            prompt_text: "x".into(),
+            ..EvaluationInput::default()
+        };
         a.configured_mcp_servers = vec!["b".into(), "a".into()];
         let mut b = a.clone();
         b.configured_mcp_servers = vec!["a".into(), "b".into()];

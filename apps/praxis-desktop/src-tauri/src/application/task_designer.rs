@@ -15,7 +15,10 @@ fn task_designer_file(user_data_dir: &Path) -> std::path::PathBuf {
 }
 
 fn primary_canvas_key(board_id: &str, connection_id: Option<&str>) -> String {
-    let scope = connection_id.map(str::trim).filter(|id| !id.is_empty()).unwrap_or("default");
+    let scope = connection_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .unwrap_or("default");
     format!("canvas.{scope}.{board_id}")
 }
 
@@ -66,7 +69,12 @@ fn issue_payload(issue: &Value, requested: &str) -> Option<Value> {
     Some(payload)
 }
 
-fn resolve_issue(host: &HostContext, catalog: &mut Catalog, key: &str, connection_id: Option<&str>) -> Result<Value> {
+fn resolve_issue(
+    host: &HostContext,
+    catalog: &mut Catalog,
+    key: &str,
+    connection_id: Option<&str>,
+) -> Result<Value> {
     let fetch = |catalog: &mut Catalog, key: &str| {
         let mut args = vec![json!(key)];
         if let Some(id) = connection_id {
@@ -75,19 +83,26 @@ fn resolve_issue(host: &HostContext, catalog: &mut Catalog, key: &str, connectio
         boards::dispatch(host, catalog, "issue:get", &args)
     };
     let issue = fetch(catalog, key)?;
-    let main = issue_payload(&issue, key).ok_or_else(|| failure(format!("Unable to resolve {key}.")))?;
+    let main =
+        issue_payload(&issue, key).ok_or_else(|| failure(format!("Unable to resolve {key}.")))?;
     let main_key = main["issueKey"].as_str().unwrap_or("").to_owned();
     let mut related: Vec<(String, &'static str)> = Vec::new();
-    let mut add = |related: &mut Vec<(String, &'static str)>, key: String, relation: &'static str| {
-        if key.is_empty() || key == main_key {
-            return;
-        }
-        match related.iter_mut().find(|(existing, _)| *existing == key) {
-            Some(entry) => entry.1 = relation,
-            None => related.push((key, relation)),
-        }
-    };
-    for dependency in issue["dependsOn"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+    let mut add =
+        |related: &mut Vec<(String, &'static str)>, key: String, relation: &'static str| {
+            if key.is_empty() || key == main_key {
+                return;
+            }
+            match related.iter_mut().find(|(existing, _)| *existing == key) {
+                Some(entry) => entry.1 = relation,
+                None => related.push((key, relation)),
+            }
+        };
+    for dependency in issue["dependsOn"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
         add(&mut related, dependency.trim().to_owned(), "dependsOn");
     }
     for sub in issue["subTasks"].as_array().into_iter().flatten() {
@@ -98,8 +113,12 @@ fn resolve_issue(host: &HostContext, catalog: &mut Catalog, key: &str, connectio
     let mut related_issues = Vec::new();
     let mut relations = Vec::new();
     for (related_key, relation) in related {
-        let Ok(found) = fetch(catalog, &related_key) else { continue };
-        let Some(mut normalized) = issue_payload(&found, &related_key) else { continue };
+        let Ok(found) = fetch(catalog, &related_key) else {
+            continue;
+        };
+        let Some(mut normalized) = issue_payload(&found, &related_key) else {
+            continue;
+        };
         let normalized_key = normalized["issueKey"].as_str().unwrap_or("").to_owned();
         normalized["relation"] = json!(relation);
         related_issues.push(normalized);
@@ -121,26 +140,41 @@ fn generate_master_plan(host: &HostContext, state: &Value) -> Result<Value> {
         .filter(|node| node["type"] == "ticket")
         .cloned()
         .collect();
-    let ids: std::collections::HashSet<&str> = tickets.iter().filter_map(|n| n["id"].as_str()).collect();
+    let ids: std::collections::HashSet<&str> =
+        tickets.iter().filter_map(|n| n["id"].as_str()).collect();
     let connectors: Vec<Value> = normalized["connectors"]
         .as_array()
         .into_iter()
         .flatten()
         .filter(|c| {
-            c["sourceNodeId"].as_str().is_some_and(|id| ids.contains(id))
-                && c["targetNodeId"].as_str().is_some_and(|id| ids.contains(id))
+            c["sourceNodeId"]
+                .as_str()
+                .is_some_and(|id| ids.contains(id))
+                && c["targetNodeId"]
+                    .as_str()
+                    .is_some_and(|id| ids.contains(id))
         })
         .cloned()
         .collect();
     if tickets.is_empty() {
-        return Err(failure("Add at least one ticket node before generating a master plan."));
+        return Err(failure(
+            "Add at least one ticket node before generating a master plan.",
+        ));
     }
     if let Some(message) = validate_graph(&connectors) {
         return Err(failure(format!("Cannot generate master plan: {message}")));
     }
-    let working_directory = host.settings().read().ai.working_directory.trim().to_owned();
+    let working_directory = host
+        .settings()
+        .read()
+        .ai
+        .working_directory
+        .trim()
+        .to_owned();
     if working_directory.is_empty() {
-        return Err(failure("Set a working directory under Settings → AI before generating a master plan."));
+        return Err(failure(
+            "Set a working directory under Settings → AI before generating a master plan.",
+        ));
     }
     let plans = Path::new(&working_directory).join(plan::MASTER_PLAN_DIRECTORY_NAME);
     let master = plans.join(plan::MASTER_PLAN_FILE_NAME);
@@ -157,10 +191,16 @@ fn generate_master_plan(host: &HostContext, state: &Value) -> Result<Value> {
             let name = format!("feature-{}-{}", feature.reference, feature.slug);
             let directory = generated.join(&name);
             std::fs::create_dir_all(&directory)?;
-            std::fs::write(directory.join(format!("{name}.md")), plan::feature_markdown(feature))?;
+            std::fs::write(
+                directory.join(format!("{name}.md")),
+                plan::feature_markdown(feature),
+            )?;
             for story in &feature.stories {
                 std::fs::write(
-                    directory.join(format!("story-{}-{}-{}.md", feature.reference, story.story_number, story.slug)),
+                    directory.join(format!(
+                        "story-{}-{}-{}.md",
+                        feature.reference, story.story_number, story.slug
+                    )),
                     plan::story_markdown(story),
                 )?;
             }
@@ -177,7 +217,9 @@ fn generate_master_plan(host: &HostContext, state: &Value) -> Result<Value> {
     let fingerprint = {
         use sha2::{Digest, Sha256};
         let hash = Sha256::digest(artifacts.master_plan_markdown.as_bytes());
-        hash.iter().map(|byte| format!("{byte:02x}")).collect::<String>()
+        hash.iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
     };
     Ok(json!({
         "outputPath": master,
@@ -188,7 +230,8 @@ fn generate_master_plan(host: &HostContext, state: &Value) -> Result<Value> {
     }))
 }
 
-const RECOMMENDATION_SYSTEM_PROMPT: &str = "You are an execution-planning assistant for a task designer canvas.
+const RECOMMENDATION_SYSTEM_PROMPT: &str =
+    "You are an execution-planning assistant for a task designer canvas.
 Return exactly one JSON code block and nothing else.
 
 Schema:
@@ -226,9 +269,17 @@ fn json_payload(text: &str) -> Option<String> {
 fn parse_recommendation(text: &str, nodes: &[Value]) -> Option<Value> {
     let parsed: Value = serde_json::from_str(&json_payload(text)?).ok()?;
     parsed.as_object()?;
-    let ids: Vec<String> = nodes.iter().filter_map(|n| n["id"].as_str().map(str::to_owned)).collect();
+    let ids: Vec<String> = nodes
+        .iter()
+        .filter_map(|n| n["id"].as_str().map(str::to_owned))
+        .collect();
     let mut ordered: Vec<String> = Vec::new();
-    for id in parsed["orderedNodeIds"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+    for id in parsed["orderedNodeIds"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
         let id = id.trim();
         if !id.is_empty() && ids.iter().any(|n| n == id) && !ordered.iter().any(|n| n == id) {
             ordered.push(id.to_owned());
@@ -245,12 +296,22 @@ fn parse_recommendation(text: &str, nodes: &[Value]) -> Option<Value> {
     let index = |id: &str| ordered.iter().position(|n| n == id);
     let mut connectors: Vec<(String, String)> = Vec::new();
     for connector in parsed["connectors"].as_array().into_iter().flatten() {
-        let source = connector["sourceNodeId"].as_str().unwrap_or_default().trim().to_owned();
-        let target = connector["targetNodeId"].as_str().unwrap_or_default().trim().to_owned();
+        let source = connector["sourceNodeId"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let target = connector["targetNodeId"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
         if source.is_empty() || target.is_empty() || source == target {
             continue;
         }
-        let (Some(from), Some(to)) = (index(&source), index(&target)) else { continue };
+        let (Some(from), Some(to)) = (index(&source), index(&target)) else {
+            continue;
+        };
         if from >= to || connectors.iter().any(|(s, t)| *s == source && *t == target) {
             continue;
         }
@@ -265,7 +326,11 @@ fn parse_recommendation(text: &str, nodes: &[Value]) -> Option<Value> {
         "orderedNodeIds": ordered,
         "connectors": connectors.iter().map(|(s, t)| json!({ "sourceNodeId": s, "targetNodeId": t })).collect::<Vec<_>>()
     });
-    if let Some(rationale) = parsed["rationale"].as_str().map(str::trim).filter(|r| !r.is_empty()) {
+    if let Some(rationale) = parsed["rationale"]
+        .as_str()
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+    {
         result["rationale"] = json!(rationale);
     }
     Some(result)
@@ -273,17 +338,28 @@ fn parse_recommendation(text: &str, nodes: &[Value]) -> Option<Value> {
 
 fn gateway_key_configured(host: &HostContext) -> bool {
     super::ai_providers::api_connection(host, "vercel-gateway")
-        .map(|(connection, _)| connection.options.api_key.as_deref().is_some_and(|k| !k.trim().is_empty()))
+        .map(|(connection, _)| {
+            connection
+                .options
+                .api_key
+                .as_deref()
+                .is_some_and(|k| !k.trim().is_empty())
+        })
         .unwrap_or(false)
 }
 
-fn recommend_with_gateway(host: &HostContext, nodes: &[Value], connectors: &[Value]) -> Result<Value> {
+fn recommend_with_gateway(
+    host: &HostContext,
+    nodes: &[Value],
+    connectors: &[Value],
+) -> Result<Value> {
     let (connection, model) = super::ai_providers::api_connection(host, "vercel-gateway")?;
     if nodes.is_empty() {
         return Ok(json!({ "orderedNodeIds": [], "connectors": [] }));
     }
     let prompt = [
-        "Recommend a start-to-finish execution flow for this existing task-designer canvas.".to_owned(),
+        "Recommend a start-to-finish execution flow for this existing task-designer canvas."
+            .to_owned(),
         "Prioritize dependency-safe sequencing and practical implementation order.".to_owned(),
         String::new(),
         "Canvas nodes (JSON):".to_owned(),
@@ -293,36 +369,66 @@ fn recommend_with_gateway(host: &HostContext, nodes: &[Value], connectors: &[Val
         serde_json::to_string_pretty(connectors).unwrap_or_default(),
     ]
     .join("\n");
-    let (content, _) = super::runtime::block_on(super::api_host::run_provider_prompt(&connection, &model, RECOMMENDATION_SYSTEM_PROMPT, &prompt, None, |_| {}))
-        .map_err(failure)?;
-    parse_recommendation(&content, nodes).ok_or_else(|| failure("Gateway flow recommendation did not return a valid JSON result."))
+    let (content, _) = super::runtime::block_on(super::api_host::run_provider_prompt(
+        &connection,
+        &model,
+        RECOMMENDATION_SYSTEM_PROMPT,
+        &prompt,
+        None,
+        |_| {},
+    ))
+    .map_err(failure)?;
+    parse_recommendation(&content, nodes)
+        .ok_or_else(|| failure("Gateway flow recommendation did not return a valid JSON result."))
 }
 
 fn recommend_flow(host: &HostContext, args: &[Value]) -> Result<Value> {
     if !gateway_key_configured(host) {
-        return Err(failure("No Vercel AI Gateway API key configured. Add one under Settings → AI Provider."));
+        return Err(failure(
+            "No Vercel AI Gateway API key configured. Add one under Settings → AI Provider.",
+        ));
     }
-    let nodes = args.first().and_then(Value::as_array).cloned().unwrap_or_default();
+    let nodes = args
+        .first()
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     if nodes.len() < 2 {
-        return Err(failure("Add at least two ticket nodes before requesting an AI recommendation."));
+        return Err(failure(
+            "Add at least two ticket nodes before requesting an AI recommendation.",
+        ));
     }
-    let connectors = args.get(1).and_then(Value::as_array).cloned().unwrap_or_default();
+    let connectors = args
+        .get(1)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     recommend_with_gateway(host, &nodes, &connectors)
 }
 
-fn recommend_board_flow(host: &HostContext, catalog: &mut Catalog, args: &[Value]) -> Result<Value> {
+fn recommend_board_flow(
+    host: &HostContext,
+    catalog: &mut Catalog,
+    args: &[Value],
+) -> Result<Value> {
     if !gateway_key_configured(host) {
-        return Err(failure("No Vercel AI Gateway API key configured. Add one under Settings → AI Provider."));
+        return Err(failure(
+            "No Vercel AI Gateway API key configured. Add one under Settings → AI Provider.",
+        ));
     }
     let board = args.first().cloned().unwrap_or(Value::Null);
     let name = board["name"].as_str().unwrap_or_default().to_owned();
     let details = boards::dispatch(host, catalog, "board:get", &[board.clone()])?;
     let issues = details["issues"].as_array().cloned().unwrap_or_default();
     if issues.is_empty() {
-        return Err(failure(format!("Board \"{name}\" has no tickets to recommend.")));
+        return Err(failure(format!(
+            "Board \"{name}\" has no tickets to recommend."
+        )));
     }
     if issues.len() < 2 {
-        return Err(failure(format!("Board \"{name}\" needs at least two tickets for AI recommendation.")));
+        return Err(failure(format!(
+            "Board \"{name}\" needs at least two tickets for AI recommendation."
+        )));
     }
     let nodes: Vec<Value> = issues
         .iter()
@@ -365,7 +471,9 @@ pub fn dispatch(
         }
         "taskDesigner:setState" => {
             let key = primary_canvas_key(text(args, 0)?, args.get(1).and_then(Value::as_str));
-            let incoming = args.get(2).ok_or_else(|| failure("Canvas state is required."))?;
+            let incoming = args
+                .get(2)
+                .ok_or_else(|| failure("Canvas state is required."))?;
             let mut canvases = read_all_canvases(user_data_dir)?;
             let recovered = normalize(Some(incoming));
             if recovered.repaired {
@@ -377,7 +485,10 @@ pub fn dispatch(
                     "state": recovered.state
                 }));
             }
-            let connectors: Vec<Value> = recovered.state["connectors"].as_array().cloned().unwrap_or_default();
+            let connectors: Vec<Value> = recovered.state["connectors"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             if let Some(message) = validate_graph(&connectors) {
                 let persisted = normalize(canvases.get(&key)).state;
                 return Ok(json!({ "ok": false, "warning": message, "state": persisted }));
@@ -387,7 +498,11 @@ pub fn dispatch(
             Ok(json!({ "ok": true, "state": recovered.state }))
         }
         "taskDesigner:resolveIssue" => {
-            let key = args.first().and_then(Value::as_str).map(str::trim).unwrap_or("");
+            let key = args
+                .first()
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("");
             if key.is_empty() {
                 return Err(failure("Dropped issue key is missing."));
             }
@@ -396,7 +511,9 @@ pub fn dispatch(
         "taskDesigner:recommendFlow" => recommend_flow(host, args),
         "taskDesigner:recommendBoardFlow" => recommend_board_flow(host, catalog, args),
         "taskDesigner:generateMasterPlan" => {
-            let state = args.get(2).ok_or_else(|| failure("Canvas state is required."))?;
+            let state = args
+                .get(2)
+                .ok_or_else(|| failure("Canvas state is required."))?;
             generate_master_plan(host, state)
         }
         _ => Err(failure("Unknown task designer operation.")),

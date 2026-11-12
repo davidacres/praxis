@@ -16,7 +16,8 @@ use serde_json::{Map, Value, json};
 use super::catalog::{discover_skills, yaml_scalar};
 use super::{fingerprint, front_matter_pair, locale_cmp, resolve};
 
-pub const NATIVE_ECOSYSTEMS: [&str; 6] = ["claude", "codex", "agents", "copilot", "gemini", "cursor"];
+pub const NATIVE_ECOSYSTEMS: [&str; 6] =
+    ["claude", "codex", "agents", "copilot", "gemini", "cursor"];
 
 #[must_use]
 pub fn ecosystem_label(ecosystem: &str) -> &'static str {
@@ -102,10 +103,20 @@ struct Pattern {
 }
 
 const fn file(file: &'static str, read_by: &'static [&'static str]) -> Pattern {
-    Pattern { file: Some(file), dir: None, suffix: "", read_by }
+    Pattern {
+        file: Some(file),
+        dir: None,
+        suffix: "",
+        read_by,
+    }
 }
 const fn dir(dir: &'static str, suffix: &'static str, read_by: &'static [&'static str]) -> Pattern {
-    Pattern { file: None, dir: Some(dir), suffix, read_by }
+    Pattern {
+        file: None,
+        dir: Some(dir),
+        suffix,
+        read_by,
+    }
 }
 
 struct Layout {
@@ -125,7 +136,10 @@ const NONE: &[&str] = &[];
 fn layout(ecosystem: &str) -> Layout {
     match ecosystem {
         "claude" => Layout {
-            project_instructions: vec![file("CLAUDE.md", &["claude-code-cli"]), file(".claude/CLAUDE.md", &["claude-code-cli"])],
+            project_instructions: vec![
+                file("CLAUDE.md", &["claude-code-cli"]),
+                file(".claude/CLAUDE.md", &["claude-code-cli"]),
+            ],
             user_instructions: vec![file(".claude/CLAUDE.md", &["claude-code-cli"])],
             agent_project: Some(".claude/agents"),
             agent_user: Some(".claude/agents"),
@@ -184,7 +198,10 @@ fn layout(ecosystem: &str) -> Layout {
             skills_read_by: &["antigravity-cli"],
         },
         _ => Layout {
-            project_instructions: vec![file(".cursorrules", &["cursor-cli"]), dir(".cursor/rules", ".mdc", &["cursor-cli"])],
+            project_instructions: vec![
+                file(".cursorrules", &["cursor-cli"]),
+                dir(".cursor/rules", ".mdc", &["cursor-cli"]),
+            ],
             user_instructions: vec![],
             agent_project: None,
             agent_user: None,
@@ -207,11 +224,17 @@ struct FrontMatter {
 
 fn front_matter(content: &str) -> FrontMatter {
     let normalized = content.strip_prefix('\u{feff}').unwrap_or(content);
-    let plain = || FrontMatter { values: HashMap::new(), body: normalized.trim().to_owned(), has_front_matter: false };
+    let plain = || FrontMatter {
+        values: HashMap::new(),
+        body: normalized.trim().to_owned(),
+        has_front_matter: false,
+    };
     if !normalized.starts_with("---") {
         return plain();
     }
-    let Some(end) = normalized[3..].find("\n---").map(|at| at + 3) else { return plain() };
+    let Some(end) = normalized[3..].find("\n---").map(|at| at + 3) else {
+        return plain();
+    };
     let values = normalized[3..end]
         .lines()
         .filter_map(front_matter_pair)
@@ -221,7 +244,11 @@ fn front_matter(content: &str) -> FrontMatter {
         .get(end + 4..)
         .and_then(|rest| rest.find('\n').map(|at| rest[at + 1..].trim().to_owned()))
         .unwrap_or_default();
-    FrontMatter { values, body, has_front_matter: true }
+    FrontMatter {
+        values,
+        body,
+        has_front_matter: true,
+    }
 }
 
 /// `csharp-dotnet-code-reviewer` becomes `Csharp Dotnet Code Reviewer`.
@@ -232,7 +259,10 @@ pub fn humanize_identifier(value: &str) -> String {
         .filter(|word| !word.is_empty())
         .map(|word| {
             let mut chars = word.chars();
-            chars.next().map(|first| first.to_uppercase().collect::<String>() + chars.as_str()).unwrap_or_default()
+            chars
+                .next()
+                .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+                .unwrap_or_default()
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -249,7 +279,10 @@ pub fn summarize_description(raw: Option<&str>) -> Option<String> {
         None => &unescaped,
     };
     let first_paragraph = first_paragraph(before_example);
-    let text = first_paragraph.split_whitespace().collect::<Vec<_>>().join(" ");
+    let text = first_paragraph
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
     if text.is_empty() {
         return None;
     }
@@ -281,7 +314,19 @@ fn is_word_char(c: char) -> bool {
 }
 
 fn is_write_tool(tool: &str) -> bool {
-    const WORDS: [&str; 11] = ["write", "edit", "multiedit", "bash", "shell", "notebookedit", "run_shell_command", "execute", "terminal", "create", "replace"];
+    const WORDS: [&str; 11] = [
+        "write",
+        "edit",
+        "multiedit",
+        "bash",
+        "shell",
+        "notebookedit",
+        "run_shell_command",
+        "execute",
+        "terminal",
+        "create",
+        "replace",
+    ];
     let lower = tool.to_lowercase();
     WORDS.iter().any(|word| {
         lower.match_indices(word).any(|(at, _)| {
@@ -306,22 +351,36 @@ pub fn tool_mode_from_list(tools: Option<&str>) -> Option<&'static str> {
     if list.is_empty() || list.iter().any(|tool| tool == "*") {
         return None;
     }
-    if list.iter().any(|tool| is_write_tool(tool)) { None } else { Some("read-only") }
+    if list.iter().any(|tool| is_write_tool(tool)) {
+        None
+    } else {
+        Some("read-only")
+    }
 }
 
 fn valid_id(name: &str) -> bool {
     let mut chars = name.chars();
-    chars.next().is_some_and(|c| c.is_ascii_alphanumeric()) && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
 /// Parses a Claude Code, Copilot (`.agent.md`) or Gemini agent file into a Praxis profile.
 #[must_use]
-pub fn parse_native_agent(content: &str, file_name: &str, suffix: &str) -> (Value, Option<&'static str>) {
+pub fn parse_native_agent(
+    content: &str,
+    file_name: &str,
+    suffix: &str,
+) -> (Value, Option<&'static str>) {
     let parsed = front_matter(content);
     let fallback_id = file_name
         .strip_suffix(suffix)
         .map(str::to_owned)
-        .unwrap_or_else(|| Path::new(file_name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default());
+        .unwrap_or_else(|| {
+            Path::new(file_name)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        });
     let name = parsed.values.get("name").filter(|name| !name.is_empty());
     let id = match name {
         Some(name) if valid_id(name) => name.clone(),
@@ -329,17 +388,28 @@ pub fn parse_native_agent(content: &str, file_name: &str, suffix: &str) -> (Valu
     }
     .to_lowercase();
     let display_name = match name {
-        Some(name) if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')) => name.clone(),
+        Some(name)
+            if !name.chars().all(|c| {
+                c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')
+            }) =>
+        {
+            name.clone()
+        }
         _ => humanize_identifier(&id),
     };
     let mut profile = json!({ "id": id, "name": display_name, "instructions": parsed.body });
-    if let Some(description) = summarize_description(parsed.values.get("description").map(String::as_str)) {
+    if let Some(description) =
+        summarize_description(parsed.values.get("description").map(String::as_str))
+    {
         profile["description"] = json!(description);
     }
     if let Some(mode) = tool_mode_from_list(parsed.values.get("tools").map(String::as_str)) {
         profile["toolMode"] = json!(mode);
     }
-    let error = parsed.body.is_empty().then_some("The agent file has no instructions after its front matter.");
+    let error = parsed
+        .body
+        .is_empty()
+        .then_some("The agent file has no instructions after its front matter.");
     (profile, error)
 }
 
@@ -352,20 +422,42 @@ fn read_small(path: &Path) -> Option<String> {
 }
 
 fn files_with_suffix(dir: &Path, suffix: &str) -> Vec<PathBuf> {
-    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
     let mut found: Vec<PathBuf> = entries
         .flatten()
-        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()) && entry.file_name().to_string_lossy().ends_with(suffix))
+        .filter(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_file())
+                && entry.file_name().to_string_lossy().ends_with(suffix)
+        })
         .map(|entry| entry.path())
         .collect();
     found.sort();
     found
 }
 
-fn display_path_for(file: &Path, scope: &str, project_root: Option<&Path>, home_dir: &Path) -> String {
-    let base = if scope == "project" { project_root } else { Some(home_dir) };
-    let relative = base.and_then(|base| file.strip_prefix(base).ok()).unwrap_or(file).to_string_lossy().into_owned();
-    if scope == "user" { format!("~/{relative}") } else { relative }
+fn display_path_for(
+    file: &Path,
+    scope: &str,
+    project_root: Option<&Path>,
+    home_dir: &Path,
+) -> String {
+    let base = if scope == "project" {
+        project_root
+    } else {
+        Some(home_dir)
+    };
+    let relative = base
+        .and_then(|base| file.strip_prefix(base).ok())
+        .unwrap_or(file)
+        .to_string_lossy()
+        .into_owned();
+    if scope == "user" {
+        format!("~/{relative}")
+    } else {
+        relative
+    }
 }
 
 /// The nearest ancestor holding `.git` (the project root other tools also use), else `dir`.
@@ -392,7 +484,10 @@ fn source_json(ecosystem: &str, scope: &str, path: &Path, read_by: &[&str]) -> V
 
 #[must_use]
 pub fn discover_native_sources(options: &NativeSourceOptions) -> NativeSourceDiscovery {
-    let mut found = NativeSourceDiscovery { project_root: options.project_root.clone(), ..Default::default() };
+    let mut found = NativeSourceDiscovery {
+        project_root: options.project_root.clone(),
+        ..Default::default()
+    };
     let mut bases: Vec<(&'static str, &Path)> = Vec::new();
     if let Some(root) = &options.project_root {
         bases.push(("project", root));
@@ -401,10 +496,17 @@ pub fn discover_native_sources(options: &NativeSourceOptions) -> NativeSourceDis
     let trusted_for = |scope: &str| scope == "user" || options.project_approved;
     let mut seen_paths: HashSet<PathBuf> = HashSet::new();
 
-    for ecosystem in NATIVE_ECOSYSTEMS.iter().filter(|e| options.enabled.get(**e) != Some(&false)) {
+    for ecosystem in NATIVE_ECOSYSTEMS
+        .iter()
+        .filter(|e| options.enabled.get(**e) != Some(&false))
+    {
         let layout = layout(ecosystem);
         for &(scope, root) in &bases {
-            let patterns = if scope == "project" { &layout.project_instructions } else { &layout.user_instructions };
+            let patterns = if scope == "project" {
+                &layout.project_instructions
+            } else {
+                &layout.user_instructions
+            };
             for pattern in patterns {
                 let files = match (pattern.file, pattern.dir) {
                     (Some(name), _) => vec![root.join(name)],
@@ -415,35 +517,64 @@ pub fn discover_native_sources(options: &NativeSourceOptions) -> NativeSourceDis
                     if seen_paths.contains(&path) {
                         continue;
                     }
-                    let Some(content) = read_small(&path).filter(|content| !content.trim().is_empty()) else { continue };
+                    let Some(content) =
+                        read_small(&path).filter(|content| !content.trim().is_empty())
+                    else {
+                        continue;
+                    };
                     seen_paths.insert(path.clone());
                     let parsed = front_matter(&content);
-                    let applies_to = parsed.values.get("applyto").or_else(|| parsed.values.get("globs")).filter(|v| !v.is_empty()).cloned();
+                    let applies_to = parsed
+                        .values
+                        .get("applyto")
+                        .or_else(|| parsed.values.get("globs"))
+                        .filter(|v| !v.is_empty())
+                        .cloned();
                     let always_applies = if path.to_string_lossy().ends_with(".mdc") {
                         parsed.values.get("alwaysapply").map(String::as_str) == Some("true")
                     } else {
-                        applies_to.as_deref().is_none_or(|glob| glob == "**" || glob == "**/*")
+                        applies_to
+                            .as_deref()
+                            .is_none_or(|glob| glob == "**" || glob == "**/*")
                     };
                     found.instructions.push(NativeInstructionFile {
                         ecosystem,
                         scope,
-                        display_path: display_path_for(&path, scope, options.project_root.as_deref(), &options.home_dir),
+                        display_path: display_path_for(
+                            &path,
+                            scope,
+                            options.project_root.as_deref(),
+                            &options.home_dir,
+                        ),
                         path,
                         read_by: pattern.read_by,
                         bytes: content.len(),
                         fingerprint: fingerprint(&content),
-                        content: if parsed.has_front_matter { parsed.body } else { content.trim().to_owned() },
+                        content: if parsed.has_front_matter {
+                            parsed.body
+                        } else {
+                            content.trim().to_owned()
+                        },
                         always_applies,
                         applies_to,
                     });
                 }
             }
 
-            let agent_dir = if scope == "project" { layout.agent_project } else { layout.agent_user };
+            let agent_dir = if scope == "project" {
+                layout.agent_project
+            } else {
+                layout.agent_user
+            };
             if let Some(agent_dir) = agent_dir {
                 for path in files_with_suffix(&root.join(agent_dir), layout.agent_suffix) {
-                    let Some(content) = read_small(&path) else { continue };
-                    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    let Some(content) = read_small(&path) else {
+                        continue;
+                    };
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
                     let (profile, error) = parse_native_agent(&content, &name, layout.agent_suffix);
                     let mut entry = json!({
                         "profile": profile,
@@ -462,15 +593,28 @@ pub fn discover_native_sources(options: &NativeSourceOptions) -> NativeSourceDis
                 }
             }
 
-            let skill_dirs = if scope == "project" { layout.skills_project } else { layout.skills_user };
+            let skill_dirs = if scope == "project" {
+                layout.skills_project
+            } else {
+                layout.skills_user
+            };
             for skill_dir in skill_dirs {
                 let dir = root.join(skill_dir);
-                let trusted_roots = if trusted_for(scope) { vec![dir.clone()] } else { Vec::new() };
+                let trusted_roots = if trusted_for(scope) {
+                    vec![dir.clone()]
+                } else {
+                    Vec::new()
+                };
                 for mut skill in discover_skills(&[dir], &trusted_roots) {
                     let skill_path = PathBuf::from(skill["skillPath"].as_str().unwrap_or_default());
-                    skill["scope"] = json!(if scope == "project" { "project" } else { "global" });
+                    skill["scope"] = json!(if scope == "project" {
+                        "project"
+                    } else {
+                        "global"
+                    });
                     skill["trusted"] = json!(trusted_for(scope));
-                    skill["source"] = source_json(ecosystem, scope, &skill_path, layout.skills_read_by);
+                    skill["source"] =
+                        source_json(ecosystem, scope, &skill_path, layout.skills_read_by);
                     found.skills.push(skill);
                 }
             }
@@ -488,9 +632,18 @@ pub fn discover_native_sources(options: &NativeSourceOptions) -> NativeSourceDis
     }
     for extra in &options.extra_agent_paths {
         for path in files_with_suffix(extra, ".md") {
-            let Some(content) = read_small(&path) else { continue };
-            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let suffix = if name.ends_with(".agent.md") { ".agent.md" } else { ".md" };
+            let Some(content) = read_small(&path) else {
+                continue;
+            };
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let suffix = if name.ends_with(".agent.md") {
+                ".agent.md"
+            } else {
+                ".md"
+            };
             let (profile, error) = parse_native_agent(&content, &name, suffix);
             let mut entry = json!({
                 "profile": profile,
@@ -520,7 +673,11 @@ fn catalog_rank(item: &Value) -> u8 {
         None if item["builtIn"] == true => 4,
         None => u8::from(item["scope"] != "project"),
         Some(source) => {
-            if source["scope"] == "project" { 2 } else { 3 }
+            if source["scope"] == "project" {
+                2
+            } else {
+                3
+            }
         }
     }
 }
@@ -529,7 +686,11 @@ fn source_label(source: &Value) -> String {
     format!(
         "{} · {}",
         ecosystem_label(source["ecosystem"].as_str().unwrap_or_default()),
-        if source["scope"] == "project" { "project" } else { "your user folder" }
+        if source["scope"] == "project" {
+            "project"
+        } else {
+            "your user folder"
+        }
     )
 }
 
@@ -573,7 +734,13 @@ pub fn merge_by_id(items: Vec<Value>, id_of: impl Fn(&Value) -> String) -> Vec<V
 
 // ── instructions for a session ───────────────────────────────────────────
 
-const INSTRUCTION_ORDER: [&str; 5] = ["AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "GEMINI.md", ".github/copilot-instructions.md"];
+const INSTRUCTION_ORDER: [&str; 5] = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".claude/CLAUDE.md",
+    "GEMINI.md",
+    ".github/copilot-instructions.md",
+];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionInstructions {
@@ -593,15 +760,25 @@ pub fn build_session_instructions(
     project_approved: bool,
     source: &str,
 ) -> SessionInstructions {
-    let rank = |file: &NativeInstructionFile| INSTRUCTION_ORDER.iter().position(|name| *name == file.display_path).unwrap_or(INSTRUCTION_ORDER.len());
+    let rank = |file: &NativeInstructionFile| {
+        INSTRUCTION_ORDER
+            .iter()
+            .position(|name| *name == file.display_path)
+            .unwrap_or(INSTRUCTION_ORDER.len())
+    };
     let mut ordered: Vec<&NativeInstructionFile> = files.iter().collect();
-    ordered.sort_by(|a, b| rank(a).cmp(&rank(b)).then_with(|| locale_cmp(&a.display_path, &b.display_path)));
+    ordered.sort_by(|a, b| {
+        rank(a)
+            .cmp(&rank(b))
+            .then_with(|| locale_cmp(&a.display_path, &b.display_path))
+    });
     let mut result = SessionInstructions::default();
     let mut seen: HashSet<String> = HashSet::new();
     let mut sections: Vec<String> = Vec::new();
     let mut used = 0usize;
     for file in ordered {
-        let mut skip = |reason: &'static str| result.skipped.push((file.display_path.clone(), reason));
+        let mut skip =
+            |reason: &'static str| result.skipped.push((file.display_path.clone(), reason));
         if file.scope != "project" {
             skip("user-scope");
             continue;
@@ -622,7 +799,11 @@ pub fn build_session_instructions(
             skip("path-specific");
             continue;
         }
-        let normalized = file.content.split_whitespace().collect::<Vec<_>>().join(" ");
+        let normalized = file
+            .content
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         if normalized.is_empty() || seen.contains(&normalized) {
             skip("duplicate");
             continue;
@@ -635,7 +816,11 @@ pub fn build_session_instructions(
         seen.insert(normalized);
         used += length;
         result.included.push(file.display_path.clone());
-        sections.push(format!("### {}\n\n{}", file.display_path, file.content.trim()));
+        sections.push(format!(
+            "### {}\n\n{}",
+            file.display_path,
+            file.content.trim()
+        ));
     }
     if !sections.is_empty() {
         let mut parts = vec![
@@ -652,8 +837,17 @@ pub fn build_session_instructions(
 #[must_use]
 pub fn native_project_json(found: &NativeSourceDiscovery, approved: bool) -> Option<Value> {
     let root = found.project_root.as_ref()?;
-    let project_items = found.agents.iter().chain(found.skills.iter()).filter(|item| item["source"]["scope"] == "project").count()
-        + found.instructions.iter().filter(|file| file.scope == "project").count();
+    let project_items = found
+        .agents
+        .iter()
+        .chain(found.skills.iter())
+        .filter(|item| item["source"]["scope"] == "project")
+        .count()
+        + found
+            .instructions
+            .iter()
+            .filter(|file| file.scope == "project")
+            .count();
     let total = found.agents.len() + found.skills.len() + found.instructions.len();
     (total > 0).then(|| json!({ "root": root.to_string_lossy(), "approved": approved, "itemCount": project_items }))
 }
@@ -698,32 +892,74 @@ mod tests {
         fs::create_dir_all(repo.join(".git")).expect("git");
         put(&repo, "AGENTS.md", "# Conventions\n\nPELICAN.");
         put(&repo, "CLAUDE.md", "CORMORANT.");
-        put(&repo, ".claude/agents/release-notes.md", "---\nname: release-notes\ndescription: Drafts release notes.\ntools: Read, Grep\n---\nSign off with HERON.");
-        put(&repo, ".claude/skills/deploy/SKILL.md", "---\nname: deploy\ndescription: Deploys.\n---\nKESTREL.");
-        put(&home, ".claude/agents/csharp-reviewer.md", "---\nname: csharp-reviewer\ndescription: Reviews C#.\n---\nYou review C#.");
+        put(
+            &repo,
+            ".claude/agents/release-notes.md",
+            "---\nname: release-notes\ndescription: Drafts release notes.\ntools: Read, Grep\n---\nSign off with HERON.",
+        );
+        put(
+            &repo,
+            ".claude/skills/deploy/SKILL.md",
+            "---\nname: deploy\ndescription: Deploys.\n---\nKESTREL.",
+        );
+        put(
+            &home,
+            ".claude/agents/csharp-reviewer.md",
+            "---\nname: csharp-reviewer\ndescription: Reviews C#.\n---\nYou review C#.",
+        );
         put(&home, ".codex/AGENTS.md", "Personal.");
         (base, repo, home)
     }
 
     fn options(repo: &Path, home: &Path, approved: bool) -> NativeSourceOptions {
-        NativeSourceOptions { project_root: Some(repo.to_path_buf()), home_dir: home.to_path_buf(), project_approved: approved, ..Default::default() }
+        NativeSourceOptions {
+            project_root: Some(repo.to_path_buf()),
+            home_dir: home.to_path_buf(),
+            project_approved: approved,
+            ..Default::default()
+        }
     }
 
     #[test]
     fn discovers_agents_skills_and_instructions_with_trust() {
         let (base, repo, home) = fixture("disc");
         let found = discover_native_sources(&options(&repo, &home, false));
-        let project_agent = found.agents.iter().find(|a| a["profile"]["id"] == "release-notes").expect("agent");
+        let project_agent = found
+            .agents
+            .iter()
+            .find(|a| a["profile"]["id"] == "release-notes")
+            .expect("agent");
         assert_eq!(project_agent["trusted"], false);
         assert_eq!(project_agent["profile"]["name"], "Release Notes");
         assert_eq!(project_agent["profile"]["toolMode"], "read-only");
-        assert_eq!(project_agent["source"]["readBy"], json!(["claude-code-cli"]));
-        let user_agent = found.agents.iter().find(|a| a["profile"]["id"] == "csharp-reviewer").expect("user agent");
+        assert_eq!(
+            project_agent["source"]["readBy"],
+            json!(["claude-code-cli"])
+        );
+        let user_agent = found
+            .agents
+            .iter()
+            .find(|a| a["profile"]["id"] == "csharp-reviewer")
+            .expect("user agent");
         assert_eq!(user_agent["trusted"], true);
         assert_eq!(user_agent["scope"], "global");
-        assert!(found.skills.iter().any(|s| s["metadata"]["name"] == "deploy" && s["trusted"] == false));
-        let paths: Vec<&str> = found.instructions.iter().map(|f| f.display_path.as_str()).collect();
-        assert!(paths.contains(&"AGENTS.md") && paths.contains(&"CLAUDE.md") && paths.contains(&"~/.codex/AGENTS.md"), "{paths:?}");
+        assert!(
+            found
+                .skills
+                .iter()
+                .any(|s| s["metadata"]["name"] == "deploy" && s["trusted"] == false)
+        );
+        let paths: Vec<&str> = found
+            .instructions
+            .iter()
+            .map(|f| f.display_path.as_str())
+            .collect();
+        assert!(
+            paths.contains(&"AGENTS.md")
+                && paths.contains(&"CLAUDE.md")
+                && paths.contains(&"~/.codex/AGENTS.md"),
+            "{paths:?}"
+        );
         let approved = discover_native_sources(&options(&repo, &home, true));
         assert!(approved.agents.iter().all(|a| a["trusted"] == true));
         let summary = native_project_json(&approved, true).expect("project");
@@ -738,12 +974,21 @@ mod tests {
         let api = build_session_instructions(&found.instructions, "gateway", true, "all");
         assert!(api.text.contains("PELICAN") && api.text.contains("CORMORANT"));
         assert!(!api.text.contains("Personal"));
-        assert!(api.text.find("PELICAN") < api.text.find("CORMORANT"), "AGENTS.md first");
-        let claude = build_session_instructions(&found.instructions, "claude-code-cli", true, "all");
+        assert!(
+            api.text.find("PELICAN") < api.text.find("CORMORANT"),
+            "AGENTS.md first"
+        );
+        let claude =
+            build_session_instructions(&found.instructions, "claude-code-cli", true, "all");
         assert!(!claude.text.contains("CORMORANT") && claude.text.contains("PELICAN"));
-        let only_claude = build_session_instructions(&found.instructions, "gateway", true, "claude");
+        let only_claude =
+            build_session_instructions(&found.instructions, "gateway", true, "claude");
         assert!(only_claude.text.contains("CORMORANT") && !only_claude.text.contains("PELICAN"));
-        assert!(build_session_instructions(&found.instructions, "gateway", false, "all").text.is_empty());
+        assert!(
+            build_session_instructions(&found.instructions, "gateway", false, "all")
+                .text
+                .is_empty()
+        );
         let _ = fs::remove_dir_all(base);
     }
 
@@ -762,17 +1007,27 @@ mod tests {
         let own = json!({ "profile": { "id": "a" }, "scope": "global" });
         let project = json!({ "profile": { "id": "a" }, "scope": "project", "source": { "ecosystem": "claude", "scope": "project" } });
         let user = json!({ "profile": { "id": "a" }, "scope": "global", "source": { "ecosystem": "codex", "scope": "user" } });
-        let merged = merge_by_id(vec![user.clone(), project.clone()], |v| v["profile"]["id"].as_str().unwrap().to_owned());
+        let merged = merge_by_id(vec![user.clone(), project.clone()], |v| {
+            v["profile"]["id"].as_str().unwrap().to_owned()
+        });
         assert_eq!(merged[0]["source"]["ecosystem"], "claude");
         assert_eq!(merged[0]["alsoIn"], json!(["Codex · your user folder"]));
-        let merged = merge_by_id(vec![project, own, user], |v| v["profile"]["id"].as_str().unwrap().to_owned());
+        let merged = merge_by_id(vec![project, own, user], |v| {
+            v["profile"]["id"].as_str().unwrap().to_owned()
+        });
         assert!(merged[0].get("source").is_none());
-        assert_eq!(merged[0]["alsoIn"], json!(["Claude Code · project", "Codex · your user folder"]));
+        assert_eq!(
+            merged[0]["alsoIn"],
+            json!(["Claude Code · project", "Codex · your user folder"])
+        );
     }
 
     #[test]
     fn descriptions_and_tool_modes_match_the_typescript() {
-        assert_eq!(summarize_description(Some("Does it.\\n\\n<example>x</example>")).as_deref(), Some("Does it."));
+        assert_eq!(
+            summarize_description(Some("Does it.\\n\\n<example>x</example>")).as_deref(),
+            Some("Does it.")
+        );
         assert_eq!(tool_mode_from_list(Some("Read, Grep")), Some("read-only"));
         assert_eq!(tool_mode_from_list(Some("[Read, Bash]")), None);
         assert_eq!(tool_mode_from_list(Some("*")), None);

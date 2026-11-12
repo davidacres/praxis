@@ -13,8 +13,8 @@ use praxis_workflows::gates::{
 };
 use praxis_workflows::run::{
     CreateWorkflowRunInput, DeclaredArtifact, LoopDecisionKind, ReworkOptions, WorkflowRun,
-    WorkflowRunCommand, allow_ai_merge_resolution, apply_workflow_run_command,
-    create_workflow_run, is_run_settled, rework_workflow_run,
+    WorkflowRunCommand, allow_ai_merge_resolution, apply_workflow_run_command, create_workflow_run,
+    is_run_settled, rework_workflow_run,
 };
 use praxis_workflows::scheduler::advance_joins;
 use praxis_workflows::types::{
@@ -65,7 +65,8 @@ pub fn project_workflow_stages(
     project_id: &str,
 ) -> Option<Vec<praxis_contracts::ProjectWorkflowStage>> {
     let catalog =
-        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+            .ok()?;
     let project = catalog.require(storage::PROJECTS, project_id).ok()?;
     serde_json::from_value(project.get("workflowStages")?.clone()).ok()
 }
@@ -127,7 +128,6 @@ fn save_single_run(host: &HostContext, run: WorkflowRun) -> Result<WorkflowRun> 
     Ok(run)
 }
 
-
 fn embedded_templates() -> Value {
     serde_json::from_str(include_str!("../../workflow-templates.json"))
         .unwrap_or_else(|_| json!({ "builtIn": [], "marketplace": [] }))
@@ -137,22 +137,33 @@ fn embedded_templates() -> Value {
 /// add-ons come first (global scope) and supersede an embedded template with the same id.
 fn templates_with_addons(host: &HostContext) -> Value {
     let mut embedded = embedded_templates();
-    let from_addons: Vec<Value> = super::marketplace::workflow_templates(&host.config().user_data_dir)
-        .into_iter()
-        .filter(|raw| raw.get("id").and_then(Value::as_str).is_some() && raw.get("nodes").is_some_and(Value::is_array))
-        .map(|mut raw| {
-            raw["scope"] = json!("global");
-            raw
-        })
+    let from_addons: Vec<Value> =
+        super::marketplace::workflow_templates(&host.config().user_data_dir)
+            .into_iter()
+            .filter(|raw| {
+                raw.get("id").and_then(Value::as_str).is_some()
+                    && raw.get("nodes").is_some_and(Value::is_array)
+            })
+            .map(|mut raw| {
+                raw["scope"] = json!("global");
+                raw
+            })
+            .collect();
+    let addon_ids: Vec<String> = from_addons
+        .iter()
+        .filter_map(|t| t["id"].as_str().map(str::to_string))
         .collect();
-    let addon_ids: Vec<String> = from_addons.iter().filter_map(|t| t["id"].as_str().map(str::to_string)).collect();
     let bundled = embedded
         .get("marketplace")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .filter(|t| t["id"].as_str().is_none_or(|id| !addon_ids.iter().any(|a| a == id)));
+        .filter(|t| {
+            t["id"]
+                .as_str()
+                .is_none_or(|id| !addon_ids.iter().any(|a| a == id))
+        });
     embedded["marketplace"] = Value::Array(from_addons.into_iter().chain(bundled).collect());
     embedded
 }
@@ -166,7 +177,8 @@ fn project_workflows_key(project_id: &str) -> String {
 /// The project's attached workspace folder, when it has one.
 pub fn project_folder(host: &HostContext, project_id: &str) -> Option<PathBuf> {
     let catalog =
-        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path).ok()?;
+        storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+            .ok()?;
     let project = catalog.require(storage::PROJECTS, project_id).ok()?;
     project["workspaceFolder"]
         .as_str()
@@ -193,7 +205,9 @@ fn workflow_file_name(id: &str) -> Result<String> {
         return Err(failure(format!("Unsafe workflow id: {id}")));
     }
     if trimmed.starts_with('.') {
-        return Err(failure(format!("A workflow id may not start with a dot: {id}")));
+        return Err(failure(format!(
+            "A workflow id may not start with a dot: {id}"
+        )));
     }
     if !trimmed
         .chars()
@@ -490,7 +504,12 @@ pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
         }
     }
     // Installed workflow-template add-ons (and the bundled marketplace set) are their own tier.
-    for t in embedded.get("marketplace").and_then(Value::as_array).into_iter().flatten() {
+    for t in embedded
+        .get("marketplace")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         list.push(json!({ "definition": t, "source": "marketplace" }));
     }
     for def in get_project_definitions(host, project_id) {
@@ -504,45 +523,102 @@ pub fn list_templates(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn get_recommended_template(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
-    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)?;
-    Ok(catalog.require(storage::PROJECTS, project_id).map(|p| p["recommendedWorkflowTemplate"].clone()).unwrap_or(Value::Null))
+    let catalog = storage::Catalog::load_readonly(
+        &host.config().user_data_dir,
+        &host.config().settings_path,
+    )?;
+    Ok(catalog
+        .require(storage::PROJECTS, project_id)
+        .map(|p| p["recommendedWorkflowTemplate"].clone())
+        .unwrap_or(Value::Null))
 }
 
 const TEMPLATE_SYSTEM_PROMPT: &str = "You are helping someone pick a workflow template for a software delivery project.\nGiven the project's name, purpose, and a short brief, and a list of available workflow templates, pick the\nsingle best-fitting template. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"templateId\": \"<one of the listed template ids, verbatim>\", \"rationale\": \"<one sentence, specific to this project>\" }\n```";
 
 /// The prompt asking which template fits (`buildPrompt` in `workflowTemplateRecommendation.ts`).
 fn template_prompt(project: &Value, candidates: &[Value]) -> String {
-    let brief: Vec<String> = project["brief"].as_object().into_iter().flatten().filter_map(|(k, v)| v.as_str().map(str::trim).filter(|v| !v.is_empty()).map(|v| format!("- {k}: {v}"))).collect();
-    let catalog: Vec<String> = candidates.iter().map(|c| format!("- {}: {}{}", c["templateId"].as_str().unwrap_or(""), c["name"].as_str().unwrap_or(""), c["description"].as_str().map(|d| format!(" — {d}")).unwrap_or_default())).collect();
-    let name = project["name"].as_str().filter(|n| !n.is_empty()).unwrap_or("(untitled project)");
-    let purpose = project["purpose"].as_str().map(str::trim).filter(|p| !p.is_empty()).unwrap_or("(none provided)");
-    let mut lines = vec![format!("Project name: {name}"), format!("Purpose: {purpose}")];
+    let brief: Vec<String> = project["brief"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| {
+            v.as_str()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(|v| format!("- {k}: {v}"))
+        })
+        .collect();
+    let catalog: Vec<String> = candidates
+        .iter()
+        .map(|c| {
+            format!(
+                "- {}: {}{}",
+                c["templateId"].as_str().unwrap_or(""),
+                c["name"].as_str().unwrap_or(""),
+                c["description"]
+                    .as_str()
+                    .map(|d| format!(" — {d}"))
+                    .unwrap_or_default()
+            )
+        })
+        .collect();
+    let name = project["name"]
+        .as_str()
+        .filter(|n| !n.is_empty())
+        .unwrap_or("(untitled project)");
+    let purpose = project["purpose"]
+        .as_str()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .unwrap_or("(none provided)");
+    let mut lines = vec![
+        format!("Project name: {name}"),
+        format!("Purpose: {purpose}"),
+    ];
     if !brief.is_empty() {
         lines.push(format!("Brief:\n{}", brief.join("\n")));
     }
-    lines.push(format!("\nAvailable workflow templates:\n{}", catalog.join("\n")));
+    lines.push(format!(
+        "\nAvailable workflow templates:\n{}",
+        catalog.join("\n")
+    ));
     lines.push("\nRecommend exactly one template id from the list above.".into());
     lines.join("\n")
 }
 
 /// The `{ <key>, rationale }` the model answered, checked against the ids it was offered.
 fn parse_choice(reply: &str, key: &str, valid: &[String], noun: &str) -> Result<(String, String)> {
-    let parsed: Value = serde_json::from_str(&extract_json_block(reply)).map_err(|_| failure("The AI recommendation response was not valid JSON."))?;
+    let parsed: Value = serde_json::from_str(&extract_json_block(reply))
+        .map_err(|_| failure("The AI recommendation response was not valid JSON."))?;
     if !parsed.is_object() || parsed.get(key).is_none() {
-        return Err(failure(format!("The AI recommendation response did not include a {key}.")));
+        return Err(failure(format!(
+            "The AI recommendation response did not include a {key}."
+        )));
     }
     let id = parsed[key].as_str().map(str::trim).unwrap_or("").to_owned();
     if !valid.contains(&id) {
-        return Err(failure(format!("The AI recommended \"{id}\", which is not one of the offered {noun}.")));
+        return Err(failure(format!(
+            "The AI recommended \"{id}\", which is not one of the offered {noun}."
+        )));
     }
-    let rationale = parsed["rationale"].as_str().map(str::trim).filter(|r| !r.is_empty()).unwrap_or("No rationale was given.").to_owned();
+    let rationale = parsed["rationale"]
+        .as_str()
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .unwrap_or("No rationale was given.")
+        .to_owned();
     Ok((id, rationale))
 }
 
 pub fn recommend_template(host: &HostContext, args: &[Value]) -> Result<Value> {
     let project_id = text(args, 0)?;
-    let catalog = storage::Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)?;
-    let project = catalog.require(storage::PROJECTS, project_id).map_err(|_| failure(format!("Project {project_id} was not found.")))?;
+    let catalog = storage::Catalog::load_readonly(
+        &host.config().user_data_dir,
+        &host.config().settings_path,
+    )?;
+    let project = catalog
+        .require(storage::PROJECTS, project_id)
+        .map_err(|_| failure(format!("Project {project_id} was not found.")))?;
     // Only what the New Workflow dialog offers: project templates are excluded there, so here too.
     let candidates: Vec<Value> = list_templates(host, &[json!(project_id)])?
         .as_array()
@@ -552,19 +628,43 @@ pub fn recommend_template(host: &HostContext, args: &[Value]) -> Result<Value> {
         .map(|t| json!({ "templateId": t["definition"]["id"], "name": t["definition"]["name"], "description": t["definition"]["description"] }))
         .collect();
     if candidates.is_empty() {
-        return Err(failure("No workflow templates are available to recommend from."));
+        return Err(failure(
+            "No workflow templates are available to recommend from.",
+        ));
     }
     let (connection, model) = recommendation_connection(host)?;
     let provider = connection.provider.clone();
-    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(&connection, &model, TEMPLATE_SYSTEM_PROMPT, &template_prompt(&project, &candidates), None, |_| {})).map_err(failure)?;
-    let ids: Vec<String> = candidates.iter().filter_map(|c| c["templateId"].as_str().map(str::to_owned)).collect();
+    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(
+        &connection,
+        &model,
+        TEMPLATE_SYSTEM_PROMPT,
+        &template_prompt(&project, &candidates),
+        None,
+        |_| {},
+    ))
+    .map_err(failure)?;
+    let ids: Vec<String> = candidates
+        .iter()
+        .filter_map(|c| c["templateId"].as_str().map(str::to_owned))
+        .collect();
     let (template_id, rationale) = parse_choice(&reply, "templateId", &ids, "templates")?;
     let stored = json!({ "templateId": template_id, "rationale": rationale, "model": model, "computedAt": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true) });
-    let response = host.dispatch_rpc(praxis_contracts::RustRpcRequest { id: "recommend-template".into(), channel: "projects:update".into(), args: vec![json!(project_id), json!({ "recommendedWorkflowTemplate": stored })] });
+    let response = host.dispatch_rpc(praxis_contracts::RustRpcRequest {
+        id: "recommend-template".into(),
+        channel: "projects:update".into(),
+        args: vec![
+            json!(project_id),
+            json!({ "recommendedWorkflowTemplate": stored }),
+        ],
+    });
     if !response.ok {
-        return Err(response.error.unwrap_or_else(|| failure("The recommendation could not be saved.")));
+        return Err(response
+            .error
+            .unwrap_or_else(|| failure("The recommendation could not be saved.")));
     }
-    Ok(json!({ "templateId": template_id, "rationale": rationale, "model": model, "provider": provider, "usage": usage }))
+    Ok(
+        json!({ "templateId": template_id, "rationale": rationale, "model": model, "provider": provider, "usage": usage }),
+    )
 }
 
 const TIER_SYSTEM_PROMPT: &str = "You are helping someone choose how capable a model each stage of a software delivery workflow needs.\nTiers: \"fast\" (cheap and quick: summaries, formatting, simple checks of text), \"standard\" (routine review, test\nauthoring, analysis), \"strong\" (hard reasoning: writing or changing production code, security review, subtle\ncorrectness review). A stage that fails is retried one tier higher automatically, so prefer the cheapest tier that\nwill usually succeed. Respond with exactly one fenced JSON code block and nothing else:\n\n```json\n{ \"stages\": { \"<nodeId, verbatim>\": { \"tier\": \"fast|standard|strong\", \"rationale\": \"<one short sentence>\" } } }\n```";
@@ -579,14 +679,22 @@ fn recommendation_connection(
     let (explicit, active, custom): (Option<String>, String, Vec<String>) = {
         let settings = host.settings().read();
         (
-            settings.ai.recommendation_provider.clone().filter(|p| !p.is_empty()),
+            settings
+                .ai
+                .recommendation_provider
+                .clone()
+                .filter(|p| !p.is_empty()),
             settings.ai.active_provider.clone(),
             settings
                 .ai
                 .custom_providers
                 .iter()
                 .flatten()
-                .filter_map(|c| serde_json::to_value(c).ok()?["id"].as_str().map(str::to_string))
+                .filter_map(|c| {
+                    serde_json::to_value(c).ok()?["id"]
+                        .as_str()
+                        .map(str::to_string)
+                })
                 .collect(),
         )
     };
@@ -627,7 +735,10 @@ fn extract_json_block(text: &str) -> String {
                 .ok()
                 .and_then(|re| re.captures(text).map(|c| c[1].to_string()))
         });
-    fenced.unwrap_or_else(|| text.to_string()).trim().to_string()
+    fenced
+        .unwrap_or_else(|| text.to_string())
+        .trim()
+        .to_string()
 }
 
 pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value> {
@@ -644,9 +755,14 @@ pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value
         .filter(|n| n["type"] == "agent-task")
         .collect();
     if agents.is_empty() {
-        return Err(failure("This workflow has no agent stages to choose a model for."));
+        return Err(failure(
+            "This workflow has no agent stages to choose a model for.",
+        ));
     }
-    let mut lines = vec![format!("Workflow: {}", definition["name"].as_str().unwrap_or(""))];
+    let mut lines = vec![format!(
+        "Workflow: {}",
+        definition["name"].as_str().unwrap_or("")
+    )];
     if let Some(description) = definition["description"].as_str().filter(|d| !d.is_empty()) {
         lines.push(format!("Description: {description}"));
     }
@@ -660,7 +776,11 @@ pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value
                 format!("  name: {}", node["name"].as_str().unwrap_or("")),
                 format!(
                     "  writes code to the worktree: {}",
-                    if node["mutatesWorktree"] == true { "yes" } else { "no" }
+                    if node["mutatesWorktree"] == true {
+                        "yes"
+                    } else {
+                        "no"
+                    }
                 ),
             ];
             if let Some(gate) = node["satisfiesGate"].as_str() {
@@ -677,7 +797,11 @@ pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value
                 .collect();
             parts.push(format!(
                 "  instructions: {}",
-                if instructions.is_empty() { "(none)" } else { &instructions }
+                if instructions.is_empty() {
+                    "(none)"
+                } else {
+                    &instructions
+                }
             ));
             parts.join("\n")
         })
@@ -699,7 +823,9 @@ pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value
     let parsed: Value = serde_json::from_str(&extract_json_block(&reply))
         .map_err(|_| failure("The AI model-tier response was not valid JSON."))?;
     let Some(answered) = parsed["stages"].as_object() else {
-        return Err(failure("The AI model-tier response did not include a \"stages\" object."));
+        return Err(failure(
+            "The AI model-tier response did not include a \"stages\" object.",
+        ));
     };
     let mut result = serde_json::Map::new();
     for node in agents {
@@ -738,9 +864,19 @@ pub fn recommend_model_tiers(host: &HostContext, args: &[Value]) -> Result<Value
 /// (a bundled definition can be installed on selection) or `missing` (`extractWorkflowDependencies`).
 fn extract_dependencies(catalog: &Value, template: &Value) -> Vec<Value> {
     use praxis_core::agent_runtime::bundled::{bundled_skill, is_bundled_agent};
-    let list = |key: &str| catalog.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
+    let list = |key: &str| {
+        catalog
+            .get(key)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
     let has_runtime_hosts = catalog.get("runtimeHosts").is_some_and(Value::is_array);
-    let hosts = if has_runtime_hosts { list("runtimeHosts") } else { list("agents") };
+    let hosts = if has_runtime_hosts {
+        list("runtimeHosts")
+    } else {
+        list("agents")
+    };
     let has_profiles = catalog.get("profiles").is_some_and(Value::is_array);
     let profiles = list("profiles");
     let skills = list("skills");
@@ -760,29 +896,58 @@ fn extract_dependencies(catalog: &Value, template: &Value) -> Vec<Value> {
         }
         let agent = &node["agent"];
         let agent_id = agent["agentId"].as_str().unwrap_or("");
-        let profile_id = agent["profileId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id).to_string();
-        let host_id = agent["hostId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id).to_string();
-        let provider = agent["providerId"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
+        let profile_id = agent["profileId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(agent_id)
+            .to_string();
+        let host_id = agent["hostId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(agent_id)
+            .to_string();
+        let provider = agent["providerId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         let scope = agent["scope"].as_str().unwrap_or("global").to_string();
-        let key = format!("{scope}:{profile_id}:{host_id}:{}", provider.clone().unwrap_or_default());
+        let key = format!(
+            "{scope}:{profile_id}:{host_id}:{}",
+            provider.clone().unwrap_or_default()
+        );
         let position = entries.iter().position(|(k, _)| *k == key);
         let index = position.unwrap_or_else(|| {
             entries.push((
                 key,
-                Entry { profile_id, host_id, provider_id: provider, scope, skills: Vec::new(), node_ids: Vec::new() },
+                Entry {
+                    profile_id,
+                    host_id,
+                    provider_id: provider,
+                    scope,
+                    skills: Vec::new(),
+                    node_ids: Vec::new(),
+                },
             ));
             entries.len() - 1
         });
         let entry = &mut entries[index].1;
-        entry.node_ids.push(node["id"].as_str().unwrap_or("").to_string());
-        for name in agent["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+        entry
+            .node_ids
+            .push(node["id"].as_str().unwrap_or("").to_string());
+        for name in agent["skillNames"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
             if !entry.skills.iter().any(|s| s == name) {
                 entry.skills.push(name.to_string());
             }
         }
     }
 
-    let usable = |v: &Value| v["trusted"] == true && v["errors"].as_array().is_none_or(Vec::is_empty);
+    let usable =
+        |v: &Value| v["trusted"] == true && v["errors"].as_array().is_none_or(Vec::is_empty);
     entries
         .into_iter()
         .map(|(_, entry)| {
@@ -870,12 +1035,18 @@ pub fn template_readiness(host: &HostContext, args: &[Value]) -> Result<Value> {
                     let message = first.split(". ").next().unwrap_or(first);
                     blocking.insert(
                         node["id"].as_str().unwrap_or("").to_string(),
-                        json!(if message.ends_with('.') { message.to_string() } else { format!("{message}.") }),
+                        json!(if message.ends_with('.') {
+                            message.to_string()
+                        } else {
+                            format!("{message}.")
+                        }),
                     );
                 }
             }
             let dependencies = extract_dependencies(&catalog, template);
-            let all_resolvable = dependencies.iter().all(|d| matches!(d["status"].as_str(), Some("installed" | "available")));
+            let all_resolvable = dependencies
+                .iter()
+                .all(|d| matches!(d["status"].as_str(), Some("installed" | "available")));
             let has_available = dependencies.iter().any(|d| d["status"] == "available");
             json!({
                 "templateId": template["id"],
@@ -1006,7 +1177,12 @@ fn ensure_workflow_dependencies_installed(host: &HostContext, template: &Value) 
         {
             installed_any = true;
         }
-        for name in node["agent"]["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+        for name in node["agent"]["skillNames"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
             if !skills_dir.join(name).join("SKILL.md").exists()
                 && praxis_core::agent_runtime::bundled::install_available_skill(name, &skills_dir)
             {
@@ -1090,7 +1266,10 @@ pub fn save(host: &HostContext, args: &[Value]) -> Result<Value> {
             .iter()
             .map(|issue| format!("{}: {}", issue.path, issue.message))
             .collect();
-        return Err(failure(format!("Workflow is invalid: {}", detail.join("; "))));
+        return Err(failure(format!(
+            "Workflow is invalid: {}",
+            detail.join("; ")
+        )));
     }
     // Reject an id that could not be committed as a file, even for a folderless project.
     workflow_file_name(val.get("id").and_then(Value::as_str).unwrap_or(""))?;
@@ -1254,8 +1433,18 @@ fn agent_catalog(host: &HostContext) -> Value {
 /// Resolves each agent stage against what is discovered and trusted right now (`preflightWorkflow`).
 /// Returns the "message remediation" text of every failure.
 fn preflight_blockers(catalog: &Value, nodes: &[Value], policy: Option<&Value>) -> Vec<String> {
-    let list = |key: &str| catalog.get(key).and_then(Value::as_array).cloned().unwrap_or_default();
-    let hosts = if catalog.get("runtimeHosts").is_some_and(Value::is_array) { list("runtimeHosts") } else { list("agents") };
+    let list = |key: &str| {
+        catalog
+            .get(key)
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let hosts = if catalog.get("runtimeHosts").is_some_and(Value::is_array) {
+        list("runtimeHosts")
+    } else {
+        list("agents")
+    };
     let profiles = list("profiles");
     let skills = list("skills");
     let require_trust = policy
@@ -1270,35 +1459,60 @@ fn preflight_blockers(catalog: &Value, nodes: &[Value], policy: Option<&Value>) 
         let agent_ref = &node["agent"];
         let scope = agent_ref["scope"].as_str().unwrap_or("global");
         let agent_id = agent_ref["agentId"].as_str().unwrap_or("");
-        let host_id = agent_ref["hostId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id);
-        let profile_id = agent_ref["profileId"].as_str().filter(|s| !s.is_empty()).unwrap_or(agent_id);
-        let mut add = |message: String, remediation: String| blockers.push(format!("{message} {remediation}"));
+        let host_id = agent_ref["hostId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(agent_id);
+        let profile_id = agent_ref["profileId"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(agent_id);
+        let mut add = |message: String, remediation: String| {
+            blockers.push(format!("{message} {remediation}"))
+        };
         let Some(agent) = hosts.iter().find(|h| h["manifest"]["id"] == host_id) else {
             add(
                 format!("Agent \"{host_id}\" is not in the {scope} catalog."),
-                format!("Install or import an agent with id \"{host_id}\", or point this stage at one that exists."),
+                format!(
+                    "Install or import an agent with id \"{host_id}\", or point this stage at one that exists."
+                ),
             );
             continue;
         };
         if agent["scope"].as_str().is_some_and(|s| s != scope) {
             add(
-                format!("Agent \"{host_id}\" belongs to the {} catalog, not the {scope} catalog.", agent["scope"].as_str().unwrap_or("")),
-                format!("Select a {scope}-scoped host with id \"{host_id}\", or change the stage scope."),
+                format!(
+                    "Agent \"{host_id}\" belongs to the {} catalog, not the {scope} catalog.",
+                    agent["scope"].as_str().unwrap_or("")
+                ),
+                format!(
+                    "Select a {scope}-scoped host with id \"{host_id}\", or change the stage scope."
+                ),
             );
         }
         let profile = profiles.iter().find(|p| p["profile"]["id"] == profile_id);
-        let wants_profile = agent_ref["profileId"].as_str().is_some_and(|s| !s.is_empty()) || !profiles.is_empty();
+        let wants_profile = agent_ref["profileId"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty())
+            || !profiles.is_empty();
         if wants_profile && profile.is_none() {
             add(
                 format!("Agent profile \"{profile_id}\" is not in the {scope} catalog."),
-                format!("Create or import an AGENT.md profile with id \"{profile_id}\", or select an existing profile."),
+                format!(
+                    "Create or import an AGENT.md profile with id \"{profile_id}\", or select an existing profile."
+                ),
             );
         }
         if let Some(profile) = profile {
             if profile["scope"].as_str().is_some_and(|s| s != scope) {
                 add(
-                    format!("Agent profile \"{profile_id}\" belongs to the {} catalog, not the {scope} catalog.", profile["scope"].as_str().unwrap_or("")),
-                    format!("Select a {scope}-scoped profile with id \"{profile_id}\", or change the stage scope."),
+                    format!(
+                        "Agent profile \"{profile_id}\" belongs to the {} catalog, not the {scope} catalog.",
+                        profile["scope"].as_str().unwrap_or("")
+                    ),
+                    format!(
+                        "Select a {scope}-scoped profile with id \"{profile_id}\", or change the stage scope."
+                    ),
                 );
             }
             if let Some(error) = profile["error"].as_str().filter(|e| !e.is_empty()) {
@@ -1317,10 +1531,19 @@ fn preflight_blockers(catalog: &Value, nodes: &[Value], policy: Option<&Value>) 
         if let Some(errors) = agent["errors"].as_array().filter(|e| !e.is_empty()) {
             let detail: Vec<String> = errors
                 .iter()
-                .map(|e| format!("{}: {}", e["path"].as_str().unwrap_or(""), e["message"].as_str().unwrap_or("")))
+                .map(|e| {
+                    format!(
+                        "{}: {}",
+                        e["path"].as_str().unwrap_or(""),
+                        e["message"].as_str().unwrap_or("")
+                    )
+                })
                 .collect();
             add(
-                format!("Agent \"{host_id}\" has a malformed manifest: {}", detail.join("; ")),
+                format!(
+                    "Agent \"{host_id}\" has a malformed manifest: {}",
+                    detail.join("; ")
+                ),
                 format!("Fix {}.", agent["manifestPath"].as_str().unwrap_or("")),
             );
         }
@@ -1330,38 +1553,62 @@ fn preflight_blockers(catalog: &Value, nodes: &[Value], policy: Option<&Value>) 
                 "Move the agent under the trusted agents folder, or relax requireTrustedAgents in the workflow policy.".into(),
             );
         }
-        for name in agent_ref["skillNames"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+        for name in agent_ref["skillNames"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
             let Some(skill) = skills.iter().find(|s| s["metadata"]["name"] == name) else {
-                add(format!("Skill \"{name}\" is not discovered."), format!("Install the \"{name}\" skill, or remove it from this stage."));
+                add(
+                    format!("Skill \"{name}\" is not discovered."),
+                    format!("Install the \"{name}\" skill, or remove it from this stage."),
+                );
                 continue;
             };
             if let Some(error) = skill["error"].as_str().filter(|e| !e.is_empty()) {
-                add(format!("Skill \"{name}\" is invalid: {error}"), format!("Fix {}.", skill["instructionsPath"].as_str().unwrap_or("")));
+                add(
+                    format!("Skill \"{name}\" is invalid: {error}"),
+                    format!("Fix {}.", skill["instructionsPath"].as_str().unwrap_or("")),
+                );
                 continue;
             }
             if skill["scope"].as_str().is_some_and(|s| s != scope) {
                 add(
-                    format!("Skill \"{name}\" belongs to the {} catalog, not the {scope} catalog.", skill["scope"].as_str().unwrap_or("")),
+                    format!(
+                        "Skill \"{name}\" belongs to the {} catalog, not the {scope} catalog.",
+                        skill["scope"].as_str().unwrap_or("")
+                    ),
                     format!("Select a {scope}-scoped skill, or change the stage scope."),
                 );
                 continue;
             }
             if require_trust && skill["trusted"] != true {
-                add(format!("Skill \"{name}\" is not trusted."), "Move the skill under a trusted skills root, or relax requireTrustedAgents.".into());
+                add(
+                    format!("Skill \"{name}\" is not trusted."),
+                    "Move the skill under a trusted skills root, or relax requireTrustedAgents."
+                        .into(),
+                );
                 continue;
             }
             if let Some(pinned) = agent_ref["skillFingerprints"][name].as_str() {
                 if skill["fingerprint"].as_str().is_some_and(|f| f != pinned) {
                     add(
                         format!("Skill \"{name}\" has changed since this workflow pinned it."),
-                        format!("Review {} and re-pin the fingerprint, or restore the previous version.", skill["instructionsPath"].as_str().unwrap_or("")),
+                        format!(
+                            "Review {} and re-pin the fingerprint, or restore the previous version.",
+                            skill["instructionsPath"].as_str().unwrap_or("")
+                        ),
                     );
                 }
             }
         }
         if node["mutatesWorktree"] != true && agent_ref["toolMode"] == "full" {
             add(
-                format!("Stage \"{}\" is non-mutating but requests full tool mode.", node["id"].as_str().unwrap_or("")),
+                format!(
+                    "Stage \"{}\" is non-mutating but requests full tool mode.",
+                    node["id"].as_str().unwrap_or("")
+                ),
                 "Set the stage to read-only or project-only, or mark it as mutating.".into(),
             );
         }
@@ -1394,17 +1641,18 @@ where
     require_run(host, run_id)?;
     let refusal: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let slot = Arc::clone(&refusal);
-    runtime::block_on(
-        workflow_engine::engine(host)
-            .orchestrator()
-            .update_run(run_id, move |run| match change(&run) {
-                Ok(next) => next,
-                Err(reason) => {
-                    *slot.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reason);
-                    run
-                }
-            }),
-    )
+    runtime::block_on(workflow_engine::engine(host).orchestrator().update_run(
+        run_id,
+        move |run| match change(&run) {
+            Ok(next) => next,
+            Err(reason) => {
+                *slot
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reason);
+                run
+            }
+        },
+    ))
     .map_err(failure)?;
     if let Some(reason) = refusal
         .lock()
@@ -1451,7 +1699,11 @@ fn string_option(options: &Value, key: &str) -> Option<String> {
 }
 
 /// A project workflow by id, or the template it would be instantiated from, without saving it.
-pub fn runnable_definition(host: &HostContext, project_id: &str, workflow_id: &str) -> Option<Value> {
+pub fn runnable_definition(
+    host: &HostContext,
+    project_id: &str,
+    workflow_id: &str,
+) -> Option<Value> {
     if let Some(own) = project_definition_values(host, project_id)
         .into_iter()
         .find(|d| d.get("id").and_then(Value::as_str) == Some(workflow_id))
@@ -1485,7 +1737,9 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
     let definition = match own {
         Some(own) => own,
         None => runnable_definition(host, &project_id, &workflow_id).ok_or_else(|| {
-            failure(format!("Workflow {workflow_id} was not found for this project."))
+            failure(format!(
+                "Workflow {workflow_id} was not found for this project."
+            ))
         })?,
     };
     let name = definition["name"].as_str().unwrap_or("").to_string();
@@ -1505,7 +1759,8 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
     }
     if instantiated {
         persist_project_workflow(host, &project_id, &definition)?;
-        let created = project_workflow_trust(host, &project_id, &workflow_id, Some(&definition), false);
+        let created =
+            project_workflow_trust(host, &project_id, &workflow_id, Some(&definition), false);
         if !created.key.is_empty() {
             set_trust(host, &created.key, &created.fingerprint)?;
         }
@@ -1514,7 +1769,11 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
     let policy = policy_value_for(host, &project_id);
     let validation = validate_workflow(&definition, policy.as_ref());
     if !validation.valid() {
-        let detail: Vec<String> = validation.errors.iter().map(|e| e.message.clone()).collect();
+        let detail: Vec<String> = validation
+            .errors
+            .iter()
+            .map(|e| e.message.clone())
+            .collect();
         return Err(failure(format!(
             "Cannot start an invalid workflow: {}",
             detail.join("; ")
@@ -1526,7 +1785,10 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
         ensure_workflow_dependencies_installed(host, &definition);
     }
 
-    let has_agent_stage = typed.nodes.iter().any(|n| matches!(n, WorkflowNode::AgentTask(_)));
+    let has_agent_stage = typed
+        .nodes
+        .iter()
+        .any(|n| matches!(n, WorkflowNode::AgentTask(_)));
     if has_agent_stage {
         let nodes = definition["nodes"].as_array().cloned().unwrap_or_default();
         let blockers = preflight_blockers(&agent_catalog(host), &nodes, policy.as_ref());
@@ -1598,7 +1860,9 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
     if let Some(m) = string_option(&options, "aiModel") {
         create["aiModel"] = json!(m);
     }
-    if let Some(p @ ("switch" | "stop")) = options.get("providerLimitPolicy").and_then(Value::as_str) {
+    if let Some(p @ ("switch" | "stop")) =
+        options.get("providerLimitPolicy").and_then(Value::as_str)
+    {
         create["providerLimitPolicy"] = json!(p);
     }
     if !parameters.as_object().is_none_or(serde_json::Map::is_empty) {
@@ -1610,7 +1874,8 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
     // App-authored definitions and selected templates have no repository trust gate, but still
     // record their snapshot grant so removing a file cannot bypass recovery.
     if trust.key.is_empty() {
-        let snapshot = project_workflow_trust(host, &project_id, &workflow_id, Some(&definition), true);
+        let snapshot =
+            project_workflow_trust(host, &project_id, &workflow_id, Some(&definition), true);
         if !snapshot.key.is_empty() {
             set_trust(host, &snapshot.key, &snapshot.fingerprint)?;
         }
@@ -1618,19 +1883,31 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
     let saved = save_run_record(host, run)?;
     // The session that started the run is its controller: it lists the run and follows it.
     if let (Some(key), Some(_)) = (&saved.controller_session_key, &saved.controller_session_id) {
-        let (run_id, workflow_id, version) = (saved.run_id.clone(), saved.workflow_id.clone(), saved.workflow_version);
-        let _ = super::session_store::store(&host.config().user_data_dir).mutate(key, true, |record| {
-            let mut ids: Vec<Value> = record["workflowRunIds"].as_array().cloned().unwrap_or_else(|| {
-                record["workflowRunId"].as_str().filter(|r| !r.is_empty()).map(|r| vec![json!(r)]).unwrap_or_default()
+        let (run_id, workflow_id, version) = (
+            saved.run_id.clone(),
+            saved.workflow_id.clone(),
+            saved.workflow_version,
+        );
+        let _ =
+            super::session_store::store(&host.config().user_data_dir).mutate(key, true, |record| {
+                let mut ids: Vec<Value> = record["workflowRunIds"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        record["workflowRunId"]
+                            .as_str()
+                            .filter(|r| !r.is_empty())
+                            .map(|r| vec![json!(r)])
+                            .unwrap_or_default()
+                    });
+                ids.push(json!(run_id));
+                record["workflowRunId"] = json!(run_id);
+                record["workflowRunIds"] = json!(ids);
+                record["workflowNodeId"] = json!("");
+                record["workflowId"] = json!(workflow_id);
+                record["workflowVersion"] = json!(version);
+                record["workflowRole"] = json!("controller");
             });
-            ids.push(json!(run_id));
-            record["workflowRunId"] = json!(run_id);
-            record["workflowRunIds"] = json!(ids);
-            record["workflowNodeId"] = json!("");
-            record["workflowId"] = json!(workflow_id);
-            record["workflowVersion"] = json!(version);
-            record["workflowRole"] = json!("controller");
-        });
     }
     workflow_engine::step_in_background(host, &saved.run_id);
     Ok(saved)
@@ -1689,7 +1966,11 @@ fn resolve_run_parameters(definition: &Value, supplied: Option<&Value>) -> Resul
                 }
                 values.insert(
                     id.to_string(),
-                    if kind == "integer" { json!(number as i64) } else { json!(number) },
+                    if kind == "integer" {
+                        json!(number as i64)
+                    } else {
+                        json!(number)
+                    },
                 );
             }
         }
@@ -1709,11 +1990,17 @@ pub fn start_run(host: &HostContext, args: &[Value]) -> Result<Value> {
         StartRunInput {
             project_id: text(args, 0)?.to_string(),
             workflow_id: text(args, 1)?.to_string(),
-            task_title: args.get(2).and_then(Value::as_str).unwrap_or("").to_string(),
+            task_title: args
+                .get(2)
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
             issue_key: issue.and_then(|i| i["issueKey"].as_str().map(str::to_string)),
             issue_connection_id: issue.and_then(|i| i["connectionId"].as_str().map(str::to_string)),
-            controller_session_key: controller.and_then(|c| c["sessionKey"].as_str().map(str::to_string)),
-            controller_session_id: controller.and_then(|c| c["sessionId"].as_str().map(str::to_string)),
+            controller_session_key: controller
+                .and_then(|c| c["sessionKey"].as_str().map(str::to_string)),
+            controller_session_id: controller
+                .and_then(|c| c["sessionId"].as_str().map(str::to_string)),
             plan_input: args.get(5).cloned(),
             scheduled_launch_token: None,
             options: args.get(6).cloned().unwrap_or(Value::Null),
@@ -1727,14 +2014,20 @@ pub fn prepare_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     let workflow_id = text(args, 1)?;
     let supplied = args.get(2).filter(|v| v.is_object());
     let definition = runnable_definition(host, project_id, workflow_id).ok_or_else(|| {
-        failure(format!("Workflow {workflow_id} was not found for this project."))
+        failure(format!(
+            "Workflow {workflow_id} was not found for this project."
+        ))
     })?;
     let resolved = resolve_run_parameters(&definition, supplied);
     let (values, issues) = match resolved {
         Ok(values) => (values, Vec::new()),
         Err(error) => (
             json!({}),
-            if supplied.is_some() { vec![json!({ "message": error.message })] } else { Vec::new() },
+            if supplied.is_some() {
+                vec![json!({ "message": error.message })]
+            } else {
+                Vec::new()
+            },
         ),
     };
     let settings = host.settings().read();
@@ -1782,11 +2075,12 @@ pub fn blocking_files(host: &HostContext, project_id: &str) -> Result<Vec<String
     match runtime::block_on(workflow_engine::base_blocking_paths(&folder)) {
         Ok(files) => Ok(files),
         Err(detail) if detail.to_lowercase().contains("not a git repository") => {
-            let project_name = Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
-                .ok()
-                .and_then(|c| c.require(storage::PROJECTS, project_id).ok())
-                .and_then(|p| p["name"].as_str().map(str::to_string))
-                .unwrap_or_else(|| "This project".to_string());
+            let project_name =
+                Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+                    .ok()
+                    .and_then(|c| c.require(storage::PROJECTS, project_id).ok())
+                    .and_then(|p| p["name"].as_str().map(str::to_string))
+                    .unwrap_or_else(|| "This project".to_string());
             Err(failure(format!(
                 "{project_name}'s workspace folder isn't a Git repository yet ({}). A workflow run builds an isolated copy of the project from Git history, so initialize Git there or attach a different workspace folder before starting a run.",
                 folder.display()
@@ -1801,7 +2095,12 @@ fn assert_run_base_ready(host: &HostContext, project_id: &str) -> Result<()> {
     if blocking.is_empty() {
         return Ok(());
     }
-    let examples = blocking.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+    let examples = blocking
+        .iter()
+        .take(3)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
     let more = if blocking.len() > 3 { ", …" } else { "" };
     let one = blocking.len() == 1;
     Err(failure(format!(
@@ -1809,7 +2108,11 @@ fn assert_run_base_ready(host: &HostContext, project_id: &str) -> Result<()> {
         blocking.len(),
         if one { "file" } else { "files" },
         if one { "is" } else { "are" },
-        if examples.is_empty() { String::new() } else { format!(" ({examples}{more})") },
+        if examples.is_empty() {
+            String::new()
+        } else {
+            format!(" ({examples}{more})")
+        },
     )))
 }
 
@@ -1847,7 +2150,9 @@ pub fn remove_controller_run(host: &HostContext, args: &[Value]) -> Result<Value
     let reason = args.get(2).and_then(Value::as_str);
     if let Some(run) = stored_run(host, run_id) {
         if run.controller_session_key.as_deref() != Some(session_key) {
-            return Err(failure("That workflow run is not controlled by this session."));
+            return Err(failure(
+                "That workflow run is not controlled by this session.",
+            ));
         }
         if !is_run_settled(&run) {
             runtime::block_on(
@@ -1879,7 +2184,12 @@ pub fn get_run(host: &HostContext, args: &[Value]) -> Result<Value> {
 
 pub fn rename_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     let run_id = text(args, 0)?;
-    let name = args.get(1).and_then(Value::as_str).map(str::trim).unwrap_or("").to_string();
+    let name = args
+        .get(1)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("")
+        .to_string();
     if name.is_empty() {
         return Err(failure("Automation name cannot be empty."));
     }
@@ -1888,7 +2198,11 @@ pub fn rename_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     }
     let run = with_run(host, run_id, move |run| {
         let mut next = run.clone();
-        next.display_name = if name == next.definition.name { None } else { Some(name) };
+        next.display_name = if name == next.definition.name {
+            None
+        } else {
+            Some(name)
+        };
         Ok(next)
     })?;
     Ok(summarize(host, &run))
@@ -1907,7 +2221,12 @@ pub fn advance_stage(host: &HostContext, args: &[Value]) -> Result<Value> {
             session_id: Some(format!("manual-{node_id}")),
         };
         let mut next = apply_workflow_run_command(run, &started).unwrap_or_else(|| run.clone());
-        let node = next.definition.nodes.iter().find(|n| n.base().id == node_id).cloned();
+        let node = next
+            .definition
+            .nodes
+            .iter()
+            .find(|n| n.base().id == node_id)
+            .cloned();
         let outputs = match &node {
             Some(WorkflowNode::AgentTask(n)) => n.outputs.clone(),
             Some(WorkflowNode::Check(n)) => n.outputs.clone(),
@@ -1953,7 +2272,10 @@ pub fn advance_stage(host: &HostContext, args: &[Value]) -> Result<Value> {
             WorkflowRunCommand::NodeFailed {
                 node_id: node_id.clone(),
                 at: at.clone(),
-                error: detail["error"].as_str().unwrap_or("Stage failed.").to_string(),
+                error: detail["error"]
+                    .as_str()
+                    .unwrap_or("Stage failed.")
+                    .to_string(),
                 exit_code: None,
                 findings: supplied_findings,
                 pause: None,
@@ -1978,9 +2300,18 @@ pub fn approve_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     let policy = policy_for(host, &run_for_policy.project_id);
     with_run(host, run_id, move |run| {
         let approval = resolve_approval_target(run, node_id.as_deref())?;
-        let result = approve_stage(run, &approval.base.id, &actor, &now(), policy.as_ref(), None)?;
+        let result = approve_stage(
+            run,
+            &approval.base.id,
+            &actor,
+            &now(),
+            policy.as_ref(),
+            None,
+        )?;
         if !result.ok {
-            return Err(result.reason.unwrap_or_else(|| "Approval was refused.".into()));
+            return Err(result
+                .reason
+                .unwrap_or_else(|| "Approval was refused.".into()));
         }
         Ok(result.run)
     })?;
@@ -2002,10 +2333,17 @@ pub fn bypass_gate_cmd(host: &HostContext, args: &[Value]) -> Result<Value> {
             "qa" => WorkflowGateKind::Qa,
             _ => WorkflowGateKind::Review,
         };
-        let input = GateBypassInput { gate, actor, reason, at: now() };
+        let input = GateBypassInput {
+            gate,
+            actor,
+            reason,
+            at: now(),
+        };
         let result = bypass_gate(run, &approval.base.id, &input, policy.as_ref(), None)?;
         if !result.ok {
-            return Err(result.reason.unwrap_or_else(|| "The bypass was refused.".into()));
+            return Err(result
+                .reason
+                .unwrap_or_else(|| "The bypass was refused.".into()));
         }
         Ok(result.run)
     })?;
@@ -2031,7 +2369,11 @@ pub fn skip_approval(host: &HostContext, args: &[Value]) -> Result<Value> {
 pub fn decide_loop(host: &HostContext, args: &[Value]) -> Result<Value> {
     let run_id = text(args, 0)?;
     let edge_id = text(args, 1)?.to_string();
-    let actor = args.get(2).and_then(Value::as_str).unwrap_or("").to_string();
+    let actor = args
+        .get(2)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     let decision_str = text(args, 3)?.to_string();
     let reason = args
         .get(4)
@@ -2116,11 +2458,10 @@ pub fn retry_stage(host: &HostContext, args: &[Value]) -> Result<Value> {
     let run_id = text(args, 0)?;
     let node_id = text(args, 1)?.to_string();
     with_run(host, run_id, move |run| {
-        Ok(apply_workflow_run_command(
-            run,
-            &WorkflowRunCommand::NodeRetry { node_id, at: now() },
+        Ok(
+            apply_workflow_run_command(run, &WorkflowRunCommand::NodeRetry { node_id, at: now() })
+                .unwrap_or_else(|| run.clone()),
         )
-        .unwrap_or_else(|| run.clone()))
     })?;
     step_and_summarize(host, run_id)
 }
@@ -2196,8 +2537,12 @@ pub fn cancel_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     let run_id = text(args, 0)?;
     let reason = args.get(1).and_then(Value::as_str);
     require_run(host, run_id)?;
-    runtime::block_on(workflow_engine::engine(host).orchestrator().cancel(run_id, reason))
-        .map_err(failure)?;
+    runtime::block_on(
+        workflow_engine::engine(host)
+            .orchestrator()
+            .cancel(run_id, reason),
+    )
+    .map_err(failure)?;
     Ok(summarize(host, &require_run(host, run_id)?))
 }
 
@@ -2270,8 +2615,18 @@ pub fn delete_run(host: &HostContext, args: &[Value]) -> Result<Value> {
             .map(|record| {
                 record["workflowRunIds"]
                     .as_array()
-                    .map(|ids| ids.iter().filter_map(|v| v.as_str().map(str::to_string)).collect::<Vec<_>>())
-                    .unwrap_or_else(|| record["workflowRunId"].as_str().filter(|r| !r.is_empty()).map(|r| vec![r.to_string()]).unwrap_or_default())
+                    .map(|ids| {
+                        ids.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_else(|| {
+                        record["workflowRunId"]
+                            .as_str()
+                            .filter(|r| !r.is_empty())
+                            .map(|r| vec![r.to_string()])
+                            .unwrap_or_default()
+                    })
             })
             .unwrap_or_default()
             .into_iter()
@@ -2282,7 +2637,11 @@ pub fn delete_run(host: &HostContext, args: &[Value]) -> Result<Value> {
             record["workflowRunId"] = json!(remaining.last().cloned().unwrap_or_default());
             record["workflowRunIds"] = json!(remaining);
             record["workflowNodeId"] = json!("");
-            record["workflowId"] = json!(next.as_ref().map(|r| r.workflow_id.clone()).unwrap_or_default());
+            record["workflowId"] = json!(
+                next.as_ref()
+                    .map(|r| r.workflow_id.clone())
+                    .unwrap_or_default()
+            );
             if let Some(next) = &next {
                 record["workflowVersion"] = json!(next.workflow_version);
                 record["workflowRole"] = json!("controller");
@@ -2295,7 +2654,10 @@ pub fn delete_run(host: &HostContext, args: &[Value]) -> Result<Value> {
     let _guard = workflow_engine::runs_lock()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let next: Vec<_> = get_runs(host).into_iter().filter(|r| r.run_id != run_id).collect();
+    let next: Vec<_> = get_runs(host)
+        .into_iter()
+        .filter(|r| r.run_id != run_id)
+        .collect();
     save_runs(host, &next)?;
     host.events()
         .emit("workflows:runChanged", Some(json!(run_id)));
@@ -2342,7 +2704,8 @@ pub fn start_diagnosis(host: &HostContext, args: &[Value]) -> Result<Value> {
     let run_id = text(args, 0)?;
     let node_id = text(args, 1)?;
     let attempt = args.get(2).and_then(Value::as_u64).unwrap_or(1) as usize;
-    let refuse = |message: String| Ok(json!({ "ok": false, "reason": "no-evidence", "message": message }));
+    let refuse =
+        |message: String| Ok(json!({ "ok": false, "reason": "no-evidence", "message": message }));
     let Some(run) = stored_run(host, run_id) else {
         return refuse(format!("Run {run_id} was not found."));
     };
@@ -2354,9 +2717,10 @@ pub fn start_diagnosis(host: &HostContext, args: &[Value]) -> Result<Value> {
     {
         return refuse(format!("Stage {node_id} is not a check stage."));
     }
-    let project = Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
-        .ok()
-        .and_then(|catalog| catalog.require(storage::PROJECTS, &run.project_id).ok());
+    let project =
+        Catalog::load_readonly(&host.config().user_data_dir, &host.config().settings_path)
+            .ok()
+            .and_then(|catalog| catalog.require(storage::PROJECTS, &run.project_id).ok());
     let folder = project
         .as_ref()
         .and_then(|p| p["workspaceFolder"].as_str())
@@ -2373,11 +2737,17 @@ pub fn start_diagnosis(host: &HostContext, args: &[Value]) -> Result<Value> {
     let node_id = node_id.to_string();
     Ok(runtime::block_on(async move {
         let mut working_directory = folder.clone();
-        if let Some(worktree) = run_for_task.worktree_path.as_deref().filter(|w| Path::new(w).exists()) {
+        if let Some(worktree) = run_for_task
+            .worktree_path
+            .as_deref()
+            .filter(|w| Path::new(w).exists())
+        {
             working_directory = Some(worktree.to_string());
         } else if folder.is_some() {
             // Fall back to the project folder when the worktree cannot be re-acquired.
-            if let Some(acquired) = workflow_engine::reacquire_worktree(&host_for_task, &run_for_task).await {
+            if let Some(acquired) =
+                workflow_engine::reacquire_worktree(&host_for_task, &run_for_task).await
+            {
                 working_directory = Some(acquired);
             }
         }
@@ -2401,21 +2771,48 @@ const RECOMMENDATION_CACHE_KEY: &str = "praxis.workflowAgentRecommendations.v1";
 /// without spending another call (`computeRecommendationFingerprint`).
 pub fn recommendation_fingerprint(input: &Value) -> String {
     use sha2::{Digest, Sha256};
-    let mut ids: Vec<&str> = input["candidates"].as_array().into_iter().flatten().filter_map(|c| c["agentId"].as_str()).collect();
+    let mut ids: Vec<&str> = input["candidates"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c["agentId"].as_str())
+        .collect();
     ids.sort_unstable();
-    let payload = [input["stageName"].as_str().unwrap_or("").trim(), input["instructions"].as_str().unwrap_or("").trim(), &ids.join(",")].join(" ");
-    Sha256::digest(payload.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+    let payload = [
+        input["stageName"].as_str().unwrap_or("").trim(),
+        input["instructions"].as_str().unwrap_or("").trim(),
+        &ids.join(","),
+    ]
+    .join(" ");
+    Sha256::digest(payload.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 fn read_recommendation_cache(host: &HostContext) -> serde_json::Map<String, Value> {
     let path = host.config().user_data_dir.join(RECOMMENDATION_CACHE_FILE);
-    let document = storage::read(&path).ok().flatten().and_then(|raw| storage::parse(&path, Some(&raw)).ok()).unwrap_or(Value::Null);
-    document[RECOMMENDATION_CACHE_KEY].as_object().cloned().unwrap_or_default()
+    let document = storage::read(&path)
+        .ok()
+        .flatten()
+        .and_then(|raw| storage::parse(&path, Some(&raw)).ok())
+        .unwrap_or(Value::Null);
+    document[RECOMMENDATION_CACHE_KEY]
+        .as_object()
+        .cloned()
+        .unwrap_or_default()
 }
 
-fn write_recommendation_cache(host: &HostContext, cache: serde_json::Map<String, Value>) -> Result<()> {
+fn write_recommendation_cache(
+    host: &HostContext,
+    cache: serde_json::Map<String, Value>,
+) -> Result<()> {
     let encoded = storage::encoded(&json!({ RECOMMENDATION_CACHE_KEY: cache }))?;
-    storage::write_atomic(&host.config().user_data_dir.join(RECOMMENDATION_CACHE_FILE), &encoded, false)
+    storage::write_atomic(
+        &host.config().user_data_dir.join(RECOMMENDATION_CACHE_FILE),
+        &encoded,
+        false,
+    )
 }
 
 fn recommendation_key(args: &[Value]) -> Result<String> {
@@ -2425,8 +2822,11 @@ fn recommendation_key(args: &[Value]) -> Result<String> {
 /// The stored recommendation for a stage, and whether the stage changed since it was computed.
 pub fn get_recommendation(host: &HostContext, args: &[Value]) -> Result<Value> {
     let key = recommendation_key(args)?;
-    let Some(stored) = read_recommendation_cache(host).remove(&key) else { return Ok(json!({ "recommendation": null, "stale": false })) };
-    let stale = stored["inputFingerprint"].as_str() != Some(recommendation_fingerprint(args.get(2).unwrap_or(&Value::Null)).as_str());
+    let Some(stored) = read_recommendation_cache(host).remove(&key) else {
+        return Ok(json!({ "recommendation": null, "stale": false }));
+    };
+    let stale = stored["inputFingerprint"].as_str()
+        != Some(recommendation_fingerprint(args.get(2).unwrap_or(&Value::Null)).as_str());
     Ok(json!({ "recommendation": stored, "stale": stale }))
 }
 
@@ -2444,19 +2844,59 @@ pub fn recommend_agent(host: &HostContext, args: &[Value]) -> Result<Value> {
     let input = args.get(2).cloned().unwrap_or(Value::Null);
     let candidates = input["candidates"].as_array().cloned().unwrap_or_default();
     if candidates.is_empty() {
-        return Err(failure("No trusted agents are available to recommend from."));
+        return Err(failure(
+            "No trusted agents are available to recommend from.",
+        ));
     }
-    let catalog: Vec<String> = candidates.iter().map(|c| {
-        let skills: Vec<&str> = c["skills"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
-        format!("- {}: {}{}", c["agentId"].as_str().unwrap_or(""), c["name"].as_str().unwrap_or(""), if skills.is_empty() { String::new() } else { format!(" (skills: {})", skills.join(", ")) })
-    }).collect();
-    let stage = input["stageName"].as_str().filter(|n| !n.is_empty()).unwrap_or("(untitled stage)");
-    let instructions = input["instructions"].as_str().map(str::trim).filter(|i| !i.is_empty()).unwrap_or("(none provided)");
-    let prompt = format!("Stage name: {stage}\nStage instructions:\n{instructions}\n\nTrusted agents available for this workflow:\n{}\n\nRecommend exactly one agent id from the list above.", catalog.join("\n"));
+    let catalog: Vec<String> = candidates
+        .iter()
+        .map(|c| {
+            let skills: Vec<&str> = c["skills"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            format!(
+                "- {}: {}{}",
+                c["agentId"].as_str().unwrap_or(""),
+                c["name"].as_str().unwrap_or(""),
+                if skills.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (skills: {})", skills.join(", "))
+                }
+            )
+        })
+        .collect();
+    let stage = input["stageName"]
+        .as_str()
+        .filter(|n| !n.is_empty())
+        .unwrap_or("(untitled stage)");
+    let instructions = input["instructions"]
+        .as_str()
+        .map(str::trim)
+        .filter(|i| !i.is_empty())
+        .unwrap_or("(none provided)");
+    let prompt = format!(
+        "Stage name: {stage}\nStage instructions:\n{instructions}\n\nTrusted agents available for this workflow:\n{}\n\nRecommend exactly one agent id from the list above.",
+        catalog.join("\n")
+    );
     let (connection, model) = recommendation_connection(host)?;
     let provider = connection.provider.clone();
-    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(&connection, &model, AGENT_SYSTEM_PROMPT, &prompt, None, |_| {})).map_err(failure)?;
-    let ids: Vec<String> = candidates.iter().filter_map(|c| c["agentId"].as_str().map(str::to_owned)).collect();
+    let (reply, usage) = runtime::block_on(super::api_host::run_provider_prompt(
+        &connection,
+        &model,
+        AGENT_SYSTEM_PROMPT,
+        &prompt,
+        None,
+        |_| {},
+    ))
+    .map_err(failure)?;
+    let ids: Vec<String> = candidates
+        .iter()
+        .filter_map(|c| c["agentId"].as_str().map(str::to_owned))
+        .collect();
     let (agent_id, rationale) = parse_choice(&reply, "agentId", &ids, "agents")?;
     let mut cache = read_recommendation_cache(host);
     cache.insert(key, json!({
@@ -2464,7 +2904,9 @@ pub fn recommend_agent(host: &HostContext, args: &[Value]) -> Result<Value> {
         "computedAt": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true), "inputFingerprint": recommendation_fingerprint(&input),
     }));
     write_recommendation_cache(host, cache)?;
-    Ok(json!({ "agentId": agent_id, "rationale": rationale, "model": model, "provider": provider, "usage": usage }))
+    Ok(
+        json!({ "agentId": agent_id, "rationale": rationale, "model": model, "provider": provider, "usage": usage }),
+    )
 }
 
 pub fn dispatch(host: &HostContext, channel: &str, args: &[Value]) -> Result<Value> {
@@ -2528,7 +2970,10 @@ mod tests {
 
     #[test]
     fn workflow_ids_that_cannot_be_file_names_are_refused() {
-        assert_eq!(workflow_file_name("governed-delivery-p1").unwrap(), "governed-delivery-p1.json");
+        assert_eq!(
+            workflow_file_name("governed-delivery-p1").unwrap(),
+            "governed-delivery-p1.json"
+        );
         assert!(workflow_file_name("").is_err());
         assert!(workflow_file_name("..").is_err());
         assert!(workflow_file_name(".hidden").is_err());
@@ -2546,7 +2991,8 @@ mod tests {
         });
         let ok = resolve_run_parameters(&definition, Some(&json!({ "goal": " faster " }))).unwrap();
         assert_eq!(ok, json!({ "goal": "faster", "rounds": 3 }));
-        let missing = resolve_run_parameters(&definition, Some(&json!({ "rounds": 9 }))).unwrap_err();
+        let missing =
+            resolve_run_parameters(&definition, Some(&json!({ "rounds": 9 }))).unwrap_err();
         assert!(missing.message.contains("Goal is required."));
         assert!(missing.message.contains("Rounds must be at most 5."));
     }
@@ -2574,7 +3020,11 @@ mod tests {
             "runtimeHosts": [{ "manifest": { "id": "a" }, "scope": "global", "trusted": false, "errors": [] }],
             "profiles": [], "skills": []
         });
-        assert!(preflight_blockers(&catalog, &nodes, None).iter().any(|b| b.contains("is not trusted")));
+        assert!(
+            preflight_blockers(&catalog, &nodes, None)
+                .iter()
+                .any(|b| b.contains("is not trusted"))
+        );
         let relaxed = json!({ "requireTrustedAgents": false });
         assert!(preflight_blockers(&catalog, &nodes, Some(&relaxed)).is_empty());
     }
@@ -2595,26 +3045,66 @@ mod tests {
         assert_eq!(copy["scope"], "project");
         assert_eq!(copy["version"], 1);
         assert!(copy.get("builtIn").is_none());
-        let tiers: Vec<&str> = copy["nodes"].as_array().unwrap().iter().map(|n| n["modelTier"].as_str().unwrap()).collect();
+        let tiers: Vec<&str> = copy["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["modelTier"].as_str().unwrap())
+            .collect();
         assert_eq!(tiers, ["strong", "standard", "fast", "fast"]);
     }
 
     #[test]
     fn recommendation_choices_must_be_an_offered_id() {
         let valid = vec!["a".to_owned(), "b".to_owned()];
-        let ok = parse_choice("```json\n{\"agentId\":\"b\",\"rationale\":\" fits \"}\n```", "agentId", &valid, "agents").unwrap();
+        let ok = parse_choice(
+            "```json\n{\"agentId\":\"b\",\"rationale\":\" fits \"}\n```",
+            "agentId",
+            &valid,
+            "agents",
+        )
+        .unwrap();
         assert_eq!(ok, ("b".to_owned(), "fits".to_owned()));
-        assert_eq!(parse_choice("{\"agentId\":\"a\"}", "agentId", &valid, "agents").unwrap().1, "No rationale was given.");
-        assert!(parse_choice("{\"agentId\":\"z\"}", "agentId", &valid, "agents").unwrap_err().message.contains("not one of the offered agents"));
-        assert!(parse_choice("nope", "agentId", &valid, "agents").unwrap_err().message.contains("not valid JSON"));
-        assert!(parse_choice("{\"x\":1}", "agentId", &valid, "agents").unwrap_err().message.contains("did not include a agentId"));
+        assert_eq!(
+            parse_choice("{\"agentId\":\"a\"}", "agentId", &valid, "agents")
+                .unwrap()
+                .1,
+            "No rationale was given."
+        );
+        assert!(
+            parse_choice("{\"agentId\":\"z\"}", "agentId", &valid, "agents")
+                .unwrap_err()
+                .message
+                .contains("not one of the offered agents")
+        );
+        assert!(
+            parse_choice("nope", "agentId", &valid, "agents")
+                .unwrap_err()
+                .message
+                .contains("not valid JSON")
+        );
+        assert!(
+            parse_choice("{\"x\":1}", "agentId", &valid, "agents")
+                .unwrap_err()
+                .message
+                .contains("did not include a agentId")
+        );
     }
 
     #[test]
     fn the_fingerprint_changes_with_the_stage_but_not_candidate_order() {
         let input = |name: &str, ids: [&str; 2]| json!({ "stageName": name, "instructions": " do ", "candidates": [{"agentId": ids[0]}, {"agentId": ids[1]}] });
-        assert_eq!(recommendation_fingerprint(&input("Build", ["a", "b"])), recommendation_fingerprint(&input(" Build ", ["b", "a"])));
-        assert_ne!(recommendation_fingerprint(&input("Build", ["a", "b"])), recommendation_fingerprint(&input("Test", ["a", "b"])));
-        assert_eq!(recommendation_fingerprint(&input("Build", ["a", "b"])).len(), 64);
+        assert_eq!(
+            recommendation_fingerprint(&input("Build", ["a", "b"])),
+            recommendation_fingerprint(&input(" Build ", ["b", "a"]))
+        );
+        assert_ne!(
+            recommendation_fingerprint(&input("Build", ["a", "b"])),
+            recommendation_fingerprint(&input("Test", ["a", "b"]))
+        );
+        assert_eq!(
+            recommendation_fingerprint(&input("Build", ["a", "b"])).len(),
+            64
+        );
     }
 }

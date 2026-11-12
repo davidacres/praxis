@@ -20,26 +20,53 @@ document.addEventListener('submit', event => event.preventDefault(), true);\
 </script>";
 
 static CSP_META: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)<meta\b[^>]*\bhttp-equiv\s*=\s*["']?content-security-policy\b[^>]*>"#).expect("csp regex")
+    Regex::new(r#"(?i)<meta\b[^>]*\bhttp-equiv\s*=\s*["']?content-security-policy\b[^>]*>"#)
+        .expect("csp regex")
 });
-static HEAD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<head\b[^>]*>").expect("head regex"));
+static HEAD: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)<head\b[^>]*>").expect("head regex"));
 
 pub fn is_html_path(path: &str) -> bool {
-    let bare = path.split(['?', '#']).next().unwrap_or_default().to_ascii_lowercase();
+    let bare = path
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     bare.ends_with(".html") || bare.ends_with(".htm")
 }
 
 pub fn window_title(requested: &str) -> String {
-    let clean: String = requested.chars().map(|c| if matches!(c, '\r' | '\n' | '\0') { ' ' } else { c }).take(120).collect();
-    format!("Preview — {}", if clean.trim().is_empty() { "HTML artifact" } else { clean.as_str() })
+    let clean: String = requested
+        .chars()
+        .map(|c| {
+            if matches!(c, '\r' | '\n' | '\0') {
+                ' '
+            } else {
+                c
+            }
+        })
+        .take(120)
+        .collect();
+    format!(
+        "Preview — {}",
+        if clean.trim().is_empty() {
+            "HTML artifact"
+        } else {
+            clean.as_str()
+        }
+    )
 }
 
 pub fn apply_policy(source: &str) -> String {
     let stripped = CSP_META.replace_all(source, "");
-    let policy = format!("<meta http-equiv=\"Content-Security-Policy\" content=\"{PREVIEW_CSP}\">{BOOTSTRAP}");
+    let policy = format!(
+        "<meta http-equiv=\"Content-Security-Policy\" content=\"{PREVIEW_CSP}\">{BOOTSTRAP}"
+    );
     match HEAD.find(&stripped) {
         Some(m) => format!("{}{}{}", &stripped[..m.end()], policy, &stripped[m.end()..]),
-        None => format!("<!doctype html><html><head><meta charset=\"utf-8\">{policy}</head><body>{stripped}</body></html>"),
+        None => format!(
+            "<!doctype html><html><head><meta charset=\"utf-8\">{policy}</head><body>{stripped}</body></html>"
+        ),
     }
 }
 
@@ -49,7 +76,9 @@ mod tests {
 
     #[test]
     fn replaces_a_looser_source_policy() {
-        let out = apply_policy(r#"<html><head><meta http-equiv="Content-Security-Policy" content="default-src *"></head></html>"#);
+        let out = apply_policy(
+            r#"<html><head><meta http-equiv="Content-Security-Policy" content="default-src *"></head></html>"#,
+        );
         assert!(!out.contains("default-src *"));
         assert!(out.contains("default-src 'none'"));
     }

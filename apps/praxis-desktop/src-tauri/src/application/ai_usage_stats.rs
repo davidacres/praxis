@@ -28,15 +28,27 @@ fn cache() -> &'static Cache {
 
 /// Every recorded event, oldest first.
 pub fn list_events(dir: &Path) -> Vec<Value> {
-    let mut all = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    all.entry(dir.to_path_buf()).or_insert_with(|| load(dir)).clone()
+    let mut all = cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    all.entry(dir.to_path_buf())
+        .or_insert_with(|| load(dir))
+        .clone()
 }
 
 fn load(dir: &Path) -> Vec<Value> {
     let path = dir.join(LOG_FILE);
-    let Ok(Some(raw)) = read(&path) else { return Vec::new() };
-    let Ok(document) = parse(&path, Some(&raw)) else { return Vec::new() };
-    document.get(LOG_KEY).and_then(Value::as_array).cloned().unwrap_or_default()
+    let Ok(Some(raw)) = read(&path) else {
+        return Vec::new();
+    };
+    let Ok(document) = parse(&path, Some(&raw)) else {
+        return Vec::new();
+    };
+    document
+        .get(LOG_KEY)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn finite_non_zero(value: &Value) -> bool {
@@ -45,7 +57,10 @@ fn finite_non_zero(value: &Value) -> bool {
 
 /// True when an event reports something; empty no-op deltas are never logged.
 fn has_reportable_usage(event: &Value) -> bool {
-    finite_non_zero(&event["inputTokens"]) || finite_non_zero(&event["outputTokens"]) || finite_non_zero(&event["totalTokens"]) || finite_non_zero(&event["cost"]["amount"])
+    finite_non_zero(&event["inputTokens"])
+        || finite_non_zero(&event["outputTokens"])
+        || finite_non_zero(&event["totalTokens"])
+        || finite_non_zero(&event["cost"]["amount"])
 }
 
 fn record(dir: &Path, mut event: Value) {
@@ -53,7 +68,9 @@ fn record(dir: &Path, mut event: Value) {
     if event["timestamp"].is_null() {
         event["timestamp"] = json!(Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     }
-    let mut all = cache().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut all = cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let events = all.entry(dir.to_path_buf()).or_insert_with(|| load(dir));
     events.push(event);
     if events.len() > MAX_EVENTS {
@@ -77,31 +94,66 @@ struct Seen {
 /// Logs the change in a session's running totals since the last time it was seen.
 pub fn track_session(dir: &Path, session: &Value) {
     static SEEN: OnceLock<Mutex<HashMap<String, Seen>>> = OnceLock::new();
-    let Some(session_id) = session["sessionId"].as_str() else { return };
+    let Some(session_id) = session["sessionId"].as_str() else {
+        return;
+    };
     let number = |value: &Value| value.as_f64().unwrap_or(0.0);
-    let (total, input, output) = (number(&session["tokenUsage"]["totalTokens"]), number(&session["tokenUsage"]["inputTokens"]), number(&session["tokenUsage"]["outputTokens"]));
-    let (cost, currency) = (number(&session["cost"]["amount"]), session["cost"]["currency"].as_str().map(str::to_owned));
+    let (total, input, output) = (
+        number(&session["tokenUsage"]["totalTokens"]),
+        number(&session["tokenUsage"]["inputTokens"]),
+        number(&session["tokenUsage"]["outputTokens"]),
+    );
+    let (cost, currency) = (
+        number(&session["cost"]["amount"]),
+        session["cost"]["currency"].as_str().map(str::to_owned),
+    );
     let previous = {
-        let mut seen = SEEN.get_or_init(Default::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut seen = SEEN
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let key = format!("{}\u{0}{session_id}", dir.display());
         let mut previous = seen.get(&key).cloned().unwrap_or_default();
         // Running totals only grow; a drop means the session restarted from zero.
         if total < previous.total || input < previous.input || output < previous.output {
             previous = Seen::default();
         }
-        seen.insert(key, Seen { total, input, output, cost, currency: currency.clone() });
+        seen.insert(
+            key,
+            Seen {
+                total,
+                input,
+                output,
+                cost,
+                currency: currency.clone(),
+            },
+        );
         previous
     };
-    let currency_stable = previous.currency.is_none() || currency.is_none() || previous.currency == currency;
-    let delta_cost = if currency_stable && currency.is_some() { cost - previous.cost } else { 0.0 };
+    let currency_stable =
+        previous.currency.is_none() || currency.is_none() || previous.currency == currency;
+    let delta_cost = if currency_stable && currency.is_some() {
+        cost - previous.cost
+    } else {
+        0.0
+    };
     let delta = |now: f64, before: f64| (now - before != 0.0).then(|| json!(now - before));
     let mut event = json!({ "source": "session", "sessionId": session_id });
-    for (field, value) in [("provider", &session["provider"]), ("model", &session["model"]), ("workflowRunId", &session["workflowRunId"]), ("workflowNodeId", &session["workflowNodeId"])] {
+    for (field, value) in [
+        ("provider", &session["provider"]),
+        ("model", &session["model"]),
+        ("workflowRunId", &session["workflowRunId"]),
+        ("workflowNodeId", &session["workflowNodeId"]),
+    ] {
         if !value.is_null() {
             event[field] = value.clone();
         }
     }
-    for (field, value) in [("inputTokens", delta(input, previous.input)), ("outputTokens", delta(output, previous.output)), ("totalTokens", delta(total, previous.total))] {
+    for (field, value) in [
+        ("inputTokens", delta(input, previous.input)),
+        ("outputTokens", delta(output, previous.output)),
+        ("totalTokens", delta(total, previous.total)),
+    ] {
         if let Some(value) = value {
             event[field] = value;
         }
@@ -148,7 +200,9 @@ impl Granularity {
 }
 
 fn utc(year: i32, month: u32, day: u32, hour: u32) -> DateTime<Utc> {
-    Utc.with_ymd_and_hms(year, month, day, hour, 0, 0).single().unwrap_or_default()
+    Utc.with_ymd_and_hms(year, month, day, hour, 0, 0)
+        .single()
+        .unwrap_or_default()
 }
 
 pub fn period_start(date: DateTime<Utc>, granularity: Granularity) -> DateTime<Utc> {
@@ -164,7 +218,12 @@ pub fn period_start(date: DateTime<Utc>, granularity: Granularity) -> DateTime<U
 
 fn shift_months(start: DateTime<Utc>, months: i32) -> DateTime<Utc> {
     let index = start.year() * 12 + start.month() as i32 - 1 + months;
-    utc(index.div_euclid(12), (index.rem_euclid(12) + 1) as u32, 1, 0)
+    utc(
+        index.div_euclid(12),
+        (index.rem_euclid(12) + 1) as u32,
+        1,
+        0,
+    )
 }
 
 fn next_start(start: DateTime<Utc>, granularity: Granularity) -> DateTime<Utc> {
@@ -190,7 +249,9 @@ fn iso(date: DateTime<Utc>) -> String {
 }
 
 fn event_time(event: &Value) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(event["timestamp"].as_str()?).ok().map(|t| t.with_timezone(&Utc))
+    DateTime::parse_from_rfc3339(event["timestamp"].as_str()?)
+        .ok()
+        .map(|t| t.with_timezone(&Utc))
 }
 
 fn tokens_of(event: &Value, field: &str) -> Option<f64> {
@@ -199,14 +260,24 @@ fn tokens_of(event: &Value, field: &str) -> Option<f64> {
 
 fn cost_of(event: &Value) -> Option<(String, f64)> {
     let amount = event["cost"]["amount"].as_f64().filter(|a| a.is_finite())?;
-    Some((event["cost"]["currency"].as_str().unwrap_or_default().to_owned(), amount))
+    Some((
+        event["cost"]["currency"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+        amount,
+    ))
 }
 
 /// Currency totals as `[{currency, amount}]`, largest first.
 fn cost_list(cost: &BTreeMap<String, f64>) -> Value {
     let mut list: Vec<(&String, &f64)> = cost.iter().collect();
     list.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
-    json!(list.into_iter().map(|(currency, amount)| json!({ "currency": currency, "amount": amount })).collect::<Vec<_>>())
+    json!(
+        list.into_iter()
+            .map(|(currency, amount)| json!({ "currency": currency, "amount": amount }))
+            .collect::<Vec<_>>()
+    )
 }
 
 #[derive(Default)]
@@ -220,23 +291,39 @@ struct Bucket {
     sources: BTreeMap<String, f64>,
 }
 
-pub fn series(events: &[Value], granularity: Granularity, periods_back: usize, reference: DateTime<Utc>, provider: Option<&str>) -> Vec<Value> {
+pub fn series(
+    events: &[Value],
+    granularity: Granularity,
+    periods_back: usize,
+    reference: DateTime<Utc>,
+    provider: Option<&str>,
+) -> Vec<Value> {
     let mut starts = vec![period_start(reference, granularity)];
     for _ in 1..periods_back.max(1) {
         let earliest = previous_start(starts[0], granularity);
         starts.insert(0, earliest);
     }
-    let range = (starts[0], next_start(*starts.last().unwrap_or(&starts[0]), granularity));
-    let mut buckets: BTreeMap<DateTime<Utc>, Bucket> = starts.iter().map(|start| (*start, Bucket::default())).collect();
+    let range = (
+        starts[0],
+        next_start(*starts.last().unwrap_or(&starts[0]), granularity),
+    );
+    let mut buckets: BTreeMap<DateTime<Utc>, Bucket> = starts
+        .iter()
+        .map(|start| (*start, Bucket::default()))
+        .collect();
     for event in events {
         if provider.is_some_and(|p| event["provider"].as_str() != Some(p)) {
             continue;
         }
-        let Some(at) = event_time(event) else { continue };
+        let Some(at) = event_time(event) else {
+            continue;
+        };
         if at < range.0 || at >= range.1 {
             continue;
         }
-        let Some(bucket) = buckets.get_mut(&period_start(at, granularity)) else { continue };
+        let Some(bucket) = buckets.get_mut(&period_start(at, granularity)) else {
+            continue;
+        };
         bucket.count += 1;
         bucket.total += tokens_of(event, "totalTokens").unwrap_or(0.0);
         bucket.input += tokens_of(event, "inputTokens").unwrap_or(0.0);
@@ -244,10 +331,16 @@ pub fn series(events: &[Value], granularity: Granularity, periods_back: usize, r
         if let Some((currency, amount)) = cost_of(event) {
             *bucket.cost.entry(currency).or_default() += amount;
         }
-        if let (Some(model), Some(total)) = (event["model"].as_str().filter(|m| !m.is_empty()), tokens_of(event, "totalTokens")) {
+        if let (Some(model), Some(total)) = (
+            event["model"].as_str().filter(|m| !m.is_empty()),
+            tokens_of(event, "totalTokens"),
+        ) {
             *bucket.models.entry(model.to_owned()).or_default() += total;
         }
-        *bucket.sources.entry(event["source"].as_str().unwrap_or("session").to_owned()).or_default() += tokens_of(event, "totalTokens").unwrap_or(0.0);
+        *bucket
+            .sources
+            .entry(event["source"].as_str().unwrap_or("session").to_owned())
+            .or_default() += tokens_of(event, "totalTokens").unwrap_or(0.0);
     }
     starts
         .iter()
@@ -267,10 +360,15 @@ pub fn series(events: &[Value], granularity: Granularity, periods_back: usize, r
         .collect()
 }
 
-pub fn compare_latest_period(events: &[Value], granularity: Granularity, reference: DateTime<Utc>) -> Value {
+pub fn compare_latest_period(
+    events: &[Value],
+    granularity: Granularity,
+    reference: DateTime<Utc>,
+) -> Value {
     let both = series(events, granularity, 2, reference, None);
     let (previous, current) = (both[0].clone(), both[1].clone());
-    let delta = current["totalTokens"].as_f64().unwrap_or(0.0) - previous["totalTokens"].as_f64().unwrap_or(0.0);
+    let delta = current["totalTokens"].as_f64().unwrap_or(0.0)
+        - previous["totalTokens"].as_f64().unwrap_or(0.0);
     let before = previous["totalTokens"].as_f64().unwrap_or(0.0);
     let mut result = json!({ "granularity": granularity.name(), "current": current, "previous": previous, "deltaTokens": delta });
     if before > 0.0 {
@@ -320,20 +418,41 @@ fn accumulate(window: &mut Window, event: &Value) {
         }
     };
     add(&mut window.entry);
-    let model = event["model"].as_str().filter(|m| !m.is_empty()).unwrap_or("Unknown model").to_owned();
+    let model = event["model"]
+        .as_str()
+        .filter(|m| !m.is_empty())
+        .unwrap_or("Unknown model")
+        .to_owned();
     let provider = event["provider"].as_str().map(str::to_owned);
     let key = (provider.clone().unwrap_or_default(), model.clone());
-    add(&mut window.models.entry(key).or_insert_with(|| (model, provider, Entry::default())).2);
-    add(window.sources.entry(event["source"].as_str().unwrap_or("session").to_owned()).or_default());
+    add(&mut window
+        .models
+        .entry(key)
+        .or_insert_with(|| (model, provider, Entry::default()))
+        .2);
+    add(window
+        .sources
+        .entry(event["source"].as_str().unwrap_or("session").to_owned())
+        .or_default());
 }
 
 fn finalize(window: &Window, peak: Option<Value>) -> Value {
     let total = window.entry.total;
     let share = |tokens: f64| if total > 0.0 { tokens / total } else { 0.0 };
     let mut models: Vec<&(String, Option<String>, Entry)> = window.models.values().collect();
-    models.sort_by(|a, b| b.2.total.partial_cmp(&a.2.total).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
+    models.sort_by(|a, b| {
+        b.2.total
+            .partial_cmp(&a.2.total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
     let mut sources: Vec<(&String, &Entry)> = window.sources.iter().collect();
-    sources.sort_by(|a, b| b.1.total.partial_cmp(&a.1.total).unwrap_or(std::cmp::Ordering::Equal).then_with(|| source_label(a.0).cmp(source_label(b.0))));
+    sources.sort_by(|a, b| {
+        b.1.total
+            .partial_cmp(&a.1.total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| source_label(a.0).cmp(source_label(b.0)))
+    });
     let mut summary = json!({
         "totalTokens": total, "inputTokens": window.entry.input, "outputTokens": window.entry.output, "eventCount": window.entry.count,
         "costByCurrency": cost_list(&window.entry.cost),
@@ -356,7 +475,11 @@ fn finalize(window: &Window, peak: Option<Value>) -> Value {
 type PeakMap = BTreeMap<DateTime<Utc>, f64>;
 
 /// Busiest entry inside `[from, to)`; an earlier period wins a tie.
-fn busiest(map: &PeakMap, granularity: Granularity, bounds: Option<(DateTime<Utc>, DateTime<Utc>)>) -> Option<Value> {
+fn busiest(
+    map: &PeakMap,
+    granularity: Granularity,
+    bounds: Option<(DateTime<Utc>, DateTime<Utc>)>,
+) -> Option<Value> {
     let mut best: Option<(DateTime<Utc>, f64)> = None;
     for (key, tokens) in map {
         if bounds.is_some_and(|(from, to)| *key < from || *key >= to) || *tokens <= 0.0 {
@@ -370,13 +493,33 @@ fn busiest(map: &PeakMap, granularity: Granularity, bounds: Option<(DateTime<Utc
 }
 
 pub fn dashboard_summary(events: &[Value], reference: DateTime<Utc>) -> Value {
-    let (day, week, month) = (period_start(reference, Granularity::Day), period_start(reference, Granularity::Week), period_start(reference, Granularity::Month));
-    let (day_end, week_end, month_end) = (next_start(day, Granularity::Day), next_start(week, Granularity::Week), next_start(month, Granularity::Month));
-    let (mut today, mut this_week, mut this_month, mut all) = (Window::default(), Window::default(), Window::default(), Window::default());
-    let (mut hours, mut days, mut weeks, mut months) = (PeakMap::new(), PeakMap::new(), PeakMap::new(), PeakMap::new());
+    let (day, week, month) = (
+        period_start(reference, Granularity::Day),
+        period_start(reference, Granularity::Week),
+        period_start(reference, Granularity::Month),
+    );
+    let (day_end, week_end, month_end) = (
+        next_start(day, Granularity::Day),
+        next_start(week, Granularity::Week),
+        next_start(month, Granularity::Month),
+    );
+    let (mut today, mut this_week, mut this_month, mut all) = (
+        Window::default(),
+        Window::default(),
+        Window::default(),
+        Window::default(),
+    );
+    let (mut hours, mut days, mut weeks, mut months) = (
+        PeakMap::new(),
+        PeakMap::new(),
+        PeakMap::new(),
+        PeakMap::new(),
+    );
     let (mut first, mut last): (Option<DateTime<Utc>>, Option<DateTime<Utc>>) = (None, None);
     for event in events {
-        let Some(at) = event_time(event) else { continue };
+        let Some(at) = event_time(event) else {
+            continue;
+        };
         accumulate(&mut all, event);
         first = Some(first.map_or(at, |f| f.min(at)));
         last = Some(last.map_or(at, |l| l.max(at)));
@@ -390,10 +533,16 @@ pub fn dashboard_summary(events: &[Value], reference: DateTime<Utc>) -> Value {
             accumulate(&mut this_month, event);
         }
         let tokens = tokens_of(event, "totalTokens").unwrap_or(0.0);
-        *hours.entry(period_start(at, Granularity::Hour)).or_default() += tokens;
+        *hours
+            .entry(period_start(at, Granularity::Hour))
+            .or_default() += tokens;
         *days.entry(period_start(at, Granularity::Day)).or_default() += tokens;
-        *weeks.entry(period_start(at, Granularity::Week)).or_default() += tokens;
-        *months.entry(period_start(at, Granularity::Month)).or_default() += tokens;
+        *weeks
+            .entry(period_start(at, Granularity::Week))
+            .or_default() += tokens;
+        *months
+            .entry(period_start(at, Granularity::Month))
+            .or_default() += tokens;
     }
     let mut all_time = finalize(&all, busiest(&months, Granularity::Month, None));
     if let Some(first) = first {
@@ -403,7 +552,11 @@ pub fn dashboard_summary(events: &[Value], reference: DateTime<Utc>) -> Value {
         all_time["lastEventAt"] = json!(iso(last));
     }
     let mut highs = json!({});
-    for (name, map, granularity) in [("day", &days, Granularity::Day), ("week", &weeks, Granularity::Week), ("month", &months, Granularity::Month)] {
+    for (name, map, granularity) in [
+        ("day", &days, Granularity::Day),
+        ("week", &weeks, Granularity::Week),
+        ("month", &months, Granularity::Month),
+    ] {
         if let Some(peak) = busiest(map, granularity, None) {
             highs[name] = peak;
         }
@@ -429,7 +582,11 @@ mod tests {
     #[test]
     fn dashboard_buckets_today_week_and_month() {
         let now = Utc.with_ymd_and_hms(2026, 11, 12, 10, 30, 0).unwrap();
-        let events = vec![event("2026-11-12T09:15:00.000Z", "a", 100), event("2026-11-10T09:15:00.000Z", "b", 50), event("2026-10-01T00:00:00.000Z", "a", 10)];
+        let events = vec![
+            event("2026-11-12T09:15:00.000Z", "a", 100),
+            event("2026-11-10T09:15:00.000Z", "b", 50),
+            event("2026-10-01T00:00:00.000Z", "a", 10),
+        ];
         let summary = dashboard_summary(&events, now);
         assert_eq!(summary["today"]["totalTokens"], 100.0);
         assert_eq!(summary["week"]["totalTokens"], 150.0);
@@ -442,14 +599,20 @@ mod tests {
     #[test]
     fn series_zero_fills_and_compares() {
         let now = Utc.with_ymd_and_hms(2026, 11, 12, 10, 0, 0).unwrap();
-        let events = vec![event("2026-11-12T09:00:00.000Z", "a", 100), event("2026-11-10T09:00:00.000Z", "a", 40)];
+        let events = vec![
+            event("2026-11-12T09:00:00.000Z", "a", 100),
+            event("2026-11-10T09:00:00.000Z", "a", 40),
+        ];
         let buckets = series(&events, Granularity::Day, 3, now, None);
         assert_eq!(buckets.len(), 3);
         assert_eq!(buckets[1]["totalTokens"], 0.0);
         let compare = compare_latest_period(&events, Granularity::Day, now);
         assert_eq!(compare["deltaTokens"], 100.0);
         assert!(compare.get("deltaPercent").is_none());
-        assert_eq!(series(&events, Granularity::Day, 3, now, Some("anthropic"))[2]["totalTokens"], 0.0);
+        assert_eq!(
+            series(&events, Granularity::Day, 3, now, Some("anthropic"))[2]["totalTokens"],
+            0.0
+        );
     }
 
     #[test]

@@ -64,16 +64,24 @@ fn set_optional(map: &mut Map<String, Value>, key: &str, value: Option<String>) 
 
 fn ticket_node(value: &Value, index: usize) -> Option<Value> {
     let object = value.as_object()?;
-    if matches!(object.get("type").and_then(Value::as_str), Some("note" | "website")) {
+    if matches!(
+        object.get("type").and_then(Value::as_str),
+        Some("note" | "website")
+    ) {
         return None;
     }
     let get = |key: &str| object.get(key).unwrap_or(&Value::Null);
     let issue_key = pick_first_string(&[get("issueKey"), get("key")])?;
-    let id = pick_first_string(&[get("id")]).unwrap_or_else(|| format!("ticket-{issue_key}-{index}"));
-    let summary = pick_first_string(&[get("summary"), get("title")]).unwrap_or_else(|| issue_key.clone());
-    let issue_type = pick_first_string(&[get("issueType"), get("type")]).unwrap_or_else(|| "Unknown".into());
-    let status = pick_first_string(&[get("status"), get("state")]).unwrap_or_else(|| "Unknown".into());
-    let project_key = pick_first_string(&[get("projectKey")]).unwrap_or_else(|| fallback_project_key(&issue_key));
+    let id =
+        pick_first_string(&[get("id")]).unwrap_or_else(|| format!("ticket-{issue_key}-{index}"));
+    let summary =
+        pick_first_string(&[get("summary"), get("title")]).unwrap_or_else(|| issue_key.clone());
+    let issue_type =
+        pick_first_string(&[get("issueType"), get("type")]).unwrap_or_else(|| "Unknown".into());
+    let status =
+        pick_first_string(&[get("status"), get("state")]).unwrap_or_else(|| "Unknown".into());
+    let project_key =
+        pick_first_string(&[get("projectKey")]).unwrap_or_else(|| fallback_project_key(&issue_key));
     let column = (index % 4) as f64;
     let row = (index / 4) as f64;
     let mut node = Map::new();
@@ -86,8 +94,14 @@ fn ticket_node(value: &Value, index: usize) -> Option<Value> {
     set_optional(&mut node, "assignee", pick_first_string(&[get("assignee")]));
     set_optional(&mut node, "priority", pick_first_string(&[get("priority")]));
     node.insert("projectKey".into(), json!(project_key));
-    node.insert("x".into(), number_json(as_number(get("x")).unwrap_or(24.0 + column * 280.0)));
-    node.insert("y".into(), number_json(as_number(get("y")).unwrap_or(72.0 + row * 150.0)));
+    node.insert(
+        "x".into(),
+        number_json(as_number(get("x")).unwrap_or(24.0 + column * 280.0)),
+    );
+    node.insert(
+        "y".into(),
+        number_json(as_number(get("y")).unwrap_or(72.0 + row * 150.0)),
+    );
     Some(Value::Object(node))
 }
 
@@ -163,18 +177,26 @@ fn missing(value: &Value, keys: [&str; 2]) -> bool {
 /// `normalizeTaskDesignerPersistedState`; `None` is the "never saved" case.
 pub fn normalize(value: Option<&Value>) -> Recovery {
     let Some(value) = value else {
-        return Recovery { state: empty_state(), repaired: false, warning: None };
+        return Recovery {
+            state: empty_state(),
+            repaired: false,
+            warning: None,
+        };
     };
     if !value.is_object() {
         return Recovery {
             state: empty_state(),
             repaired: true,
-            warning: Some("Recovered Task Designer state: persisted payload was invalid and was reset.".into()),
+            warning: Some(
+                "Recovered Task Designer state: persisted payload was invalid and was reset."
+                    .into(),
+            ),
         };
     }
     let mut nodes: Vec<Value> = Vec::new();
     let mut seen_ids: HashSet<String> = HashSet::new();
-    let (mut dropped_nodes, mut deduped, mut coords, mut note_dims, mut site_dims) = (0, 0, 0, 0, 0);
+    let (mut dropped_nodes, mut deduped, mut coords, mut note_dims, mut site_dims) =
+        (0, 0, 0, 0, 0);
     let raw_nodes = value["nodes"].as_array().cloned().unwrap_or_default();
     for (index, candidate) in raw_nodes.iter().enumerate() {
         let Some(node) = website_node(candidate, index)
@@ -192,10 +214,16 @@ pub fn normalize(value: Option<&Value>) -> Recovery {
         if candidate.is_object() && missing(candidate, ["x", "y"]) {
             coords += 1;
         }
-        if node["type"] == "note" && candidate.is_object() && missing(candidate, ["width", "height"]) {
+        if node["type"] == "note"
+            && candidate.is_object()
+            && missing(candidate, ["width", "height"])
+        {
             note_dims += 1;
         }
-        if node["type"] == "website" && candidate.is_object() && missing(candidate, ["width", "height"]) {
+        if node["type"] == "website"
+            && candidate.is_object()
+            && missing(candidate, ["width", "height"])
+        {
             site_dims += 1;
         }
         seen_ids.insert(id);
@@ -205,9 +233,15 @@ pub fn normalize(value: Option<&Value>) -> Recovery {
     let zoom = as_number(&value["zoom"])
         .map(|zoom| ((zoom * 100.0).round() / 100.0).clamp(0.5, 2.0))
         .unwrap_or(1.0);
-    let toolbar = value["toolbarPosition"].as_object().map(|_| &value["toolbarPosition"]);
-    let toolbar_x = toolbar.and_then(|toolbar| as_number(&toolbar["x"])).unwrap_or(16.0);
-    let toolbar_y = toolbar.and_then(|toolbar| as_number(&toolbar["y"])).unwrap_or(16.0);
+    let toolbar = value["toolbarPosition"]
+        .as_object()
+        .map(|_| &value["toolbarPosition"]);
+    let toolbar_x = toolbar
+        .and_then(|toolbar| as_number(&toolbar["x"]))
+        .unwrap_or(16.0);
+    let toolbar_y = toolbar
+        .and_then(|toolbar| as_number(&toolbar["y"]))
+        .unwrap_or(16.0);
 
     let mut connectors: Vec<Value> = Vec::new();
     let mut seen_connector_ids: HashSet<String> = HashSet::new();
@@ -246,9 +280,21 @@ pub fn normalize(value: Option<&Value>) -> Recovery {
     let parts: Vec<String> = [
         warning_part(dropped_nodes, "invalid node", "invalid nodes"),
         warning_part(deduped, "duplicate node id", "duplicate node ids"),
-        warning_part(coords, "node with invalid coordinates", "nodes with invalid coordinates"),
-        warning_part(note_dims, "note with invalid dimensions", "notes with invalid dimensions"),
-        warning_part(site_dims, "website preview with invalid dimensions", "website previews with invalid dimensions"),
+        warning_part(
+            coords,
+            "node with invalid coordinates",
+            "nodes with invalid coordinates",
+        ),
+        warning_part(
+            note_dims,
+            "note with invalid dimensions",
+            "notes with invalid dimensions",
+        ),
+        warning_part(
+            site_dims,
+            "website preview with invalid dimensions",
+            "website previews with invalid dimensions",
+        ),
         warning_part(dropped, "invalid connector", "invalid connectors"),
         warning_part(stale, "stale connector", "stale connectors"),
         warning_part(self_loops, "self-loop connector", "self-loop connectors"),
@@ -267,7 +313,12 @@ pub fn normalize(value: Option<&Value>) -> Recovery {
             "toolbarPosition": { "x": number_json(toolbar_x), "y": number_json(toolbar_y) }
         }),
         repaired,
-        warning: repaired.then(|| format!("Recovered Task Designer state: removed {}.", parts.join(", "))),
+        warning: repaired.then(|| {
+            format!(
+                "Recovered Task Designer state: removed {}.",
+                parts.join(", ")
+            )
+        }),
     }
 }
 
@@ -295,7 +346,8 @@ pub fn validate_graph(connectors: &[Value]) -> Option<&'static str> {
             None => adjacency.push((source.clone(), vec![target.clone()])),
         }
     }
-    let lookup: HashMap<&str, &Vec<String>> = adjacency.iter().map(|(id, n)| (id.as_str(), n)).collect();
+    let lookup: HashMap<&str, &Vec<String>> =
+        adjacency.iter().map(|(id, n)| (id.as_str(), n)).collect();
     fn visit<'a>(
         node: &'a str,
         lookup: &HashMap<&'a str, &'a Vec<String>>,
@@ -328,12 +380,22 @@ pub fn validate_graph(connectors: &[Value]) -> Option<&'static str> {
 
 /// Kahn's algorithm; ties break by input order. `None` when there is a cycle.
 pub fn topological_order(nodes: &[Value], connectors: &[Value]) -> Option<Vec<String>> {
-    let ids: Vec<String> = nodes.iter().map(|n| n["id"].as_str().unwrap_or("").to_owned()).collect();
-    let order: HashMap<&str, usize> = ids.iter().enumerate().map(|(i, id)| (id.as_str(), i)).collect();
-    let mut adjacency: HashMap<&str, Vec<&str>> = ids.iter().map(|id| (id.as_str(), Vec::new())).collect();
+    let ids: Vec<String> = nodes
+        .iter()
+        .map(|n| n["id"].as_str().unwrap_or("").to_owned())
+        .collect();
+    let order: HashMap<&str, usize> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (id.as_str(), i))
+        .collect();
+    let mut adjacency: HashMap<&str, Vec<&str>> =
+        ids.iter().map(|id| (id.as_str(), Vec::new())).collect();
     let mut in_degree: HashMap<&str, usize> = ids.iter().map(|id| (id.as_str(), 0)).collect();
     for link in connectors {
-        let (Some(source), Some(target)) = (link["sourceNodeId"].as_str(), link["targetNodeId"].as_str()) else {
+        let (Some(source), Some(target)) =
+            (link["sourceNodeId"].as_str(), link["targetNodeId"].as_str())
+        else {
             continue;
         };
         if !adjacency.contains_key(source) || !in_degree.contains_key(target) {
@@ -345,7 +407,11 @@ pub fn topological_order(nodes: &[Value], connectors: &[Value]) -> Option<Vec<St
     for neighbours in adjacency.values_mut() {
         neighbours.sort_by(|a, b| compare_ids(a, b, &order));
     }
-    let mut queue: VecDeque<&str> = ids.iter().map(String::as_str).filter(|id| in_degree[id] == 0).collect();
+    let mut queue: VecDeque<&str> = ids
+        .iter()
+        .map(String::as_str)
+        .filter(|id| in_degree[id] == 0)
+        .collect();
     let mut ordered = Vec::new();
     while let Some(node) = queue.pop_front() {
         ordered.push(node.to_owned());
@@ -402,15 +468,26 @@ mod tests {
         assert_eq!(recovered.state["zoom"], 2);
         assert_eq!(
             recovered.warning.as_deref(),
-            Some("Recovered Task Designer state: removed 1 invalid node, 1 duplicate node id, 1 node with invalid coordinates, 1 note with invalid dimensions, 1 stale connector, 1 self-loop connector.")
+            Some(
+                "Recovered Task Designer state: removed 1 invalid node, 1 duplicate node id, 1 node with invalid coordinates, 1 note with invalid dimensions, 1 stale connector, 1 self-loop connector."
+            )
         );
     }
 
     #[test]
     fn graph_validation_and_ordering() {
-        let link = |id: &str, a: &str, b: &str| json!({ "id": id, "sourceNodeId": a, "targetNodeId": b });
-        assert!(validate_graph(&[link("1", "a", "b"), link("2", "b", "a")]).unwrap().contains("cycles"));
-        assert!(validate_graph(&[link("1", "a", "b"), link("2", "a", "b")]).unwrap().contains("Duplicate"));
+        let link =
+            |id: &str, a: &str, b: &str| json!({ "id": id, "sourceNodeId": a, "targetNodeId": b });
+        assert!(
+            validate_graph(&[link("1", "a", "b"), link("2", "b", "a")])
+                .unwrap()
+                .contains("cycles")
+        );
+        assert!(
+            validate_graph(&[link("1", "a", "b"), link("2", "a", "b")])
+                .unwrap()
+                .contains("Duplicate")
+        );
         assert!(validate_graph(&[link("1", "a", "b")]).is_none());
         let nodes = vec![json!({"id": "b"}), json!({"id": "a"}), json!({"id": "c"})];
         assert_eq!(

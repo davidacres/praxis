@@ -59,7 +59,9 @@ fn folder_service(config: StaticFolderConfig) -> Arc<dyn IssueTrackerService> {
     type Kept = Vec<(String, Arc<FolderService>)>;
     static SERVICES: std::sync::Mutex<Kept> = std::sync::Mutex::new(Vec::new());
     let key = serde_json::to_string(&config).unwrap_or_default();
-    let mut services = SERVICES.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut services = SERVICES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some((_, service)) = services.iter().find(|(k, _)| *k == key) {
         return service.clone();
     }
@@ -90,7 +92,8 @@ pub fn resolve_tracker_service(input: &TrackerConnectionInput) -> Arc<dyn IssueT
                 Arc::new(SilentLogSink),
             ))
         }
-        BackendMode::Jiracloud => match input.jira_config.clone().filter(|cfg| cfg.is_configured()) {
+        BackendMode::Jiracloud => match input.jira_config.clone().filter(|cfg| cfg.is_configured())
+        {
             Some(cfg) => Arc::new(crate::jira_service::JiraCloudService::new(cfg)),
             None => Arc::new(StubBackendService::new(BackendMode::Jiracloud)),
         },

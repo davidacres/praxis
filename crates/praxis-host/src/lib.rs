@@ -6,12 +6,12 @@ pub mod call_client;
 pub mod config;
 pub mod context;
 pub mod deployment_bridge;
+pub mod electron_secrets;
 pub mod events;
 pub mod mobile_bridge;
 #[cfg(feature = "napi-addon")]
 pub mod napi_bridge;
 pub mod profile_bridge;
-pub mod electron_secrets;
 pub mod secret_backends;
 pub mod secrets;
 pub mod services;

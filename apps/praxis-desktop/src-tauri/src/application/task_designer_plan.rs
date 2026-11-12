@@ -71,7 +71,11 @@ fn slug(value: &str, fallback: &str) -> String {
     let trimmed = collapsed.trim_matches('-');
     let cut: String = trimmed.chars().take(64).collect();
     let cut = cut.trim_end_matches('-');
-    if cut.is_empty() { fallback.to_owned() } else { cut.to_owned() }
+    if cut.is_empty() {
+        fallback.to_owned()
+    } else {
+        cut.to_owned()
+    }
 }
 
 fn execution_priority(priority: Option<&str>) -> String {
@@ -92,11 +96,17 @@ fn ordered_nodes(nodes: &[Value], connectors: &[Value]) -> Vec<Value> {
     let by_id: HashMap<String, &Value> = nodes.iter().map(|n| (text(n, "id"), n)).collect();
     let ids = topological_order(nodes, connectors)
         .unwrap_or_else(|| nodes.iter().map(|n| text(n, "id")).collect());
-    ids.iter().filter_map(|id| by_id.get(id).map(|n| (*n).clone())).collect()
+    ids.iter()
+        .filter_map(|id| by_id.get(id).map(|n| (*n).clone()))
+        .collect()
 }
 
 fn node_order(nodes: &[Value]) -> HashMap<String, usize> {
-    nodes.iter().enumerate().map(|(i, n)| (text(n, "id"), i)).collect()
+    nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (text(n, "id"), i))
+        .collect()
 }
 
 fn plural(count: usize) -> &'static str {
@@ -111,13 +121,24 @@ pub fn master_plan_markdown(nodes: &[Value], connectors: &[Value]) -> String {
     let mut rows: Vec<&Value> = connectors
         .iter()
         .filter(|c| {
-            by_id.contains_key(&text(c, "sourceNodeId")) && by_id.contains_key(&text(c, "targetNodeId"))
+            by_id.contains_key(&text(c, "sourceNodeId"))
+                && by_id.contains_key(&text(c, "targetNodeId"))
         })
         .collect();
     rows.sort_by(|l, r| {
-        compare_ids(l["sourceNodeId"].as_str().unwrap_or(""), r["sourceNodeId"].as_str().unwrap_or(""), &order_ref)
-            .then_with(|| compare_ids(l["targetNodeId"].as_str().unwrap_or(""), r["targetNodeId"].as_str().unwrap_or(""), &order_ref))
-            .then_with(|| text(l, "id").cmp(&text(r, "id")))
+        compare_ids(
+            l["sourceNodeId"].as_str().unwrap_or(""),
+            r["sourceNodeId"].as_str().unwrap_or(""),
+            &order_ref,
+        )
+        .then_with(|| {
+            compare_ids(
+                l["targetNodeId"].as_str().unwrap_or(""),
+                r["targetNodeId"].as_str().unwrap_or(""),
+                &order_ref,
+            )
+        })
+        .then_with(|| text(l, "id").cmp(&text(r, "id")))
     });
     let deps = rows.len();
     let mut lines: Vec<String> = vec![
@@ -128,7 +149,11 @@ pub fn master_plan_markdown(nodes: &[Value], connectors: &[Value]) -> String {
         format!("**Priority:** {PRIORITY}"),
         format!(
             "**Dependencies:** {}",
-            if deps > 0 { format!("{deps} directed graph link{}", plural(deps)) } else { "None".into() }
+            if deps > 0 {
+                format!("{deps} directed graph link{}", plural(deps))
+            } else {
+                "None".into()
+            }
         ),
         format!("**Complexity:** {COMPLEXITY}"),
         format!("**Risk:** {RISK}"),
@@ -164,7 +189,11 @@ pub fn master_plan_markdown(nodes: &[Value], connectors: &[Value]) -> String {
                 index + 1,
                 index + 1,
                 text(node, "issueKey"),
-                if summary.is_empty() { "(no summary)".into() } else { summary }
+                if summary.is_empty() {
+                    "(no summary)".into()
+                } else {
+                    summary
+                }
             ));
         }
     }
@@ -174,12 +203,18 @@ pub fn master_plan_markdown(nodes: &[Value], connectors: &[Value]) -> String {
         lines.push("1. No explicit directed dependencies are currently defined.".into());
     } else {
         for (index, link) in rows.iter().enumerate() {
-            let (Some(source), Some(target)) =
-                (by_id.get(&text(link, "sourceNodeId")), by_id.get(&text(link, "targetNodeId")))
-            else {
+            let (Some(source), Some(target)) = (
+                by_id.get(&text(link, "sourceNodeId")),
+                by_id.get(&text(link, "targetNodeId")),
+            ) else {
                 continue;
             };
-            lines.push(format!("{}. {} → {}", index + 1, text(source, "issueKey"), text(target, "issueKey")));
+            lines.push(format!(
+                "{}. {} → {}",
+                index + 1,
+                text(source, "issueKey"),
+                text(target, "issueKey")
+            ));
         }
     }
     lines.extend([
@@ -261,7 +296,11 @@ pub fn feature_artifacts(nodes: &[Value], connectors: &[Value]) -> Vec<Feature> 
             let title = format!(
                 "Execution Slice {} — {}",
                 two_digits(number),
-                if summary.is_empty() { text(&first.node, "issueKey") } else { summary }
+                if summary.is_empty() {
+                    text(&first.node, "issueKey")
+                } else {
+                    summary
+                }
             );
             Feature {
                 reference: two_digits(number),
@@ -276,10 +315,16 @@ pub fn feature_artifacts(nodes: &[Value], connectors: &[Value]) -> Vec<Feature> 
 
 pub fn feature_markdown(feature: &Feature) -> String {
     let rank = |p: &str| p[1..].parse::<usize>().unwrap_or(usize::MAX);
-    let mut priorities: Vec<String> =
-        feature.stories.iter().map(|s| execution_priority(s.node["priority"].as_str())).collect();
+    let mut priorities: Vec<String> = feature
+        .stories
+        .iter()
+        .map(|s| execution_priority(s.node["priority"].as_str()))
+        .collect();
     priorities.sort_by_key(|p| rank(p));
-    let priority = priorities.first().cloned().unwrap_or_else(|| PRIORITY.into());
+    let priority = priorities
+        .first()
+        .cloned()
+        .unwrap_or_else(|| PRIORITY.into());
     let mut lines: Vec<String> = vec![
         format!("# Feature {}: {}", feature.reference, feature.title),
         String::new(),
@@ -288,14 +333,21 @@ pub fn feature_markdown(feature: &Feature) -> String {
         format!("**Priority:** {priority}"),
         format!(
             "**Dependencies:** {}",
-            if feature.dependencies.is_empty() { "None".into() } else { feature.dependencies.join(", ") }
+            if feature.dependencies.is_empty() {
+                "None".into()
+            } else {
+                feature.dependencies.join(", ")
+            }
         ),
         format!("**Complexity:** {COMPLEXITY}"),
         format!("**Risk:** {RISK}"),
         format!("**Confidence:** {CONFIDENCE}"),
         String::new(),
         "## Description".into(),
-        format!("Generated from Task Designer graph order for story slice group {}.", feature.reference),
+        format!(
+            "Generated from Task Designer graph order for story slice group {}.",
+            feature.reference
+        ),
         String::new(),
         "## Items".into(),
         String::new(),
@@ -307,7 +359,11 @@ pub fn feature_markdown(feature: &Feature) -> String {
         lines.push(format!(
             "| {} | Story | {} | {} | {} |",
             story.reference,
-            if summary.is_empty() { "(no summary)".into() } else { summary },
+            if summary.is_empty() {
+                "(no summary)".into()
+            } else {
+                summary
+            },
             text(&story.node, "issueKey"),
             text(&story.node, "status")
         ));
@@ -334,13 +390,28 @@ pub fn feature_markdown(feature: &Feature) -> String {
 pub fn story_markdown(story: &Story) -> String {
     let key = text(&story.node, "issueKey");
     let summary = single_line(story.node["summary"].as_str().unwrap_or(""));
-    let deps = if story.dependencies.is_empty() { "None".to_owned() } else { story.dependencies.join(", ") };
+    let deps = if story.dependencies.is_empty() {
+        "None".to_owned()
+    } else {
+        story.dependencies.join(", ")
+    };
     let mut lines: Vec<String> = vec![
-        format!("# Story {}: {}", story.reference, if summary.is_empty() { key.clone() } else { summary }),
+        format!(
+            "# Story {}: {}",
+            story.reference,
+            if summary.is_empty() {
+                key.clone()
+            } else {
+                summary
+            }
+        ),
         String::new(),
         "**Status:** Proposed".into(),
         "**Type:** Story".into(),
-        format!("**Priority:** {}", execution_priority(story.node["priority"].as_str())),
+        format!(
+            "**Priority:** {}",
+            execution_priority(story.node["priority"].as_str())
+        ),
         format!("**Dependencies:** {deps}"),
         format!("**Complexity:** {COMPLEXITY}"),
         format!("**Risk:** {RISK}"),
@@ -348,7 +419,10 @@ pub fn story_markdown(story: &Story) -> String {
         format!("**Source Ticket:** {key}"),
         String::new(),
         "## Description".into(),
-        format!("Implement execution phase {} from the Task Designer graph using ticket {key}.", story.order),
+        format!(
+            "Implement execution phase {} from the Task Designer graph using ticket {key}.",
+            story.order
+        ),
         String::new(),
         "## Implementation Activities".into(),
         format!("1. Deliver the scope represented by ticket {key}."),
@@ -380,7 +454,11 @@ pub fn story_markdown(story: &Story) -> String {
 pub fn artifacts(nodes: &[Value], connectors: &[Value]) -> Artifacts {
     let features = feature_artifacts(nodes, connectors);
     let story_count = features.iter().map(|f| f.stories.len()).sum();
-    Artifacts { master_plan_markdown: master_plan_markdown(nodes, connectors), features, story_count }
+    Artifacts {
+        master_plan_markdown: master_plan_markdown(nodes, connectors),
+        features,
+        story_count,
+    }
 }
 
 #[cfg(test)]
@@ -391,17 +469,26 @@ mod tests {
 
     #[test]
     fn plan_orders_tickets_and_groups_three_stories_per_feature() {
-        let ticket = |id: &str, key: &str, summary: &str| {
-            json!({ "type": "ticket", "id": id, "issueKey": key, "summary": summary, "status": "To Do", "priority": "p1" })
-        };
-        let nodes = vec![ticket("b", "B-1", "Second"), ticket("a", "A-1", "First step"), ticket("c", "C-1", "Third"), ticket("d", "D-1", "Fourth")];
+        let ticket = |id: &str, key: &str, summary: &str| json!({ "type": "ticket", "id": id, "issueKey": key, "summary": summary, "status": "To Do", "priority": "p1" });
+        let nodes = vec![
+            ticket("b", "B-1", "Second"),
+            ticket("a", "A-1", "First step"),
+            ticket("c", "C-1", "Third"),
+            ticket("d", "D-1", "Fourth"),
+        ];
         let links = vec![json!({ "id": "l", "sourceNodeId": "a", "targetNodeId": "b" })];
         let plan = artifacts(&nodes, &links);
-        assert!(plan.master_plan_markdown.contains("1. **Phase 1 — A-1:** First step"));
+        assert!(
+            plan.master_plan_markdown
+                .contains("1. **Phase 1 — A-1:** First step")
+        );
         assert!(plan.master_plan_markdown.contains("1. A-1 → B-1"));
         assert_eq!(plan.features.len(), 2);
         assert_eq!(plan.story_count, 4);
-        assert_eq!(plan.features[0].stories[1].dependencies, Vec::<String>::new());
+        assert_eq!(
+            plan.features[0].stories[1].dependencies,
+            Vec::<String>::new()
+        );
         assert_eq!(plan.features[1].stories[0].dependencies, vec!["01.1"]);
         assert_eq!(plan.features[1].dependencies, vec!["Feature 01"]);
         assert_eq!(plan.features[0].slug, "execution-slice-01-first-step");

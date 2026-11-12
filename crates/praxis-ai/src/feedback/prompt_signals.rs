@@ -7,7 +7,10 @@ use serde_json::Value;
 
 use super::clarity::{Answers, CHECKLIST, score_answers};
 use super::grounding::{pick_test_command, rank_file_candidates, unknown_identifiers};
-use super::types::{DimensionScore, Finding, PriorContext, Remediation, Signal, WorkspaceHints, group_digits, js_round, signal};
+use super::types::{
+    DimensionScore, Finding, PriorContext, Remediation, Signal, WorkspaceHints, group_digits,
+    js_round, signal,
+};
 
 macro_rules! lazy_re {
     ($name:ident, $pattern:expr) => {
@@ -18,18 +21,48 @@ macro_rules! lazy_re {
     };
 }
 
-lazy_re!(edit_intent, r"(?i)\b(implement|create|write|edit|modify|update|refactor|fix|add|remove|delete|rename|build|patch|scaffold|wire)\b");
-lazy_re!(imperative_start, r"(?i)^(?:please\s+)?(put|move|make|do|change|set|replace|swap|convert|migrate|clean|tidy|improve|handle|sort|get|turn|use|hook|connect|finish|apply|bump|upgrade|tweak|adjust|align|place|insert|drop|stick|wrap|merge|split|deploy|run)\b");
-lazy_re!(read_only_intent, r"(?i)\b(do not edit|don't edit|read[- ]only|without modifying|only analyze|just explain|investigate only)\b");
-lazy_re!(file_anchor, r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|css|html|py|go|rs|cs|dart)\b|`[^`]{2,80}`|@[A-Za-z0-9_./-]{3,})");
-lazy_re!(ticket_anchor, r"\b(?:FX-[A-Z]+-\d+|TASK-\d+|[A-Z]{2,10}-\d+|#\d+)\b");
-lazy_re!(verification, r"(?i)\b(test|tests|unit test|e2e|playwright|verify|verification|check-types|typecheck|compile|build|lint|assert|npm run|node --test)\b");
-lazy_re!(question_lead, r"(?i)^(how|what|why|where|which|who|when|does|is|are|should|(?:can|could) you (?:explain|tell me|describe)|explain|tell me|describe)\b");
-lazy_re!(follow_up_ref, r"(?i)\b(it|that|this|those|these|again|same|above|previous|earlier|remaining|rest|commit|push|continue|retry|rerun|re-run|also|instead|too)\b");
+lazy_re!(
+    edit_intent,
+    r"(?i)\b(implement|create|write|edit|modify|update|refactor|fix|add|remove|delete|rename|build|patch|scaffold|wire)\b"
+);
+lazy_re!(
+    imperative_start,
+    r"(?i)^(?:please\s+)?(put|move|make|do|change|set|replace|swap|convert|migrate|clean|tidy|improve|handle|sort|get|turn|use|hook|connect|finish|apply|bump|upgrade|tweak|adjust|align|place|insert|drop|stick|wrap|merge|split|deploy|run)\b"
+);
+lazy_re!(
+    read_only_intent,
+    r"(?i)\b(do not edit|don't edit|read[- ]only|without modifying|only analyze|just explain|investigate only)\b"
+);
+lazy_re!(
+    file_anchor,
+    r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|\b[A-Za-z0-9_-]+\.(?:ts|tsx|js|jsx|mjs|cjs|json|md|css|html|py|go|rs|cs|dart)\b|`[^`]{2,80}`|@[A-Za-z0-9_./-]{3,})"
+);
+lazy_re!(
+    ticket_anchor,
+    r"\b(?:FX-[A-Z]+-\d+|TASK-\d+|[A-Z]{2,10}-\d+|#\d+)\b"
+);
+lazy_re!(
+    verification,
+    r"(?i)\b(test|tests|unit test|e2e|playwright|verify|verification|check-types|typecheck|compile|build|lint|assert|npm run|node --test)\b"
+);
+lazy_re!(
+    question_lead,
+    r"(?i)^(how|what|why|where|which|who|when|does|is|are|should|(?:can|could) you (?:explain|tell me|describe)|explain|tell me|describe)\b"
+);
+lazy_re!(
+    follow_up_ref,
+    r"(?i)\b(it|that|this|those|these|again|same|above|previous|earlier|remaining|rest|commit|push|continue|retry|rerun|re-run|also|instead|too)\b"
+);
 lazy_re!(review_pattern, r"(?i)\b(review|audit|critique)\b");
-lazy_re!(plan_pattern, r"(?i)\b(plan|roadmap|decompose|stories|feature plan|break (?:it|this) down)\b");
+lazy_re!(
+    plan_pattern,
+    r"(?i)\b(plan|roadmap|decompose|stories|feature plan|break (?:it|this) down)\b"
+);
 lazy_re!(plan_verbs, r"(?i)\b(create|write|draft|make)\b");
-lazy_re!(bugfix_pattern, r"(?i)\b(fix|bug|broken|regression|crash|failing|fails|error|truncated|misaligned|wrong)\b");
+lazy_re!(
+    bugfix_pattern,
+    r"(?i)\b(fix|bug|broken|regression|crash|failing|fails|error|truncated|misaligned|wrong)\b"
+);
 lazy_re!(question_mark_end, r"\?\s*$");
 
 pub fn intent_label(intent: &str) -> &'static str {
@@ -45,7 +78,8 @@ pub fn intent_label(intent: &str) -> &'static str {
 }
 
 fn has_action_intent(text: &str) -> bool {
-    (edit_intent().is_match(text) || imperative_start().is_match(text)) && !read_only_intent().is_match(text)
+    (edit_intent().is_match(text) || imperative_start().is_match(text))
+        && !read_only_intent().is_match(text)
 }
 
 pub fn classify_intent(prompt: &str, has_prior_turns: bool) -> &'static str {
@@ -104,14 +138,19 @@ pub fn analyze(input: &PromptSignalInput<'_>) -> PromptAnalysis {
         Some(a) if a.kind == "conversation" => "follow-up",
         Some(_) => {
             if matches!(heuristic, "question" | "follow-up" | "general") {
-                if has_edit && bugfix_pattern().is_match(text) { "bugfix" } else { "feature" }
+                if has_edit && bugfix_pattern().is_match(text) {
+                    "bugfix"
+                } else {
+                    "feature"
+                }
             } else {
                 heuristic
             }
         }
         None => heuristic,
     };
-    let inherits_context = has_prior && (intent == "follow-up" || answers.as_ref().is_some_and(|a| a.kind == "conversation"));
+    let inherits_context = has_prior
+        && (intent == "follow-up" || answers.as_ref().is_some_and(|a| a.kind == "conversation"));
     let question_like = intent == "question" || intent == "review";
     let tool_mode = input.tool_mode.unwrap_or("full");
     let session_mode = input.session_mode.unwrap_or("chat");
@@ -121,9 +160,13 @@ pub fn analyze(input: &PromptSignalInput<'_>) -> PromptAnalysis {
         let related: Vec<String> = candidates.iter().map(|c| c.path.clone()).collect();
         let test = pick_test_command(text, input.workspace_hints, &related);
         let pin = |path: &str| {
-            Remediation::new("pin-file", format!("Pin @{}", path.rsplit('/').next().unwrap_or(path)), format!("Anchor the prompt to `{path}` so the agent starts in the right file."))
-                .target(path)
-                .snippet(format!("in @{path}"))
+            Remediation::new(
+                "pin-file",
+                format!("Pin @{}", path.rsplit('/').next().unwrap_or(path)),
+                format!("Anchor the prompt to `{path}` so the agent starts in the right file."),
+            )
+            .target(path)
+            .snippet(format!("in @{path}"))
         };
         let target_fix = candidates.first().map(|first| {
             let mut fix = pin(&first.path);
@@ -131,11 +174,17 @@ pub fn analyze(input: &PromptSignalInput<'_>) -> PromptAnalysis {
             fix
         });
         let answer_of = |id: &str| answers.checks.get(id).map(|c| c.answer.as_str());
-        let done_fix = test.filter(|_| answer_of("target") != Some("no") && answer_of("outcome") != Some("no")).map(|t| {
-            Remediation::new("add-test-command", format!("Test: {}", t.label), format!("Ask the agent to run `{}` before finishing.", t.command))
+        let done_fix = test
+            .filter(|_| answer_of("target") != Some("no") && answer_of("outcome") != Some("no"))
+            .map(|t| {
+                Remediation::new(
+                    "add-test-command",
+                    format!("Test: {}", t.label),
+                    format!("Ask the agent to run `{}` before finishing.", t.command),
+                )
                 .target(t.command.clone())
                 .snippet(format!("and verify with `{}`", t.command))
-        });
+            });
         let scored = score_answers(answers, target_fix.as_ref(), done_fix.as_ref());
         earned -= scored.deduction;
         findings.extend(scored.findings);
@@ -144,7 +193,11 @@ pub fn analyze(input: &PromptSignalInput<'_>) -> PromptAnalysis {
     let unknown = unknown_identifiers(input.workspace_hints, text);
     if !unknown.is_empty() {
         earned -= 4;
-        let list = unknown.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
+        let list = unknown
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
         findings.push(Finding::new(
             "prompt-unknown-symbol", "prompt-clarity", "warning", -4,
             format!("{list} {} in the code index", if unknown.len() == 1 { "isn't" } else { "aren't" }),
@@ -180,20 +233,49 @@ pub fn analyze(input: &PromptSignalInput<'_>) -> PromptAnalysis {
     }
 
     let earned = earned.clamp(0, max);
-    let mut signals: Vec<Signal> = vec![signal(format!("Intent: {}", intent_label(intent)), "neutral")];
+    let mut signals: Vec<Signal> = vec![signal(
+        format!("Intent: {}", intent_label(intent)),
+        "neutral",
+    )];
     if let Some(answers) = &answers {
         for item in &CHECKLIST {
             if item.instruction_only && answers.kind != "instruction" {
                 continue;
             }
-            let Some(check) = answers.checks.get(item.id) else { continue };
-            let good = if item.bad_answer == "no" { check.answer == "yes" } else { check.answer == "no" };
-            signals.push(signal(format!("{} {}", if good { "✓" } else { "!" }, item.id), if good { "good" } else if check.answer == "partial" { "warn" } else { "bad" }));
+            let Some(check) = answers.checks.get(item.id) else {
+                continue;
+            };
+            let good = if item.bad_answer == "no" {
+                check.answer == "yes"
+            } else {
+                check.answer == "no"
+            };
+            signals.push(signal(
+                format!("{} {}", if good { "✓" } else { "!" }, item.id),
+                if good {
+                    "good"
+                } else if check.answer == "partial" {
+                    "warn"
+                } else {
+                    "bad"
+                },
+            ));
         }
     } else {
-        signals.push(signal(if input.clarity.is_some_and(|c| c["status"] == "pending") { "Clarity: checking…" } else { "Clarity: not checked" }, "neutral"));
+        signals.push(signal(
+            if input.clarity.is_some_and(|c| c["status"] == "pending") {
+                "Clarity: checking…"
+            } else {
+                "Clarity: not checked"
+            },
+            "neutral",
+        ));
     }
-    for symbol in input.workspace_hints.iter().flat_map(|h| h.symbols.iter().filter(|s| s.found).take(2)) {
+    for symbol in input
+        .workspace_hints
+        .iter()
+        .flat_map(|h| h.symbols.iter().filter(|s| s.found).take(2))
+    {
         signals.push(signal(format!("✓ {} found", symbol.name), "good"));
     }
     let summary = if answers.is_none() {
@@ -201,7 +283,11 @@ pub fn analyze(input: &PromptSignalInput<'_>) -> PromptAnalysis {
     } else if earned == max {
         "Clear target, outcome, and finish line.".to_owned()
     } else {
-        findings.iter().map(|f| f.title.clone()).collect::<Vec<_>>().join("; ")
+        findings
+            .iter()
+            .map(|f| f.title.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
     };
     PromptAnalysis {
         dimension: DimensionScore {
@@ -226,7 +312,10 @@ mod tests {
     #[test]
     fn classifies_intents() {
         assert_eq!(classify_intent("how does this work?", false), "question");
-        assert_eq!(classify_intent("fix the truncated headline", false), "bugfix");
+        assert_eq!(
+            classify_intent("fix the truncated headline", false),
+            "bugfix"
+        );
         assert_eq!(classify_intent("add a toggle", false), "feature");
         assert_eq!(classify_intent("commit it", true), "follow-up");
         assert_eq!(classify_intent("review the diff", false), "review");
@@ -235,19 +324,34 @@ mod tests {
     #[test]
     fn read_only_edit_request_is_a_critical_blocker() {
         let result = analyze(&PromptSignalInput {
-            prompt_text: "fix the truncated headline in the prompt score bar", tool_mode: Some("read-only"), session_mode: None,
-            context_tokens: None, context_limit: None, prior_context: None, workspace_hints: None, clarity: None,
+            prompt_text: "fix the truncated headline in the prompt score bar",
+            tool_mode: Some("read-only"),
+            session_mode: None,
+            context_tokens: None,
+            context_limit: None,
+            prior_context: None,
+            workspace_hints: None,
+            clarity: None,
         });
         assert_eq!(result.findings[0].id, "prompt-tool-mode-conflict");
         assert_eq!(result.dimension.earned_points, 14);
-        assert_eq!(result.dimension.summary, "Clarity not checked — facts only.");
+        assert_eq!(
+            result.dimension.summary,
+            "Clarity not checked — facts only."
+        );
     }
 
     #[test]
     fn context_pressure_formats_tokens() {
         let result = analyze(&PromptSignalInput {
-            prompt_text: "how?", tool_mode: None, session_mode: None, context_tokens: Some(90_000.0), context_limit: Some(100_000.0),
-            prior_context: None, workspace_hints: None, clarity: None,
+            prompt_text: "how?",
+            tool_mode: None,
+            session_mode: None,
+            context_tokens: Some(90_000.0),
+            context_limit: Some(100_000.0),
+            prior_context: None,
+            workspace_hints: None,
+            clarity: None,
         });
         assert!(result.findings[0].evidence.contains("90,000 / 100,000"));
     }

@@ -32,12 +32,20 @@ fn skill_tool_name(tool_name: &str, args: &Value) -> Option<String> {
     static TOOL: OnceLock<Regex> = OnceLock::new();
     static TITLED: OnceLock<Regex> = OnceLock::new();
     let name = tool_name.trim();
-    let is_skill_tool = regex(&TOOL, r"(?i)^(?:skill|use_skill|load_skill|activate_skill)$").is_match(name);
-    let titled = regex(&TITLED, r"(?i)^skill\s*[:(]\s*([^\s)]+)\)?$").captures(name).map(|c| c[1].to_owned());
+    let is_skill_tool = regex(
+        &TOOL,
+        r"(?i)^(?:skill|use_skill|load_skill|activate_skill)$",
+    )
+    .is_match(name);
+    let titled = regex(&TITLED, r"(?i)^skill\s*[:(]\s*([^\s)]+)\)?$")
+        .captures(name)
+        .map(|c| c[1].to_owned());
     if !is_skill_tool && titled.is_none() {
         return None;
     }
-    let from_args = ["skill", "name", "command", "skill_name"].iter().find_map(|key| args[*key].as_str().filter(|v| !v.trim().is_empty()));
+    let from_args = ["skill", "name", "command", "skill_name"]
+        .iter()
+        .find_map(|key| args[*key].as_str().filter(|v| !v.trim().is_empty()));
     let candidate = from_args.map(str::to_owned).or(titled).unwrap_or_default();
     let candidate = candidate.trim().trim_start_matches('/').to_owned();
     skill_name(&candidate).then_some(candidate)
@@ -48,8 +56,14 @@ fn skill_tool_name(tool_name: &str, args: &Value) -> Option<String> {
 pub fn detect_skill_uses(events: &[Value]) -> Vec<SkillUseSignal> {
     static FILE: OnceLock<Regex> = OnceLock::new();
     static WRITE: OnceLock<Regex> = OnceLock::new();
-    let file_pattern = regex(&FILE, r#"(?i)((?:[^\s'"`<>|;&()]*/)?skills/([A-Za-z0-9][A-Za-z0-9_.-]*)/SKILL\.md)(?:$|[^A-Za-z0-9_.])"#);
-    let write_pattern = regex(&WRITE, r"(?i)\b(write|edit|create|apply_patch|patch|str_replace|multiedit|editing files)\b");
+    let file_pattern = regex(
+        &FILE,
+        r#"(?i)((?:[^\s'"`<>|;&()]*/)?skills/([A-Za-z0-9][A-Za-z0-9_.-]*)/SKILL\.md)(?:$|[^A-Za-z0-9_.])"#,
+    );
+    let write_pattern = regex(
+        &WRITE,
+        r"(?i)\b(write|edit|create|apply_patch|patch|str_replace|multiedit|editing files)\b",
+    );
     let mut signals = Vec::new();
     for event in events {
         if event["type"] != "tool_start" {
@@ -59,14 +73,22 @@ pub fn detect_skill_uses(events: &[Value]) -> Vec<SkillUseSignal> {
         let at = event["timestamp"].as_str().unwrap_or_default().to_owned();
         let tool_name = data["toolName"].as_str().unwrap_or_default();
         if let Some(skill_id) = skill_tool_name(tool_name, &data["args"]) {
-            signals.push(SkillUseSignal { skill_id, via: "skill-tool", at, path: None });
+            signals.push(SkillUseSignal {
+                skill_id,
+                via: "skill-tool",
+                at,
+                path: None,
+            });
             continue;
         }
         if data["kind"] == "write" || write_pattern.is_match(tool_name) {
             continue;
         }
         let mut parts: Vec<String> = Vec::new();
-        for part in [data["toolName"].as_str(), data["argsSummary"].as_str()].into_iter().flatten() {
+        for part in [data["toolName"].as_str(), data["argsSummary"].as_str()]
+            .into_iter()
+            .flatten()
+        {
             parts.push(part.to_owned());
         }
         if !data["args"].is_null() {
@@ -83,7 +105,12 @@ pub fn detect_skill_uses(events: &[Value]) -> Vec<SkillUseSignal> {
                 continue;
             }
             seen.insert(skill_id.clone());
-            signals.push(SkillUseSignal { skill_id, via: "skill-file", at: at.clone(), path: Some(path) });
+            signals.push(SkillUseSignal {
+                skill_id,
+                via: "skill-file",
+                at: at.clone(),
+                path: Some(path),
+            });
         }
     }
     signals
@@ -91,18 +118,28 @@ pub fn detect_skill_uses(events: &[Value]) -> Vec<SkillUseSignal> {
 
 /// True when `text` writes to `path` with a shell redirect, i.e. authors the skill rather than loads it.
 fn redirects_into(text: &str, path: &str) -> bool {
-    Regex::new(&format!(r#">>?\s*['"]?{}"#, regex::escape(path))).is_ok_and(|pattern| pattern.is_match(text))
+    Regex::new(&format!(r#">>?\s*['"]?{}"#, regex::escape(path)))
+        .is_ok_and(|pattern| pattern.is_match(text))
 }
 
 /// Folds new signals into a session's aggregated `detectedSkills`. `None` when there are none.
 #[must_use]
-pub fn merge_detected_skill_uses(existing: Option<&Value>, signals: &[SkillUseSignal]) -> Option<Vec<Value>> {
-    let mut uses: Vec<Value> = existing.and_then(Value::as_array).cloned().unwrap_or_default();
+pub fn merge_detected_skill_uses(
+    existing: Option<&Value>,
+    signals: &[SkillUseSignal],
+) -> Option<Vec<Value>> {
+    let mut uses: Vec<Value> = existing
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     if signals.is_empty() {
         return existing.filter(|value| !value.is_null()).map(|_| uses);
     }
     for signal in signals {
-        let Some(current) = uses.iter_mut().find(|used| used["skillId"] == signal.skill_id.as_str()) else {
+        let Some(current) = uses
+            .iter_mut()
+            .find(|used| used["skillId"] == signal.skill_id.as_str())
+        else {
             let mut created = json!({ "skillId": signal.skill_id, "via": signal.via, "firstAt": signal.at, "lastAt": signal.at, "count": 1 });
             if let Some(path) = &signal.path {
                 created["path"] = json!(path);
@@ -141,15 +178,31 @@ mod tests {
     #[test]
     fn detects_the_skill_tool_and_skill_file_reads() {
         let events = vec![
-            tool("cat .agents/skills/plan-authoring/SKILL.md", Value::Null, "t1"),
+            tool(
+                "cat .agents/skills/plan-authoring/SKILL.md",
+                Value::Null,
+                "t1",
+            ),
             tool("Skill", json!({ "skill": "praxis-scheduled-runs" }), "t2"),
             tool("Write", json!({ "file": "skills/x/SKILL.md" }), "t3"),
             tool("shell", json!("echo hi > skills/y/SKILL.md"), "t4"),
         ];
         let signals = detect_skill_uses(&events);
-        let ids: Vec<(&str, &str)> = signals.iter().map(|s| (s.skill_id.as_str(), s.via)).collect();
-        assert_eq!(ids, vec![("plan-authoring", "skill-file"), ("praxis-scheduled-runs", "skill-tool")]);
-        assert_eq!(signals[0].path.as_deref(), Some(".agents/skills/plan-authoring/SKILL.md"));
+        let ids: Vec<(&str, &str)> = signals
+            .iter()
+            .map(|s| (s.skill_id.as_str(), s.via))
+            .collect();
+        assert_eq!(
+            ids,
+            vec![
+                ("plan-authoring", "skill-file"),
+                ("praxis-scheduled-runs", "skill-tool")
+            ]
+        );
+        assert_eq!(
+            signals[0].path.as_deref(),
+            Some(".agents/skills/plan-authoring/SKILL.md")
+        );
     }
 
     #[test]
@@ -160,7 +213,10 @@ mod tests {
         let merged = merge_detected_skill_uses(Some(&json!(merged)), &again).expect("uses");
         assert_eq!(merged[0]["count"], 2);
         assert_eq!(merged[0]["via"], "skill-tool");
-        assert_eq!((merged[0]["firstAt"].as_str(), merged[0]["lastAt"].as_str()), (Some("t1"), Some("t2")));
+        assert_eq!(
+            (merged[0]["firstAt"].as_str(), merged[0]["lastAt"].as_str()),
+            (Some("t1"), Some("t2"))
+        );
         assert!(merge_detected_skill_uses(None, &[]).is_none());
     }
 }

@@ -8,7 +8,6 @@ use uuid::Uuid;
 use super::storage::{parse, read, write_atomic};
 use super::{Result, failure, now, text};
 
-
 fn analysis_file(user_data_dir: &Path) -> std::path::PathBuf {
     user_data_dir.join("ai-analysis.json")
 }
@@ -39,9 +38,15 @@ fn analysis_state(analyses: &BTreeMap<String, Value>, issue_key: &str) -> Value 
 }
 
 /// Confirming an analysis turns the same session into the implementation run (full tools, new contract).
-fn promote_analysis_session(host: &HostContext, user_data_dir: &Path, issue_key: &str) -> Result<()> {
+fn promote_analysis_session(
+    host: &HostContext,
+    user_data_dir: &Path,
+    issue_key: &str,
+) -> Result<()> {
     let sessions = super::session_store::store(user_data_dir);
-    let Some(record) = sessions.get(issue_key)? else { return Ok(()) };
+    let Some(record) = sessions.get(issue_key)? else {
+        return Ok(());
+    };
     if record["taskDefinition"]["kind"] != "analysis" {
         return Ok(());
     }
@@ -81,7 +86,9 @@ fn read_analysis(user_data_dir: &Path) -> Result<BTreeMap<String, Value>> {
 
 /// Whether the analysis gate for `issue_key` has been confirmed.
 pub(super) fn is_analysis_confirmed(user_data_dir: &Path, issue_key: &str) -> Result<bool> {
-    Ok(read_analysis(user_data_dir)?.get(issue_key).is_some_and(|a| a["confirmed"] == true))
+    Ok(read_analysis(user_data_dir)?
+        .get(issue_key)
+        .is_some_and(|a| a["confirmed"] == true))
 }
 
 fn save_analysis(user_data_dir: &Path, analysis: &BTreeMap<String, Value>) -> Result<()> {
@@ -112,7 +119,9 @@ pub fn dispatch(
     }
     match channel {
         // 1. Provider configuration & statuses
-        "ai:testMcpServer" => Ok(super::user_mcp::test_server(args.first().unwrap_or(&Value::Null))),
+        "ai:testMcpServer" => Ok(super::user_mcp::test_server(
+            args.first().unwrap_or(&Value::Null),
+        )),
         "ai:testProviderApiKey" => Ok(json!({ "valid": true })),
 
         // 2. Code intelligence & semantic model
@@ -217,11 +226,17 @@ pub fn dispatch(
                 if session["detectedSkills"].is_null() {
                     let events = session["events"].as_array().cloned().unwrap_or_default();
                     let signals = praxis_ai::session::skill_usage::detect_skill_uses(&events);
-                    if let Some(uses) = praxis_ai::session::skill_usage::merge_detected_skill_uses(None, &signals) {
+                    if let Some(uses) =
+                        praxis_ai::session::skill_usage::merge_detected_skill_uses(None, &signals)
+                    {
                         session["detectedSkills"] = json!(uses);
                         let key = session["issueKey"].as_str().unwrap_or(issue_key).to_owned();
                         let saved = session["detectedSkills"].clone();
-                        let _ = super::session_store::store(user_data_dir).mutate(&key, true, |record| record["detectedSkills"] = saved);
+                        let _ = super::session_store::store(user_data_dir).mutate(
+                            &key,
+                            true,
+                            |record| record["detectedSkills"] = saved,
+                        );
                     }
                 }
                 if let Some(record) = session.as_object_mut() {
@@ -244,20 +259,28 @@ pub fn dispatch(
                 })
                 .cloned()
                 .map(|mut session| {
-                    session.as_object_mut().map(|o| o.remove("conversationHistory"));
+                    session
+                        .as_object_mut()
+                        .map(|o| o.remove("conversationHistory"));
                     session
                 })
                 .collect();
             Ok(json!(interrupted))
         }
         "ai:dismissInterruptedSessions" => {
-            let Some(keys) = args.first().and_then(Value::as_array).filter(|k| k.iter().all(Value::is_string)) else {
+            let Some(keys) = args
+                .first()
+                .and_then(Value::as_array)
+                .filter(|k| k.iter().all(Value::is_string))
+            else {
                 return Err(failure("Invalid session selection."));
             };
             let store = super::session_store::store(user_data_dir);
             for key in keys.iter().filter_map(Value::as_str) {
                 store.mutate(key, true, |record| {
-                    record.as_object_mut().map(|o| o.remove("interruptedByRestart"));
+                    record
+                        .as_object_mut()
+                        .map(|o| o.remove("interruptedByRestart"));
                 })?;
             }
             store.flush()?;
@@ -369,16 +392,24 @@ pub fn dispatch(
         "ai:updateSessionToolAccess" => {
             let issue_key = text(args, 0)?;
             if super::acp_host::is_running(user_data_dir, issue_key) {
-                return Err(failure("Wait for the current session turn to finish before changing tool access."));
+                return Err(failure(
+                    "Wait for the current session turn to finish before changing tool access.",
+                ));
             }
             let options = args.get(1).cloned().unwrap_or(Value::Null);
             let sessions = super::session_store::store(user_data_dir);
-            let record = sessions.get(issue_key)?.ok_or_else(|| failure(format!("No agent session found for {issue_key}.")))?;
+            let record = sessions
+                .get(issue_key)?
+                .ok_or_else(|| failure(format!("No agent session found for {issue_key}.")))?;
             // A folder may be set or cleared; clearing it with no tool mode falls back to project-only.
             let mut working = record["workingDirectory"].as_str().map(str::to_owned);
             let mut tool_mode = record["toolMode"].as_str().map(str::to_owned);
             if let Some(folder) = options.get("workingDirectory") {
-                working = folder.as_str().map(str::trim).filter(|f| !f.is_empty()).map(str::to_owned);
+                working = folder
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|f| !f.is_empty())
+                    .map(str::to_owned);
                 if working.is_none() && options["toolMode"].is_null() {
                     tool_mode = Some("project-only".into());
                 }
@@ -400,8 +431,10 @@ pub fn dispatch(
                     r["toolMode"] = json!(mode);
                 }
             })?;
-            let updated = updated.ok_or_else(|| failure(format!("No agent session found for {issue_key}.")))?;
-            host.events().emit("ai:sessionChanged", Some(updated.clone()));
+            let updated = updated
+                .ok_or_else(|| failure(format!("No agent session found for {issue_key}.")))?;
+            host.events()
+                .emit("ai:sessionChanged", Some(updated.clone()));
             Ok(updated)
         }
         "ai:undoToolFileChange" => Ok(json!({ "undone": true })),
@@ -444,14 +477,20 @@ pub fn dispatch(
             Ok(Value::Null)
         }
         // 6. Analysis
-        "ai:getAnalysis" => Ok(analysis_state(&read_analysis(user_data_dir)?, text(args, 0)?)),
+        "ai:getAnalysis" => Ok(analysis_state(
+            &read_analysis(user_data_dir)?,
+            text(args, 0)?,
+        )),
         "ai:submitAnalysis" => {
             let issue_key = text(args, 0)?;
             let analysis = args.get(1).cloned().unwrap_or_else(|| json!({}));
             let mut analyses = read_analysis(user_data_dir)?;
             analyses.insert(issue_key.to_string(), analysis.clone());
             save_analysis(user_data_dir, &analyses)?;
-            host.events().emit("ai:analysisChanged", Some(analysis_state(&analyses, issue_key)));
+            host.events().emit(
+                "ai:analysisChanged",
+                Some(analysis_state(&analyses, issue_key)),
+            );
             Ok(analysis)
         }
         "ai:cancelAnalysis" => Ok(Value::Null),
@@ -460,14 +499,19 @@ pub fn dispatch(
             let mut analyses = read_analysis(user_data_dir)?;
             analyses.remove(issue_key);
             save_analysis(user_data_dir, &analyses)?;
-            host.events().emit("ai:analysisChanged", Some(analysis_state(&analyses, issue_key)));
+            host.events().emit(
+                "ai:analysisChanged",
+                Some(analysis_state(&analyses, issue_key)),
+            );
             Ok(Value::Null)
         }
         "ai:setAnalysisConfirmed" => {
             let issue_key = text(args, 0)?;
             let confirmed = args.get(1).and_then(Value::as_bool).unwrap_or(true);
             let mut analyses = read_analysis(user_data_dir)?;
-            let entry = analyses.entry(issue_key.to_owned()).or_insert_with(|| json!({ "messages": [], "confirmed": false }));
+            let entry = analyses
+                .entry(issue_key.to_owned())
+                .or_insert_with(|| json!({ "messages": [], "confirmed": false }));
             entry["confirmed"] = json!(confirmed);
             if confirmed {
                 entry["confirmedAt"] = json!(now());
@@ -478,12 +522,14 @@ pub fn dispatch(
             if confirmed {
                 promote_analysis_session(host, user_data_dir, issue_key)?;
             }
-            host.events().emit("ai:analysisChanged", Some(analysis_state(&analyses, issue_key)));
+            host.events().emit(
+                "ai:analysisChanged",
+                Some(analysis_state(&analyses, issue_key)),
+            );
             Ok(Value::Null)
         }
 
         // 7. Delivery, peer review and merge requests live in `ai_workflows`.
-
         _ => Err(failure(format!("Unknown AI channel: {channel}"))),
     }
 }

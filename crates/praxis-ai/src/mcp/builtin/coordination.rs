@@ -302,7 +302,13 @@ pub trait CoordinationSessionHooks: Send + Sync {
     async fn status(&self, since: Option<i64>) -> String;
     async fn claim(&self, paths: Vec<String>, app: bool, reason: String) -> (bool, String);
     /// Bounded wait for what another session holds; held until the turn ends once granted.
-    async fn wait(&self, paths: Vec<String>, app: bool, reason: String, timeout_ms: i64) -> (bool, String);
+    async fn wait(
+        &self,
+        paths: Vec<String>,
+        app: bool,
+        reason: String,
+        timeout_ms: i64,
+    ) -> (bool, String);
     async fn release(&self) -> String;
     async fn message(&self, text: String, to: Option<String>, needs_ack: bool) -> (bool, String);
     async fn ack(&self, sequence: i64) -> (bool, String);
@@ -318,7 +324,13 @@ fn claim_targets(args: &Value) -> Result<Targets, String> {
     let paths: Vec<String> = args
         .get("paths")
         .and_then(Value::as_array)
-        .map(|all| all.iter().filter_map(Value::as_str).filter(|p| !p.trim().is_empty()).map(ToString::to_string).collect())
+        .map(|all| {
+            all.iter()
+                .filter_map(Value::as_str)
+                .filter(|p| !p.trim().is_empty())
+                .map(ToString::to_string)
+                .collect()
+        })
         .unwrap_or_default();
     let app = args.get("app").and_then(Value::as_bool) == Some(true);
     let reason = args
@@ -337,10 +349,18 @@ fn claim_targets(args: &Value) -> Result<Targets, String> {
 }
 
 /// Runs one coordination tool against a session's hooks (`executeCoordinationTool`).
-pub async fn execute_coordination_tool_with_hooks(name: &str, args: &Value, hooks: &dyn CoordinationSessionHooks) -> (bool, String) {
+pub async fn execute_coordination_tool_with_hooks(
+    name: &str,
+    args: &Value,
+    hooks: &dyn CoordinationSessionHooks,
+) -> (bool, String) {
     match name {
         "coordination_status" => {
-            let since = args.get("since").and_then(Value::as_f64).filter(|n| *n > 0.0).map(|n| n.floor() as i64);
+            let since = args
+                .get("since")
+                .and_then(Value::as_f64)
+                .filter(|n| *n > 0.0)
+                .map(|n| n.floor() as i64);
             (true, hooks.status(since).await)
         }
         "coordination_claim" => match claim_targets(args) {
@@ -349,24 +369,49 @@ pub async fn execute_coordination_tool_with_hooks(name: &str, args: &Value, hook
         },
         "coordination_wait" => match claim_targets(args) {
             Ok(t) => {
-                let seconds = args.get("seconds").and_then(Value::as_f64).filter(|n| n.is_finite()).unwrap_or(60.0);
-                let timeout_ms = ((seconds * 1000.0).round() as i64).clamp(1000, COORDINATION_MCP_MAX_WAIT_MS);
+                let seconds = args
+                    .get("seconds")
+                    .and_then(Value::as_f64)
+                    .filter(|n| n.is_finite())
+                    .unwrap_or(60.0);
+                let timeout_ms =
+                    ((seconds * 1000.0).round() as i64).clamp(1000, COORDINATION_MCP_MAX_WAIT_MS);
                 hooks.wait(t.paths, t.app, t.reason, timeout_ms).await
             }
             Err(error) => (false, error),
         },
-        "coordination_ack" => match args.get("sequence").and_then(Value::as_f64).map(f64::floor).filter(|n| n.is_finite() && *n > 0.0) {
+        "coordination_ack" => match args
+            .get("sequence")
+            .and_then(Value::as_f64)
+            .map(f64::floor)
+            .filter(|n| n.is_finite() && *n > 0.0)
+        {
             Some(sequence) => hooks.ack(sequence as i64).await,
             None => (false, "Give the note's number.".to_owned()),
         },
         "coordination_release" => (true, hooks.release().await),
         "coordination_message" => {
-            let text = args.get("text").and_then(Value::as_str).map(str::trim).unwrap_or_default();
+            let text = args
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
             if text.is_empty() {
                 return (false, "A message needs text.".to_owned());
             }
-            let to = args.get("to").and_then(Value::as_str).map(str::trim).filter(|t| !t.is_empty()).map(ToString::to_string);
-            hooks.message(text.to_owned(), to, args.get("needs_ack").and_then(Value::as_bool) == Some(true)).await
+            let to = args
+                .get("to")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(ToString::to_string);
+            hooks
+                .message(
+                    text.to_owned(),
+                    to,
+                    args.get("needs_ack").and_then(Value::as_bool) == Some(true),
+                )
+                .await
         }
         _ => (false, format!("Unknown tool: {name}")),
     }
@@ -481,23 +526,46 @@ mod tests {
     #[async_trait::async_trait]
     impl CoordinationSessionHooks for Recording {
         async fn status(&self, since: Option<i64>) -> String {
-            self.0.lock().expect("lock").push(format!("status {since:?}"));
+            self.0
+                .lock()
+                .expect("lock")
+                .push(format!("status {since:?}"));
             "status".into()
         }
         async fn claim(&self, paths: Vec<String>, app: bool, reason: String) -> (bool, String) {
-            self.0.lock().expect("lock").push(format!("claim {paths:?} {app} {reason}"));
+            self.0
+                .lock()
+                .expect("lock")
+                .push(format!("claim {paths:?} {app} {reason}"));
             (true, "claimed".into())
         }
-        async fn wait(&self, paths: Vec<String>, app: bool, reason: String, timeout_ms: i64) -> (bool, String) {
-            self.0.lock().expect("lock").push(format!("wait {paths:?} {app} {reason} {timeout_ms}"));
+        async fn wait(
+            &self,
+            paths: Vec<String>,
+            app: bool,
+            reason: String,
+            timeout_ms: i64,
+        ) -> (bool, String) {
+            self.0
+                .lock()
+                .expect("lock")
+                .push(format!("wait {paths:?} {app} {reason} {timeout_ms}"));
             (true, "waited".into())
         }
         async fn release(&self) -> String {
             self.0.lock().expect("lock").push("release".into());
             "released".into()
         }
-        async fn message(&self, text: String, to: Option<String>, needs_ack: bool) -> (bool, String) {
-            self.0.lock().expect("lock").push(format!("message {text} {to:?} {needs_ack}"));
+        async fn message(
+            &self,
+            text: String,
+            to: Option<String>,
+            needs_ack: bool,
+        ) -> (bool, String) {
+            self.0
+                .lock()
+                .expect("lock")
+                .push(format!("message {text} {to:?} {needs_ack}"));
             (true, "sent".into())
         }
         async fn ack(&self, sequence: i64) -> (bool, String) {
@@ -513,23 +581,70 @@ mod tests {
             let hooks = &hooks;
             async move { execute_coordination_tool_with_hooks(name, &args, hooks).await }
         };
-        assert_eq!(run("coordination_claim", json!({ "reason": "x" })).await, (false, "Name at least one path, or set app: true.".into()));
+        assert_eq!(
+            run("coordination_claim", json!({ "reason": "x" })).await,
+            (false, "Name at least one path, or set app: true.".into())
+        );
         let many: Vec<String> = (0..51).map(|n| format!("f{n}")).collect();
-        assert!(!run("coordination_claim", json!({ "paths": many, "reason": "x" })).await.0);
-        assert_eq!(run("coordination_ack", json!({ "sequence": 0 })).await, (false, "Give the note's number.".into()));
-        assert_eq!(run("coordination_message", json!({ "text": "  " })).await, (false, "A message needs text.".into()));
-        assert_eq!(run("coordination_nope", json!({})).await, (false, "Unknown tool: coordination_nope".into()));
-        assert!(hooks.0.lock().expect("lock").is_empty(), "nothing reached the hooks");
+        assert!(
+            !run(
+                "coordination_claim",
+                json!({ "paths": many, "reason": "x" })
+            )
+            .await
+            .0
+        );
+        assert_eq!(
+            run("coordination_ack", json!({ "sequence": 0 })).await,
+            (false, "Give the note's number.".into())
+        );
+        assert_eq!(
+            run("coordination_message", json!({ "text": "  " })).await,
+            (false, "A message needs text.".into())
+        );
+        assert_eq!(
+            run("coordination_nope", json!({})).await,
+            (false, "Unknown tool: coordination_nope".into())
+        );
+        assert!(
+            hooks.0.lock().expect("lock").is_empty(),
+            "nothing reached the hooks"
+        );
     }
 
     #[tokio::test]
     async fn a_wait_is_bounded_and_defaults_to_a_minute() {
         let hooks = Recording::default();
-        execute_coordination_tool_with_hooks("coordination_wait", &json!({ "paths": ["a"], "reason": "edit" }), &hooks).await;
-        execute_coordination_tool_with_hooks("coordination_wait", &json!({ "paths": ["a"], "reason": "edit", "seconds": 9999 }), &hooks).await;
-        execute_coordination_tool_with_hooks("coordination_wait", &json!({ "app": true, "reason": "edit", "seconds": 0.1 }), &hooks).await;
-        execute_coordination_tool_with_hooks("coordination_status", &json!({ "since": 7.9 }), &hooks).await;
-        execute_coordination_tool_with_hooks("coordination_message", &json!({ "text": "hi", "to": " B ", "needs_ack": true }), &hooks).await;
+        execute_coordination_tool_with_hooks(
+            "coordination_wait",
+            &json!({ "paths": ["a"], "reason": "edit" }),
+            &hooks,
+        )
+        .await;
+        execute_coordination_tool_with_hooks(
+            "coordination_wait",
+            &json!({ "paths": ["a"], "reason": "edit", "seconds": 9999 }),
+            &hooks,
+        )
+        .await;
+        execute_coordination_tool_with_hooks(
+            "coordination_wait",
+            &json!({ "app": true, "reason": "edit", "seconds": 0.1 }),
+            &hooks,
+        )
+        .await;
+        execute_coordination_tool_with_hooks(
+            "coordination_status",
+            &json!({ "since": 7.9 }),
+            &hooks,
+        )
+        .await;
+        execute_coordination_tool_with_hooks(
+            "coordination_message",
+            &json!({ "text": "hi", "to": " B ", "needs_ack": true }),
+            &hooks,
+        )
+        .await;
         let seen = hooks.0.lock().expect("lock").clone();
         assert_eq!(
             seen,

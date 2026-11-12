@@ -5,21 +5,32 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
+use praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path;
+use praxis_ai::providers::anthropic_wire::{
+    AnthropicRequestOptions, anthropic_request_body, anthropic_stream_event,
+};
+use praxis_ai::providers::gemini_wire::{
+    GeminiRequestOptions, gemini_request_body, gemini_stream_event,
+};
 use praxis_ai::providers::model_catalog::{GatewayOptions, KeyAuth, endpoint, list_catalog_models};
 use praxis_ai::providers::model_pricing::{estimate_turn_cost, get_known_context_length};
-use praxis_ai::providers::provider_limit_error::{extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error};
-use praxis_ai::providers::anthropic_wire::{AnthropicRequestOptions, anthropic_request_body, anthropic_stream_event};
-use praxis_ai::providers::gemini_wire::{GeminiRequestOptions, gemini_request_body, gemini_stream_event};
-use praxis_ai::providers::reasoning_support::{ReasoningEffort, ReasoningFamily, anthropic_thinking_config, detect_reasoning_family, gemini_thinking_budget};
-use praxis_ai::providers::wire::{
-    ChatCompletionResult, ChatCompletionToolCall, ChatRequestOptions, ChatStreamEvent, EventStream, GatewayToolDefinition, OpenAiToolCall, SseEvent, TokenUsage, ToolResult, WireMessage,
-    WireRole, assistant_message_with_tool_calls, build_chat_request, consume_chat_stream, parse_tool_arguments, tool_result_messages, trim_tool_output_to_budget,
+use praxis_ai::providers::provider_limit_error::{
+    extract_provider_limit_message, is_limit_notice_reply, is_provider_limit_error,
 };
-use praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path;
+use praxis_ai::providers::reasoning_support::{
+    ReasoningEffort, ReasoningFamily, anthropic_thinking_config, detect_reasoning_family,
+    gemini_thinking_budget,
+};
+use praxis_ai::providers::wire::{
+    ChatCompletionResult, ChatCompletionToolCall, ChatRequestOptions, ChatStreamEvent, EventStream,
+    GatewayToolDefinition, OpenAiToolCall, SseEvent, TokenUsage, ToolResult, WireMessage, WireRole,
+    assistant_message_with_tool_calls, build_chat_request, consume_chat_stream,
+    parse_tool_arguments, tool_result_messages, trim_tool_output_to_budget,
+};
 use praxis_core::unified_diff::create_unified_diff;
 use praxis_host::HostContext;
 use serde_json::{Value, json};
@@ -88,13 +99,21 @@ impl EventStream for HttpSse {
                 return Some(Ok(event));
             }
             let chunk = match tokio::time::timeout(IDLE_TIMEOUT, self.response.chunk()).await {
-                Err(_) => return Some(Err(format!("The provider sent nothing for {}s.", IDLE_TIMEOUT.as_secs()))),
+                Err(_) => {
+                    return Some(Err(format!(
+                        "The provider sent nothing for {}s.",
+                        IDLE_TIMEOUT.as_secs()
+                    )));
+                }
                 Ok(Err(error)) => return Some(Err(error.to_string())),
                 Ok(Ok(None)) => {
                     if self.data.is_empty() {
                         return None;
                     }
-                    let event = SseEvent { event: self.event.take(), data: self.data.drain(..).collect::<Vec<_>>().join("\n") };
+                    let event = SseEvent {
+                        event: self.event.take(),
+                        data: self.data.drain(..).collect::<Vec<_>>().join("\n"),
+                    };
                     return Some(Ok(event));
                 }
                 Ok(Ok(Some(chunk))) => chunk,
@@ -105,13 +124,17 @@ impl EventStream for HttpSse {
                 let line = line.trim_end_matches(['\r', '\n']);
                 if line.is_empty() {
                     if !self.data.is_empty() {
-                        self.queue.push_back(SseEvent { event: self.event.take(), data: self.data.drain(..).collect::<Vec<_>>().join("\n") });
+                        self.queue.push_back(SseEvent {
+                            event: self.event.take(),
+                            data: self.data.drain(..).collect::<Vec<_>>().join("\n"),
+                        });
                     }
                     self.event = None;
                 } else if let Some(rest) = line.strip_prefix("event:") {
                     self.event = Some(rest.trim().to_owned());
                 } else if let Some(rest) = line.strip_prefix("data:") {
-                    self.data.push(rest.strip_prefix(' ').unwrap_or(rest).to_owned());
+                    self.data
+                        .push(rest.strip_prefix(' ').unwrap_or(rest).to_owned());
                 }
             }
         }
@@ -120,19 +143,34 @@ impl EventStream for HttpSse {
 
 fn non_retryable(body: &str) -> bool {
     let lowered = body.to_lowercase();
-    ["\"1113\"", "\"1001\"", "insufficient", "no resource package", "please recharge", "credit balance"].iter().any(|needle| lowered.contains(needle))
+    [
+        "\"1113\"",
+        "\"1001\"",
+        "insufficient",
+        "no resource package",
+        "please recharge",
+        "credit balance",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
 }
 
 fn request_for(connection: &ApiConnection, model: &str) -> (String, Vec<(String, String)>) {
     let options = &connection.options;
-    let mut headers: Vec<(String, String)> = options.headers.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let mut headers: Vec<(String, String)> = options
+        .headers
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     headers.push(("Accept".into(), "text/event-stream".into()));
     let key = options.api_key.as_deref().filter(|k| !k.is_empty());
     match connection.wire {
         Wire::OpenAi => {
             if let Some(key) = key {
                 match &options.auth {
-                    KeyAuth::Bearer => headers.push(("Authorization".into(), format!("Bearer {key}"))),
+                    KeyAuth::Bearer => {
+                        headers.push(("Authorization".into(), format!("Bearer {key}")))
+                    }
                     KeyAuth::Header(name) => headers.push((name.clone(), key.to_owned())),
                     KeyAuth::None => {}
                 }
@@ -144,21 +182,37 @@ fn request_for(connection: &ApiConnection, model: &str) -> (String, Vec<(String,
             if let Some(key) = key {
                 headers.push(("x-api-key".into(), key.to_owned()));
             }
-            (format!("{}/v1/messages", options.url.trim_end_matches('/')), headers)
+            (
+                format!("{}/v1/messages", options.url.trim_end_matches('/')),
+                headers,
+            )
         }
         Wire::Gemini => {
             if let Some(key) = key {
                 headers.push(("x-goog-api-key".into(), key.to_owned()));
             }
-            let base = Some(options.url.trim()).filter(|u| !u.is_empty()).unwrap_or(praxis_ai::providers::registry::DEFAULT_GEMINI_BASE_URL).trim_end_matches('/');
-            (format!("{base}/v1beta/models/{model}:streamGenerateContent?alt=sse"), headers)
+            let base = Some(options.url.trim())
+                .filter(|u| !u.is_empty())
+                .unwrap_or(praxis_ai::providers::registry::DEFAULT_GEMINI_BASE_URL)
+                .trim_end_matches('/');
+            (
+                format!("{base}/v1beta/models/{model}:streamGenerateContent?alt=sse"),
+                headers,
+            )
         }
     }
 }
 
-async fn post_stream(connection: &ApiConnection, model: &str, body: &Value) -> std::result::Result<HttpSse, String> {
+async fn post_stream(
+    connection: &ApiConnection,
+    model: &str,
+    body: &Value,
+) -> std::result::Result<HttpSse, String> {
     let (url, headers) = request_for(connection, model);
-    let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
     let mut attempt = 0;
     loop {
         let mut request = client.post(&url).json(body);
@@ -168,7 +222,13 @@ async fn post_stream(connection: &ApiConnection, model: &str, body: &Value) -> s
         let response = request.send().await.map_err(|e| e.to_string())?;
         let status = response.status();
         if status.is_success() {
-            return Ok(HttpSse { response, buffer: String::new(), event: None, data: Vec::new(), queue: VecDeque::new() });
+            return Ok(HttpSse {
+                response,
+                buffer: String::new(),
+                event: None,
+                data: Vec::new(),
+                queue: VecDeque::new(),
+            });
         }
         let text = response.text().await.unwrap_or_default();
         let retryable = matches!(status.as_u16(), 429 | 502 | 503 | 504) && !non_retryable(&text);
@@ -181,16 +241,19 @@ async fn post_stream(connection: &ApiConnection, model: &str, body: &Value) -> s
 }
 
 /// One completion from a stream, whichever wire it arrived on.
-async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl FnMut(&str), mut on_reasoning: impl FnMut(&str)) -> std::result::Result<ChatCompletionResult, String> {
+async fn collect(
+    connection: &ApiConnection,
+    mut sse: HttpSse,
+    mut on_text: impl FnMut(&str),
+    mut on_reasoning: impl FnMut(&str),
+) -> std::result::Result<ChatCompletionResult, String> {
     if connection.wire == Wire::OpenAi {
         let mut seen = 0usize;
         let _ = &mut seen;
-        return consume_chat_stream(&mut sse, |event| {
-            match event {
-                ChatStreamEvent::Text { text } => on_text(&text),
-                ChatStreamEvent::Reasoning { text } => on_reasoning(&text),
-                _ => {}
-            }
+        return consume_chat_stream(&mut sse, |event| match event {
+            ChatStreamEvent::Text { text } => on_text(&text),
+            ChatStreamEvent::Reasoning { text } => on_reasoning(&text),
+            _ => {}
         })
         .await;
     }
@@ -204,7 +267,11 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
             Wire::Anthropic => {
                 // Anthropic names each event twice (an `event:` line and the payload's `type`); some
                 // proxies and test servers send only the payload.
-                let named = event.event.clone().or_else(|| serde_json::from_str::<Value>(&event.data).ok().and_then(|p| p["type"].as_str().map(str::to_owned)));
+                let named = event.event.clone().or_else(|| {
+                    serde_json::from_str::<Value>(&event.data)
+                        .ok()
+                        .and_then(|p| p["type"].as_str().map(str::to_owned))
+                });
                 anthropic_stream_event(named.as_deref().unwrap_or_default(), &event.data)
             }
             _ => gemini_stream_event(&event.data),
@@ -214,7 +281,12 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
                 on_text(&piece);
                 text.push_str(&piece);
             }
-            Some(ChatStreamEvent::ToolCall { index, id, name, args_delta }) => {
+            Some(ChatStreamEvent::ToolCall {
+                index,
+                id,
+                name,
+                args_delta,
+            }) => {
                 while drafts.len() <= index {
                     drafts.push((None, None, String::new()));
                 }
@@ -248,34 +320,81 @@ async fn collect(connection: &ApiConnection, mut sse: HttpSse, mut on_text: impl
     let tool_calls = drafts
         .into_iter()
         .enumerate()
-        .filter_map(|(index, (id, name, args))| Some(ChatCompletionToolCall { id: id.unwrap_or_else(|| format!("call_{index}")), name: name?, arguments: parse_tool_arguments(&args) }))
+        .filter_map(|(index, (id, name, args))| {
+            Some(ChatCompletionToolCall {
+                id: id.unwrap_or_else(|| format!("call_{index}")),
+                name: name?,
+                arguments: parse_tool_arguments(&args),
+            })
+        })
         .collect();
-    Ok(ChatCompletionResult { text, thought: String::new(), tool_calls, finish_reason: None, usage: usage.with_derived_total() })
+    Ok(ChatCompletionResult {
+        text,
+        thought: String::new(),
+        tool_calls,
+        finish_reason: None,
+        usage: usage.with_derived_total(),
+    })
 }
 
 // ── local tools ──────────────────────────────────────────────────────────
 
-fn tool_definitions(tool_mode: &str, tracker: bool, coordinated: bool) -> Vec<GatewayToolDefinition> {
-    let tool = |name: &str, description: &str, schema: Value| GatewayToolDefinition { name: name.into(), description: Some(description.into()), input_schema: Some(schema) };
-    let path = json!({ "type": "string", "description": "File path relative to the working directory" });
+fn tool_definitions(
+    tool_mode: &str,
+    tracker: bool,
+    coordinated: bool,
+) -> Vec<GatewayToolDefinition> {
+    let tool = |name: &str, description: &str, schema: Value| GatewayToolDefinition {
+        name: name.into(),
+        description: Some(description.into()),
+        input_schema: Some(schema),
+    };
+    let path =
+        json!({ "type": "string", "description": "File path relative to the working directory" });
     let read = vec![
-        tool("read_file", "Read a UTF-8 text file relative to the working directory.", json!({ "type": "object", "properties": { "path": path }, "required": ["path"] })),
-        tool("list_dir", "List files and directories under a path relative to the working directory.", json!({ "type": "object", "properties": { "path": { "type": "string", "description": "Directory path relative to the working directory (default \".\")" } } })),
+        tool(
+            "read_file",
+            "Read a UTF-8 text file relative to the working directory.",
+            json!({ "type": "object", "properties": { "path": path }, "required": ["path"] }),
+        ),
+        tool(
+            "list_dir",
+            "List files and directories under a path relative to the working directory.",
+            json!({ "type": "object", "properties": { "path": { "type": "string", "description": "Directory path relative to the working directory (default \".\")" } } }),
+        ),
     ];
-    let image_tool = tool("read_image", "Read an image file (png, jpg, gif, webp) and return it so it can be viewed. Use this to inspect screenshots or visual output rather than guessing at it.", json!({ "type": "object", "properties": { "path": path }, "required": ["path"] }));
+    let image_tool = tool(
+        "read_image",
+        "Read an image file (png, jpg, gif, webp) and return it so it can be viewed. Use this to inspect screenshots or visual output rather than guessing at it.",
+        json!({ "type": "object", "properties": { "path": path }, "required": ["path"] }),
+    );
     // The session's own ticket, through the tracker connection it is bound to.
     let tracker_tools: Vec<GatewayToolDefinition> = if tracker && tool_mode != "project-only" {
         praxis_ai::mcp::builtin::list_tracker_tools()
             .into_iter()
-            .filter(|t| tool_mode != "read-only" || matches!(t.name.as_str(), "tracker_get_ticket" | "tracker_list_transitions"))
-            .map(|t| GatewayToolDefinition { name: t.name, description: t.description, input_schema: t.input_schema })
+            .filter(|t| {
+                tool_mode != "read-only"
+                    || matches!(
+                        t.name.as_str(),
+                        "tracker_get_ticket" | "tracker_list_transitions"
+                    )
+            })
+            .map(|t| GatewayToolDefinition {
+                name: t.name,
+                description: t.description,
+                input_schema: t.input_schema,
+            })
             .collect()
     } else {
         Vec::new()
     };
     match tool_mode {
         "project-only" => Vec::new(),
-        "read-only" => read.into_iter().chain(std::iter::once(image_tool)).chain(tracker_tools).collect(),
+        "read-only" => read
+            .into_iter()
+            .chain(std::iter::once(image_tool))
+            .chain(tracker_tools)
+            .collect(),
         _ => {
             let mut all = read;
             all.push(image_tool);
@@ -309,7 +428,9 @@ fn parse_effort(effort: Option<&str>) -> Option<ReasoningEffort> {
 /// needs that provider's own shape through the `providerOptions` passthrough; everything else uses
 /// the standard `reasoning_effort` field. Nothing is sent unless a non-`off` level is selected.
 fn apply_openai_reasoning(body: &mut Value, model: &str, effort: Option<&str>) {
-    let Some(level) = parse_effort(effort) else { return };
+    let Some(level) = parse_effort(effort) else {
+        return;
+    };
     match detect_reasoning_family(Some(model)) {
         Some(ReasoningFamily::Anthropic) => {
             if let Some(config) = anthropic_thinking_config(Some(model), Some(level))
@@ -354,21 +475,42 @@ struct ToolOutcome {
 }
 
 fn failed(content: impl Into<String>) -> ToolOutcome {
-    ToolOutcome { ok: false, content: content.into(), data: None }
+    ToolOutcome {
+        ok: false,
+        content: content.into(),
+        data: None,
+    }
 }
 
 /// A tool from a server the user added; servers that require approval ask before each call.
-async fn run_mcp_tool(task: &Arc<Task>, tool: &praxis_ai::mcp::tool_bridge::ResolvedMcpTool, server: &praxis_core::config::mcp_servers::McpServerConfig, call: &ChatCompletionToolCall) -> ToolOutcome {
+async fn run_mcp_tool(
+    task: &Arc<Task>,
+    tool: &praxis_ai::mcp::tool_bridge::ResolvedMcpTool,
+    server: &praxis_core::config::mcp_servers::McpServerConfig,
+    call: &ChatCompletionToolCall,
+) -> ToolOutcome {
     if tool.require_approval {
         let detail = serde_json::to_string_pretty(&call.arguments).unwrap_or_default();
-        let detail = if detail.chars().count() > 1500 { format!("{}…", detail.chars().take(1500).collect::<String>()) } else { detail };
+        let detail = if detail.chars().count() > 1500 {
+            format!("{}…", detail.chars().take(1500).collect::<String>())
+        } else {
+            detail
+        };
         let request = json!({ "toolCallId": call.id, "kind": "mcp-tool", "title": format!("Permission requested: {} › {}", server.name, tool.original_tool_name), "description": format!("Permission requested: {} › {}", server.name, tool.original_tool_name), "detail": detail, "name": call.name, "rawInput": call.arguments });
         if task.request_permission(request).await == super::acp_host::Decision::Deny {
-            return failed(format!("Permission denied for {}.", tool.original_tool_name));
+            return failed(format!(
+                "Permission denied for {}.",
+                tool.original_tool_name
+            ));
         }
     }
-    let (ok, content) = super::user_mcp::call(server, &tool.original_tool_name, &call.arguments).await;
-    ToolOutcome { ok, content, data: None }
+    let (ok, content) =
+        super::user_mcp::call(server, &tool.original_tool_name, &call.arguments).await;
+    ToolOutcome {
+        ok,
+        content,
+        data: None,
+    }
 }
 
 /// An in-app browser tool. Navigating to a host that is not on the allow-list asks first; the
@@ -378,17 +520,38 @@ async fn run_browser_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> To
         return failed("The in-app browser is turned off in Settings.");
     }
     if call.name == "browser_navigate" {
-        let url = call.arguments["url"].as_str().unwrap_or_default().to_owned();
+        let url = call.arguments["url"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
         if let Some(host_name) = super::ai_browser::host_of(&url) {
-            let allowed = task.host.settings().read().ai.browser_tools.allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(&host_name));
+            let allowed = task
+                .host
+                .settings()
+                .read()
+                .ai
+                .browser_tools
+                .allowed_hosts
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case(&host_name));
             if !allowed {
                 let request = json!({ "toolCallId": call.id, "kind": "browser-navigate", "title": format!("Open {host_name} in the in-app browser"), "name": "browser_navigate", "rawInput": call.arguments });
                 if task.request_permission(request).await == super::acp_host::Decision::Deny {
                     return failed(format!("Permission denied to open {host_name}."));
                 }
-                let mut hosts = task.host.settings().read().ai.browser_tools.allowed_hosts.clone();
+                let mut hosts = task
+                    .host
+                    .settings()
+                    .read()
+                    .ai
+                    .browser_tools
+                    .allowed_hosts
+                    .clone();
                 hosts.push(host_name);
-                let _ = super::ai_providers::write_settings(&task.host, &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }));
+                let _ = super::ai_providers::write_settings(
+                    &task.host,
+                    &json!({ "ai": { "browserTools": { "allowedHosts": hosts } } }),
+                );
             }
         }
     }
@@ -397,23 +560,50 @@ async fn run_browser_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> To
         return failed(reason);
     }
     let (ok, content) = super::ai_browser::run_tool(&task.host, &call.name, &call.arguments).await;
-    ToolOutcome { ok, content, data: None }
+    ToolOutcome {
+        ok,
+        content,
+        data: None,
+    }
 }
 
 /// A tracker tool against the connection the session is bound to; writes ask first.
 async fn run_tracker_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
-    let connection_id = task.store.get(&task.key).ok().flatten().and_then(|r| r["connectionId"].as_str().map(str::to_owned));
+    let connection_id = task
+        .store
+        .get(&task.key)
+        .ok()
+        .flatten()
+        .and_then(|r| r["connectionId"].as_str().map(str::to_owned));
     let provider = super::builtin_mcp::HostTracker::new(task.host.clone(), connection_id);
-    let write = matches!(call.name.as_str(), "tracker_add_comment" | "tracker_update_ticket" | "tracker_transition_ticket");
+    let write = matches!(
+        call.name.as_str(),
+        "tracker_add_comment" | "tracker_update_ticket" | "tracker_transition_ticket"
+    );
     if write && task.tool_mode != "read-only" {
-        let issue = call.arguments["issueKey"].as_str().unwrap_or_default().trim().to_owned();
+        let issue = call.arguments["issueKey"]
+            .as_str()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
         let request = json!({ "toolCallId": call.id, "kind": "tracker-write", "title": format!("Permission requested: {}: The agent wants to use {} on ticket {issue}.", call.name, call.name), "name": call.name });
         if task.request_permission(request).await == super::acp_host::Decision::Deny {
             return failed(format!("Permission denied for {}.", call.name));
         }
     }
-    match praxis_ai::mcp::builtin::execute_tracker_tool(&call.name, &call.arguments, super::builtin_mcp::parse_tool_mode(&task.tool_mode), &provider).await {
-        Ok(result) => ToolOutcome { ok: result.ok, content: result.content, data: None },
+    match praxis_ai::mcp::builtin::execute_tracker_tool(
+        &call.name,
+        &call.arguments,
+        super::builtin_mcp::parse_tool_mode(&task.tool_mode),
+        &provider,
+    )
+    .await
+    {
+        Ok(result) => ToolOutcome {
+            ok: result.ok,
+            content: result.content,
+            data: None,
+        },
         Err(message) => failed(message),
     }
 }
@@ -421,14 +611,21 @@ async fn run_tracker_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> To
 /// The session's coordination gate: every write and command of an API-provider session runs
 /// through Praxis, so its coverage is `enforced`.
 fn coordination_gate(task: &Task) -> Option<super::coordination::Gate> {
-    super::coordination::gate_for(&task.key, &task.working_directory, praxis_ai::coordination::Coverage::Enforced)
+    super::coordination::gate_for(
+        &task.key,
+        &task.working_directory,
+        praxis_ai::coordination::Coverage::Enforced,
+    )
 }
 
 async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcome {
     let args = &call.arguments;
     let text = |key: &str| args[key].as_str().unwrap_or_default().to_owned();
     if task.tool_mode == "project-only" {
-        return failed(format!("{} is unavailable without a project workspace folder.", call.name));
+        return failed(format!(
+            "{} is unavailable without a project workspace folder.",
+            call.name
+        ));
     }
     if call.name.starts_with("tracker_") {
         return run_tracker_tool(task, call).await;
@@ -436,8 +633,13 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
     if call.name.starts_with("browser_") {
         return run_browser_tool(task, call).await;
     }
-    if task.tool_mode == "read-only" && !matches!(call.name.as_str(), "read_file" | "list_dir" | "read_image") {
-        return failed(format!("{} is unavailable in read-only tool mode.", call.name));
+    if task.tool_mode == "read-only"
+        && !matches!(call.name.as_str(), "read_file" | "list_dir" | "read_image")
+    {
+        return failed(format!(
+            "{} is unavailable in read-only tool mode.",
+            call.name
+        ));
     }
     let root = &task.working_directory;
     match call.name.as_str() {
@@ -450,8 +652,14 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             if task.request_permission(request).await == super::acp_host::Decision::Deny {
                 return failed("Permission denied for read_file");
             }
-            match resolve_sandboxed_path(root, &path).and_then(|p| std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))) {
-                Ok(content) => ToolOutcome { ok: true, content, data: None },
+            match resolve_sandboxed_path(root, &path).and_then(|p| {
+                std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))
+            }) {
+                Ok(content) => ToolOutcome {
+                    ok: true,
+                    content,
+                    data: None,
+                },
                 Err(error) => failed(error),
             }
         }
@@ -460,40 +668,86 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             if path.trim().is_empty() {
                 return failed("path is required");
             }
-            let extension = std::path::Path::new(&path).extension().and_then(|e| e.to_str()).map(str::to_lowercase).unwrap_or_default();
-            let Some(media) = [("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("gif", "image/gif"), ("webp", "image/webp")].iter().find(|(e, _)| *e == extension).map(|(_, m)| *m) else {
-                return failed(format!("Not a readable image: {path}. Supported: .png, .jpg, .jpeg, .gif, .webp"));
+            let extension = std::path::Path::new(&path)
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(str::to_lowercase)
+                .unwrap_or_default();
+            let Some(media) = [
+                ("png", "image/png"),
+                ("jpg", "image/jpeg"),
+                ("jpeg", "image/jpeg"),
+                ("gif", "image/gif"),
+                ("webp", "image/webp"),
+            ]
+            .iter()
+            .find(|(e, _)| *e == extension)
+            .map(|(_, m)| *m) else {
+                return failed(format!(
+                    "Not a readable image: {path}. Supported: .png, .jpg, .jpeg, .gif, .webp"
+                ));
             };
             let request = json!({ "toolCallId": call.id, "title": "Permission requested: read_image", "name": "read_image", "kind": "read", "rawInput": args });
             if task.request_permission(request).await == super::acp_host::Decision::Deny {
                 return failed("Permission denied for read_image");
             }
-            match resolve_sandboxed_path(root, &path).and_then(|p| std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))) {
-                Ok(bytes) if bytes.len() > 12 * 1024 * 1024 => failed(format!("{path} is too large to attach.")),
+            match resolve_sandboxed_path(root, &path)
+                .and_then(|p| std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display())))
+            {
+                Ok(bytes) if bytes.len() > 12 * 1024 * 1024 => {
+                    failed(format!("{path} is too large to attach."))
+                }
                 Ok(bytes) => {
                     use base64::Engine;
                     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                    ToolOutcome { ok: true, content: format!("Image: {path} ({media}, {} bytes).", bytes.len()), data: Some(json!({ "__images": [{ "mimeType": media, "dataBase64": encoded }] })) }
+                    ToolOutcome {
+                        ok: true,
+                        content: format!("Image: {path} ({media}, {} bytes).", bytes.len()),
+                        data: Some(
+                            json!({ "__images": [{ "mimeType": media, "dataBase64": encoded }] }),
+                        ),
+                    }
                 }
                 Err(error) => failed(error),
             }
         }
         "list_dir" => {
-            let requested = Some(text("path")).filter(|p| !p.is_empty()).unwrap_or_else(|| ".".into());
+            let requested = Some(text("path"))
+                .filter(|p| !p.is_empty())
+                .unwrap_or_else(|| ".".into());
             let request = json!({ "toolCallId": call.id, "title": "Permission requested: list_dir", "name": "list_dir", "kind": "search", "rawInput": args });
             if task.request_permission(request).await == super::acp_host::Decision::Deny {
                 return failed("Permission denied for list_dir");
             }
-            match resolve_sandboxed_path(root, &requested).and_then(|p| std::fs::read_dir(&p).map_err(|e| format!("{}: {e}", p.display()))) {
+            match resolve_sandboxed_path(root, &requested)
+                .and_then(|p| std::fs::read_dir(&p).map_err(|e| format!("{}: {e}", p.display())))
+            {
                 Ok(entries) => {
-                    let mut names: Vec<String> = entries.flatten().map(|e| format!("{}{}", e.file_name().to_string_lossy(), if e.file_type().is_ok_and(|t| t.is_dir()) { "/" } else { "" })).collect();
+                    let mut names: Vec<String> = entries
+                        .flatten()
+                        .map(|e| {
+                            format!(
+                                "{}{}",
+                                e.file_name().to_string_lossy(),
+                                if e.file_type().is_ok_and(|t| t.is_dir()) {
+                                    "/"
+                                } else {
+                                    ""
+                                }
+                            )
+                        })
+                        .collect();
                     names.sort();
                     let more = names.len().saturating_sub(MAX_LIST_ENTRIES);
                     names.truncate(MAX_LIST_ENTRIES);
                     if more > 0 {
                         names.push(format!("… and {more} more"));
                     }
-                    ToolOutcome { ok: true, content: names.join("\n"), data: None }
+                    ToolOutcome {
+                        ok: true,
+                        content: names.join("\n"),
+                        data: None,
+                    }
                 }
                 Err(error) => failed(error),
             }
@@ -516,9 +770,17 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
                                 Ok(item) => item,
                                 Err(error) => return failed(error),
                             };
-                            match gate.acquire(vec![item], &format!("write {path}"), Lifetime::Tool).await {
+                            match gate
+                                .acquire(vec![item], &format!("write {path}"), Lifetime::Tool)
+                                .await
+                            {
                                 Decision::Granted(grant) => Some(grant),
-                                Decision::Refused(reason) => return failed(refusal_for_agent(&reason, Some("wait_for_files"))),
+                                Decision::Refused(reason) => {
+                                    return failed(refusal_for_agent(
+                                        &reason,
+                                        Some("wait_for_files"),
+                                    ));
+                                }
                             }
                         }
                         None => None,
@@ -528,7 +790,8 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
                         if let Some(parent) = full.parent() {
                             let _ = std::fs::create_dir_all(parent);
                         }
-                        std::fs::write(&full, &content).map_err(|error| format!("{}: {error}", full.display()))
+                        std::fs::write(&full, &content)
+                            .map_err(|error| format!("{}: {error}", full.display()))
                     })();
                     if let Some(grant) = grant {
                         grant.release(None).await;
@@ -536,19 +799,43 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
                     if let Err(error) = written {
                         return failed(error);
                     }
-                    let diff = (before.as_deref().map_or(0, str::len) + content.len() <= MAX_DIFF_BYTES).then(|| create_unified_diff(&path, before.as_deref().unwrap_or_default(), &content, 3));
+                    let diff = (before.as_deref().map_or(0, str::len) + content.len()
+                        <= MAX_DIFF_BYTES)
+                        .then(|| {
+                            create_unified_diff(
+                                &path,
+                                before.as_deref().unwrap_or_default(),
+                                &content,
+                                3,
+                            )
+                        });
                     let mut data = json!({ "kind": "write", "fileChanges": [{ "path": path, "oldText": before.clone().unwrap_or_default(), "newText": content }] });
                     if let Some(diff) = diff {
                         data["diff"] = json!(diff);
                         data["fileChanges"][0]["diff"] = json!(diff);
                     }
-                    ToolOutcome { ok: true, content: format!("Wrote {path}"), data: Some(data) }
+                    ToolOutcome {
+                        ok: true,
+                        content: format!("Wrote {path}"),
+                        data: Some(data),
+                    }
                 }
             }
         }
         "wait_for_files" => {
-            let Some(gate) = coordination_gate(task) else { return failed("wait_for_files is only available to a coordinated session.") };
-            let paths: Vec<String> = args["paths"].as_array().map(|all| all.iter().filter_map(Value::as_str).filter(|p| !p.trim().is_empty()).map(str::to_owned).collect()).unwrap_or_default();
+            let Some(gate) = coordination_gate(task) else {
+                return failed("wait_for_files is only available to a coordinated session.");
+            };
+            let paths: Vec<String> = args["paths"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .filter_map(Value::as_str)
+                        .filter(|p| !p.trim().is_empty())
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
             if paths.is_empty() {
                 return failed("Name at least one path.");
             }
@@ -557,17 +844,34 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             }
             let mut items = Vec::new();
             for entry in &paths {
-                match resolve_sandboxed_path(root, entry).and_then(|absolute| gate.file_item(&absolute, true)) {
+                match resolve_sandboxed_path(root, entry)
+                    .and_then(|absolute| gate.file_item(&absolute, true))
+                {
                     Ok(item) => items.push(item),
                     Err(error) => return failed(error),
                 }
             }
-            let seconds = args["seconds"].as_f64().filter(|n| n.is_finite()).unwrap_or(60.0);
-            let timeout_ms = ((seconds * 1000.0).round() as i64).clamp(1000, praxis_ai::coordination::COORDINATION_MAX_WAIT_MS);
-            let reason = Some(text("reason").trim().chars().take(200).collect::<String>()).filter(|r| !r.is_empty()).unwrap_or_else(|| "waiting to edit".into());
+            let seconds = args["seconds"]
+                .as_f64()
+                .filter(|n| n.is_finite())
+                .unwrap_or(60.0);
+            let timeout_ms = ((seconds * 1000.0).round() as i64)
+                .clamp(1000, praxis_ai::coordination::COORDINATION_MAX_WAIT_MS);
+            let reason = Some(text("reason").trim().chars().take(200).collect::<String>())
+                .filter(|r| !r.is_empty())
+                .unwrap_or_else(|| "waiting to edit".into());
             match gate.wait(items, &reason, timeout_ms).await {
-                Decision::Granted(_) => ToolOutcome { ok: true, content: format!("You now hold {} until your turn ends. Re-read them before changing them: another session just finished with them.", paths.join(", ")), data: None },
-                Decision::Refused(why) => failed(format!("Not granted: {why} Do other work, or stop and report what is blocking you; do not wait again in a loop.")),
+                Decision::Granted(_) => ToolOutcome {
+                    ok: true,
+                    content: format!(
+                        "You now hold {} until your turn ends. Re-read them before changing them: another session just finished with them.",
+                        paths.join(", ")
+                    ),
+                    data: None,
+                },
+                Decision::Refused(why) => failed(format!(
+                    "Not granted: {why} Do other work, or stop and report what is blocking you; do not wait again in a loop."
+                )),
             }
         }
         "run_shell" => {
@@ -583,31 +887,84 @@ async fn run_tool(task: &Arc<Task>, call: &ChatCompletionToolCall) -> ToolOutcom
             let gate = coordination_gate(task);
             let grant = match &gate {
                 Some(gate) => {
-                    let clipped = if command.chars().count() > 80 { format!("{}…", command.chars().take(80).collect::<String>()) } else { command.clone() };
-                    let items = vec![RequestItem { resource: Resource::Worktree { worktree: gate.worktree.clone() }, mode: ClaimMode::Exclusive }];
-                    match gate.acquire(items, &format!("run `{clipped}`"), Lifetime::Tool).await {
+                    let clipped = if command.chars().count() > 80 {
+                        format!("{}…", command.chars().take(80).collect::<String>())
+                    } else {
+                        command.clone()
+                    };
+                    let items = vec![RequestItem {
+                        resource: Resource::Worktree {
+                            worktree: gate.worktree.clone(),
+                        },
+                        mode: ClaimMode::Exclusive,
+                    }];
+                    match gate
+                        .acquire(items, &format!("run `{clipped}`"), Lifetime::Tool)
+                        .await
+                    {
                         Decision::Granted(grant) => Some(grant),
-                        Decision::Refused(reason) => return failed(refusal_for_agent(&reason, Some("wait_for_files"))),
+                        Decision::Refused(reason) => {
+                            return failed(refusal_for_agent(&reason, Some("wait_for_files")));
+                        }
                     }
                 }
                 None => None,
             };
             // Its own process group, killed as a whole if the step is cancelled or times out.
-            let run = super::shell_services::run_shell_command(&command, root, SHELL_TIMEOUT, praxis_ai::providers::environment::effective_path().to_owned()).await;
-            let output = [run.stdout.as_str(), run.stderr.as_str()].into_iter().filter(|part| !part.trim().is_empty()).collect::<Vec<_>>().join("\n").trim().to_owned();
-            let mut parts = vec![output.clone(), run.error.as_ref().map(|error| format!("exit error: {error}")).unwrap_or_default()];
+            let run = super::shell_services::run_shell_command(
+                &command,
+                root,
+                SHELL_TIMEOUT,
+                praxis_ai::providers::environment::effective_path().to_owned(),
+            )
+            .await;
+            let output = [run.stdout.as_str(), run.stderr.as_str()]
+                .into_iter()
+                .filter(|part| !part.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_owned();
+            let mut parts = vec![
+                output.clone(),
+                run.error
+                    .as_ref()
+                    .map(|error| format!("exit error: {error}"))
+                    .unwrap_or_default(),
+            ];
             // Processes the command left running are a service: they keep a claim until they exit.
             if let Some(pgid) = run.pgid.filter(|_| !run.survivors.is_empty()) {
-                parts.push(super::shell_services::track_service(task, gate.as_ref(), &command, pgid, run.survivors.clone()).await);
+                parts.push(
+                    super::shell_services::track_service(
+                        task,
+                        gate.as_ref(),
+                        &command,
+                        pgid,
+                        run.survivors.clone(),
+                    )
+                    .await,
+                );
             }
             if let Some(grant) = grant {
                 grant.release(None).await;
             }
-            let content = parts.into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join("\n").trim().to_owned();
+            let content = parts
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_owned();
             ToolOutcome {
                 ok: run.error.is_none(),
-                content: if content.is_empty() { "(no output)".to_owned() } else { content },
-                data: Some(json!({ "toolName": "run_shell", "kind": "shell", "ok": run.error.is_none(), "output": output, "exitCode": run.exit_code })),
+                content: if content.is_empty() {
+                    "(no output)".to_owned()
+                } else {
+                    content
+                },
+                data: Some(
+                    json!({ "toolName": "run_shell", "kind": "shell", "ok": run.error.is_none(), "output": output, "exitCode": run.exit_code }),
+                ),
             }
         }
         other => failed(format!("Unknown tool: {other}")),
@@ -626,12 +983,22 @@ struct Turn {
 }
 
 fn sum(a: Option<u64>, b: Option<u64>) -> Option<u64> {
-    if a.is_none() && b.is_none() { None } else { Some(a.unwrap_or(0) + b.unwrap_or(0)) }
+    if a.is_none() && b.is_none() {
+        None
+    } else {
+        Some(a.unwrap_or(0) + b.unwrap_or(0))
+    }
 }
 
 pub(super) fn usage_json(usage: &TokenUsage) -> Value {
     let mut value = json!({});
-    for (key, field) in [("inputTokens", usage.input_tokens), ("outputTokens", usage.output_tokens), ("totalTokens", usage.total_tokens), ("reasoningTokens", usage.reasoning_tokens), ("cachedInputTokens", usage.cached_input_tokens)] {
+    for (key, field) in [
+        ("inputTokens", usage.input_tokens),
+        ("outputTokens", usage.output_tokens),
+        ("totalTokens", usage.total_tokens),
+        ("reasoningTokens", usage.reasoning_tokens),
+        ("cachedInputTokens", usage.cached_input_tokens),
+    ] {
         if let Some(n) = field {
             value[key] = json!(n);
         }
@@ -648,14 +1015,21 @@ fn add_usage(task: &Task, usage: TokenUsage, provider: &str, model: &str) {
             if !slot.is_object() {
                 *slot = json!({});
             }
-            for (key, field) in [("inputTokens", usage.input_tokens), ("outputTokens", usage.output_tokens), ("totalTokens", usage.total_tokens)] {
+            for (key, field) in [
+                ("inputTokens", usage.input_tokens),
+                ("outputTokens", usage.output_tokens),
+                ("totalTokens", usage.total_tokens),
+            ] {
                 if let Some(n) = field {
                     slot[key] = json!(slot[key].as_u64().unwrap_or(0) + n);
                 }
             }
         };
         add(&mut record["tokenUsage"], &usage);
-        if let Some(epoch) = record["runtimeEpochs"].as_array_mut().and_then(|epochs| epochs.iter_mut().find(|e| e["endedAt"].is_null())) {
+        if let Some(epoch) = record["runtimeEpochs"]
+            .as_array_mut()
+            .and_then(|epochs| epochs.iter_mut().find(|e| e["endedAt"].is_null()))
+        {
             add(&mut epoch["tokenUsage"], &usage);
         }
         // Context pressure is this turn's prompt, not the running total.
@@ -663,7 +1037,10 @@ fn add_usage(task: &Task, usage: TokenUsage, provider: &str, model: &str) {
             record["contextTokens"] = json!(input);
         }
         if let Some(cost) = estimate_turn_cost(Some(&provider), Some(&model), usage) {
-            let prior = record["cost"]["amount"].as_f64().filter(|_| record["cost"]["currency"] == cost.currency).unwrap_or(0.0);
+            let prior = record["cost"]["amount"]
+                .as_f64()
+                .filter(|_| record["cost"]["currency"] == cost.currency)
+                .unwrap_or(0.0);
             record["cost"] = json!({ "amount": prior + cost.amount, "currency": cost.currency });
         }
     });
@@ -675,8 +1052,12 @@ fn note_context_limit(task: &Arc<Task>, connection: &ApiConnection, model: &str)
     }
     let (task, connection, model) = (Arc::clone(task), connection.clone(), model.to_owned());
     runtime().spawn(async move {
-        if let Ok(choices) = list_catalog_models(&connection.provider, &connection.options, &[], false).await
-            && let Some(limit) = choices.iter().find(|c| c["value"] == model).and_then(|c| c["contextLength"].as_u64())
+        if let Ok(choices) =
+            list_catalog_models(&connection.provider, &connection.options, &[], false).await
+            && let Some(limit) = choices
+                .iter()
+                .find(|c| c["value"] == model)
+                .and_then(|c| c["contextLength"].as_u64())
         {
             task.mutate(true, move |record| record["contextLimit"] = json!(limit));
         }
@@ -690,13 +1071,37 @@ enum Outcome {
     StepLimit(String),
 }
 
-async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, system: String, mut history: Vec<WireMessage>, tool_mode: &str, max_steps: u64, reasoning: Option<&str>) -> (Outcome, Vec<WireMessage>) {
-    let mut tools = tool_definitions(tool_mode, !task.key.starts_with("SESSION-"), tool_mode == "full" && coordination_gate(task).is_some());
+async fn run_loop(
+    task: &Arc<Task>,
+    connection: &ApiConnection,
+    model: &str,
+    system: String,
+    mut history: Vec<WireMessage>,
+    tool_mode: &str,
+    max_steps: u64,
+    reasoning: Option<&str>,
+) -> (Outcome, Vec<WireMessage>) {
+    let mut tools = tool_definitions(
+        tool_mode,
+        !task.key.starts_with("SESSION-"),
+        tool_mode == "full" && coordination_gate(task).is_some(),
+    );
     if tool_mode == "full" && task.host.settings().read().ai.browser_tools.enabled {
-        tools.extend(super::ai_browser::tool_definitions().into_iter().map(|(name, description, schema)| GatewayToolDefinition { name: name.into(), description: Some(description.into()), input_schema: Some(schema) }));
+        tools.extend(super::ai_browser::tool_definitions().into_iter().map(
+            |(name, description, schema)| GatewayToolDefinition {
+                name: name.into(),
+                description: Some(description.into()),
+                input_schema: Some(schema),
+            },
+        ));
     }
-    let (mcp_servers, mcp_tools) = super::user_mcp::api_tools(&task.host, tool_mode, &connection.provider).await;
-    tools.extend(mcp_tools.iter().map(|t| GatewayToolDefinition { name: t.namespaced_name.clone(), description: t.description.clone(), input_schema: t.input_schema.clone() }));
+    let (mcp_servers, mcp_tools) =
+        super::user_mcp::api_tools(&task.host, tool_mode, &connection.provider).await;
+    tools.extend(mcp_tools.iter().map(|t| GatewayToolDefinition {
+        name: t.namespaced_name.clone(),
+        description: t.description.clone(),
+        input_schema: t.input_schema.clone(),
+    }));
     // The gateway's internal model ids carry a `Vercel/` prefix that is not part of the wire id.
     let wire_model = model.strip_prefix("Vercel/").unwrap_or(model).to_owned();
     let mut steps = 0u64;
@@ -706,7 +1111,9 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
     // Each model call is billed once, so a turn's tokens are the running sum of its calls.
     let mut run_usage: Option<TokenUsage> = None;
     let mut run_estimate: Option<TokenUsage> = None;
-    let read_only = tools.iter().all(|t| matches!(t.name.as_str(), "read_file" | "list_dir" | "read_image"));
+    let read_only = tools
+        .iter()
+        .all(|t| matches!(t.name.as_str(), "read_file" | "list_dir" | "read_image"));
     let provider_label = connection.label.clone();
     let _ = provider_label;
     loop {
@@ -716,10 +1123,23 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
         let mut messages = vec![WireMessage::text(WireRole::System, system.clone())];
         messages.extend(history.iter().cloned());
         let force_final = duplicate_reads >= 4 || (read_only && steps >= 30);
-        let active_tools = if force_final { Vec::new() } else { tools.clone() };
+        let active_tools = if force_final {
+            Vec::new()
+        } else {
+            tools.clone()
+        };
         let body = match connection.wire {
             Wire::OpenAi => {
-                let mut request = build_chat_request(&messages, &wire_model, &ChatRequestOptions { tools: active_tools, stream: true, ..ChatRequestOptions::default() }).body;
+                let mut request = build_chat_request(
+                    &messages,
+                    &wire_model,
+                    &ChatRequestOptions {
+                        tools: active_tools,
+                        stream: true,
+                        ..ChatRequestOptions::default()
+                    },
+                )
+                .body;
                 if !connection.stream_usage {
                     request.as_object_mut().map(|o| o.remove("stream_options"));
                 }
@@ -735,15 +1155,43 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 request
             }
             Wire::Anthropic => {
-                let mut request = anthropic_request_body(&messages, &wire_model, &AnthropicRequestOptions { tools: active_tools, reasoning_effort: parse_effort(reasoning), ..AnthropicRequestOptions::default() });
+                let mut request = anthropic_request_body(
+                    &messages,
+                    &wire_model,
+                    &AnthropicRequestOptions {
+                        tools: active_tools,
+                        reasoning_effort: parse_effort(reasoning),
+                        ..AnthropicRequestOptions::default()
+                    },
+                );
                 request["stream"] = json!(true);
                 request
             }
-            Wire::Gemini => gemini_request_body(&messages, &GeminiRequestOptions { tools: active_tools, ..GeminiRequestOptions::default() }),
+            Wire::Gemini => gemini_request_body(
+                &messages,
+                &GeminiRequestOptions {
+                    tools: active_tools,
+                    ..GeminiRequestOptions::default()
+                },
+            ),
         };
-        let prompt_chars: usize = messages.iter().map(|m| m.content.as_deref().map_or(0, |c| c.chars().count())).sum();
-        let mut turn = Turn { usage: run_usage, estimate: run_estimate, tools: Vec::new(), started: Instant::now(), reasoning_emitted: 0, prompt_chars };
-        let _ = (&mut turn.estimate, &mut turn.reasoning_emitted, &turn.prompt_chars);
+        let prompt_chars: usize = messages
+            .iter()
+            .map(|m| m.content.as_deref().map_or(0, |c| c.chars().count()))
+            .sum();
+        let mut turn = Turn {
+            usage: run_usage,
+            estimate: run_estimate,
+            tools: Vec::new(),
+            started: Instant::now(),
+            reasoning_emitted: 0,
+            prompt_chars,
+        };
+        let _ = (
+            &mut turn.estimate,
+            &mut turn.reasoning_emitted,
+            &turn.prompt_chars,
+        );
 
         let cancelled = task.cancel.notified();
         tokio::pin!(cancelled);
@@ -751,26 +1199,38 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
         let task_for_reasoning = Arc::clone(task);
         let step = async {
             let sse = post_stream(connection, &wire_model, &body).await?;
-            collect(connection, sse, |piece| {
-                let buffer = {
-                    let mut buffer = task_for_text.message.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                    buffer.push_str(piece);
-                    buffer.clone()
-                };
-                task_for_text.mutate(false, move |record| {
-                    record["responseText"] = json!(buffer);
-                    if record["state"] == "planning" {
-                        record["planText"] = json!(buffer);
-                    }
-                });
-            }, |piece| {
-                let buffer = {
-                    let mut buffer = task_for_reasoning.reasoning.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                    buffer.push_str(piece);
-                    buffer.clone()
-                };
-                task_for_reasoning.mutate(false, move |record| record["reasoningText"] = json!(buffer));
-            })
+            collect(
+                connection,
+                sse,
+                |piece| {
+                    let buffer = {
+                        let mut buffer = task_for_text
+                            .message
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        buffer.push_str(piece);
+                        buffer.clone()
+                    };
+                    task_for_text.mutate(false, move |record| {
+                        record["responseText"] = json!(buffer);
+                        if record["state"] == "planning" {
+                            record["planText"] = json!(buffer);
+                        }
+                    });
+                },
+                |piece| {
+                    let buffer = {
+                        let mut buffer = task_for_reasoning
+                            .reasoning
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        buffer.push_str(piece);
+                        buffer.clone()
+                    };
+                    task_for_reasoning
+                        .mutate(false, move |record| record["reasoningText"] = json!(buffer));
+                },
+            )
             .await
         };
         let completion = tokio::select! {
@@ -782,14 +1242,31 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
         };
 
         let reported = completion.usage;
-        let has_usage = reported.input_tokens.is_some() || reported.output_tokens.is_some() || reported.total_tokens.is_some();
+        let has_usage = reported.input_tokens.is_some()
+            || reported.output_tokens.is_some()
+            || reported.total_tokens.is_some();
         if has_usage {
             turn.usage = Some(TokenUsage {
-                input_tokens: sum(turn.usage.and_then(|u| u.input_tokens), reported.input_tokens),
-                output_tokens: sum(turn.usage.and_then(|u| u.output_tokens), reported.output_tokens),
-                total_tokens: sum(turn.usage.and_then(|u| u.total_tokens), reported.total_tokens),
-                reasoning_tokens: sum(turn.usage.and_then(|u| u.reasoning_tokens), reported.reasoning_tokens),
-                cached_input_tokens: sum(turn.usage.and_then(|u| u.cached_input_tokens), reported.cached_input_tokens),
+                input_tokens: sum(
+                    turn.usage.and_then(|u| u.input_tokens),
+                    reported.input_tokens,
+                ),
+                output_tokens: sum(
+                    turn.usage.and_then(|u| u.output_tokens),
+                    reported.output_tokens,
+                ),
+                total_tokens: sum(
+                    turn.usage.and_then(|u| u.total_tokens),
+                    reported.total_tokens,
+                ),
+                reasoning_tokens: sum(
+                    turn.usage.and_then(|u| u.reasoning_tokens),
+                    reported.reasoning_tokens,
+                ),
+                cached_input_tokens: sum(
+                    turn.usage.and_then(|u| u.cached_input_tokens),
+                    reported.cached_input_tokens,
+                ),
             });
             add_usage(task, reported, &connection.provider, model);
             run_usage = turn.usage;
@@ -805,22 +1282,42 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 task.append(evt("error", notice.clone(), None, None), 0);
                 return (Outcome::Failed(notice), history);
             }
-            emit_message(task, &mut turn, &text, &completion, connection, model, &system);
+            emit_message(
+                task,
+                &mut turn,
+                &text,
+                &completion,
+                connection,
+                model,
+                &system,
+            );
             run_estimate = turn.estimate;
         }
 
         if completion.tool_calls.is_empty() {
             if text.trim().is_empty() {
-                let message = completion.finish_reason.as_deref().map_or_else(|| "Model returned an empty response.".to_owned(), |reason| format!("Model returned an empty response (finish reason: {reason})."));
+                let message = completion.finish_reason.as_deref().map_or_else(
+                    || "Model returned an empty response.".to_owned(),
+                    |reason| format!("Model returned an empty response (finish reason: {reason})."),
+                );
                 task.append(evt("error", message.clone(), None, None), 0);
                 return (Outcome::Failed(message), history);
             }
             history.push(WireMessage::text(WireRole::Assistant, text));
-            task.append(evt("task_complete", "Agent completed the task", None, None), 0);
+            task.append(
+                evt("task_complete", "Agent completed the task", None, None),
+                0,
+            );
             return (Outcome::Completed, history);
         }
 
-        let wire_calls: Vec<OpenAiToolCall> = completion.tool_calls.iter().map(|c| OpenAiToolCall::function(c.id.clone(), c.name.clone(), c.arguments.to_string())).collect();
+        let wire_calls: Vec<OpenAiToolCall> = completion
+            .tool_calls
+            .iter()
+            .map(|c| {
+                OpenAiToolCall::function(c.id.clone(), c.name.clone(), c.arguments.to_string())
+            })
+            .collect();
         history.push(assistant_message_with_tool_calls(&text, &wire_calls));
         let mut results: Vec<ToolResult> = Vec::new();
         let mut tool_images: Vec<praxis_ai::providers::wire::WireImageAttachment> = Vec::new();
@@ -852,7 +1349,14 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
             let outcome = if is_read && prior >= 2 {
                 duplicate_reads += 1;
                 let target = call.arguments["path"].as_str().unwrap_or("this target");
-                ToolOutcome { ok: true, content: format!("[Notice: You have already inspected {target} {} times in this session. Its contents have not changed and will not be re-read. Do not re-inspect files in a loop. You have gathered sufficient codebase context; synthesize your findings and produce your required stage response now.]", prior + 1), data: None }
+                ToolOutcome {
+                    ok: true,
+                    content: format!(
+                        "[Notice: You have already inspected {target} {} times in this session. Its contents have not changed and will not be re-read. Do not re-inspect files in a loop. You have gathered sufficient codebase context; synthesize your findings and produce your required stage response now.]",
+                        prior + 1
+                    ),
+                    data: None,
+                }
             } else {
                 if is_read {
                     duplicate_reads = 0;
@@ -862,7 +1366,15 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
                 if task.ending.load(Ordering::SeqCst) {
                     return (Outcome::Aborted, history);
                 }
-                let owner = mcp_tools.iter().find(|t| t.namespaced_name == call.name).and_then(|t| mcp_servers.iter().find(|s| s.id == t.server_id).map(|s| (t.clone(), s.clone())));
+                let owner = mcp_tools
+                    .iter()
+                    .find(|t| t.namespaced_name == call.name)
+                    .and_then(|t| {
+                        mcp_servers
+                            .iter()
+                            .find(|s| s.id == t.server_id)
+                            .map(|s| (t.clone(), s.clone()))
+                    });
                 tokio::select! {
                     () = &mut cancelled => return (Outcome::Aborted, history),
                     outcome = async {
@@ -875,20 +1387,47 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
             };
             let mut data = outcome.data.clone().unwrap_or_else(|| json!({}));
             // An image a tool read cannot ride a text-only tool message; it is re-attached below.
-            if let Some(images) = data.as_object_mut().and_then(|o| o.remove("__images")).and_then(|v| v.as_array().cloned()) {
-                tool_images.extend(images.iter().filter_map(|i| serde_json::from_value::<praxis_ai::providers::wire::WireImageAttachment>(i.clone()).ok()));
+            if let Some(images) = data
+                .as_object_mut()
+                .and_then(|o| o.remove("__images"))
+                .and_then(|v| v.as_array().cloned())
+            {
+                tool_images.extend(images.iter().filter_map(|i| {
+                    serde_json::from_value::<praxis_ai::providers::wire::WireImageAttachment>(
+                        i.clone(),
+                    )
+                    .ok()
+                }));
             }
             data["toolName"] = json!(call.name);
             data["ok"] = json!(outcome.ok);
             if data["kind"].is_null() {
                 data["kind"] = json!(classify_tool(&call.name));
             }
-            task.append(evt("tool_complete", format!("Tool {}: {}", if outcome.ok { "completed" } else { "failed" }, call.name), Some(outcome.content.chars().take(2000).collect()), Some(data)), 1);
-            results.push(ToolResult { call_id: Some(call.id.clone()), content: outcome.content });
+            task.append(
+                evt(
+                    "tool_complete",
+                    format!(
+                        "Tool {}: {}",
+                        if outcome.ok { "completed" } else { "failed" },
+                        call.name
+                    ),
+                    Some(outcome.content.chars().take(2000).collect()),
+                    Some(data),
+                ),
+                1,
+            );
+            results.push(ToolResult {
+                call_id: Some(call.id.clone()),
+                content: outcome.content,
+            });
         }
         history.extend(tool_result_messages(&wire_calls, &results));
         if !tool_images.is_empty() {
-            let mut shown = WireMessage::text(WireRole::User, "The tool output above included image attachments, shown here:");
+            let mut shown = WireMessage::text(
+                WireRole::User,
+                "The tool output above included image attachments, shown here:",
+            );
             shown.images = Some(tool_images);
             history.push(shown);
         }
@@ -899,7 +1438,18 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
         // Bound the conversation before the provider does it with a context-length error.
         let trimmed = trim_history(&mut history, DEFAULT_HISTORY_BUDGET_CHARS);
         if trimmed > 0 {
-            task.append(evt("message", format!("Dropped {trimmed} earlier tool result{} to stay within the context window", if trimmed == 1 { "" } else { "s" }), None, None), 0);
+            task.append(
+                evt(
+                    "message",
+                    format!(
+                        "Dropped {trimmed} earlier tool result{} to stay within the context window",
+                        if trimmed == 1 { "" } else { "s" }
+                    ),
+                    None,
+                    None,
+                ),
+                0,
+            );
         }
     }
 }
@@ -907,17 +1457,29 @@ async fn run_loop(task: &Arc<Task>, connection: &ApiConnection, model: &str, sys
 /// Elides the oldest tool outputs once the conversation passes `budget` characters. The tool
 /// message itself stays (an assistant tool call without its result is a protocol error).
 fn trim_history(history: &mut [WireMessage], budget: usize) -> usize {
-    let total = |h: &[WireMessage]| -> usize { h.iter().map(|m| m.content.as_deref().map_or(0, |c| c.chars().count())).sum() };
+    let total = |h: &[WireMessage]| -> usize {
+        h.iter()
+            .map(|m| m.content.as_deref().map_or(0, |c| c.chars().count()))
+            .sum()
+    };
     let mut dropped = 0;
     let mut size = total(history);
     for message in history.iter_mut() {
         if size <= budget {
             break;
         }
-        if message.role == WireRole::Tool && let Some(content) = message.content.as_mut() && content.chars().count() > 200 {
+        if message.role == WireRole::Tool
+            && let Some(content) = message.content.as_mut()
+            && content.chars().count() > 200
+        {
             let before = content.chars().count();
-            *content = trim_tool_output_to_budget("[Earlier tool output elided to stay within the context window]", 200);
-            size = size.saturating_sub(before).saturating_add(content.chars().count());
+            *content = trim_tool_output_to_budget(
+                "[Earlier tool output elided to stay within the context window]",
+                200,
+            );
+            size = size
+                .saturating_sub(before)
+                .saturating_add(content.chars().count());
             dropped += 1;
         }
     }
@@ -933,23 +1495,60 @@ fn args_summary(name: &str, args: &Value) -> String {
     }
 }
 
-fn emit_message(task: &Arc<Task>, turn: &mut Turn, text: &str, completion: &ChatCompletionResult, connection: &ApiConnection, model: &str, system: &str) {
-    let preview = if text.chars().count() > 200 { format!("{}…", text.chars().take(200).collect::<String>()) } else { text.to_owned() };
+fn emit_message(
+    task: &Arc<Task>,
+    turn: &mut Turn,
+    text: &str,
+    completion: &ChatCompletionResult,
+    connection: &ApiConnection,
+    model: &str,
+    system: &str,
+) {
+    let preview = if text.chars().count() > 200 {
+        format!("{}…", text.chars().take(200).collect::<String>())
+    } else {
+        text.to_owned()
+    };
     let reasoning_all = task.reasoning.lock().map(|r| r.clone()).unwrap_or_default();
     let thought = completion.thought.trim().to_owned();
-    let reasoning = if !thought.is_empty() { thought } else { reasoning_all.chars().skip(turn.reasoning_emitted).collect::<String>().trim().to_owned() };
+    let reasoning = if !thought.is_empty() {
+        thought
+    } else {
+        reasoning_all
+            .chars()
+            .skip(turn.reasoning_emitted)
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    };
     turn.reasoning_emitted = reasoning_all.chars().count();
     let mut usage = turn.usage;
     if usage.is_none() {
         // The provider reported nothing (e.g. the Z.ai PaaS endpoint): estimate one round trip.
-        let input = Some(((turn.prompt_chars.max(system.chars().count())) as f64 / 3.5).ceil() as u64).filter(|n| *n > 0);
+        let input =
+            Some(((turn.prompt_chars.max(system.chars().count())) as f64 / 3.5).ceil() as u64)
+                .filter(|n| *n > 0);
         let output = Some((text.chars().count() as f64 / 3.5).ceil() as u64).filter(|n| *n > 0);
-        let estimate = TokenUsage { input_tokens: input, output_tokens: output, total_tokens: sum(input, output), ..TokenUsage::default() };
+        let estimate = TokenUsage {
+            input_tokens: input,
+            output_tokens: output,
+            total_tokens: sum(input, output),
+            ..TokenUsage::default()
+        };
         add_usage(task, estimate, &connection.provider, model);
         turn.estimate = Some(TokenUsage {
-            input_tokens: sum(turn.estimate.and_then(|u| u.input_tokens), estimate.input_tokens),
-            output_tokens: sum(turn.estimate.and_then(|u| u.output_tokens), estimate.output_tokens),
-            total_tokens: sum(turn.estimate.and_then(|u| u.total_tokens), estimate.total_tokens),
+            input_tokens: sum(
+                turn.estimate.and_then(|u| u.input_tokens),
+                estimate.input_tokens,
+            ),
+            output_tokens: sum(
+                turn.estimate.and_then(|u| u.output_tokens),
+                estimate.output_tokens,
+            ),
+            total_tokens: sum(
+                turn.estimate.and_then(|u| u.total_tokens),
+                estimate.total_tokens,
+            ),
             ..TokenUsage::default()
         });
         usage = turn.estimate;
@@ -970,7 +1569,13 @@ fn emit_message(task: &Arc<Task>, turn: &mut Turn, text: &str, completion: &Chat
         message["toolNames"] = json!(turn.tools);
     }
     task.append(message, 0);
-    if task.store.get(&task.key).ok().flatten().is_some_and(|r| r["state"] == "planning") {
+    if task
+        .store
+        .get(&task.key)
+        .ok()
+        .flatten()
+        .is_some_and(|r| r["state"] == "planning")
+    {
         let plan = text.to_owned();
         task.mutate(true, move |record| record["planText"] = json!(plan));
         task.set_state("executing", None);
@@ -987,10 +1592,45 @@ fn history_from_record(record: &Value) -> Vec<WireMessage> {
     serde_json::from_value(record["conversationHistory"].clone()).unwrap_or_default()
 }
 
-async fn run_session(task: Arc<Task>, connection: ApiConnection, model: String, system: String, history: Vec<WireMessage>, tool_mode: String, max_steps: u64, timeout: Duration, reasoning: Option<String>) {
-    let outcome = tokio::time::timeout(timeout, run_loop(&task, &connection, &model, system, history, &tool_mode, max_steps, reasoning.as_deref())).await;
+async fn run_session(
+    task: Arc<Task>,
+    connection: ApiConnection,
+    model: String,
+    system: String,
+    history: Vec<WireMessage>,
+    tool_mode: String,
+    max_steps: u64,
+    timeout: Duration,
+    reasoning: Option<String>,
+) {
+    let outcome = tokio::time::timeout(
+        timeout,
+        run_loop(
+            &task,
+            &connection,
+            &model,
+            system,
+            history,
+            &tool_mode,
+            max_steps,
+            reasoning.as_deref(),
+        ),
+    )
+    .await;
     match outcome {
-        Err(_) => stop_task(&task, "failed", evt("error", format!("Task stopped after timing out at {}s.", timeout.as_secs()), None, None)).await,
+        Err(_) => {
+            stop_task(
+                &task,
+                "failed",
+                evt(
+                    "error",
+                    format!("Task stopped after timing out at {}s.", timeout.as_secs()),
+                    None,
+                    None,
+                ),
+            )
+            .await
+        }
         Ok((result, history)) => {
             if !task.ending.load(Ordering::SeqCst) {
                 let saved = history_to_value(&history);
@@ -1004,12 +1644,30 @@ async fn run_session(task: Arc<Task>, connection: ApiConnection, model: String, 
                 match result {
                     Outcome::Completed => {
                         task.set_state("completed", None);
-                        task.append(evt("idle", "Agent session idle after completion", None, None), 0);
+                        task.append(
+                            evt("idle", "Agent session idle after completion", None, None),
+                            0,
+                        );
                     }
                     Outcome::Aborted => {}
                     Outcome::Failed(error) | Outcome::StepLimit(error) => {
-                        let shown = [Some(error.clone()), task.message.lock().ok().map(|m| m.clone())].into_iter().flatten().find(|t| is_provider_limit_error(t)).map(|t| extract_provider_limit_message(&t).unwrap_or(t)).unwrap_or(error);
-                        let already = task.store.get(&task.key).ok().flatten().is_some_and(|r| r["events"].as_array().is_some_and(|events| events.iter().any(|e| e["type"] == "error" && (e["summary"] == shown || e["detail"] == shown))));
+                        let shown = [
+                            Some(error.clone()),
+                            task.message.lock().ok().map(|m| m.clone()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .find(|t| is_provider_limit_error(t))
+                        .map(|t| extract_provider_limit_message(&t).unwrap_or(t))
+                        .unwrap_or(error);
+                        let already = task.store.get(&task.key).ok().flatten().is_some_and(|r| {
+                            r["events"].as_array().is_some_and(|events| {
+                                events.iter().any(|e| {
+                                    e["type"] == "error"
+                                        && (e["summary"] == shown || e["detail"] == shown)
+                                })
+                            })
+                        });
                         task.set_state("failed", Some(&shown));
                         if !already {
                             task.append(evt("error", shown, None, None), 0);
@@ -1024,13 +1682,25 @@ async fn run_session(task: Arc<Task>, connection: ApiConnection, model: String, 
 
 fn system_prompt(start: &ApiStart) -> String {
     let mode_line = match start.tool_mode.as_str() {
-        "read-only" => "Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets.",
-        "project-only" => "Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user.",
-        _ => "Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.",
+        "read-only" => {
+            "Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets."
+        }
+        "project-only" => {
+            "Tool mode: PROJECT ONLY. You do not have local file or shell tools. Converse directly with the user."
+        }
+        _ => {
+            "Tool mode: FULL. Use the available tools as needed; mutating operations require user approval."
+        }
     };
-    let mut prompt = format!("{}\n\n{mode_line}", praxis_ai::session::prompt::build_system_prompt(&start.task, &start.issue));
+    let mut prompt = format!(
+        "{}\n\n{mode_line}",
+        praxis_ai::session::prompt::build_system_prompt(&start.task, &start.issue)
+    );
     if start.permission_mode.as_deref() == Some("autopilot") {
-        prompt.push_str(&format!("\n\n{}", praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")));
+        prompt.push_str(&format!(
+            "\n\n{}",
+            praxis_ai::session::prompt::prompt("AUTOPILOT_SESSION_PROMPT")
+        ));
     }
     prompt
 }
@@ -1038,15 +1708,31 @@ fn system_prompt(start: &ApiStart) -> String {
 fn initial_prompt(start: &ApiStart) -> String {
     let key = start.issue["key"].as_str().unwrap_or_default();
     if start.task["sessionMode"] == "chat" {
-        return format!("Respond directly to the user's request. Do not start a ticket analysis or inspect a ticket unless the user explicitly asks you to.\n\nUser request: {}", start.task["goal"].as_str().unwrap_or_default());
+        return format!(
+            "Respond directly to the user's request. Do not start a ticket analysis or inspect a ticket unless the user explicitly asks you to.\n\nUser request: {}",
+            start.task["goal"].as_str().unwrap_or_default()
+        );
     }
-    let worktree = start.working_directory.as_deref().filter(|w| !w.is_empty()).map(|w| format!("\nWorktree (run ALL git and build commands from here): {w}")).unwrap_or_default();
-    let shown = praxis_ai::session::prompt::reviewed_issue_key(key).unwrap_or_else(|| key.to_owned());
-    format!("Execute the task described in the system prompt.\n\nIssue: {shown} — {}{worktree}", start.issue["summary"].as_str().unwrap_or_default())
+    let worktree = start
+        .working_directory
+        .as_deref()
+        .filter(|w| !w.is_empty())
+        .map(|w| format!("\nWorktree (run ALL git and build commands from here): {w}"))
+        .unwrap_or_default();
+    let shown =
+        praxis_ai::session::prompt::reviewed_issue_key(key).unwrap_or_else(|| key.to_owned());
+    format!(
+        "Execute the task described in the system prompt.\n\nIssue: {shown} — {}{worktree}",
+        start.issue["summary"].as_str().unwrap_or_default()
+    )
 }
 
 /// Creates the session record and runs the loop in the background. Returns the session id.
-pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart) -> Result<String> {
+pub fn start_api_task(
+    host: &HostContext,
+    dir: &std::path::Path,
+    start: ApiStart,
+) -> Result<String> {
     let key = start.issue["key"].as_str().unwrap_or_default().to_owned();
     if super::acp_host::has_active_task(dir, &key) {
         super::acp_host::abort_task(host, dir, &key);
@@ -1054,7 +1740,14 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
     let sessions = store(dir);
     let session_id = uuid::Uuid::new_v4().to_string();
     let started_at = now();
-    let mode = start.task["sessionMode"].as_str().map(str::to_owned).unwrap_or_else(|| match start.task["kind"].as_str() { Some("analysis") => "analysis".into(), Some("review") => "review".into(), _ => "chat".into() });
+    let mode = start.task["sessionMode"]
+        .as_str()
+        .map(str::to_owned)
+        .unwrap_or_else(|| match start.task["kind"].as_str() {
+            Some("analysis") => "analysis".into(),
+            Some("review") => "review".into(),
+            _ => "chat".into(),
+        });
     let mut record = json!({
         "issueKey": key, "sessionId": session_id, "provider": start.connection.provider, "model": start.model, "toolMode": start.tool_mode,
         "state": "not_started", "taskDefinition": start.task, "purpose": super::session_handover::purpose_from_task(&start.task, &key, None),
@@ -1062,7 +1755,12 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
         "mode": mode, "events": [], "eventsLoaded": true, "eventCount": 0, "stepCount": 0, "startedAt": started_at,
         "reasoningEffort": start.reasoning_effort.clone().unwrap_or_else(|| "medium".into())
     });
-    if let Some(working) = start.working_directory.as_deref().map(str::trim).filter(|w| !w.is_empty()) {
+    if let Some(working) = start
+        .working_directory
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    {
         record["workingDirectory"] = json!(working);
     }
     if start.auto_approve {
@@ -1071,37 +1769,106 @@ pub fn start_api_task(host: &HostContext, dir: &std::path::Path, start: ApiStart
     if let Some(mode) = &start.permission_mode {
         record["permissionMode"] = json!(mode);
     }
-    let cost_before = sessions.get(&key)?.and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
+    let cost_before = sessions
+        .get(&key)?
+        .and_then(|r| Some(r["cost"].clone()).filter(|c| !c.is_null()));
     sessions.put(&key, record.clone())?;
-    let working_directory = start.working_directory.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
-    super::log_bus::log(host, &format!("[ai] [ApiAgent] Starting session for {key} provider={} model={} cwd={}", start.connection.provider, start.model, working_directory.display()));
-    let task = register_api_task(host, dir, &key, &session_id, &start.tool_mode, working_directory, start.auto_approve, start.permission_mode.as_deref() == Some("auto"), cost_before);
+    let working_directory = start
+        .working_directory
+        .clone()
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
+    super::log_bus::log(
+        host,
+        &format!(
+            "[ai] [ApiAgent] Starting session for {key} provider={} model={} cwd={}",
+            start.connection.provider,
+            start.model,
+            working_directory.display()
+        ),
+    );
+    let task = register_api_task(
+        host,
+        dir,
+        &key,
+        &session_id,
+        &start.tool_mode,
+        working_directory,
+        start.auto_approve,
+        start.permission_mode.as_deref() == Some("auto"),
+        cost_before,
+    );
     host.events().emit("ai:sessionChanged", Some(record));
     task.set_state("planning", None);
-    task.append(evt("session_start", format!("{} agent session started", start.connection.label), None, None), 0);
+    task.append(
+        evt(
+            "session_start",
+            format!("{} agent session started", start.connection.label),
+            None,
+            None,
+        ),
+        0,
+    );
     note_context_limit(&task, &start.connection, &start.model);
 
     let max_steps = start.task["maxSteps"].as_u64().unwrap_or(500);
-    let timeout = start.task["timeoutMs"].as_u64().map_or(Duration::from_secs(3 * 60 * 60), Duration::from_millis);
+    let timeout = start.task["timeoutMs"]
+        .as_u64()
+        .map_or(Duration::from_secs(3 * 60 * 60), Duration::from_millis);
     let system = system_prompt(&start);
     let mut first = WireMessage::text(WireRole::User, initial_prompt(&start));
-    let images: Vec<praxis_ai::providers::wire::WireImageAttachment> = start.images.iter().filter_map(|i| serde_json::from_value(i.clone()).ok()).collect();
+    let images: Vec<praxis_ai::providers::wire::WireImageAttachment> = start
+        .images
+        .iter()
+        .filter_map(|i| serde_json::from_value(i.clone()).ok())
+        .collect();
     if !images.is_empty() {
         first.images = Some(images);
     }
-    let (connection, model, tool_mode, reasoning) = (start.connection.clone(), start.model.clone(), start.tool_mode.clone(), start.reasoning_effort.clone());
+    let (connection, model, tool_mode, reasoning) = (
+        start.connection.clone(),
+        start.model.clone(),
+        start.tool_mode.clone(),
+        start.reasoning_effort.clone(),
+    );
     let runner = Arc::clone(&task);
-    runtime().spawn(async move { run_session(runner, connection, model, system, vec![first], tool_mode, max_steps, timeout, reasoning).await });
+    runtime().spawn(async move {
+        run_session(
+            runner,
+            connection,
+            model,
+            system,
+            vec![first],
+            tool_mode,
+            max_steps,
+            timeout,
+            reasoning,
+        )
+        .await
+    });
     Ok(session_id)
 }
 
 /// A follow-up turn on an API session, continuing from the saved conversation history.
-pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, message: &str, images: Vec<Value>, connection: ApiConnection, internal: bool, gadget_answer: bool, conversation_context: Option<&str>) -> Result<()> {
+pub fn continue_api_task(
+    host: &HostContext,
+    dir: &std::path::Path,
+    key: &str,
+    message: &str,
+    images: Vec<Value>,
+    connection: ApiConnection,
+    internal: bool,
+    gadget_answer: bool,
+    conversation_context: Option<&str>,
+) -> Result<()> {
     if super::acp_host::has_active_task(dir, key) {
         return Err(failure(format!("The agent is still working on {key}.")));
     }
     let sessions = store(dir);
-    let record = sessions.get(key)?.ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
+    let record = sessions
+        .get(key)?
+        .ok_or_else(|| failure(format!("No agent session found for {key}.")))?;
     let follow_up = message.trim().to_owned();
     if follow_up.is_empty() {
         return Err(failure("Enter a follow-up message."));
@@ -1109,27 +1876,67 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
     let tool_mode = record["toolMode"].as_str().unwrap_or("full").to_owned();
     let model = record["model"].as_str().unwrap_or_default().to_owned();
     let issue = json!({ "key": key, "summary": record["taskDefinition"]["goal"], "issueType": "Task", "status": "In progress", "description": record["taskDefinition"]["scope"] });
-    let start = ApiStart { issue, task: record["taskDefinition"].clone(), model: model.clone(), reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned), working_directory: record["workingDirectory"].as_str().map(str::to_owned), tool_mode: tool_mode.clone(), permission_mode: record["permissionMode"].as_str().map(str::to_owned), auto_approve: record["autoApprovePermissions"] == true, images: images.clone(), connection: connection.clone() };
+    let start = ApiStart {
+        issue,
+        task: record["taskDefinition"].clone(),
+        model: model.clone(),
+        reasoning_effort: record["reasoningEffort"].as_str().map(str::to_owned),
+        working_directory: record["workingDirectory"].as_str().map(str::to_owned),
+        tool_mode: tool_mode.clone(),
+        permission_mode: record["permissionMode"].as_str().map(str::to_owned),
+        auto_approve: record["autoApprovePermissions"] == true,
+        images: images.clone(),
+        connection: connection.clone(),
+    };
     let mut system = system_prompt(&start);
     if let Some(context) = conversation_context.filter(|c| !c.is_empty()) {
         system.push_str(&format!("\n\n{context}"));
     }
     let mut history = history_from_record(&record);
     let mut turn = WireMessage::text(WireRole::User, follow_up.clone());
-    let attachments: Vec<praxis_ai::providers::wire::WireImageAttachment> = images.iter().filter_map(|i| serde_json::from_value(i.clone()).ok()).collect();
+    let attachments: Vec<praxis_ai::providers::wire::WireImageAttachment> = images
+        .iter()
+        .filter_map(|i| serde_json::from_value(i.clone()).ok())
+        .collect();
     if !attachments.is_empty() {
         turn.images = Some(attachments);
     }
     history.push(turn);
-    let working_directory = start.working_directory.clone().map(PathBuf::from).or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+    let working_directory = start
+        .working_directory
+        .clone()
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
     let session_id = record["sessionId"].as_str().unwrap_or_default().to_owned();
-    super::log_bus::log(host, &format!("[ai] [ApiAgent] Starting follow-up turn provider={} session={key} model={model} at={}", connection.provider, chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
-    let task = register_api_task(host, dir, key, &session_id, &tool_mode, working_directory, record["autoApprovePermissions"] == true, record["permissionMode"] == "auto", Some(record["cost"].clone()).filter(|c| !c.is_null()));
+    super::log_bus::log(
+        host,
+        &format!(
+            "[ai] [ApiAgent] Starting follow-up turn provider={} session={key} model={model} at={}",
+            connection.provider,
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        ),
+    );
+    let task = register_api_task(
+        host,
+        dir,
+        key,
+        &session_id,
+        &tool_mode,
+        working_directory,
+        record["autoApprovePermissions"] == true,
+        record["permissionMode"] == "auto",
+        Some(record["cost"].clone()).filter(|c| !c.is_null()),
+    );
     task.mutate(true, |record| {
         record["responseText"] = json!("");
         record["reasoningText"] = json!("");
     });
-    let mut event = if internal { evt("conversation_turn", "Conversation turn started", None, None) } else { evt("user_input_completed", "You", Some(follow_up), None) };
+    let mut event = if internal {
+        evt("conversation_turn", "Conversation turn started", None, None)
+    } else {
+        evt("user_input_completed", "You", Some(follow_up), None)
+    };
     if !images.is_empty() {
         event["attachments"] = json!(images);
     }
@@ -1140,10 +1947,17 @@ pub fn continue_api_task(host: &HostContext, dir: &std::path::Path, key: &str, m
     task.append(event, 0);
     task.set_state("executing", None);
     let max_steps = record["taskDefinition"]["maxSteps"].as_u64().unwrap_or(500);
-    let timeout = record["taskDefinition"]["timeoutMs"].as_u64().map_or(Duration::from_secs(3 * 60 * 60), Duration::from_millis);
+    let timeout = record["taskDefinition"]["timeoutMs"]
+        .as_u64()
+        .map_or(Duration::from_secs(3 * 60 * 60), Duration::from_millis);
     let reasoning = start.reasoning_effort.clone();
     let runner = Arc::clone(&task);
-    runtime().spawn(async move { run_session(runner, connection, model, system, history, tool_mode, max_steps, timeout, reasoning).await });
+    runtime().spawn(async move {
+        run_session(
+            runner, connection, model, system, history, tool_mode, max_steps, timeout, reasoning,
+        )
+        .await
+    });
     Ok(())
 }
 
@@ -1153,15 +1967,33 @@ pub(super) fn report(task: &Task, message: String) {
     fail(task, message);
 }
 
-
 /// One no-tools completion (`runProviderPrompt`): a system prompt and a single user prompt, streamed
 /// and collected. Used by the Virtual Team assistant for text-only turns.
-pub(super) async fn run_provider_prompt(connection: &ApiConnection, model: &str, system: &str, prompt: &str, reasoning: Option<&str>, on_text: impl FnMut(&str)) -> std::result::Result<(String, TokenUsage), String> {
+pub(super) async fn run_provider_prompt(
+    connection: &ApiConnection,
+    model: &str,
+    system: &str,
+    prompt: &str,
+    reasoning: Option<&str>,
+    on_text: impl FnMut(&str),
+) -> std::result::Result<(String, TokenUsage), String> {
     let wire_model = model.strip_prefix("Vercel/").unwrap_or(model).to_owned();
-    let messages = vec![WireMessage::text(WireRole::System, system.to_owned()), WireMessage::text(WireRole::User, prompt.to_owned())];
+    let messages = vec![
+        WireMessage::text(WireRole::System, system.to_owned()),
+        WireMessage::text(WireRole::User, prompt.to_owned()),
+    ];
     let body = match connection.wire {
         Wire::OpenAi => {
-            let mut request = build_chat_request(&messages, &wire_model, &ChatRequestOptions { tools: Vec::new(), stream: true, ..ChatRequestOptions::default() }).body;
+            let mut request = build_chat_request(
+                &messages,
+                &wire_model,
+                &ChatRequestOptions {
+                    tools: Vec::new(),
+                    stream: true,
+                    ..ChatRequestOptions::default()
+                },
+            )
+            .body;
             if !connection.stream_usage {
                 request.as_object_mut().map(|o| o.remove("stream_options"));
             }
@@ -1169,11 +2001,25 @@ pub(super) async fn run_provider_prompt(connection: &ApiConnection, model: &str,
             request
         }
         Wire::Anthropic => {
-            let mut request = anthropic_request_body(&messages, &wire_model, &AnthropicRequestOptions { tools: Vec::new(), reasoning_effort: parse_effort(reasoning), ..AnthropicRequestOptions::default() });
+            let mut request = anthropic_request_body(
+                &messages,
+                &wire_model,
+                &AnthropicRequestOptions {
+                    tools: Vec::new(),
+                    reasoning_effort: parse_effort(reasoning),
+                    ..AnthropicRequestOptions::default()
+                },
+            );
             request["stream"] = json!(true);
             request
         }
-        Wire::Gemini => gemini_request_body(&messages, &GeminiRequestOptions { tools: Vec::new(), ..GeminiRequestOptions::default() }),
+        Wire::Gemini => gemini_request_body(
+            &messages,
+            &GeminiRequestOptions {
+                tools: Vec::new(),
+                ..GeminiRequestOptions::default()
+            },
+        ),
     };
     let sse = post_stream(connection, &wire_model, &body).await?;
     let result = collect(connection, sse, on_text, |_| {}).await?;

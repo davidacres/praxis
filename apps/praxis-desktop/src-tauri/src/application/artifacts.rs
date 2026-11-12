@@ -179,7 +179,11 @@ fn write_details_file(details_path: &Path, records: &[Value], groups: &[Value]) 
 const MAX_PUBLISHED_ARTIFACT_BYTES: u64 = 25 * 1024 * 1024;
 
 fn trimmed_text(value: &Value, max: usize) -> Option<String> {
-    value.as_str().map(str::trim).filter(|v| !v.is_empty()).map(|v| v.chars().take(max).collect())
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| v.chars().take(max).collect())
 }
 
 /// `ai:saveArtifactToWorkspace`: publishes a session's artifact into its project's artifacts folder.
@@ -187,26 +191,58 @@ fn trimmed_text(value: &Value, max: usize) -> Option<String> {
 /// The copy lands in the project's main checkout, never a worktree, so it shows on the Artifacts page
 /// straight away and outlives the run. An existing file is never overwritten: an identical copy is
 /// reused and a different one with the same name pushes the new file to the first free `name-N.ext`.
-pub fn save_session_artifact(host: &HostContext, catalog: &Catalog, user_data_dir: &Path, args: &[Value]) -> Result<Value> {
+pub fn save_session_artifact(
+    host: &HostContext,
+    catalog: &Catalog,
+    user_data_dir: &Path,
+    args: &[Value],
+) -> Result<Value> {
     use super::session_store::store;
     let key = args.first().and_then(Value::as_str).unwrap_or_default();
-    let input = args.get(1).and_then(Value::as_str).map(str::trim).unwrap_or_default();
+    let input = args
+        .get(1)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
     let sessions = store(user_data_dir);
-    let record = sessions
-        .get(key)?
-        .or_else(|| sessions.all().ok().and_then(|all| all.into_values().find(|r| r["sessionId"] == key)));
-    let field = |record: &Value, name: &str| record[name].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_owned);
-    let working = record.as_ref().and_then(|r| field(r, "worktreePath").or_else(|| field(r, "workingDirectory")));
-    let has_scheme = input.split_once(':').is_some_and(|(scheme, _)| scheme.len() > 1 && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c)));
-    let (Some(record), Some(working)) = (record, working) else { return Err(failure("Invalid workspace path for saving artifact.")) };
+    let record = sessions.get(key)?.or_else(|| {
+        sessions
+            .all()
+            .ok()
+            .and_then(|all| all.into_values().find(|r| r["sessionId"] == key))
+    });
+    let field = |record: &Value, name: &str| {
+        record[name]
+            .as_str()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned)
+    };
+    let working = record
+        .as_ref()
+        .and_then(|r| field(r, "worktreePath").or_else(|| field(r, "workingDirectory")));
+    let has_scheme = input.split_once(':').is_some_and(|(scheme, _)| {
+        scheme.len() > 1
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c))
+    });
+    let (Some(record), Some(working)) = (record, working) else {
+        return Err(failure("Invalid workspace path for saving artifact."));
+    };
     if input.is_empty() || Path::new(input).is_absolute() || has_scheme {
         return Err(failure("Invalid workspace path for saving artifact."));
     }
     let bytes: Vec<u8> = match args.get(2).and_then(Value::as_str) {
         Some(content) => content.as_bytes().to_vec(),
         None => {
-            let absolute = praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path(Path::new(&working), input).map_err(failure)?;
-            let meta = fs::metadata(&absolute).map_err(|_| failure("Artifact file was not found in the session folder."))?;
+            let absolute = praxis_ai::mcp::builtin::read_only_files::resolve_sandboxed_path(
+                Path::new(&working),
+                input,
+            )
+            .map_err(failure)?;
+            let meta = fs::metadata(&absolute)
+                .map_err(|_| failure("Artifact file was not found in the session folder."))?;
             if !meta.is_file() || meta.len() > MAX_PUBLISHED_ARTIFACT_BYTES {
                 return Err(failure("Artifact must be a file no larger than 25 MB."));
             }
@@ -222,10 +258,19 @@ pub fn save_session_artifact(host: &HostContext, catalog: &Catalog, user_data_di
         .or_else(|| {
             projects
                 .iter()
-                .find(|p| p["workspaceFolder"].as_str().map(str::trim).filter(|f| !f.is_empty()).is_some_and(|f| find_repository_root(Path::new(f)) == session_root))
+                .find(|p| {
+                    p["workspaceFolder"]
+                        .as_str()
+                        .map(str::trim)
+                        .filter(|f| !f.is_empty())
+                        .is_some_and(|f| find_repository_root(Path::new(f)) == session_root)
+                })
                 .cloned()
         });
-    let base = project.as_ref().and_then(|p| field(p, "workspaceFolder")).unwrap_or_else(|| session_folder.clone());
+    let base = project
+        .as_ref()
+        .and_then(|p| field(p, "workspaceFolder"))
+        .unwrap_or_else(|| session_folder.clone());
     let root = find_repository_root(Path::new(&base));
     let folder = normalize_folder(project.as_ref().and_then(|p| p["artifactsFolder"].as_str()));
 
@@ -235,11 +280,23 @@ pub fn save_session_artifact(host: &HostContext, catalog: &Catalog, user_data_di
         .map(str::to_owned)
         .filter(|n| !n.is_empty() && n != "." && n != "..")
         .ok_or_else(|| failure("Artifact has no file name to publish under."))?;
-    let extension = Path::new(&file_name).extension().and_then(|e| e.to_str()).map(|e| format!(".{e}")).unwrap_or_default();
-    let stem = file_name.strip_suffix(&extension).filter(|s| !s.is_empty()).unwrap_or(&file_name).to_owned();
+    let extension = Path::new(&file_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+    let stem = file_name
+        .strip_suffix(&extension)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&file_name)
+        .to_owned();
     let mut outcome = None;
     for attempt in 1..=999 {
-        let name = if attempt == 1 { file_name.clone() } else { format!("{stem}-{attempt}{extension}") };
+        let name = if attempt == 1 {
+            file_name.clone()
+        } else {
+            format!("{stem}-{attempt}{extension}")
+        };
         let relative = format!("{folder}/{name}");
         let absolute = root.join(&relative);
         match fs::read(&absolute) {
@@ -259,28 +316,35 @@ pub fn save_session_artifact(host: &HostContext, catalog: &Catalog, user_data_di
             Err(error) => return Err(failure(error)),
         }
     }
-    let (saved_path, unchanged) = outcome.ok_or_else(|| failure(format!("Too many artifacts named {file_name} in {folder}.")))?;
+    let (saved_path, unchanged) = outcome
+        .ok_or_else(|| failure(format!("Too many artifacts named {file_name} in {folder}.")))?;
 
     if let Some(project) = project {
         let details = args.get(3).cloned().unwrap_or(Value::Null);
         let project_id = project["id"].as_str().unwrap_or_default().to_owned();
         let details_path = root.join(&folder).join(ARTIFACT_DETAILS_FILE);
         let (mut records, groups) = read_details_file(&details_path, &project_id);
-        let mut saved = json!({ "path": saved_path, "savedAt": now(), "sessionKey": record["issueKey"] });
+        let mut saved =
+            json!({ "path": saved_path, "savedAt": now(), "sessionKey": record["issueKey"] });
         for (name, max) in [("title", 400), ("description", 2000), ("mediaType", 200)] {
             if let Some(text) = trimmed_text(&details[name], max) {
                 saved[name] = json!(text);
             }
         }
-        let first_goal_line = record["taskDefinition"]["goal"].as_str().and_then(|g| g.lines().next()).map(str::to_owned);
-        let session_title = trimmed_text(&record["title"], 400).or_else(|| first_goal_line.and_then(|g| trimmed_text(&json!(g), 400)));
+        let first_goal_line = record["taskDefinition"]["goal"]
+            .as_str()
+            .and_then(|g| g.lines().next())
+            .map(str::to_owned);
+        let session_title = trimmed_text(&record["title"], 400)
+            .or_else(|| first_goal_line.and_then(|g| trimmed_text(&json!(g), 400)));
         if let Some(title) = session_title {
             saved["sessionTitle"] = json!(title);
         }
         records.retain(|r| r["path"] != saved["path"]);
         records.push(saved);
         write_details_file(&details_path, &records, &groups)?;
-        host.events().emit("artifacts:changed", Some(json!(project_id)));
+        host.events()
+            .emit("artifacts:changed", Some(json!(project_id)));
     }
     Ok(json!({ "savedPath": saved_path, "unchanged": unchanged }))
 }
@@ -505,7 +569,10 @@ pub fn dispatch(
             }
             // The shell that drew the page offers its JPEG (a `data:` URL) for the cache, keyed
             // by the same path/size/mtime so an edit to the page refreshes it.
-            if let Some(drawn) = args.get(2).and_then(Value::as_str).and_then(|d| d.strip_prefix("data:image/jpeg;base64,"))
+            if let Some(drawn) = args
+                .get(2)
+                .and_then(Value::as_str)
+                .and_then(|d| d.strip_prefix("data:image/jpeg;base64,"))
                 && let Ok(bytes) = BASE64.decode(drawn)
                 && bytes.len() <= 2 * 1024 * 1024
             {

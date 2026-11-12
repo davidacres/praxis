@@ -24,7 +24,9 @@ const PREFIX: &[u8] = b"v10";
 /// Whether a stored value is an Electron `safeStorage` blob rather than plaintext.
 #[must_use]
 pub fn is_safe_storage_blob(value: &str) -> bool {
-    STANDARD.decode(value).is_ok_and(|bytes| bytes.starts_with(PREFIX))
+    STANDARD
+        .decode(value)
+        .is_ok_and(|bytes| bytes.starts_with(PREFIX))
 }
 
 /// Derives the Chromium `v10` AES key from the Keychain "Safe Storage" password.
@@ -50,7 +52,9 @@ pub fn decrypt_blob(key: &[u8; 16], value: &str) -> Option<String> {
 
 /// Splits the legacy file into plaintext entries and encrypted blobs.
 #[must_use]
-pub fn partition_legacy(entries: BTreeMap<String, serde_json::Value>) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
+pub fn partition_legacy(
+    entries: BTreeMap<String, serde_json::Value>,
+) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
     let (mut plain, mut blobs) = (BTreeMap::new(), BTreeMap::new());
     for (key, value) in entries {
         let Some(text) = value.as_str() else { continue };
@@ -84,7 +88,11 @@ const MARKER: &str = "secrets.electron-import.done";
 /// called at most once, and only if there are encrypted entries still to import — it is where
 /// the OS keychain prompt happens. The legacy file is never modified. A marker is written only
 /// when nothing was left locked, so a denied prompt is retried on a later launch.
-pub fn import_legacy(profile_dir: &Path, store: &HostSecretStore, blob_key: impl FnOnce() -> Option<[u8; 16]>) -> ImportReport {
+pub fn import_legacy(
+    profile_dir: &Path,
+    store: &HostSecretStore,
+    blob_key: impl FnOnce() -> Option<[u8; 16]>,
+) -> ImportReport {
     let mut report = ImportReport::default();
     let marker = profile_dir.join(MARKER);
     if marker.exists() {
@@ -105,7 +113,10 @@ pub fn import_legacy(profile_dir: &Path, store: &HostSecretStore, blob_key: impl
             report.imported += 1;
         }
     }
-    let pending: Vec<_> = blobs.into_iter().filter(|(key, _)| !store.has(key)).collect();
+    let pending: Vec<_> = blobs
+        .into_iter()
+        .filter(|(key, _)| !store.has(key))
+        .collect();
     if !pending.is_empty() {
         match blob_key() {
             Some(key) => {
@@ -158,7 +169,8 @@ mod tests {
 
     fn encrypt(key: &[u8; 16], plain: &str) -> String {
         let iv = [b' '; 16];
-        let cipher = Aes128CbcEnc::new(key.into(), &iv.into()).encrypt_padded_vec_mut::<Pkcs7>(plain.as_bytes());
+        let cipher = Aes128CbcEnc::new(key.into(), &iv.into())
+            .encrypt_padded_vec_mut::<Pkcs7>(plain.as_bytes());
         STANDARD.encode([PREFIX, &cipher].concat())
     }
 
@@ -166,7 +178,10 @@ mod tests {
     fn decrypts_what_the_chromium_scheme_produces() {
         let key = derive_key("a-keychain-password");
         let blob = encrypt(&key, "sk-live-123");
-        assert!(blob.starts_with("djEw"), "v10 base64 prefix, the shape seen in real profiles");
+        assert!(
+            blob.starts_with("djEw"),
+            "v10 base64 prefix, the shape seen in real profiles"
+        );
         assert!(is_safe_storage_blob(&blob));
         assert_eq!(decrypt_blob(&key, &blob).as_deref(), Some("sk-live-123"));
     }
@@ -176,7 +191,10 @@ mod tests {
         let blob = encrypt(&derive_key("right"), "secret");
         assert_eq!(decrypt_blob(&derive_key("wrong"), &blob), None);
         assert_eq!(decrypt_blob(&derive_key("right"), "not base64!!"), None);
-        assert_eq!(decrypt_blob(&derive_key("right"), &STANDARD.encode(b"v10short")), None);
+        assert_eq!(
+            decrypt_blob(&derive_key("right"), &STANDARD.encode(b"v10short")),
+            None
+        );
         assert!(!is_safe_storage_blob("plain-token"));
     }
 
@@ -192,20 +210,36 @@ mod tests {
         let before = std::fs::read(dir.join("secrets.json")).expect("read");
 
         let store = HostSecretStore::new();
-        store.attach_backend(Arc::new(FileSecretBackend::new(dir.join("new-secrets.json"))));
+        store.attach_backend(Arc::new(FileSecretBackend::new(
+            dir.join("new-secrets.json"),
+        )));
         store.set("keep", "newer");
 
         let locked = import_legacy(&dir, &store, || None);
-        assert_eq!((locked.imported, locked.locked, locked.complete), (1, 1, false), "plain imported; the one missing blob waits");
+        assert_eq!(
+            (locked.imported, locked.locked, locked.complete),
+            (1, 1, false),
+            "plain imported; the one missing blob waits"
+        );
         assert!(!dir.join(MARKER).exists());
 
         let done = import_legacy(&dir, &store, || Some(key));
         assert_eq!((done.imported, done.locked, done.complete), (1, 0, true));
         assert_eq!(store.get("enc").as_deref(), Some("from-electron"));
-        assert_eq!(store.get("keep").as_deref(), Some("newer"), "existing values win");
-        assert_eq!(std::fs::read(dir.join("secrets.json")).expect("read"), before, "legacy file untouched");
+        assert_eq!(
+            store.get("keep").as_deref(),
+            Some("newer"),
+            "existing values win"
+        );
+        assert_eq!(
+            std::fs::read(dir.join("secrets.json")).expect("read"),
+            before,
+            "legacy file untouched"
+        );
 
-        let again = import_legacy(&dir, &store, || panic!("must not prompt again after completion"));
+        let again = import_legacy(&dir, &store, || {
+            panic!("must not prompt again after completion")
+        });
         assert!(again.complete);
         let _ = std::fs::remove_dir_all(dir);
     }

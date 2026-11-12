@@ -9,15 +9,17 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use async_trait::async_trait;
-use praxis_core::git::run_work::{preserve_uncommitted_work, restore_worktree_to, run_worktree_key};
+use praxis_core::git::run_work::{
+    preserve_uncommitted_work, restore_worktree_to, run_worktree_key,
+};
 use praxis_host::HostContext;
 use praxis_workflows::check_process::{check_environment, is_check_command_available, spawn_check};
 use praxis_workflows::orchestrator::{
     StageDispatchContext, StageDispatcher, StageOutcome, WorkflowOrchestrator,
     WorkflowOrchestratorOptions, WorkflowRunPersistence, WorkflowWorkspaceProvider,
 };
-use praxis_workflows::run::{DeclaredArtifact, WorkflowPauseReason, WorkflowRun};
 use praxis_workflows::run::is_run_settled;
+use praxis_workflows::run::{DeclaredArtifact, WorkflowPauseReason, WorkflowRun};
 use praxis_workflows::types::{WorkflowAgentTaskNode, WorkflowCheckNode, WorkflowNode};
 use serde_json::json;
 use tokio::process::Command;
@@ -89,7 +91,8 @@ pub async fn base_blocking_paths(folder: &Path) -> Result<Vec<String>, String> {
 
 /// The base checkout is the one thing parallel runs share: writes to it and merges into it take turns.
 pub async fn base_checkout_guard(folder: &Path) -> tokio::sync::OwnedMutexGuard<()> {
-    static LOCKS: OnceLock<Mutex<std::collections::HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    static LOCKS: OnceLock<Mutex<std::collections::HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
+        OnceLock::new();
     let key = std::fs::canonicalize(folder).unwrap_or_else(|_| folder.to_path_buf());
     let lock = {
         let mut all = LOCKS
@@ -103,7 +106,11 @@ pub async fn base_checkout_guard(folder: &Path) -> tokio::sync::OwnedMutexGuard<
 
 /// Every path git reports as changed or untracked (`changedPaths`).
 pub async fn changed_paths(folder: &Path) -> Result<Vec<String>, String> {
-    let status = git_raw(folder, &["status", "--porcelain=v1", "-z", "--untracked-files=all"]).await?;
+    let status = git_raw(
+        folder,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )
+    .await?;
     Ok(status
         .split('\0')
         .filter(|e| e.len() > 3)
@@ -113,7 +120,11 @@ pub async fn changed_paths(folder: &Path) -> Result<Vec<String>, String> {
 
 /// Commits what a Praxis write (a ticket move, say) changed since `before`, so the checkout does not
 /// read as dirty and the schedule's next ticket can start (`commitPraxisWrite`).
-pub async fn commit_praxis_write(folder: &Path, before: &[String], message: &str) -> Result<(), String> {
+pub async fn commit_praxis_write(
+    folder: &Path,
+    before: &[String],
+    message: &str,
+) -> Result<(), String> {
     let after = changed_paths(folder).await?;
     let fresh: Vec<String> = after.into_iter().filter(|p| !before.contains(p)).collect();
     if fresh.is_empty() {
@@ -159,7 +170,11 @@ async fn ensure_worktrees_excluded(repo_root: &Path) -> Result<(), String> {
     if let Some(parent) = exclude.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let prefix = if !current.is_empty() && !current.ends_with('\n') { "\n" } else { "" };
+    let prefix = if !current.is_empty() && !current.ends_with('\n') {
+        "\n"
+    } else {
+        ""
+    };
     std::fs::write(
         &exclude,
         format!("{current}{prefix}# Praxis run worktrees\n/.worktrees/\n"),
@@ -168,7 +183,10 @@ async fn ensure_worktrees_excluded(repo_root: &Path) -> Result<(), String> {
 }
 
 /// Commits the checkout's uncommitted work on top of HEAD without touching the tree or index.
-async fn snapshot_uncommitted_work(repo_root: &Path, label: &str) -> Result<Option<String>, String> {
+async fn snapshot_uncommitted_work(
+    repo_root: &Path,
+    label: &str,
+) -> Result<Option<String>, String> {
     let git_dir = git(repo_root, &["rev-parse", "--git-dir"]).await?;
     let git_dir = repo_root.join(git_dir);
     let temp_index = git_dir.join(format!("praxis-snapshot-{}.index", uuid::Uuid::new_v4()));
@@ -304,13 +322,23 @@ impl WorkflowWorkspaceProvider for GitWorkspace {
 
         let branch_ref = format!("refs/heads/{name}");
         let path_text = worktree_path.to_string_lossy().into_owned();
-        if git(&repo_root, &["rev-parse", "--verify", "--quiet", &branch_ref])
-            .await
-            .is_ok_and(|out| !out.is_empty())
+        if git(
+            &repo_root,
+            &["rev-parse", "--verify", "--quiet", &branch_ref],
+        )
+        .await
+        .is_ok_and(|out| !out.is_empty())
         {
             git(
                 &repo_root,
-                &["-c", "core.symlinks=true", "worktree", "add", &path_text, &name],
+                &[
+                    "-c",
+                    "core.symlinks=true",
+                    "worktree",
+                    "add",
+                    &path_text,
+                    &name,
+                ],
             )
             .await?;
             return Ok(path_text);
@@ -335,7 +363,9 @@ impl WorkflowWorkspaceProvider for GitWorkspace {
                 &["rev-parse", "--verify", &format!("origin/{base_branch}")],
             )
             .await
-            .map_err(|_| format!("Base branch {base_branch} was not found locally or on origin."))?,
+            .map_err(|_| {
+                format!("Base branch {base_branch} was not found locally or on origin.")
+            })?,
         };
         if include_uncommitted {
             if let Some(snapshot) = snapshot_uncommitted_work(&repo_root, &name).await? {
@@ -406,7 +436,10 @@ impl WorkflowWorkspaceProvider for GitWorkspace {
         restore_worktree_to(
             Path::new(worktree),
             reference,
-            &format!("Restore {} (best so far)", &reference[..reference.len().min(7)]),
+            &format!(
+                "Restore {} (best so far)",
+                &reference[..reference.len().min(7)]
+            ),
         )
         .await?;
         Ok(())
@@ -451,7 +484,9 @@ fn evidence_root(host: &HostContext) -> PathBuf {
 }
 
 fn evidence_attempt(run: &WorkflowRun, node_id: &str) -> usize {
-    run.nodes.get(node_id).map_or(1, |n| n.attempts.len().max(1))
+    run.nodes
+        .get(node_id)
+        .map_or(1, |n| n.attempts.len().max(1))
 }
 
 /// Retains a node attempt's combined log as an evidence bundle; the stored file when there is one.
@@ -542,11 +577,18 @@ fn describe_failure(result: &praxis_workflows::check_process::CheckProcessResult
     } else if let Some(code) = result.code {
         format!("it exited with code {code}")
     } else {
-        result.error.clone().unwrap_or_else(|| "it did not start".to_string())
+        result
+            .error
+            .clone()
+            .unwrap_or_else(|| "it did not start".to_string())
     };
     let lines: Vec<&str> = result.output.trim().lines().collect();
     let tail = lines[lines.len().saturating_sub(15)..].join("\n");
-    if tail.is_empty() { format!("{why}.") } else { format!("{why}.\n{tail}") }
+    if tail.is_empty() {
+        format!("{why}.")
+    } else {
+        format!("{why}.\n{tail}")
+    }
 }
 
 impl HostDispatcher {
@@ -559,12 +601,16 @@ impl HostDispatcher {
     ) -> Result<StageOutcome, String> {
         let run = &context.run;
         let Some(root) = praxis_core::git::run_work::repository_root(folder).await else {
-            return Ok(StageOutcome::failure("No Git repository found for this project."));
+            return Ok(StageOutcome::failure(
+                "No Git repository found for this project.",
+            ));
         };
         let root = PathBuf::from(root);
         // Whatever the run's worktree left uncommitted is kept before the branch is merged.
         if let Some(worktree) = &context.worktree_path {
-            let _ = preserve_uncommitted_work(Path::new(worktree), "WIP: preserve changes for merge").await;
+            let _ =
+                preserve_uncommitted_work(Path::new(worktree), "WIP: preserve changes for merge")
+                    .await;
         }
         let source = match &run.shared_delivery_branch {
             Some(branch) => branch.clone(),
@@ -572,9 +618,18 @@ impl HostDispatcher {
                 .await
                 .unwrap_or_else(|| run_worktree_key(&run.run_id)),
         };
-        let target = match node.target_branch.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        let target = match node
+            .target_branch
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
             Some(t) => t.to_string(),
-            None => git(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await.ok().filter(|b| !b.is_empty()).unwrap_or_else(|| "main".to_string()),
+            None => git(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+                .await
+                .ok()
+                .filter(|b| !b.is_empty())
+                .unwrap_or_else(|| "main".to_string()),
         };
         let mut log = format!("Initiating merge of branch {source} into {target}...\n");
         let evidence = |log: &str| {
@@ -584,13 +639,24 @@ impl HostDispatcher {
                 run,
                 &node.base.id,
                 None,
-                &super::workflow_evidence::Captured { content: Some(content), missing_reason: None, redacted },
+                &super::workflow_evidence::Captured {
+                    content: Some(content),
+                    missing_reason: None,
+                    redacted,
+                },
             );
         };
-        if git(&root, &["rev-parse", "--verify", &source]).await.is_err() {
-            log.push_str(&format!("Source branch {source} was not found in the repository.\n"));
+        if git(&root, &["rev-parse", "--verify", &source])
+            .await
+            .is_err()
+        {
+            log.push_str(&format!(
+                "Source branch {source} was not found in the repository.\n"
+            ));
             evidence(&log);
-            return Ok(StageOutcome::failure(format!("Source branch {source} was not found.")));
+            return Ok(StageOutcome::failure(format!(
+                "Source branch {source} was not found."
+            )));
         }
         // Praxis's own metadata is not work the merge could lose, the same rule the start-of-run check uses.
         let dirty = base_blocking_paths(&root).await?;
@@ -601,12 +667,16 @@ impl HostDispatcher {
                 "Target checkout contains uncommitted changes. Please commit or stash them before merging.",
             ));
         }
-        let current = git(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await.unwrap_or_default();
+        let current = git(&root, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+            .await
+            .unwrap_or_default();
         if current != target {
             log.push_str(&format!("Switching checkout to {target}...\n"));
             if git(&root, &["checkout", &target]).await.is_err() {
                 evidence(&log);
-                return Ok(StageOutcome::failure(format!("Could not switch to target branch {target}.")));
+                return Ok(StageOutcome::failure(format!(
+                    "Could not switch to target branch {target}."
+                )));
             }
         }
         let message = format!(
@@ -614,7 +684,15 @@ impl HostDispatcher {
             &run.run_id[..run.run_id.len().min(8)],
             run.definition.name
         );
-        let mut args = vec!["-c", "user.name=Praxis", "-c", "user.email=praxis@localhost", "-c", "commit.gpgsign=false", "merge"];
+        let mut args = vec![
+            "-c",
+            "user.name=Praxis",
+            "-c",
+            "user.email=praxis@localhost",
+            "-c",
+            "commit.gpgsign=false",
+            "merge",
+        ];
         if node.no_fast_forward != Some(false) {
             args.push("--no-ff");
         }
@@ -625,17 +703,22 @@ impl HostDispatcher {
                 log.push_str(&output);
                 log.push_str(&format!("\nMerge succeeded cleanly into {target}.\n"));
                 evidence(&log);
-                Ok(StageOutcome { succeeded: true, exit_code: Some(0), ..StageOutcome::default() })
+                Ok(StageOutcome {
+                    succeeded: true,
+                    exit_code: Some(0),
+                    ..StageOutcome::default()
+                })
             }
             Err(error) => {
                 log.push_str(&error);
-                let conflicted: Vec<String> = git(&root, &["diff", "--name-only", "--diff-filter=U"])
-                    .await
-                    .unwrap_or_default()
-                    .lines()
-                    .map(|l| l.trim().to_string())
-                    .filter(|l| !l.is_empty())
-                    .collect();
+                let conflicted: Vec<String> =
+                    git(&root, &["diff", "--name-only", "--diff-filter=U"])
+                        .await
+                        .unwrap_or_default()
+                        .lines()
+                        .map(|l| l.trim().to_string())
+                        .filter(|l| !l.is_empty())
+                        .collect();
                 log.push_str("\nMerge conflict encountered!\n");
                 let _ = git(&root, &["merge", "--abort"]).await;
                 log.push_str("Merge aborted cleanly.\n");
@@ -668,11 +751,13 @@ impl HostDispatcher {
             return None;
         }
         // `npm ci` empties whatever a node_modules link points at, so a link out of the worktree goes first.
-        let _ = praxis_core::git::worktree_dependency_links::remove_escaping_dependency_links(&worktree).await;
+        let _ = praxis_core::git::worktree_dependency_links::remove_escaping_dependency_links(
+            &worktree,
+        )
+        .await;
         let vars: Vec<(String, String)> = std::env::vars().collect();
-        let env = |id: &str| {
-            check_environment(id, vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
-        };
+        let env =
+            |id: &str| check_environment(id, vars.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         let command_of = |n: &WorkflowCheckNode| {
             let mut parts = vec![n.command.clone()];
             parts.extend(n.args.clone().unwrap_or_default());
@@ -683,8 +768,17 @@ impl HostDispatcher {
             eprintln!("[workflow {}] {stage_name}: {message}", context.run.run_id);
         };
         let command = command_of(node);
-        log(&format!("Installing dependencies in this run's worktree first ({command})."));
-        let result = spawn_check(node, &worktree, &env(&node.base.id), Some(&context.cancel), None).await;
+        log(&format!(
+            "Installing dependencies in this run's worktree first ({command})."
+        ));
+        let result = spawn_check(
+            node,
+            &worktree,
+            &env(&node.base.id),
+            Some(&context.cancel),
+            None,
+        )
+        .await;
         if context.cancel.is_cancelled() {
             return None;
         }
@@ -705,7 +799,14 @@ impl HostDispatcher {
         let build = build_stage_of(nodes)?;
         let build_command = command_of(build);
         log(&format!("Building this run's worktree ({build_command})."));
-        let built = spawn_check(build, &worktree, &env(&build.base.id), Some(&context.cancel), None).await;
+        let built = spawn_check(
+            build,
+            &worktree,
+            &env(&build.base.id),
+            Some(&context.cancel),
+            None,
+        )
+        .await;
         if context.cancel.is_cancelled() {
             return None;
         }
@@ -748,7 +849,12 @@ impl HostDispatcher {
             }
         };
         let base = if context.run.scheduled_launch_token.is_some() {
-            affected::scheduled_ticket_base(worktree, &context.run.started_at, context.run.worktree_base_ref.as_deref()).await
+            affected::scheduled_ticket_base(
+                worktree,
+                &context.run.started_at,
+                context.run.worktree_base_ref.as_deref(),
+            )
+            .await
         } else if let Some(base) = context.run.worktree_base_ref.clone() {
             Some(base)
         } else {
@@ -759,14 +865,25 @@ impl HostDispatcher {
         };
         match affected::select_changed_tests(worktree, &base).await {
             Ok(selection) => {
-                context.reporter.report_progress(&match selection.tests.len() {
-                    0 => "No test files were added or updated in this ticket.".to_string(),
-                    1 => "Running the 1 test file for this change.".to_string(),
-                    n => format!("Running the {n} test files for this change."),
-                });
-                affected::run_affected_tests(worktree, &selection, Some(&context.cancel), node.timeout_ms, on_line).await
+                context
+                    .reporter
+                    .report_progress(&match selection.tests.len() {
+                        0 => "No test files were added or updated in this ticket.".to_string(),
+                        1 => "Running the 1 test file for this change.".to_string(),
+                        n => format!("Running the {n} test files for this change."),
+                    });
+                affected::run_affected_tests(
+                    worktree,
+                    &selection,
+                    Some(&context.cancel),
+                    node.timeout_ms,
+                    on_line,
+                )
+                .await
             }
-            Err(error) => failure(format!("Could not pick or run the tests for this change: {error}")),
+            Err(error) => failure(format!(
+                "Could not pick or run the tests for this change: {error}"
+            )),
         }
     }
 
@@ -790,7 +907,8 @@ impl HostDispatcher {
             return Ok(StageOutcome::failure("This check has no command."));
         }
         if context.worktree_path.is_some()
-            && install_stage_of(&context.run.definition.nodes).is_none_or(|n| n.base.id != node.base.id)
+            && install_stage_of(&context.run.definition.nodes)
+                .is_none_or(|n| n.base.id != node.base.id)
         {
             if let Some(error) = self.ensure_run_dependencies(context, &node.base.name).await {
                 return Ok(StageOutcome::failure(error));
@@ -831,12 +949,23 @@ impl HostDispatcher {
             && let Some(worktree) = &context.worktree_path
             && result.code.is_some_and(|c| success_codes.contains(&c))
         {
-            let fallback_folder = workflows::project_folder(&self.host, &context.run.project_id).unwrap_or_else(|| cwd.clone());
+            let fallback_folder = workflows::project_folder(&self.host, &context.run.project_id)
+                .unwrap_or_else(|| cwd.clone());
             let affected = self
-                .run_change_tests(node, context, Path::new(worktree), &fallback_folder, &mut on_line)
+                .run_change_tests(
+                    node,
+                    context,
+                    Path::new(worktree),
+                    &fallback_folder,
+                    &mut on_line,
+                )
                 .await;
             result = praxis_workflows::check_process::CheckProcessResult {
-                code: if affected.code == Some(0) { result.code } else { affected.code },
+                code: if affected.code == Some(0) {
+                    result.code
+                } else {
+                    affected.code
+                },
                 timed_out: result.timed_out || affected.timed_out,
                 output: format!("{}\n\n{}", result.output.trim_end(), affected.output),
                 error: result.error,
@@ -844,7 +973,8 @@ impl HostDispatcher {
         }
 
         // Whatever the check emitted is evidence, even when it was stopped or timed out.
-        let spawn_failed = result.code.is_none() && !result.timed_out && !context.cancel.is_cancelled();
+        let spawn_failed =
+            result.code.is_none() && !result.timed_out && !context.cancel.is_cancelled();
         // Redact before this becomes evidence at all, and before the tail below can land raw in a
         // run's own error text: a check's output can echo a secret from the environment.
         let (redacted_output, redacted) = super::workflow_evidence::redact(&result.output);
@@ -853,7 +983,10 @@ impl HostDispatcher {
             super::workflow_evidence::Captured {
                 content: None,
                 missing_reason: Some(
-                    result.error.clone().unwrap_or_else(|| format!("Could not start {}.", node.command)),
+                    result
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| format!("Could not start {}.", node.command)),
                 ),
                 redacted: false,
             }
@@ -864,7 +997,13 @@ impl HostDispatcher {
                 redacted,
             }
         };
-        let stored = retain_evidence(&self.host, &context.run, &node.base.id, source_sha.as_deref(), &captured);
+        let stored = retain_evidence(
+            &self.host,
+            &context.run,
+            &node.base.id,
+            source_sha.as_deref(),
+            &captured,
+        );
         let log_path = stored.as_ref().ok().cloned().flatten();
         let artifacts: Vec<DeclaredArtifact> = match &log_path {
             Some(log_path) => node
@@ -995,13 +1134,19 @@ impl StageDispatcher for HostDispatcher {
         context: &StageDispatchContext,
     ) -> Result<StageOutcome, String> {
         let Some(folder) = workflows::project_folder(&self.host, &context.run.project_id) else {
-            return Ok(StageOutcome::failure("No Git repository found for this project."));
+            return Ok(StageOutcome::failure(
+                "No Git repository found for this project.",
+            ));
         };
         // Merges into one base checkout never overlap, whichever runs (or parallel lanes) start them.
         let _base = base_checkout_guard(&folder).await;
         let outcome = self.merge_into_base(node, context, &folder).await;
         // E2E only: hold the checkout a little longer, so a spec can tell turns from overlap.
-        if let Some(ms) = std::env::var("PRAXIS_E2E_MERGE_HOLD_MS").ok().and_then(|v| v.parse::<u64>().ok()).filter(|ms| *ms > 0) {
+        if let Some(ms) = std::env::var("PRAXIS_E2E_MERGE_HOLD_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|ms| *ms > 0)
+        {
             tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
         }
         outcome
@@ -1029,21 +1174,33 @@ impl praxis_workflows::orchestrator::FallbackProviderChooser for HostFallbackPro
         let current = stage_provider(
             run,
             node_id,
-            run.ai_provider.as_deref().filter(|p| !p.is_empty()).unwrap_or(&active),
+            run.ai_provider
+                .as_deref()
+                .filter(|p| !p.is_empty())
+                .unwrap_or(&active),
         );
         let mut exclude = vec![current];
         exclude.extend(exhausted_providers(run));
-        if let Some(WorkflowNode::AgentTask(task)) = run.definition.nodes.iter().find(|n| n.base().id == node_id)
+        if let Some(WorkflowNode::AgentTask(task)) =
+            run.definition.nodes.iter().find(|n| n.base().id == node_id)
             && let Some(author) = task.independent_of.as_deref()
-            && let Some(latest) = run
-                .nodes
-                .get(author)
-                .and_then(|state| state.attempts.iter().rev().find(|a| a.provider.is_some() && a.pause.is_none()))
+            && let Some(latest) = run.nodes.get(author).and_then(|state| {
+                state
+                    .attempts
+                    .iter()
+                    .rev()
+                    .find(|a| a.provider.is_some() && a.pause.is_none())
+            })
             && let Some(provider) = &latest.provider
         {
             exclude.push(provider.clone());
         }
-        let mut order: Vec<String> = run.ai_provider.iter().filter(|p| !p.is_empty()).cloned().collect();
+        let mut order: Vec<String> = run
+            .ai_provider
+            .iter()
+            .filter(|p| !p.is_empty())
+            .cloned()
+            .collect();
         order.push(active);
         let usable = super::scheduled_runner_host::usable_providers(&self.host);
         order.extend(usable.iter().cloned());
@@ -1090,7 +1247,9 @@ pub fn engine(host: &HostContext) -> &'static Engine {
                         super::workflow_write_back::write_back(&events_host, run);
                     }
                 })),
-                choose_fallback_provider: Some(Arc::new(HostFallbackProvider { host: host.clone() })),
+                choose_fallback_provider: Some(Arc::new(HostFallbackProvider {
+                    host: host.clone(),
+                })),
                 now: None,
             }),
         }
@@ -1111,7 +1270,9 @@ pub fn missing_check_tools_message(definition_nodes: &[WorkflowNode]) -> Option<
     let mut missing: Vec<(String, Vec<String>)> = Vec::new();
     let mut checked: std::collections::HashMap<String, bool> = std::collections::HashMap::new();
     for node in definition_nodes {
-        let WorkflowNode::Check(check) = node else { continue };
+        let WorkflowNode::Check(check) = node else {
+            continue;
+        };
         let command = check.command.trim().to_string();
         if command.is_empty() {
             continue;
@@ -1154,7 +1315,11 @@ pub fn missing_check_tools_message(definition_nodes: &[WorkflowNode]) -> Option<
             )
         })
         .collect();
-    let noun = if missing.len() == 1 { "a tool that is" } else { "tools that are" };
+    let noun = if missing.len() == 1 {
+        "a tool that is"
+    } else {
+        "tools that are"
+    };
     Some(format!(
         "Cannot start this workflow: its check stages need {noun} not installed. {} Then try again, or change or remove those stages in the workflow.",
         lines.join(" ")
@@ -1165,12 +1330,34 @@ fn install_hint(command: &str) -> String {
     let mac = cfg!(target_os = "macos");
     let win = cfg!(windows);
     let hint = match command {
-        "semgrep" => Some(if mac { "brew install semgrep" } else { "pipx install semgrep (or pip install semgrep)" }),
-        "gitleaks" => Some(if mac { "brew install gitleaks" } else if win { "scoop install gitleaks" } else { "download a release from https://github.com/gitleaks/gitleaks/releases" }),
-        "osv-scanner" => Some(if mac { "brew install osv-scanner" } else { "go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest" }),
-        "trivy" => Some(if mac { "brew install trivy" } else { "see https://trivy.dev/latest/getting-started/installation/" }),
+        "semgrep" => Some(if mac {
+            "brew install semgrep"
+        } else {
+            "pipx install semgrep (or pip install semgrep)"
+        }),
+        "gitleaks" => Some(if mac {
+            "brew install gitleaks"
+        } else if win {
+            "scoop install gitleaks"
+        } else {
+            "download a release from https://github.com/gitleaks/gitleaks/releases"
+        }),
+        "osv-scanner" => Some(if mac {
+            "brew install osv-scanner"
+        } else {
+            "go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest"
+        }),
+        "trivy" => Some(if mac {
+            "brew install trivy"
+        } else {
+            "see https://trivy.dev/latest/getting-started/installation/"
+        }),
         "license-checker" => Some("npm install -g license-checker"),
-        "ruff" => Some(if mac { "brew install ruff" } else { "pipx install ruff" }),
+        "ruff" => Some(if mac {
+            "brew install ruff"
+        } else {
+            "pipx install ruff"
+        }),
         "mypy" => Some("pipx install mypy"),
         "pytest" => Some("pip install pytest pytest-cov"),
         "behave" => Some("pip install behave"),

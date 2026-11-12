@@ -302,9 +302,11 @@ mod tests {
 
     #[test]
     fn project_ids_resolve_to_their_working_folder() {
-        let dir = std::env::temp_dir().join(format!("praxis-profile-folder-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("praxis-profile-folder-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("dir");
-        let host = HostContext::new(HostConfig::for_user_data_dir(&dir, false, true).expect("config"));
+        let host =
+            HostContext::new(HostConfig::for_user_data_dir(&dir, false, true).expect("config"));
         let folder = dir.join("checkout");
         let served = folder.to_string_lossy().into_owned();
         host.register_handler("projects:get", move |_, args| {
@@ -314,12 +316,18 @@ mod tests {
                 _ => Value::Null,
             })
         });
-        assert_eq!(project_folder(&host, "with-folder").as_deref(), Some(folder.to_string_lossy().as_ref()));
+        assert_eq!(
+            project_folder(&host, "with-folder").as_deref(),
+            Some(folder.to_string_lossy().as_ref())
+        );
         assert_eq!(project_folder(&host, "without-folder"), None);
         assert_eq!(project_folder(&host, "unknown"), None);
         // A caller that already resolved the folder passes it straight through.
         let absolute = dir.to_string_lossy().into_owned();
-        assert_eq!(project_folder(&host, &absolute).as_deref(), Some(absolute.as_str()));
+        assert_eq!(
+            project_folder(&host, &absolute).as_deref(),
+            Some(absolute.as_str())
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 }

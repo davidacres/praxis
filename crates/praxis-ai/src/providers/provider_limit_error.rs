@@ -113,7 +113,8 @@ pub fn extract_provider_limit_message(error: &str) -> Option<String> {
     let wrappers = regex::Regex::new(r"(?is)^(?:The stage session failed:\s*)?(?:RequestError:\s*)?(?:Internal error:\s*)?(?:Provider error:\s*)?(?:Gateway returned \d+:\s*)?").expect("static pattern");
     let mut cleaned = wrappers.replace(error, "").trim().to_owned();
     // A notice passes through several layers, each of which extracts again.
-    let repeated = regex::Regex::new(r"(?i)^(?:Provider limit reached:\s*)+").expect("static pattern");
+    let repeated =
+        regex::Regex::new(r"(?i)^(?:Provider limit reached:\s*)+").expect("static pattern");
     cleaned = repeated.replace(&cleaned, "").trim().to_owned();
     // If it is or contains JSON, use the inner message.
     if let Some(start) = cleaned.find('{')
@@ -138,11 +139,19 @@ mod tests {
         assert!(is_provider_limit_error("Rate limit exceeded for gpt-4"));
         assert!(is_provider_limit_error("429 Too Many Requests"));
         assert!(is_provider_limit_error("You have exceeded your quota"));
-        assert!(is_provider_limit_error("insufficient_quota: credits exhausted"));
+        assert!(is_provider_limit_error(
+            "insufficient_quota: credits exhausted"
+        ));
         assert!(is_provider_limit_error("RESOURCE_EXHAUSTED: token limit"));
-        assert!(is_provider_limit_error("Usage limit reached for this account"));
-        assert!(is_provider_limit_error("You've hit your session limit \u{b7} resets 12:50pm"));
-        assert!(is_provider_limit_error("Insufficient balance: credits exhausted"));
+        assert!(is_provider_limit_error(
+            "Usage limit reached for this account"
+        ));
+        assert!(is_provider_limit_error(
+            "You've hit your session limit \u{b7} resets 12:50pm"
+        ));
+        assert!(is_provider_limit_error(
+            "Insufficient balance: credits exhausted"
+        ));
     }
 
     #[test]
@@ -155,7 +164,9 @@ mod tests {
     #[test]
     fn only_a_short_unstructured_reply_is_a_notice() {
         assert!(is_limit_notice_reply("You've hit your session limit"));
-        assert!(!is_limit_notice_reply("Here is the answer to your question."));
+        assert!(!is_limit_notice_reply(
+            "Here is the answer to your question."
+        ));
         assert!(!is_limit_notice_reply(&format!("rate limit\n```\nx\n```")));
         assert!(!is_limit_notice_reply(&"rate limit ".repeat(80)));
     }
@@ -163,13 +174,20 @@ mod tests {
     #[test]
     fn the_message_unwraps_json_and_prefixes_once() {
         let message = extract_provider_limit_message("OpenAI request failed: {\"error\":{\"message\":\"insufficient quota: credits exhausted\"}}").unwrap();
-        assert_eq!(message, "Provider limit reached: insufficient quota: credits exhausted");
+        assert_eq!(
+            message,
+            "Provider limit reached: insufficient quota: credits exhausted"
+        );
         let again = extract_provider_limit_message(&message).unwrap();
         assert_eq!(again, message);
     }
 
     #[test]
     fn a_message_without_a_limit_gets_the_generic_explanation() {
-        assert!(extract_provider_limit_message("network request failed").unwrap().starts_with("Provider usage limit"));
+        assert!(
+            extract_provider_limit_message("network request failed")
+                .unwrap()
+                .starts_with("Provider usage limit")
+        );
     }
 }

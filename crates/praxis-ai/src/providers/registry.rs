@@ -37,15 +37,27 @@ pub struct ProviderDescriptor {
 
 fn api(id: &str, label: &str, url: &str, model: &str, path: Option<&str>) -> ProviderDescriptor {
     ProviderDescriptor {
-        id: id.into(), kind: DescriptorKind::Api, label: label.into(), default_base_url: Some(url.into()),
-        default_model: model.into(), api_path: path.map(Into::into), default_command: None, default_args: Vec::new(),
+        id: id.into(),
+        kind: DescriptorKind::Api,
+        label: label.into(),
+        default_base_url: Some(url.into()),
+        default_model: model.into(),
+        api_path: path.map(Into::into),
+        default_command: None,
+        default_args: Vec::new(),
     }
 }
 
 fn cli(id: &str, label: &str, command: &str, args: &[&str]) -> ProviderDescriptor {
     ProviderDescriptor {
-        id: id.into(), kind: DescriptorKind::CliAgent, label: label.into(), default_base_url: None, default_model: String::new(),
-        api_path: None, default_command: Some(command.into()), default_args: args.iter().map(|a| (*a).to_owned()).collect(),
+        id: id.into(),
+        kind: DescriptorKind::CliAgent,
+        label: label.into(),
+        default_base_url: None,
+        default_model: String::new(),
+        api_path: None,
+        default_command: Some(command.into()),
+        default_args: args.iter().map(|a| (*a).to_owned()).collect(),
     }
 }
 
@@ -53,14 +65,54 @@ fn cli(id: &str, label: &str, command: &str, args: &[&str]) -> ProviderDescripto
 #[must_use]
 pub fn built_in_descriptors() -> Vec<ProviderDescriptor> {
     vec![
-        api("vercel-gateway", "Vercel AI Gateway", DEFAULT_VERCEL_URL, "anthropic/claude-sonnet-4.6", None),
-        api("openai", "OpenAI", "https://api.openai.com", "gpt-4o-mini", None),
-        api("anthropic", "Anthropic", "https://api.anthropic.com", "claude-sonnet-4-6", None),
-        api("gemini", "Google Gemini", DEFAULT_GEMINI_BASE_URL, "gemini-2.5-flash", None),
-        api("z-ai", "Z.ai", "https://api.z.ai", "glm-5.3", Some("/api/coding/paas/v4")),
-        cli("claude-code-cli", "Claude Code (local)", "claude-agent-acp", &[]),
+        api(
+            "vercel-gateway",
+            "Vercel AI Gateway",
+            DEFAULT_VERCEL_URL,
+            "anthropic/claude-sonnet-4.6",
+            None,
+        ),
+        api(
+            "openai",
+            "OpenAI",
+            "https://api.openai.com",
+            "gpt-4o-mini",
+            None,
+        ),
+        api(
+            "anthropic",
+            "Anthropic",
+            "https://api.anthropic.com",
+            "claude-sonnet-4-6",
+            None,
+        ),
+        api(
+            "gemini",
+            "Google Gemini",
+            DEFAULT_GEMINI_BASE_URL,
+            "gemini-2.5-flash",
+            None,
+        ),
+        api(
+            "z-ai",
+            "Z.ai",
+            "https://api.z.ai",
+            "glm-5.3",
+            Some("/api/coding/paas/v4"),
+        ),
+        cli(
+            "claude-code-cli",
+            "Claude Code (local)",
+            "claude-agent-acp",
+            &[],
+        ),
         cli("codex-cli", "Codex CLI (local)", "codex-acp", &[]),
-        cli("copilot-cli", "GitHub Copilot (local)", "copilot", &["--acp"]),
+        cli(
+            "copilot-cli",
+            "GitHub Copilot (local)",
+            "copilot",
+            &["--acp"],
+        ),
         cli("antigravity-cli", "Antigravity", "antigravity-acp", &[]),
         cli("cursor-cli", "Cursor (local)", "agent", &["acp"]),
     ]
@@ -93,15 +145,25 @@ pub fn provider_presets() -> Vec<Value> {
 }
 
 /// Providers whose keys live in the AI provider secrets namespace.
-pub const API_KEY_PROVIDERS: [&str; 5] = ["vercel-gateway", "openai", "anthropic", "gemini", "z-ai"];
+pub const API_KEY_PROVIDERS: [&str; 5] =
+    ["vercel-gateway", "openai", "anthropic", "gemini", "z-ai"];
 
 /// The gateway key from the environment: `AI_GATEWAY_API_KEY`, `VERCEL_OIDC_TOKEN`, then
 /// `FROSTY_VERCEL_API_KEY`.
 #[must_use]
 pub fn gateway_key_from_env() -> Option<String> {
-    ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN", "FROSTY_VERCEL_API_KEY"]
-        .iter()
-        .find_map(|name| std::env::var(name).ok().map(|value| value.trim().to_owned()).filter(|value| !value.is_empty()))
+    [
+        "AI_GATEWAY_API_KEY",
+        "VERCEL_OIDC_TOKEN",
+        "FROSTY_VERCEL_API_KEY",
+    ]
+    .iter()
+    .find_map(|name| {
+        std::env::var(name)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    })
 }
 
 /// Resolves `command` to an executable file, searching `search_path` when it has no directory
@@ -112,19 +174,30 @@ pub fn resolve_executable(command: &str, search_path: &str) -> Option<PathBuf> {
     if command.is_empty() {
         return None;
     }
-    let candidates: Vec<PathBuf> = if Path::new(command).components().count() > 1 || Path::new(command).is_absolute() {
-        vec![PathBuf::from(command)]
-    } else {
-        std::env::split_paths(search_path).map(|dir| dir.join(command)).collect()
-    };
+    let candidates: Vec<PathBuf> =
+        if Path::new(command).components().count() > 1 || Path::new(command).is_absolute() {
+            vec![PathBuf::from(command)]
+        } else {
+            std::env::split_paths(search_path)
+                .map(|dir| dir.join(command))
+                .collect()
+        };
     let extensions: Vec<String> = if cfg!(windows) {
-        std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into()).split(';').map(str::to_owned).collect()
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".into())
+            .split(';')
+            .map(str::to_owned)
+            .collect()
     } else {
         Vec::new()
     };
     for base in candidates {
         let mut variants = vec![base.clone()];
-        variants.extend(extensions.iter().map(|ext| PathBuf::from(format!("{}{ext}", base.display()))));
+        variants.extend(
+            extensions
+                .iter()
+                .map(|ext| PathBuf::from(format!("{}{ext}", base.display()))),
+        );
         for path in variants {
             if is_executable_file(&path) {
                 return Some(path);
@@ -135,7 +208,9 @@ pub fn resolve_executable(command: &str, search_path: &str) -> Option<PathBuf> {
 }
 
 fn is_executable_file(path: &Path) -> bool {
-    let Ok(meta) = std::fs::metadata(path) else { return false };
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
     if !meta.is_file() {
         return false;
     }
@@ -188,7 +263,10 @@ impl CliPreflight {
 }
 
 fn version_from(output: &str) -> Option<String> {
-    Regex::new(r"(?i)\b(?:v(?:ersion)?\s*)?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.-]+)?)\b").ok()?.captures(output).map(|c| c[1].to_owned())
+    Regex::new(r"(?i)\b(?:v(?:ersion)?\s*)?(\d+\.\d+(?:\.\d+)?(?:[-+][\w.-]+)?)\b")
+        .ok()?
+        .captures(output)
+        .map(|c| c[1].to_owned())
 }
 
 fn denied(output: &str) -> bool {
@@ -199,13 +277,32 @@ fn denied(output: &str) -> bool {
 #[must_use]
 pub fn probe_cli_provider(command: &str) -> CliPreflight {
     let Some(resolved) = resolve_executable(command, effective_path()) else {
-        return CliPreflight { status: "unavailable", message: format!("spawn {command} ENOENT"), provider_version: None };
+        return CliPreflight {
+            status: "unavailable",
+            message: format!("spawn {command} ENOENT"),
+            provider_version: None,
+        };
     };
-    let mut child = match Command::new(&resolved).arg("--version").env("PATH", effective_path()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+    let mut child = match Command::new(&resolved)
+        .arg("--version")
+        .env("PATH", effective_path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
         Ok(child) => child,
         Err(error) => {
-            let status = if error.kind() == std::io::ErrorKind::PermissionDenied { "denied" } else { "unavailable" };
-            return CliPreflight { status, message: error.to_string(), provider_version: None };
+            let status = if error.kind() == std::io::ErrorKind::PermissionDenied {
+                "denied"
+            } else {
+                "unavailable"
+            };
+            return CliPreflight {
+                status,
+                message: error.to_string(),
+                provider_version: None,
+            };
         }
     };
     let (out, err) = (drain(child.stdout.take()), drain(child.stderr.take()));
@@ -217,21 +314,43 @@ pub fn probe_cli_provider(command: &str) -> CliPreflight {
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return CliPreflight { status: "failed", message: format!("CLI version check timed out after {}ms.", VERSION_TIMEOUT.as_millis()), provider_version: None };
+                return CliPreflight {
+                    status: "failed",
+                    message: format!(
+                        "CLI version check timed out after {}ms.",
+                        VERSION_TIMEOUT.as_millis()
+                    ),
+                    provider_version: None,
+                };
             }
         }
     };
-    let output = format!("{}{}", out.join().unwrap_or_default(), err.join().unwrap_or_default());
+    let output = format!(
+        "{}{}",
+        out.join().unwrap_or_default(),
+        err.join().unwrap_or_default()
+    );
     let message = output.trim().to_owned();
     match code {
         Some(Some(0)) => CliPreflight {
             status: "ready",
             provider_version: version_from(&message),
-            message: if message.is_empty() { "CLI is available.".into() } else { message },
+            message: if message.is_empty() {
+                "CLI is available.".into()
+            } else {
+                message
+            },
         },
         other => CliPreflight {
             status: if denied(&message) { "denied" } else { "failed" },
-            message: if message.is_empty() { format!("CLI exited with status {}.", other.flatten().map_or("unknown".into(), |c| c.to_string())) } else { message },
+            message: if message.is_empty() {
+                format!(
+                    "CLI exited with status {}.",
+                    other.flatten().map_or("unknown".into(), |c| c.to_string())
+                )
+            } else {
+                message
+            },
             provider_version: None,
         },
     }
@@ -243,34 +362,82 @@ mod tests {
 
     #[test]
     fn secret_keys_match_the_names_the_electron_app_wrote() {
-        assert_eq!(secret_key_for_provider("vercel-gateway"), "praxis.vercelApiKey");
+        assert_eq!(
+            secret_key_for_provider("vercel-gateway"),
+            "praxis.vercelApiKey"
+        );
         assert_eq!(secret_key_for_provider("gemini"), "praxis.geminiApiKey");
         assert_eq!(secret_key_for_provider("z-ai"), "praxis.z-aiApiKey");
-        assert_eq!(secret_key_for_provider("custom:openrouter"), "praxis.customProvider.openrouter.apiKey");
-        assert_eq!(secret_key_for_provider("custom:alibaba-model-studio-token-plan"), "praxis.customProvider.alibaba-model-studio-token-plan.apiKey");
+        assert_eq!(
+            secret_key_for_provider("custom:openrouter"),
+            "praxis.customProvider.openrouter.apiKey"
+        );
+        assert_eq!(
+            secret_key_for_provider("custom:alibaba-model-studio-token-plan"),
+            "praxis.customProvider.alibaba-model-studio-token-plan.apiKey"
+        );
     }
 
     #[test]
     fn built_ins_are_listed_in_settings_order_with_the_documented_commands() {
         let ids: Vec<_> = built_in_descriptors().into_iter().map(|d| d.id).collect();
-        assert_eq!(ids, ["vercel-gateway", "openai", "anthropic", "gemini", "z-ai", "claude-code-cli", "codex-cli", "copilot-cli", "antigravity-cli", "cursor-cli"]);
-        let copilot = built_in_descriptors().into_iter().find(|d| d.id == "copilot-cli").expect("copilot");
-        assert_eq!((copilot.default_command.as_deref(), copilot.default_args.as_slice()), (Some("copilot"), ["--acp".to_string()].as_slice()));
+        assert_eq!(
+            ids,
+            [
+                "vercel-gateway",
+                "openai",
+                "anthropic",
+                "gemini",
+                "z-ai",
+                "claude-code-cli",
+                "codex-cli",
+                "copilot-cli",
+                "antigravity-cli",
+                "cursor-cli"
+            ]
+        );
+        let copilot = built_in_descriptors()
+            .into_iter()
+            .find(|d| d.id == "copilot-cli")
+            .expect("copilot");
+        assert_eq!(
+            (
+                copilot.default_command.as_deref(),
+                copilot.default_args.as_slice()
+            ),
+            (Some("copilot"), ["--acp".to_string()].as_slice())
+        );
     }
 
     #[test]
     fn presets_are_the_documented_catalog() {
         let presets = provider_presets();
         assert_eq!(presets.len(), 18);
-        let ollama = presets.iter().find(|p| p["id"] == "ollama").expect("ollama");
-        assert_eq!((ollama["group"].as_str(), ollama["keyRequired"].as_bool(), ollama["auth"]["kind"].as_str()), (Some("local"), Some(false), Some("none")));
-        let bifrost = presets.iter().find(|p| p["id"] == "bifrost").expect("bifrost");
+        let ollama = presets
+            .iter()
+            .find(|p| p["id"] == "ollama")
+            .expect("ollama");
+        assert_eq!(
+            (
+                ollama["group"].as_str(),
+                ollama["keyRequired"].as_bool(),
+                ollama["auth"]["kind"].as_str()
+            ),
+            (Some("local"), Some(false), Some("none"))
+        );
+        let bifrost = presets
+            .iter()
+            .find(|p| p["id"] == "bifrost")
+            .expect("bifrost");
         assert_eq!(bifrost["auth"]["name"], "x-bf-vk");
     }
 
     #[test]
     fn versions_are_read_the_way_the_typescript_reads_them() {
-        assert_eq!(version_from("claude-agent-acp v0.5.2 (build 7)").as_deref(), Some("0.5.2"));
+        assert_eq!(
+            version_from("claude-agent-acp v0.5.2 (build 7)").as_deref(),
+            Some("0.5.2")
+        );
         assert_eq!(version_from("version 1.2").as_deref(), Some("1.2"));
         assert_eq!(version_from("no digits here"), None);
         assert!(denied("Error: Permission denied"));
@@ -285,14 +452,26 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("dir");
         let tool = dir.join("my-agent");
         std::fs::write(&tool, "#!/bin/sh\necho 'my-agent 9.8.7'\n").expect("write");
-        assert!(resolve_executable("my-agent", dir.to_str().unwrap_or("")).is_none(), "not executable yet");
+        assert!(
+            resolve_executable("my-agent", dir.to_str().unwrap_or("")).is_none(),
+            "not executable yet"
+        );
         std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-        assert_eq!(resolve_executable("my-agent", dir.to_str().unwrap_or("")), Some(tool.clone()));
+        assert_eq!(
+            resolve_executable("my-agent", dir.to_str().unwrap_or("")),
+            Some(tool.clone())
+        );
         assert!(resolve_executable("missing", dir.to_str().unwrap_or("")).is_none());
         // An absolute path ignores the search path.
-        assert_eq!(resolve_executable(tool.to_str().unwrap_or(""), ""), Some(tool.clone()));
+        assert_eq!(
+            resolve_executable(tool.to_str().unwrap_or(""), ""),
+            Some(tool.clone())
+        );
         let probe = probe_cli_provider(tool.to_str().unwrap_or(""));
-        assert_eq!((probe.status, probe.provider_version.as_deref()), ("ready", Some("9.8.7")));
+        assert_eq!(
+            (probe.status, probe.provider_version.as_deref()),
+            ("ready", Some("9.8.7"))
+        );
         let _ = std::fs::remove_dir_all(dir);
     }
 

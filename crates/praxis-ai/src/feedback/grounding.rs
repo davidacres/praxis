@@ -26,10 +26,75 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
 }
 
 const STOPWORDS: &[&str] = &[
-    "the", "and", "for", "with", "that", "this", "from", "into", "when", "then", "than", "are", "was", "can", "you", "please", "make", "should",
-    "would", "could", "have", "has", "not", "but", "all", "add", "fix", "update", "change", "use", "new", "its", "our", "out", "any", "get", "set",
-    "run", "tsx", "jsx", "src", "test", "tests", "spec", "file", "files", "index", "main", "app", "lib", "put", "move", "rename", "remove", "delete",
-    "create", "show", "hide", "bigger", "smaller", "larger", "better", "faster", "slower", "simpler", "cleaner", "nicer", "properly", "correctly",
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "into",
+    "when",
+    "then",
+    "than",
+    "are",
+    "was",
+    "can",
+    "you",
+    "please",
+    "make",
+    "should",
+    "would",
+    "could",
+    "have",
+    "has",
+    "not",
+    "but",
+    "all",
+    "add",
+    "fix",
+    "update",
+    "change",
+    "use",
+    "new",
+    "its",
+    "our",
+    "out",
+    "any",
+    "get",
+    "set",
+    "run",
+    "tsx",
+    "jsx",
+    "src",
+    "test",
+    "tests",
+    "spec",
+    "file",
+    "files",
+    "index",
+    "main",
+    "app",
+    "lib",
+    "put",
+    "move",
+    "rename",
+    "remove",
+    "delete",
+    "create",
+    "show",
+    "hide",
+    "bigger",
+    "smaller",
+    "larger",
+    "better",
+    "faster",
+    "slower",
+    "simpler",
+    "cleaner",
+    "nicer",
+    "properly",
+    "correctly",
 ];
 
 pub fn basename(path: &str) -> &str {
@@ -37,7 +102,11 @@ pub fn basename(path: &str) -> &str {
 }
 
 fn singular(word: &str) -> String {
-    if word.ends_with('s') && word.chars().count() > 4 { word[..word.len() - 1].to_owned() } else { word.to_owned() }
+    if word.ends_with('s') && word.chars().count() > 4 {
+        word[..word.len() - 1].to_owned()
+    } else {
+        word.to_owned()
+    }
 }
 
 fn prompt_terms(text: &str) -> BTreeSet<String> {
@@ -57,8 +126,12 @@ fn file_terms(path: &str) -> Vec<String> {
     static CAMEL: OnceLock<Regex> = OnceLock::new();
     let name = basename(path);
     let stem = re(&SPEC, r"(?i)\.(?:spec|test)\.[a-z]+$").replace(name, "");
-    let stem = re(&EXT, r"(?i)\.[a-z0-9]+$").replace(&stem, "").into_owned();
-    let spaced = re(&CAMEL, r"([a-z0-9])([A-Z])").replace_all(&stem, "$1 $2").into_owned();
+    let stem = re(&EXT, r"(?i)\.[a-z0-9]+$")
+        .replace(&stem, "")
+        .into_owned();
+    let spaced = re(&CAMEL, r"([a-z0-9])([A-Z])")
+        .replace_all(&stem, "$1 $2")
+        .into_owned();
     spaced
         .split(|c: char| !c.is_ascii_alphanumeric())
         .map(str::to_lowercase)
@@ -68,7 +141,10 @@ fn file_terms(path: &str) -> Vec<String> {
 }
 
 fn overlap(terms: &BTreeSet<String>, path: &str) -> usize {
-    file_terms(path).iter().filter(|t| terms.contains(*t)).count()
+    file_terms(path)
+        .iter()
+        .filter(|t| terms.contains(*t))
+        .count()
 }
 
 pub fn prompt_mentions_file(prompt: &str, path: &str) -> bool {
@@ -82,17 +158,28 @@ fn is_test_path(path: &str) -> bool {
 }
 
 fn vocabulary(files: &[String]) -> BTreeSet<String> {
-    files.iter().flat_map(|file| file.split('/').flat_map(file_terms).collect::<Vec<_>>()).collect()
+    files
+        .iter()
+        .flat_map(|file| file.split('/').flat_map(file_terms).collect::<Vec<_>>())
+        .collect()
 }
 
-pub fn rank_file_candidates(prompt: &str, hints: Option<&WorkspaceHints>, limit: usize) -> Vec<RankedFile> {
-    let Some(hints) = hints else { return Vec::new() };
+pub fn rank_file_candidates(
+    prompt: &str,
+    hints: Option<&WorkspaceHints>,
+    limit: usize,
+) -> Vec<RankedFile> {
+    let Some(hints) = hints else {
+        return Vec::new();
+    };
     let terms = prompt_terms(prompt);
     if terms.is_empty() {
         return Vec::new();
     }
     let changed: BTreeSet<&String> = hints.changed_files.iter().collect();
-    let grounded = if hints.tracked_files.is_empty() { terms.len() } else {
+    let grounded = if hints.tracked_files.is_empty() {
+        terms.len()
+    } else {
         let vocab = vocabulary(&hints.tracked_files);
         terms.iter().filter(|t| vocab.contains(*t)).count()
     };
@@ -104,14 +191,29 @@ pub fn rank_file_candidates(prompt: &str, hints: Option<&WorkspaceHints>, limit:
         .chain(hints.tracked_files.iter())
         .filter(|f| seen.insert((*f).clone()))
         .filter(|f| !is_test_path(f) && !prompt_mentions_file(prompt, f))
-        .map(|path| RankedFile { path: path.clone(), score: overlap(&terms, path) })
-        .filter(|c| c.score >= if changed.contains(&c.path) { 1 } else { unchanged_minimum })
+        .map(|path| RankedFile {
+            path: path.clone(),
+            score: overlap(&terms, path),
+        })
+        .filter(|c| {
+            c.score
+                >= if changed.contains(&c.path) {
+                    1
+                } else {
+                    unchanged_minimum
+                }
+        })
         .collect();
     ranked.sort_by(|a, b| {
         b.score
             .cmp(&a.score)
             .then_with(|| changed.contains(&b.path).cmp(&changed.contains(&a.path)))
-            .then_with(|| a.path.encode_utf16().count().cmp(&b.path.encode_utf16().count()))
+            .then_with(|| {
+                a.path
+                    .encode_utf16()
+                    .count()
+                    .cmp(&b.path.encode_utf16().count())
+            })
             .then_with(|| locale_cmp(&a.path, &b.path))
     });
     ranked.truncate(limit);
@@ -145,26 +247,35 @@ pub fn extract_prompt_identifiers(prompt: &str) -> Vec<String> {
 }
 
 fn is_introduced_name(prompt: &str, name: &str) -> bool {
-    let pattern = format!(r"(?i)\b(?:to|as|into|called|named|new|create|add|introduce|extract)\s+(?:an?\s+|the\s+)?`?{}\b", regex::escape(name));
+    let pattern = format!(
+        r"(?i)\b(?:to|as|into|called|named|new|create|add|introduce|extract)\s+(?:an?\s+|the\s+)?`?{}\b",
+        regex::escape(name)
+    );
     Regex::new(&pattern).is_ok_and(|r| r.is_match(prompt))
 }
 
 pub fn unknown_identifiers(hints: Option<&WorkspaceHints>, prompt: &str) -> Vec<String> {
     static EXT: OnceLock<Regex> = OnceLock::new();
     static SPEC: OnceLock<Regex> = OnceLock::new();
-    let Some(hints) = hints else { return Vec::new() };
+    let Some(hints) = hints else {
+        return Vec::new();
+    };
     let stems: BTreeSet<String> = hints
         .tracked_files
         .iter()
         .map(|f| {
             let stem = re(&EXT, r"\.[^.]+$").replace(basename(f), "").into_owned();
-            re(&SPEC, r"\.(?:spec|test)$").replace(&stem, "").into_owned()
+            re(&SPEC, r"\.(?:spec|test)$")
+                .replace(&stem, "")
+                .into_owned()
         })
         .collect();
     let mut names: Vec<String> = hints
         .symbols
         .iter()
-        .filter(|s: &&Symbol| !s.found && !stems.contains(&s.name) && !is_introduced_name(prompt, &s.name))
+        .filter(|s: &&Symbol| {
+            !s.found && !stems.contains(&s.name) && !is_introduced_name(prompt, &s.name)
+        })
         .map(|s| s.name.clone())
         .collect();
     names.sort();
@@ -184,58 +295,117 @@ fn command_for_test_file(file: &str) -> String {
     format!("node --test {file}")
 }
 
-pub fn pick_test_command(prompt: &str, hints: Option<&WorkspaceHints>, related: &[String]) -> Option<TestCommand> {
+pub fn pick_test_command(
+    prompt: &str,
+    hints: Option<&WorkspaceHints>,
+    related: &[String],
+) -> Option<TestCommand> {
     let hints = hints?;
-    let joined = std::iter::once(prompt.to_owned()).chain(related.iter().map(|p| basename(p).to_owned())).collect::<Vec<_>>().join(" ");
+    let joined = std::iter::once(prompt.to_owned())
+        .chain(related.iter().map(|p| basename(p).to_owned()))
+        .collect::<Vec<_>>()
+        .join(" ");
     let terms = prompt_terms(&joined);
-    let grounded = if hints.tracked_files.is_empty() { terms.len() } else {
+    let grounded = if hints.tracked_files.is_empty() {
+        terms.len()
+    } else {
         let vocab = vocabulary(&hints.tracked_files);
         terms.iter().filter(|t| vocab.contains(*t)).count()
     };
     let minimum = grounded.clamp(1, 2);
     let tests: BTreeSet<&String> = hints.test_files.iter().collect();
-    let mut best: Vec<(&String, usize)> = tests.into_iter().map(|p| (p, overlap(&terms, p))).filter(|(_, s)| *s >= minimum).collect();
+    let mut best: Vec<(&String, usize)> = tests
+        .into_iter()
+        .map(|p| (p, overlap(&terms, p)))
+        .filter(|(_, s)| *s >= minimum)
+        .collect();
     best.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| locale_cmp(a.0, b.0)));
     if let Some((path, _)) = best.first() {
-        return Some(TestCommand { label: basename(path).to_owned(), command: command_for_test_file(path) });
+        return Some(TestCommand {
+            label: basename(path).to_owned(),
+            command: command_for_test_file(path),
+        });
     }
-    let script = ["check-types", "typecheck", "test", "build"].into_iter().find(|name| hints.package_scripts.iter().any(|s| s == name))?;
-    let command = if script == "test" { "npm test".to_owned() } else { format!("npm run {script}") };
-    Some(TestCommand { label: command.clone(), command })
+    let script = ["check-types", "typecheck", "test", "build"]
+        .into_iter()
+        .find(|name| hints.package_scripts.iter().any(|s| s == name))?;
+    let command = if script == "test" {
+        "npm test".to_owned()
+    } else {
+        format!("npm run {script}")
+    };
+    Some(TestCommand {
+        label: command.clone(),
+        command,
+    })
 }
 
 /// What a new follow-up prompt inherits from a session's earlier turns.
 pub fn derive_prior_context(session: &Value) -> PriorContext {
     static ISSUE: OnceLock<Regex> = OnceLock::new();
     let events: Vec<Value> = session["events"].as_array().cloned().unwrap_or_default();
-    let goal = session["taskDefinition"]["goal"].as_str().map(str::trim).filter(|g| !g.is_empty());
+    let goal = session["taskDefinition"]["goal"]
+        .as_str()
+        .map(str::trim)
+        .filter(|g| !g.is_empty());
     let mut messages: Vec<Message> = Vec::new();
     if let Some(goal) = goal {
-        messages.push(Message { role: "user".into(), text: goal.to_owned() });
+        messages.push(Message {
+            role: "user".into(),
+            text: goal.to_owned(),
+        });
     }
     for event in &events {
         let kind = event["type"].as_str().unwrap_or_default();
         if kind != "user_input_completed" && kind != "message" {
             continue;
         }
-        let text = event["detail"].as_str().filter(|d| !d.is_empty()).or_else(|| event["summary"].as_str()).unwrap_or_default().trim().to_owned();
-        let role = if kind == "message" { "assistant" } else { "user" };
-        let duplicate = messages.last().is_some_and(|p| p.text == text && p.role == role);
+        let text = event["detail"]
+            .as_str()
+            .filter(|d| !d.is_empty())
+            .or_else(|| event["summary"].as_str())
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        let role = if kind == "message" {
+            "assistant"
+        } else {
+            "user"
+        };
+        let duplicate = messages
+            .last()
+            .is_some_and(|p| p.text == text && p.role == role);
         if !text.is_empty() && !duplicate {
-            messages.push(Message { role: role.into(), text });
+            messages.push(Message {
+                role: role.into(),
+                text,
+            });
         }
     }
-    let bounded = bounded_messages(Some(&PriorContext { recent_messages: Some(messages), ..PriorContext::default() }));
+    let bounded = bounded_messages(Some(&PriorContext {
+        recent_messages: Some(messages),
+        ..PriorContext::default()
+    }));
     let mut touched = BTreeSet::new();
     for event in &events {
-        for change in event["data"]["fileChanges"].as_array().into_iter().flatten() {
+        for change in event["data"]["fileChanges"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
             if let Some(path) = change["path"].as_str().filter(|p| !p.is_empty()) {
                 touched.insert(path.to_owned());
             }
         }
     }
-    let issue_key = session["issueKey"].as_str().filter(|k| re(&ISSUE, r"^[A-Z]{2,10}(?:-[A-Z]+)?-\d+$").is_match(k)).map(str::to_owned);
-    let follow_ups = events.iter().filter(|e| e["type"] == "user_input_completed").count();
+    let issue_key = session["issueKey"]
+        .as_str()
+        .filter(|k| re(&ISSUE, r"^[A-Z]{2,10}(?:-[A-Z]+)?-\d+$").is_match(k))
+        .map(str::to_owned);
+    let follow_ups = events
+        .iter()
+        .filter(|e| e["type"] == "user_input_completed")
+        .count();
     PriorContext {
         turn_count: follow_ups + usize::from(goal.is_some()),
         touched_paths: touched.into_iter().collect(),
@@ -251,36 +421,74 @@ mod tests {
 
     fn hints() -> WorkspaceHints {
         WorkspaceHints {
-            changed_files: vec!["src/PromptScoreBar.tsx".into(), "src/PromptScoreBarStyles.tsx".into()],
+            changed_files: vec![
+                "src/PromptScoreBar.tsx".into(),
+                "src/PromptScoreBarStyles.tsx".into(),
+            ],
             test_files: vec!["e2e/promptScoreBar.spec.ts".into()],
             package_scripts: vec!["test".into(), "check-types".into()],
-            tracked_files: vec!["src/PromptScoreBar.tsx".into(), "e2e/promptScoreBar.spec.ts".into()],
+            tracked_files: vec![
+                "src/PromptScoreBar.tsx".into(),
+                "e2e/promptScoreBar.spec.ts".into(),
+            ],
             symbols: Vec::new(),
         }
     }
 
     #[test]
     fn ranks_matching_files_and_picks_the_spec() {
-        let ranked = rank_file_candidates("fix the truncated headline in the prompt score bar", Some(&hints()), 2);
+        let ranked = rank_file_candidates(
+            "fix the truncated headline in the prompt score bar",
+            Some(&hints()),
+            2,
+        );
         assert_eq!(ranked[0].path, "src/PromptScoreBar.tsx");
         assert_eq!(ranked[1].path, "src/PromptScoreBarStyles.tsx");
-        let test = pick_test_command("fix the prompt score bar", Some(&hints()), &["src/PromptScoreBar.tsx".into()]).unwrap();
-        assert_eq!(test.command, "npx playwright test e2e/promptScoreBar.spec.ts");
+        let test = pick_test_command(
+            "fix the prompt score bar",
+            Some(&hints()),
+            &["src/PromptScoreBar.tsx".into()],
+        )
+        .unwrap();
+        assert_eq!(
+            test.command,
+            "npx playwright test e2e/promptScoreBar.spec.ts"
+        );
     }
 
     #[test]
     fn falls_back_to_a_package_script() {
         let mut h = hints();
         h.test_files.clear();
-        assert_eq!(pick_test_command("zzz", Some(&h), &[]).unwrap().command, "npm run check-types");
+        assert_eq!(
+            pick_test_command("zzz", Some(&h), &[]).unwrap().command,
+            "npm run check-types"
+        );
     }
 
     #[test]
     fn extracts_identifiers_and_flags_unknown_ones() {
-        assert_eq!(extract_prompt_identifiers("rename fooBar to `baz_qux` in SessionBar"), vec!["SessionBar", "baz_qux", "fooBar"]);
+        assert_eq!(
+            extract_prompt_identifiers("rename fooBar to `baz_qux` in SessionBar"),
+            vec!["SessionBar", "baz_qux", "fooBar"]
+        );
         let mut h = hints();
-        h.symbols = vec![Symbol { name: "fooBar".into(), found: false, location: None }, Symbol { name: "newName".into(), found: false, location: None }];
-        assert_eq!(unknown_identifiers(Some(&h), "rename fooBar to newName"), vec!["fooBar"]);
+        h.symbols = vec![
+            Symbol {
+                name: "fooBar".into(),
+                found: false,
+                location: None,
+            },
+            Symbol {
+                name: "newName".into(),
+                found: false,
+                location: None,
+            },
+        ];
+        assert_eq!(
+            unknown_identifiers(Some(&h), "rename fooBar to newName"),
+            vec!["fooBar"]
+        );
     }
 
     #[test]

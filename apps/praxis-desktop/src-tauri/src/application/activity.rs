@@ -104,7 +104,11 @@ pub fn run_as_agent<T>(work: impl FnOnce() -> T) -> T {
 
 /// The actor for a board write observed right now.
 pub fn current_actor() -> &'static str {
-    if AGENT_WRITE.with(std::cell::Cell::get) { "agent" } else { "you" }
+    if AGENT_WRITE.with(std::cell::Cell::get) {
+        "agent"
+    } else {
+        "you"
+    }
 }
 
 /// Records a session's state change as agent activity on its project (once per distinct state).
@@ -122,13 +126,20 @@ pub fn observe_session(root: &Path, session: &Value) {
     let changed = LAST_STATE
         .get_or_init(Default::default)
         .lock()
-        .map(|mut all| all.insert(session_id.to_owned(), state.to_owned()).as_deref() != Some(state))
+        .map(|mut all| {
+            all.insert(session_id.to_owned(), state.to_owned())
+                .as_deref()
+                != Some(state)
+        })
         .unwrap_or(false);
     if !changed {
         return;
     }
     let issue_key = session["issueKey"].as_str().unwrap_or_default();
-    let title = session["title"].as_str().filter(|t| !t.is_empty()).unwrap_or(issue_key);
+    let title = session["title"]
+        .as_str()
+        .filter(|t| !t.is_empty())
+        .unwrap_or(issue_key);
     record(
         root,
         &Observation {

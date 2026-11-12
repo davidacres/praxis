@@ -14,7 +14,10 @@ use serde_json::{Map, Value, json};
 pub const MIN_STAGE_SAMPLES: usize = 3;
 
 fn array<'a>(value: &'a Value, key: &str) -> &'a [Value] {
-    value.get(key).and_then(Value::as_array).map_or(&[][..], Vec::as_slice)
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice)
 }
 
 fn s<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -34,7 +37,9 @@ fn loop_budget(definition: &Value, parameters: &Value, edge: &Value) -> u64 {
         .and_then(|p| parameters.get(s(p, "id")))
         .and_then(Value::as_f64)
         .map(|v| v as u64);
-    bound.unwrap_or(own).min(u64::from(WORKFLOW_MAX_LOOP_ITERATIONS))
+    bound
+        .unwrap_or(own)
+        .min(u64::from(WORKFLOW_MAX_LOOP_ITERATIONS))
 }
 
 fn reach(outbound: &BTreeMap<&str, Vec<&str>>, from: &str) -> BTreeSet<String> {
@@ -52,7 +57,10 @@ fn reach(outbound: &BTreeMap<&str, Vec<&str>>, from: &str) -> BTreeSet<String> {
 }
 
 fn attempts_of(node: &Value) -> u64 {
-    if matches!(s(node, "type"), "agent-task" | "check" | "deployment" | "merge") {
+    if matches!(
+        s(node, "type"),
+        "agent-task" | "check" | "deployment" | "merge"
+    ) {
         node["maxAttempts"].as_u64().unwrap_or(1).max(1)
     } else {
         1
@@ -77,7 +85,10 @@ pub fn estimate_workflow_run(
         .collect();
     let mut outbound: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for edge in edges.iter().filter(|e| !is_loop(e)) {
-        outbound.entry(s(edge, "from")).or_default().push(s(edge, "to"));
+        outbound
+            .entry(s(edge, "from"))
+            .or_default()
+            .push(s(edge, "to"));
     }
     let bodies: Vec<(&str, BTreeSet<String>)> = loops
         .iter()
@@ -85,7 +96,9 @@ pub fn estimate_workflow_run(
             let from_target = reach(&outbound, s(edge, "to"));
             let body = from_target
                 .into_iter()
-                .filter(|id| id == s(edge, "from") || reach(&outbound, id).contains(s(edge, "from")))
+                .filter(|id| {
+                    id == s(edge, "from") || reach(&outbound, id).contains(s(edge, "from"))
+                })
                 .collect();
             (s(edge, "id"), body)
         })
@@ -105,7 +118,10 @@ pub fn estimate_workflow_run(
     for node in nodes {
         let kind = s(node, "type");
         if node["enabled"] == json!(false)
-            || !matches!(kind, "agent-task" | "check" | "map" | "deployment" | "merge")
+            || !matches!(
+                kind,
+                "agent-task" | "check" | "map" | "deployment" | "merge"
+            )
         {
             continue;
         }
@@ -115,7 +131,11 @@ pub fn estimate_workflow_run(
             .filter(|(_, body)| body.contains(id))
             .map(|(edge_id, _)| budgets.get(edge_id).copied().unwrap_or(0) + 1)
             .product();
-        let items = if kind == "map" { node["maxItems"].as_u64().unwrap_or(1) } else { 1 };
+        let items = if kind == "map" {
+            node["maxItems"].as_u64().unwrap_or(1)
+        } else {
+            1
+        };
         let is_repair = nodes.iter().any(|c| {
             s(c, "type") == "check" && c["failureRecovery"]["repairNodeId"].as_str() == Some(id)
         });
@@ -129,7 +149,11 @@ pub fn estimate_workflow_run(
             };
         let is_agent = matches!(kind, "agent-task" | "map");
         let provider = if is_agent { provider_for(node) } else { None };
-        let tier = if is_agent { node.get("modelTier").and_then(Value::as_str) } else { None };
+        let tier = if is_agent {
+            node.get("modelTier").and_then(Value::as_str)
+        } else {
+            None
+        };
         let model = if is_agent {
             node.get("model")
                 .and_then(Value::as_str)
@@ -165,8 +189,11 @@ pub fn estimate_workflow_run(
             .map(|st| st[key].as_u64().unwrap_or(0))
             .sum()
     };
-    let (first_pass_agents, worst_agents, worst_checks) =
-        (sum(true, "firstPass"), sum(true, "worstCase"), sum(false, "worstCase"));
+    let (first_pass_agents, worst_agents, worst_checks) = (
+        sum(true, "firstPass"),
+        sum(true, "worstCase"),
+        sum(false, "worstCase"),
+    );
     json!({
         "stages": stages,
         "loops": loops.iter().map(|e| json!({
@@ -227,7 +254,8 @@ mod tests {
         });
         let none = |_: &Value| None;
         let no_tier = |_: Option<&str>, _: Option<&str>| None;
-        let estimate = estimate_workflow_run(&definition, &json!({ "rounds": 7 }), 5, &none, &no_tier);
+        let estimate =
+            estimate_workflow_run(&definition, &json!({ "rounds": 7 }), 5, &none, &no_tier);
         assert_eq!(estimate["loops"][0]["budget"], 7);
         assert_eq!(estimate["worstCaseAgentLaunches"], 8);
         assert_eq!(estimate["needsConfirm"], true);
