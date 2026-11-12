@@ -1254,6 +1254,22 @@ pub fn start_workflow_run(host: &HostContext, input: StartRunInput) -> Result<Wo
         }
     }
     let saved = save_run_record(host, run)?;
+    // The session that started the run is its controller: it lists the run and follows it.
+    if let (Some(key), Some(_)) = (&saved.controller_session_key, &saved.controller_session_id) {
+        let (run_id, workflow_id, version) = (saved.run_id.clone(), saved.workflow_id.clone(), saved.workflow_version);
+        let _ = super::session_store::store(&host.config().user_data_dir).mutate(key, true, |record| {
+            let mut ids: Vec<Value> = record["workflowRunIds"].as_array().cloned().unwrap_or_else(|| {
+                record["workflowRunId"].as_str().filter(|r| !r.is_empty()).map(|r| vec![json!(r)]).unwrap_or_default()
+            });
+            ids.push(json!(run_id));
+            record["workflowRunId"] = json!(run_id);
+            record["workflowRunIds"] = json!(ids);
+            record["workflowNodeId"] = json!("");
+            record["workflowId"] = json!(workflow_id);
+            record["workflowVersion"] = json!(version);
+            record["workflowRole"] = json!("controller");
+        });
+    }
     workflow_engine::step_in_background(host, &saved.run_id);
     Ok(saved)
 }
