@@ -332,12 +332,12 @@ impl MobileHost {
             .then(Self::configured_relay_url)
             .flatten();
         let Some(url) = url else {
-            *lock(&self.relay) = RelayView::default();
-            // With no listener there is no relay channel to stop, so a missing channel is not a failure.
-            match self.rpc("mobile:relayStop", Value::Null) {
-                Err(message) if !message.contains("is not registered") => return Err(message),
-                _ => return Ok(()),
+            // Nothing to close unless a relay connection was ever started.
+            let was_active = std::mem::take(&mut *lock(&self.relay)).url.is_some();
+            if was_active {
+                self.rpc("mobile:relayStop", Value::Null)?;
             }
+            return Ok(());
         };
         let key = block_on(self.identity.static_key())?;
         let relay = block_on(self.identity.relay_identity());

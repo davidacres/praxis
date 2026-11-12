@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
 import { launchTestApp, closeTestApp, type TestApp, notReproducible } from './launchTestApp';
 import { chooseOption } from './chipSelect';
+import { RelayServer } from '../../../packages/mobile-relay/src/relayServer';
 
 let app: TestApp;
 let window: Page;
@@ -49,6 +50,30 @@ test('creating a pairing code shows a single-use token and never a private key',
   await expect(window.locator('[data-testid="mobile-host-fingerprint"]')).toHaveText(/^[0-9a-f]{16}$/);
   await expect(window.locator('[data-testid="mobile-copy-invitation"]')).toBeVisible();
   await window.screenshot({ path: testInfo.outputPath('mobile-listening.png') });
+});
+
+test('internet mode registers with the configured relay and puts its route in the invitation; local mode never does', async () => {
+  const relay = new RelayServer({ host: '127.0.0.1', port: 0 });
+  await relay.start();
+  const relayUrl = `ws://127.0.0.1:${relay.port}`;
+  await closeTestApp(app);
+  app = await launchTestApp(undefined, undefined, { PRAXIS_MOBILE_RELAY_URL: relayUrl });
+  window = app.window;
+  try {
+    const routeOf = async () => ((await window.evaluate(() => window.praxis.settings.getMobileHostInfo())).invitation as { relay?: { url: string; channel: string } } | undefined)?.relay;
+    await openMobileAccess();
+    await chooseOption(window.locator('[data-testid="mobile-access-mode"]'), 'local-only');
+    await expect(window.locator('[data-testid="mobile-listener-status"]')).toContainText('Listening');
+    await window.locator('[data-testid="mobile-create-pairing"]').click();
+    await expect(window.locator('[data-testid="mobile-pairing-code"]')).toBeVisible();
+    expect(await routeOf()).toBeUndefined();
+    await chooseOption(window.locator('[data-testid="mobile-access-mode"]'), 'internet');
+    await expect.poll(routeOf, { timeout: 15000 }).toMatchObject({ url: relayUrl, channel: expect.stringMatching(/^[0-9a-f]{32}$/) });
+    await chooseOption(window.locator('[data-testid="mobile-access-mode"]'), 'local-only');
+    await expect.poll(routeOf, { timeout: 15000 }).toBeUndefined();
+  } finally {
+    await relay.stop();
+  }
 });
 
 test('resetting the host key asks for confirmation in-app', async () => {
