@@ -503,6 +503,18 @@ pub fn dispatch(
                 let b64 = BASE64.encode(&bytes);
                 return Ok(json!(format!("data:image/jpeg;base64,{b64}")));
             }
+            // The shell that drew the page offers its JPEG (a `data:` URL) for the cache, keyed
+            // by the same path/size/mtime so an edit to the page refreshes it.
+            if let Some(drawn) = args.get(2).and_then(Value::as_str).and_then(|d| d.strip_prefix("data:image/jpeg;base64,"))
+                && let Ok(bytes) = BASE64.decode(drawn)
+                && bytes.len() <= 2 * 1024 * 1024
+            {
+                if let Some(dir) = cache_file.parent() {
+                    fs::create_dir_all(dir).map_err(failure)?;
+                }
+                fs::write(&cache_file, &bytes).map_err(failure)?;
+                return Ok(json!(format!("data:image/jpeg;base64,{drawn}")));
+            }
             Ok(Value::Null)
         }
         "artifacts:createGroup" => {

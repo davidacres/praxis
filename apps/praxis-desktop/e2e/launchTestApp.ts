@@ -562,7 +562,61 @@ export async function launchTestApp(
     if (page && !page.isClosed()) await page.close();
     return result;
   });
+  // The native shell shows a restricted HTML preview in its own webview window; here it is another
+  // page. The backend validates the file and returns the document with the preview policy applied.
+  await testApp.overrideChannel('ai:openHtmlArtifactPreview', async (args, backend) => {
+    const prepared = await backend.call('ai:openHtmlArtifactPreview', ...args) as { title: string; html: string };
+    const page = await context.newPage();
+    await page.goto(`data:text/html;charset=utf-8,${encodeURIComponent(prepared.html)}`);
+    await page.waitForLoadState('domcontentloaded');
+    return undefined;
+  });
+  // The shell draws page thumbnails in a hidden webview; here a throwaway page is screenshotted.
+  // It lives in its own browser so its pages never show up as windows of the app under test.
+  let thumbnailBrowser: Promise<import('@playwright/test').Browser> | undefined;
+  context.on('close', () => { void thumbnailBrowser?.then(browser => browser.close()).catch(() => undefined); });
+  const renderThumbnail = async (html: string): Promise<string | undefined> => {
+    thumbnailBrowser ??= chromium.launch();
+    const page = await (await thumbnailBrowser).newPage({ viewport: { width: 960, height: 720 }, deviceScaleFactor: 0.5 });
+    try {
+      await page.goto(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`, { timeout: 8000 }).catch(() => undefined);
+      await page.waitForTimeout(300);
+      const jpeg = await page.screenshot({ type: 'jpeg', quality: 82, scale: 'device', clip: { x: 0, y: 0, width: 960, height: 720 } });
+      return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+    } catch {
+      return undefined;
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  };
+  const previewPolicy = async (backend: ChannelContext, issueKey: string, file: string) =>
+    ((await backend.call('ai:openHtmlArtifactPreview', issueKey, file, 'thumbnail')) as { html: string }).html;
+  await testApp.overrideChannel('ai:artifactPageThumbnail', async ([issueKey, file], backend) => {
+    const cached = await backend.call('ai:artifactPageThumbnail', issueKey, file);
+    if (cached) return cached;
+    try { return await renderThumbnail(await previewPolicy(backend, issueKey, file)); } catch { return undefined; }
+  });
+  await testApp.overrideChannel('artifacts:pageThumbnail', async ([projectId, file], backend) => {
+    const cached = await backend.call('artifacts:pageThumbnail', projectId, file);
+    if (cached) return cached;
+    try {
+      const source = await backend.call('artifacts:readText', projectId, file) as string;
+      const drawn = await renderThumbnail(applyPreviewPolicyForTests(source));
+      // Offered back to the host, which caches it under the file's path, size and mtime.
+      return drawn ? await backend.call('artifacts:pageThumbnail', projectId, file, drawn) : undefined;
+    } catch { return undefined; }
+  });
   return testApp;
+}
+
+/** Same policy as the host's `html_preview::apply_policy`, for pages read outside a session. */
+function applyPreviewPolicyForTests(source: string): string {
+  const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; media-src data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'";
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+  const stripped = source.replace(/<meta\b[^>]*\bhttp-equiv\s*=\s*["']?content-security-policy\b[^>]*>/gi, '');
+  return /<head\b[^>]*>/i.test(stripped)
+    ? stripped.replace(/<head\b[^>]*>/i, match => `${match}${meta}`)
+    : `<!doctype html><html><head><meta charset="utf-8">${meta}</head><body>${stripped}</body></html>`;
 }
 
 /**

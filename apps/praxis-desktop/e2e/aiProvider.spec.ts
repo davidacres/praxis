@@ -647,7 +647,9 @@ test('delegate succeeds without a working folder in chat/conversation mode and c
 });
 
 test('updateSessionToolAccess attaches a working folder and elevates toolMode mid-session', async () => {
-  mock = await startMockGatewayServer({ mode: 'complete' });
+  // Held open so the turn is provably in flight at first (the mock otherwise answers in a few
+  // milliseconds and the update would race it), then released so the session is idle for the update.
+  mock = await startMockGatewayServer({ mode: 'complete', holdCompletion: true });
   app = await launchTestApp({
     ai: {
       activeProvider: 'vercel-gateway',
@@ -678,6 +680,22 @@ test('updateSessionToolAccess attaches a working folder and elevates toolMode mi
 
   expect(session.toolMode).toBe('project-only');
   expect(session.workingDirectory).toBeFalsy();
+
+  const toolAccess = (key: string) => win.evaluate(async (issueKey: string) => {
+    try {
+      const w = window as unknown as { praxis: { ai: { updateSessionToolAccess: (key: string, opts: object) => Promise<unknown> } } };
+      await w.praxis.ai.updateSessionToolAccess(issueKey, { toolMode: 'full' });
+      return 'updated';
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }, key);
+  expect(await toolAccess(session.issueKey)).toContain('Wait for the current session turn to finish');
+  mock.releaseCompletion();
+  await expect.poll(() => win.evaluate(async (key: string) => {
+    const w = window as unknown as { praxis: { ai: { getSession: (key: string) => Promise<{ state: string } | undefined> } } };
+    return (await w.praxis.ai.getSession(key))?.state;
+  }, session.issueKey), { timeout: 15000 }).toBe('completed');
 
   const updated = await win.evaluate(async (key: string) => {
     const w = window as unknown as {

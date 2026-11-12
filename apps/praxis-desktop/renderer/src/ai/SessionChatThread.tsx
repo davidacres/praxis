@@ -285,7 +285,9 @@ export function SessionChatThread({
   );
 
   // Fallback to internal session gadgets if parent doesn't provide them
-  const internalGadgets = useSessionGadgets(session, rawEvents, { enabled: !propGadgetBlocks });
+  // Keyed by conversation index, the same index the thread renders them under; the raw event
+  // list also holds session_start/tool events ahead of the first message, which shifts every key.
+  const internalGadgets = useSessionGadgets(session, conversationEvents, { enabled: !propGadgetBlocks });
   const gadgetBlocks = propGadgetBlocks ?? internalGadgets.gadgetBlocks;
   const gadgetResults = propGadgetResults ?? internalGadgets.gadgetResults;
   const busyGadgetId = propBusyGadgetId ?? internalGadgets.busyGadgetId;
