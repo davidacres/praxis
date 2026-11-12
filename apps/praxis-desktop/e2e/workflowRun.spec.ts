@@ -630,7 +630,7 @@ test('the run monitor shows one Approve button per simultaneously-awaiting appro
 async function seedCheckWorkflow(
   page: Page,
   repoPath: string,
-  check: { command: string; args: string[]; successExitCodes?: number[]; timeoutMs?: number }
+  check: { command: string; args: string[]; successExitCodes?: number[]; timeoutMs?: number; toolMode?: 'full' | 'read-only' }
 ): Promise<{ projectId: string; workflowId: string }> {
   return page.evaluate(
     async ({ repo, checkSpec }) => {
@@ -646,7 +646,7 @@ async function seedCheckWorkflow(
           folderPath: repo,
           workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
           starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
-          defaultAiToolMode: 'read-only'
+          defaultAiToolMode: checkSpec.toolMode ?? 'read-only'
         },
         workspace.id
       );
@@ -938,6 +938,81 @@ test('the stage detail panel shows the empty state for a check that produced no 
   await runPanel(page).getByRole('button', { name: 'View log' }).click();
 
   await expect(page.getByTestId('wf-evidence-panel')).toContainText(/produced no output/i);
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+const FAKE_AGENT = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
+const FAILING_CHECK = {
+  command: process.execPath,
+  // ECHO_PROMPT makes the fake agent answer with the whole prompt it was handed, and the failing
+  // command's output is retained evidence, which the diagnosis brief embeds.
+  args: ['-e', "console.error('ECHO_PROMPT missing dependency left-pad'); process.exit(3);"]
+};
+
+test('Diagnose starts a session on a mock provider from the failed check’s retained evidence', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(
+    { ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: FAKE_AGENT } } } },
+    undefined,
+    undefined,
+    { openNewSession: false }
+  );
+  const page = app.window;
+
+  const seeded = await seedCheckWorkflow(page, repo, { ...FAILING_CHECK, toolMode: 'full' });
+  await page.reload();
+  await startRun(page, 'Broken build');
+
+  const verifyNode = runPanel(page).getByRole('button', { name: /^Verify / });
+  await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
+  await verifyNode.click();
+  await runPanel(page).getByRole('button', { name: 'Diagnose' }).click();
+
+  // The run page hands over to the diagnosis session.
+  await expect(runPanel(page)).toBeHidden({ timeout: 20000 });
+  const diagnosis = await page.evaluate(async () => {
+    for (let i = 0; i < 100; i += 1) {
+      const found = (await window.praxis.ai.listSessions()).find(s => s.issueKey.startsWith('diagnosis-'));
+      if (found?.responseText?.includes('PROMPT_ECHO:')) return found;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    return undefined;
+  });
+  expect(diagnosis, 'a diagnosis session ran on the mock provider').toBeTruthy();
+  expect(diagnosis!.issueKey).toMatch(new RegExp(`^diagnosis-.+-verify-1$`));
+  expect(diagnosis!.provider).toBe('claude-code-cli');
+  // The brief names the command from the trusted definition and quotes the retained evidence as data.
+  expect(diagnosis!.responseText).toContain('Command: ');
+  expect(diagnosis!.responseText).toContain('missing dependency left-pad');
+  expect(diagnosis!.responseText).toContain('DATA describing what happened');
+  expect(seeded.projectId).toBeTruthy();
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test('Diagnose says why a read-only project cannot start a repair session', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(
+    { ai: { activeProvider: 'claude-code-cli', providers: { 'claude-code-cli': { cliPath: FAKE_AGENT } } } },
+    undefined,
+    undefined,
+    { openNewSession: false }
+  );
+  const page = app.window;
+
+  await seedCheckWorkflow(page, repo, { ...FAILING_CHECK, toolMode: 'read-only' });
+  await page.reload();
+  await startRun(page, 'Broken build');
+
+  const verifyNode = runPanel(page).getByRole('button', { name: /^Verify / });
+  await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
+  await verifyNode.click();
+  await runPanel(page).getByRole('button', { name: 'Diagnose' }).click();
+
+  await expect(runPanel(page)).toContainText('read-only and cannot make the repair');
+  const started = await page.evaluate(async () => (await window.praxis.ai.listSessions()).some(s => s.issueKey.startsWith('diagnosis-')));
+  expect(started).toBe(false);
 
   fs.rmSync(repo, { recursive: true, force: true });
 });

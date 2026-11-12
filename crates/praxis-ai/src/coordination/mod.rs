@@ -9,6 +9,7 @@
 //! - [`gate`] — what a tool executor asks before a side effect.
 
 pub mod broker;
+pub mod change_scope;
 pub mod gate;
 pub mod host;
 pub mod policy;

@@ -653,6 +653,115 @@ fn describe_failure(result: &praxis_workflows::check_process::CheckProcessResult
     }
 }
 
+/// An out-of-scope change set: what to say, whether to stop, and the findings to record.
+struct ScopeVerdict {
+    block: bool,
+    message: String,
+    findings: praxis_workflows::types::CheckFindings,
+}
+
+/// FX-BE-094 / TASK-265: the findings for the paths a merge's source branch changed outside the
+/// node's declared paths. `None` when nothing is declared or everything is in scope.
+fn scope_verdict(
+    node: &praxis_workflows::types::WorkflowMergeNode,
+    root: &Path,
+    changed: &[String],
+) -> Option<ScopeVerdict> {
+    use praxis_ai::coordination::change_scope::{
+        OutOfScopePolicy as Policy, ScopeAction, assess_change_scope,
+    };
+    use praxis_ai::coordination::types::Resource;
+    use praxis_workflows::types::{
+        CheckFinding, CheckFindingSeverity, OutOfScopePolicy, compute_finding_fingerprint,
+    };
+    let declared = node.declared_paths.as_ref().filter(|d| !d.is_empty())?;
+    let worktree = root.to_string_lossy().into_owned();
+    let resources: Vec<Resource> = declared
+        .iter()
+        .map(|path| Resource::Directory {
+            worktree: worktree.clone(),
+            path: path.clone(),
+        })
+        .collect();
+    let policy = match node.out_of_scope {
+        Some(OutOfScopePolicy::Block) => Policy::Block,
+        _ => Policy::Escalate,
+    };
+    let assessment = assess_change_scope(changed, &resources, &worktree, policy, false);
+    let message = assessment.message.clone()?;
+    if assessment.action == ScopeAction::None {
+        return None;
+    }
+    let block = assessment.action == ScopeAction::Block;
+    let severity = if block {
+        CheckFindingSeverity::High
+    } else {
+        CheckFindingSeverity::Medium
+    };
+    let findings = assessment
+        .out_of_scope
+        .iter()
+        .map(|file| {
+            let finding_message =
+                format!("{file} changed but is outside the paths this run declared.");
+            CheckFinding {
+                fingerprint: compute_finding_fingerprint(
+                    Some("out-of-scope-change"),
+                    Some(file),
+                    None,
+                    &finding_message,
+                ),
+                rule_id: Some("out-of-scope-change".into()),
+                file: Some(file.to_string()),
+                line: None,
+                severity,
+                category: "scope".into(),
+                message: finding_message,
+                suggestion: None,
+                verdict: None,
+                verdict_reason: None,
+            }
+        })
+        .collect();
+    Some(ScopeVerdict {
+        block,
+        message,
+        findings: praxis_workflows::types::CheckFindings {
+            findings,
+            metrics: [
+                (
+                    "outOfScope".to_owned(),
+                    assessment.out_of_scope.len() as f64,
+                ),
+                ("inScope".to_owned(), assessment.in_scope.len() as f64),
+            ]
+            .into_iter()
+            .collect(),
+        },
+    })
+}
+
+async fn check_declared_scope(
+    node: &praxis_workflows::types::WorkflowMergeNode,
+    root: &Path,
+    source: &str,
+    target: &str,
+) -> Option<ScopeVerdict> {
+    node.declared_paths.as_ref().filter(|d| !d.is_empty())?;
+    let diff = git(
+        root,
+        &["diff", "--name-only", &format!("{target}...{source}")],
+    )
+    .await
+    .ok()?;
+    let changed: Vec<String> = diff
+        .lines()
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty())
+        .collect();
+    scope_verdict(node, root, &changed)
+}
+
 impl HostDispatcher {
     /// Merges the run's branch into the target branch of the base checkout (`runWorkflowMerge`).
     async fn merge_into_base(
@@ -720,6 +829,20 @@ impl HostDispatcher {
                 "Source branch {source} was not found."
             )));
         }
+        // Changes outside what the run declared are held back or flagged before anything merges.
+        let scope = check_declared_scope(node, &root, &source, &target).await;
+        if let Some(scope) = &scope {
+            log.push_str(&format!("{}\n", scope.message));
+            if scope.block {
+                evidence(&log);
+                return Ok(StageOutcome {
+                    error: Some(scope.message.clone()),
+                    findings: Some(scope.findings.clone()),
+                    ..StageOutcome::default()
+                });
+            }
+        }
+        let scope_findings = scope.map(|s| s.findings);
         // Praxis's own metadata is not work the merge could lose, the same rule the start-of-run check uses.
         let dirty = base_blocking_paths(&root).await?;
         if !dirty.is_empty() {
@@ -768,6 +891,7 @@ impl HostDispatcher {
                 Ok(StageOutcome {
                     succeeded: true,
                     exit_code: Some(0),
+                    findings: scope_findings,
                     ..StageOutcome::default()
                 })
             }
@@ -1455,6 +1579,113 @@ mod tests {
         let log = format!("{}\n  1) the broken test\nstack", "noise\n".repeat(5000));
         let shown = tail(&log);
         assert!(shown.starts_with("…\n  1) the broken test"));
+    }
+
+    fn merge_node(declared: &[&str], policy: &str) -> praxis_workflows::types::WorkflowMergeNode {
+        serde_json::from_value(json!({
+            "type": "merge", "id": "merge", "name": "Merge", "x": 0, "y": 0, "inputs": [],
+            "declaredPaths": declared, "outOfScope": policy
+        }))
+        .expect("merge node")
+    }
+
+    fn changed(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|p| (*p).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_merge_that_stays_inside_its_declared_paths_has_no_scope_verdict() {
+        let node = merge_node(&["src/pay"], "block");
+        assert!(scope_verdict(&node, Path::new("/repo"), &changed(&["src/pay/a.ts"])).is_none());
+        // Nothing declared means no scope to be outside of.
+        let open = merge_node(&[], "block");
+        assert!(scope_verdict(&open, Path::new("/repo"), &changed(&["anything.ts"])).is_none());
+    }
+
+    #[test]
+    fn block_policy_holds_the_merge_with_high_findings() {
+        let node = merge_node(&["src/pay"], "block");
+        let verdict = scope_verdict(
+            &node,
+            Path::new("/repo"),
+            &changed(&["src/pay/a.ts", "package.json", "docs/x.md"]),
+        )
+        .expect("verdict");
+        assert!(verdict.block);
+        assert!(verdict.message.starts_with("Held back: 2 changed paths"));
+        assert_eq!(verdict.findings.findings.len(), 2);
+        let first = &verdict.findings.findings[0];
+        assert_eq!(first.rule_id.as_deref(), Some("out-of-scope-change"));
+        assert_eq!(first.file.as_deref(), Some("package.json"));
+        assert_eq!(first.category, "scope");
+        assert_eq!(
+            first.severity,
+            praxis_workflows::types::CheckFindingSeverity::High
+        );
+        assert_eq!(verdict.findings.metrics["outOfScope"], 2.0);
+        assert_eq!(verdict.findings.metrics["inScope"], 1.0);
+    }
+
+    #[test]
+    fn escalate_policy_flags_without_blocking() {
+        let node = merge_node(&["src/pay"], "escalate");
+        let verdict =
+            scope_verdict(&node, Path::new("/repo"), &changed(&["package.json"])).expect("verdict");
+        assert!(!verdict.block);
+        assert_eq!(
+            verdict.findings.findings[0].severity,
+            praxis_workflows::types::CheckFindingSeverity::Medium
+        );
+    }
+
+    #[test]
+    fn the_scope_check_reads_the_branch_diff_from_git() {
+        let root = std::env::temp_dir().join(format!("praxis-scope-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src/pay")).expect("dir");
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args([
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "commit.gpgsign=false",
+                ])
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .expect("git");
+            assert!(status.status.success(), "git {args:?}: {status:?}");
+        };
+        run(&["init", "-q", "-b", "main"]);
+        std::fs::write(root.join("README.md"), "x").expect("write");
+        run(&["add", "-A"]);
+        run(&["commit", "-q", "-m", "base"]);
+        run(&["checkout", "-q", "-b", "feature"]);
+        std::fs::write(root.join("src/pay/a.ts"), "a").expect("write");
+        std::fs::write(root.join("package.json"), "{}").expect("write");
+        run(&["add", "-A"]);
+        run(&["commit", "-q", "-m", "work"]);
+
+        let node = merge_node(&["src/pay"], "block");
+        let verdict =
+            super::super::runtime::block_on(check_declared_scope(&node, &root, "feature", "main"))
+                .expect("verdict");
+        assert!(verdict.block);
+        assert_eq!(verdict.findings.findings.len(), 1);
+        assert_eq!(
+            verdict.findings.findings[0].file.as_deref(),
+            Some("package.json")
+        );
+        let inside = merge_node(&["src/pay", "package.json"], "block");
+        assert!(
+            super::super::runtime::block_on(check_declared_scope(
+                &inside, &root, "feature", "main"
+            ))
+            .is_none()
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
