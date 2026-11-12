@@ -91,6 +91,31 @@ export interface TestApp {
    * when the renderer confirms (`window:confirmClose`) - the point at which the app would exit.
    */
   requestClose(): Promise<Promise<void>>;
+  /**
+   * What the backend's notification surface was asked to show (the OS notification centre in the
+   * desktop shell), and where clicking one took the person.
+   */
+  notifications(): Promise<{ shown: ShownNotification[]; opened: Array<{ window: string; target: Record<string, unknown> }> }>;
+  /** Clicks the `index`th shown notification, as the person would in the OS notification centre. */
+  clickNotification(index: number): Promise<void>;
+  /** Whether the app window counts as focused (a notice for what it is showing is then held back). */
+  setWindowFocused(focused: boolean): Promise<void>;
+  /**
+   * Stores a session record and publishes `ai:sessionChanged`, as the session manager does on each
+   * state change, so a spec can walk a session through states it cannot reach with a real provider.
+   */
+  applySession(record: Record<string, unknown>): Promise<void>;
+  /** Replaces the provider-quota override (`PRAXIS_E2E_PROVIDER_USAGE`) of the running backend. */
+  setProviderUsage(usage: Record<string, number> | null): Promise<void>;
+  /** Makes the backend refuse to exit when asked to (a vetoed quit), until it is killed. */
+  vetoShutdown(): Promise<void>;
+}
+
+export interface ShownNotification {
+  title: string;
+  body: string;
+  silent: boolean;
+  target: Record<string, unknown>;
 }
 
 /**
@@ -385,6 +410,11 @@ export async function launchTestApp(
     return body.result;
   };
   const callBackend = callRoute('rpc');
+  // Test seams the e2e-gated backend exposes beside the contract (see e2e_server.rs).
+  const seam = async (route: string, body: unknown): Promise<void> => {
+    const response = await fetch(`http://127.0.0.1:${port}/e2e/${route}?token=${token}`, { method: 'POST', body: JSON.stringify(body) });
+    if (!response.ok) throw new Error(`e2e seam ${route} failed: ${await response.text()}`);
+  };
   const handlerContext: ChannelContext = { call: callBackend, host: callRoute('host') };
   await context.exposeFunction('__praxisE2eOverride', async (channel: string, args: unknown[]) => {
     const handler = overrides.get(channel);
@@ -474,6 +504,12 @@ export async function launchTestApp(
     openWindow,
     windows: () => context.pages(),
     callHost: callRoute('host'),
+    notifications: async () => (await fetch(`http://127.0.0.1:${port}/e2e/notifications?token=${token}`)).json(),
+    clickNotification: index => seam('notifications/click', { index }),
+    setWindowFocused: focused => seam('window', { focused }),
+    applySession: record => seam('sessions', record),
+    setProviderUsage: usage => seam('provider-usage', { usage: usage ? JSON.stringify(usage) : null }),
+    vetoShutdown: () => seam('veto-shutdown', {}),
     async requestClose() {
       let confirm!: () => void;
       const confirmed = new Promise<void>(resolve => { confirm = resolve; });
@@ -655,9 +691,9 @@ export async function closeTestApp(app: TestApp, options: { timeoutMs?: number }
     await withinDeadline((async () => {
       if (hasExited()) return;
       await stopTestWork(app);
-      stage = 'closing Electron';
+      stage = 'closing the backend';
       await app.electronApp.close();
-      stage = 'waiting for the Electron process to exit';
+      stage = 'waiting for the backend process to exit';
       await exited;
     })(), options.timeoutMs ?? 10000, () => `Test app shutdown timed out while ${stage} (pid ${child.pid})`);
   } catch (error) {

@@ -8,7 +8,7 @@ import { defineConfig } from '@playwright/test';
  */
 const SMOKE_SPECS = [
   // App shell and settings
-  'app', 'commandPalette', 'keyboardFocus', 'settingsReset', 'windowState', 'terminal', 'backgroundTasks', 'easymode', 'appShell',
+  'app', 'commandPalette', 'keyboardFocus', 'settingsReset', 'terminal', 'backgroundTasks', 'easymode', 'appShell',
   // Boards and backends (folder/edit/new is the folder-compatibility gate)
   'folder', 'folderMulti', 'editIssue', 'newIssue', 'journey', 'boardFilters', 'issueDetail',
   'github', 'gitlab', 'jira',

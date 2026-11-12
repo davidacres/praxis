@@ -14,13 +14,60 @@ use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{self, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use praxis_contracts::RustRpcRequest;
 use praxis_host::{HostConfig, HostContext, HostServices};
 use serde_json::{Value, json};
 
+use crate::application::task_notifications::{self, Notice, NoticeShell};
 use crate::state::{contract_audit, contract_channels};
+
+/// Stands in for the OS notification surface: records what the person would have been shown and
+/// where a click would have taken them. Only ever installed by the e2e server.
+#[derive(Default)]
+struct RecordingShell {
+    focused: AtomicBool,
+    shown: Mutex<Vec<(Notice, bool)>>,
+    opened: Mutex<Vec<Value>>,
+    host: Mutex<Option<praxis_host::HostContext>>,
+}
+
+impl NoticeShell for RecordingShell {
+    fn focused_windows(&self) -> Vec<String> {
+        if self.focused.load(Ordering::SeqCst) { vec!["main".into()] } else { Vec::new() }
+    }
+
+    fn show(&self, notice: &Notice, silent: bool) {
+        if let Ok(mut shown) = self.shown.lock() {
+            shown.push((notice.clone(), silent));
+        }
+    }
+
+    fn open(&self, notice: &Notice, detached: Option<&str>) {
+        let window = detached.map_or_else(|| "main".to_owned(), |key| format!("detached:{key}"));
+        if let Ok(mut opened) = self.opened.lock() {
+            opened.push(json!({ "window": window, "target": notice.target }));
+        }
+        // The main window is told to open the target, as the native shell does.
+        if detached.is_none()
+            && let Ok(host) = self.host.lock()
+            && let Some(host) = host.as_ref()
+        {
+            host.events().emit("window:notificationOpen", Some(notice.target.clone()));
+        }
+    }
+}
+
+impl RecordingShell {
+    fn snapshot(&self) -> Value {
+        let shown: Vec<Value> = self.shown.lock().map(|shown| {
+            shown.iter().map(|(n, silent)| json!({ "title": n.title, "body": n.body, "silent": silent, "target": n.target })).collect()
+        }).unwrap_or_default();
+        json!({ "shown": shown, "opened": self.opened.lock().map(|o| o.clone()).unwrap_or_default() })
+    }
+}
 
 type Subscribers = Arc<Mutex<Vec<Sender<String>>>>;
 
@@ -61,7 +108,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::io::stdout().flush()?;
 
     let zoom = host.settings().read().appearance.zoom_factor;
-    let shared = Arc::new(Shared { host, methods, token, subscribers, zoom: Mutex::new(zoom) });
+    let shell = Arc::new(RecordingShell::default());
+    *shell.host.lock().expect("shell host") = Some(host.clone());
+    let center = task_notifications::install(&host, Arc::clone(&shell) as Arc<dyn NoticeShell>);
+    let shared = Arc::new(Shared { host, methods, token, subscribers, zoom: Mutex::new(zoom), shell, center, veto_shutdown: AtomicBool::new(false) });
     let accept_shared = Arc::clone(&shared);
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
@@ -75,6 +125,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // The launcher owns our lifetime: exit when stdin closes.
     let mut sink = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut sink);
+    // Test seam: a vetoed shutdown (the app refusing to quit) keeps running until it is killed.
+    while shared.veto_shutdown.load(Ordering::SeqCst) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     crate::application::dispose();
     services.shutdown();
     runtime.shutdown_background();
@@ -87,6 +141,9 @@ struct Shared {
     token: String,
     subscribers: Subscribers,
     zoom: Mutex<f64>,
+    shell: Arc<RecordingShell>,
+    center: Arc<task_notifications::Center>,
+    veto_shutdown: AtomicBool,
 }
 
 struct Request {
@@ -180,6 +237,39 @@ fn handle(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
             };
             respond(&mut stream, "200 OK", &body.to_string())
         }
+        // Test seams, reachable only in this e2e-gated server (PRAXIS_E2E=1 + token).
+        ("GET", "/e2e/notifications") => respond(&mut stream, "200 OK", &shared.shell.snapshot().to_string()),
+        ("POST", "/e2e/notifications/click") => {
+            let index = serde_json::from_slice::<Value>(&request.body).ok().and_then(|v| v["index"].as_u64());
+            let notice = index.and_then(|i| shared.shell.shown.lock().ok().and_then(|shown| shown.get(i as usize).map(|(n, _)| n.clone())));
+            let Some(notice) = notice else {
+                return respond(&mut stream, "400 Bad Request", r#"{"error":"no such notification"}"#);
+            };
+            shared.center.click(&notice);
+            respond(&mut stream, "200 OK", "{}")
+        }
+        ("POST", "/e2e/window") => {
+            if let Some(focused) = serde_json::from_slice::<Value>(&request.body).ok().and_then(|v| v["focused"].as_bool()) {
+                shared.shell.focused.store(focused, Ordering::SeqCst);
+            }
+            respond(&mut stream, "200 OK", "{}")
+        }
+        ("POST", "/e2e/sessions") => {
+            let record = serde_json::from_slice::<Value>(&request.body).unwrap_or(Value::Null);
+            match crate::application::e2e_apply_session(&shared.host, record) {
+                Ok(()) => respond(&mut stream, "200 OK", "{}"),
+                Err(error) => respond(&mut stream, "400 Bad Request", &json!({ "error": error.message }).to_string()),
+            }
+        }
+        ("POST", "/e2e/provider-usage") => {
+            let raw = serde_json::from_slice::<Value>(&request.body).ok().and_then(|v| v["usage"].as_str().map(str::to_owned));
+            crate::application::set_provider_usage_override(raw);
+            respond(&mut stream, "200 OK", "{}")
+        }
+        ("POST", "/e2e/veto-shutdown") => {
+            shared.veto_shutdown.store(true, Ordering::SeqCst);
+            respond(&mut stream, "200 OK", "{}")
+        }
         ("GET", "/events") => {
             write!(
                 stream,
@@ -243,7 +333,12 @@ fn rpc(shared: &Shared, channel: String, args: Vec<Value>) -> Value {
         }
         "window:reload" | "window:minimize" | "window:toggleMaximize"
         | "window:confirmClose" | "window:cancelClose" | "window:setSurfaceVibrancy"
-        | "window:setNotificationView" | "shell:openExternal" => ok(Value::Null),
+        | "shell:openExternal" => ok(Value::Null),
+        // The webview reports what it is showing, so a notice for it can be held back.
+        "window:setNotificationView" => {
+            task_notifications::set_view("main", args.first().unwrap_or(&Value::Null));
+            ok(Value::Null)
+        }
         "dialog:pickFolder" | "workspaces:saveToFile" | "workspaces:openFromFile" => ok(Value::Null),
         _ => {
             let response = shared.host.dispatch_rpc(RustRpcRequest { id: "e2e".into(), channel, args });
