@@ -826,7 +826,7 @@ async fn wait_for_session(
             let previous_turn = after.is_some_and(|a| {
                 state == "completed" && record["completedAt"].as_str() == Some(a)
             });
-            if is_terminal(state) && !previous_turn && !acp_host::has_active_task(&dir, key) {
+            if is_terminal(state) && !previous_turn && !acp_host::has_active_task(&dir, key) && !super::stage_handover_guard::is_held(key) {
                 return Some(Finished {
                     state: state.to_string(),
                     response: record["responseText"].as_str().unwrap_or("").to_string(),

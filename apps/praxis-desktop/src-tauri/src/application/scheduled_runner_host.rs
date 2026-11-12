@@ -21,7 +21,7 @@ use praxis_workflows::gates::{
 };
 use praxis_workflows::run::{
     LoopDecisionKind, ReworkOptions, WorkflowPauseReason, WorkflowRun, WorkflowRunCommand,
-    apply_workflow_run_command, exhausted_providers, rework_workflow_run,
+    apply_workflow_run_command, exhausted_providers, provider_can_run_stage, rework_workflow_run,
 };
 use praxis_workflows::scheduled_budget::ProviderUsage;
 use praxis_workflows::scheduled_run::{ScheduledPauseReason, ScheduledRun, ScheduledTicketRef};
@@ -108,6 +108,38 @@ impl HostPorts {
 
     fn usable_providers(&self) -> Vec<String> {
         usable_providers(&self.host)
+    }
+
+    fn run_is_running(&self, id: &str) -> bool {
+        self.run(id).is_some_and(|r| serde_json::to_value(r.status).ok() == Some(json!("running")))
+    }
+
+    /// The first usable AI not in `exclude` that can run this stage, preferring `preferred`, then the active AI.
+    fn stage_capable_provider(&self, run: &WorkflowRun, node_id: &str, exclude: &[String], preferred: &[String]) -> Option<String> {
+        let usable = usable_providers(&self.host);
+        let mut order: Vec<String> = preferred.to_vec();
+        order.push(self.host.settings().read().ai.active_provider.clone());
+        order.extend(usable.iter().cloned());
+        let mut seen = std::collections::HashSet::new();
+        order.into_iter().filter(|id| seen.insert(id.clone()) && usable.contains(id)).find(|id| !exclude.contains(id) && provider_can_run_stage(run, node_id, id))
+    }
+
+    /// No live stage to move: checkpoint the run's worktree and change the AI for every stage not yet started.
+    async fn switch_for_next_stages(&self, run: &WorkflowRun, workflow_run_id: &str, message: &str, to: String) -> Result<ScheduledHandOverResult, String> {
+        let mut checkpoint = None;
+        if let Some(worktree) = run.worktree_path.as_deref() {
+            let path = std::path::Path::new(worktree);
+            if praxis_core::git::run_work::preserve_uncommitted_work(path, message).await? {
+                checkpoint = praxis_core::git::map_worktrees::rev_parse_head(path).await;
+            }
+        }
+        let target = to.clone();
+        self.update_run(workflow_run_id, move |mut current| {
+            current.ai_provider = Some(target);
+            current
+        })
+        .await?;
+        Ok(ScheduledHandOverResult { checkpoint_ref: checkpoint, provider: Some(to) })
     }
 }
 
@@ -690,27 +722,80 @@ impl ScheduledRunnerPorts for HostPorts {
             entry.ticket.issue_key,
             (used_fraction * 100.0).round()
         );
+        let dir = self.host.config().user_data_dir.clone();
+        let active: Vec<Value> = super::session_store::store(&dir)
+            .all()
+            .map(|all| {
+                all.into_values()
+                    .filter(|session| {
+                        session["workflowRunId"] == workflow_run_id.as_str()
+                            && session["workflowRole"] == "stage"
+                            && session["provider"] == from.as_str()
+                            && !matches!(session["state"].as_str(), Some("completed" | "failed" | "aborted"))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Between stages, or with stages running side by side, nothing is cut off: the run's AI changes
+        // for every stage not yet started, and each stage launch still checks it can run there.
+        if active.len() != 1 {
+            return self.switch_for_next_stages(&run, &workflow_run_id, &message, to).await;
+        }
+        let session = &active[0];
+        // A mid-turn handover moves the live session, so the AI must be able to run this stage (Antigravity
+        // can't run a read-only or approval-gated one). If the planner's pick can't, take the next that can.
+        let node_id = session["workflowNodeId"].as_str().unwrap_or_default().to_owned();
+        let target = if provider_can_run_stage(&run, &node_id, &to) {
+            Some(to.clone())
+        } else {
+            let mut exclude = vec![from.clone()];
+            exclude.extend(exhausted_providers(&run));
+            self.stage_capable_provider(&run, &node_id, &exclude, std::slice::from_ref(&to))
+        };
+        let Some(target) = target else {
+            return self.switch_for_next_stages(&run, &workflow_run_id, &message, to).await;
+        };
+        let key = session["issueKey"].as_str().unwrap_or_default().to_owned();
+        let worktree = session["worktreePath"].as_str().map(str::to_owned).or_else(|| run.worktree_path.clone());
+        let revision = session["handoverBrief"]["revision"].as_u64().unwrap_or(0);
+        // Hold the stage attached for the whole interruption: the abort below is deliberate, not the stage ending.
+        let _hold = super::stage_handover_guard::hold(&key).ok_or("A provider handover is already in progress.")?;
+        let host = self.host.clone();
+        {
+            let (host, dir, key) = (host.clone(), dir.clone(), key.clone());
+            tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key)).await.map_err(|e| e.to_string())?;
+        }
         let mut checkpoint = None;
-        if let Some(worktree) = run.worktree_path.as_deref() {
-            if praxis_core::git::run_work::preserve_uncommitted_work(std::path::Path::new(worktree), &message).await? {
-                checkpoint = tokio::process::Command::new("git")
-                    .args(["rev-parse", "--short", "HEAD"])
-                    .current_dir(worktree)
-                    .output()
-                    .await
-                    .ok()
-                    .filter(|o| o.status.success())
-                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+        if let Some(worktree) = worktree.as_deref() {
+            let path = std::path::Path::new(worktree);
+            praxis_core::git::run_work::preserve_uncommitted_work(path, &message).await?;
+            checkpoint = praxis_core::git::map_worktrees::rev_parse_head(path).await;
+            if checkpoint.is_none() {
+                return Err("Could not record the handover checkpoint.".into());
             }
         }
-        // The run's AI changes for every stage not yet started; each stage launch still checks it can run there.
-        let target = to.clone();
+        if !self.run_is_running(&workflow_run_id) {
+            return Err("The workflow stopped during provider handover.".into());
+        }
+        {
+            let (host, dir, key, target) = (host.clone(), dir.clone(), key.clone(), target.clone());
+            tokio::task::spawn_blocking(move || super::ai_session_ops::handover_to(&host, &dir, &key, json!({ "provider": target, "expectedBriefRevision": revision })))
+                .await
+                .map_err(|e| e.to_string())?
+                .map_err(|e| e.message)?;
+        }
+        if !self.run_is_running(&workflow_run_id) {
+            let (host, dir, key) = (host.clone(), dir.clone(), key.clone());
+            let _ = tokio::task::spawn_blocking(move || super::acp_host::abort_task(&host, &dir, &key)).await;
+            return Err("The workflow stopped during provider handover.".into());
+        }
+        let chosen = target.clone();
         self.update_run(&workflow_run_id, move |mut current| {
-            current.ai_provider = Some(target);
+            current.ai_provider = Some(chosen);
             current
         })
         .await?;
-        Ok(ScheduledHandOverResult { checkpoint_ref: checkpoint, provider: Some(to) })
+        Ok(ScheduledHandOverResult { checkpoint_ref: checkpoint, provider: Some(target) })
     }
 
     async fn decide_gate(
